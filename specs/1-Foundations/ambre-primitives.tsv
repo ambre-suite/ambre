@@ -2862,13 +2862,6 @@ ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_locked | f
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_unlocked | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.has_group | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.multi | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/grid.rs | crate::ui::grid | BASE_GRID | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/grid.rs | crate::ui::grid | board_unit() | ret | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/grid.rs | crate::ui::grid | board_unit(register) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/grid.rs | crate::ui::grid | grid_step() | ret | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/grid.rs | crate::ui::grid | grid_step(base) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/grid.rs | crate::ui::grid | paint_grid(unit) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/grid.rs | crate::ui::grid | snap_world(step) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/hit.rs | crate::ui::hit | ellipse_contains() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | exact_hit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | path_contains() | ret | bool	generic	predicate or handled-flag result

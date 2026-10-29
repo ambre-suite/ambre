@@ -9,6 +9,7 @@
 // ============================================================================
 
 use ambre_canvas::Palette;
+use ambre_core::BoardLength;
 use ambre_draw::{DrawSurface, Point};
 
 use super::viewport::ViewportTransform;
@@ -16,16 +17,37 @@ use super::viewport::ViewportTransform;
 /// The grid unit in world units of a board whose register holds no usable one.
 /// A power-of-two multiple of the unit is the smallest step the adaptive grid
 /// shows.
-pub const BASE_GRID: f64 = 20.0;
+pub const BASE_GRID: BoardLength = BoardLength::new(20.0);
 
-/// The unit a board paints its grid on: its `board` register when that holds
-/// a finite, positive length, else [`BASE_GRID`] (`TOILE-UI-279`). A peer can
-/// write any number there, and a zero or a NaN would stall the step search.
-pub fn board_unit(register: f64) -> f64 {
-    if register.is_finite() && register > 0.0 {
-        register
-    } else {
-        BASE_GRID
+/// The unit a grid steps by: a finite, positive board length.
+///
+/// A peer can write any number in the `board` register. A zero, a negative or
+/// a NaN unit would stall the step search of [`grid_step`], so no such unit
+/// is representable.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct GridUnit(BoardLength);
+
+impl GridUnit {
+    /// The unit of a board whose register holds no usable one.
+    pub const BASE: Self = Self(BASE_GRID);
+
+    /// The unit `length`, or `None` when it is not finite and positive.
+    #[must_use]
+    pub fn new(length: BoardLength) -> Option<Self> {
+        (length.is_finite() && length > BoardLength::ZERO).then_some(Self(length))
+    }
+
+    /// The unit a board paints its grid on: its `board` register when that
+    /// holds a usable unit, else [`GridUnit::BASE`] (`TOILE-UI-279`).
+    #[must_use]
+    pub fn of_register(register: BoardLength) -> Self {
+        Self::new(register).unwrap_or(Self::BASE)
+    }
+
+    /// The unit as a board length.
+    #[must_use]
+    pub fn length(self) -> BoardLength {
+        self.0
     }
 }
 
@@ -40,25 +62,26 @@ const MAX_SPACING: ambre_core::ViewPx = ambre_core::ViewPx::new(96.0);
 /// `MIN_SPACING`. That step is then halved back down while it stays above
 /// `MAX_SPACING`, never below `base`, so the grid stays magnetic to the board
 /// unit.
-pub fn grid_step(zoom: ambre_core::ZoomFactor, base: f64) -> f64 {
+pub fn grid_step(zoom: ambre_core::ZoomFactor, base: GridUnit) -> BoardLength {
     let zoom = zoom.get();
     // The band, in the f64 of the board's screen geometry.
     let (min, max) = (f64::from(MIN_SPACING.get()), f64::from(MAX_SPACING.get()));
-    debug_assert!(base > 0.0);
+    let base = base.length();
     let mut step = base;
     // Zoomed out: coarsen until the spacing is legible.
-    while step * zoom < min {
-        step *= 2.0;
+    while step.get() * zoom < min {
+        step = step * 2.0;
     }
     // Zoomed in: refine toward the band, but never finer than `base`.
-    while step > base && step * zoom > max {
-        step /= 2.0;
+    while step > base && step.get() * zoom > max {
+        step = step / 2.0;
     }
     step
 }
 
 /// Quantize a world point to the nearest multiple of `step` on each axis.
-pub fn snap_world(p: Point, step: f64) -> Point {
+pub fn snap_world(p: Point, step: BoardLength) -> Point {
+    let step = step.get();
     Point::new((p.x / step).round() * step, (p.y / step).round() * step)
 }
 
@@ -83,12 +106,12 @@ pub fn paint_grid<S: DrawSurface>(
     surface: &mut S,
     cam: &ViewportTransform,
     palette: &Palette,
-    unit: f64,
+    unit: BoardLength,
 ) {
     // Board background fills the whole canvas.
     paint_background(surface, cam, palette);
 
-    let step = grid_step(cam.zoom, board_unit(unit));
+    let step = grid_step(cam.zoom, GridUnit::of_register(unit)).get();
     let s2w = cam.screen_to_world();
     let w2s = cam.world_to_screen();
     // Visible world rect: the transform is translate+scale (axis-aligned), so the
@@ -133,10 +156,10 @@ mod tests {
         // For any zoom, the chosen step keeps the on-screen spacing at or above
         // the minimum legible band.
         let min = f64::from(MIN_SPACING.get());
-        let mut z = min / (BASE_GRID * 64.0); // very zoomed out
+        let mut z = min / (BASE_GRID.get() * 64.0); // very zoomed out
         while z <= MAX_ZOOM_SWEEP {
-            let step = grid_step(ambre_core::ZoomFactor::positive(z), BASE_GRID);
-            let spacing = step * z;
+            let step = grid_step(ambre_core::ZoomFactor::positive(z), GridUnit::BASE);
+            let spacing = step.get() * z;
             assert!(
                 spacing >= min - 1e-9,
                 "zoom {z}: spacing {spacing} below min"
@@ -152,7 +175,7 @@ mod tests {
     #[test]
     fn step_is_power_of_two_multiple_of_base() {
         for z in [0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0] {
-            let step = grid_step(ambre_core::ZoomFactor::positive(z), BASE_GRID);
+            let step = grid_step(ambre_core::ZoomFactor::positive(z), GridUnit::BASE);
             let ratio = step / BASE_GRID;
             assert!(ratio >= 1.0 - 1e-9, "step below base at zoom {z}");
             // ratio must be a power of two.
@@ -170,7 +193,7 @@ mod tests {
 
     fn grid_ops(cam: &ViewportTransform, unit: f64) -> Vec<DrawOp> {
         let mut surface = RecordingSurface::new();
-        paint_grid(&mut surface, cam, &palette(), unit);
+        paint_grid(&mut surface, cam, &palette(), BoardLength::new(unit));
         surface.ops().to_vec()
     }
 
@@ -191,7 +214,8 @@ mod tests {
         let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         // At 1x a unit of 20 doubles to stay legible; 32 and 50 already are.
         for (unit, step) in [(20.0, 40.0), (32.0, 32.0), (50.0, 50.0)] {
-            assert_eq!(grid_step(cam.zoom, unit), step);
+            let typed = GridUnit::of_register(BoardLength::new(unit));
+            assert_eq!(grid_step(cam.zoom, typed), BoardLength::new(step));
             let xs = columns(&grid_ops(&cam, unit));
             assert!(xs.len() > 2, "unit {unit}: {xs:?}");
             for pair in xs.windows(2) {
@@ -201,12 +225,31 @@ mod tests {
             assert!(xs.iter().any(|x| (x - 500.0).abs() < 1e-9));
         }
         for unusable in [0.0, -8.0, f64::NAN, f64::INFINITY] {
-            assert_eq!(board_unit(unusable), BASE_GRID, "{unusable}");
+            let length = BoardLength::new(unusable);
+            assert_eq!(GridUnit::new(length), None, "{unusable}");
+            assert_eq!(GridUnit::of_register(length), GridUnit::BASE, "{unusable}");
             assert_eq!(
                 columns(&grid_ops(&cam, unusable)),
-                columns(&grid_ops(&cam, BASE_GRID))
+                columns(&grid_ops(&cam, BASE_GRID.get()))
             );
         }
+    }
+
+    /// A grid unit from a peer register is finite and positive, or refused.
+    /// The step search then always ends, from the smallest positive unit too.
+    #[test]
+    fn a_grid_unit_is_finite_and_positive() {
+        for refused in [0.0, -0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(GridUnit::new(BoardLength::new(refused)), None, "{refused}");
+        }
+        let tiny = GridUnit::new(BoardLength::new(f64::MIN_POSITIVE)).map(GridUnit::length);
+        assert_eq!(tiny, Some(BoardLength::new(f64::MIN_POSITIVE)));
+        let zoom = ambre_core::ZoomFactor::positive(1.0);
+        let step = grid_step(
+            zoom,
+            GridUnit::of_register(BoardLength::new(f64::MIN_POSITIVE)),
+        );
+        assert!(step.get() >= f64::from(MIN_SPACING.get()));
     }
 
     /// `TOILE-UI-280`: a grid line is one pixel wide at every zoom, and the
@@ -216,7 +259,7 @@ mod tests {
         for zoom in [0.1, 0.5, 1.0, 3.0, 10.0] {
             let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
             cam.zoom = ambre_core::ZoomFactor::positive(zoom);
-            let ops = grid_ops(&cam, BASE_GRID);
+            let ops = grid_ops(&cam, BASE_GRID.get());
             let mut lines = 0;
             for op in &ops {
                 match op {
@@ -239,7 +282,7 @@ mod tests {
         let cam = ViewportTransform::new(ambre_draw::Size::new(640.0, 480.0));
         let mut bare = RecordingSurface::new();
         paint_background(&mut bare, &cam, &palette());
-        for ops in [grid_ops(&cam, BASE_GRID), bare.ops().to_vec()] {
+        for ops in [grid_ops(&cam, BASE_GRID.get()), bare.ops().to_vec()] {
             match ops.first() {
                 Some(DrawOp::FillRect { rect, color }) => {
                     assert_eq!(*rect, ambre_draw::Rect::new(0.0, 0.0, 640.0, 480.0));
@@ -252,7 +295,7 @@ mod tests {
 
     #[test]
     fn snap_quantizes_to_step() {
-        let s = snap_world(Point::new(23.0, -31.0), 20.0);
+        let s = snap_world(Point::new(23.0, -31.0), BoardLength::new(20.0));
         assert_eq!(s, Point::new(20.0, -40.0));
     }
 }

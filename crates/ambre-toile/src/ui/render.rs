@@ -102,7 +102,7 @@ pub fn paint_content<S: DrawSurface>(
     if mode.is_presenting() {
         grid::paint_background(surface, cam, palette);
     } else {
-        grid::paint_grid(surface, cam, palette, vp.grid_unit.get());
+        grid::paint_grid(surface, cam, palette, vp.grid_unit);
     }
 
     // 2. The board walk, in board units under the camera. The body or the
@@ -688,7 +688,7 @@ mod tests {
     fn content_walk_balances_transform_and_paints_each_node() {
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -740,7 +740,7 @@ mod tests {
     fn content_walk_applies_animation_override() {
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -847,7 +847,7 @@ mod tests {
         path.line_to((300.0, 40.0));
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -906,7 +906,7 @@ mod tests {
         let fill = Rgba::from_bits(0xFEF0_8AFF); // sticky yellow
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1039,7 +1039,7 @@ mod tests {
     fn text_element_paints_no_card() {
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1114,7 +1114,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 40.0, 20.0);
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1173,7 +1173,7 @@ mod tests {
     fn overlay_draws_box_and_handles_for_single_selection() {
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1213,7 +1213,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 50.0, 50.0);
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1379,7 +1379,7 @@ mod tests {
     fn overlay_paints_no_editing_surface_while_presenting() {
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1416,7 +1416,7 @@ mod tests {
         // stretches it to (0,0)-(90,70); the selection box must track the preview.
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1471,7 +1471,7 @@ mod tests {
         path.line_to((100.0, 0.0));
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1536,7 +1536,7 @@ mod tests {
         }
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1570,7 +1570,7 @@ mod tests {
     fn a_vanished_arrow_paints_nothing() {
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1598,7 +1598,7 @@ mod tests {
     fn overlay_outlines_visible_find_hits() {
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1637,7 +1637,7 @@ mod tests {
     fn the_current_match_is_outlined_apart_from_the_rest() {
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1707,7 +1707,7 @@ mod tests {
         use std::f64::consts::FRAC_PI_4;
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1775,7 +1775,7 @@ mod tests {
         use std::f64::consts::FRAC_PI_4;
         let vp = DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),
@@ -1816,7 +1816,7 @@ mod tests {
     fn board(nodes: Vec<DisplayNode>) -> DisplayViewport {
         DisplayViewport {
             version: ambre_bus::ViewportVersion(0),
-            grid_unit: ambre_core::BoardLength::new(grid::BASE_GRID),
+            grid_unit: grid::BASE_GRID,
             pins: Vec::new(),
             reactions: Default::default(),
             viewport: Default::default(),

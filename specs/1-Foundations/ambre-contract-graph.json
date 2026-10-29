@@ -6941,6 +6941,7 @@
   {"edge": "cites-section", "from": "TOILE-UI-279", "section": "5", "to": "3-Toile/features/ambre-spec-toile-viewport.md"},
   {"edge": "verified-by", "from": "TOILE-UI-279", "to": "ambre_toile::ui::grid::tests::step_is_power_of_two_multiple_of_base"},
   {"edge": "verified-by", "from": "TOILE-UI-279", "to": "ambre_toile::ui::grid::tests::a_board_paints_its_grid_on_its_own_unit"},
+  {"edge": "verified-by", "from": "TOILE-UI-279", "to": "ambre_toile::ui::grid::tests::a_grid_unit_is_finite_and_positive"},
   {"edge": "verified-by", "from": "TOILE-UI-279", "to": "ambre_toile::logic::state::derive::tests::a_frame_carries_the_boards_grid_unit"},
   {"edge": "cites-section", "from": "TOILE-UI-280", "section": "3", "to": "3-Toile/features/ambre-spec-toile-viewport.md"},
   {"edge": "cites-document", "from": "TOILE-UI-280", "section": "3", "to": "features/ambre-spec-toile-board-rendering.md"},
