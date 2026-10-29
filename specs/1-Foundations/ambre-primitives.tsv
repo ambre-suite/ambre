@@ -2127,9 +2127,7 @@ ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render() | ret | 
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta() | ret | String	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
-ambre-prose | src/logic/ids.rs | crate::logic::ids | IdSource::Seeded.next | field | Cell<u64>	math	count, size or local index
-ambre-prose | src/logic/ids.rs | crate::logic::ids | pack() | ret | u128	generic	generic primitive API
-ambre-prose | src/logic/ids.rs | crate::logic::ids | pack(counter) | param | u64	math	count, size or local index
+ambre-prose | src/logic/ids.rs | crate::logic::ids | IdSequence.0 | field | u64	newtype-inner	the place of an id in a pinned peer's sequence, held under 2^62
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VARIANT | const | u128	generic	UUID bit layout constants
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VERSION | const | u128	generic	UUID bit layout constants
 ambre-prose | src/logic/interop.rs | crate::logic::interop | accepts() | ret | bool	generic	independent flag or predicate
