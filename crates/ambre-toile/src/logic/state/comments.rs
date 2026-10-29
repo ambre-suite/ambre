@@ -55,7 +55,7 @@ use super::names::{FieldValues, Fields, MessageKey, Root, ThreadKey, entry, root
 /// How many characters of the opening message the board-wide list carries. The
 /// panel shows a row per thread, and a row is a line: the rest of the
 /// conversation arrives when the thread is opened (`TOILE-205`).
-const PREVIEW_CHARS: usize = 80;
+const PREVIEW_CHARS: CharCount = CharCount::new(80);
 
 impl ToileState {
     /// Open a thread at `anchor`, seeded with its first message.
@@ -281,7 +281,7 @@ impl ToileState {
                 let preview = thread
                     .messages
                     .first()
-                    .map(|m| m.body.chars().take(PREVIEW_CHARS).collect())
+                    .map(|m| m.body.chars().take(PREVIEW_CHARS.to_usize()).collect())
                     .unwrap_or_default();
                 Some(CommentSummary {
                     id: thread.id,

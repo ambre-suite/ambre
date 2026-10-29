@@ -15,7 +15,7 @@ use ambre_bus::app::toile::{
 
 /// The longest text an announcement carries. A sticky holding a page of notes
 /// is announced by its start, not read whole on every click.
-const TEXT_LIMIT: usize = 120;
+const TEXT_LIMIT: ambre_core::CharCount = ambre_core::CharCount::new(120);
 
 /// The announcement for `selection`, given the display data of its elements.
 /// One element whose data has not arrived yet is not announced: the data
@@ -34,7 +34,7 @@ fn element_announcement(element: &DisplayElement) -> String {
     let mut out = kind_name(element).to_owned();
     if let Some(text) = element_text(&element.geom).filter(|t| !t.trim().is_empty()) {
         out.push_str(", ");
-        out.extend(text.trim().chars().take(TEXT_LIMIT));
+        out.extend(text.trim().chars().take(TEXT_LIMIT.to_usize()));
     }
     if element.locked == ambre_bus::app::toile::LockState::Locked {
         out.push_str(", locked");
@@ -158,6 +158,6 @@ mod tests {
         let id = long.id.clone();
         assert_eq!(selection_announcement(std::slice::from_ref(&id), &[]), None);
         let said = selection_announcement(&[id], &[long]).unwrap();
-        assert_eq!(said.len(), "Text, ".len() + TEXT_LIMIT);
+        assert_eq!(said.len(), "Text, ".len() + TEXT_LIMIT.to_usize());
     }
 }

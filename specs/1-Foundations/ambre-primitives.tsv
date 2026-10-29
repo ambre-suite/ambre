@@ -2602,19 +2602,19 @@ ambre-toile | src/chrome/mod.rs | crate::chrome | new_doc_label() | ret | &'stat
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterIntent::EditNotes.base | field | String	free-text	label, message or user text
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterPanel(notes) | param | RwSignal<String>	free-text	label, message or user text
 ambre-toile | src/chrome/relay.rs | crate::chrome::relay | ToileRelay.presenter_notes | field | RwSignal<String>	free-text	label, message or user text
-ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_in(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_out(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::lerp(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic() | ret | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_rgba(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64() | ret | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(a) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(b) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_fill(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_rect(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/animate.rs | crate::logic::animate | smart_animate(t) | param | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_in(t) | param | f64	math	the transition phase, a 0..1 factor scaled into the opacity
+ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_out(t) | param | f64	math	the transition phase, a 0..1 factor whose complement scales the opacity
+ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::lerp(t) | param | f64	math	the eased phase, a 0..1 factor weighting rotation, opacity and bounds
+ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic() | ret | f64	math	the eased phase, a 0..1 factor
+ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic(t) | param | f64	math	the raw phase, clamped to 0..1 before the easing curve
+ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_rgba(t) | param | f64	math	the eased phase, a 0..1 factor applied per colour channel
+ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64() | ret | f64	generic	the interpolation a + (b - a) * t over any f64 pair: a coordinate or a colour channel by caller
+ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(a) | param | f64	generic	the start value of the interpolation: a coordinate or a colour channel by caller
+ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(b) | param | f64	generic	the end value of the interpolation: a coordinate or a colour channel by caller
+ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(t) | param | f64	math	the interpolation factor in a + (b - a) * t
+ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_fill(t) | param | f64	math	the eased phase, a 0..1 factor: compared with one half, then applied per channel
+ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_rect(t) | param | f64	math	the eased phase, a 0..1 factor applied to each rect edge
+ambre-toile | src/logic/animate.rs | crate::logic::animate | smart_animate(t) | param | f64	math	the eased phase, a 0..1 factor handed to the per-element interpolations
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Contour | alias | Vec<[f64;2]>	foreign-api	the point ring i_overlay takes and returns
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | FlattenTol::get() | ret | f64	newtype-inner	the tolerance as the f64 kurbo flatten takes
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Shape | alias | Vec<Contour>	foreign-api	the contour list i_overlay takes and returns
@@ -2644,18 +2644,18 @@ ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | THUM
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | decode_media(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | import_raster(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.document | field | String	generic	SVG serialisation text
-ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.skipped | field | Vec<String>	generic	SVG serialisation text
+ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.skipped | field | Vec<String>	free-text	user-facing report lines naming each element the export skipped
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | element_shape() | ret | Option<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | element_svg() | ret | Option<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | f() | ret | String	generic	SVG serialisation text
-ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | f(v) | param | f64	generic	SVG serialisation text
-ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | kind_name() | ret | &'static str	generic	SVG serialisation text
+ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | f(v) | param | f64	generic	a coordinate, size or angle the SVG writer formats into attribute text
+ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | kind_name() | ret | &'static str	free-text	user-facing name of an element kind in the export report
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | paint_attrs() | ret | String	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | rotation_attr() | ret | Option<String>	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | xml_escape() | ret | String	generic	SVG serialisation text
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | xml_escape(s) | param | &str	generic	SVG serialisation text
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct() | ret | Vec<f64>	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct(it) | param | impl Iterator<Item=f64>	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct() | ret | Vec<f64>	generic	the sorted values of any f64 iterator, deduplicated within an epsilon
+ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct(it) | param | impl Iterator<Item=f64>	generic	any f64 iterator the dedupe sorts and deduplicates
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct::EPS | const | f64	math	a constant local to one function
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_svg(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
@@ -2665,7 +2665,7 @@ ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_und
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | body_of() | ret | Option<String>	generic	generic parser/reader/formatter over text: None when the key is missing
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bool_of() | ret | Option<bool>	generic	untyped CRDT flag read by key: None when absent or not a bool, and the key the caller passes gives it its meaning
-ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | connector_label() | ret | Option<String>	generic	enum<->stored string codec at the CRDT boundary: None when the key is missing
+ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | connector_label() | ret | Option<String>	free-text	the user's caption of an arrow, read from its LoroText: None when the key is missing
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | content_matches() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | decode_anchor(s) | param | &str	generic	enum<->stored string codec at the CRDT boundary
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | decode_path_type(s) | param | &str	generic	enum<->stored string codec at the CRDT boundary
@@ -2679,7 +2679,6 @@ ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_f64() 
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | map_str() | ret | Option<String>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | str_of() | ret | Option<String>	generic	untyped CRDT leaf read by key; the caller types it and picks the default
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | value_has_type() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | PREVIEW_CHARS | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::create_comment(body) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::reply_comment(body) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | ToileState::seed_thread(anchor) | param | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
@@ -2705,7 +2704,7 @@ ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(haystack) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(needle) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | ToileState::canonical_dump() | ret | String	generic	schema-freeze / fixture tooling text and counts
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_deck::PITCH | const | f64	math	a constant local to one function
+ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_deck::PITCH | const | f64	local	the board spacing between two slides of the fixture deck, read once in its function
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board::COLS | const | u32	math	a constant local to one function
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board::ROWS | const | u32	math	a constant local to one function
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | hex_of() | ret | String	generic	schema-freeze / fixture tooling text and counts
@@ -2726,9 +2725,9 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::import_
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::note_undecodable(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::notes_change(before) | param | &Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | waits_for_import() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/state/names.rs | crate::logic::state::names | REACTION_SEPARATOR | const | char	newtype-inner	the spelling of ReactionKey, a reactions map key
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | REACTION_SEPARATOR | const | char	generic	the character ReactionKey writes between the target and the user of a reactions map key
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey.0 | field | String	newtype-inner	the reactions map key ReactionKey types
-ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::as_str() | ret | &str	foreign-api	the reactions map key, for the Loro call that reads or writes it
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::as_str() | ret | &str	newtype-inner	the accessor of ReactionKey, read by the Loro call that reads or writes the key
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_of() | ret | Option<&str>	foreign-api	the target id half of a key Loro hands back from the reactions map
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_of(key) | param | &str	foreign-api	a reactions map key as Loro hands it back
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | entry(id) | param | &str	generic	dictionary lookup over every id type the board keys a root by
@@ -2740,17 +2739,17 @@ ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentatio
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice() | ret | String	free-text	label, message or user text
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | splice(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | encode() | ret | Result<Vec<u8>,ToileError>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/stroke.rs | crate::logic::stroke | SEGMENTS_PER_SPAN | const | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/stroke.rs | crate::logic::stroke | catmull_rom(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | EDIT_CAP | const | usize	math	diff/merge algorithm index, codepoints throughout
+ambre-toile | src/logic/stroke.rs | crate::logic::stroke | SEGMENTS_PER_SPAN | const | usize	local	the line segments each spline span is cut into, the loop bound and divisor of one function
+ambre-toile | src/logic/stroke.rs | crate::logic::stroke | catmull_rom(t) | param | f64	math	the spline parameter in 0..1, raised to the polynomial weights
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | EDIT_CAP | const | usize	local	the most edit steps the Myers search walks before it gives up, read once by that search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Edit.insert | field | String	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Hunk.text | field | String	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Merge.text | field | String	free-text	user text being merged
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Step::Insert.1 | field | char	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(b) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Step::Insert.1 | field | char	free-text	the user character an insertion step adds
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(b) | param | &[char]	free-text	the changed user text as chars, read to fill each insertion
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(m) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(n) | param | isize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(trace) | param | &[Vec<isize>]	math	diff/merge algorithm index, codepoints throughout
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(trace) | param | &[Vec<isize>]	math	the Myers frontier history: the x position reached per diagonal, one row per edit distance
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down() | ret | Option<bool>	local	private Myers step: whether the path comes down (an insertion), read by the two diff loops
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(d) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(k) | param | isize	math	diff/merge algorithm index, codepoints throughout
@@ -2759,8 +2758,8 @@ ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(v)
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends(base) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends(stored) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends(typed) | param | &str	free-text	user text being merged
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | diff(base) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | diff(side) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | diff(base) | param | &[char]	free-text	the base user text as chars
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | diff(side) | param | &[char]	free-text	one side's user text as chars
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits(base) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits(stored) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits(typed) | param | &str	free-text	user text being merged
@@ -2773,17 +2772,16 @@ ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_text() 
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_text(base) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_text(stored) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_text(typed) | param | &str	free-text	user text being merged
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | myers(a) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | myers(b) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach() | ret | Option<isize>	math	diff/merge algorithm index, codepoints throughout
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | myers(a) | param | &[char]	free-text	the source user text as chars
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | myers(b) | param | &[char]	free-text	the target user text as chars
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach() | ret | Option<isize>	math	the x position the Myers frontier reached on one diagonal
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach(k) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach(offset) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach(v) | param | &[isize]	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region() | ret | Option<String>	free-text	user text being merged
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region(base) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run() | ret | &[char]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run(base) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/ui/a11y.rs | crate::ui::a11y | TEXT_LIMIT | const | usize	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region(base) | param | &[char]	free-text	the base user text as chars, which a side's hunks apply to
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run() | ret | &[char]	free-text	a slice of the base user text, copied into the merge
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run(base) | param | &[char]	free-text	the base user text as chars
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_announcement() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_text() | ret | Option<&str>	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | kind_name() | ret | &'static str	free-text	label, message or user text
@@ -2791,7 +2789,7 @@ ambre-toile | src/ui/a11y.rs | crate::ui::a11y | selection_announcement() | ret 
 ambre-toile | src/ui/arrow.rs | crate::ui::arrow | holds_element() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/commands.rs | crate::ui::commands | letter(c) | param | char	generic	generic parser/reader/formatter over text
 ambre-toile | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	label, message or user text
-ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Post.0 | field | String	newtype-inner	single field of its own wrapper
+ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Post.0 | field | String	free-text	the comment body the user typed in the panel
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Reply.body | field | String	free-text	label, message or user text
 ambre-toile | src/ui/comments.rs | crate::ui::comments | ThreadFilter::keeps() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/comments.rs | crate::ui::comments | pin_badge() | ret | String	free-text	label, message or user text
@@ -2816,7 +2814,7 @@ ambre-toile | src/ui/hit.rs | crate::ui::hit | path_contains() | ret | bool	gene
 ambre-toile | src/ui/hit.rs | crate::ui::hit | path_hit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | polyline_hit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/interop.rs | crate::ui::interop | IMPORT_ACCEPT | const | &str	generic	HTML accept attribute text
-ambre-toile | src/ui/interop.rs | crate::ui::interop | SKIPPED_NAMED | const | usize	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/interop.rs | crate::ui::interop | SKIPPED_NAMED | const | usize	local	how many skipped elements the import notice names, read once by its take
 ambre-toile | src/ui/interop.rs | crate::ui::interop | accepts() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | Under::grabbable_if(grabbable) | param | bool	newtype-inner	the bool the one constructor of Under reads into its variant
@@ -2839,7 +2837,7 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | nearest_resize_keyword() 
 ambre-toile | src/ui/palette.rs | crate::ui::palette | resize_cursor() | ret | Cow<'static,str>	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor() | ret | String	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(fallback) | param | &str	generic	CSS cursor text
-ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_TRAIL_MAX | const | usize	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_TRAIL_MAX | const | usize	local	the most samples a laser trail keeps, read once to bound it
 ambre-toile | src/ui/presence.rs | crate::ui::presence | PeerCursors::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/presence.rs | crate::ui::presence | paint_cursor(label) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(after) | param | &str	free-text	label, message or user text
@@ -2869,7 +2867,7 @@ ambre-toile | src/ui/tool.rs | crate::ui::tool | double_click_edit(editable) | p
 ambre-toile | src/ui/tool.rs | crate::ui::tool | drop_missing() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | is_group() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | EDIT_LOST | const | &str	free-text	label, message or user text
-ambre-toile | src/ui/view.rs | crate::ui::view | LIVE_STROKE_TAIL | const | usize	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/view.rs | crate::ui::view | LIVE_STROKE_TAIL | const | usize	local	the trailing live-stroke points redrawn each frame, read once by its take
 ambre-toile | src/ui/view.rs | crate::ui::view | NOTHING_TO_ZOOM | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_CONTAINS | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_HOLDS | const | &str	free-text	label, message or user text
@@ -2925,19 +2923,19 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_move() | ret |
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session(fatal) | param | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	the padding fraction a fit scales the bounds by, as 1 + pad
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a ZoomFactor
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::glide(t) | param | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	the padding fraction the bounds are scaled by, as 1 + pad_frac
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	the padding fraction forwarded to the same 1 + pad_frac scale
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::glide(t) | param | f64	math	the eased phase in 0..1 that interpolates zoom and pan
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_by_center(factor) | param | f64	math	relative zoom factor, not an absolute zoom
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	the multiplier one zoom step applies to the zoom
 ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	math	the widest radius four cubics draw within 0.1 of the ellipse, in the space of the rect ellipse_path fills: the board walk and the screen-space draft both call it, so no one length type fits
-ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	the multiplier a radius takes to place a quarter-circle Bezier control point
+ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	the sRGB transfer table, one linear value per 8-bit channel
+ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	the contrast ratio (L1 + 0.05) / (L2 + 0.05) of two luminances
+ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	the relative luminance, a weighted sum of the linear channels
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	math	the corner radius, in the space of the kurbo rect it rounds: the board walk passes board units and the link badge passes screen pixels
 ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	free-text	free text: user content, label, message or display string
