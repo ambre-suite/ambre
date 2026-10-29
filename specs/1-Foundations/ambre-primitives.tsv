@@ -1252,7 +1252,7 @@ ambre-logic | src/waiting.rs | crate::waiting | Waiting.reported | field | bool	
 ambre-logic | src/waiting.rs | crate::waiting | Waiting::stalled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/attachment.rs | crate::attachment | fits() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::cancel_older() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	generic	state flag/predicate
+ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	generic	a predicate the caller passes: whether an unread message counts, every one or those that mention the member
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::holds() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::identified() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::is_pending() | ret | bool	generic	state flag/predicate
@@ -1273,13 +1273,13 @@ ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelSt
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::thread_failed() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
-ambre-murmure | src/chrome.rs | crate::chrome | ChannelHeader(has_members) | param | Signal<bool>	generic	state flag/predicate
+ambre-murmure | src/chrome.rs | crate::chrome | ChannelHeader(has_members) | param | Signal<bool>	generic	a fact the header reads: whether the channel shown is a public channel of a space, which shows the control of the member list
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.hint | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.title | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.unnamed | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.word | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::run() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	generic	state flag/predicate
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	generic	a predicate as a signal: whether the channel shown is a public channel of a space
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	the text of the search box as the DOM hands it, blank included; a SearchQuery parses from it inside
 ambre-murmure | src/chrome.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
@@ -1359,7 +1359,7 @@ ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion::get() | ret | u
 ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion::new(version) | param | u8	newtype-inner	JsonSchemaVersion newtype accessor
 ambre-murmure | src/delta.rs | crate::delta | Refusal::asks_update() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | binary_by() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | check(reactions) | param | impl Fn(&ContainerID)->bool	generic	state flag/predicate
+ambre-murmure | src/delta.rs | crate::delta | check(reactions) | param | impl Fn(&ContainerID)->bool	generic	a predicate the caller passes: whether a container is the reactions map of a message
 ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
 ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	generic	state flag/predicate
@@ -1515,7 +1515,7 @@ ambre-murmure | src/uploads.rs | crate::uploads | size_label() | ret | String	fr
 ambre-murmure | src/view.rs | crate::view | AT_FRACTION | const | f32	math	a ratio: where in the viewport a named message rests, a fraction of the list height
 ambre-murmure | src/view.rs | crate::view | MurmureView::clipboard() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | MurmureView::close_thread() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::composer_input() | ret | Option<bool>	generic	state flag/predicate
+ambre-murmure | src/view.rs | crate::view | MurmureView::composer_input() | ret | Option<bool>	generic	None leaves an event to the list; Some answers whether the composer prevents its default, the bool handle_input returns
 ambre-murmure | src/view.rs | crate::view | MurmureView::copy() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | MurmureView::drags_text() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::finger_down() | ret | bool	generic	state flag/predicate
