@@ -1301,12 +1301,15 @@ pub fn main() {
                 continue;
             }
             // The seal of a local row this thread asked for, which no view
-            // awaits (`RESID-025`).
-            if let UiEvent::Rest { id, evt } = &ev
-                && vault_frame.answer(*id, evt)
-            {
-                continue;
-            }
+            // awaits (`RESID-025`). The vault takes the event by value, so
+            // each opened row moves out of its wrapper with no copy.
+            let ev = match ev {
+                UiEvent::Rest { id, evt } => match vault_frame.answer(id, evt) {
+                    Some(evt) => UiEvent::Rest { id, evt },
+                    None => continue,
+                },
+                ev => ev,
+            };
             // Mirror authoritative command-toggle state into the chrome store.
             // The active app owns the event->toggle mapping; the launcher names
             // no content event variant.

@@ -415,13 +415,13 @@ mod tests {
         // snapshot's, so the delta never lands under it.
         vault.answer(
             second,
-            &RestEvent::LocalRowSealed {
+            RestEvent::LocalRowSealed {
                 sealed: SealedRowBytes::new(b"sealed edit".to_vec()),
             },
         );
         vault.answer(
             first,
-            &RestEvent::LocalRowSealed {
+            RestEvent::LocalRowSealed {
                 sealed: SealedRowBytes::new(b"sealed document".to_vec()),
             },
         );
@@ -449,7 +449,7 @@ mod tests {
         assert_eq!(sealed, [b"sealed document".as_slice(), b"sealed edit"]);
         vault.answer(
             id,
-            &RestEvent::LocalRowsOpened {
+            RestEvent::LocalRowsOpened {
                 rows: vec![
                     Some(SecretBytes::new(b"the document".to_vec())),
                     Some(SecretBytes::new(b"an edit".to_vec())),
@@ -471,7 +471,7 @@ mod tests {
         let (id, _) = request(&vault_rx).await;
         vault.answer(
             id,
-            &RestEvent::LocalRowsOpened {
+            RestEvent::LocalRowsOpened {
                 rows: vec![Some(SecretBytes::new(b"the document".to_vec())), None],
             },
         );

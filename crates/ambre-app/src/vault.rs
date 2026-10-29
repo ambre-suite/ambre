@@ -94,22 +94,22 @@ impl Vault {
         self.inner.borrow_mut().send();
     }
 
-    /// Take the answer to one of this vault's requests. `false` leaves the
-    /// event to the rest of the relay.
-    pub(crate) fn answer(&self, id: RequestId, evt: &RestEvent) -> bool {
+    /// Take the answer to one of this vault's requests, by value. Each opened
+    /// row then reaches `done` with one owner, so it moves out of its wrapper
+    /// with no copy. An event that is not the vault's comes back for the rest
+    /// of the relay.
+    pub(crate) fn answer(&self, id: RequestId, evt: RestEvent) -> Option<RestEvent> {
         let Some(pending) = self.inner.borrow_mut().waiting.remove(&id) else {
-            return false;
+            return Some(evt);
         };
         // The borrow ends before the answer runs, which may ask again.
         match (pending, evt) {
-            (Pending::Seal(done), RestEvent::LocalRowSealed { sealed }) => {
-                done(Some(sealed.clone()))
-            }
-            (Pending::Open(done), RestEvent::LocalRowsOpened { rows }) => done(Some(rows.clone())),
+            (Pending::Seal(done), RestEvent::LocalRowSealed { sealed }) => done(Some(sealed)),
+            (Pending::Open(done), RestEvent::LocalRowsOpened { rows }) => done(Some(rows)),
             (Pending::Seal(done), _) => done(None),
             (Pending::Open(done), _) => done(None),
         }
-        true
+        None
     }
 }
 
@@ -174,16 +174,23 @@ mod tests {
         assert_eq!(place, RowPlace::Document(doc));
         assert_eq!(plaintext.into_plaintext(), b"plain");
 
-        assert!(!vault.answer(RequestId(u64::MAX), &RestEvent::LocalStoreLocked));
+        assert!(
+            vault
+                .answer(RequestId(u64::MAX), RestEvent::LocalStoreLocked)
+                .is_some()
+        );
         let sealed = RestEvent::LocalRowSealed {
             sealed: SealedRowBytes::new(b"sealed".to_vec()),
         };
-        assert!(vault.answer(id, &sealed));
+        assert!(vault.answer(id, sealed.clone()).is_none());
         assert_eq!(
             *got.borrow(),
             Some(Some(SealedRowBytes::new(b"sealed".to_vec())))
         );
-        assert!(!vault.answer(id, &sealed), "an answer is taken once");
+        assert!(
+            vault.answer(id, sealed).is_some(),
+            "an answer is taken once"
+        );
     }
 
     /// Without a session the store is locked: the seal answers nothing and
@@ -212,9 +219,37 @@ mod tests {
         });
         for _ in 0..2 {
             let (id, _) = request(&rx);
-            assert!(vault.answer(id, &RestEvent::LocalStoreLocked));
+            assert!(vault.answer(id, RestEvent::LocalStoreLocked).is_none());
         }
         assert!(sealed.get() && opened.get());
+    }
+
+    /// An opened row reaches the one who asked with one owner. So it moves
+    /// out of its wrapper with no copy, and its bytes keep their address.
+    #[wasm_bindgen_test]
+    fn an_opened_row_moves_out_with_no_copy() {
+        let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
+        let vault = Vault::new(tx);
+        let moved = Rc::new(Cell::new(None));
+        let row = SealedRow {
+            place: RowPlace::Draft(ambre_bus::DraftKey::new("k".into())),
+            sealed: SealedRowBytes::new(vec![1]),
+        };
+        vault.open(vec![row], {
+            let moved = Rc::clone(&moved);
+            move |rows| {
+                let row = rows.and_then(|rows| rows.into_iter().next().flatten());
+                moved.set(row.map(|row| row.into_plaintext().as_ptr()));
+            }
+        });
+        let (id, _) = request(&rx);
+        let opened = SecretBytes::new(b"the row".to_vec());
+        let before = opened.with_plaintext(<[u8]>::as_ptr);
+        let answer = RestEvent::LocalRowsOpened {
+            rows: vec![Some(opened)],
+        };
+        assert!(vault.answer(id, answer).is_none());
+        assert_eq!(moved.get(), Some(before));
     }
 
     /// A request the channel to Logic does not take waits, and leaves in
