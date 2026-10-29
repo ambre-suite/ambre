@@ -31,7 +31,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-110` | `OBS` | A row the filter hides MUST count in an aggregate, as it counts in a formula over the same cells. | this spec section 4 | `ambre_trame::logic::tests::group5::status_bar_total_matches_sum_under_a_filter` | none | verified |
 | `TRAME-UI-135` | `OBS` | An aggregate MUST read with no decimals when it is a whole number, and with two otherwise. | this spec section 3 | `ambre_trame::tests::chrome_ui::an_aggregate_reads_whole_or_with_two_decimals` | none | verified |
 | `TRAME-UI-178` | `OBS` | A cell value that is not a finite number MUST count in `count` and in no numeric aggregate. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_leaves_a_value_that_is_not_finite_out_of_the_totals` -- a typed `NaN`, two infinities and `1e999` beside two numbers; type-level -- the totals hold a `CellNumber`, which refuses a value that is not finite | none | verified |
-| `TRAME-UI-179` | `OBS` | A sum past the largest finite number MUST read `#NUM!`, and so MUST its average. | this spec section 2; section 3 | `ambre_bus::app::trame::event::tests::a_sum_past_the_largest_number_is_an_overflow` -- the totals; `ambre_trame::tests::chrome_ui::a_sum_past_the_largest_number_reads_num` -- the band | none | verified |
+| `TRAME-UI-179` | `OBS` | A sum whose exact total is past the largest finite number MUST read `#NUM!`, and so MUST its average. | this spec section 2; section 3 | `ambre_trame::logic::tests::group4::selection_stats_sums_as_a_formula_over_the_same_cells_does` -- the sum, in two orders, beside `=SUM` over the same cells; `ambre_bus::app::trame::event::tests::an_overflowed_sum_leaves_no_average_and_exact_extremes` -- the average; `ambre_trame::tests::chrome_ui::a_sum_past_the_largest_number_reads_num` -- the band | none | verified |
 
 ### 1.2 Select a different block
 
@@ -47,8 +47,8 @@ status values are normative in `ambre-spec-template.md`.
   and `UI-THREAD-004` bans a network, crypto or persistence path on the thread it paints on.
 * **Verification.** 13 `verified`. The walk, the tallies, the read-only guarantee, the
   whole-selection coverage, the refresh on a selection change and the clear decision each have a
-  host test. The band, its number format and its overflow are read back on the wasm tier. The count and the
-  numeric aggregates are two rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
+  host test. The band, its number format and its overflow are read back on the wasm tier. The
+  count and the numeric aggregates are two rows (`TRAME-UI-105`, `TRAME-UI-172`) over one test.
 
 ---
 
@@ -73,8 +73,9 @@ pub struct SelStats {
 }
 
 /// The totals of at least one number (`ambre-bus`): its count, sum, minimum
-/// and maximum, and the average they give. The sum and the average are
-/// `None` past the largest finite number.
+/// and maximum, and the average they give. The sum is the exact total the
+/// Logic thread computes, and it and the average are `None` past the
+/// largest finite number.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumericStats { /* private */ }
 
@@ -92,9 +93,9 @@ finite. Such a value is no cell number, so it enters no total (`TRAME-UI-178`).
 1. bring the formula cache up to date, so each cell is read at its computed value;
 2. walk every tracked selection rectangle, the rows the filter hides included (`TRAME-UI-110`);
 3. tally every non-empty cell into `count`;
-4. fold each cell number into the totals: its count, the sum, the minimum and the maximum. From
-   the first partial sum past the largest finite number on, the sum is an overflow
-   (`TRAME-UI-179`);
+4. fold each cell number into the count, the minimum and the maximum. Sum them as `SUM` does,
+   exactly and then rounded once, so their order changes nothing (`TRAME-FEAT-029`). The sum is
+   an overflow only when that exact total is past the largest finite number (`TRAME-UI-179`);
 5. leave the totals out when no number was found, so no aggregate reads an empty zero;
 6. reply with the count and the totals, and emit no delta (`TRAME-UI-106`).
 
@@ -126,8 +127,8 @@ band specified in `ambre-spec-chrome.md`, which owns the slots below.
 | the frame chip | the frame rate, expanding on click into the frame timings |
 
 **How a number reads.** A whole number shows with no decimals, any other with two, so the band
-keeps a stable width as the selection changes. A sum that overflows reads `#NUM!`, as a formula
-whose arithmetic overflows does, and its average reads the same (`TRAME-UI-179`).
+keeps a stable width as the selection changes. A sum that overflows reads `#NUM!`, as `=SUM` over
+the same cells does, and its average reads the same (`TRAME-UI-179`).
 
 **What the user does not see.** One cell shows an empty band, because the cell already shows its own
 value (`TRAME-UI-108`).

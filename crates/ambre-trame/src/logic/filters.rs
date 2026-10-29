@@ -104,22 +104,24 @@ impl TrameState {
     /// Aggregate the tracked selection for the status bar (`trame-status-bar`).
     /// Walks the selection rectangle, pulling each cell's evaluated value through
     /// the formula cache. Rows a filter hides count, as they do in `SUM`, so the
-    /// bar and a formula over the same cells read one total (`TRAME-FEAT-029`). `count` tallies non-empty cells;
-    /// numeric cells additionally feed the `NumericStats` totals. A read-only
-    /// query: no CRDT delta.
+    /// bar and a formula over the same cells read one total (`TRAME-FEAT-029`).
+    /// The sum is the exact one `SUM` takes, for the same reason. `count`
+    /// tallies non-empty cells; numeric cells additionally feed the
+    /// `NumericStats` totals. A read-only query: no CRDT delta.
     ///
     /// A number that is not finite counts as a non-empty cell and enters no
     /// total (`TRAME-UI-178`). The text of a cell comes from a keystroke, a
     /// paste, an import or a peer. A literal such as `NaN` or `1e999` parses
     /// as such a number.
     pub(super) fn selection_stats(&mut self) -> TrameOutcome {
+        use crate::formula::functions::exact_sum;
         use ambre_bus::app::trame::{CellCount, CellNumber, NumericStats};
         // Make sure evaluated values are current before reading them.
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
 
         let mut count = CellCount::ZERO;
-        let mut numbers: Option<NumericStats> = None;
+        let mut numbers: Vec<CellNumber> = Vec::new();
         // The whole selection, deduplicated across every rectangle (`TRAME-UI-104`).
         for at in self.selected_cells() {
             let v = self
@@ -131,12 +133,16 @@ impl TrameState {
                 CellValue::Number(n) => {
                     count = count.incremented();
                     if let Ok(n) = CellNumber::new(n) {
-                        numbers = Some(numbers.map_or_else(|| NumericStats::of(n), |s| s.with(n)));
+                        numbers.push(n);
                     }
                 }
                 _ => count = count.incremented(),
             }
         }
+        // The exact sum `SUM` takes, so the band reads the total a formula
+        // over the same cells reads, overflow included (`TRAME-UI-179`).
+        let sum = CellNumber::new(exact_sum(numbers.iter().map(|n| n.get()))).ok();
+        let numbers = NumericStats::of_all(&numbers, sum);
         TrameOutcome::display_only(vec![TrameEvent::SelectionStats { count, numbers }])
     }
 

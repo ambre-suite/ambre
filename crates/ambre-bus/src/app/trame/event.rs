@@ -55,12 +55,6 @@ impl CellNumber {
     pub fn max(self, other: Self) -> Self {
         Self(self.0.max(other.0))
     }
-
-    /// The sum of the two numbers, `None` when it leaves the finite range.
-    #[must_use]
-    pub fn checked_add(self, other: Self) -> Option<Self> {
-        Self::new(self.0 + other.0).ok()
-    }
 }
 
 impl std::fmt::Display for CellNumber {
@@ -75,41 +69,30 @@ impl std::fmt::Display for CellNumber {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumericStats {
     count: CellCount,
-    /// `None` from the first partial sum past the largest finite number on.
-    /// A sum is no cell number once it overflows, and no later term makes
-    /// the running sum exact again.
+    /// `None` when the exact total of the numbers is past the largest finite
+    /// number, whatever their order.
     sum: Option<CellNumber>,
     min: CellNumber,
     max: CellNumber,
 }
 
 impl NumericStats {
-    /// The totals of the single number `n`.
-    #[must_use]
-    pub const fn of(n: CellNumber) -> Self {
-        Self {
-            count: CellCount::new(1),
-            sum: Some(n),
-            min: n,
-            max: n,
-        }
-    }
-
-    /// The totals with one more number, `n`.
-    #[must_use]
-    pub fn with(self, n: CellNumber) -> Self {
-        Self {
-            count: self.count.incremented(),
-            sum: self.sum.and_then(|sum| sum.checked_add(n)),
-            min: self.min.min(n),
-            max: self.max.max(n),
-        }
-    }
-
     /// The totals of `numbers`, `None` when there is none.
-    pub fn of_all(numbers: impl IntoIterator<Item = CellNumber>) -> Option<Self> {
-        numbers.into_iter().fold(None, |stats, n| {
-            Some(stats.map_or_else(|| Self::of(n), |stats: Self| stats.with(n)))
+    ///
+    /// `sum` is their total as the Logic thread's formulas compute it, so
+    /// the band and a formula over the same cells read one total
+    /// (`TRAME-FEAT-029`). `None` is a total past the largest finite number.
+    #[must_use]
+    pub fn of_all(numbers: &[CellNumber], sum: Option<CellNumber>) -> Option<Self> {
+        let (&first, rest) = numbers.split_first()?;
+        let (min, max) = rest
+            .iter()
+            .fold((first, first), |(min, max), &n| (min.min(n), max.max(n)));
+        Some(Self {
+            count: CellCount::new(u64::try_from(numbers.len()).unwrap_or(u64::MAX)),
+            sum,
+            min,
+            max,
         })
     }
 
@@ -624,8 +607,6 @@ ambre_core::define_flag! {
 mod tests {
     use super::*;
 
-    /// Totals exist only over at least one number, and the average is the sum
-    /// over the count.
     fn numbers(values: &[f64]) -> Vec<CellNumber> {
         values
             .iter()
@@ -633,10 +614,17 @@ mod tests {
             .collect()
     }
 
+    fn number(value: f64) -> CellNumber {
+        CellNumber::new(value).expect("a finite number")
+    }
+
+    /// Totals exist only over at least one number, and the average is the sum
+    /// over the count.
     #[test]
     fn numeric_totals_need_a_number_and_average_over_their_count() {
-        assert_eq!(NumericStats::of_all([]), None);
-        let totals = NumericStats::of_all(numbers(&[10.0, -4.0, 6.0])).expect("three numbers");
+        assert_eq!(NumericStats::of_all(&[], Some(number(0.0))), None);
+        let totals = NumericStats::of_all(&numbers(&[10.0, -4.0, 6.0]), Some(number(12.0)))
+            .expect("three numbers");
         assert_eq!(totals.count().get(), 3);
         assert_eq!(totals.sum().map(CellNumber::get), Some(12.0));
         assert_eq!(totals.avg().map(CellNumber::get), Some(4.0));
@@ -659,9 +647,9 @@ mod tests {
     /// infinity, and so is its average. The extremes stay exact
     /// (`TRAME-UI-179`).
     #[test]
-    fn a_sum_past_the_largest_number_is_an_overflow() {
-        let totals =
-            NumericStats::of_all(numbers(&[f64::MAX, f64::MAX, -f64::MAX])).expect("numbers");
+    fn an_overflowed_sum_leaves_no_average_and_exact_extremes() {
+        let totals = NumericStats::of_all(&numbers(&[f64::MAX, f64::MAX, -f64::MAX]), None)
+            .expect("numbers");
         assert_eq!(totals.sum(), None);
         assert_eq!(totals.avg(), None);
         assert_eq!(totals.count().get(), 3);
@@ -669,7 +657,5 @@ mod tests {
             (totals.min().get(), totals.max().get()),
             (-f64::MAX, f64::MAX)
         );
-        let below = NumericStats::of_all(numbers(&[-f64::MAX, -f64::MAX])).expect("numbers");
-        assert_eq!(below.sum(), None, "an overflow below is one too");
     }
 }

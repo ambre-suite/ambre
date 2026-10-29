@@ -656,6 +656,61 @@ fn selection_stats_leaves_a_value_that_is_not_finite_out_of_the_totals() {
     }
 }
 
+/// The band's sum of a column, and `=SUM` of it as the cell beside reads it.
+fn band_and_formula_sums(values: &[&str]) -> (Option<f64>, String) {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, values);
+    let last = u32::try_from(values.len()).expect("a short column") - 1;
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: Row::new(last),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
+    });
+    let evts = state.handle_command(TrameCommand::RequestSelectionStats);
+    let TrameEvent::SelectionStats { numbers, .. } = &evts.display[0] else {
+        panic!("expected SelectionStats, got {:?}", evts.display[0])
+    };
+    let band = numbers
+        .expect("the column holds numbers")
+        .sum()
+        .map(CellNumber::get);
+    state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(0),
+        col: Col::new(1),
+        text: format!("=SUM(A1:A{})", values.len()),
+    });
+    (band, read_cell(&mut state, 0, 1))
+}
+
+/// The band sums as `SUM` does: exactly, so a small term between two large
+/// ones survives, and the order of the cells changes nothing. A sum past the
+/// largest number has no value, and `SUM` reads `#NUM!` (`TRAME-FEAT-029`,
+/// `TRAME-UI-179`).
+#[test]
+fn selection_stats_sums_as_a_formula_over_the_same_cells_does() {
+    const BIG: &str = "1.7976931348623157e308";
+    const MINUS_BIG: &str = "-1.7976931348623157e308";
+    assert_eq!(
+        band_and_formula_sums(&["1e16", "1", "-1e16"]),
+        (Some(1.0), "1".to_owned())
+    );
+    assert_eq!(
+        band_and_formula_sums(&[BIG, BIG, MINUS_BIG, MINUS_BIG]),
+        (Some(0.0), "0".to_owned())
+    );
+    assert_eq!(
+        band_and_formula_sums(&[BIG, MINUS_BIG, BIG, MINUS_BIG]),
+        (Some(0.0), "0".to_owned())
+    );
+    assert_eq!(
+        band_and_formula_sums(&[BIG, BIG]),
+        (None, "#NUM!".to_owned())
+    );
+}
+
 /// A disjoint selection reaches the Logic thread whole: a range intent styles
 /// every rectangle, not the live one alone (`TRAME-UI-129`).
 #[test]

@@ -20,6 +20,8 @@ mod builtins_a;
 mod builtins_b;
 mod builtins_c;
 
+/// The exact total `SUM` takes, for the status band (`TRAME-FEAT-029`).
+pub(crate) use builtins_a::exact_sum;
 use builtins_a::*;
 use builtins_b::*;
 use builtins_c::*;

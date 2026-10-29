@@ -725,13 +725,15 @@ fn a_lost_edit_reaches_the_user() {
     root.remove();
 }
 
-/// The totals of `values`, each a finite cell number.
+/// The totals of `values`, each a finite cell number. Their plain sum stands
+/// for the Logic thread's exact one: the band shows what it is given.
 fn totals(values: &[f64]) -> Option<ambre_bus::app::trame::NumericStats> {
-    ambre_bus::app::trame::NumericStats::of_all(
-        values
-            .iter()
-            .map(|&v| ambre_bus::app::trame::CellNumber::new(v).unwrap()),
-    )
+    use ambre_bus::app::trame::{CellNumber, NumericStats};
+    let numbers: Vec<CellNumber> = values
+        .iter()
+        .map(|&v| CellNumber::new(v).unwrap())
+        .collect();
+    NumericStats::of_all(&numbers, CellNumber::new(values.iter().sum()).ok())
 }
 
 /// Mount the status band over `stats` and return its text.
