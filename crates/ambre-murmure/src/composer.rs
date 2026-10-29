@@ -44,7 +44,7 @@ use crate::Region;
 use crate::commands::PendingEdit;
 use crate::drafts::{DraftShelf, Loss, LossCount};
 use crate::look;
-use crate::markers::{self, MarkBar};
+use crate::markers::{self, DraftEdit, MarkBar};
 use crate::mention_list::{MentionList, Offer, OfferIndex, OfferVec, offers, query_at};
 use crate::paint::{RowBounds, draw, shape, surface_px, text_height, text_width, view_rect};
 use crate::read_aloud::{self, Say};
@@ -323,8 +323,12 @@ impl Marks {
     /// (`MURMURE-553`). The styles follow it too.
     fn follow(&mut self, text: &str) -> &[Mention] {
         if self.text != text {
-            self.mentions = kept_mentions(&self.text, text, &self.mentions);
-            self.styles = markers::kept_styles(&self.text, text, &self.styles);
+            let edit = DraftEdit {
+                before: &self.text,
+                after: text,
+            };
+            self.mentions = kept_mentions(edit, &self.mentions);
+            self.styles = markers::kept_styles(edit, &self.styles);
             text.clone_into(&mut self.text);
         }
         &self.mentions
@@ -420,13 +424,16 @@ impl Sent {
     }
 }
 
-/// The mentions of `old` that an edit to `new` leaves whole. The edit
-/// changed the chars between the common head and the common tail. A mention
-/// before the change keeps its range, one after it moves with the tail, and
-/// one the change touches goes.
-fn kept_mentions(old: &str, new: &str, mentions: &[Mention]) -> Vec<Mention> {
-    let (old, new): (Vec<char>, Vec<char>) = (old.chars().collect(), new.chars().collect());
-    let (head, old_end, new_end) = markers::change(&old, &new);
+/// The mentions of the text before `edit` that the edit leaves whole. The
+/// edit changed the chars between the common head and the common tail. A
+/// mention before the change keeps its range, one after it moves with the
+/// tail, and one the change touches goes.
+fn kept_mentions(edit: DraftEdit<'_>, mentions: &[Mention]) -> Vec<Mention> {
+    let markers::Changed {
+        head,
+        old_end,
+        new_end,
+    } = markers::change(edit);
     mentions
         .iter()
         .filter_map(|mention| {
@@ -1206,7 +1213,7 @@ impl Composer {
         let Some(closed) = found(&text, &code) else {
             return;
         };
-        let (between, after) = closed.apply(&text);
+        let markers::Unmarked { between, after } = closed.apply(&text);
         let caret = editor.caret();
         editor.push(EditIntent::Replace {
             start: closed.span.start,
@@ -1481,9 +1488,16 @@ impl Composer {
                 });
                 editor.set_spans(font_cx, spans);
                 if let Some((_, say)) = self.saying.take().filter(|(of, _)| *of == shown) {
-                    let (caret, selection) = (editor.caret(), editor.selection());
-                    let drawn = editor.caret_line();
-                    self.said = read_aloud::said(say, &before, &text, caret, selection, drawn);
+                    let at = read_aloud::CaretAt {
+                        caret: editor.caret(),
+                        selection: editor.selection(),
+                        drawn: editor.caret_line(),
+                    };
+                    let edit = DraftEdit {
+                        before: &before,
+                        after: &text,
+                    };
+                    self.said = read_aloud::said(say, edit, at);
                 }
                 let tall = editor.layout_height().unwrap_or(ViewPx::ZERO);
                 self.drafts.insert(shown, editor);
@@ -1769,13 +1783,14 @@ mod tests {
         };
         // "@a hi @b": "hi" becomes "hello".
         let mentions = [at(0..2), at(6..8)];
-        let kept = kept_mentions("@a hi @b", "@a hello @b", &mentions);
+        let edit = |before, after| DraftEdit { before, after };
+        let kept = kept_mentions(edit("@a hi @b", "@a hello @b"), &mentions);
         assert_eq!(kept, [at(0..2), at(9..11)]);
-        let kept = kept_mentions("@a hi @b", "@x hi @b", &mentions);
+        let kept = kept_mentions(edit("@a hi @b", "@x hi @b"), &mentions);
         assert_eq!(kept, [at(6..8)], "the first one was edited");
-        let same = kept_mentions("@a hi @b", "@a hi @b", &mentions);
+        let same = kept_mentions(edit("@a hi @b", "@a hi @b"), &mentions);
         assert_eq!(same, mentions, "no change keeps them all");
-        let wide = kept_mentions("é @b", "éé @b", &[at(2..4)]);
+        let wide = kept_mentions(edit("é @b", "éé @b"), &[at(2..4)]);
         assert_eq!(wide, [at(3..5)], "ranges count chars, not bytes");
     }
 

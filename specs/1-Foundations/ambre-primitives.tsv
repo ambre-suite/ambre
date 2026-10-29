@@ -1353,8 +1353,6 @@ ambre-murmure | src/composer.rs | crate::composer | Marks::follow(text) | param 
 ambre-murmure | src/composer.rs | crate::composer | REMOVE_MARK | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | UPLOADING | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | also_said() | ret | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | kept_mentions(new) | param | &str	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | kept_mentions(old) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | span_of(text) | param | &str	free-text	the draft text a style mark indexes; the mark range is a CharSpan and char_span_to_bytes turns it into a ByteSpan
 ambre-murmure | src/composer.rs | crate::composer | typing_line() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/delta.rs | crate::delta | JsonSchemaVersion.0 | field | u8	newtype-inner	JsonSchemaVersion newtype accessor
@@ -1405,16 +1403,17 @@ ambre-murmure | src/list.rs | crate::list | file_label() | ret | String	free-tex
 ambre-murmure | src/list.rs | crate::list | fill_down() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | grouped() | ret | bool	generic	a fact, selects no mode: whether the next message joins the previous one's group
 ambre-murmure | src/look.rs | crate::look | margin(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | Closed::apply() | ret | (String,String)	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | Closed::apply(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | Closed::range(text) | param | &str	free-text	the draft text the closed markers sit in; the spans are ByteSpan in, CharSpan out
+ambre-murmure | src/markers.rs | crate::markers | DraftEdit.after | field | &'a str	free-text	the text of a draft a member typed, after an edit; Debug prints its length alone
+ambre-murmure | src/markers.rs | crate::markers | DraftEdit.before | field | &'a str	free-text	the text of a draft a member typed, before an edit; Debug prints its length alone
 ambre-murmure | src/markers.rs | crate::markers | FENCE | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | MARK_BAR | const | [(TextStyle,&str);3]	free-text	the title a person reads on each control of the format bar, the words Prose gives the same mark
 ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	free-text	UI text/label const
+ambre-murmure | src/markers.rs | crate::markers | Unmarked.after | field | String	free-text	the text of a draft a member typed, with both markers gone; Debug prints its length alone
+ambre-murmure | src/markers.rs | crate::markers | Unmarked.between | field | String	free-text	the text of a draft a member typed, with the close marker gone alone; Debug prints its length alone
 ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | change(new) | param | &[char]	free-text	the draft text after an edit, as its chars; the three offsets it returns are CharOffset
-ambre-murmure | src/markers.rs | crate::markers | change(old) | param | &[char]	free-text	the draft text before an edit, as its chars; the three offsets it returns are CharOffset
 ambre-murmure | src/markers.rs | crate::markers | closed(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | closed_at_send(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | closed_by_break(text) | param | &str	free-text	text, label or user content
@@ -1425,8 +1424,6 @@ ambre-murmure | src/markers.rs | crate::markers | holds() | ret | bool	generic	s
 ambre-murmure | src/markers.rs | crate::markers | holds(inner) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | inline_code(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | italic(line) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | kept_styles(new) | param | &str	free-text	text, label or user content
-ambre-murmure | src/markers.rs | crate::markers | kept_styles(old) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | line_marker(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | link(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | outside(text) | param | &str	free-text	text, label or user content
@@ -1443,8 +1440,7 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | AT_CHANNEL | const |
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer.name | field | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer::written() | ret | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | matches() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/mention_list.rs | crate::mention_list | matches(name) | param | &str	free-text	text, label or user content
-ambre-murmure | src/mention_list.rs | crate::mention_list | matches(query) | param | &str	free-text	text, label or user content
+ambre-murmure | src/mention_list.rs | crate::mention_list | matches(query) | param | &str	free-text	the words a member typed after an @, matched against the start of each word of a name
 ambre-murmure | src/mention_list.rs | crate::mention_list | offers(query) | param | &str	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at() | ret | Option<(ByteOffset,&str)>	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | param | &str	free-text	the draft text an @ query is read from; the caret and the @ are ByteOffset
@@ -1470,12 +1466,8 @@ ambre-murmure | src/read_aloud.rs | crate::read_aloud | clipped() | ret | String
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | clipped(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | line_at() | ret | Option<&str>	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | line_at(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | removed() | ret | Option<&'a str>	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | removed(after) | param | &str	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | removed(before) | param | &'a str	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | said() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | said(before) | param | &str	free-text	text, label or user content
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | said(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/read_aloud.rs | crate::read_aloud | removed() | ret | Option<&'a str>	free-text	the chars of a draft a delete took, as a screen reader says them
+ambre-murmure | src/read_aloud.rs | crate::read_aloud | said() | ret | Option<String>	free-text	the words a screen reader says of a draft
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | spoken() | ret | String	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | spoken(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/schema.rs | crate::schema | ChannelType::as_str() | ret | &'static str	newtype-inner	enum/newtype own accessor or constructor

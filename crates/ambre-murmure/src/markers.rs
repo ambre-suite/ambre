@@ -92,11 +92,33 @@ pub struct Closed {
     pub style: TextStyle,
 }
 
+/// A draft once the markers of a [`Closed`] leave it, in two steps. Named
+/// fields, so the two drafts never swap at a read.
+///
+/// `Debug` prints the length of each draft alone: a draft is plaintext a
+/// member typed.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Unmarked {
+    /// The draft with the close marker gone alone.
+    pub between: String,
+    /// The draft with both markers gone.
+    pub after: String,
+}
+
+impl std::fmt::Debug for Unmarked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Unmarked")
+            .field("between", &ByteCount::from_len(self.between.len()))
+            .field("after", &ByteCount::from_len(self.after.len()))
+            .finish()
+    }
+}
+
 impl Closed {
     /// The draft once the markers leave it, and the one between, with the
     /// close marker gone alone. The marks follow the two in turn, so a
     /// mention between the markers stays whole.
-    pub fn apply(&self, text: &str) -> (String, String) {
+    pub fn apply(&self, text: &str) -> Unmarked {
         let (span, inner) = (self.span.to_usize_range(), self.inner.to_usize_range());
         let between = format!("{}{}", &text[..inner.end], &text[span.end..]);
         let after = format!(
@@ -105,7 +127,7 @@ impl Closed {
             &text[inner],
             &text[span.end..]
         );
-        (between, after)
+        Unmarked { between, after }
     }
 
     /// The chars of the text that stays, once the markers left.
@@ -300,10 +322,42 @@ fn link(line: &str) -> Option<Closed> {
     })
 }
 
-/// Where the edit from `old` to `new` falls: the common head, and the end
-/// of the change in each text, all in chars.
-pub(crate) fn change(old: &[char], new: &[char]) -> (CharOffset, CharOffset, CharOffset) {
-    let head = old.iter().zip(new).take_while(|(a, b)| a == b).count();
+/// The text of a draft before an edit, and after it. A pair of names, so
+/// the two texts never swap at a call.
+///
+/// `Debug` prints the length of each text alone: a draft is plaintext a
+/// member typed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct DraftEdit<'a> {
+    /// The text before the edit.
+    pub before: &'a str,
+    /// The text after the edit.
+    pub after: &'a str,
+}
+
+impl std::fmt::Debug for DraftEdit<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DraftEdit")
+            .field("before", &ByteCount::from_len(self.before.len()))
+            .field("after", &ByteCount::from_len(self.after.len()))
+            .finish()
+    }
+}
+
+/// Where an edit falls, in chars: the common head, and the end of the
+/// change in the text before and in the text after.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Changed {
+    pub head: CharOffset,
+    pub old_end: CharOffset,
+    pub new_end: CharOffset,
+}
+
+/// Where `edit` falls.
+pub(crate) fn change(edit: DraftEdit<'_>) -> Changed {
+    let (old, new): (Vec<char>, Vec<char>) =
+        (edit.before.chars().collect(), edit.after.chars().collect());
+    let head = old.iter().zip(&new).take_while(|(a, b)| a == b).count();
     let room = old.len().min(new.len()) - head;
     let tail = old
         .iter()
@@ -312,19 +366,22 @@ pub(crate) fn change(old: &[char], new: &[char]) -> (CharOffset, CharOffset, Cha
         .take(room)
         .take_while(|(a, b)| a == b)
         .count();
-    (
-        CharOffset::from_usize(head),
-        CharOffset::from_usize(old.len() - tail),
-        CharOffset::from_usize(new.len() - tail),
-    )
+    Changed {
+        head: CharOffset::from_usize(head),
+        old_end: CharOffset::from_usize(old.len() - tail),
+        new_end: CharOffset::from_usize(new.len() - tail),
+    }
 }
 
-/// The styles of `old` once an edit made it `new`. A run grows or shrinks
-/// with an edit inside it, and loses the chars an edit took from its ends.
-/// Text typed at either end stays out of it.
-pub fn kept_styles(old: &str, new: &str, styles: &[StyleMark]) -> Vec<StyleMark> {
-    let (old, new): (Vec<char>, Vec<char>) = (old.chars().collect(), new.chars().collect());
-    let (head, old_end, new_end) = change(&old, &new);
+/// The styles of the text before `edit` once it made the text after. A run
+/// grows or shrinks with an edit inside it, and loses the chars an edit took
+/// from its ends. Text typed at either end stays out of it.
+pub fn kept_styles(edit: DraftEdit<'_>, styles: &[StyleMark]) -> Vec<StyleMark> {
+    let Changed {
+        head,
+        old_end,
+        new_end,
+    } = change(edit);
     let shifted = |at: CharOffset| at + (new_end - old_end);
     styles
         .iter()
@@ -407,7 +464,7 @@ mod tests {
     /// chars of the text that took the style.
     fn converted(text: &str) -> Option<(String, Range<usize>, TextStyle)> {
         let closed = closed(text, ByteOffset::from_usize(text.len()), &[])?;
-        let (_, after) = closed.apply(text);
+        let after = closed.apply(text).after;
         Some((after, closed.range(text).to_usize_range(), closed.style))
     }
 
@@ -415,7 +472,7 @@ mod tests {
     /// line, and the chars of the text that took the style.
     fn broken(text: &str) -> Option<(String, Range<usize>, TextStyle)> {
         let closed = closed_by_break(text, ByteOffset::from_usize(text.len()), &[])?;
-        let (_, after) = closed.apply(text);
+        let after = closed.apply(text).after;
         Some((after, closed.range(text).to_usize_range(), closed.style))
     }
 
@@ -445,7 +502,10 @@ mod tests {
             .expect("closed at the caret");
         assert_eq!(
             closed.apply(text),
-            ("a\n**b tail".to_owned(), "a\nb tail".to_owned())
+            Unmarked {
+                between: "a\n**b tail".to_owned(),
+                after: "a\nb tail".to_owned(),
+            }
         );
         assert_eq!(closed.range(text), CharSpan::from_usize_range(2..3));
         assert_eq!(
@@ -516,7 +576,7 @@ mod tests {
         let text = "> one\n two";
         let closed = closed_by_break(text, ByteOffset::from_usize(text.len()), &[])
             .expect("closed at the break");
-        assert_eq!(closed.apply(text).1, "one\n two");
+        assert_eq!(closed.apply(text).after, "one\n two");
         assert_eq!(closed.range(text), CharSpan::from_usize_range(0..4));
         assert_eq!(closed_by_break("no break", ByteOffset::new(8), &[]), None);
         assert_eq!(
@@ -529,7 +589,7 @@ mod tests {
         let sent = |text: &str| {
             let closed = closed_at_send(text, &[])?;
             Some((
-                closed.apply(text).1,
+                closed.apply(text).after,
                 closed.range(text).to_usize_range(),
                 closed.style,
             ))
@@ -650,7 +710,7 @@ mod tests {
     #[test]
     fn a_style_follows_the_text_through_an_edit() {
         let bold = |range| vec![mark(TextStyle::Bold, range)];
-        let kept = |old: &str, new: &str| kept_styles(old, new, &bold(2..6));
+        let kept = |before, after| kept_styles(DraftEdit { before, after }, &bold(2..6));
         assert_eq!(kept("a bold", "a bold!"), bold(2..6), "typed at its end");
         assert_eq!(kept("a bold", "a Xbold"), bold(3..7), "typed at its start");
         assert_eq!(kept("a bold", "a boXld"), bold(2..7), "typed inside");
@@ -659,11 +719,27 @@ mod tests {
         assert_eq!(kept("a bold", "a ld"), bold(2..4), "cut at its start");
         assert_eq!(kept("a bold", "a "), [], "cut whole");
         assert_eq!(kept("a bold", "a bXX"), bold(2..5), "chars replaced inside");
-        assert_eq!(
-            kept_styles("a bold x", "a bo", &bold(2..6)),
-            bold(2..4),
-            "cut past its end"
-        );
+        assert_eq!(kept("a bold x", "a bo"), bold(2..4), "cut past its end");
+    }
+
+    /// The debug form of an edit names the length of each text, never a
+    /// char of it: a draft is plaintext.
+    #[test]
+    fn an_edit_debugs_its_lengths_alone() {
+        let edit = DraftEdit {
+            before: "secret draft",
+            after: "secret",
+        };
+        let shown = format!("{edit:?}");
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains("12") && shown.contains('6'), "{shown}");
+        let unmarked = Unmarked {
+            between: "a **secret".to_owned(),
+            after: "a secret".to_owned(),
+        };
+        let shown = format!("{unmarked:?}");
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains("10") && shown.contains('8'), "{shown}");
     }
 
     /// A chord puts its style on the selection, and takes it off a

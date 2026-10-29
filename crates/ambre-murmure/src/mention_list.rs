@@ -97,9 +97,10 @@ pub fn query_at(text: &str, caret: ByteOffset) -> Option<(ByteOffset, &str)> {
 }
 
 /// Whether a word of `name` starts with `query`, case folded.
-fn matches(name: &str, query: &str) -> bool {
+fn matches(name: &ambre_core::DisplayName, query: &str) -> bool {
     let query = query.to_lowercase();
-    name.to_lowercase()
+    name.as_str()
+        .to_lowercase()
         .split_whitespace()
         .any(|word| word.starts_with(&query))
 }
@@ -113,7 +114,7 @@ pub fn offers(
 ) -> Vec<Offer> {
     let mut kept: Vec<&(UserId, ambre_core::DisplayName)> = members
         .iter()
-        .filter(|(user, name)| Some(*user) != me && matches(name.as_str(), query))
+        .filter(|(user, name)| Some(*user) != me && matches(name, query))
         .collect();
     kept.sort_by_cached_key(|(_, name)| name.as_str().to_lowercase());
     let channel = AT_CHANNEL

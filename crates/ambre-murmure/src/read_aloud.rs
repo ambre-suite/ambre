@@ -7,6 +7,8 @@
 
 use ambre_core::{ByteOffset, ByteSpan, CharCount};
 
+use crate::markers::DraftEdit;
+
 /// The longest text one announcement carries. A long draft is said by its
 /// start, as a Prose block is.
 const TEXT_LIMIT: CharCount = CharCount::new(200);
@@ -26,18 +28,29 @@ pub enum Say {
     Draft,
 }
 
-/// What a screen reader hears of the draft `text`, once the key that asked
-/// for `say` landed on `before`. `caret`, `selection` and `drawn` are byte
-/// offsets in `text`, `drawn` the line the layout draws around the caret. A
-/// move that leaves a selection says the text selected.
-pub fn said(
-    say: Say,
-    before: &str,
-    text: &str,
-    caret: Option<ByteOffset>,
-    selection: Option<ByteSpan>,
-    drawn: Option<ByteSpan>,
-) -> Option<String> {
+/// Where the caret of a draft stands once a key landed, in bytes of the
+/// text after the key. Three names, so the selection and the line drawn
+/// never swap at a call.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CaretAt {
+    /// The caret, `None` with no caret.
+    pub caret: Option<ByteOffset>,
+    /// The selection, `None` with none.
+    pub selection: Option<ByteSpan>,
+    /// The line the layout draws around the caret, `None` with no layout.
+    pub drawn: Option<ByteSpan>,
+}
+
+/// What a screen reader hears of the draft once the key that asked for
+/// `say` made `edit`. `at` places the caret in the text after it. A move
+/// that leaves a selection says the text selected.
+pub fn said(say: Say, edit: DraftEdit<'_>, at: CaretAt) -> Option<String> {
+    let CaretAt {
+        caret,
+        selection,
+        drawn,
+    } = at;
+    let text = edit.after;
     let moved = matches!(say, Say::Char | Say::Word | Say::Line);
     if moved && let Some(selected) = selection.and_then(|range| text.get(range.to_usize_range())) {
         return Some(format!("{}, selected", clipped(selected)));
@@ -59,7 +72,7 @@ pub fn said(
             .and_then(|range| text.get(range.to_usize_range()))
             .or_else(|| caret.and_then(|at| line_at(text, at)))
             .map(spoken),
-        Say::Removed => removed(before, text).map(|gone| {
+        Say::Removed => removed(edit).map(|gone| {
             let mut chars = gone.chars();
             match (chars.next(), chars.next()) {
                 (Some(one), None) => char_name(Some(one)),
@@ -78,9 +91,10 @@ fn line_at(text: &str, at: ByteOffset) -> Option<&str> {
     text.get(start..end)
 }
 
-/// The text a delete took from `before` to leave `after`, `None` unless
-/// `after` is `before` with one run of chars taken out.
-fn removed<'a>(before: &'a str, after: &str) -> Option<&'a str> {
+/// The chars a delete took from the draft in `edit`. `None` unless the edit
+/// took one run of chars out and typed none.
+fn removed<'a>(edit: DraftEdit<'a>) -> Option<&'a str> {
+    let DraftEdit { before, after } = edit;
     if after.len() >= before.len() {
         return None;
     }
@@ -131,13 +145,29 @@ fn char_name(c: Option<char>) -> String {
 mod tests {
     use super::*;
 
+    /// A key that moved the caret: the text stays.
+    fn kept(text: &str) -> DraftEdit<'_> {
+        DraftEdit {
+            before: text,
+            after: text,
+        }
+    }
+
+    /// The caret at the byte `at`, with no selection and no layout.
+    fn caret(at: usize) -> CaretAt {
+        CaretAt {
+            caret: Some(ByteOffset::new(at)),
+            ..CaretAt::default()
+        }
+    }
+
     /// A move by a char says the char after the caret, by its name for a
     /// space, a line break or the end. A move by a word says the word
     /// (`MURMURE-571`).
     #[test]
     fn a_move_says_the_char_or_the_word_after_the_caret() {
         let text = "one two\nthree";
-        let say = |say, at| said(say, text, text, Some(ByteOffset::new(at)), None, None);
+        let say = |say, at| said(say, kept(text), caret(at));
         assert_eq!(say(Say::Char, 0).as_deref(), Some("o"));
         assert_eq!(say(Say::Char, 3).as_deref(), Some("space"));
         assert_eq!(say(Say::Char, 7).as_deref(), Some("new line"));
@@ -145,7 +175,7 @@ mod tests {
         assert_eq!(say(Say::Word, 4).as_deref(), Some("two"));
         assert_eq!(say(Say::Word, 3).as_deref(), Some("space"));
         assert_eq!(
-            said(Say::Char, text, text, None, None, None),
+            said(Say::Char, kept(text), CaretAt::default()),
             None,
             "no caret, nothing said"
         );
@@ -161,7 +191,7 @@ mod tests {
     #[test]
     fn a_line_move_says_the_line_of_the_caret() {
         let text = "one\n\nthree";
-        let say = |at| said(Say::Line, text, text, Some(ByteOffset::new(at)), None, None);
+        let say = |at| said(Say::Line, kept(text), caret(at));
         assert_eq!(say(1).as_deref(), Some("one"));
         assert_eq!(say(4).as_deref(), Some("blank"));
         assert_eq!(say(text.len()).as_deref(), Some("three"));
@@ -173,8 +203,11 @@ mod tests {
     fn a_line_move_says_the_line_drawn() {
         let text = "one two three\nfour";
         let say = |drawn: Option<std::ops::Range<usize>>| {
-            let drawn = drawn.map(ByteSpan::from_usize_range);
-            said(Say::Line, text, text, Some(ByteOffset::new(5)), None, drawn)
+            let at = CaretAt {
+                drawn: drawn.map(ByteSpan::from_usize_range),
+                ..caret(5)
+            };
+            said(Say::Line, kept(text), at)
         };
         assert_eq!(say(Some(4..8)).as_deref(), Some("two"));
         assert_eq!(say(None).as_deref(), Some("one two three"), "no layout");
@@ -189,7 +222,13 @@ mod tests {
     /// An edit that took nothing says nothing (`MURMURE-572`).
     #[test]
     fn a_delete_says_what_it_took() {
-        let take = |before, after| said(Say::Removed, before, after, None, None, None);
+        let take = |before, after| {
+            said(
+                Say::Removed,
+                DraftEdit { before, after },
+                CaretAt::default(),
+            )
+        };
         assert_eq!(take("one two", "one tw").as_deref(), Some("o"));
         assert_eq!(take("one two", "onetwo").as_deref(), Some("space"));
         assert_eq!(take("one two", "one ").as_deref(), Some("two"));
@@ -205,14 +244,11 @@ mod tests {
     #[test]
     fn a_selection_says_its_text() {
         let text = "one two";
-        let said = said(
-            Say::Char,
-            text,
-            text,
-            None,
-            Some(ByteSpan::from_usize_range(4..7)),
-            None,
-        );
+        let at = CaretAt {
+            selection: Some(ByteSpan::from_usize_range(4..7)),
+            ..CaretAt::default()
+        };
+        let said = said(Say::Char, kept(text), at);
         assert_eq!(said.as_deref(), Some("two, selected"));
     }
 
@@ -220,7 +256,10 @@ mod tests {
     /// `blank` (`MURMURE-574`).
     #[test]
     fn the_draft_is_said_by_its_start() {
-        let draft = |text: &str| said(Say::Draft, "", text, None, None, None);
+        let draft = |after: &str| {
+            let edit = DraftEdit { before: "", after };
+            said(Say::Draft, edit, CaretAt::default())
+        };
         assert_eq!(draft("  hi \n").as_deref(), Some("hi"));
         assert_eq!(draft(" ").as_deref(), Some("blank"));
         let long = "a".repeat(TEXT_LIMIT.to_usize() + 5);
