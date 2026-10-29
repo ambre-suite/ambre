@@ -42,13 +42,13 @@ use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
 
 use crate::Region;
 use crate::commands::PendingEdit;
-use crate::drafts::{DraftShelf, Loss};
+use crate::drafts::{DraftShelf, Loss, LossCount};
 use crate::look;
 use crate::markers::{self, MarkBar};
 use crate::mention_list::{MentionList, Offer, OfferIndex, OfferVec, offers, query_at};
 use crate::paint::{RowBounds, draw, shape, surface_px, text_height, text_width, view_rect};
 use crate::read_aloud::{self, Say};
-use crate::uploads::Uploads;
+use crate::uploads::{FileIndex, Uploads};
 
 /// The strip above the field while the composer holds an edit.
 pub const EDITING_LINE: &str = "Editing a message. Escape cancels.";
@@ -486,12 +486,12 @@ pub struct Composer {
     /// go (`MURMURE-212`).
     sent: Vec<DraftOf>,
     /// How many losses of the shelf the composer applied.
-    losses_seen: usize,
+    losses_seen: LossCount,
     /// The files each draft carries, and those still uploading.
     uploads: Uploads,
     /// Each file chip of the last paint that a press takes off the draft, as
     /// its rectangle and its place in the draft's files.
-    file_chips: Vec<(Rect, usize)>,
+    file_chips: Vec<(Rect, FileIndex)>,
 }
 
 impl Composer {
@@ -512,7 +512,7 @@ impl Composer {
 
     /// The file whose chip the last paint drew under `(x, y)`, by its place
     /// in the files of the draft shown.
-    pub fn file_at(&self, at: ViewPoint) -> Option<usize> {
+    pub fn file_at(&self, at: ViewPoint) -> Option<FileIndex> {
         let at = Point::new(at.x.get().into(), at.y.get().into());
         self.file_chips
             .iter()
@@ -1661,7 +1661,7 @@ impl Composer {
             let label_y = y0 + (y1 - y0 - text_height(words)) / 2.0;
             draw(surface, words, ViewPoint::new(x + SPACE_4, label_y), ink);
             if removable {
-                self.file_chips.push((chip, index));
+                self.file_chips.push((chip, FileIndex::from_usize(index)));
             }
             x += chip_w + SPACE_4;
         }

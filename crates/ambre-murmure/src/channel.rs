@@ -727,7 +727,7 @@ impl ChannelState {
         me: UserId,
     ) -> Result<UnreadCount, MurmureError> {
         self.count_in(segment.document_id(), read, me, |_| true)
-            .map(UnreadCount)
+            .map(|count| UnreadCount(count.get()))
     }
 
     /// The messages [`ChannelState::unread`] counts that mention `me` or the
@@ -776,7 +776,7 @@ impl ChannelState {
             content_of(message)
                 .is_some_and(|content| mention::names(&mention::read(&content, channel), me))
         })
-        .map(MentionCount)
+        .map(|count| MentionCount(count.get()))
     }
 
     /// The messages of a held segment or thread past `read`, written by
@@ -787,11 +787,11 @@ impl ChannelState {
         read: Seq,
         me: UserId,
         counts: impl Fn(&Fields<MessageKey>) -> bool,
-    ) -> Result<u32, MurmureError> {
-        let mut count: u32 = 0;
+    ) -> Result<MessageCount, MurmureError> {
+        let mut count = MessageCount::ZERO;
         self.each_unread(document_id, read, me, |_, message| {
             if counts(message) {
-                count = count.saturating_add(1);
+                count = count.incremented();
             }
         })?;
         Ok(count)

@@ -1254,7 +1254,6 @@ ambre-murmure | src/attachment.rs | crate::attachment | fits() | ret | bool	gene
 ambre-murmure | src/channel.rs | crate::channel | ChannelState.close_asked | field | bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState.key_rotated | field | bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::cancel_older() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in() | ret | Result<u32,MurmureError>	math	local count/index/counter
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::holds() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::identified() | ret | bool	generic	state flag/predicate
@@ -1328,9 +1327,7 @@ ambre-murmure | src/composer.rs | crate::composer | COMPOSER_HINT | const | &str
 ambre-murmure | src/composer.rs | crate::composer | Composer.chords | field | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer.composing | field | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer.dragging | field | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer.file_chips | field | Vec<(Rect,usize)>	math	local count/index/counter
 ambre-murmure | src/composer.rs | crate::composer | Composer.focused | field | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer.losses_seen | field | usize	math	local count/index/counter
 ambre-murmure | src/composer.rs | crate::composer | Composer.said | field | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer.typed | field | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::blank() | ret | bool	generic	state flag/predicate
@@ -1340,7 +1337,6 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::cut() | ret | Opti
 ambre-murmure | src/composer.rs | crate::composer | Composer::draft() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::drag_to() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::editing() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::file_at() | ret | Option<usize>	math	local count/index/counter
 ambre-murmure | src/composer.rs | crate::composer | Composer::focused() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::has_files() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::key() | ret | bool	generic	state flag/predicate
@@ -1389,8 +1385,6 @@ ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::from_bytes(bytes) | param | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::into_bytes() | ret | Vec<u8>	newtype-inner	DraftRow newtype
-ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::losses_since() | ret | (Vec<Loss>,usize)	math	local count/index/counter
-ambre-murmure | src/drafts.rs | crate::drafts | DraftShelf::losses_since(seen) | param | usize	math	local count/index/counter
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
 ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	draft row encoder/decoder over &str
 ambre-murmure | src/emoji.rs | crate::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
@@ -1411,7 +1405,6 @@ ambre-murmure | src/list.rs | crate::list | FROM_THREAD | const | &str	free-text
 ambre-murmure | src/list.rs | crate::list | JUMP_HINT | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | JUMP_TO_LATEST | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | MessageList::is_empty() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/list.rs | crate::list | MessageList::len() | ret | usize	math	local count/index/counter
 ambre-murmure | src/list.rs | crate::list | MessageList::place() | ret | usize	math	local count/index/counter
 ambre-murmure | src/list.rs | crate::list | Row::Message.header | field | bool	generic	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement() | ret | String	free-text	text, label or user content
@@ -1429,8 +1422,6 @@ ambre-murmure | src/list.rs | crate::list | chip_label() | ret | String	free-tex
 ambre-murmure | src/list.rs | crate::list | file_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | fill_down() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | grouped() | ret | bool	generic	a fact, selects no mode: whether the next message joins the previous one's group
-ambre-murmure | src/look.rs | crate::look | LIST_DOT | const | f64	math	layout geometry in logical px
-ambre-murmure | src/look.rs | crate::look | QUOTE_RULE | const | (f64,f64)	math	layout geometry in logical px
 ambre-murmure | src/look.rs | crate::look | margin(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | Closed::apply() | ret | (String,String)	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | Closed::apply(text) | param | &str	free-text	text, label or user content
@@ -1477,30 +1468,24 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | query_at() | ret | O
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | param | &str	free-text	the draft text an @ query is read from; the caret and the @ are ByteOffset
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | OfferVec<String>	free-text	text, label or user content
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/paint.rs | crate::paint | PLACEHOLDER_ASPECT | const | f32	math	layout geometry in logical px
+ambre-murmure | src/paint.rs | crate::paint | PLACEHOLDER_ASPECT | const | f32	math	a ratio: the width-to-height aspect of a picture not decoded yet
 ambre-murmure | src/paint.rs | crate::paint | Painted.latest_shown | field | bool	generic	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | Painted.line_shown | field | bool	generic	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | Painted.oldest_shown | field | bool	generic	state flag/predicate
-ambre-murmure | src/paint.rs | crate::paint | SELECTION_ALPHA | const | f32	math	layout geometry in logical px
 ambre-murmure | src/paint.rs | crate::paint | body_top(line) | param | bool	generic	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | chip_boxes(labels) | param | &[String]	free-text	text, label or user content
 ambre-murmure | src/paint.rs | crate::paint | paint_list(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/paint.rs | crate::paint | shape(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/pictures.rs | crate::pictures | Held::Shown.painted | field | u64	math	local count/index/counter
-ambre-murmure | src/pictures.rs | crate::pictures | Pictures.paint | field | u64	math	local count/index/counter
-ambre-murmure | src/pictures.rs | crate::pictures | Pictures.screens | field | [u64;2]	math	local count/index/counter
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures::failed() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures::land() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures::want() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/pictures.rs | crate::pictures | frame_at() | ret | (usize,Option<ambre_core::PageTime>)	math	frame index local to animation
-ambre-murmure | src/pictures.rs | crate::pictures | frame_key(index) | param | usize	math	local count/index/counter
+ambre-murmure | src/pictures.rs | crate::pictures | Screens::last_painted() | ret | bool	generic	predicate result: whether a screen's last paint is the one named
 ambre-murmure | src/pictures.rs | crate::pictures | previews() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::as_str() | ret | &str	foreign-api	the reaction key as the Loro map stores it
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::read(stored) | param | &str	foreign-api	a reaction key the Loro map returns
 ambre-murmure | src/reaction.rs | crate::reaction | is_emoji() | ret | bool	generic	predicate result: the Murmure one-emoji rule over the shared Emoji, which Toile keeps free-form
 ambre-murmure | src/reaction.rs | crate::reaction | is_map() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/read_aloud.rs | crate::read_aloud | TEXT_LIMIT | const | usize	math	local count/index/counter
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name() | ret | String	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name(c) | param | Option<char>	free-text	text, label or user content
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | clipped() | ret | String	free-text	text, label or user content
@@ -1543,11 +1528,8 @@ ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) |
 ambre-murmure | src/sequence.rs | crate::sequence | FRAME_MAGIC | const | &[u8;4]	generic	snapshot frame byte-layout constant, declared once: delta.rs and the frame parser both read this one
 ambre-murmure | src/sequence.rs | crate::sequence | Framed.loro | field | &'a[u8]	newtype-inner	Private parse view into a SnapshotBytes frame: the Loro bytes past the table, read only by split and loro_part.
 ambre-murmure | src/sequence.rs | crate::sequence | Framed.rows | field | &'a[u8]	newtype-inner	Private parse view into a SnapshotBytes frame: the raw sequence table, cut into fixed rows only by table.
-ambre-murmure | src/sequence.rs | crate::sequence | ROW_LEN | const | usize	math	local count/index/counter
 ambre-murmure | src/sequence.rs | crate::sequence | Range::holds() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/sequence.rs | crate::sequence | loro_part() | ret | &[u8]	foreign-api	The bytes handed to LoroDoc::import, past the frame of a snapshot or a delta as it is.
-ambre-murmure | src/session.rs | crate::session | Session.sent | field | i32	trait	Loro Counter is i32
-ambre-murmure | src/session.rs | crate::session | Session::rewind(counter) | param | i32	trait	Loro Counter is i32
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_direct() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_member() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/space.rs | crate::space | SpaceState::identified() | ret | bool	generic	state flag/predicate
@@ -1560,16 +1542,11 @@ ambre-murmure | src/uploads.rs | crate::uploads | Uploaded::Failed.name | field 
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::begin() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::begin(name) | param | String	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::busy() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/uploads.rs | crate::uploads | Uploads::remove(index) | param | usize	math	local count/index/counter
 ambre-murmure | src/uploads.rs | crate::uploads | Uploads::uploading() | ret | Vec<&str>	free-text	text, label or user content
 ambre-murmure | src/uploads.rs | crate::uploads | FALLBACK_STEM | const | &str	free-text	a stem the suite names itself
 ambre-murmure | src/uploads.rs | crate::uploads | size_label() | ret | String	free-text	text, label or user content
-ambre-murmure | src/uploads.rs | crate::uploads | size_label::KB | const | u64	math	byte multiples for a size label
-ambre-murmure | src/uploads.rs | crate::uploads | size_label::MB | const | u64	math	byte multiples for a size label
-ambre-murmure | src/view.rs | crate::view | AT_FRACTION | const | f32	math	layout geometry in logical px
-ambre-murmure | src/view.rs | crate::view | Lists.revision | field | u64	math	local count/index/counter
+ambre-murmure | src/view.rs | crate::view | AT_FRACTION | const | f32	math	a ratio: where in the viewport a named message rests, a fraction of the list height
 ambre-murmure | src/view.rs | crate::view | MurmureView.dirty | field | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView.painted | field | (MurmurePane,u64)	math	local count/index/counter
 ambre-murmure | src/view.rs | crate::view | MurmureView.pending | field | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView.reveal | field | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::clipboard() | ret | Option<String>	free-text	text, label or user content
@@ -1583,7 +1560,6 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::hear_latest(at_bottom) 
 ambre-murmure | src/view.rs | crate::view | MurmureView::in_composer() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::mark_shown_read() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::on_jump() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::page(pages) | param | f32	math	layout geometry in logical px
 ambre-murmure | src/view.rs | crate::view | MurmureView::paste(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | MurmureView::retry_at() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::retry_focus() | ret | bool	generic	state flag/predicate

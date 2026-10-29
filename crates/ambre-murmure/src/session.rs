@@ -6,8 +6,8 @@
 //! nothing before its PeerID lands: an operation under any other PeerID never
 //! travels (`AUTHOR-029`).
 
-use ambre_core::{DeltaBytes, PeerEntryBytes};
-use loro::{CommitOptions, ExportMode, IdSpan, LoroDoc};
+use ambre_core::{DeltaBytes, OpCounter, PeerEntryBytes};
+use loro::{CommitOptions, ExportMode, IdSpan, LoroDoc, VersionVector};
 
 use crate::error::MurmureError;
 
@@ -17,7 +17,13 @@ use crate::error::MurmureError;
 pub(crate) struct Session {
     peer: ambre_core::PeerId,
     /// The counter of this PeerID up to which every operation was exported.
-    sent: i32,
+    sent: OpCounter,
+}
+
+/// The counter `versions` holds for `peer`: the operations of `peer` they
+/// name stop before it. Zero for a peer they do not name.
+fn counter_of(versions: &VersionVector, peer: ambre_core::PeerId) -> OpCounter {
+    OpCounter(versions.get(&peer.0).copied().unwrap_or(0))
 }
 
 impl Session {
@@ -35,7 +41,7 @@ impl Session {
     ) -> Result<Self, MurmureError> {
         doc.commit();
         doc.set_peer_id(peer.0)?;
-        let sent = doc.oplog_vv().get(&peer.0).copied().unwrap_or(0);
+        let sent = counter_of(&doc.oplog_vv(), peer);
         doc.get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
             .insert(ambre_core::PeerKey::of(peer).as_str(), entry.into_bytes())?;
         doc.commit_with(
@@ -49,10 +55,10 @@ impl Session {
         self.peer
     }
 
-    /// The relay refused every operation of this session from `counter` on,
-    /// and the document dropped them. The next export starts there.
-    pub(crate) fn rewind(&mut self, counter: i32) {
-        self.sent = self.sent.min(counter);
+    /// The relay refused every operation of this session past what `kept`
+    /// holds, and the document dropped them. The next export starts there.
+    pub(crate) fn rewind(&mut self, kept: &VersionVector) {
+        self.sent = self.sent.min(counter_of(kept, self.peer));
     }
 
     /// Commit the pending writes, and export what this session wrote since its
@@ -63,8 +69,8 @@ impl Session {
     /// [`MurmureError::Crdt`] when Loro refuses the export.
     pub(crate) fn export(&mut self, doc: &LoroDoc) -> Result<DeltaBytes, MurmureError> {
         doc.commit();
-        let end = doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0);
-        let span = IdSpan::new(self.peer.0, self.sent, end);
+        let end = counter_of(&doc.oplog_vv(), self.peer);
+        let span = IdSpan::new(self.peer.0, self.sent.0, end.0);
         let delta = doc.export(ExportMode::updates_in_range(vec![span]))?;
         self.sent = end;
         Ok(DeltaBytes::new(delta))
@@ -80,9 +86,9 @@ impl Session {
         doc.commit();
         let end = doc.oplog_vv();
         let mut start = end.clone();
-        start.insert(self.peer.0, self.sent);
+        start.insert(self.peer.0, self.sent.0);
         let update = doc.export_json_updates_without_peer_compression(&start, &end);
-        self.sent = end.get(&self.peer.0).copied().unwrap_or(0);
+        self.sent = counter_of(&end, self.peer);
         crate::delta::encode(&update)
     }
 }

@@ -20,7 +20,8 @@ use crate::session::Session;
 pub const SEGMENT_MESSAGES: MessageCount = MessageCount::new(5000);
 
 ambre_core::define_tally! {
-    /// How many messages a segment holds, or holds before it asks to close.
+    /// How many messages a segment or a list holds, or how many a segment
+    /// holds before it asks to close.
     pub struct MessageCount;
 }
 

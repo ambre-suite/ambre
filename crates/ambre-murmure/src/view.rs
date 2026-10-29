@@ -165,6 +165,14 @@ fn down(dy: CssPx) -> CssVector {
     CssVector::new(CssPx::ZERO, dy)
 }
 
+/// The way a page key moves the list: up towards the oldest row, down
+/// towards the latest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PageStep {
+    Up,
+    Down,
+}
+
 /// Where the list of a region rests (`MURMURE-189`, `MURMURE-190`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Rest {
@@ -178,11 +186,17 @@ enum Rest {
     },
 }
 
+ambre_core::define_generation! {
+    /// The number of changes the lists of a page went through: what a
+    /// region repaints for when it moves.
+    struct ListsRevision;
+}
+
 /// The lists every region of the page reads, and a count of their changes.
 #[derive(Default)]
 struct Lists {
     conversations: Conversations,
-    revision: u64,
+    revision: ListsRevision,
 }
 
 /// The list a region shows: a channel, or the thread under one of its
@@ -242,7 +256,7 @@ pub struct MurmureView {
     marks: ReadMarks,
     unread_line: UnreadLine,
     /// The pane and the revision of the lists this region last painted.
-    painted: (MurmurePane, u64),
+    painted: (MurmurePane, ListsRevision),
     /// What the last paint did.
     last: Option<Painted>,
     theme_ctl: ThemeControl,
@@ -342,7 +356,7 @@ impl MurmureView {
             region: Region::Channel,
             marks: ReadMarks::default(),
             unread_line: UnreadLine::default(),
-            painted: (MurmurePane::default(), 0),
+            painted: (MurmurePane::default(), ListsRevision::ZERO),
             last: None,
             theme_ctl,
             theme,
@@ -453,7 +467,7 @@ impl MurmureView {
             };
             let mut lists = self.lists.borrow_mut();
             if lists.conversations.absorb(ev) {
-                lists.revision += 1;
+                lists.revision = lists.revision.next();
             }
         }
     }
@@ -501,7 +515,8 @@ impl MurmureView {
             } => {
                 // Both regions repaint: either may show the picture.
                 if self.pictures.borrow_mut().land(media_ref, picture) {
-                    self.lists.borrow_mut().revision += 1;
+                    let mut lists = self.lists.borrow_mut();
+                    lists.revision = lists.revision.next();
                 }
             }
             ev => return Some(ev),
@@ -539,15 +554,18 @@ impl MurmureView {
         self.dirty = true;
     }
 
-    /// Move the list by one viewport, towards the latest row for a positive
-    /// `pages`. The model takes it as a wheel step of a page (`MURMURE-504`).
-    fn page(&mut self, pages: f32) {
+    /// Move the list by one viewport the way `step` names. The model takes
+    /// it as a wheel step of a page (`MURMURE-504`).
+    fn page(&mut self, step: PageStep) {
         let now = (self.reads.now)();
-        let step = self.kinetic.wheel(
-            down((self.list_height() * pages).on_page(CssPx::ZERO)),
-            WheelDeltaMode::Page,
-            now,
-        );
+        let height = self.list_height();
+        let dy = match step {
+            PageStep::Up => -height,
+            PageStep::Down => height,
+        };
+        let step = self
+            .kinetic
+            .wheel(down(dy.on_page(CssPx::ZERO)), WheelDeltaMode::Page, now);
         self.scroll_by(step);
     }
 
@@ -1660,8 +1678,8 @@ impl MurmureView {
                         (self.reads.act_on)(self.target_of_focus())
                     }
                     Key::PageUp if shift => self.rest_at_first_unread(),
-                    Key::PageDown => self.page(1.0),
-                    Key::PageUp => self.page(-1.0),
+                    Key::PageDown => self.page(PageStep::Down),
+                    Key::PageUp => self.page(PageStep::Up),
                     Key::End => self.rest_at_latest(),
                     Key::ArrowDown => self.move_focus(ListRowDelta::new(1)),
                     Key::ArrowUp => self.move_focus(ListRowDelta::new(-1)),

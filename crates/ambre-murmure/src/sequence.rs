@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{LoroPayloadRef, MessageId, Seq, SnapshotBytes};
+use ambre_core::{ByteSize, LoroPayloadRef, MessageId, Seq, SnapshotBytes};
 use loro::{ContainerID, ContainerTrait, ID, LoroDoc, VersionVector};
 
 use crate::schema::{self, MessageKey, Root};
@@ -19,7 +19,7 @@ use crate::schema::{self, MessageKey, Root};
 /// `loro`, so the two never read as each other.
 pub(crate) const FRAME_MAGIC: &[u8; 4] = b"amsq";
 /// One table row: a message identifier, then its number.
-const ROW_LEN: usize = 16 + 8;
+const ROW_SIZE: ByteSize = ByteSize(16 + 8);
 
 /// Where a payload stands in the relay's order of its document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,7 +226,7 @@ impl Sequence {
             .collect();
         rows.sort_unstable();
         let count = u32::try_from(rows.len()).unwrap_or(u32::MAX);
-        let mut out = Vec::with_capacity(8 + rows.len() * ROW_LEN + loro.len());
+        let mut out = Vec::with_capacity(8 + rows.len() * ROW_SIZE.as_len() + loro.len());
         out.extend_from_slice(FRAME_MAGIC);
         out.extend_from_slice(&count.to_le_bytes());
         for (id, seq) in rows.into_iter().take(count as usize) {
@@ -274,7 +274,7 @@ fn split(payload: &SnapshotBytes) -> Option<Framed<'_>> {
     let (count, rest) = rest.split_first_chunk::<4>()?;
     let len = usize::try_from(u32::from_le_bytes(*count))
         .ok()?
-        .checked_mul(ROW_LEN)?;
+        .checked_mul(ROW_SIZE.as_len())?;
     (rest.len() >= len).then(|| {
         let (rows, loro) = rest.split_at(len);
         Framed { rows, loro }
@@ -297,9 +297,14 @@ pub(crate) fn loro_part(payload: LoroPayloadRef<'_>) -> &[u8] {
 /// The rows a framed snapshot carries, `None` for a bare one.
 fn table(payload: &SnapshotBytes) -> Option<impl Iterator<Item = (MessageId, Seq)> + '_> {
     let framed = split(payload)?;
-    Some(framed.rows.chunks_exact(ROW_LEN).filter_map(|row| {
-        let (id, seq) = row.split_first_chunk::<16>()?;
-        let seq = Seq(u64::from_le_bytes(seq.try_into().ok()?));
-        Some((MessageId::from_bytes(*id), seq))
-    }))
+    Some(
+        framed
+            .rows
+            .chunks_exact(ROW_SIZE.as_len())
+            .filter_map(|row| {
+                let (id, seq) = row.split_first_chunk::<16>()?;
+                let seq = Seq(u64::from_le_bytes(seq.try_into().ok()?));
+                Some((MessageId::from_bytes(*id), seq))
+            }),
+    )
 }

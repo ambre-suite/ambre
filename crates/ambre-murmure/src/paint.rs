@@ -24,8 +24,11 @@ use crate::look;
 use crate::pictures::{Pictures, frame_at, frame_key, previews};
 use crate::select::{Selecting, Spot, TextSelection};
 
-/// How strongly a selection tints the text under it.
-const SELECTION_ALPHA: f32 = 0.3;
+/// The ink `selection` tints the text under a selection with: faint, so
+/// the text stays legible.
+fn selection_tint(selection: Color) -> Color {
+    selection.with_alpha(ambre_core::Opacity::clamped(0.3).get())
+}
 /// The height of the box an image previews in. A picture not decoded yet
 /// takes the same, so its row keeps its height when it lands.
 pub const PREVIEW_TALL: ViewPx = ViewPx::new(160.0);
@@ -310,7 +313,7 @@ pub fn paint_list<S: DrawSurface>(
                 }
             }
             if let Some(band) = band {
-                let tint = palette.selection.with_alpha(SELECTION_ALPHA);
+                let tint = selection_tint(palette.selection);
                 fill_bytes(surface, layout, band, body_y, tint);
             }
         }
@@ -477,7 +480,7 @@ fn draw_chips<S: DrawSurface>(
         let at = Rect::new(b.x0 + dx, b.y0 + dy, b.x1 + dx, b.y1 + dy);
         let mine = me.is_some_and(|me| reaction.users.contains(&me));
         if mine {
-            surface.fill_rect(at, palette.selection.with_alpha(SELECTION_ALPHA));
+            surface.fill_rect(at, selection_tint(palette.selection));
             surface.stroke_rect(at, palette.selection, ambre_core::SurfacePx::new(1.0));
         } else {
             surface.fill_rect(at, palette.header_bg);
@@ -890,7 +893,7 @@ fn draw_previews<S: DrawSurface>(
             continue;
         };
         let (index, next) = frame_at(picture, pictured.now, pictured.motion);
-        let Some(frame) = picture.frames.get(index) else {
+        let Some(frame) = crate::pictures::frame(picture, index) else {
             continue;
         };
         let image = ImageSource {
@@ -1382,7 +1385,7 @@ pub(crate) mod tests {
                 .collect()
         };
         let theirs = fills(LIGHT.header_bg);
-        let mine = fills(LIGHT.selection.with_alpha(SELECTION_ALPHA));
+        let mine = fills(selection_tint(LIGHT.selection));
         let ([theirs], [mine]) = (theirs.as_slice(), mine.as_slice()) else {
             panic!("one chip each: {theirs:?} {mine:?}");
         };
@@ -1856,7 +1859,7 @@ pub(crate) mod tests {
                 byte: ByteOffset::new(5)
             }
         );
-        let tint = LIGHT.selection.with_alpha(SELECTION_ALPHA);
+        let tint = selection_tint(LIGHT.selection);
         let tints = surface
             .ops()
             .iter()

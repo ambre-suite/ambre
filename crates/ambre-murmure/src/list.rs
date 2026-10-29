@@ -6,6 +6,8 @@
 //! `paint` lays the rows out and draws them.
 
 use ambre_core::{ByteOffset, ByteSpan, CharOffset, CharVec, ViewPx};
+
+use crate::MessageCount;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use ambre_bus::{
@@ -188,8 +190,19 @@ impl MessageList {
     }
 
     /// How many messages the list holds.
-    pub fn len(&self) -> usize {
-        self.segments.iter().map(|s| s.messages.len()).sum()
+    pub fn len(&self) -> MessageCount {
+        MessageCount::of_len(self.segments.iter().map(|s| s.messages.len()).sum())
+    }
+
+    /// The rows the list draws: a row per message and per band. A capacity,
+    /// so a paint allocates once.
+    fn row_capacity(&self) -> ListRowCount {
+        ListRowCount::from_len(
+            self.segments
+                .iter()
+                .map(|s| s.messages.len() + usize::from(s.band.is_some()))
+                .sum(),
+        )
     }
 
     /// Whether the list holds no message.
@@ -220,7 +233,7 @@ impl MessageList {
     /// What names each row, in the order of [`MessageList::rows`]. A key
     /// outlives a load above, where an index does not (`MURMURE-192`).
     pub fn keys(&self) -> ListRowVec<RowKey> {
-        let mut keys = Vec::with_capacity(self.len());
+        let mut keys = Vec::with_capacity(self.row_capacity().to_usize());
         for segment in &self.segments {
             if segment.band.is_some() {
                 keys.push(RowKey::Band(segment.id));
@@ -234,7 +247,7 @@ impl MessageList {
     /// group under a header of its own (`MURMURE-183`). A band is one row,
     /// and the message after it opens a group.
     pub fn rows(&self) -> ListRowVec<Row<'_>> {
-        let mut rows = Vec::with_capacity(self.len());
+        let mut rows = Vec::with_capacity(self.row_capacity().to_usize());
         let mut previous: Option<&MessageView> = None;
         for segment in &self.segments {
             if let Some(band) = &segment.band {
@@ -884,7 +897,7 @@ pub(crate) mod tests {
             [true, false, true],
             "a band breaks the group"
         );
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), MessageCount::new(2));
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("c"));
 
         let keys = band(Unreadable::KeyNotReceived, 20, Some(30));
@@ -952,7 +965,7 @@ pub(crate) mod tests {
             ],
         );
         assert_eq!(texts(&list), ["a", "b", "c", "d"]);
-        assert_eq!(list.len(), 4);
+        assert_eq!(list.len(), MessageCount::new(4));
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("d"));
         list.absorb(active, vec![message(author, ambre_bus::Timestamp(50), "e")]);
         assert_eq!(texts(&list), ["a", "b", "c", "d", "e"]);

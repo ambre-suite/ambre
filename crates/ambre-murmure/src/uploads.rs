@@ -13,6 +13,20 @@ use ambre_core::{ExportFilename, KnownMediaType};
 
 use crate::composer::DraftOf;
 
+ambre_core::define_index! {
+    /// The place of a file among the uploaded files of one draft, counted
+    /// from zero in the order they landed.
+    pub struct FileIndex(u32);
+    /// A number of files of a draft.
+    pub struct FileCount;
+    /// The signed gap between two files of a draft.
+    pub struct FileDelta(i64);
+    /// A run of files of a draft.
+    pub struct FileSpan;
+    /// A list indexed by the files of a draft.
+    pub struct FileVec;
+}
+
 /// A file the member dropped or pasted on the composer, as the page read it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PickedFile {
@@ -24,12 +38,16 @@ pub struct PickedFile {
 
 /// A size as a reader reads it: "512 B", "2 KB", "3.4 MB".
 pub fn size_label(size: ByteSize) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * KB;
-    match size.0 {
-        bytes if bytes < KB => format!("{bytes} B"),
-        bytes if bytes < MB => format!("{} KB", bytes.div_ceil(KB)),
-        bytes => format!("{:.1} MB", bytes as f64 / MB as f64),
+    const KB: ByteSize = ByteSize(1024);
+    const MB: ByteSize = ByteSize(1024 * 1024);
+    // Kilobytes round up, so the unit follows the rounded size: a size short
+    // of a megabyte by less than a kilobyte reads in megabytes.
+    let kilobytes = size.0.div_ceil(KB.0);
+    let rounded = ByteSize(kilobytes.saturating_mul(KB.0));
+    match size {
+        size if size < KB => format!("{} B", size.0),
+        _ if rounded < MB => format!("{kilobytes} KB"),
+        size => format!("{:.1} MB", size.0 as f64 / MB.0 as f64),
     }
 }
 
@@ -194,9 +212,9 @@ impl Uploads {
 
     /// Take the file at `index` off the draft `of`. The relay keeps the blob
     /// until a delete of a message carrying it.
-    pub fn remove(&mut self, of: DraftOf, index: usize) {
+    pub fn remove(&mut self, of: DraftOf, index: FileIndex) {
         if let Some(files) = self.ready.get_mut(&of)
-            && index < files.len()
+            && let Some(index) = index.to_index().filter(|&index| index < files.len())
         {
             files.remove(index);
         }
@@ -217,6 +235,19 @@ mod tests {
 
     fn channel() -> DraftOf {
         DraftOf::Channel(ChannelId::new())
+    }
+
+    /// A size reads in the largest unit it reaches once rounded up. So a
+    /// size just short of a megabyte reads "1.0 MB", never "1024 KB".
+    #[test]
+    fn a_size_label_never_reads_1024_kb() {
+        assert_eq!(size_label(ByteSize(512)), "512 B");
+        assert_eq!(size_label(ByteSize(1024)), "1 KB");
+        assert_eq!(size_label(ByteSize(1025)), "2 KB");
+        assert_eq!(size_label(ByteSize(1023 * 1024)), "1023 KB");
+        assert_eq!(size_label(ByteSize(1023 * 1024 + 1)), "1.0 MB");
+        assert_eq!(size_label(ByteSize(1024 * 1024 - 1)), "1.0 MB");
+        assert_eq!(size_label(ByteSize(3_565_158)), "3.4 MB");
     }
 
     fn begin(uploads: &mut Uploads, id: u64, of: DraftOf, name: &str) -> bool {

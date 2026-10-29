@@ -5,11 +5,11 @@
 //! composer says what its last key did, through the polite live region
 //! (`MURMURE-571` to `MURMURE-574`).
 
-use ambre_core::{ByteOffset, ByteSpan};
+use ambre_core::{ByteOffset, ByteSpan, CharCount};
 
 /// The longest text one announcement carries. A long draft is said by its
 /// start, as a Prose block is.
-const TEXT_LIMIT: usize = 200;
+const TEXT_LIMIT: CharCount = CharCount::new(200);
 
 /// What the last key of a frame asks the composer to say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,7 +113,7 @@ fn spoken(text: &str) -> String {
 
 /// The start of `text`, at most `TEXT_LIMIT` chars.
 fn clipped(text: &str) -> String {
-    text.chars().take(TEXT_LIMIT).collect()
+    text.chars().take(TEXT_LIMIT.to_usize()).collect()
 }
 
 /// A char as a screen reader names it, `blank` past the end.
@@ -223,7 +223,10 @@ mod tests {
         let draft = |text: &str| said(Say::Draft, "", text, None, None, None);
         assert_eq!(draft("  hi \n").as_deref(), Some("hi"));
         assert_eq!(draft(" ").as_deref(), Some("blank"));
-        let long = "a".repeat(TEXT_LIMIT + 5);
-        assert_eq!(draft(&long).map(|s| s.chars().count()), Some(TEXT_LIMIT));
+        let long = "a".repeat(TEXT_LIMIT.to_usize() + 5);
+        assert_eq!(
+            draft(&long).map(|s| CharCount::from_len(s.chars().count())),
+            Some(TEXT_LIMIT)
+        );
     }
 }
