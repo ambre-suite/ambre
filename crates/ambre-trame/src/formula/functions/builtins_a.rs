@@ -86,22 +86,30 @@ pub(crate) fn flatten_all(args: &[CellValue]) -> Vec<CellValue> {
 /// partial of the exact sum overflows. The product undoes the division.
 const SUM_SCALE: f64 = 18_446_744_073_709_551_616.0;
 
-/// The sum of `nums`, rounded once from the exact total, so no order of the
-/// terms gives another answer (`TRAME-199`). It is not finite only when a
-/// term is not, or when the exact total is past the largest number.
+/// The sum of `nums`, rounded once from the exact total of the terms it sums,
+/// so no order of the terms gives another answer (`TRAME-199`). It is not
+/// finite only when a term is not, or when the exact total is past the
+/// largest number.
 ///
 /// A partial can pass the largest number while the total does not, for two
-/// terms near it that a third cancels. The terms are then summed again at a
-/// scale of 2^-64, and the total is scaled back. At that scale, a term or a
-/// total below about 1e-288 can lose its last bits.
+/// terms near it that a third cancels. The terms are scaled when the largest
+/// one is above the largest number over twice the count. Each is divided by
+/// 2^64 first, and the total is scaled back. The test reads only the largest term and the
+/// count, so it does not depend on the order. Under it, the sum of the
+/// magnitudes is at most half the largest number, and no partial overflows.
+///
+/// The scaled terms are what is summed. A term below about 4.1e-289 then
+/// loses its last bits, and one at or below about 4.6e-305 is lost entirely.
+/// A total below 4.1e-289 is rounded as coarsely. This loss happens only on
+/// the scaled path, and the same way in any order.
 pub(crate) fn exact_sum(nums: impl IntoIterator<Item = f64>) -> f64 {
     let nums: Vec<f64> = nums.into_iter().collect();
     if nums.iter().any(|n| !n.is_finite()) {
         return nums.iter().sum();
     }
-    let total = exact_partials(nums.iter().copied());
-    if total.is_finite() {
-        return total;
+    let largest = nums.iter().fold(0.0_f64, |m, n| m.max(n.abs()));
+    if largest <= f64::MAX / 2.0 / nums.len() as f64 {
+        return exact_partials(nums.iter().copied());
     }
     exact_partials(nums.iter().map(|n| n / SUM_SCALE)) * SUM_SCALE
 }

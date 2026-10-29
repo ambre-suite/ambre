@@ -832,6 +832,27 @@ fn a_total_of_the_largest_numbers_is_exact_in_any_order() {
     assert_eq!(backward.to_display(), "0.5");
 }
 
+/// A tiny term beside terms near the largest number sums the same in any
+/// order (`TRAME-199`). The terms are scaled down, so the tiny one loses its
+/// last bits, or, below about 4.6e-305, all of them. The loss is the same
+/// whatever the order.
+#[test]
+fn a_tiny_term_beside_the_largest_numbers_sums_the_same_in_any_order() {
+    let big = f64::MAX;
+    let orders = [
+        exact_sum([1e-300, big, big, -big, -big]),
+        exact_sum([big, 1e-300, -big, big, -big]),
+        exact_sum([big, -big, big, -big, 1e-300]),
+    ];
+    assert!(orders.iter().all(|t| t.to_bits() == orders[0].to_bits()));
+    assert!((orders[0] - 1e-300).abs() < 1e-303, "{}", orders[0]);
+    let lost = [
+        exact_sum([big, big, -big, -big, 1e-306]),
+        exact_sum([1e-306, big, -big, big, -big]),
+    ];
+    assert_eq!(lost, [0.0, 0.0]);
+}
+
 /// Text that reads as a number counts in a total, from a range as from a
 /// scalar; text that does not is left out (`TRAME-200`).
 #[test]

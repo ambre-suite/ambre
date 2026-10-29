@@ -34,7 +34,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-197` | `PRE` | The key column of an approximate lookup MUST already be ascending. | this spec section 3 | `ambre_trame::formula::functions::tests::an_approximate_lookup_over_falling_keys_answers_na` -- `VLOOKUP`, `HLOOKUP` and `MATCH` | none | verified |
 | `TRAME-198` | `PRE` | A recomputation MUST be given its clock before it runs. | this spec section 2 | type-level -- `EvalContext::new` takes the clock, so no pass runs without one; `ambre_trame::logic::tests::group12::today_reads_the_clock_of_the_recomputation` | none | verified |
 | `TRAME-014` | `POST` | A total over whole numbers MUST equal the naive total. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_is_exact_and_order_independent`; `::engine_sum_matches_naive_sum`; `::average_times_count_equals_sum`; `::min_max_bound_every_element` -- four proptests over integer inputs | none | verified |
-| `TRAME-199` | `POST` | A total MUST NOT depend on the order of the cells. | this spec section 2 | `ambre_trame::formula::prop_tests::a_total_of_decimals_is_the_same_in_any_order` -- decimals of mixed magnitudes, three orders compared bit for bit; `ambre_trame::formula::functions::tests::two_orders_of_one_decimal_total_agree`; `::a_total_of_the_largest_numbers_is_exact_in_any_order` -- terms near the largest number that cancel, in two orders | none | verified |
+| `TRAME-199` | `POST` | A total MUST NOT depend on the order of the cells. | this spec section 2 | `ambre_trame::formula::prop_tests::a_total_of_decimals_is_the_same_in_any_order` -- decimals of mixed magnitudes, three orders compared bit for bit; `ambre_trame::formula::functions::tests::two_orders_of_one_decimal_total_agree`; `::a_total_of_the_largest_numbers_is_exact_in_any_order` -- terms near the largest number that cancel, in two orders; `::a_tiny_term_beside_the_largest_numbers_sums_the_same_in_any_order` -- a tiny term beside them, in three orders compared bit for bit | none | verified |
 | `TRAME-051` | `POST` | A range given where a value is expected MUST be read cell by cell. | this spec section 2 | `ambre_trame::formula::prop_tests::sum_flattens_range_like_scalars`; `::engine_sum_matches_naive_sum`; `ambre_trame::formula::functions::tests::sum_basic` | none | verified |
 | `TRAME-200` | `POST` | A value stored as text MUST count in a total when it reads as a number. | this spec section 4 | `ambre_trame::formula::functions::tests::text_that_reads_as_a_number_counts_in_a_total` | none | verified |
 | `TRAME-056` | `POST` | A total MUST NOT silently drop a cell it cannot read. | this spec section 2 | `ambre_trame::formula::functions::tests::total_propagates_an_error_it_cannot_read` | none | verified |
@@ -67,10 +67,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: a function reads cells and returns a value in the Logic thread. It opens no
   path, and `ZK-001` seals what the document sends.
 * **Verification.** 22 `verified`, 7 `unimplemented`. What holds is the arithmetic core and the
-  edges of the library. A total is summed exactly, so its order cannot change it (`TRAME-199`),
-  and one past the largest number reads `#NUM!` (`TRAME-244`). A lookup refuses keys out of order,
-  and no function can read the clock for itself. The seven
-  unimplemented rows are functions not yet in the catalogue.
+  edges of the library. A total is rounded once from an exact sum, so its order cannot change it
+  (`TRAME-199`), and one past the largest number reads `#NUM!` (`TRAME-244`). A lookup refuses
+  keys out of order, and no function can read the clock for itself. The seven unimplemented rows
+  are functions not yet in the catalogue.
 
 ---
 
@@ -142,7 +142,7 @@ conditional aggregates; `builtins_a.rs`, `builtins_b.rs` and `builtins_c.rs` hol
 | A lookup key that is text | matched without regard to case, Unicode letters included (`TRAME-202`) |
 | An approximate lookup over keys out of order | reads `#N/A`, never a neighbouring row (`TRAME-197`). Blank keys are skipped |
 | A total of decimals | summed exactly, then rounded once, so its order cannot change it (`TRAME-199`) |
-| A total past the largest number | reads `#NUM!`, as does any result that is not a finite number (`TRAME-244`). Terms near the largest number that cancel leave the rest, in any order |
+| A total past the largest number | reads `#NUM!`, as does any result that is not a finite number (`TRAME-244`). Terms near the largest number that cancel leave the rest, in any order. The terms are then summed at a scale of 2^-64, so a rest below about 4.1e-289 loses bits, the same in any order |
 | How a date is held | a date serial (`DateSerial`) on the 1899-12-30 epoch: integer part the day, fraction the time of day |
 | How a calendar day is named | a civil date (`CivilDate`): a proleptic-Gregorian year, month and day, counted to and from its serial |
 | Where `TODAY` and `NOW` read | the recomputation clock, never the system clock (`TRAME-053`) |

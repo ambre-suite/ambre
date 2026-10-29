@@ -4273,6 +4273,7 @@
   {"edge": "verified-by", "from": "TRAME-199", "to": "ambre_trame::formula::prop_tests::a_total_of_decimals_is_the_same_in_any_order"},
   {"edge": "verified-by", "from": "TRAME-199", "to": "ambre_trame::formula::functions::tests::two_orders_of_one_decimal_total_agree"},
   {"edge": "verified-by", "from": "TRAME-199", "to": "::a_total_of_the_largest_numbers_is_exact_in_any_order"},
+  {"edge": "verified-by", "from": "TRAME-199", "to": "::a_tiny_term_beside_the_largest_numbers_sums_the_same_in_any_order"},
   {"edge": "cites-section", "from": "TRAME-051", "section": "2", "to": "2-Trame/features/ambre-spec-trame-function-library.md"},
   {"edge": "verified-by", "from": "TRAME-051", "to": "ambre_trame::formula::prop_tests::sum_flattens_range_like_scalars"},
   {"edge": "verified-by", "from": "TRAME-051", "to": "::engine_sum_matches_naive_sum"},

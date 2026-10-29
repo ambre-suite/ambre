@@ -3078,8 +3078,8 @@ ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | arg(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials() | ret | f64	math	the exact sum of the terms inside the formula engine
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials(nums) | param | impl IntoIterator<Item=f64>	math	the terms of an exact sum inside the formula engine
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum(nums) | param | impl IntoIterator<Item=f64>	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum() | ret | f64	math	the exact sum of the terms inside the formula engine
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum(nums) | param | impl IntoIterator<Item=f64>	math	the terms of an exact sum inside the formula engine
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | first_num() | ret | Option<f64>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric() | ret | Vec<f64>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric_inner(out) | param | &mut Vec<f64>	math	count, length, local index, limit or calendar/arith helper
