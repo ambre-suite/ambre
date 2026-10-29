@@ -78,7 +78,10 @@ impl ProseKey {
 
 /// One input, as the host hands it over. Points are pixels of the view, from
 /// the canvas's corner.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// The text an input carries is the user's, so `Debug` prints its length
+/// alone.
+#[derive(Clone, PartialEq)]
 pub enum ProseInput {
     Key {
         key: ProseKey,
@@ -122,6 +125,43 @@ pub enum ProseInput {
         html: Option<String>,
         rich: Option<ambre_core::ClipboardBytes>,
     },
+}
+
+impl std::fmt::Debug for ProseInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::redact::{Redacted, optional};
+        match self {
+            Self::Key { key, mods } => f
+                .debug_struct("Key")
+                .field("key", key)
+                .field("mods", mods)
+                .finish(),
+            Self::Text(text) => f.debug_tuple("Text").field(&Redacted(text)).finish(),
+            Self::Press { at, mods, now } => f
+                .debug_struct("Press")
+                .field("at", at)
+                .field("mods", mods)
+                .field("now", now)
+                .finish(),
+            Self::Drag { at } => f.debug_struct("Drag").field("at", at).finish(),
+            Self::Release => f.write_str("Release"),
+            Self::Drop { at, text } => f
+                .debug_struct("Drop")
+                .field("at", at)
+                .field("text", &Redacted(text))
+                .finish(),
+            Self::SlashPick(choice) => f.debug_tuple("SlashPick").field(choice).finish(),
+            Self::Compose(text) => f.debug_tuple("Compose").field(&Redacted(text)).finish(),
+            Self::ComposeEnd(text) => f.debug_tuple("ComposeEnd").field(&Redacted(text)).finish(),
+            Self::Copy(write) => f.debug_tuple("Copy").field(write).finish(),
+            Self::Paste { text, html, rich } => f
+                .debug_struct("Paste")
+                .field("text", &Redacted(text))
+                .field("html", &optional(html.as_ref()))
+                .field("rich", rich)
+                .finish(),
+        }
+    }
 }
 
 /// A command sent, as the view keeps track of it.

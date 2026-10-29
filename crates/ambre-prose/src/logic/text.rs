@@ -255,11 +255,21 @@ pub(super) fn body_span(body: &LoroText) -> DocSpan {
     DocSpan::from_count(DocOffset::ZERO, DocCount::from_len(body.len_unicode()))
 }
 
-/// One run of body text and the marks it carries.
-#[derive(Clone, Debug, PartialEq)]
+/// One run of body text and the marks it carries. The text is content, so
+/// `Debug` prints its length alone.
+#[derive(Clone, PartialEq)]
 pub(super) struct MarkedRun {
     pub(super) text: String,
     pub(super) marks: Vec<(MarkKey, loro::LoroValue)>,
+}
+
+impl std::fmt::Debug for MarkedRun {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MarkedRun")
+            .field("text", &crate::redact::Redacted(&self.text))
+            .field("mark_count", &self.marks.len())
+            .finish()
+    }
 }
 
 /// The marked runs a body holds between two code-point offsets.
@@ -382,6 +392,15 @@ mod tests {
     use ambre_bus::app::prose::CodeLang;
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::prose::DocSpan;
+
+    #[test]
+    fn a_marked_run_prints_its_text_by_length_alone() {
+        let run = super::MarkedRun {
+            text: "body".into(),
+            marks: Vec::new(),
+        };
+        assert!(crate::redact::tests::hides(&run, "body"));
+    }
 
     /// A document of three root paragraphs holding `texts`.
     fn document_of(texts: &[&str]) -> (ProseState, Vec<crate::events::BlockId>) {

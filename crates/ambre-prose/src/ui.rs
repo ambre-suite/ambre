@@ -83,10 +83,24 @@ struct DraftEdit {
     confirmed: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What one draft entry does. The inserted text is the user's, so `Debug`
+/// prints its length alone.
+#[derive(Clone, PartialEq, Eq)]
 enum Change {
     Insert(String),
     Delete(DocCount),
+}
+
+impl std::fmt::Debug for Change {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Insert(text) => f
+                .debug_tuple("Insert")
+                .field(&crate::redact::Redacted(text))
+                .finish(),
+            Self::Delete(count) => f.debug_tuple("Delete").field(count).finish(),
+        }
+    }
 }
 
 impl DraftBuffer {
@@ -935,6 +949,12 @@ pub fn status_figures(count: &WordCount) -> StatusFigures {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_draft_insertion_prints_its_text_by_length_alone() {
+        let change = super::Change::Insert("typed".into());
+        assert!(crate::redact::tests::hides(&change, "typed"));
+    }
+
     /// `PROSE-IO-056`: a written file waits for the host once, with the media
     /// type the Logic thread named.
     #[test]

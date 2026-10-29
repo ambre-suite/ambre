@@ -93,8 +93,9 @@ pub struct ProseIr {
     pub footnotes: Vec<IrFootnote>,
 }
 
-/// What the document carries beside its blocks.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// What the document carries beside its blocks. The title is content, so
+/// `Debug` prints its length alone.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct IrMeta {
     pub title: Option<String>,
     /// The document has a page format. Every Prose document has one, and a
@@ -104,8 +105,20 @@ pub struct IrMeta {
     pub bands: Banding,
 }
 
-/// One block. Depth is the nesting, never a number.
-#[derive(Clone, Debug, PartialEq)]
+impl std::fmt::Debug for IrMeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IrMeta")
+            .field("title", &crate::redact::optional(self.title.as_ref()))
+            .field("paged", &self.paged)
+            .field("bands", &self.bands)
+            .finish()
+    }
+}
+
+/// One block. Depth is the nesting, never a number. The text of a code block
+/// and the alternative text of an image are content. So `Debug` prints their
+/// length alone, and a run prints its own the same way.
+#[derive(Clone, PartialEq)]
 pub enum IrBlock {
     Paragraph {
         /// The paragraph carries a named style, or alignment, indents or
@@ -138,6 +151,51 @@ pub enum IrBlock {
     PageBreak,
     HRule,
     Toc,
+}
+
+impl std::fmt::Debug for IrBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::redact::{Redacted, optional};
+        match self {
+            Self::Paragraph { styled, runs } => f
+                .debug_struct("Paragraph")
+                .field("styled", styled)
+                .field("runs", runs)
+                .finish(),
+            Self::Heading { level, runs } => f
+                .debug_struct("Heading")
+                .field("level", level)
+                .field("runs", runs)
+                .finish(),
+            Self::ListItem {
+                style,
+                runs,
+                children,
+            } => f
+                .debug_struct("ListItem")
+                .field("style", style)
+                .field("runs", runs)
+                .field("children", children)
+                .finish(),
+            Self::Table { merged, rows } => f
+                .debug_struct("Table")
+                .field("merged", merged)
+                .field("rows", rows)
+                .finish(),
+            Self::CodeBlock { lang, text } => f
+                .debug_struct("CodeBlock")
+                .field("lang", &optional(lang.as_ref()))
+                .field("text", &Redacted(text))
+                .finish(),
+            Self::Image { alt } => f
+                .debug_struct("Image")
+                .field("alt", &Redacted(alt))
+                .finish(),
+            Self::PageBreak => f.write_str("PageBreak"),
+            Self::HRule => f.write_str("HRule"),
+            Self::Toc => f.write_str("Toc"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -175,8 +233,9 @@ pub enum IrOrderedStyle {
     UpperRoman,
 }
 
-/// A run of text and what it carries.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// A run of text and what it carries. The text is content, so `Debug`
+/// prints its length alone.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct IrRun {
     pub text: String,
     pub bold: Weight,
@@ -204,6 +263,27 @@ impl IrRun {
             text: text.into(),
             ..Self::default()
         }
+    }
+}
+
+impl std::fmt::Debug for IrRun {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IrRun")
+            .field("text", &crate::redact::Redacted(&self.text))
+            .field("bold", &self.bold)
+            .field("italic", &self.italic)
+            .field("underline", &self.underline)
+            .field("strikethrough", &self.strikethrough)
+            .field("superscript", &self.superscript)
+            .field("subscript", &self.subscript)
+            .field("code", &self.code)
+            .field("link", &self.link)
+            .field("styled", &self.styled)
+            .field("comment", &self.comment)
+            .field("suggestion", &self.suggestion)
+            .field("cross_ref", &self.cross_ref)
+            .field("footnote_ref", &self.footnote_ref)
+            .finish()
     }
 }
 

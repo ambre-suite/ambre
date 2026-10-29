@@ -1874,12 +1874,12 @@ ambre-prose | src/doc.rs | crate::doc | read_i64() | ret | Option<i64>	generic	a
 ambre-prose | src/doc.rs | crate::doc | read_string() | ret | Option<String>	generic	a string register as the store holds it; each caller parses or keeps what it reads
 ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/input.rs | crate::input | ProseInput::Compose.0 | field | String	newtype-inner	newtype inner field
-ambre-prose | src/input.rs | crate::input | ProseInput::ComposeEnd.0 | field | String	newtype-inner	newtype inner field
+ambre-prose | src/input.rs | crate::input | ProseInput::Compose.0 | field | String	free-text	the input method's text in progress, as the user types it; Debug prints its length alone
+ambre-prose | src/input.rs | crate::input | ProseInput::ComposeEnd.0 | field | String	free-text	the text the input method committed, as the user typed it; Debug prints its length alone
 ambre-prose | src/input.rs | crate::input | ProseInput::Drop.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.html | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/input.rs | crate::input | ProseInput::Text.0 | field | String	newtype-inner	newtype inner field
+ambre-prose | src/input.rs | crate::input | ProseInput::Text.0 | field | String	free-text	committed text, as the user typed, dictated or pasted it; Debug prints its length alone
 ambre-prose | src/input.rs | crate::input | ProseUiState::act() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::copy() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | ProseUiState::delete() | ret | bool	generic	consumed answer
@@ -2050,8 +2050,8 @@ ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | write() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipRun.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Bool.0 | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Float.0 | field | f64	newtype-inner	newtype inner field
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Int.0 | field | i64	newtype-inner	newtype inner field
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Float.0 | field | f64	generic	a number mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
+ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Int.0 | field | i64	generic	an integer mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ClipValue::Text.0 | field | String	generic	a mark value as untrusted clipboard bytes carry it, checked under its key before a paste writes it
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(html) | param | Option<&str>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | ProseState::paste(text) | param | &str	free-text	text content / label / parser input
@@ -2064,7 +2064,7 @@ ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard | safe_link(h
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::parse_error(_msg) | param | Cow<'static,str>	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | <Arena as TreeSink>::same_node() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Arena::insert(index) | param | usize	local	the place of a child among its parent's children, in the private arena's own vector
-ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Data::Text.0 | field | String	newtype-inner	newtype inner field
+ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Data::Text.0 | field | String	free-text	the text of a pasted HTML node, as the clipboard carries it
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | NodeId.0 | field | usize	newtype-inner	the slot of a node in the parse arena, handed out only by Nodes::push
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::add_comment(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::edit_reply(text) | param | &str	free-text	text content / label / parser input
@@ -2133,13 +2133,15 @@ ambre-prose | src/numbering.rs | crate::numbering | walk::descend(visit) | param
 ambre-prose | src/probe.rs | crate::probe | FrameNumber.0 | field | u64	newtype-inner	how many animation frames began before a moment, held at the top
 ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	layout geometry local to algorithm
+ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	the samples of one probe series, in milliseconds or frames, that the host hands in
+ambre-prose | src/redact.rs | crate::redact | Redacted.0 | field | &'a str	newtype-inner	document content that Debug prints the length of alone
+ambre-prose | src/redact.rs | crate::redact | optional(text) | param | Option<&String>	free-text	an optional document text, wrapped for a Debug that prints its length alone
 ambre-prose | src/style.rs | crate::style | heading_scale() | ret | f32	math	the scale a heading level is drawn at, local to the cascade
 ambre-prose | src/style.rs | crate::style | MarkSet | alias | BTreeMap<MarkKey,String>	free-text	the mark values a run carries as read back from the document, never checked: a peer on another build may have written any text, and resolve parses each one and drops what fails
 ambre-prose | src/style.rs | crate::style | resolve(marks) | param | &MarkSet	free-text	the mark values one run carries as read back from the document, never checked: resolve parses each one and drops what fails
 ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/toc.rs | crate::toc | lines() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/ui.rs | crate::ui | Change::Insert.0 | field | String	newtype-inner	newtype inner field
+ambre-prose | src/ui.rs | crate::ui | Change::Insert.0 | field | String	free-text	the text a draft entry inserts, as the user typed it; Debug prints its length alone
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::entries() | ret | impl Iterator<Item=(ambre_bus::app::prose::TextAck,bool)>+'_	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::is_empty() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::marks_of(laid) | param | &str	free-text	text content / label / parser input
