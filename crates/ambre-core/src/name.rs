@@ -28,9 +28,17 @@ pub struct NameTooLong;
 
 /// A name a member typed for a document, a channel, a space or a category:
 /// at most [`NAME_MAX_CHARS`] characters, empty allowed. It travels as its
-/// text, and a read past the cap is refused.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+/// text, and a read past the cap is refused. A document's name is sealed
+/// for the relay, so `Debug` prints the length alone, and a log carries none
+/// of the text.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct Name(String);
+
+impl fmt::Debug for Name {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Name({} chars)", self.0.chars().count())
+    }
+}
 
 impl Name {
     /// The name `text` is.
@@ -207,6 +215,14 @@ impl<'de> Deserialize<'de> for DisplayName {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A name's `Debug` form holds none of its text, so a log carries none.
+    #[test]
+    fn a_name_prints_its_length_and_none_of_its_text() {
+        let name = Name::new("Ada's plan").unwrap();
+        assert_eq!(format!("{name:?}"), "Name(10 chars)");
+        assert_eq!(format!("{:?}", Some(&name)), "Some(Name(10 chars))");
+    }
 
     #[test]
     fn a_name_past_the_cap_is_cut_to_it() {

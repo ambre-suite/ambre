@@ -270,7 +270,10 @@ impl<'a> From<&'a SnapshotBytes> for LoroPayloadRef<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DeltaBytes, EphemeralBytes, LoroPayload, RgbaPixels, SnapshotBytes};
+    use super::{
+        DeltaBytes, EphemeralBytes, LoroPayload, MediaBytes, PlaintextContainer, RgbaPixels,
+        SnapshotBytes,
+    };
 
     #[test]
     fn debug_prints_the_length_alone() {
@@ -289,6 +292,14 @@ mod tests {
         assert_eq!(
             format!("{:?}", RgbaPixels::new(vec![9, 8, 7, 255])),
             "RgbaPixels(4 bytes)"
+        );
+        assert_eq!(
+            format!("{:?}", MediaBytes::new(b"a photo".to_vec())),
+            "MediaBytes(7 bytes)"
+        );
+        assert_eq!(
+            format!("{:?}", PlaintextContainer::new(b"AMBRE".to_vec())),
+            "PlaintextContainer(5 bytes)"
         );
     }
 

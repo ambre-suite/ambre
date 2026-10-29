@@ -39,9 +39,16 @@ pub enum DraftWrite {
 }
 
 /// A draft as a row of the store keeps it: the JSON text the shelf encodes.
-/// The store seals its bytes, and hands them back to be read.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The store seals its bytes, and hands them back to be read. It holds what
+/// the user typed, so `Debug` prints the length alone.
+#[derive(Clone, PartialEq, Eq)]
 pub struct DraftRow(String);
+
+impl std::fmt::Debug for DraftRow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DraftRow({} bytes)", self.0.len())
+    }
+}
 
 impl DraftRow {
     /// The bytes the store seals.
@@ -438,6 +445,20 @@ mod tests {
         let row = encode(&draft("hi"));
         assert_eq!(DraftRow::from_bytes(row.clone().into_bytes()), Some(row));
         assert_eq!(DraftRow::from_bytes(vec![0xff, 0xfe]), None);
+    }
+
+    /// A row's `Debug` form holds no byte of what the user typed, so a log
+    /// carries none of it.
+    #[test]
+    fn a_row_prints_its_length_and_none_of_its_text() {
+        let row = encode(&draft("a secret plan"));
+        let len = row.clone().into_bytes().len();
+        let printed = format!("{row:?}");
+        assert_eq!(printed, format!("DraftRow({len} bytes)"));
+        assert!(!printed.contains("secret"));
+        let key = DraftKey::new("k".into());
+        let put = format!("{:?}", DraftWrite::Put { key, row });
+        assert!(!put.contains("secret"));
     }
 
     /// A row read back from a reload is the draft of its channel or thread,
