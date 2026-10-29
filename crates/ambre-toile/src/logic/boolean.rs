@@ -25,6 +25,7 @@
 //!
 //! Fills use the non-zero rule, matching how shapes are painted.
 
+use ambre_core::BoardLength;
 use i_overlay::core::fill_rule::FillRule;
 use i_overlay::core::overlay_rule::OverlayRule;
 use i_overlay::float::single::SingleFloatOverlay;
@@ -37,18 +38,36 @@ type Contour = Vec<[f64; 2]>;
 /// A shape is a list of contours (outer boundary plus any holes).
 type Shape = Vec<Contour>;
 
-/// Flatten tolerance (world units) for turning curves into polylines before the
-/// boolean runs. Sub-pixel at typical board zoom, and small enough that the
-/// result tracks the source outline. It is large enough to keep the contour
-/// point count, and so the solve cost, bounded.
-pub const FLATTEN_TOL: f64 = 0.25;
+/// How far a flattened polyline may stray from the curve it replaces. Finite
+/// and positive: kurbo derives the segment count from it, so a zero, negative
+/// or NaN tolerance asks for an unbounded number of points.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FlattenTol(BoardLength);
+
+impl FlattenTol {
+    /// `None` unless `tol` is finite and positive.
+    pub fn new(tol: BoardLength) -> Option<Self> {
+        (tol.is_finite() && tol > BoardLength::ZERO).then_some(Self(tol))
+    }
+
+    /// The tolerance in the bare form kurbo takes.
+    pub fn get(self) -> f64 {
+        self.0.get()
+    }
+}
+
+/// Flatten tolerance for turning curves into polylines before the boolean
+/// runs. Sub-pixel at typical board zoom, and small enough that the result
+/// tracks the source outline. It is large enough to keep the contour point
+/// count, and so the solve cost, bounded.
+pub const FLATTEN_TOL: FlattenTol = FlattenTol(BoardLength::new(0.25));
 
 /// Combine world-space `paths` with a boolean `op`. Each path is flattened to
 /// closed contours at `tol`, then the paths fold left to right via [`i_overlay`].
 /// The result is rebuilt as a line-segment [`BezPath`]. Returns an empty path
 /// when fewer than two paths are given or the geometry fully cancels (the caller
 /// treats an empty result as a no-op). Deterministic.
-pub fn boolean_op(op: BoolOp, paths: &[BezPath], tol: f64) -> BezPath {
+pub fn boolean_op(op: BoolOp, paths: &[BezPath], tol: FlattenTol) -> BezPath {
     let Some((first, rest)) = paths.split_first().filter(|(_, rest)| !rest.is_empty()) else {
         return BezPath::new();
     };
@@ -79,7 +98,7 @@ fn overlay_rule(op: BoolOp) -> OverlayRule {
 /// at `tol`; each subpath becomes one contour. i_overlay auto-closes contours, so
 /// open subpaths are combined as if closed (a whiteboard boolean over an open
 /// path treats it as its filled region,).
-fn flatten_to_contours(path: &BezPath, tol: f64) -> Shape {
+fn flatten_to_contours(path: &BezPath, tol: FlattenTol) -> Shape {
     let mut contours: Shape = Vec::new();
     let mut current: Contour = Vec::new();
     let push = |current: &mut Contour, contours: &mut Shape| {
@@ -89,7 +108,7 @@ fn flatten_to_contours(path: &BezPath, tol: f64) -> Shape {
             current.clear();
         }
     };
-    kurbo::flatten(path.iter(), tol, |el| match el {
+    kurbo::flatten(path.iter(), tol.get(), |el| match el {
         PathEl::MoveTo(p) => {
             push(&mut current, &mut contours);
             current.push([p.x, p.y]);
@@ -276,5 +295,14 @@ mod tests {
         let first = boolean_op(BoolOp::Union, &[a.clone(), b.clone()], FLATTEN_TOL);
         let second = boolean_op(BoolOp::Union, &[a, b], FLATTEN_TOL);
         assert_eq!(first.to_svg(), second.to_svg());
+    }
+
+    /// A tolerance that would ask kurbo for unbounded points is refused.
+    #[test]
+    fn a_flatten_tolerance_is_finite_and_positive() {
+        for bad in [0.0, -0.25, f64::NAN, f64::INFINITY] {
+            assert_eq!(FlattenTol::new(BoardLength::new(bad)), None, "{bad}");
+        }
+        assert_eq!(FlattenTol::new(BoardLength::new(0.25)), Some(FLATTEN_TOL));
     }
 }

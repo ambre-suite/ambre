@@ -2604,9 +2604,6 @@ ambre-toile | src/chrome/mod.rs | crate::chrome | new_doc_label() | ret | &'stat
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterIntent::EditNotes.base | field | String	free-text	label, message or user text
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterPanel(notes) | param | RwSignal<String>	free-text	label, message or user text
 ambre-toile | src/chrome/relay.rs | crate::chrome::relay | ToileRelay.presenter_notes | field | RwSignal<String>	free-text	label, message or user text
-ambre-toile | src/logic/align.rs | crate::logic::align | Axis.delta | field | fn(f64)->Vec2	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/align.rs | crate::logic::align | Axis.extent | field | fn(&Rect)->f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/align.rs | crate::logic::align | Axis.near | field | fn(&Rect)->f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_in(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_out(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::lerp(t) | param | f64	math	geometry, layout, count or size local to the algorithm
@@ -2620,19 +2617,18 @@ ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(t) | param
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_fill(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_rect(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/animate.rs | crate::logic::animate | smart_animate(t) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Contour | alias | Vec<[f64;2]>	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/boolean.rs | crate::logic::boolean | FLATTEN_TOL | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/boolean.rs | crate::logic::boolean | boolean_op(tol) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/boolean.rs | crate::logic::boolean | flatten_to_contours(tol) | param | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Contour | alias | Vec<[f64;2]>	foreign-api	the point ring i_overlay takes and returns
+ambre-toile | src/logic/boolean.rs | crate::logic::boolean | FlattenTol::get() | ret | f64	newtype-inner	the tolerance as the f64 kurbo flatten takes
+ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Shape | alias | Vec<Contour>	foreign-api	the contour list i_overlay takes and returns
+ambre-toile | src/logic/boolean.rs | crate::logic::boolean | flatten_to_contours() | ret | Shape	foreign-api	the contour list i_overlay takes as a subject or clip
+ambre-toile | src/logic/boolean.rs | crate::logic::boolean | shapes_to_bezpath(shapes) | param | &[Shape]	foreign-api	the shapes an i_overlay overlay returns
 ambre-toile | src/logic/connector.rs | crate::logic::connector | anchor_is_horizontal() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/connector.rs | crate::logic::connector | outline_meets() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/connector.rs | crate::logic::connector | segment_meets() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/index.rs | crate::logic::index | ElementBounds.max | field | [f64;2]	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/index.rs | crate::logic::index | ElementBounds.min | field | [f64;2]	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::len() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_coord() | ret | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_coord(v) | param | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_axis() | ret | f64	foreign-api	the f64 a kurbo Point or Rect holds on one axis
+ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_axis(v) | param | f64	foreign-api	the f64 a kurbo Point or Rect holds on one axis
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | Entry.pixels | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache.capacity | field | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::is_empty() | ret | bool	generic	predicate or handled-flag result

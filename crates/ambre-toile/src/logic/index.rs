@@ -22,25 +22,26 @@ pub use ambre_bus::app::toile::Viewport;
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElementBounds {
     pub id: ElementId,
-    pub min: [f64; 2],
-    pub max: [f64; 2],
+    rect: Rect,
 }
 
 impl ElementBounds {
     /// Build from a `kurbo::Rect` (already rotation-expanded by the caller).
     pub fn from_rect(id: ElementId, r: Rect) -> Self {
-        Self {
-            id,
-            min: [r.x0, r.y0],
-            max: [r.x1, r.y1],
-        }
+        Self { id, rect: r }
+    }
+
+    /// The box, in board coordinates.
+    pub fn rect(&self) -> Rect {
+        self.rect
     }
 }
 
 impl RTreeObject for ElementBounds {
     type Envelope = AABB<[f64; 2]>;
     fn envelope(&self) -> Self::Envelope {
-        AABB::from_corners(self.min, self.max)
+        let r = self.rect;
+        AABB::from_corners([r.x0, r.y0], [r.x1, r.y1])
     }
 }
 
@@ -323,8 +324,9 @@ mod prop {
                 let mut expected: Vec<ElementId> = model
                     .values()
                     .filter(|b| {
-                        b.min[0] <= world.x1 && b.max[0] >= world.x0
-                            && b.min[1] <= world.y1 && b.max[1] >= world.y0
+                        let r = b.rect();
+                        r.x0 <= world.x1 && r.x1 >= world.x0
+                            && r.y0 <= world.y1 && r.y1 >= world.y0
                     })
                     .map(|b| b.id.clone())
                     .collect();

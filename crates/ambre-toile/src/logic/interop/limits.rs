@@ -17,6 +17,24 @@ ambre_core::define_tally! {
     pub struct ImportDepth;
 }
 
+/// The symmetric bound an imported coordinate is clamped to, per axis. Finite
+/// and not negative: a NaN bound would let every coordinate through, and a
+/// negative one would turn the clamp range inside out.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CoordBound(BoardLength);
+
+impl CoordBound {
+    /// `None` unless `bound` is finite and not negative.
+    pub fn new(bound: BoardLength) -> Option<Self> {
+        (bound.is_finite() && bound >= BoardLength::ZERO).then_some(Self(bound))
+    }
+
+    /// `v` held inside `[-bound, bound]`.
+    pub fn clamp(self, v: BoardLength) -> BoardLength {
+        v.clamp(-self.0, self.0)
+    }
+}
+
 /// The per-import bounds. Defaults are generous headroom over the performance
 /// budget (a 5 000-node SVG) while still bounding a pathological file.
 #[derive(Clone, Copy, Debug)]
@@ -29,7 +47,7 @@ pub struct Limits {
     pub max_depth: ImportDepth,
     /// Absolute world-coordinate clamp (applied per axis, symmetric). A coordinate
     /// outside `[-coord_clamp, coord_clamp]` is clamped to the bound.
-    pub coord_clamp: BoardLength,
+    pub coord_clamp: CoordBound,
     /// Maximum decoded image size, each edge apart. An image past it on either
     /// edge aborts the import (memory-exhaustion vector).
     pub max_image: ambre_core::ImageSize,
@@ -43,7 +61,7 @@ impl Default for Limits {
             max_depth: ImportDepth::new(64),
             // +/- 1e6 world units: far past any real board, safely inside f32 range
             // for the CRDT geometry fields.
-            coord_clamp: BoardLength::new(1_000_000.0),
+            coord_clamp: CoordBound(BoardLength::new(1_000_000.0)),
             // 8192 px: a 8K texture edge; above this the decode cost is abusive.
             max_image: ambre_core::ImageSize::new(WholePx::new(8_192), WholePx::new(8_192)),
         }
@@ -53,26 +71,31 @@ impl Default for Limits {
 impl Limits {
     /// Clamp one coordinate to `[-coord_clamp, coord_clamp]`. Non-finite input
     /// (NaN/inf from a crafted file) collapses to 0.0 rather than poisoning the geometry.
-    pub fn clamp_coord(&self, v: f64) -> f64 {
+    pub fn clamp_coord(&self, v: BoardLength) -> BoardLength {
         if !v.is_finite() {
-            return 0.0;
+            return BoardLength::ZERO;
         }
-        v.clamp(-self.coord_clamp.get(), self.coord_clamp.get())
+        self.coord_clamp.clamp(v)
     }
 
     /// Clamp a point to the world bound.
     pub fn clamp_point(&self, p: Point) -> Point {
-        Point::new(self.clamp_coord(p.x), self.clamp_coord(p.y))
+        Point::new(self.clamp_axis(p.x), self.clamp_axis(p.y))
     }
 
     /// Clamp a rect's origin and far corner to the world bound. Width/height stay
     /// non-negative (a clamp can only shrink, never invert, the box).
     pub fn clamp_rect(&self, r: Rect) -> Rect {
-        let x0 = self.clamp_coord(r.x0.min(r.x1));
-        let y0 = self.clamp_coord(r.y0.min(r.y1));
-        let x1 = self.clamp_coord(r.x0.max(r.x1));
-        let y1 = self.clamp_coord(r.y0.max(r.y1));
+        let x0 = self.clamp_axis(r.x0.min(r.x1));
+        let y0 = self.clamp_axis(r.y0.min(r.y1));
+        let x1 = self.clamp_axis(r.x0.max(r.x1));
+        let y1 = self.clamp_axis(r.y0.max(r.y1));
         Rect::new(x0, y0, x1, y1)
+    }
+
+    /// [`Self::clamp_coord`] on one kurbo axis value, a board coordinate.
+    fn clamp_axis(&self, v: f64) -> f64 {
+        self.clamp_coord(BoardLength::new(v)).get()
     }
 
     /// Fail the import if adding one more element would exceed [`max_elements`].
@@ -129,23 +152,37 @@ mod tests {
 
     #[test]
     fn coord_clamp_bounds_and_sanitizes() {
-        let l = Limits {
-            coord_clamp: BoardLength::new(100.0),
+        let l = bounded(100.0);
+        let at = |v: f64| l.clamp_coord(BoardLength::new(v)).get();
+        assert_eq!(at(50.0), 50.0);
+        assert_eq!(at(999.0), 100.0);
+        assert_eq!(at(-999.0), -100.0);
+        assert_eq!(at(f64::NAN), 0.0);
+        assert_eq!(at(f64::INFINITY), 0.0);
+    }
+
+    /// A bound that would let every coordinate through, or invert the range,
+    /// is refused. The bare `f64::clamp` it replaces panicked on a negative or
+    /// NaN bound.
+    #[test]
+    fn a_coord_bound_is_finite_and_not_negative() {
+        for bad in [-1.0, f64::NAN, f64::INFINITY] {
+            assert_eq!(CoordBound::new(BoardLength::new(bad)), None, "{bad}");
+        }
+        let zero = CoordBound::new(BoardLength::ZERO).expect("zero is a bound");
+        assert_eq!(zero.clamp(BoardLength::new(7.0)), BoardLength::ZERO);
+    }
+
+    fn bounded(bound: f64) -> Limits {
+        Limits {
+            coord_clamp: CoordBound::new(BoardLength::new(bound)).expect("a valid bound"),
             ..Limits::default()
-        };
-        assert_eq!(l.clamp_coord(50.0), 50.0);
-        assert_eq!(l.clamp_coord(999.0), 100.0);
-        assert_eq!(l.clamp_coord(-999.0), -100.0);
-        assert_eq!(l.clamp_coord(f64::NAN), 0.0);
-        assert_eq!(l.clamp_coord(f64::INFINITY), 0.0);
+        }
     }
 
     #[test]
     fn rect_clamp_keeps_non_negative_extent() {
-        let l = Limits {
-            coord_clamp: BoardLength::new(100.0),
-            ..Limits::default()
-        };
+        let l = bounded(100.0);
         let r = l.clamp_rect(Rect::new(-999.0, -999.0, 999.0, 999.0));
         assert_eq!(r, Rect::new(-100.0, -100.0, 100.0, 100.0));
         assert!(r.width() >= 0.0 && r.height() >= 0.0);

@@ -25,6 +25,7 @@
 //!   what makes the operation idempotent, and a user who overlaps three shapes
 //!   gets an even overlap.
 
+use ambre_core::BoardLength;
 use kurbo::{Rect, Vec2};
 
 pub use ambre_bus::app::toile::AlignOp;
@@ -47,32 +48,41 @@ pub fn align_deltas(boxes: &[Rect], op: AlignOp) -> Vec<Vec2> {
         AlignOp::Top => shift(boxes, |b| Vec2::new(0.0, union.y0 - b.y0)),
         AlignOp::VCenter => shift(boxes, |b| Vec2::new(0.0, union.center().y - b.center().y)),
         AlignOp::Bottom => shift(boxes, |b| Vec2::new(0.0, union.y1 - b.y1)),
-        AlignOp::DistributeH => distribute(boxes, union, horizontal()),
-        AlignOp::DistributeV => distribute(boxes, union, vertical()),
+        AlignOp::DistributeH => distribute(boxes, union, Axis::Horizontal),
+        AlignOp::DistributeV => distribute(boxes, union, Axis::Vertical),
     }
 }
 
-/// The axis an operation works on, as the accessors it needs. That is the near
-/// edge of a box, its extent along the axis, and the translation a scalar makes.
-struct Axis {
-    near: fn(&Rect) -> f64,
-    extent: fn(&Rect) -> f64,
-    delta: fn(f64) -> Vec2,
+/// The axis a distribution works on.
+#[derive(Clone, Copy)]
+enum Axis {
+    Horizontal,
+    Vertical,
 }
 
-const fn horizontal() -> Axis {
-    Axis {
-        near: |r| r.x0,
-        extent: |r| r.width(),
-        delta: |d| Vec2::new(d, 0.0),
+impl Axis {
+    /// The near edge of a board box along the axis.
+    fn near(self, r: &Rect) -> BoardLength {
+        BoardLength::new(match self {
+            Self::Horizontal => r.x0,
+            Self::Vertical => r.y0,
+        })
     }
-}
 
-const fn vertical() -> Axis {
-    Axis {
-        near: |r| r.y0,
-        extent: |r| r.height(),
-        delta: |d| Vec2::new(0.0, d),
+    /// The extent of a board box along the axis.
+    fn extent(self, r: &Rect) -> BoardLength {
+        BoardLength::new(match self {
+            Self::Horizontal => r.width(),
+            Self::Vertical => r.height(),
+        })
+    }
+
+    /// The translation that moves `d` along the axis and not at all across it.
+    fn delta(self, d: BoardLength) -> Vec2 {
+        match self {
+            Self::Horizontal => Vec2::new(d.get(), 0.0),
+            Self::Vertical => Vec2::new(0.0, d.get()),
+        }
     }
 }
 
@@ -90,22 +100,24 @@ fn distribute(boxes: &[Rect], union: Rect, axis: Axis) -> Vec<Vec2> {
     // Keep the original index to answer in the order fed in.
     let mut order: Vec<(usize, &Rect)> = boxes.iter().enumerate().collect();
     order.sort_by(|(_, a), (_, b)| {
-        (axis.near)(a)
-            .partial_cmp(&(axis.near)(b))
+        axis.near(a)
+            .partial_cmp(&axis.near(b))
             .unwrap_or(std::cmp::Ordering::Equal)
     });
-    let span = (axis.extent)(&union);
-    let occupied: f64 = boxes.iter().map(|b| (axis.extent)(b)).sum();
+    let span = axis.extent(&union);
+    let occupied: BoardLength = boxes.iter().map(|b| axis.extent(b)).sum();
     #[allow(clippy::cast_precision_loss)] // a selection is far below 2^53 boxes
     let gap = (span - occupied) / (boxes.len() - 1) as f64;
 
     let mut out = vec![Vec2::ZERO; boxes.len()];
-    let mut cursor = order.first().map_or(0.0, |(_, b)| (axis.near)(b));
+    let mut cursor = order
+        .first()
+        .map_or(BoardLength::ZERO, |(_, b)| axis.near(b));
     for (i, b) in order {
         if let Some(slot) = out.get_mut(i) {
-            *slot = (axis.delta)(cursor - (axis.near)(b));
+            *slot = axis.delta(cursor - axis.near(b));
         }
-        cursor += (axis.extent)(b) + gap;
+        cursor += axis.extent(b) + gap;
     }
     out
 }

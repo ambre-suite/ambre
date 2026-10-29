@@ -5831,6 +5831,7 @@
   {"edge": "cites-section", "from": "TOILE-IO-002", "section": "3", "to": "3-Toile/features/ambre-spec-toile-import-export.md"},
   {"edge": "verified-by", "from": "TOILE-IO-002", "to": "ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes"},
   {"edge": "verified-by", "from": "TOILE-IO-002", "to": "ambre_toile::logic::interop::limits::tests::rect_clamp_keeps_non_negative_extent"},
+  {"edge": "verified-by", "from": "TOILE-IO-002", "to": "ambre_toile::logic::interop::limits::tests::a_coord_bound_is_finite_and_not_negative"},
   {"edge": "verified-by", "from": "TOILE-IO-002", "to": "ambre_toile::logic::interop::tests::coordinates_are_clamped_to_the_world_bound"},
   {"edge": "cites-section", "from": "TOILE-IO-072", "section": "3", "to": "3-Toile/features/ambre-spec-toile-import-export.md"},
   {"edge": "verified-by", "from": "TOILE-IO-072", "to": "ambre_toile::logic::interop::limits::tests::coord_clamp_bounds_and_sanitizes"},
