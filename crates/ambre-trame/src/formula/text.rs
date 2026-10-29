@@ -5,6 +5,30 @@
 
 pub use ambre_bus::app::trame::{DisplayFormula, FormulaSource, StoredFormula};
 
+/// The text of a literal a user typed: a string in a formula, or the printed
+/// part of a number format. It is document content, so its Debug form is its
+/// length alone.
+#[derive(Clone, PartialEq, Eq)]
+pub struct LiteralText(String);
+
+impl LiteralText {
+    /// The literal `text`.
+    pub fn new(text: String) -> Self {
+        Self(text)
+    }
+
+    /// The text, for the value or the output that holds it.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for LiteralText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "LiteralText({} chars)", self.0.chars().count())
+    }
+}
+
 /// One char lowercased, with a final sigma read as a plain one, as Unicode
 /// case folding reads it. A whole-string lowercase picks the final sigma by
 /// context, and a char alone cannot: folding char by char gives every reader

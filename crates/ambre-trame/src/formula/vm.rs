@@ -165,7 +165,7 @@ impl<'a> EvalContext<'a> {
         for op in &bc.ops {
             match op {
                 Op::PushNum(n) => stack.push(CellValue::Number(*n)),
-                Op::PushStr(s) => stack.push(CellValue::Text(s.clone())),
+                Op::PushStr(s) => stack.push(CellValue::Text(s.as_str().to_owned())),
                 Op::PushBool(b) => stack.push(CellValue::Boolean(*b)),
                 Op::PushEmpty => stack.push(CellValue::Empty),
                 Op::PushError(e) => stack.push(CellValue::Error(e.clone())),

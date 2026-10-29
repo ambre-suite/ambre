@@ -3175,6 +3175,9 @@ ambre-trame | src/formula/render.rs | crate::formula::render | render_range() | 
 ambre-trame | src/formula/render.rs | crate::formula::render | render_span() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_stored() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_uid() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
+ambre-trame | src/formula/text.rs | crate::formula::text | LiteralText.0 | field | String	newtype-inner	the text of a literal a user typed in a formula or a number format
+ambre-trame | src/formula/text.rs | crate::formula::text | LiteralText::as_str() | ret | &str	newtype-inner	the text of the literal, for the value or the output that holds it
+ambre-trame | src/formula/text.rs | crate::formula::text | LiteralText::new(text) | param | String	newtype-inner	the text of a literal a user typed
 ambre-trame | src/formula/text.rs | crate::formula::text | fold_char() | ret | impl Iterator<Item=char>	generic	the folded form of one char of a text a comparison ignoring case folds
 ambre-trame | src/formula/text.rs | crate::formula::text | fold_char(ch) | param | char	generic	one char of a text a comparison ignoring case folds: a query, a cell's text or a SEARCH argument
 ambre-trame | src/formula/text.rs | crate::formula::text | fold_char_simple() | ret | char	generic	the one char a char folds to, or the char itself when its fold is several
@@ -3190,7 +3193,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::new(in
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::position() | ret | usize	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushBool.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushStr.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	the finite number a cell's text spells, inside the formula engine
@@ -3234,7 +3236,6 @@ ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | fie
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.undecodable | field | std::cell::Cell<bool>	generic	state flag
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | const | [&str;7]	free-text	the English day names a ddd or dddd run prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | MONTHS | const | [&str;12]	free-text	the English month names a mmm or mmmm run prints
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Token::Literal.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(pattern) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(value) | param | f64	math	the formula number a custom pattern formats

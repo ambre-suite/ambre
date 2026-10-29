@@ -115,7 +115,9 @@ fn compile_into(
         Expr::Literal(val) => {
             match val {
                 super::types::CellValue::Number(n) => ops.push(Op::PushNum(*n)),
-                super::types::CellValue::Text(s) => ops.push(Op::PushStr(s.clone())),
+                super::types::CellValue::Text(s) => {
+                    ops.push(Op::PushStr(super::text::LiteralText::new(s.clone())))
+                }
                 super::types::CellValue::Boolean(b) => ops.push(Op::PushBool(*b)),
                 super::types::CellValue::Empty => ops.push(Op::PushEmpty),
                 super::types::CellValue::Range(_) => {

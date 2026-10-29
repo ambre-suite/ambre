@@ -420,7 +420,7 @@ impl RangeValue {
 
 /// The result of evaluating a cell: a literal value, an error, or an internal
 /// range (used only on the VM stack, never persisted in `formula_cache`).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum CellValue {
     Number(f64),
     Text(String),
@@ -429,6 +429,20 @@ pub enum CellValue {
     /// Only on the VM stack during evaluation; never stored in `formula_cache`.
     Range(RangeValue),
     Error(FormulaError),
+}
+
+/// The length of a text alone: a cell's text is document content.
+impl fmt::Debug for CellValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Number(n) => f.debug_tuple("Number").field(n).finish(),
+            Self::Text(text) => write!(f, "Text({} chars)", text.chars().count()),
+            Self::Boolean(b) => f.debug_tuple("Boolean").field(b).finish(),
+            Self::Empty => write!(f, "Empty"),
+            Self::Range(range) => f.debug_tuple("Range").field(range).finish(),
+            Self::Error(error) => f.debug_tuple("Error").field(error).finish(),
+        }
+    }
 }
 
 /// The number `text` spells, when it is a finite one (`TRAME-245`).
@@ -488,7 +502,7 @@ impl CellValue {
 
 /// Why a formula's text did not parse, or named a sheet no tab carries. Its
 /// display is the message `#PARSE!(...)` shows.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ParseError {
     /// Nothing but blanks after the `=`.
     Empty,
@@ -506,6 +520,25 @@ pub enum ParseError {
     Incomplete,
     /// A sheet display name no tab carries, as the formula spells it.
     UnknownSheet(SheetName),
+}
+
+/// The length alone of the formula text a variant quotes: that text is
+/// document content. The sheet name prints through its own type.
+impl fmt::Debug for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => write!(f, "Empty"),
+            Self::TooLong => write!(f, "TooLong"),
+            Self::TooDeep => write!(f, "TooDeep"),
+            Self::TooManyOperators => write!(f, "TooManyOperators"),
+            Self::TrailingInput(text) => {
+                write!(f, "TrailingInput({} chars)", text.chars().count())
+            }
+            Self::Near(text) => write!(f, "Near({} chars)", text.chars().count()),
+            Self::Incomplete => write!(f, "Incomplete"),
+            Self::UnknownSheet(name) => f.debug_tuple("UnknownSheet").field(name).finish(),
+        }
+    }
 }
 
 impl fmt::Display for ParseError {
@@ -594,7 +627,7 @@ impl fmt::Display for FormulaError {
 pub enum Op {
     // -- Stack literals --------------------------------------------------------
     PushNum(f64),
-    PushStr(String),
+    PushStr(super::text::LiteralText),
     PushBool(bool),
     PushEmpty,
     /// Push a constant error onto the stack. Emitted for an error literal,
@@ -905,6 +938,28 @@ pub(crate) use crate::columns::{alpha_to_col, col_to_alpha};
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A cell's text, a string literal and the formula text a parse error
+    /// quotes are document content: each Debug form holds a length alone.
+    #[test]
+    fn debug_forms_print_the_length_of_document_text_alone() {
+        let secret = || "salary".to_owned();
+        let printed = [
+            format!("{:?}", CellValue::Text(secret())),
+            format!(
+                "{:?}",
+                Op::PushStr(crate::formula::text::LiteralText::new(secret()))
+            ),
+            format!("{:?}", Expr::Literal(CellValue::Text(secret()))),
+            format!("{:?}", ParseError::TrailingInput(secret())),
+            format!("{:?}", ParseError::Near(secret())),
+            format!("{:?}", FormulaError::ParseError(ParseError::Near(secret()))),
+        ];
+        for line in &printed {
+            assert!(!line.contains("salary"), "{line}");
+            assert!(line.contains("6 chars"), "{line}");
+        }
+    }
 
     #[test]
     fn col_to_alpha_basics() {

@@ -11,6 +11,7 @@
 // stands, so no pattern is refused. A mistyped pattern still renders, and the
 // result shows the mistake.
 
+use crate::formula::text::LiteralText;
 use ambre_bus::{CivilDate, DateSerial};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.
@@ -88,7 +89,7 @@ fn hms(serial: DateSerial) -> TimeOfDay {
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
     /// Printed as it stands.
-    Literal(String),
+    Literal(LiteralText),
     /// `0`: a digit, a zero when the number has none there.
     Zero,
     /// `#`: a digit, nothing when the number has none there.
@@ -203,12 +204,12 @@ fn lex(section: &str) -> Vec<Token> {
                 let len = tail.iter().position(|&q| q == '"').unwrap_or(tail.len());
                 let text: String = tail.iter().take(len).collect();
                 i += len + 1;
-                Token::Literal(text)
+                Token::Literal(LiteralText::new(text))
             }
             '\\' => {
                 let escaped = chars.get(i).map(char::to_string).unwrap_or_default();
                 i += 1;
-                Token::Literal(escaped)
+                Token::Literal(LiteralText::new(escaped))
             }
             '0' => Token::Zero,
             '#' => Token::Hash,
@@ -237,7 +238,7 @@ fn lex(section: &str) -> Vec<Token> {
                 i += same;
                 Token::Date(letter, (0..same).fold(Run::One, |run, _| run.longer()))
             }
-            other => Token::Literal(other.to_string()),
+            other => Token::Literal(LiteralText::new(other.to_string())),
         };
         tokens.push(token);
     }
@@ -338,7 +339,7 @@ fn place_integer(tokens: &[Token], digits: &str, thousands: Thousands) -> String
                 };
                 out.push(text);
             }
-            Token::Literal(text) => out.push(text.clone()),
+            Token::Literal(text) => out.push(text.as_str().to_owned()),
             Token::Percent => out.push("%".to_owned()),
             Token::AmPm | Token::Date(..) | Token::Comma | Token::Point => {}
         }
@@ -401,7 +402,7 @@ fn place_fraction(tokens: &[Token], digits: &str) -> String {
                 }
                 place += 1;
             }
-            Token::Literal(text) => out.push_str(text),
+            Token::Literal(text) => out.push_str(text.as_str()),
             Token::Percent => out.push('%'),
             Token::AmPm | Token::Date(..) | Token::Comma | Token::Point => {}
         }
@@ -486,7 +487,7 @@ fn render_date(tokens: &[Token], serial: DateSerial) -> String {
             }
             Token::Date(DateLetter::Second, run) => out.push_str(&pad(s, *run)),
             Token::AmPm => out.push_str(if h < 12 { "AM" } else { "PM" }),
-            Token::Literal(text) => out.push_str(text),
+            Token::Literal(text) => out.push_str(text.as_str()),
             Token::Zero => out.push('0'),
             Token::Hash => out.push('#'),
             Token::Point => out.push('.'),
@@ -565,6 +566,16 @@ mod tests {
         assert_eq!(f(serial, "dddd d mmmm"), "Tuesday 29 September");
         assert_eq!(f(serial, "hh:mm:ss"), "14:05:09");
         assert_eq!(f(serial, "h:mm AM/PM"), "2:05 PM");
+    }
+
+    /// The literal part of a format is document content: the Debug form of
+    /// its token holds a length alone.
+    #[test]
+    fn a_literal_token_prints_its_length_alone() {
+        let tokens = lex(r#"0 "salary""#);
+        let printed = format!("{tokens:?}");
+        assert!(!printed.contains("salary"), "{printed}");
+        assert!(printed.contains("6 chars"), "{printed}");
     }
 
     /// A run of a date letter prints at one of four widths, and a run past
