@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3757 rows: 3201 shipped, of which 9 loose. 556 unbuilt.**
+**3759 rows: 3203 shipped, of which 9 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 917 | 428 | 819 | 611 | 417 | 3192 |
+| `verified` | 917 | 428 | 821 | 611 | 417 | 3194 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 7 |  |  |  |  | 7 |
@@ -105,7 +105,7 @@
 | `ambre-spec-trame-sort.md` | 24 | 24 | 24 |  |  |
 | `ambre-spec-trame-status-bar.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-trame-undo.md` | 6 | 2 | 2 |  | 4 |
-| `ambre-spec-toile-schema.md` | 10 | 10 | 10 |  |  |
+| `ambre-spec-toile-schema.md` | 11 | 11 | 11 |  |  |
 | `ambre-spec-toile-auto-layout.md` | 27 | 25 | 25 |  | 2 |
 | `ambre-spec-toile-board-rendering.md` | 30 | 30 | 30 |  |  |
 | `ambre-spec-toile-clipboard.md` | 18 | 17 | 17 |  | 1 |
@@ -113,7 +113,7 @@
 | `ambre-spec-toile-connectors.md` | 46 | 45 | 45 |  | 1 |
 | `ambre-spec-toile-elements.md` | 33 | 33 | 33 |  |  |
 | `ambre-spec-toile-embeds.md` | 45 | 45 | 45 |  |  |
-| `ambre-spec-toile-engine.md` | 39 | 39 | 39 |  |  |
+| `ambre-spec-toile-engine.md` | 40 | 40 | 40 |  |  |
 | `ambre-spec-toile-find.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-toile-frames.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-toile-freehand.md` | 13 | 13 | 13 |  |  |
@@ -295,7 +295,7 @@
 | `ambre-spec-toile-connectors.md` | TOILE-006..007,042..047,164..176,232..233,238,263; TOILE-UI-211..215,344..348,350..354,359,363,371..374 |
 | `ambre-spec-toile-elements.md` | TOILE-012,022,031..037,186..204,234..235,239,242..243 |
 | `ambre-spec-toile-embeds.md` | TOILE-021,083..088,224..226,267; TOILE-UI-015..017,090..098,320..341 |
-| `ambre-spec-toile-engine.md` | TOILE-001..002,004..005,017,023,089..093,206..215,217..223,236,240,244..245,265; TOILE-UI-099..101,312..314 |
+| `ambre-spec-toile-engine.md` | TOILE-001..002,004..005,017,023,089..093,206..215,217..223,236,240,244..245,265,270; TOILE-UI-099..101,312..314 |
 | `ambre-spec-toile-find.md` | TOILE-079..080,082,142..145; TOILE-UI-111..118 |
 | `ambre-spec-toile-frames.md` | TOILE-011,048..051,099..102,237,247..256,261..262; TOILE-UI-390 |
 | `ambre-spec-toile-freehand.md` | TOILE-008,038..041,103..108,259,268 |
@@ -308,7 +308,7 @@
 | `ambre-spec-toile-presence.md` | TOILE-016,177..185,241; TOILE-UI-014,073..078,216..222,367,376..377 |
 | `ambre-spec-toile-presentation.md` | TOILE-FEAT-001..004,008,026..028,075..095,098; TOILE-UI-083..089,315..319,342..343,368 |
 | `ambre-spec-toile-reactions.md` | TOILE-FEAT-007,010,019..025,055..067,100..101,106; TOILE-UI-079..081,299..305 |
-| `ambre-spec-toile-schema.md` | TOILE-003,018,027,029..030,227..231 |
+| `ambre-spec-toile-schema.md` | TOILE-003,018,027,029..030,227..231,269 |
 | `ambre-spec-toile-selection.md` | TOILE-UI-005..007,031..035,223..242,349,385..386,391..392,396 |
 | `ambre-spec-toile-status-bar.md` | TOILE-020,116..118; TOILE-UI-053..056,106..110 |
 | `ambre-spec-toile-styles.md` | TOILE-163; TOILE-UI-019,066..071,161..182,397 |

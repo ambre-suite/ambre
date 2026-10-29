@@ -42,6 +42,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-002` | `POST` | Derivation MUST finish before the command returns. | this spec section 3 | type-level -- `handle_command` returns `ToileOutcome` by value and the crate has no async path; `ambre_toile::logic::state::derive::tests::derive_viewport_at_uses_the_given_camera` | none | verified |
 | `TOILE-210` | `POST` | The outcome MUST carry every display event the command produced. | this spec section 3 | `ambre_toile::logic::convergence_tests::viewport_culls_offscreen_nodes` -- it reads the derivation through a test accessor, while thirty-odd tests of the same file read `out.display` directly, over creation, deletion, grouping, find, stats and presence | none | verified |
 | `TOILE-211` | `FAIL` | A command naming an element that is gone MUST answer with an error and MUST NOT advance the export cursor. | this spec section 3; `ambre-spec-delta-order.md` | type-level -- the two refusal helpers return `ToileOutcome::display_only`, which carries no delta and never reaches the cursor, and the construction is the proof | none | verified |
+| `TOILE-270` | `FAIL` | A create that needs an id the session can no longer mint MUST answer with an error and MUST leave the board as it was. | `ambre-spec-toile-schema.md section 2` (`TOILE-269`) | `ambre_toile::logic::state::elements::inner_tests::a_spent_counter_refuses_each_create_and_overwrites_nothing` -- a shape, a group and a paste; `::a_spent_counter_refuses_every_other_create_and_writes_nothing` -- a stroke, an arrow, a boolean and a comment, each reading the document back unchanged; `::a_group_refused_at_the_top_leaves_its_members_where_they_sat` -- the group that would detach its members first | none | verified |
 | `TOILE-212` | `FRAME` | A camera command MUST NOT write to the board and MUST NOT produce a delta. | this spec section 3 | type-level -- the camera arm stores the viewport and returns `ToileOutcome::display_only`, so it neither commits nor exports, and the construction is the proof | none | verified |
 
 ### 1.3 Take in a change from a collaborator
@@ -104,7 +105,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 39 `verified`, 0 `untested`. What holds is the pair no other application holds:
+* **Verification.** 40 `verified`, 0 `untested`. What holds is the pair no other application holds:
   the index equivalence, at a camera that culls too, and the convergence of every derived cache. Ten
   verified rows are structural.
 

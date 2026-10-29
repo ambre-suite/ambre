@@ -75,6 +75,7 @@
 | PeerID | the Loro identifier of one writing session | | `1-Foundations/ambre-spec-op-authorship.md` |
 | session nonce | the random value a PeerID derives from | | `1-Foundations/ambre-spec-op-authorship.md` |
 | peer registry | the map from a PeerID to its user, inside a document | | `1-Foundations/ambre-spec-op-authorship.md` |
+| IdCounter | the per-session counter an id is minted from, beside a PeerID | | `3-Toile/ambre-spec-toile-schema.md` |
 | Timestamp | the author's wall clock in Unix milliseconds, shown and never trusted | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | page clock | the page's monotonic milliseconds, restarted on every load | | `1-Foundations/ambre-spec-frame.md` |
 | presence | who is on a document, and where | | `1-Foundations/ambre-spec-presence.md` |

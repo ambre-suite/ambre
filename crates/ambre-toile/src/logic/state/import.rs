@@ -381,7 +381,7 @@ impl ToileState {
                     ..
                 }) => self
                     .create_element_inner(kind, at, size, content, fill)
-                    .map_err(|_| format!("element slot {unit}: rejected by the engine")),
+                    .map_err(|e| format!("element slot {unit}: {e}")),
                 // The batch contract is creates-only; anything else is a
                 // converter bug. Drop it rather than corrupt slot indices.
                 _ => Err(format!("import slot {unit}: non-create command dropped")),
@@ -411,10 +411,18 @@ impl ToileState {
                 .iter()
                 .filter_map(|r| self.resolve_ref(*r, &job.slot_ids, &job.group_ids))
                 .collect();
+            // Fewer than two resolved members: the element skips already
+            // say why, so the group drops without a second line.
             let built = if members.len() < 2 {
                 None
             } else {
-                self.group_inner(&members).ok()
+                match self.group_inner(&members) {
+                    Ok(id) => Some(id),
+                    Err(e) => {
+                        job.report.skip(format!("group {unit}: {e}"));
+                        None
+                    }
+                }
             };
             if built.is_some() {
                 // Seed the fresh group's derived bounds now, so a later

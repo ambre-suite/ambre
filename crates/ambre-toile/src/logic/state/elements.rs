@@ -765,6 +765,110 @@ mod inner_tests {
         );
     }
 
+    /// A stroke, an arrow, a boolean result and a comment thread each need a
+    /// fresh id. With the counter spent, each answers the same refusal and
+    /// writes nothing (`TOILE-270`).
+    #[test]
+    fn a_spent_counter_refuses_every_other_create_and_writes_nothing() {
+        use crate::logic::command::ToileError;
+        use ambre_bus::app::toile::{
+            Anchor, BoolOp, Cap, CommentAnchor, EndCaps, PathType, Sources, StrokePoint,
+        };
+        let mut st = ToileState::new();
+        st.set_user_id(ambre_core::UserId::new());
+        let a = rect_at(&mut st, 0.0);
+        let b = rect_at(&mut st, 5.0);
+        st.doc.commit();
+        st.counter = ambre_bus::app::toile::IdCounter::new(u32::MAX);
+        let vv = st.doc.oplog_vv();
+        let doc = st.doc.get_deep_value();
+        let point = |x: f32| {
+            StrokePoint::full_pressure(
+                ambre_core::StrokeCoord::new(x),
+                ambre_core::StrokeCoord::new(x),
+            )
+        };
+        let commands = [
+            (
+                "stroke",
+                ToileCommand::CommitStroke {
+                    points: vec![point(0.0), point(4.0)],
+                    style: ElementStyle::default(),
+                },
+            ),
+            (
+                "arrow",
+                ToileCommand::CreateConnector {
+                    from: a.clone(),
+                    from_anch: Anchor::Right,
+                    to: b.clone(),
+                    to_anch: Anchor::Left,
+                    path_type: PathType::Straight,
+                    arrows: EndCaps {
+                        start: Cap::Plain,
+                        end: Cap::Arrow,
+                    },
+                },
+            ),
+            (
+                "boolean",
+                ToileCommand::BooleanOp {
+                    op: BoolOp::Union,
+                    ids: vec![a, b],
+                    sources: Sources::Consume,
+                },
+            ),
+            (
+                "comment",
+                ToileCommand::CreateComment {
+                    anchor: CommentAnchor::Point(Point::new(1.0, 1.0)),
+                    body: "late".to_owned(),
+                    ts: ambre_core::Timestamp::from_i64(1),
+                },
+            ),
+        ];
+        for (name, command) in commands {
+            let out = st.handle_command(command);
+            assert!(
+                out.display
+                    .iter()
+                    .any(|e| matches!(e, ToileEvent::Error(ToileError::IdsExhausted))),
+                "{name}"
+            );
+            assert_eq!(st.doc.get_deep_value(), doc, "{name}");
+        }
+        st.doc.commit();
+        assert_eq!(st.doc.oplog_vv(), vv, "nothing left pending");
+    }
+
+    /// A group refused for want of an id writes nothing first. Its members
+    /// stay in the group they sat in, the caches hold, and no detach is left
+    /// pending to ride along with the next commit.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))] // `debug_caches` is a host helper
+    fn a_group_refused_at_the_top_leaves_its_members_where_they_sat() {
+        use crate::logic::command::ToileError;
+        let mut st = ToileState::new();
+        let a = rect_at(&mut st, 0.0);
+        let b = rect_at(&mut st, 20.0);
+        let first = st.group_inner(&[a.clone(), b.clone()]).expect("group");
+        st.doc.commit();
+        st.counter = ambre_bus::app::toile::IdCounter::new(u32::MAX);
+        let doc_before = st.doc.get_deep_value();
+        let caches_before = st.debug_caches();
+        let vv_before = st.doc.oplog_vv();
+        assert_eq!(
+            st.group_inner(&[a.clone(), b.clone()]),
+            Err(ToileError::IdsExhausted)
+        );
+        assert_eq!(st.doc.get_deep_value(), doc_before);
+        assert_eq!(st.debug_caches(), caches_before);
+        st.doc.commit();
+        assert_eq!(st.doc.oplog_vv(), vv_before);
+        assert_eq!(st.parents_of(&a).to_vec(), vec![first.clone()]);
+        assert_eq!(st.parents_of(&b).to_vec(), vec![first]);
+    }
+
     /// A rect of `w` x 10 at `(x, y)`, committed on its own. Each fixture is
     /// then its own undo item, and the alignment under test is the last one.
     fn rect(st: &mut ToileState, x: f64, y: f64, w: f64) -> crate::logic::model::ElementId {

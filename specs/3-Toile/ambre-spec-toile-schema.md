@@ -34,8 +34,8 @@ here as a **cause**, never as a **rule**.
 Prefix `TOILE`, shared with the feature documents: one prefix, one numbering, no renumbering.
 `TOILE-003` and `TOILE-018` sit here because each states a property of the format, not of the
 engine. `TOILE-227` and `TOILE-228` are the halves those two hid. `TOILE-229`, `TOILE-230` and
-`TOILE-231` state format rules sections 2, 3 and 7 already lean on and no row carried. Grammar and
-status values are normative in `ambre-spec-template.md`.
+`TOILE-231` state format rules sections 2, 3 and 7 already lean on and no row carried, and so does
+`TOILE-269`. Grammar and status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
@@ -43,6 +43,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-227` | `INV` | A reference to an element MUST still resolve after a move, a reorder and a regroup. | this spec section 2; this spec section 6 | `ambre_toile::logic::convergence_tests::move_translates_bounds` -- it resolves the id after a translate; `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it reads the `layers` order back after a `mov`, which is the call section 6 rejects the Loro slot id for; `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- it resolves the members after they are regrouped | none | verified |
 | `TOILE-229` | `INV` | A composite key MUST re-read as the pair it joins: a `layers` entry as tag and id, a reaction key as target and user. | this spec section 2 | structural -- an id is hex and `_`, a `UserId` is a hyphenated UUID, so no half can carry the `:` or the `/` the key splits on; `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it walks the `NodeId` codec both ways; `ambre_toile::logic::convergence_tests::two_peers_converge` -- it compares the reaction tally of two peers, which is read by splitting the composite key | none | verified |
 | `TOILE-231` | `INV` | Every id in the document MUST render at the fixed width `mint` produces: 25 characters for an id, 27 for a `layers` entry. | this spec section 2; this spec section 7 | `ambre_toile::logic::structure_tests::every_id_the_board_writes_has_the_minted_width` -- the mint at its two extremes, then every key of the element and arrow maps and every `layers` entry of a board holding each kind of id, written by the widest peer a document takes | none | verified |
+| `TOILE-269` | `INV` | One session MUST NOT mint two equal ids. | this spec section 2 | `ambre_core::authorship::tests::an_id_counter_ends_at_the_top_and_crosses_the_wire_bare` -- the step past `u32::MAX` answers no counter; `ambre_toile::logic::state::elements::inner_tests::a_spent_counter_refuses_each_create_and_overwrites_nothing` -- the element that holds the last id keeps its box | none | verified |
 | `TOILE-018` | `INV` | An element's whole style MUST be a single LWW register. | this spec section 3; architecture section 2.D | structural -- one `LoroValue::Binary` under the `style` key per element map (`logic/state/elements.rs`), decoded whole by `ElementStyle::from_bytes`, so no attribute has a register to be elected on its own | none | verified |
 | `TOILE-228` | `CONC` | Two concurrent restyles of one element MUST converge on the whole style one of the two wrote, never a per-attribute blend. | this spec section 3; architecture section 2.D | proptest -- `ambre_toile::logic::convergence_tests::two_peers_converge` draws 48 interleavings of restyles of the same element across two peers and compares the full rendered viewport, so a blend of two writers' attributes diverges (Trame's dedicated no-blend tests have no counterpart here) | none | verified |
 | `TOILE-230` | `INV` | An unset property MUST be the absence of its key; a container MUST NOT carry a "cleared" marker. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_auto_layout_add_change_clear` -- it clears a frame's auto-layout and reads back `None` with the key gone, and the clear of an already-absent key broadcasting nothing, both of which a marker would break; `::a_link_is_set_and_cleared` -- the link key | none | verified |
@@ -54,7 +55,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the containers this table declares reach the relay as ciphertext alone
   (`ZK-001`), and the media entry holds a content hash, never the pixels
   (`features/ambre-spec-toile-media.md section 3`).
-* **Verification.** 10 `verified`, 0 `failing`, 0 `untested`. What holds is the table's shape: the
+* **Verification.** 11 `verified`, 0 `failing`, 0 `untested`. What holds is the table's shape: the
   container per subject, and the composite key re-read as its pair. The key set a build writes is
   held too, append-only, by a CI gate, and so is the id width (`TOILE-231`). A note body merges
   character by character (`TOILE-030`). What is loose is the move-invariance two paste tests never
@@ -68,8 +69,8 @@ One identity type serves elements, connectors, frames and comment threads.
 
 * `ElementId` is `"{peer:016x}_{counter:08x}"` -- 25 characters. `peer` is the document `PeerID`;
   `counter` is a per-session monotonic counter, an `IdCounter`.
-* A session mints each counter once. Past `u32::MAX` it mints no id, and the create is refused
-  with `ToileError::IdsExhausted`, so an id never repeats and never overwrites an element.
+* A session mints each counter once, and past `u32::MAX` it mints no id, so an id never repeats
+  (`TOILE-269`). What a create answers then is `TOILE-270`, in the engine feature.
 * `ConnectorId` uses the same rendering and is a distinct type, so the compiler refuses one where
   the other is meant. `FrameId` and `TargetId` are aliases of `ElementId`.
 * A `layers` entry joins a tag and an id with `:`: `"E:{element_id}"` or `"C:{connector_id}"`.

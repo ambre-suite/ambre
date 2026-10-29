@@ -78,6 +78,9 @@ impl ToileState {
         if members.len() < 2 {
             return Err(ToileError::GroupNeedsTwo);
         }
+        // Mint before the first write: a spent counter refuses the group with
+        // the board untouched, so no detach rides along with the next commit.
+        let id = self.mint_element_id()?;
         // A member leaves every container it sat in, a frame included, since
         // it belongs to one at most (`TOILE-149`). When every member sat in one
         // frame, the new group takes their place in it.
@@ -113,7 +116,6 @@ impl ToileState {
             .min()
             .unwrap_or(0);
 
-        let id = self.mint_element_id()?;
         let refused = || ToileError::WriteFailed("the board refused the new group".to_owned());
         let Ok(em) = self
             .doc
