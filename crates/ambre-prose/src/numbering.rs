@@ -15,6 +15,8 @@
 //! walk, every heading. [`compute_heading_number`] answers for one heading and
 //! stops there, so neither form turns a numbering pass into a walk per heading.
 
+use std::ops::ControlFlow;
+
 use loro::{LoroTree, TreeID};
 
 use crate::doc;
@@ -71,7 +73,7 @@ pub fn heading_numbers(tree: &LoroTree) -> Vec<(TreeID, HeadingNumber)> {
         {
             out.push((*id, number));
         }
-        false
+        ControlFlow::Continue(())
     });
     out
 }
@@ -88,14 +90,14 @@ pub fn compute_heading_number(tree: &LoroTree, heading_id: &TreeID) -> Option<He
     let mut found = None;
     walk(tree, &mut |tree, id| {
         let Some(stored) = doc::heading_level_of(tree, id) else {
-            return false;
+            return ControlFlow::Continue(());
         };
         let number = counters.bump(stored.clamped());
         if id == heading_id {
             found = number;
-            return true;
+            return ControlFlow::Break(());
         }
-        false
+        ControlFlow::Continue(())
     });
     found
 }
@@ -167,24 +169,23 @@ ambre_core::define_tally! {
 }
 
 /// Visit every live block in document order, depth first and parents before
-/// children, until `visit` answers `true`.
+/// children, until `visit` answers `Break`.
 ///
 /// The same order the layout pass walks in, and the order the tree itself
 /// holds, so no reader sorts anything.
-fn walk(tree: &LoroTree, visit: &mut impl FnMut(&LoroTree, &TreeID) -> bool) {
+fn walk(tree: &LoroTree, visit: &mut impl FnMut(&LoroTree, &TreeID) -> ControlFlow<()>) {
     fn descend(
         tree: &LoroTree,
         parent: Option<TreeID>,
-        visit: &mut impl FnMut(&LoroTree, &TreeID) -> bool,
-    ) -> bool {
+        visit: &mut impl FnMut(&LoroTree, &TreeID) -> ControlFlow<()>,
+    ) -> ControlFlow<()> {
         for id in doc::children_of(tree, parent) {
-            if visit(tree, &id) || descend(tree, Some(id), visit) {
-                return true;
-            }
+            visit(tree, &id)?;
+            descend(tree, Some(id), visit)?;
         }
-        false
+        ControlFlow::Continue(())
     }
-    descend(tree, None, visit);
+    let _ = descend(tree, None, visit);
 }
 
 #[cfg(test)]

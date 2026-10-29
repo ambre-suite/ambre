@@ -176,7 +176,7 @@ impl KeyProbe {
     ) -> Vec<Measure> {
         let pending: Vec<ambre_bus::app::prose::TextAck> = draft
             .entries()
-            .filter(|&(_, confirmed)| !confirmed)
+            .filter(|&(_, confirmed)| confirmed == crate::ui::Confirmation::Pending)
             .map(|(seq, _)| seq)
             .collect();
         let mut measures = Vec::new();

@@ -2127,9 +2127,6 @@ ambre-prose | src/mark.rs | crate::mark | is_owned_anchor() | ret | bool	generic
 ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	generic	predicate result
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	local	the length of the constant array of heading levels, which sizes the private counters
-ambre-prose | src/numbering.rs | crate::numbering | walk(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	independent flag or predicate
-ambre-prose | src/numbering.rs | crate::numbering | walk::descend() | ret | bool	generic	tree walk callback: continue or stop
-ambre-prose | src/numbering.rs | crate::numbering | walk::descend(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	tree walk callback: continue or stop
 ambre-prose | src/probe.rs | crate::probe | FrameNumber.0 | field | u64	newtype-inner	how many animation frames began before a moment, held at the top
 ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
@@ -2142,14 +2139,12 @@ ambre-prose | src/style.rs | crate::style | resolve(marks) | param | &MarkSet	fr
 ambre-prose | src/suggest.rs | crate::suggest | of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/toc.rs | crate::toc | lines() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | Change::Insert.0 | field | String	free-text	the text a draft entry inserts, as the user typed it; Debug prints its length alone
-ambre-prose | src/ui.rs | crate::ui | DraftBuffer::entries() | ret | impl Iterator<Item=(ambre_bus::app::prose::TextAck,bool)>+'_	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::is_empty() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::marks_of(laid) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::push_str(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of(laid) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::touches() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/ui.rs | crate::ui | DraftEdit.confirmed | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.changed | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	text content / label / parser input

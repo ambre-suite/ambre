@@ -80,7 +80,17 @@ struct DraftEdit {
     at: DocOffset,
     change: Change,
     /// Taken as drawn: the document holds it, and the next layout will.
-    confirmed: bool,
+    confirmed: Confirmation,
+}
+
+ambre_core::define_flag! {
+    /// Whether the Logic thread took a draft entry as drawn.
+    pub enum Confirmation {
+        /// The entry waits for its answer.
+        Pending,
+        /// The document holds the entry, and the next layout will.
+        Confirmed,
+    }
 }
 
 /// What one draft entry does. The inserted text is the user's, so `Debug`
@@ -111,7 +121,9 @@ impl DraftBuffer {
 
     /// Each entry's acknowledgement number, and whether the Logic thread
     /// confirmed it. The keystroke probes read it (`ambre-spec-budgets.md`).
-    pub fn entries(&self) -> impl Iterator<Item = (ambre_bus::app::prose::TextAck, bool)> + '_ {
+    pub fn entries(
+        &self,
+    ) -> impl Iterator<Item = (ambre_bus::app::prose::TextAck, Confirmation)> + '_ {
         self.edits.iter().map(|edit| (edit.seq, edit.confirmed))
     }
 
@@ -161,7 +173,7 @@ impl DraftBuffer {
             block,
             at,
             change,
-            confirmed: false,
+            confirmed: Confirmation::Pending,
         });
         self.bump();
     }
@@ -174,7 +186,7 @@ impl DraftBuffer {
     /// (`PROSE-UI-005`). The entries confirm in the order they were sent.
     pub fn confirm(&mut self, seq: ambre_bus::app::prose::TextAck) {
         if let Some(edit) = self.edits.iter_mut().find(|edit| edit.seq == seq) {
-            edit.confirmed = true;
+            edit.confirmed = Confirmation::Confirmed;
         }
     }
 
@@ -191,7 +203,8 @@ impl DraftBuffer {
     /// now. Confirmed entries lead the log, since they confirm in order.
     pub fn laid(&mut self) {
         let before = self.edits.len();
-        self.edits.retain(|edit| !edit.confirmed);
+        self.edits
+            .retain(|edit| edit.confirmed == Confirmation::Pending);
         if self.edits.len() != before {
             self.bump();
         }
