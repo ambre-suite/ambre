@@ -39,10 +39,7 @@ impl ChannelState {
             return Ok(SnapshotVerdict::Unchecked);
         }
         let theirs = LoroDoc::new();
-        if theirs
-            .import(sequence::loro_part(LoroPayloadRef::Snapshot(snapshot)))
-            .is_err()
-        {
+        if sequence::import(&theirs, LoroPayloadRef::Snapshot(snapshot)).is_err() {
             return Ok(SnapshotVerdict::Mismatch);
         }
         // A fold holds operations no delta carried: it is checked by folding

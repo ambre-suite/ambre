@@ -202,6 +202,17 @@ pub const COMMANDS: &[Command] = &[
     },
 ];
 
+ambre_core::define_flag! {
+    /// Who wrote a message the actions are open on.
+    pub enum Writer {
+        /// A member wrote it.
+        Member,
+        /// The channel wrote it: a notice, which takes no reply and no
+        /// reaction.
+        Channel,
+    }
+}
+
 /// The message the actions are open on, as the view found it under the
 /// pointer (the Murmure message list spec).
 #[derive(Debug, Clone, PartialEq)]
@@ -220,8 +231,8 @@ pub struct MessageTarget {
     pub mentions: Vec<Mention>,
     /// How its runs read, as the list holds them.
     pub styles: Vec<StyleMark>,
-    /// The message is a notice the channel wrote, not a member.
-    pub notice: bool,
+    /// Who wrote the message: a member, or the channel as a notice.
+    pub writer: Writer,
     /// Whether the message reads deleted already.
     pub deleted: ambre_bus::Deletion,
     /// Where a long press held, in the pixels of the region's canvas. `None`
@@ -410,11 +421,12 @@ pub fn asked_all_title(members: ambre_core::MemberCount) -> String {
 /// is edited in the composer of its thread (`MURMURE-526`).
 pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<CommandId> {
     let in_channel = matches!(target.at, MessageAt::Segment(_));
+    let by_member = target.writer == Writer::Member;
     let mut ids = Vec::with_capacity(6);
-    if in_channel && !target.notice {
+    if in_channel && by_member {
         ids.push(REPLY);
     }
-    if !target.notice && target.deleted == ambre_bus::Deletion::Live {
+    if by_member && target.deleted == ambre_bus::Deletion::Live {
         ids.push(REACT);
     }
     if in_channel {
@@ -423,8 +435,7 @@ pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<Comman
     if !target.text.is_empty() {
         ids.push(COPY_TEXT);
     }
-    let own =
-        me == Some(target.author) && !target.notice && target.deleted == ambre_bus::Deletion::Live;
+    let own = me == Some(target.author) && by_member && target.deleted == ambre_bus::Deletion::Live;
     if own {
         ids.extend([EDIT, DELETE]);
     }
@@ -650,7 +661,7 @@ mod tests {
             text: text.to_owned(),
             mentions: Vec::new(),
             styles: Vec::new(),
-            notice,
+            writer: Writer::from_bool(notice),
             deleted: ambre_bus::Deletion::from_bool(text.is_empty()),
             pressed: None,
             canvas: ambre_core::CanvasId::CONTENT,

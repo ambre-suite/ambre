@@ -613,11 +613,10 @@ pub(crate) fn import_bytes(
 ) -> Result<(), MurmureError> {
     // A snapshot may carry the relay's numbers before its Loro bytes; the
     // document is the bytes past them.
-    doc.import(crate::sequence::loro_part(payload))
-        .map_err(|e| {
-            tracing::warn!("[Murmure] document {document_id} rejected by the CRDT engine: {e:?}");
-            SchemaError::PayloadRejected
-        })?;
+    crate::sequence::import(doc, payload).map_err(|e| {
+        tracing::warn!("[Murmure] document {document_id} rejected by the CRDT engine: {e:?}");
+        SchemaError::PayloadRejected
+    })?;
     Ok(())
 }
 

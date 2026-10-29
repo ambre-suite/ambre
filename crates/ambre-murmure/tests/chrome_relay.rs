@@ -27,7 +27,7 @@ use ambre_murmure::chrome::{
 };
 use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
-    NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, key_list,
+    NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, Writer, key_list,
 };
 use ambre_murmure::{MessageRef, MurmurePane, Region};
 use leptos::prelude::*;
@@ -880,7 +880,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         text: "hello".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
-        notice: false,
+        writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
@@ -950,7 +950,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         text: "typo".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
-        notice: false,
+        writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
@@ -1019,7 +1019,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         text: "oops".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
-        notice: false,
+        writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
@@ -1166,7 +1166,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         text: "ship it".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
-        notice: false,
+        writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
@@ -1307,7 +1307,10 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
         handler.on_key(SEARCH, ambre_chrome::KeyTarget::TextField),
         KeyRoute::Run(actions) if actions.is_empty()
     ));
-    assert!(relay.search.get_untracked().open);
+    assert_eq!(
+        relay.search.get_untracked().open,
+        ambre_chrome::Openness::Open
+    );
     assert!(sent.get_untracked().is_empty(), "opening asks nothing");
 
     let asked = relay.search_for("bud".to_owned());

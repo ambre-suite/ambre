@@ -31,7 +31,7 @@ use ambre_draw::wheel::WheelDeltaMode;
 use ambre_draw::{DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::{
-    AskedAll, EDIT, EMOJI_KEY, FromThread, MessageAction, MessageTarget, PendingEdit,
+    AskedAll, EDIT, EMOJI_KEY, FromThread, MessageAction, MessageTarget, PendingEdit, Writer,
     message_action,
 };
 use crate::composer::{Composer, Composition, DraftOf, EDITING_LINE, also_said, typing_line};
@@ -762,7 +762,11 @@ impl MurmureView {
             text: message.text.clone(),
             mentions: message.mentions.clone(),
             styles: message.styles.clone(),
-            notice: message.notice.is_some(),
+            writer: if message.notice.is_some() {
+                Writer::Channel
+            } else {
+                Writer::Member
+            },
             deleted: message.deleted,
             pressed: None,
             canvas: match self.region {
@@ -3387,7 +3391,7 @@ mod tests {
             text: "b".to_owned(),
             mentions: Vec::new(),
             styles: Vec::new(),
-            notice: false,
+            writer: Writer::Member,
             deleted: ambre_bus::Deletion::Live,
             pressed: None,
             canvas: CHANNEL_CANVAS,
@@ -3458,7 +3462,7 @@ mod tests {
             text: "one".to_owned(),
             mentions: Vec::new(),
             styles: Vec::new(),
-            notice: false,
+            writer: Writer::Member,
             deleted: ambre_bus::Deletion::Live,
             pressed: Some(pointer(10.0, y)),
             canvas: THREAD_CANVAS,

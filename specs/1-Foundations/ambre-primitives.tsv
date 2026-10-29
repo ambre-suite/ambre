@@ -1289,7 +1289,6 @@ ambre-murmure | src/chrome.rs | crate::chrome | Notice.title | field | String	fr
 ambre-murmure | src/chrome.rs | crate::chrome | PageVisibility::visible_if(visible) | param | bool	newtype-inner	the bool the one constructor of PageVisibility reads into its variant
 ambre-murmure | src/chrome.rs | crate::chrome | ROOT_LOST | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
-ambre-murmure | src/chrome.rs | crate::chrome | SearchBox.open | field | bool	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | SearchBox.query | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.coverage | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.matches | field | Vec<(MessageRef,String)>	free-text	text, label or user content
@@ -1302,7 +1301,6 @@ ambre-murmure | src/chrome.rs | crate::chrome | segments() | ret | String	free-t
 ambre-murmure | src/commands.rs | crate::commands | KeyPlace::words() | ret | &'static str	free-text	the closed set's display label: the words the shortcut list shows for the place
 ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	newtype-inner	newtype inner
-ambre-murmure | src/commands.rs | crate::commands | MessageTarget.notice | field | bool	generic	state flag/predicate
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.text | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | PendingEdit.text | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | RegionKey.action | field | &'static str	free-text	text, label or user content
@@ -1380,7 +1378,6 @@ ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::into_bytes() | ret | V
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
 ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	draft row encoder/decoder over &str
 ambre-murmure | src/emoji.rs | crate::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
-ambre-murmure | src/emoji.rs | crate::emoji | entry(glyph) | param | &'static str	newtype-inner	the glyph a static Emoji is built from
 ambre-murmure | src/emoji.rs | crate::emoji | entry(name) | param | &'static str	free-text	the English name of an emoji, shown as is
 ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	free-text	the English name of an Emoji, the label a screen reader hears; the emoji itself is the typed Emoji
 ambre-murmure | src/emoji.rs | crate::emoji | search(query) | param | &str	free-text	the words a user types in the picker's search box, matched against the English names
@@ -1416,7 +1413,7 @@ ambre-murmure | src/markers.rs | crate::markers | Closed::apply(text) | param | 
 ambre-murmure | src/markers.rs | crate::markers | Closed::range(text) | param | &str	free-text	the draft text the closed markers sit in; the spans are ByteSpan in, CharSpan out
 ambre-murmure | src/markers.rs | crate::markers | FENCE | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | LIST_MARKER | const | &str	free-text	UI text/label const
-ambre-murmure | src/markers.rs | crate::markers | MARK_BAR | const | [(TextStyle,&str);3]	newtype-inner	table keyed by TextStyle enum
+ambre-murmure | src/markers.rs | crate::markers | MARK_BAR | const | [(TextStyle,&str);3]	free-text	the title a person reads on each control of the format bar, the words Prose gives the same mark
 ambre-murmure | src/markers.rs | crate::markers | QUOTE_MARKER | const | &str	free-text	UI text/label const
 ambre-murmure | src/markers.rs | crate::markers | bold(line) | param | &str	free-text	text, label or user content
 ambre-murmure | src/markers.rs | crate::markers | change(new) | param | &[char]	free-text	the draft text after an edit, as its chars; the three offsets it returns are CharOffset
@@ -1493,8 +1490,8 @@ ambre-murmure | src/schema.rs | crate::schema | NoticeKind::parse(word) | param 
 ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	generic	untyped CRDT flag read by a FieldKey of any schema: absent or not a bool reads false, and the key gives it its meaning
 ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	generic	the text the document stores under a key, parsed into its role by the caller
 ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	generic	the text a read found, parsed into its role by the caller
-ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	newtype-inner	Loro storage adapter for Timestamp
-ambre-murmure | src/schema.rs | crate::schema | unsigned() | ret | Option<u64>	foreign-api	a scalar the document stores, typed by the caller
+ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	generic	the store codec of a Timestamp: the i64 a Loro map holds, since Loro has no unsigned integer
+ambre-murmure | src/schema.rs | crate::schema | unsigned() | ret | Option<u64>	generic	a store reader: the non-negative integer under any FieldKey, which the caller types by the key's role
 ambre-murmure | src/search.rs | crate::search | Query.words | field | Vec<String>	free-text	text, label or user content
 ambre-murmure | src/search.rs | crate::search | Query::matches() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/search.rs | crate::search | Query::matches(text) | param | &str	free-text	text, label or user content
@@ -1510,10 +1507,9 @@ ambre-murmure | src/search.rs | crate::search | is_mark(c) | param | char	free-t
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/sequence.rs | crate::sequence | FRAME_MAGIC | const | &[u8;4]	generic	snapshot frame byte-layout constant, declared once: delta.rs and the frame parser both read this one
-ambre-murmure | src/sequence.rs | crate::sequence | Framed.loro | field | &'a[u8]	newtype-inner	Private parse view into a SnapshotBytes frame: the Loro bytes past the table, read only by split and loro_part.
-ambre-murmure | src/sequence.rs | crate::sequence | Framed.rows | field | &'a[u8]	newtype-inner	Private parse view into a SnapshotBytes frame: the raw sequence table, cut into fixed rows only by table.
+ambre-murmure | src/sequence.rs | crate::sequence | LoroBytes.0 | field | &'a[u8]	newtype-inner	the Loro bytes of a payload past the frame of a snapshot, which its own methods hand to LoroDoc::import and decode_import_blob_meta
 ambre-murmure | src/sequence.rs | crate::sequence | Range::holds() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/sequence.rs | crate::sequence | loro_part() | ret | &[u8]	foreign-api	The bytes handed to LoroDoc::import, past the frame of a snapshot or a delta as it is.
+ambre-murmure | src/sequence.rs | crate::sequence | RowTable.0 | field | &'a[u8]	newtype-inner	the raw sequence table of a framed snapshot, cut into fixed rows only by table
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_direct() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/sidebar.rs | crate::sidebar | Sidebar::is_member() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/space.rs | crate::space | SpaceState::identified() | ret | bool	generic	state flag/predicate

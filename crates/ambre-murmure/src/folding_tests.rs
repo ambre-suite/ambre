@@ -17,7 +17,6 @@ use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::error::MurmureError;
 use crate::schema::{MessageKey, Root};
-use crate::sequence::loro_part;
 use crate::session::next_peer;
 use crate::{ChangeTarget, ChannelState, ChannelType, FINALIZE_RETRY, FOLD_DELAY, Replay, Signer};
 
@@ -449,9 +448,7 @@ fn another_member_checks_the_fold_by_folding_its_own_copy() {
     assert_eq!(bob.messages(segment).expect("held"), before, "only read");
 
     let forged = LoroDoc::new();
-    forged
-        .import(loro_part((&fold.payload).into()))
-        .expect("import");
+    crate::sequence::import(&forged, (&fold.payload).into()).expect("import");
     let Some(message) = crate::schema::root_list(&forged, Root::Messages)
         .get(2)
         .and_then(crate::schema::fields_of)

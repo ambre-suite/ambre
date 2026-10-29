@@ -1463,7 +1463,7 @@ impl ChannelState {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let status = doc.import(sequence::loro_part(payload))?;
+        let status = sequence::import(doc, payload)?;
         if amendments {
             if let Some(order) = order {
                 self.sequences
@@ -1504,8 +1504,10 @@ impl ChannelState {
         snapshot: &SnapshotBytes,
     ) -> Result<(), MurmureError> {
         let fresh = LoroDoc::new();
-        let loro = sequence::loro_part(LoroPayloadRef::Snapshot(snapshot));
-        if fresh.import(loro)?.pending.is_some() {
+        if sequence::import(&fresh, LoroPayloadRef::Snapshot(snapshot))?
+            .pending
+            .is_some()
+        {
             return Ok(());
         }
         if let Some(held) = self.held_mut(document_id) {

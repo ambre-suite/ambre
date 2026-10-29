@@ -437,8 +437,8 @@ pub struct MurmureRelay {
 /// to that query (the Murmure search spec).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SearchBox {
-    /// The box shows in the command bar.
-    pub open: bool,
+    /// Whether the box shows in the command bar.
+    pub open: ambre_chrome::Openness,
     /// The words typed.
     pub query: String,
     /// What the Logic thread answered for `query`, one entry per open channel.
@@ -671,7 +671,8 @@ impl MurmureRelay {
     /// Open the search box, on the find chord (`MURMURE-213`). An open box
     /// keeps its query.
     pub fn open_search(&self) {
-        self.search.update(|s| s.open = true);
+        self.search
+            .update(|s| s.open = ambre_chrome::Openness::Open);
     }
 
     /// Close the search box, and forget its query and its answer.
@@ -1014,7 +1015,7 @@ impl MurmureRelay {
             // to a box closed since, is dropped: typing outruns the answers.
             UiEvent::MessageSearch { query, channels } => {
                 self.search.update(|s| {
-                    if s.open && s.query == query.as_str() {
+                    if s.open == ambre_chrome::Openness::Open && s.query == query.as_str() {
                         s.channels.clone_from(channels);
                     }
                 });
@@ -1482,7 +1483,9 @@ pub fn MessageSearch(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
     let input = NodeRef::<leptos::html::Input>::new();
     // The box takes the caret as it opens, and again on each find chord.
     Effect::new(move |_| {
-        if relay.search.with(|s| s.open)
+        if relay
+            .search
+            .with(|s| s.open == ambre_chrome::Openness::Open)
             && let Some(el) = input.get()
         {
             let _ = el.focus();
@@ -1501,7 +1504,7 @@ pub fn MessageSearch(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
         }
     };
     view! {
-        <Show when=move || relay.search.with(|s| s.open)>
+        <Show when=move || relay.search.with(|s| s.open == ambre_chrome::Openness::Open)>
             <div class="murmure-search" role="search">
                 <input
                     node_ref=input

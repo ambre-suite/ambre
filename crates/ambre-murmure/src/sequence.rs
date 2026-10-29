@@ -11,7 +11,10 @@
 use std::collections::HashMap;
 
 use ambre_core::{ByteSize, LoroPayloadRef, MessageId, Seq, SnapshotBytes};
-use loro::{ContainerID, ContainerTrait, ID, LoroDoc, VersionVector};
+use loro::{
+    ContainerID, ContainerTrait, ID, ImportBlobMetadata, ImportStatus, LoroDoc, LoroError,
+    VersionVector,
+};
 
 use crate::schema::{self, MessageKey, Root};
 
@@ -85,7 +88,7 @@ impl Sequence {
         match order {
             Order::Update(seq) => {
                 self.delivered = self.delivered.max(seq);
-                let Ok(meta) = LoroDoc::decode_import_blob_meta(loro_part(payload), false) else {
+                let Ok(meta) = blob_meta(payload) else {
                     tracing::warn!(
                         "[Murmure] update {} has no readable range; not numbered",
                         seq.0
@@ -102,7 +105,7 @@ impl Sequence {
             Order::Snapshot(covered) => {
                 self.covered = self.covered.max(covered);
                 self.delivered = self.delivered.max(covered);
-                if let Ok(meta) = LoroDoc::decode_import_blob_meta(loro_part(payload), false) {
+                if let Ok(meta) = blob_meta(payload) {
                     self.relay(&meta.partial_end_vv);
                 }
                 // A row past the horizon is a number no update of this
@@ -136,7 +139,7 @@ impl Sequence {
             Order::Update(seq) | Order::Snapshot(seq) => seq,
         };
         self.passed(seq);
-        if let Ok(meta) = LoroDoc::decode_import_blob_meta(loro_part(payload), false) {
+        if let Ok(meta) = blob_meta(payload) {
             self.relay(&meta.partial_end_vv);
         }
     }
@@ -263,10 +266,30 @@ pub(crate) fn created(doc: &LoroDoc) -> Vec<Created> {
     out
 }
 
+/// The raw sequence table of a framed snapshot, whole rows only.
+#[derive(Clone, Copy)]
+struct RowTable<'a>(&'a [u8]);
+
+/// The bytes Loro reads from a payload, past the frame of a snapshot.
+#[derive(Clone, Copy)]
+struct LoroBytes<'a>(&'a [u8]);
+
+impl LoroBytes<'_> {
+    /// Import the bytes into `doc`.
+    fn import_into(self, doc: &LoroDoc) -> Result<ImportStatus, LoroError> {
+        doc.import(self.0)
+    }
+
+    /// The ranges and the kind the bytes carry, read without an import.
+    fn meta(self) -> Result<ImportBlobMetadata, LoroError> {
+        LoroDoc::decode_import_blob_meta(self.0, false)
+    }
+}
+
 /// The frame of a snapshot and the Loro bytes after it.
 struct Framed<'a> {
-    rows: &'a [u8],
-    loro: &'a [u8],
+    rows: RowTable<'a>,
+    loro: LoroBytes<'a>,
 }
 
 fn split(payload: &SnapshotBytes) -> Option<Framed<'_>> {
@@ -277,7 +300,10 @@ fn split(payload: &SnapshotBytes) -> Option<Framed<'_>> {
         .checked_mul(ROW_SIZE.as_len())?;
     (rest.len() >= len).then(|| {
         let (rows, loro) = rest.split_at(len);
-        Framed { rows, loro }
+        Framed {
+            rows: RowTable(rows),
+            loro: LoroBytes(loro),
+        }
     })
 }
 
@@ -285,13 +311,33 @@ fn split(payload: &SnapshotBytes) -> Option<Framed<'_>> {
 /// snapshot carries one. A snapshot that opens with the magic and holds no
 /// whole frame is handed on as it is. Loro refuses it, so a truncated table
 /// never imports.
-pub(crate) fn loro_part(payload: LoroPayloadRef<'_>) -> &[u8] {
+fn loro_part(payload: LoroPayloadRef<'_>) -> LoroBytes<'_> {
     match payload {
-        LoroPayloadRef::Delta(delta) => delta.as_bytes(),
+        LoroPayloadRef::Delta(delta) => LoroBytes(delta.as_bytes()),
         LoroPayloadRef::Snapshot(snapshot) => {
-            split(snapshot).map_or(snapshot.as_bytes(), |f| f.loro)
+            split(snapshot).map_or(LoroBytes(snapshot.as_bytes()), |f| f.loro)
         }
     }
+}
+
+/// Import the Loro bytes of `payload` into `doc`, past the frame of a
+/// snapshot.
+///
+/// # Errors
+/// The [`LoroError`] of an import Loro refuses, a truncated frame included.
+pub(crate) fn import(
+    doc: &LoroDoc,
+    payload: LoroPayloadRef<'_>,
+) -> Result<ImportStatus, LoroError> {
+    loro_part(payload).import_into(doc)
+}
+
+/// The ranges and the kind the Loro bytes of `payload` carry.
+///
+/// # Errors
+/// The [`LoroError`] of bytes Loro cannot read.
+fn blob_meta(payload: LoroPayloadRef<'_>) -> Result<ImportBlobMetadata, LoroError> {
+    loro_part(payload).meta()
 }
 
 /// The rows a framed snapshot carries, `None` for a bare one.
@@ -300,6 +346,7 @@ fn table(payload: &SnapshotBytes) -> Option<impl Iterator<Item = (MessageId, Seq
     Some(
         framed
             .rows
+            .0
             .chunks_exact(ROW_SIZE.as_len())
             .filter_map(|row| {
                 let (id, seq) = row.split_first_chunk::<16>()?;
