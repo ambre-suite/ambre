@@ -799,6 +799,30 @@ mod cache_tests {
         assert_eq!(st.debug_caches(), rebuilt_caches(&st));
     }
 
+    /// `TOILE-157`, the board side: ungrouping a group that no group or frame
+    /// holds leaves its children on the board. No parent names them, in the
+    /// caches or in the document.
+    #[test]
+    fn a_top_level_ungroup_hands_its_children_to_the_board() {
+        let mut st = ToileState::new();
+        let [x, y] = [(); 2].map(|()| create(&mut st, ElementKind::Shape(ShapeKind::Rect)));
+        let group = st
+            .group_inner(&[x.clone(), y.clone()])
+            .expect("a group of two members");
+        st.doc.commit();
+        assert!(st.parents_of(&group).is_empty(), "the group is top-level");
+
+        st.handle_command(ToileCommand::UngroupElements {
+            groups: vec![group.clone()],
+        });
+
+        assert!(st.membership_of(&group).is_empty(), "the group is gone");
+        for child in [&x, &y] {
+            assert_eq!(st.parents_of(child), &[] as &[ElementId], "{child:?}");
+        }
+        assert_eq!(st.debug_caches(), rebuilt_caches(&st));
+    }
+
     /// `TOILE-049`: an element joins a frame only out of its group. Two
     /// concurrent adds leave its id twice on the group's list, and the test
     /// writes the two entries directly. Moving it into a frame takes both
