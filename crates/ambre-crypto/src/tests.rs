@@ -38,7 +38,7 @@ fn roundtrip_envelope() {
 
     let sealed = envelope::seal(&secret(plaintext), aad, &doc_key, &signing).unwrap();
     let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
-    assert_eq!(opened.to_plaintext(), plaintext);
+    assert_eq!(opened.into_plaintext(), plaintext);
 }
 
 /// A media seal is the envelope of any other plaintext: it opens through
@@ -53,7 +53,7 @@ fn a_media_seal_opens_as_any_envelope() {
 
     let sealed = envelope::seal_media(&media, aad, &doc_key, &signing).unwrap();
     let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
-    assert_eq!(opened.to_plaintext(), media.as_bytes());
+    assert_eq!(opened.into_plaintext(), media.as_bytes());
     assert!(envelope::open(&sealed, &Aad::of(b"other"), &doc_key, &author).is_err());
 }
 
@@ -314,7 +314,7 @@ fn a_store_row_opens_only_where_it_was_sealed() {
     assert_eq!(
         aead::open_row(&row, &Aad::of(b"doc:0a"), &key)
             .unwrap()
-            .to_plaintext(),
+            .into_plaintext(),
         b"a copy"
     );
 
@@ -649,7 +649,7 @@ proptest! {
         let aad = &Aad::of(b"aad");
         let sealed = envelope::seal(&secret(&data), aad, &doc_key, &signing).unwrap();
         let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
-        prop_assert_eq!(opened.to_plaintext(), data);
+        prop_assert_eq!(opened.into_plaintext(), data);
     }
 
     #[test]
@@ -773,7 +773,7 @@ fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
     assert_eq!(
         aead::open_file(&nonce, &ciphertext, aad, &key)
             .unwrap()
-            .to_plaintext(),
+            .into_plaintext(),
         plaintext
     );
 
@@ -818,7 +818,7 @@ fn a_document_key_sealed_under_another_opens_to_the_same_key() {
     assert_eq!(
         aead::open(&n, &ct, &Aad::of(b""), &opened)
             .unwrap()
-            .to_plaintext(),
+            .into_plaintext(),
         b"a message"
     );
 }
@@ -991,7 +991,7 @@ fn a_row_the_old_code_sealed_still_opens() {
     assert_eq!(
         aead::open_row(&row, &Aad::of(b"doc:0a"), &key)
             .unwrap()
-            .to_plaintext(),
+            .into_plaintext(),
         b"a copy"
     );
 }

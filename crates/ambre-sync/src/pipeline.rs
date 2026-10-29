@@ -1148,7 +1148,7 @@ mod tests {
             );
             let plaintext = envelope::open(&sealed, &aad, &doc_key, &update.public_data.pub_key)
                 .unwrap()
-                .to_plaintext();
+                .into_plaintext();
             assert_eq!(plaintext[0], version);
         }
     }
@@ -1303,7 +1303,9 @@ mod tests {
         assert!(!contains(object.as_bytes()));
         assert_eq!(object.len(), object.as_bytes().len());
         assert_eq!(
-            open_object(&object, &aad, &doc_key).unwrap().to_plaintext(),
+            open_object(&object, &aad, &doc_key)
+                .unwrap()
+                .into_plaintext(),
             plaintext
         );
     }
@@ -1500,7 +1502,9 @@ mod tests {
         let aad = &ambre_core::Aad::of(b"ambre-media");
         let sealed = seal_object(&secret(b"a picture"), aad, &doc_key, &signing).unwrap();
         assert_eq!(
-            open_object(&sealed, aad, &doc_key).unwrap().to_plaintext(),
+            open_object(&sealed, aad, &doc_key)
+                .unwrap()
+                .into_plaintext(),
             b"a picture"
         );
         let sealed = sealed.into_bytes();
@@ -1552,7 +1556,7 @@ mod tests {
         assert_eq!(
             open_object(&sealed, &name_aad(own), &doc_key)
                 .unwrap()
-                .to_plaintext(),
+                .into_plaintext(),
             b"Budget 2027"
         );
         assert!(open_object(&sealed, &name_aad(DocumentId::new()), &doc_key).is_err());
@@ -1583,7 +1587,7 @@ mod tests {
         assert_eq!(
             open_object(&sealed, &name_aad(id), &doc_key)
                 .unwrap()
-                .to_plaintext(),
+                .into_plaintext(),
             b"Budget 2027"
         );
     }
@@ -1613,7 +1617,7 @@ mod tests {
         assert_eq!(
             open_object(&sealed, &media_aad(id, &address), &doc_key)
                 .unwrap()
-                .to_plaintext(),
+                .into_plaintext(),
             b"\x89PNG media"
         );
     }

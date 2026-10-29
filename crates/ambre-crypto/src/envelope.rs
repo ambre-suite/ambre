@@ -97,9 +97,9 @@ fn envelope_of(
 /// Verifies and decrypts a [`Sealed`] envelope in the spec order: signature,
 /// then commitment tag, then AEAD. Any failure yields a typed error; the caller
 /// (Sync) drops the message and raises a `SyncWarning`. The plaintext comes
-/// back as [`SecretBytes`]. A copy read through `SecretBytes::to_plaintext`
-/// is never wiped: for that copy the wrapper is typing only, with no wipe gain
-/// (`ARCH-047`).
+/// back as [`SecretBytes`]. A caller reads it in place through
+/// `SecretBytes::with_plaintext`, or moves it into a role that keeps it in the
+/// clear through `SecretBytes::into_plaintext` (`ARCH-047`).
 ///
 /// # Errors
 ///

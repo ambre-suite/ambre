@@ -3749,7 +3749,6 @@ ambre-core | src/secret.rs | crate::secret | SecretBytes.0 | field | Arc<Secret<
 ambre-core | src/secret.rs | crate::secret | SecretBytes::into_plaintext() | ret | Vec<u8>	newtype-inner	the opened bytes moved out with no copy, into a role that keeps them in the clear by design; the wrapper is left empty (ARCH-047)
 ambre-core | src/secret.rs | crate::secret | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretBytes::secret() | ret | &Secret<Vec<u8>>	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | SecretBytes::to_plaintext() | ret | Vec<u8>	newtype-inner	a copy of the plaintext for the document model, out of the Secret; the copy is never wiped, so the wrapper is typing only, with no wipe gain
 ambre-core | src/secret.rs | crate::secret | SecretBytes::with_plaintext(read) | param | impl FnOnce(&[u8])->R	generic	lends the opened bytes with no copy to the code that reads them, while the wrapper keeps and wipes them (ARCH-047)
 ambre-core | src/secret.rs | crate::secret | SecretString.0 | field | Arc<Secret<String>>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretString::secret() | ret | &Secret<String>	newtype-inner	secret newtype over a shared ambre_core::Secret

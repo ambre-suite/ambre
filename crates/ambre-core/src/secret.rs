@@ -216,13 +216,6 @@ impl SecretBytes {
         &self.0
     }
 
-    /// A copy of the opened bytes, for the document model that reads them.
-    /// The copy is a plaintext like any other, and nothing wipes it.
-    #[must_use]
-    pub fn to_plaintext(&self) -> Vec<u8> {
-        self.0.expose().clone()
-    }
-
     /// Lends the opened bytes to `read`, with no copy, for the code that
     /// reads them on the way to another form. The bytes stay under the
     /// wrapper, which wipes them when the last copy drops, on every path out
@@ -603,7 +596,7 @@ mod tests {
         let bytes = postcard::to_allocvec(&plain).unwrap();
         assert_eq!(bytes, postcard::to_allocvec(b"plain".as_slice()).unwrap());
         let back: SecretBytes = postcard::from_bytes(&bytes).unwrap();
-        assert_eq!(back.to_plaintext(), b"plain");
+        assert_eq!(back.into_plaintext(), b"plain");
     }
 
     #[test]

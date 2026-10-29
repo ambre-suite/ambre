@@ -553,7 +553,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         // What comes back is the whole plaintext container, byte for byte, so
         // the caller reads it exactly as it reads a file off the disk.
         RestEvent::DocFileOpened { plaintext: opened } => {
-            let opened = opened.to_plaintext();
+            let opened = opened.into_plaintext();
             assert_eq!(opened, plaintext.as_bytes());
             let opened = ambre_core::PlaintextContainer::new(opened);
             let header = ambre_core::read_ambre_plaintext(&opened).expect("plaintext header");

@@ -36,9 +36,9 @@ pub fn seal(
 /// Decrypts `ciphertext` under `key`, verifying the Poly1305 tag against `aad`.
 ///
 /// The plaintext comes back as [`SecretBytes`], so it leaves this crate typed
-/// as a secret. A caller that reads it through `SecretBytes::to_plaintext`
-/// holds an unwiped copy: for that copy the wrapper is typing only, with no
-/// wipe gain (`ARCH-047`).
+/// as a secret. A caller reads it in place through
+/// `SecretBytes::with_plaintext`, or moves it into a role that keeps it in the
+/// clear through `SecretBytes::into_plaintext` (`ARCH-047`).
 ///
 /// # Errors
 ///

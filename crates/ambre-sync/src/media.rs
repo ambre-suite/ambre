@@ -882,7 +882,7 @@ mod tests {
         assert_eq!(
             pipeline::open_object(forged, &pipeline::media_aad(document_id, &address), &key)
                 .unwrap()
-                .to_plaintext(),
+                .into_plaintext(),
             b"other bytes"
         );
         assert!(open_blob(forged, document_id, &wanted, &key).is_err());

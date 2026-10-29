@@ -172,7 +172,7 @@ mod tests {
             panic!("expected a seal, got {cmd:?}");
         };
         assert_eq!(place, RowPlace::Document(doc));
-        assert_eq!(plaintext.to_plaintext(), b"plain");
+        assert_eq!(plaintext.into_plaintext(), b"plain");
 
         assert!(!vault.answer(RequestId(u64::MAX), &RestEvent::LocalStoreLocked));
         let sealed = RestEvent::LocalRowSealed {
