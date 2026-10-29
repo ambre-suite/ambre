@@ -4312,6 +4312,8 @@
   {"edge": "verified-by", "from": "TRAME-201", "to": "ambre_trame::formula::functions::tests::a_lookup_with_no_flag_is_approximate"},
   {"edge": "cites-section", "from": "TRAME-202", "section": "3", "to": "2-Trame/features/ambre-spec-trame-function-library.md"},
   {"edge": "verified-by", "from": "TRAME-202", "to": "ambre_trame::formula::functions::tests::an_exact_lookup_ignores_case"},
+  {"edge": "cites-section", "from": "TRAME-246", "section": "3", "to": "2-Trame/features/ambre-spec-trame-function-library.md"},
+  {"edge": "verified-by", "from": "TRAME-246", "to": "ambre_trame::formula::functions::tests::search_counts_the_chars_of_the_text_it_was_given"},
   {"edge": "cites-section", "from": "TRAME-057", "section": "5", "to": "2-Trame/features/ambre-spec-trame-function-library.md"},
   {"edge": "lands-with", "from": "TRAME-057", "to": "Functions that answer a reference"},
   {"edge": "cites-section", "from": "TRAME-058", "section": "5", "to": "2-Trame/features/ambre-spec-trame-function-library.md"},

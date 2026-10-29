@@ -43,6 +43,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-055` | `POST` | An approximate lookup MUST answer the largest key at or below the target. | this spec section 3 | `ambre_trame::formula::functions::tests::vlookup_exact_and_approx`; `::index_and_match` | none | verified |
 | `TRAME-201` | `POST` | A lookup that omits its match flag MUST be read as approximate. | this spec section 3 | `ambre_trame::formula::functions::tests::a_lookup_with_no_flag_is_approximate` | none | verified |
 | `TRAME-202` | `POST` | An exact lookup MUST match a text key whatever its case. | this spec section 3 | `ambre_trame::formula::functions::tests::an_exact_lookup_ignores_case` | none | verified |
+| `TRAME-246` | `POST` | A search that ignores case MUST answer a position in the characters of the text it was given. | this spec section 3 | `ambre_trame::formula::functions::tests::search_counts_the_chars_of_the_text_it_was_given` -- a capital I with a dot, which lowercases to two chars, and a final sigma | none | verified |
 | `TRAME-057` | `POST` | A function given a range MUST be able to answer a reference into it, not only a value. | this spec section 5 | not built | unbuilt -- lands with the `Functions that answer a reference` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-058` | `POST` | A lookup MUST be expressible without counting columns from the key. | this spec section 5 | not built | unbuilt -- lands with the `Functions that answer a reference` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-059` | `POST` | A user MUST be able to name a formula of their own and call it. | this spec section 5 | not built | unbuilt -- lands with the `User-defined functions` Story (`ambre-roadmap.md` E6) | unimplemented |
@@ -66,11 +67,11 @@ status values are normative in `ambre-spec-template.md`.
   `features/ambre-spec-trame-formula-engine.md` owns.
 * **Boundary.** none: a function reads cells and returns a value in the Logic thread. It opens no
   path, and `ZK-001` seals what the document sends.
-* **Verification.** 22 `verified`, 7 `unimplemented`. What holds is the arithmetic core and the
+* **Verification.** 23 `verified`, 7 `unimplemented`. What holds is the arithmetic core and the
   edges of the library. A total is rounded once from an exact sum, so its order cannot change it
-  (`TRAME-199`), and one past the largest number reads `#NUM!` (`TRAME-244`). A lookup refuses
-  keys out of order, and no function can read the clock for itself. The seven unimplemented rows
-  are functions not yet in the catalogue.
+  (`TRAME-199`), and one past the largest number reads `#NUM!` (`TRAME-244`). A lookup refuses keys
+  out of order, and no function can read the clock for itself. The seven unimplemented rows are
+  functions not yet in the catalogue.
 
 ---
 

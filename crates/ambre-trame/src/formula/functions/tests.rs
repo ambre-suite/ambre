@@ -573,6 +573,22 @@ fn lookup_reference_functions() {
     ));
 }
 
+/// SEARCH counts its position in the chars of the text it was given. A
+/// capital I with a dot lowercases to two chars, and a whole-string lowercase
+/// put every later match one place too far.
+#[test]
+fn search_counts_the_chars_of_the_text_it_was_given() {
+    assert_eq!(search_fn(&[txt("x"), txt("\u{130}x")]).to_display(), "2");
+    assert_eq!(
+        search_fn(&[txt("X"), txt("\u{130}\u{130}x"), num(2.0)]).to_display(),
+        "3"
+    );
+    assert_eq!(
+        search_fn(&[txt("\u{3C3}"), txt("A\u{3A3}")]).to_display(),
+        "2"
+    );
+}
+
 #[test]
 fn more_text_functions() {
     assert_eq!(search_fn(&[txt("C"), txt("abcabc")]).to_display(), "3");

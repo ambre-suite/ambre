@@ -478,9 +478,23 @@ pub(crate) fn search_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
+    // One folded char per char, so a position in the folded text is the
+    // position in the text the call was given. A whole-string lowercase
+    // grows a capital I with a dot into two chars.
+    let fold = |value: &CellValue| -> String {
+        value
+            .to_display()
+            .chars()
+            .map(|ch| match ch.to_lowercase().next() {
+                Some('\u{3C2}') => '\u{3C3}',
+                Some(lower) => lower,
+                None => ch,
+            })
+            .collect()
+    };
     let lowered = vec![
-        CellValue::Text(arg(args, 0).to_display().to_lowercase()),
-        CellValue::Text(arg(args, 1).to_display().to_lowercase()),
+        CellValue::Text(fold(arg(args, 0))),
+        CellValue::Text(fold(arg(args, 1))),
     ];
     let mut call: Vec<CellValue> = lowered;
     if let Some(start) = args.get(2) {
