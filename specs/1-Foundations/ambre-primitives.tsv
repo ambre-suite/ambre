@@ -3074,8 +3074,10 @@ ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::ev
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::formula_count() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::is_formula_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/engine.rs | crate::formula::engine | literal_value(raw) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | EXACT_SUM_LIMIT | const | f64	math	local geometry / pixel arithmetic
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | SUM_SCALE | const | f64	math	the power of two an exact sum scales its terms by when a partial overflows
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | arg(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials() | ret | f64	math	the exact sum of the terms inside the formula engine
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials(nums) | param | impl IntoIterator<Item=f64>	math	the terms of an exact sum inside the formula engine
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum(nums) | param | impl IntoIterator<Item=f64>	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | first_num() | ret | Option<f64>	math	count, length, local index, limit or calendar/arith helper

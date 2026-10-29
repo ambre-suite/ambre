@@ -287,7 +287,7 @@ A wasm thread gets 1 MiB of stack. A native release build overflows it past abou
 | `#DIV/0!` | a division whose divisor is zero |
 | `#CIRCULAR!` | a formula that reads itself, directly or through others |
 | `#TYPE!` | an operand of a type the operator refuses |
-| `#NUM!` | a numeric argument out of the function's domain |
+| `#NUM!` | a numeric argument out of the function's domain, or an operator or a function whose result is not a finite number (`TRAME-244`) |
 | `#N/A` | a lookup that found nothing, or a name that is not a function |
 | `#PARSE!(msg)` | text that is not a formula. Evaluation produces it; no formula holds it |
 

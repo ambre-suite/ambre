@@ -51,7 +51,20 @@ impl FnCtx {
 }
 
 /// Call the named built-in function with pre-evaluated arguments.
+///
+/// A result that is not a finite number answers `#NUM!`, as an operator
+/// that overflows does (`TRAME-244`). One guard here holds every function.
+/// It covers a total past the largest number, a product, an exponential, and
+/// a function handed a number that is not finite.
 pub fn call_builtin(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> CellValue {
+    match dispatch(name, args, ctx) {
+        CellValue::Number(n) if !n.is_finite() => CellValue::Error(FormulaError::NumError),
+        value => value,
+    }
+}
+
+/// The function `name` names, applied to `args`.
+fn dispatch(name: &FunctionName, args: &[CellValue], ctx: FnCtx) -> CellValue {
     let now_serial = ctx.now_serial;
     match name.as_str() {
         // Math

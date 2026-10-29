@@ -82,23 +82,33 @@ pub(crate) fn flatten_all(args: &[CellValue]) -> Vec<CellValue> {
     out
 }
 
-/// Terms at or above this magnitude could overflow a partial sum, so the exact
-/// path stops there. Far above any value a sheet holds (about 1e301).
-const EXACT_SUM_LIMIT: f64 = 1.0e301;
+/// 2^64. A term divided by it sits far below the largest number, so no
+/// partial of the exact sum overflows. The product undoes the division.
+const SUM_SCALE: f64 = 18_446_744_073_709_551_616.0;
 
 /// The sum of `nums`, rounded once from the exact total, so no order of the
-/// terms gives another answer (`TRAME-199`).
+/// terms gives another answer (`TRAME-199`). It is not finite only when a
+/// term is not, or when the exact total is past the largest number.
 ///
-/// Shewchuk's partials, finished as CPython's `math.fsum` does. A term that
-/// is not finite, or at or above [`EXACT_SUM_LIMIT`], takes the plain fold.
+/// A partial can pass the largest number while the total does not, for two
+/// terms near it that a third cancels. The terms are then summed again at a
+/// scale of 2^-64, and the total is scaled back. At that scale, a term or a
+/// total below about 1e-288 can lose its last bits.
 pub(crate) fn exact_sum(nums: impl IntoIterator<Item = f64>) -> f64 {
     let nums: Vec<f64> = nums.into_iter().collect();
-    if nums
-        .iter()
-        .any(|n| !n.is_finite() || n.abs() >= EXACT_SUM_LIMIT)
-    {
+    if nums.iter().any(|n| !n.is_finite()) {
         return nums.iter().sum();
     }
+    let total = exact_partials(nums.iter().copied());
+    if total.is_finite() {
+        return total;
+    }
+    exact_partials(nums.iter().map(|n| n / SUM_SCALE)) * SUM_SCALE
+}
+
+/// Shewchuk's partials, finished as CPython's `math.fsum` does, over finite
+/// terms. A partial that overflows leaves a total that is not finite.
+fn exact_partials(nums: impl IntoIterator<Item = f64>) -> f64 {
     // Non-overlapping partials, in increasing magnitude, whose exact sum is
     // the exact sum of the terms read so far.
     let mut partials: Vec<f64> = Vec::new();

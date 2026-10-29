@@ -781,6 +781,55 @@ fn two_orders_of_one_decimal_total_agree() {
     );
 }
 
+/// A call whose result is not a finite number answers `#NUM!`, as an
+/// operator that overflows does (`TRAME-244`). The calls are a total past the
+/// largest number, a product, an exponential, and a total given an infinity.
+#[test]
+fn a_result_that_is_not_finite_answers_num() {
+    let calls: [(&str, Vec<CellValue>); 8] = [
+        ("SUM", vec![num(f64::MAX), num(f64::MAX)]),
+        ("SUM", vec![num(-f64::MAX), num(-f64::MAX)]),
+        ("AVERAGE", vec![num(f64::MAX), num(f64::MAX)]),
+        ("SUMSQ", vec![num(1e200), num(1.0)]),
+        ("PRODUCT", vec![num(1e200), num(1e200)]),
+        ("STDEV", vec![num(f64::MAX), num(-f64::MAX)]),
+        ("EXP", vec![num(1000.0)]),
+        ("MAX", vec![num(1.0), num(f64::INFINITY)]),
+    ];
+    for (name, args) in calls {
+        assert_eq!(
+            call_builtin(
+                &function(name),
+                &args,
+                FnCtx::at_clock(DateSerial::new(0.0))
+            )
+            .to_display(),
+            "#NUM!",
+            "{name}"
+        );
+    }
+}
+
+/// A total of terms near the largest number is exact too: two that cancel
+/// leave the rest, whatever their order (`TRAME-199`).
+#[test]
+fn a_total_of_the_largest_numbers_is_exact_in_any_order() {
+    let big = f64::MAX;
+    assert_eq!(
+        sum(&[num(big), num(big), num(-big), num(-big)]).to_display(),
+        "0"
+    );
+    assert_eq!(
+        sum(&[num(big), num(-big), num(big), num(-big)]).to_display(),
+        "0"
+    );
+    assert_eq!(sum(&[num(1e305), num(1.0), num(-1e305)]).to_display(), "1");
+    let forward = sum(&[num(big), num(0.5), num(big), num(-big), num(-big)]);
+    let backward = sum(&[num(-big), num(-big), num(big), num(0.5), num(big)]);
+    assert_eq!(forward.to_display(), "0.5");
+    assert_eq!(backward.to_display(), "0.5");
+}
+
 /// Text that reads as a number counts in a total, from a range as from a
 /// scalar; text that does not is left out (`TRAME-200`).
 #[test]
