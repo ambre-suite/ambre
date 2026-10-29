@@ -31,8 +31,10 @@ pub enum Category {
     FreeText,
     /// The call into a foreign API that takes the primitive.
     ForeignApi,
-    /// The field of a single-field struct, a parameter of an associated
-    /// `fn` that returns it, or the return of its method.
+    /// The own representation of a type: the field of a single-field
+    /// struct, or the one field of a tuple variant of any enum. For a newtype
+    /// or a fieldless enum, also a parameter of an associated `fn` that
+    /// returns the type, or the return of its method.
     NewtypeInner,
     /// A signature that a foreign trait dictates, or a closure type that a
     /// foreign signature requires.

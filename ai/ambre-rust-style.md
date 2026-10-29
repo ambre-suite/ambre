@@ -40,11 +40,17 @@
     length, a position, a count, an index or a size is never a multiplier.
   * A formula number is `math` inside the formula engine. It is a `CellNumber` once it crosses a
     public struct or the bus.
-  * A closed set stays an `enum` on every path up to its display label. The site that turns the
-    `enum` into text for display or for the wire is `free-text`. The spelling a fieldless `enum`
-    writes for the wire or the store may instead be `newtype-inner`, its own representation.
+  * A closed set stays an `enum` on every path up to its display label. A site that spells the
+    `enum` as a primitive takes the one category its reader sets (`ARCH-035`):
+    * A reader that decodes or matches the spelling back sets `newtype-inner` for a fieldless
+      `enum`, its own representation. That covers the wire, the store, a DOM attribute, a CSS
+      word and the name a foreign API knows it by.
+    * The same reader sets `generic` for an `enum` that carries data. The site is its codec.
+    * A person sets `free-text`: a display label, or the words of an error message.
   * A SQL query, a Lua script and a whole markup document are `free-text`.
-  * An error that echoes the refused raw value is `generic`.
+  * An error that echoes the refused raw value is `generic`, as is a count it gives of that
+    value. That holds for the one field of a tuple variant of an error, which the gate would
+    pass as `newtype-inner` too.
   * A vertex layout that the GPU dictates is `foreign-api`. So is a constant that one foreign call
     alone reads.
 
@@ -182,7 +188,8 @@
     type is one of three:
     * a newtype: a struct with exactly one field, or a type that a workspace `define_*!` macro
       writes. A `PhantomData` marker is not a field in that count;
-    * a fieldless `enum`: each of its variants is a unit variant;
+    * a fieldless `enum`: no variant it builds with holds a field. A variant behind a test
+      `cfg` is out of every build, and `V()` or `V {}` holds none;
     * any `enum`, for the one field of a tuple variant with exactly one field.
 
     The orphan rule may put the impl of a workspace trait for the newtype or the fieldless `enum`

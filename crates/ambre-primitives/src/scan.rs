@@ -5004,7 +5004,8 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             return;
         }
         // A variant behind a test `cfg` is out of every build the gate reads,
-        // so it holds no field that makes the enum carry data.
+        // so it holds no field that makes the enum carry data. A variant
+        // written `V()` or `V {}` holds none either.
         let carries = e
             .variants
             .iter()

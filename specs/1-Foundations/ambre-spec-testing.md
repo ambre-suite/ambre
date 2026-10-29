@@ -140,13 +140,15 @@ file, the module, the item, the kind and the type, and no line number.
 * **A new line is a hand edit, read by a reviewer** (`ARCH-035`). The gate checks the word, and
   never the meaning a line claims. A `local` line meets the four conditions of
   `ai/ambre-rust-style.md`, and its note names the reason.
-* **Two categories claim a shape, and the gate checks it from the site** (`ARCH-036`). A
-  `newtype-inner` site is the own representation of its type. It sits in the impl of a struct
-  with one field, a `PhantomData` marker apart, or of a fieldless enum. It may instead be the one
-  field of a tuple variant. The orphan rule may put that impl in the crate of a workspace trait.
-* **A `trait` site sits in an impl of a foreign trait**, or is a closure type that names a foreign
-  type. A primitive the impl writes as a trait argument, or as the type it is for, refutes the
-  line: the workspace chose it. A `use ... as` rename of a trait is undone before the lookup.
+* **A `newtype-inner` site is the own representation of its type** (`ARCH-036`). The gate checks
+  that shape from the site. It sits in the impl of a struct with one field, a `PhantomData`
+  marker apart, or of a fieldless enum. It may instead be the one field of a tuple variant. The
+  orphan rule may put that impl in the crate of a workspace trait. Its reader still picks the one
+  true category of a spelling (`ARCH-035`).
+* **A `trait` site sits in an impl of a foreign trait** (`ARCH-036`), or is a closure type that
+  names a foreign type. A primitive the impl writes as a trait argument, or as the type it is for,
+  refutes the line: the workspace chose it. A `use ... as` rename of a trait is undone before the
+  lookup.
 * **An alias of a module reads as its target.** Each `type` alias a module of the workspace
   declares resolves in the module that names it, across crates, before any check reads the type.
   The key keeps the type as written.

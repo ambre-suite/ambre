@@ -184,6 +184,7 @@
   {"edge": "verified-by", "from": "ARCH-036", "to": "::a_phantom_marker_is_no_field_of_a_newtype"},
   {"edge": "verified-by", "from": "ARCH-036", "to": "::a_newtype_inner_line_holds_in_an_impl_the_orphan_rule_places_in_the_trait_crate"},
   {"edge": "verified-by", "from": "ARCH-036", "to": "::a_newtype_inner_line_holds_on_the_codec_of_a_fieldless_enum"},
+  {"edge": "verified-by", "from": "ARCH-036", "to": "::an_enum_is_fieldless_when_no_variant_it_builds_with_holds_a_field"},
   {"edge": "verified-by", "from": "ARCH-036", "to": "::a_newtype_inner_line_holds_on_the_one_field_of_a_tuple_variant"},
   {"edge": "verified-by", "from": "ARCH-036", "to": "::a_newtype_inner_line_is_refuted_off_the_own_representation_of_an_enum"},
   {"edge": "verified-by", "from": "ARCH-036", "to": "::a_newtype_inner_line_is_refuted_on_a_fieldless_enum_of_another_crate"},

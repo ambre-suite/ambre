@@ -839,6 +839,25 @@ fn a_newtype_inner_line_holds_on_the_codec_of_a_fieldless_enum() {
 }
 
 #[test]
+fn an_enum_is_fieldless_when_no_variant_it_builds_with_holds_a_field() {
+    let scan = scanned(
+        "pub enum Probe { Live, #[cfg(test)] Fake(u8) }\n\
+         impl Probe { pub fn code(self) -> u8 { 0 } }\n\
+         pub enum Bare { Tuple(), Named {} }\n\
+         impl Bare { pub fn code(self) -> u8 { 0 } }\n\
+         pub enum Kept { Live, #[cfg(feature = \"x\")] Real(u8) }\n\
+         impl Kept { pub fn code(self) -> u8 { 0 } }",
+    );
+    for item in ["Probe::code()", "Bare::code()"] {
+        assert_eq!(scan.newtype_inner(&site(&scan, item)), Ok(()), "{item}");
+    }
+    let refusal = scan
+        .newtype_inner(&site(&scan, "Kept::code()"))
+        .expect_err("a variant a build keeps makes the enum carry data");
+    assert!(refusal.contains("carries data"), "{refusal}");
+}
+
+#[test]
 fn a_newtype_inner_line_holds_on_the_one_field_of_a_tuple_variant() {
     let scan = scanned(
         "pub enum FontFamily { Serif, Other(String) }\n\
