@@ -266,7 +266,7 @@ fn render_qualifier(q: &SheetQualifier) -> String {
         // An apostrophe inside a quoted name doubles, as Excel writes it, so
         // the parser reads the name back whole (`TRAME-236`).
         SheetQualifier::Name(name) => {
-            if needs_quoting(name.as_str()) {
+            if needs_quoting(name) {
                 format!("'{}'", name.as_str().replace('\'', "''"))
             } else {
                 name.to_string()
@@ -278,8 +278,8 @@ fn render_qualifier(q: &SheetQualifier) -> String {
 /// A sheet display name must be single-quoted unless it is a plain identifier
 /// (`alpha`/`_` start, then `alphanumeric`/`_`). This matches the bareword form
 /// the parser accepts without quotes.
-fn needs_quoting(name: &str) -> bool {
-    let mut chars = name.chars();
+fn needs_quoting(name: &SheetName) -> bool {
+    let mut chars = name.as_str().chars();
     match chars.next() {
         None => true,
         Some(c) if !c.is_ascii_alphabetic() && c != '_' => true,

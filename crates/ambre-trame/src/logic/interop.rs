@@ -22,7 +22,7 @@ impl TrameState {
         target_sheet_id: Option<SheetId>,
         start: CellPos,
     ) -> TrameOutcome {
-        let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(data.as_bytes()));
+        let delim = delimiter.unwrap_or_else(|| detect_csv_delimiter(&data));
         let mut reader = csv::ReaderBuilder::new()
             .delimiter(delim.byte())
             // We skip the header ourselves so every record is read uniformly.
@@ -276,7 +276,8 @@ impl TrameState {
 /// tab, by frequency in the first kilobyte (`trame-import-export`). A separator
 /// inside a quoted field does not count. A tie goes to the earlier of the
 /// three. Any other separator, the caller names (`TRAME-IO-035`).
-fn detect_csv_delimiter(data: &[u8]) -> CsvDelimiter {
+fn detect_csv_delimiter(data: &ambre_core::FileBytes) -> CsvDelimiter {
+    let data = data.as_bytes();
     let sample = data.get(..1024).unwrap_or(data);
     let mut counts = [
         (CsvDelimiter::COMMA, 0usize),

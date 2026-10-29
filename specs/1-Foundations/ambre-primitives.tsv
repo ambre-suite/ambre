@@ -3063,7 +3063,6 @@ ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::comp
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::is_empty() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::evaluated_text() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::is_formula_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/engine.rs | crate::formula::engine | literal_value(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | SUM_SCALE | const | f64	math	the power of two an exact sum scales its terms by when a partial overflows
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials() | ret | f64	math	the exact sum of the terms inside the formula engine
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials(nums) | param | impl IntoIterator<Item=f64>	math	the terms of an exact sum inside the formula engine
@@ -3164,7 +3163,6 @@ ambre-trame | src/formula/render.rs | crate::formula::render | binop_symbol() | 
 ambre-trame | src/formula/render.rs | crate::formula::render | emit() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | emit(min_prec) | param | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | needs_quoting() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/render.rs | crate::formula::render | needs_quoting(name) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | precedence() | ret | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render() | ret | String	generic	renderer: an expression as formula text, whose form the caller names
 ambre-trame | src/formula/render.rs | crate::formula::render | render_cell() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3222,13 +3220,11 @@ ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_dag
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_grid::ROWS | const | u32	math	a value local to one algorithm
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_grid(cols) | param | u32	math	fixture grid dimensions
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_grid(rows) | param | u32	math	fixture grid dimensions
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | new_sheet_id(name) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | compare_cell_values::rank() | ret | u8	math	a value local to one algorithm
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(operand) | param | &str	free-text	the filter operand the user typed, compared as a number when it spells a finite one, else as text
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | filter_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter(data) | param | &[u8]	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
