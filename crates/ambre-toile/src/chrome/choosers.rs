@@ -19,7 +19,7 @@ use super::handler::ToileDialogs;
 use crate::ui::deck::DeckSignals;
 use crate::ui::embed::{EmbedTarget, PlacedEmbed};
 use crate::ui::link::LinkEdit;
-use ambre_bus::app::toile::WebAddress;
+use ambre_bus::app::toile::{AddressError, WebAddress};
 
 /// A document the user may embed or link to, as the launcher's list names it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -93,7 +93,7 @@ pub fn ToileChoosers(
                     }
                 />
                 <p class="ambre-embed-error" aria-live="polite">
-                    {move || embed_web_error.get().unwrap_or("")}
+                    {move || embed_web_error.get().map_or("", AddressError::message)}
                 </p>
                 <div class="ambre-dialog-actions">
                     <button on:click=move |_| embed_web_open.set(Openness::Closed)>"Cancel"</button>
@@ -153,7 +153,7 @@ pub fn ToileChoosers(
                     }
                 />
                 <p class="ambre-embed-error" aria-live="polite">
-                    {move || link_error.get().unwrap_or("")}
+                    {move || link_error.get().map_or("", AddressError::message)}
                 </p>
                 <h3>"To a frame on this board"</h3>
                 <ul class="ambre-embed-docs">
@@ -221,7 +221,7 @@ fn label(doc: &DocChoice) -> impl IntoView + use<> {
 /// board that never paints.
 fn place_web_embed(
     typed: RwSignal<String>,
-    error: RwSignal<Option<&'static str>>,
+    error: RwSignal<Option<AddressError>>,
     open: RwSignal<Openness>,
     placed: RwSignal<Option<PlacedEmbed>>,
 ) {
@@ -233,7 +233,7 @@ fn place_web_embed(
             }));
             open.set(Openness::Closed);
         }
-        Err(e) => error.set(Some(e.message())),
+        Err(e) => error.set(Some(e)),
     }
 }
 
@@ -241,7 +241,7 @@ fn place_web_embed(
 /// hand the board a link to it (`TOILE-066`). A refusal stays in the dialog.
 fn set_web_link(
     typed: RwSignal<String>,
-    error: RwSignal<Option<&'static str>>,
+    error: RwSignal<Option<AddressError>>,
     open: RwSignal<Openness>,
     edit: RwSignal<Option<LinkEdit>>,
 ) {
@@ -252,6 +252,6 @@ fn set_web_link(
             )))));
             open.set(Openness::Closed);
         }
-        Err(e) => error.set(Some(e.message())),
+        Err(e) => error.set(Some(e)),
     }
 }

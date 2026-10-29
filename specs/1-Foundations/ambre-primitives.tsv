@@ -2587,15 +2587,11 @@ ambre-sync | src/websocket.rs | crate::websocket | SyncState::handle_ws_disconne
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter() | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::jitter()#2 | ret | f64	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | replay_retry_delay(stop) | param | u32	math	count, size, limit, index or jitter local to an algorithm
-ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(typed) | param | RwSignal<String>	free-text	text the user is typing
-ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/comments.rs | crate::chrome::comments | clock_label() | ret | String	free-text	label, message or user text
 ambre-toile | src/chrome/find.rs | crate::chrome::find | FindPanelState::is_open() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_error | field | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_text | field | RwSignal<String>	free-text	text the user is typing
-ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link_error | field | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link_text | field | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | label() | ret | String	free-text	user-facing label of a media type
 ambre-toile | src/chrome/mod.rs | crate::chrome | new_doc_label() | ret | &'static str	free-text	label, message or user text
@@ -2836,9 +2832,10 @@ ambre-toile | src/ui/presenter.rs | crate::ui::presenter | notes_delta(old) | pa
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | slide_counter_label() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | paint_chip(label) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | vote_label() | ret | String	free-text	label, message or user text
-ambre-toile | src/ui/render.rs | crate::ui::render | frame_bands() | ret | impl Iterator<Item=(&'a DisplayElement,Rect,&'a str,bool)>	free-text	label, message or user text
+ambre-toile | src/ui/render.rs | crate::ui::render | FrameTitle::Named.0 | field | &'a str	free-text	the title a user typed on a frame, trimmed
+ambre-toile | src/ui/render.rs | crate::ui::render | FrameTitle<'a>::PLACEHOLDER | const | &'static str	free-text	the words the band of an unnamed frame reads
+ambre-toile | src/ui/render.rs | crate::ui::render | FrameTitle<'a>::label() | ret | &'a str	free-text	the text a frame's band draws: a user title or the placeholder
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_box(title) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label() | ret | (&str,bool)	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label(title) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/status.rs | crate::ui::status | bounds_label() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/status.rs | crate::ui::status | count_label() | ret | Option<String>	free-text	label, message or user text

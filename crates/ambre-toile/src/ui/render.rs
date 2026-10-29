@@ -470,12 +470,35 @@ const FRAME_TITLE_GAP: ambre_core::ViewPx = ambre_core::ViewPx::new(4.0);
 /// always something to read and something to double-click. The placeholder
 /// names no rank. The deck panel numbers a frame by its place in the deck, and
 /// a second numbering here would call one frame two different things.
-pub fn frame_title_label(title: &str) -> (&str, bool) {
+pub fn frame_title_label(title: &str) -> FrameTitle<'_> {
     let title = title.trim();
     if title.is_empty() {
-        ("Untitled frame", false)
+        FrameTitle::Untitled
     } else {
-        (title, true)
+        FrameTitle::Named(title)
+    }
+}
+
+/// What a frame's band shows: the title somebody typed, or the placeholder
+/// of a frame nobody named.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameTitle<'a> {
+    /// The frame's own title, trimmed.
+    Named(&'a str),
+    /// No title: the band shows [`FrameTitle::PLACEHOLDER`].
+    Untitled,
+}
+
+impl<'a> FrameTitle<'a> {
+    /// What the band of an unnamed frame reads.
+    pub const PLACEHOLDER: &'static str = "Untitled frame";
+
+    /// The text the band draws.
+    pub fn label(self) -> &'a str {
+        match self {
+            Self::Named(title) => title,
+            Self::Untitled => Self::PLACEHOLDER,
+        }
     }
 }
 
@@ -485,7 +508,7 @@ pub fn frame_title_label(title: &str) -> (&str, bool) {
 pub fn frame_bands<'a>(
     nodes: &'a [DisplayNode],
     cam: &'a ViewportTransform,
-) -> impl Iterator<Item = (&'a DisplayElement, Rect, &'a str, bool)> {
+) -> impl Iterator<Item = (&'a DisplayElement, Rect, FrameTitle<'a>)> {
     nodes.iter().filter_map(move |node| {
         let DisplayNode::Element(e) = node else {
             return None;
@@ -493,9 +516,9 @@ pub fn frame_bands<'a>(
         let DisplayGeom::Frame(title) = &e.geom else {
             return None;
         };
-        let (label, named) = frame_title_label(title);
-        let band = frame_title_box(world_rect_to_screen(e.bounds, cam), label)?;
-        Some((e, band, label, named))
+        let shown = frame_title_label(title);
+        let band = frame_title_box(world_rect_to_screen(e.bounds, cam), shown.label())?;
+        Some((e, band, shown))
     })
 }
 
@@ -535,7 +558,7 @@ fn paint_frame_titles<S: DrawSurface>(
     editing: Option<&super::edit::EditTarget>,
 ) {
     let editing = editing.and_then(|t| t.frame_title());
-    for (e, band, label, named) in frame_bands(&vp.nodes, cam) {
+    for (e, band, shown) in frame_bands(&vp.nodes, cam) {
         // The title under edit is painted by the editor overlay instead, as an
         // element's body is (`TOILE-261`).
         if editing == Some(&e.id) {
@@ -543,7 +566,7 @@ fn paint_frame_titles<S: DrawSurface>(
         }
         let layout = text_cache.get_or_build_font(
             font_cx,
-            label,
+            shown.label(),
             FRAME_TITLE_HEIGHT,
             ambre_core::ViewPx::new(f32::MAX),
             Alignment::Start,
@@ -554,10 +577,9 @@ fn paint_frame_titles<S: DrawSurface>(
         );
         // A placeholder reads as the absence it is: the secondary ink, not the
         // ink of a title somebody typed.
-        let brush = Brush::Solid(if named {
-            palette.cell_text
-        } else {
-            palette.header_text
+        let brush = Brush::Solid(match shown {
+            FrameTitle::Named(_) => palette.cell_text,
+            FrameTitle::Untitled => palette.header_text,
         });
         for line in layout.lines() {
             for item in line.items() {
@@ -677,11 +699,12 @@ mod tests {
     /// somewhere to type a first name.
     #[test]
     fn an_unnamed_frame_reads_as_a_placeholder() {
-        assert_eq!(frame_title_label("Agenda"), ("Agenda", true));
-        assert_eq!(frame_title_label("  Agenda "), ("Agenda", true));
-        let (label, named) = frame_title_label("   ");
-        assert!(!named, "a blank title is not a title");
-        assert!(!label.is_empty(), "the band would have nothing to show");
+        assert_eq!(frame_title_label("Agenda"), FrameTitle::Named("Agenda"));
+        assert_eq!(frame_title_label("  Agenda "), FrameTitle::Named("Agenda"));
+        let blank = frame_title_label("   ");
+        assert_eq!(blank, FrameTitle::Untitled, "a blank title is not a title");
+        let shown = blank.label();
+        assert!(!shown.is_empty(), "the band would have nothing to show");
     }
 
     #[test]

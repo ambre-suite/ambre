@@ -78,9 +78,9 @@ pub fn frame_title_at(
     // Reverse paint order: the band drawn last is the one on top, so it takes
     // the press where two overlap.
     super::render::frame_bands(nodes, cam)
-        .filter(|(_, band, _, _)| band.contains(screen_pt))
+        .filter(|(_, band, _)| band.contains(screen_pt))
         .last()
-        .map(|(e, _, _, _)| e.id.clone())
+        .map(|(e, _, _)| e.id.clone())
 }
 
 /// Whether `local` lies inside the axis-aligned ellipse inscribed in `bounds`.

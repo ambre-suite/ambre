@@ -1007,7 +1007,7 @@ fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
     assert_eq!(placed.get_untracked(), None, "a refused address was placed");
     assert_eq!(
         dialogs.embed_web_error.get_untracked(),
-        Some(AddressError::NotHttps.message())
+        Some(AddressError::NotHttps)
     );
     assert_eq!(
         dialogs.embed_web_open.get_untracked(),
