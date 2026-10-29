@@ -243,7 +243,8 @@ impl DependencyGraph {
             .collect()
     }
 
-    /// Number of nodes in the cell-level DAG.
+    /// Number of nodes in the cell-level DAG. Only the tests read it.
+    #[cfg(test)]
     pub fn node_count(&self) -> usize {
         self.cell_to_node.len()
     }

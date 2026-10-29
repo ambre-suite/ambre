@@ -159,11 +159,6 @@ impl FormulaEngine {
     pub fn is_formula_cell(&self, cell: CellId) -> bool {
         self.bytecode.get(&cell).is_some()
     }
-
-    /// Number of cached formula cells.
-    pub fn formula_count(&self) -> usize {
-        self.bytecode.len()
-    }
 }
 
 /// Current wall-clock time as an Excel serial number. The integer part is the

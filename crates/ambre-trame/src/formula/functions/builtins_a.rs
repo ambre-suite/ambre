@@ -3,6 +3,7 @@
 // resolve through the module glob mesh.
 
 use super::*;
+use ambre_core::CharCount;
 
 /// The argument at `i`, or an empty cell when the call passed fewer. Every
 /// builtin checks its arity first, so the fallback only guards a slip there.
@@ -505,18 +506,19 @@ pub(crate) fn concat_fn(args: &[CellValue]) -> CellValue {
 /// Returns the count as `usize`, or `#NUM!` for a negative value. A bare `as
 /// usize` cast wraps a negative `f64` to a gigantic length. Excel returns an
 /// error here rather than silently taking the whole string.
-fn str_count_arg(args: &[CellValue], default: usize) -> Result<usize, FormulaError> {
+fn str_count_arg(args: &[CellValue], default: CharCount) -> Result<CharCount, FormulaError> {
     if args.len() < 2 {
         return Ok(default);
     }
     let n = flatten_numeric(one(args, 1))
         .first()
         .copied()
-        .unwrap_or(default as f64);
+        .unwrap_or(f64::from(default.get()));
     if n < 0.0 || !n.is_finite() {
         return Err(FormulaError::NumError);
     }
-    Ok(n as usize)
+    // The float truncates and saturates, as `as` does.
+    Ok(CharCount::from_len(n as usize))
 }
 
 pub(crate) fn left(args: &[CellValue]) -> CellValue {
@@ -524,11 +526,11 @@ pub(crate) fn left(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let s = arg(args, 0).to_display();
-    let n = match str_count_arg(args, 1) {
+    let n = match str_count_arg(args, CharCount::new(1)) {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
-    CellValue::Text(s.chars().take(n).collect())
+    CellValue::Text(s.chars().take(n.to_usize()).collect())
 }
 
 pub(crate) fn right(args: &[CellValue]) -> CellValue {
@@ -536,12 +538,12 @@ pub(crate) fn right(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let s = arg(args, 0).to_display();
-    let n = match str_count_arg(args, 1) {
+    let n = match str_count_arg(args, CharCount::new(1)) {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
     let chars: Vec<char> = s.chars().collect();
-    let start = chars.len().saturating_sub(n);
+    let start = chars.len().saturating_sub(n.to_usize());
     CellValue::Text(chars.iter().skip(start).collect())
 }
 

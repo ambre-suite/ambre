@@ -3061,10 +3061,7 @@ ambre-trame | src/columns.rs | crate::columns | row_label() | ret | String	free-
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::compiled_from() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::is_empty() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/dag.rs | crate::formula::dag | DependencyGraph::node_count() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::evaluated_text() | ret | Option<String>	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::formula_count() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::is_formula_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/engine.rs | crate::formula::engine | literal_value(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | SUM_SCALE | const | f64	math	the power of two an exact sum scales its terms by when a partial overflows
@@ -3080,8 +3077,6 @@ ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | is_truthy() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | one(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | rest_from(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | str_count_arg() | ret | Result<usize,FormulaError>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | str_count_arg(default) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | average_at(idx) | param | &[usize]	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands(s) | param | &str	free-text	free text: user content, label, message or display string
@@ -3199,7 +3194,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | fie
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushStr.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::is_empty() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	the finite number a cell's text spells, inside the formula engine
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	free-text	free text: user content, label, message or display string
