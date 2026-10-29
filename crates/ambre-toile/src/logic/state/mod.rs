@@ -208,7 +208,7 @@ pub struct ToileState {
     /// This PeerID's counter just past its registry entry, while the entry is
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
-    entry_end: Option<i32>,
+    entry_end: Option<ambre_core::OpCounter>,
 }
 
 /// Write a merge's edits into the text it was computed against, in order. The
@@ -418,7 +418,11 @@ impl ToileState {
                     loro::CommitOptions::new()
                         .origin(ambre_core::crdt::CommitOrigin::Peers.as_str()),
                 );
-                self.doc.oplog_vv().get(&peer.0).copied()
+                self.doc
+                    .oplog_vv()
+                    .get(&peer.0)
+                    .copied()
+                    .map(ambre_core::OpCounter)
             }
             Err(e) => {
                 tracing::error!("Toile: the registry entry was refused: {e:?}");
@@ -1105,7 +1109,7 @@ impl ToileState {
         // The registry entry alone is no edit: it waits for the first one and
         // travels with it (`AUTHOR-009`).
         if let Some(end) = self.entry_end {
-            if current.get(&self.peer.0) == Some(&end) {
+            if current.get(&self.peer.0) == Some(&end.0) {
                 return None;
             }
             self.entry_end = None;

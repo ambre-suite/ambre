@@ -22,8 +22,8 @@
 use std::collections::{BTreeMap, HashMap};
 
 use ambre_core::{
-    BoardFrameCount, ConnectorCount, DocType, ElementCount, FixtureGen, FixtureName, FixtureSeed,
-    FixtureShape, GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
+    BoardFrameCount, BoardLength, ConnectorCount, DocType, ElementCount, FixtureGen, FixtureName,
+    FixtureSeed, FixtureShape, GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
 };
 use loro::LoroValue;
 
@@ -498,16 +498,31 @@ impl FixtureGen for ToileBenchFixture {
         match self {
             // 100 tiles of 500 on a 4 000-unit pitch: far wider than one
             // viewport, so a cull that returned everything shows up as a figure.
-            Self::Board50k => build_spread_board(&mut state, 100, 4_000.0, 160.0),
+            Self::Board50k => build_spread_board(
+                &mut state,
+                Tiles::new(100),
+                BoardLength::new(4_000.0),
+                BoardLength::new(160.0),
+            ),
             // One tile of 500, then three more inside the 1280 by 800 default
             // camera, so every element of this board is a visible element.
-            Self::DenseViewport2k => build_spread_board(&mut state, 4, 600.0, 24.0),
-            Self::Deck50 => build_deck(&mut state, 50),
+            Self::DenseViewport2k => build_spread_board(
+                &mut state,
+                Tiles::new(4),
+                BoardLength::new(600.0),
+                BoardLength::new(24.0),
+            ),
+            Self::Deck50 => build_deck(&mut state, ambre_bus::app::toile::SlideCount::new(50)),
         }
         state
             .export_ambre_plaintext(seeded_document_id(seed))
             .expect("the document reads")
     }
+}
+
+ambre_core::define_tally! {
+    /// How many copies of the one built block a spread board holds.
+    pub struct Tiles;
 }
 
 /// Elements of one [`TILE`] block, spread over `tiles` copies on a
@@ -525,9 +540,15 @@ impl FixtureGen for ToileBenchFixture {
 ///
 /// * The three shape kinds alternate inside a block, so a tessellation bench
 ///   meets a mix rather than one geometry repeated.
-fn build_spread_board(state: &mut ToileState, tiles: u32, tile_pitch: f64, element_pitch: f64) {
+fn build_spread_board(
+    state: &mut ToileState,
+    tiles: Tiles,
+    tile_pitch: BoardLength,
+    element_pitch: BoardLength,
+) {
     const COLS: u32 = 25;
     const ROWS: u32 = 20;
+    let (tiles, tile_pitch, element_pitch) = (tiles.get(), tile_pitch.get(), element_pitch.get());
     let kinds = [ShapeKind::Rect, ShapeKind::Ellipse, ShapeKind::Triangle];
     let ids: Vec<ElementId> = (0..ROWS)
         .flat_map(|row| (0..COLS).map(move |col| (row, col)))
@@ -579,10 +600,10 @@ fn copy_payload(state: &mut ToileState, ids: Vec<ElementId>) -> Option<Clipboard
 ///
 /// The frames declare their children and the deck declares its order. The
 /// export walks that order and that membership, never the spatial overlap.
-fn build_deck(state: &mut ToileState, slides: u32) {
+fn build_deck(state: &mut ToileState, slides: ambre_bus::app::toile::SlideCount) {
     const PITCH: f64 = 1_400.0;
-    let mut order = Vec::with_capacity(slides as usize);
-    for slide in 0..slides {
+    let mut order = Vec::with_capacity(slides.to_usize());
+    for slide in 0..slides.get() {
         let origin = f64::from(slide) * PITCH;
         let frame = create(
             state,

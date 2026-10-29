@@ -196,23 +196,24 @@ static MOVE_PATHS: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
 /// The base resize-axis angle (radians, screen space y-down) of a handle on the
 /// axis-aligned box, or `None` for the rotate handle. A resize direction has
 /// 180-degree symmetry, so opposite handles share an angle.
-fn resize_axis_base(h: Handle) -> Option<f64> {
+fn resize_axis_base(h: Handle) -> Option<ambre_core::Radians> {
     use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
-    match h {
-        Handle::E | Handle::W => Some(0.0),
-        Handle::Nw | Handle::Se => Some(FRAC_PI_4),
-        Handle::N | Handle::S => Some(FRAC_PI_2),
-        Handle::Ne | Handle::Sw => Some(3.0 * FRAC_PI_4),
-        Handle::Rotate => None,
-    }
+    let base = match h {
+        Handle::E | Handle::W => 0.0,
+        Handle::Nw | Handle::Se => FRAC_PI_4,
+        Handle::N | Handle::S => FRAC_PI_2,
+        Handle::Ne | Handle::Sw => 3.0 * FRAC_PI_4,
+        Handle::Rotate => return None,
+    };
+    Some(ambre_core::Radians::new(base))
 }
 
 /// Snap a resize-axis angle (radians) to the nearest of the four native CSS resize
 /// keywords. That is the crisp cursor for an axis-aligned box, and the graceful
 /// fallback when a data-URI cursor is unsupported.
-fn nearest_resize_keyword(a: f64) -> &'static str {
+fn nearest_resize_keyword(a: ambre_core::Radians) -> &'static str {
     use std::f64::consts::{FRAC_PI_4, PI};
-    match (a.rem_euclid(PI) / FRAC_PI_4).round() as i64 % 4 {
+    match (a.get().rem_euclid(PI) / FRAC_PI_4).round() as i64 % 4 {
         0 => "ew-resize",
         1 => "nwse-resize",
         2 => "ns-resize",
@@ -220,14 +221,14 @@ fn nearest_resize_keyword(a: f64) -> &'static str {
     }
 }
 
-/// A directional resize cursor rotated `deg` degrees: the `MOVE_PATHS` double
-/// arrow wrapped in a `rotate(deg 12 12)` group, hotspot centred. It is painted
-/// twice (white under-stroke then dark top-stroke) so it stays legible on any
-/// board colour. `fallback` is the native keyword shown if the data URI is
-/// unsupported.
-fn rotated_resize_cursor(deg: f64, fallback: &str) -> String {
+/// A directional resize cursor rotated to `angle`: the `MOVE_PATHS` double
+/// arrow wrapped in a `rotate(deg 12 12)` group, in whole degrees, hotspot
+/// centred. It is painted twice (white under-stroke then dark top-stroke) so it
+/// stays legible on any board colour. `fallback` is the native keyword shown if
+/// the data URI is unsupported.
+fn rotated_resize_cursor(angle: ambre_core::Radians, fallback: &str) -> String {
     let paths = MOVE_PATHS.as_str();
-    let d = deg.rem_euclid(360.0).round() as i64;
+    let d = angle.to_degrees().rem_euclid(360.0).round() as i64;
     format!(
         "url(\"data:image/svg+xml;utf8,\
          <svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' \
@@ -253,15 +254,12 @@ pub fn resize_cursor(h: Handle, theta: ambre_core::Radians) -> Cow<'static, str>
     let Some(base) = resize_axis_base(h) else {
         return Cow::Borrowed(ROTATE_CURSOR.as_str());
     };
-    let angle = base + theta.get();
+    let angle = base + theta;
     if theta == ambre_core::Radians::ZERO {
         // Axis-aligned: the native keyword is crisper than an SVG cursor.
         Cow::Borrowed(nearest_resize_keyword(angle))
     } else {
-        Cow::Owned(rotated_resize_cursor(
-            angle.to_degrees(),
-            nearest_resize_keyword(angle),
-        ))
+        Cow::Owned(rotated_resize_cursor(angle, nearest_resize_keyword(angle)))
     }
 }
 

@@ -2710,11 +2710,7 @@ ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(haystack) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(needle) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | ToileState::canonical_dump() | ret | String	generic	schema-freeze / fixture tooling text and counts
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_deck(slides) | param | u32	generic	schema-freeze / fixture tooling text and counts
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_deck::PITCH | const | f64	math	a constant local to one function
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board(element_pitch) | param | f64	generic	schema-freeze / fixture tooling text and counts
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board(tile_pitch) | param | f64	generic	schema-freeze / fixture tooling text and counts
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board(tiles) | param | u32	generic	schema-freeze / fixture tooling text and counts
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board::COLS | const | u32	math	a constant local to one function
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board::ROWS | const | u32	math	a constant local to one function
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | hex_of() | ret | String	generic	schema-freeze / fixture tooling text and counts
@@ -2726,7 +2722,6 @@ ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileSta
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::rename_frame(name) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_service_error(reason) | param | String	free-text	error reason text from ApiError, shown in a toast
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::has_pending_work() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.entry_end | field | Option<i32>	generic	Loro Counter (i32) as Loro defines it
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecodable | field | std::cell::Cell<bool>	local	private latch: whether a stored value failed to decode; read only by the notice of this state
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_session() | ret | bool	generic	predicate or handled-flag result
@@ -2867,15 +2862,11 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | STICKY_CURSOR | const | &
 ambre-toile | src/ui/palette.rs | crate::ui::palette | is_editable_tag() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/palette.rs | crate::ui::palette | is_editable_tag(tag_name) | param | &str	generic	DOM tag name
 ambre-toile | src/ui/palette.rs | crate::ui::palette | nearest_resize_keyword() | ret | &'static str	generic	CSS cursor text
-ambre-toile | src/ui/palette.rs | crate::ui::palette | nearest_resize_keyword(a) | param | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/palette.rs | crate::ui::palette | resize_axis_base() | ret | Option<f64>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/palette.rs | crate::ui::palette | resize_cursor() | ret | Cow<'static,str>	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor() | ret | String	generic	CSS cursor text
-ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(deg) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(fallback) | param | &str	generic	CSS cursor text
 ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_TRAIL_MAX | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/presence.rs | crate::ui::presence | PeerCursors::is_empty() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/presence.rs | crate::ui::presence | laser_alpha() | ret | f32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/presence.rs | crate::ui::presence | paint_cursor(label) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/present.rs | crate::ui::present | TransitionFrame.done | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(after) | param | &str	free-text	label, message or user text

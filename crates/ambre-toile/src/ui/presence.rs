@@ -258,14 +258,14 @@ fn paint_laser<S: DrawSurface>(
         let (pa, _) = trail[i - 1];
         let (pb, tb) = trail[i];
         let alpha = laser_alpha(tb, now);
-        if alpha <= 0.0 {
+        if alpha <= ambre_core::Opacity::TRANSPARENT {
             continue;
         }
         let a = *w2s * pa;
         let b = *w2s * pb;
         surface.stroke_line(
             ambre_draw::Line::new((a.x, a.y), (b.x, b.y)),
-            color.with_alpha(alpha),
+            color.with_alpha(alpha.get()),
             ambre_core::SurfacePx::new(3.0),
         );
     }
@@ -274,12 +274,15 @@ fn paint_laser<S: DrawSurface>(
 /// The alpha of a laser segment that arrived at `sampled_at`, read at `now`:
 /// opaque when fresh, zero once [`LASER_FADE`] has passed. A sample from the
 /// future (a clock that stepped back) reads as fresh rather than as invisible.
-pub fn laser_alpha(sampled_at: ambre_core::PageTime, now: ambre_core::PageTime) -> f32 {
+pub fn laser_alpha(
+    sampled_at: ambre_core::PageTime,
+    now: ambre_core::PageTime,
+) -> ambre_core::Opacity {
     let age = (now - sampled_at).max(ambre_core::PageMillis::ZERO);
     if age >= LASER_FADE {
-        return 0.0;
+        return ambre_core::Opacity::TRANSPARENT;
     }
-    (1.0 - age / LASER_FADE) as f32
+    ambre_core::Opacity::clamped((1.0 - age / LASER_FADE) as f32)
 }
 
 /// What a peer's chip reads: the display name their sample carried, or a short
@@ -685,20 +688,33 @@ mod tests {
         );
         assert_eq!(
             laser_alpha(ambre_bus::PageTime(0.0), ambre_bus::PageTime(0.0)),
-            1.0
+            ambre_core::Opacity::OPAQUE
         );
         assert_eq!(
             laser_alpha(
                 ambre_bus::PageTime(0.0),
                 ambre_bus::PageTime(LASER_FADE.get())
             ),
-            0.0
+            ambre_core::Opacity::TRANSPARENT
         );
         // A sample from the future reads as fresh, never as invisible.
         assert_eq!(
             laser_alpha(ambre_bus::PageTime(100.0), ambre_bus::PageTime(0.0)),
-            1.0
+            ambre_core::Opacity::OPAQUE
         );
+    }
+
+    /// A clock that reads no number never yields an alpha outside the unit
+    /// range: the age reads as none, so the segment reads as fresh.
+    #[test]
+    fn a_laser_alpha_stays_in_range_on_a_nan_clock() {
+        let nan = ambre_bus::PageTime(f64::NAN);
+        for (at, now) in [
+            (nan, ambre_bus::PageTime(0.0)),
+            (ambre_bus::PageTime(0.0), nan),
+        ] {
+            assert_eq!(laser_alpha(at, now), ambre_core::Opacity::OPAQUE);
+        }
     }
 
     /// TOILE-UI-076: the chip reads the name the sample carried, and falls back
