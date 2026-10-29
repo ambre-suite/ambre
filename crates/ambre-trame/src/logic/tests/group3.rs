@@ -491,6 +491,52 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
     assert_eq!(read_raw(&mut b, 0, 1), "=Data!A1*2");
 }
 
+/// The first sheet a session adds keeps its `_00000000` id. Once the session
+/// has minted its last sheet counter, it refuses the next sheet. The sheet
+/// that holds the last id keeps its name, which a repeated id would rename
+/// (`TRAME-243`).
+#[test]
+fn a_spent_sheet_counter_refuses_the_next_sheet_and_overwrites_nothing() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::CreateSheet {
+        name: crate::test_support::sheet("First"),
+    });
+    let first = state.all_sheet_ids();
+    assert!(first.iter().any(|id| id.0.ends_with("_00000000")));
+    state.sheet_counter = Some(ambre_core::IdCounter::new(u32::MAX));
+    state.handle_command(TrameCommand::CreateSheet {
+        name: crate::test_support::sheet("Last"),
+    });
+    assert_eq!(state.sheet_counter, None);
+    let tabs = |state: &mut TrameState| {
+        let out = state.handle_command(TrameCommand::CreateSheet {
+            name: crate::test_support::sheet("Late"),
+        });
+        let refused = out.display.iter().any(
+            |e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh sheet id")),
+        );
+        (refused, state.all_sheet_ids().len())
+    };
+    assert_eq!(
+        tabs(&mut state),
+        (true, 3),
+        "the sheet past the last id is refused"
+    );
+    let vv = state.doc.oplog_vv();
+    state.doc.commit();
+    assert_eq!(state.doc.oplog_vv(), vv, "the refusal wrote nothing");
+    let last = state.sheet_list_event();
+    let TrameEvent::SheetList { sheets, .. } = &last else {
+        panic!("expected SheetList")
+    };
+    assert!(
+        sheets
+            .iter()
+            .any(|t| t.id.0.ends_with("_ffffffff") && t.name.as_str() == "Last"),
+        "the last id keeps its sheet"
+    );
+}
+
 /// Creating a sheet mints a stable id, lists it after the default in the tab
 /// strip, and keeps its cells isolated from the default sheet.
 #[test]

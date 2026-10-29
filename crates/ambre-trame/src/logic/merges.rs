@@ -32,7 +32,9 @@ impl TrameState {
                 ),
             }]);
         }
-        self.insert_merge_entry(rect);
+        if let Err(why) = self.insert_merge_entry(rect) {
+            return TrameOutcome::display_only(vec![why.notice()]);
+        }
         self.doc.commit();
         self.after_merge_change()
     }
@@ -41,17 +43,14 @@ impl TrameState {
     /// by the context-menu merge and the merge-aware autofill
     /// (`trame-autofill`); does not
     /// commit or rebuild the derived caches -- the caller batches those.
-    pub(super) fn insert_merge_entry(&mut self, rect: CellRect) {
+    /// Refused, writing no entry, when the rectangle gets no lines.
+    pub(super) fn insert_merge_entry(&mut self, rect: CellRect) -> Result<(), Unmaterialized> {
         // Materialize the bottom-right corner so the whole rectangle has ids.
-        if self.materialize(rect.bottom_right).is_none() {
-            return;
-        }
-        let (Some(master), Some(extent)) = (
-            self.index.resolve(rect.top_left),
-            self.index.resolve(rect.bottom_right),
-        ) else {
-            return;
-        };
+        let extent = self.materialize(rect.bottom_right)?;
+        let master = self
+            .index
+            .resolve(rect.top_left)
+            .ok_or(Unmaterialized::Unwritten)?;
         let _ = self
             .doc
             .get_map(SheetContainer::of(SheetRoot::Merges, &self.active_sheet).as_str())
@@ -59,6 +58,7 @@ impl TrameState {
                 CellKey::of(master.0, master.1).as_str(),
                 CellKey::of(extent.0, extent.1).as_str(),
             );
+        Ok(())
     }
 
     /// Split the merge whose rectangle contains `at`, restoring covered

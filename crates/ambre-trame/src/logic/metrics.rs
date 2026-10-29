@@ -34,9 +34,10 @@ impl TrameState {
         }
         let width = width.max(MIN_COL_WIDTH);
         // Materialize the column to mint/resolve its stable id (materialize keys
-        // on a cell; row 0 is the cheapest anchor). Beyond the cap: drop.
-        let Some((_, col_uid)) = self.materialize(CellPos::new(Row::ZERO, col)) else {
-            return TrameOutcome::display_only(vec![]);
+        // on a cell; row 0 is the cheapest anchor). Refused: say why.
+        let col_uid = match self.materialize(CellPos::new(Row::ZERO, col)) {
+            Ok((_, uid)) => uid,
+            Err(why) => return TrameOutcome::display_only(vec![why.notice()]),
         };
         let _ = self
             .doc
@@ -65,8 +66,9 @@ impl TrameState {
             return TrameOutcome::display_only(vec![]);
         }
         let height = height.max(MIN_ROW_HEIGHT);
-        let Some((row_uid, _)) = self.materialize(CellPos::new(row, Col::ZERO)) else {
-            return TrameOutcome::display_only(vec![]);
+        let row_uid = match self.materialize(CellPos::new(row, Col::ZERO)) {
+            Ok((uid, _)) => uid,
+            Err(why) => return TrameOutcome::display_only(vec![why.notice()]),
         };
         let _ = self
             .doc

@@ -195,10 +195,11 @@ impl TrameState {
     /// Ensure the cell `at` is materialized (its row and column exist in the
     /// `rows_/cols_` lists) and return the `(row_lid, col_lid)` pair to key the
     /// cell with. Extends the dense used range by pushing placeholder elements,
-    /// capturing each new element's stable id. Returns `None` -- dropping the
-    /// write -- if the jump past the high-water mark exceeds [`MATERIALIZE_CAP`],
-    /// or if the session has no fresh uid.
-    pub(super) fn materialize(&mut self, at: CellPos) -> Option<(Uid, Uid)> {
+    /// capturing each new element's stable id. The write is refused when the
+    /// jump past the high-water mark exceeds [`MATERIALIZE_CAP`]. It is refused
+    /// too when the session cannot mint every uid the cell needs. Every uid is minted
+    /// before the first push, so a refusal for want of one pushes no line.
+    pub(super) fn materialize(&mut self, at: CellPos) -> Result<(Uid, Uid), Unmaterialized> {
         let (rows, cols) = (self.index.row_len(), self.index.col_len());
         if at.row.count_from(rows.as_end()) >= MATERIALIZE_ROWS
             || at.col.count_from(cols.as_end()) >= MATERIALIZE_COLS
@@ -207,26 +208,53 @@ impl TrameState {
                 "[Logic] materialize {at:?} exceeds cap past hwm \
                  (rows {rows:?}, cols {cols:?}); write dropped",
             );
-            return None;
+            return Err(Unmaterialized::BeyondCap);
         }
-        let mut grew = false;
-        while self.index.row_len().as_end() <= at.row {
-            let uid = self.mint_uid()?;
-            let rows = self
-                .doc
-                .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
-            rows.push(uid.to_key_part().as_str()).ok()?;
+        let before = self.uid_counter;
+        let mut row_uids = Vec::new();
+        let mut next_row = rows.as_end();
+        let mut col_uids = Vec::new();
+        let mut next_col = cols.as_end();
+        let minted = loop {
+            if next_row <= at.row {
+                let Some(uid) = self.mint_uid() else {
+                    break false;
+                };
+                row_uids.push(uid);
+                next_row += RowCount::ONE;
+            } else if next_col <= at.col {
+                let Some(uid) = self.mint_uid() else {
+                    break false;
+                };
+                col_uids.push(uid);
+                next_col += ColCount::ONE;
+            } else {
+                break true;
+            }
+        };
+        if !minted {
+            // No uid minted here reached the document: hand them back.
+            self.uid_counter = before;
+            return Err(Unmaterialized::IdsExhausted);
+        }
+        let grew = !row_uids.is_empty() || !col_uids.is_empty();
+        let rows = self
+            .doc
+            .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
+        for uid in row_uids {
+            if rows.push(uid.to_key_part().as_str()).is_err() {
+                break;
+            }
             self.index.push_row(uid);
-            grew = true;
         }
-        while self.index.col_len().as_end() <= at.col {
-            let uid = self.mint_uid()?;
-            let cols = self
-                .doc
-                .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
-            cols.push(uid.to_key_part().as_str()).ok()?;
+        let cols = self
+            .doc
+            .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
+        for uid in col_uids {
+            if cols.push(uid.to_key_part().as_str()).is_err() {
+                break;
+            }
             self.index.push_col(uid);
-            grew = true;
         }
         // Commit the implicit scaffolding under the excluded origin so it stays
         // OUT of the undo stack (see `CommitOrigin::Materialize`). A cell edit's intent
@@ -240,7 +268,7 @@ impl TrameState {
                 .set_next_commit_origin(ambre_core::crdt::CommitOrigin::Materialize.as_str());
             self.doc.commit();
         }
-        self.index.resolve(at)
+        self.index.resolve(at).ok_or(Unmaterialized::Unwritten)
     }
 
     /// Rebuild [`Self::index`] from the active sheet's `rows_/cols_` lists.
@@ -336,17 +364,18 @@ impl TrameState {
                     .push(WriteRefusal::UnknownSheet(unknown));
                 return;
             }
-            let Some((rl, cl)) = self.materialize(at) else {
-                // Beyond the materialization cap, or out of fresh uids: the
-                // write is refused, and `finish_cell_writes` says so
-                // (`TRAME-UI-164`).
-                let refusal = if self.uid_counter.is_none() {
-                    WriteRefusal::IdsExhausted
-                } else {
-                    WriteRefusal::BeyondCap
-                };
-                self.write_refusals.push(refusal);
-                return;
+            let (rl, cl) = match self.materialize(at) {
+                Ok(lines) => lines,
+                Err(refused) => {
+                    // The write is refused, and `finish_cell_writes` says so
+                    // (`TRAME-UI-164`).
+                    self.write_refusals.push(match refused {
+                        Unmaterialized::BeyondCap => WriteRefusal::BeyondCap,
+                        Unmaterialized::IdsExhausted => WriteRefusal::IdsExhausted,
+                        Unmaterialized::Unwritten => WriteRefusal::Unwritten,
+                    });
+                    return;
+                }
             };
             // Bound once the cell's own lines exist, so a reference to its row
             // or column names that line rather than a position.
@@ -404,11 +433,14 @@ impl TrameState {
             .filter(|r| **r == WriteRefusal::BeyondCap)
             .count();
         let spent = refusals.contains(&WriteRefusal::IdsExhausted);
+        let unwritten_lines = refusals.contains(&WriteRefusal::Unwritten);
         let mut unknown: Vec<SheetName> = refusals
             .into_iter()
             .filter_map(|r| match r {
                 WriteRefusal::UnknownSheet(name) => Some(name),
-                WriteRefusal::BeyondCap | WriteRefusal::IdsExhausted => None,
+                WriteRefusal::BeyondCap | WriteRefusal::IdsExhausted | WriteRefusal::Unwritten => {
+                    None
+                }
             })
             .collect();
         unknown.sort();
@@ -424,10 +456,48 @@ impl TrameState {
         if spent {
             events.push(ids_exhausted());
         }
+        if unwritten_lines {
+            events.push(unwritten());
+        }
         events.extend(unknown.into_iter().map(|name| TrameEvent::Error {
             message: format!("no sheet is named \"{name}\": the formula was not written"),
         }));
         events
+    }
+}
+
+/// Why [`TrameState::materialize`] gave a cell no lines. Each refusal names
+/// its own cause, so a batch that hits the cap and then spends the counter
+/// reports both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Unmaterialized {
+    /// The cell lies past the materialization cap ([`MATERIALIZE_CAP`]).
+    BeyondCap,
+    /// The cell needs a new line, and the session cannot mint its uid.
+    IdsExhausted,
+    /// The document refused a new line, so the cell still has none.
+    Unwritten,
+}
+
+impl Unmaterialized {
+    /// The notice for one write refused for this cause (`TRAME-UI-164`).
+    pub(super) fn notice(self) -> TrameEvent {
+        match self {
+            Self::BeyondCap => TrameEvent::Error {
+                message: format!(
+                    "the cell lies beyond the sheet's {MATERIALIZE_CAP}-line limit and was not written"
+                ),
+            },
+            Self::IdsExhausted => ids_exhausted(),
+            Self::Unwritten => unwritten(),
+        }
+    }
+}
+
+/// The notice for a write whose new row or column the document refused.
+fn unwritten() -> TrameEvent {
+    TrameEvent::Error {
+        message: "the sheet refused a new row or column; the write was dropped".to_owned(),
     }
 }
 

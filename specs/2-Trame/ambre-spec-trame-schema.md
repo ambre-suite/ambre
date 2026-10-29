@@ -34,11 +34,13 @@ reorder, and its `{peer}_{counter}` shape answers concurrent minting. So an acti
 Prefix `TRAME`, shared with `trame-engine`: one prefix, one numbering, no renumbering.
 `TRAME-003`, `TRAME-010` and `TRAME-016` sit here because each states a property of the format,
 not of the engine. `TRAME-221` and `TRAME-222` are the halves those last two hid, and each states
-what two peers reach, not what one holds. Grammar and status values are normative in `ambre-spec-template.md`.
+what two peers reach, not what one holds. `TRAME-242` states the rule section 2 leans on. Grammar
+and status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-003` | `INV` | A row's or column's identity MUST be a minted `Uid` carried as the `LoroMovableList` element's **value**, never its position. | this spec section 2 | `ambre_trame::model::sheet_index::tests::build_maps_positions_to_stable_ids`; `::apply_move_row_permutes_order_and_reindexes`; `::cell_key_is_fixed_length_and_stable` -- the index; `ambre_trame::logic::tests::group4::sort_range_formulas_follow_data` -- the one that walks a real move on the `LoroMovableList` and reads the cells back under their unchanged keys, which is the hazard section 6 rejects the slot id for | none | verified |
+| `TRAME-242` | `INV` | One session MUST NOT mint two equal row, column or sheet ids. | this spec section 2 | `ambre_core::authorship::tests::an_id_counter_ends_at_the_top_and_crosses_the_wire_bare` -- the step past `u32::MAX` answers no counter; `ambre_trame::logic::tests::group2::a_spent_uid_counter_refuses_new_lines_and_overwrites_nothing` -- two rows, two uids; `ambre_trame::logic::tests::group3::a_spent_sheet_counter_refuses_the_next_sheet_and_overwrites_nothing` -- the sheet that holds the last id keeps its name | none | verified |
 | `TRAME-010` | `INV` | Computed values MUST NOT enter the CRDT: a container MUST hold the raw text alone. | this spec section 3 | `ambre_trame::logic::tests::group12::a_computed_value_stays_out_of_the_document` -- the cells map holds each raw text alone, and no result appears anywhere in the document | none | verified |
 | `TRAME-221` | `CONC` | Two peers that exchanged their whole history MUST show the same computed value, and a peer rebuilt from the converged snapshot MUST show it too. | this spec section 3 | `ambre_trame::logic::convergence_tests::two_peers_converge_under_interleaved_ops` -- a proptest over 256 interleavings, comparing the rendered text of both peers, then of a third peer imported from the converged snapshot; `logic::tests::group1::sum_over_plain_literals_survives_reseed` -- the worked example | none | verified |
 | `TRAME-016` | `INV` | A cell's whole style MUST be one binary register, keyed by that cell's identity. | this spec section 3; architecture section 2.D | `ambre_trame::logic::convergence_tests::subset_style_edit_does_not_tear_a_whole_cell_rewrite` -- it goes red on a split register, because a partial patch racing a whole rewrite is what a second style container tears on; `logic::tests::group1::bold_stays_on_the_cell_not_the_selection` -- the key | none | verified |
@@ -49,7 +51,7 @@ what two peers reach, not what one holds. Grammar and status values are normativ
   `ambre-spec-budgets.md section 4`, and both are recorded there as unbudgeted.
 * **Boundary.** none: `TRAME-010` keeps computed values out of the document, and the containers
   this table declares reach the relay as ciphertext alone (`ZK-001`).
-* **Verification.** 6 `verified`. What holds is the shape a merge reads back. The identity a cell
+* **Verification.** 7 `verified`. What holds is the shape a merge reads back. The identity a cell
   keeps, and the single register a style lives in. The key set a build writes, which a CI gate holds
   append-only. A computed value is looked for in the whole document, beside the raw text too.
 
@@ -62,11 +64,11 @@ One identity type serves rows, columns and sheets.
 * `Uid` is `{peer: PeerId, counter: IdCounter}`, rendered `"{peer:016x}_{counter:08x}"` -- 25
   characters.
 * `peer` is the document `PeerID`; `counter` is a per-session monotonic counter.
-* A session mints each counter once. Past `u32::MAX` it mints no uid, and the write that needs a
-  new line is refused, so a uid never repeats.
+* A session mints each counter once, and past `u32::MAX` it mints no uid, so a uid never repeats
+  (`TRAME-242`). What a write answers then is `TRAME-243`, in the engine feature.
 * A cell key joins two halves with `:`: `"{row_uid}:{col_uid}"`, 51 characters, fixed length.
-* A `sheet_id` uses the same rendering, minted from the document `PeerID` and a sheet counter. The
-  implicit first sheet is the constant `"s0"`.
+* A `sheet_id` uses the same rendering, minted from the document `PeerID` and a sheet counter, an
+  `IdCounter` too. The implicit first sheet is the constant `"s0"`.
 * `crates/ambre-trame/src/model/sheet_index.rs` holds the type and the parser.
 
 Both halves of the shape are decisions, with their rejected alternatives in section 6.

@@ -41,7 +41,7 @@ impl TrameState {
         };
         // Styling a cell pins an identity to it, so it must be materialized just
         // like an edited value. Beyond the cap there is nothing to persist.
-        let (rl, cl) = self.materialize(pos)?;
+        let (rl, cl) = self.materialize(pos).ok()?;
         let key = CellKey::of(rl, cl);
         let map = self
             .doc
@@ -89,13 +89,16 @@ impl TrameState {
         // collapse into the single trailing commit. The group is sealed by the
         // next command's fallback `group_end`.
         let _ = self.undo_manager.group_start();
-        // A cell past the materialization cap has no line to key its style by.
-        // It is refused whole, never drawn with a style the document does not
-        // hold (`TRAME-193`).
-        let mut refused: HashSet<CellPos> = HashSet::new();
+        // A cell with no line to key its style by is refused whole, never
+        // drawn with a style the document does not hold (`TRAME-193`). It lies
+        // past the materialization cap, or the session is out of fresh uids.
+        let mut refused: HashMap<CellPos, Unmaterialized> = HashMap::new();
         for &cell in &cells {
-            if !self.covered.contains(&cell) && self.materialize(cell).is_none() {
-                refused.insert(cell);
+            if self.covered.contains(&cell) {
+                continue;
+            }
+            if let Err(why) = self.materialize(cell) {
+                refused.insert(cell, why);
             }
         }
         for &cell in &cells {
@@ -104,7 +107,7 @@ impl TrameState {
             // it is actively wrong, since it would draw interior edges
             // inside the merged block. The master carries the whole span's
             // style.
-            if self.covered.contains(&cell) || refused.contains(&cell) {
+            if self.covered.contains(&cell) || refused.contains_key(&cell) {
                 continue;
             }
             // Bold/italic live in their own in-memory sets; they are folded
@@ -187,13 +190,21 @@ impl TrameState {
         // The active cell's resolved state drives the toolbar; DataReset re-fetches
         // the restyled viewport (number-format reformat, colours, borders).
         let mut display = vec![self.style_state_event(), TrameEvent::DataReset];
-        if !refused.is_empty() {
+        let beyond_cap = refused
+            .values()
+            .filter(|why| **why == Unmaterialized::BeyondCap)
+            .count();
+        if beyond_cap > 0 {
             display.push(TrameEvent::Error {
                 message: format!(
-                    "{} cell(s) lie beyond the sheet's {MATERIALIZE_CAP}-line limit and were not formatted",
-                    refused.len()
+                    "{beyond_cap} cell(s) lie beyond the sheet's {MATERIALIZE_CAP}-line limit and were not formatted"
                 ),
             });
+        }
+        for why in [Unmaterialized::IdsExhausted, Unmaterialized::Unwritten] {
+            if refused.values().any(|w| *w == why) {
+                display.push(why.notice());
+            }
         }
         TrameOutcome {
             display,

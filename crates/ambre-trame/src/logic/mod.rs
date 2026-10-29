@@ -120,6 +120,8 @@ enum WriteRefusal {
     UnknownSheet(SheetName),
     /// The cell needs a new line, and the session has no fresh uid.
     IdsExhausted,
+    /// The document refused the cell's new line.
+    Unwritten,
 }
 
 /// Per-document state for a Trame (spreadsheet) document.
@@ -237,7 +239,9 @@ pub struct TrameState {
     /// distinct ids that both survive (`trame-sheets`). Not persisted: ids, once
     /// minted,
     /// live in the CRDT; the counter only needs to be unique within this session.
-    sheet_counter: u32,
+    /// `None` once the session has minted its last counter: a repeated id
+    /// would make two sheets one.
+    sheet_counter: Option<ambre_core::IdCounter>,
     /// Per-session monotonic counter for minting row/column [`Uid`]s. Same
     /// peer-scoped convergence argument as `sheet_counter`
     /// (`trame-rows-and-columns`): two peers that
@@ -410,7 +414,7 @@ impl TrameState {
             write_refusals: Vec::new(),
             edit_anchor: None,
             undo_manager,
-            sheet_counter: 0,
+            sheet_counter: Some(ambre_core::IdCounter::ZERO),
             uid_counter: Some(ambre_core::IdCounter::ZERO),
             sheet_list_sent: false,
             undecodable: std::cell::Cell::new(false),
@@ -516,6 +520,7 @@ impl TrameState {
 // - docfile: the native `.ambre` container, Trame side (`docfile`).
 // -----------------------------------------------------------------------------
 mod cells;
+use cells::Unmaterialized;
 mod clipboard;
 mod commands;
 pub mod docfile;

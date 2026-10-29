@@ -64,13 +64,12 @@ impl TrameState {
         let (sheet_id, created) = match target_sheet_id {
             Some(id) if self.all_sheet_ids().iter().any(|s| s == &id) => (id, false),
             _ => {
+                // Mint before the first write: a spent counter refuses the
+                // import with the document untouched.
+                let Some(id) = self.mint_sheet_id() else {
+                    return TrameOutcome::display_only(vec![super::sheets::sheet_ids_exhausted()]);
+                };
                 self.hold_default_sheet();
-                let id = SheetId(format!(
-                    "{:016x}_{:08x}",
-                    self.doc.peer_id(),
-                    self.sheet_counter
-                ));
-                self.sheet_counter += 1;
                 (id, true)
             }
         };

@@ -404,6 +404,22 @@ impl TrameState {
         }
     }
 
+    /// Mint a fresh, peer-scoped sheet id, `{peer:016x}_{counter:08x}`
+    /// (`trame-sheets`). `None` once the session has minted its last counter:
+    /// a repeated id would make two sheets one.
+    pub(super) fn mint_sheet_id(&mut self) -> Option<SheetId> {
+        let Some(counter) = self.sheet_counter else {
+            tracing::warn!("[Logic] the session has no fresh sheet id; sheet not added");
+            return None;
+        };
+        self.sheet_counter = counter.next();
+        Some(SheetId(format!(
+            "{:016x}_{:08x}",
+            self.doc.peer_id(),
+            counter.get()
+        )))
+    }
+
     /// Store the default sheet when the map holds no sheet. Two peers that
     /// delete the last two sheets at once leave an empty map, and each reads
     /// the default sheet without a write (`TRAME-077`). The first local write
@@ -523,9 +539,13 @@ impl TrameState {
     /// empty; its containers are created lazily on first write. Does not switch
     /// the active sheet (the UI sends [`TrameCommand::ActivateSheet`] for that).
     pub(super) fn create_sheet(&mut self, name: &SheetName) -> TrameOutcome {
+        // Mint before the first write: a spent counter refuses the sheet with
+        // the document untouched.
+        let Some(id) = self.mint_sheet_id() else {
+            return TrameOutcome::display_only(vec![sheet_ids_exhausted()]);
+        };
+        let id = id.0;
         self.hold_default_sheet();
-        let id = format!("{:016x}_{:08x}", self.doc.peer_id(), self.sheet_counter);
-        self.sheet_counter += 1;
         let name = self.free_sheet_name(name);
         let _ = self
             .doc
@@ -752,5 +772,14 @@ impl TrameState {
                 .get_movable_list(SheetContainer::of(root, sheet_id).as_str())
                 .clear();
         }
+    }
+}
+
+/// The notice for a sheet create after the session minted its last sheet id.
+/// A reopened document mints under a new PeerID.
+pub(super) fn sheet_ids_exhausted() -> TrameEvent {
+    TrameEvent::Error {
+        message: "this session has no fresh sheet id; reopen the document to add a sheet"
+            .to_owned(),
     }
 }

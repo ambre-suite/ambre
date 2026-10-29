@@ -254,7 +254,7 @@ impl TrameState {
         self.carry_style(src_master, master);
         // A tile cut down to one cell by the drag edge is a plain cell.
         if !tile.is_single_cell() {
-            self.insert_merge_entry(tile);
+            let _ = self.insert_merge_entry(tile);
         }
     }
 

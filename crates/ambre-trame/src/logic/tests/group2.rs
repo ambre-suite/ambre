@@ -376,6 +376,133 @@ fn a_spent_uid_counter_refuses_new_lines_and_overwrites_nothing() {
     );
 }
 
+/// Whether `out` carries the notice for a session out of fresh uids.
+fn says_ids_exhausted(out: &TrameOutcome) -> bool {
+    out.display
+        .iter()
+        .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh row")))
+}
+
+/// A cell needs a new row and a new column, and one uid is left. It pushes
+/// neither line, so no placeholder waits uncommitted to land on the undo
+/// stack with the next edit. The last uid stays to mint (`TRAME-243`).
+#[test]
+fn a_cell_short_of_uids_pushes_no_line_and_keeps_the_undo_stack() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(0),
+        col: Col::new(0),
+        text: "top".to_owned(),
+    });
+    let last = Some(ambre_core::IdCounter::new(u32::MAX));
+    state.uid_counter = last;
+    let undo_before = state.undo_manager.undo_count();
+    let vv_before = state.doc.oplog_vv();
+    let out = state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(1),
+        col: Col::new(1),
+        text: "both".to_owned(),
+    });
+    assert!(says_ids_exhausted(&out));
+    assert_eq!(state.index.row_len(), RowCount::new(1));
+    assert_eq!(state.index.col_len(), ColCount::new(1));
+    assert_eq!(state.uid_counter, last, "the last uid is handed back");
+    state.doc.commit();
+    assert_eq!(state.doc.oplog_vv(), vv_before, "nothing left pending");
+    assert_eq!(state.undo_manager.undo_count(), undo_before);
+    state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(1),
+        col: Col::new(0),
+        text: "one".to_owned(),
+    });
+    assert_eq!(
+        read_cell(&mut state, 1, 0),
+        "one",
+        "one new line still fits"
+    );
+    assert_eq!(state.uid_counter, None);
+}
+
+/// Once the counter is spent, every write that needs a new line says so. A
+/// resize, a merge and a restyle each answer the notice (`TRAME-243`).
+#[test]
+fn a_spent_uid_counter_answers_each_line_write_with_its_notice() {
+    let mut state = TrameState::new();
+    let sheet_id = state.active_sheet.clone();
+    state.uid_counter = None;
+    let col = state.handle_command(TrameCommand::ResizeCol {
+        version: ambre_bus::ViewportVersion(1),
+        sheet_id: sheet_id.clone(),
+        col: Col::new(3),
+        width: ambre_core::DocPx::new(150.0),
+    });
+    assert!(says_ids_exhausted(&col), "resize column");
+    let row = state.handle_command(TrameCommand::ResizeRow {
+        version: ambre_bus::ViewportVersion(1),
+        sheet_id,
+        row: Row::new(3),
+        height: ambre_core::DocPx::new(40.0),
+    });
+    assert!(says_ids_exhausted(&row), "resize row");
+    let merge = state.handle_command(TrameCommand::MergeCells {
+        rect: crate::CellRect::spanning(
+            CellPos::new(Row::new(1), Col::new(1)),
+            CellPos::new(Row::new(2), Col::new(2)),
+        ),
+    });
+    assert!(says_ids_exhausted(&merge), "merge");
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: Row::new(4),
+        col: Col::new(4),
+        anchor_row: Row::new(4),
+        anchor_col: Col::new(4),
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
+    });
+    let style = state.handle_command(TrameCommand::SetCellStyle {
+        patch: crate::StylePatch {
+            bold: Some(ambre_bus::Weight::Bold),
+            ..Default::default()
+        },
+    });
+    assert!(says_ids_exhausted(&style), "restyle");
+    assert!(
+        !style
+            .display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("limit"))),
+        "a spent counter is not the line limit"
+    );
+}
+
+/// A batch whose first write spends the last uid still names the cap for a
+/// later write past it: each refusal carries its own cause.
+#[test]
+fn a_batch_names_the_cap_after_the_counter_is_spent() {
+    let mut state = TrameState::new();
+    state.uid_counter = Some(ambre_core::IdCounter::new(u32::MAX - 1));
+    let out = state.handle_command(TrameCommand::SetCellsBatch {
+        cells: vec![
+            (CellPos::new(Row::new(0), Col::new(0)), "last".to_owned()),
+            (
+                CellPos::new(Row::new(20_000), Col::new(0)),
+                "far".to_owned(),
+            ),
+        ],
+    });
+    assert_eq!(state.uid_counter, None);
+    assert!(
+        out.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("limit"))),
+        "the far cell lies past the cap"
+    );
+    assert!(
+        !says_ids_exhausted(&out),
+        "no write here was short of a uid"
+    );
+}
+
 /// Deleting a row shifts the rows below it up and drops the deleted row's
 /// cell content (no orphan entry resurfaces).
 #[test]
