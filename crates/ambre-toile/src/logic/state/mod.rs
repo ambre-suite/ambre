@@ -50,7 +50,7 @@ mod groups;
 mod import;
 mod names;
 mod presence;
-pub use import::{MediaEntries, PendingImports};
+pub use import::{MediaEntryCount, PendingImportCount};
 pub use presence::PRESENCE_TTL;
 pub(crate) mod presentation;
 mod reactions;
@@ -96,7 +96,7 @@ pub(crate) use names::{
 ambre_core::define_tally! {
     /// How many times the whole element map has been resolved: a cost probe
     /// (`TOILE-056`).
-    pub struct BoardWalks;
+    pub struct BoardWalkCount;
 }
 
 /// Per-document Toile engine.
@@ -131,7 +131,7 @@ pub struct ToileState {
     /// How many times the whole element map has been resolved. A cost probe a
     /// test reads to show a read walks no board (`TOILE-056`); a `Cell`, since
     /// the reads that would walk take `&self`.
-    board_walks: Cell<BoardWalks>,
+    board_walks: Cell<BoardWalkCount>,
     /// Per-session monotonic id-minting counter.
     counter: IdCounter,
     peer: ambre_core::PeerId,
@@ -364,7 +364,7 @@ impl ToileState {
             _watch: watch,
             wires: std::cell::RefCell::default(),
             wires_gone: std::cell::RefCell::default(),
-            board_walks: Cell::new(BoardWalks::ZERO),
+            board_walks: Cell::new(BoardWalkCount::ZERO),
             counter: IdCounter::ZERO,
             peer: ambre_core::PeerId(peer),
             viewport: Viewport::default(),
@@ -1196,7 +1196,7 @@ impl ToileState {
     }
 
     /// How many times the whole element map has been resolved. Test helper.
-    pub fn board_walks(&self) -> BoardWalks {
+    pub fn board_walks(&self) -> BoardWalkCount {
         self.board_walks.get()
     }
 

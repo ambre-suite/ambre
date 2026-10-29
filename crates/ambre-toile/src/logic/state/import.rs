@@ -63,19 +63,19 @@ pub(super) struct PendingImport {
 ambre_core::define_tally! {
     /// A number of import units. A unit is one create, one style, one group
     /// or one connector.
-    pub struct ImportUnits;
+    pub struct ImportUnitCount;
 
     /// How many entries the board's `media` map holds, or a seed added.
-    pub struct MediaEntries;
+    pub struct MediaEntryCount;
 
     /// How many imports wait on their media uploads.
-    pub struct PendingImports;
+    pub struct PendingImportCount;
 }
 
 /// How many units one slice of an import applies (`TOILE-IO-028`). The
 /// `import` bench reads the cost of a slice against the keystroke pass row of
 /// `ambre-spec-budgets.md`.
-pub(super) const IMPORT_SLICE: ImportUnits = ImportUnits::new(64);
+pub(super) const IMPORT_SLICE: ImportUnitCount = ImportUnitCount::new(64);
 
 /// How much of a running import one call applies.
 #[derive(Clone, Copy)]
@@ -94,7 +94,7 @@ pub(super) struct ImportJob {
     /// The creates not applied yet, in slot order.
     commands: std::vec::IntoIter<ToileCommand>,
     /// How many creates the batch carried.
-    creates: ImportUnits,
+    creates: ImportUnitCount,
     styles: Vec<Option<ElementStyle>>,
     groups: Vec<ImportGroup>,
     connectors: Vec<ImportConnector>,
@@ -105,7 +105,7 @@ pub(super) struct ImportJob {
     /// The group each group entry built, `None` when it was not.
     group_ids: Vec<Option<ElementId>>,
     /// Units applied so far, across the four phases in order.
-    done: ImportUnits,
+    done: ImportUnitCount,
 }
 
 impl ImportJob {
@@ -113,7 +113,7 @@ impl ImportJob {
         let creates = batch.commands.len();
         Self {
             commands: batch.commands.into_iter(),
-            creates: ImportUnits::of_len(creates),
+            creates: ImportUnitCount::of_len(creates),
             styles: batch.styles,
             group_ids: Vec::with_capacity(batch.groups.len()),
             groups: batch.groups,
@@ -121,15 +121,15 @@ impl ImportJob {
             media: batch.media,
             report: batch.report,
             slot_ids: Vec::with_capacity(creates),
-            done: ImportUnits::ZERO,
+            done: ImportUnitCount::ZERO,
         }
     }
 
-    fn total(&self) -> ImportUnits {
+    fn total(&self) -> ImportUnitCount {
         self.creates
-            .plus(ImportUnits::of_len(self.styles.len()))
-            .plus(ImportUnits::of_len(self.groups.len()))
-            .plus(ImportUnits::of_len(self.connectors.len()))
+            .plus(ImportUnitCount::of_len(self.styles.len()))
+            .plus(ImportUnitCount::of_len(self.groups.len()))
+            .plus(ImportUnitCount::of_len(self.connectors.len()))
     }
 }
 
@@ -376,8 +376,8 @@ impl ToileState {
     }
 
     /// Number of imports awaiting media uploads. Test / integration accessor.
-    pub fn pending_import_count(&self) -> PendingImports {
-        PendingImports::of_len(self.pending_imports.len())
+    pub fn pending_import_count(&self) -> PendingImportCount {
+        PendingImportCount::of_len(self.pending_imports.len())
     }
 
     /// Apply one unit of the running import. The units run in a strict order,
@@ -510,9 +510,9 @@ impl ToileState {
     ///
     /// Commit-free by design: the caller (`apply_import`) folds this into the one
     /// import undo group alongside the element creates.
-    pub(super) fn seed_media(&mut self, blobs: &[MediaBlob]) -> MediaEntries {
+    pub(super) fn seed_media(&mut self, blobs: &[MediaBlob]) -> MediaEntryCount {
         let media = self.doc.get_map(Root::Media.as_str());
-        let mut created = MediaEntries::ZERO;
+        let mut created = MediaEntryCount::ZERO;
         for blob in blobs {
             let Some(key) = blob.media.stored().map(ContentHash::as_str) else {
                 // No address from Sync yet: a pending slot never becomes a key.
@@ -541,10 +541,10 @@ impl ToileState {
     }
 
     /// Number of entries in the `media` map. Test / integration accessor.
-    pub fn media_count(&self) -> MediaEntries {
+    pub fn media_count(&self) -> MediaEntryCount {
         match self.doc.get_map(Root::Media.as_str()).get_deep_value() {
-            LoroValue::Map(m) => MediaEntries::of_len(m.len()),
-            _ => MediaEntries::ZERO,
+            LoroValue::Map(m) => MediaEntryCount::of_len(m.len()),
+            _ => MediaEntryCount::ZERO,
         }
     }
 
@@ -587,7 +587,7 @@ mod tests {
     use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
     use crate::logic::state::ToileState;
 
-    use super::{MediaEntries, PendingImports};
+    use super::{MediaEntryCount, PendingImportCount};
 
     /// A `CreateElement` for a plain rect at `x`, used to fill import slots.
     fn rect_cmd(x: f64) -> ToileCommand {
@@ -691,7 +691,7 @@ mod tests {
             ..Default::default()
         };
         st.apply_import(batch);
-        assert_eq!(st.media_count(), MediaEntries::new(1));
+        assert_eq!(st.media_count(), MediaEntryCount::new(1));
         assert_eq!(
             st.media_meta("img-hash"),
             Some((32, 32, "image/png".to_owned()))
@@ -715,8 +715,8 @@ mod tests {
     fn seed_media_writes_load_info() {
         let mut st = ToileState::new();
         let n = st.seed_media(&[blob("abc", 640, 480, "image/png")]);
-        assert_eq!(n, MediaEntries::new(1));
-        assert_eq!(st.media_count(), MediaEntries::new(1));
+        assert_eq!(n, MediaEntryCount::new(1));
+        assert_eq!(st.media_count(), MediaEntryCount::new(1));
         assert_eq!(
             st.media_meta("abc"),
             Some((640, 480, "image/png".to_owned()))
@@ -733,16 +733,16 @@ mod tests {
         ]);
         assert_eq!(
             n,
-            MediaEntries::new(1),
+            MediaEntryCount::new(1),
             "identical hashes seed exactly one entry"
         );
-        assert_eq!(st.media_count(), MediaEntries::new(1));
+        assert_eq!(st.media_count(), MediaEntryCount::new(1));
         // A later seed of the same hash is a no-op (already present).
         assert_eq!(
             st.seed_media(&[blob("dup", 10, 10, "image/png")]),
-            MediaEntries::ZERO
+            MediaEntryCount::ZERO
         );
-        assert_eq!(st.media_count(), MediaEntries::new(1));
+        assert_eq!(st.media_count(), MediaEntryCount::new(1));
     }
 
     #[test]
@@ -751,8 +751,8 @@ mod tests {
         // An empty hash means Sync has not returned the blake2b yet: never seed a
         // placeholder key collaborators could not resolve.
         let n = st.seed_media(&[blob("", 10, 10, "image/png")]);
-        assert_eq!(n, MediaEntries::ZERO);
-        assert_eq!(st.media_count(), MediaEntries::ZERO);
+        assert_eq!(n, MediaEntryCount::ZERO);
+        assert_eq!(st.media_count(), MediaEntryCount::ZERO);
     }
 
     /// `TOILE-IO-059`: the slot an import names a blob by until Sync answers
@@ -771,11 +771,11 @@ mod tests {
             media: MediaRef::Pending(ImportSlot::ZERO.next()),
             ..blob("unused", 1, 1, "image/png")
         };
-        assert_eq!(st.seed_media(&[minted, pending]), MediaEntries::ZERO);
-        assert_eq!(st.media_count(), MediaEntries::ZERO);
+        assert_eq!(st.seed_media(&[minted, pending]), MediaEntryCount::ZERO);
+        assert_eq!(st.media_count(), MediaEntryCount::ZERO);
         assert_eq!(
             st.seed_media(&[blob("realhash", 1, 1, "image/png")]),
-            MediaEntries::new(1)
+            MediaEntryCount::new(1)
         );
     }
 
@@ -823,7 +823,7 @@ mod tests {
         assert!(out.requests.is_empty());
         assert!(has_report(&out), "an ImportReport is surfaced");
         assert_eq!(st.element_count(), ElementCount::new(1));
-        assert_eq!(st.pending_import_count(), PendingImports::ZERO);
+        assert_eq!(st.pending_import_count(), PendingImportCount::ZERO);
     }
 
     /// A file lands where the user dropped it, not at the coordinates it carried
@@ -950,7 +950,7 @@ mod tests {
         assert_eq!(out.requests.len(), 1);
         assert!(out.update.is_none(), "board unchanged until media resolves");
         assert_eq!(st.element_count(), ElementCount::ZERO);
-        assert_eq!(st.pending_import_count(), PendingImports::new(1));
+        assert_eq!(st.pending_import_count(), PendingImportCount::new(1));
 
         // Sync returns the real hash: the batch lands with it, no `pending:` left.
         let id = first_upload_id(&out);
@@ -967,9 +967,9 @@ mod tests {
             "the applied batch broadcasts a delta"
         );
         assert_eq!(st.element_count(), ElementCount::new(1));
-        assert_eq!(st.media_count(), MediaEntries::new(1));
+        assert_eq!(st.media_count(), MediaEntryCount::new(1));
         assert!(st.media_meta("realhash").is_some());
-        assert_eq!(st.pending_import_count(), PendingImports::ZERO);
+        assert_eq!(st.pending_import_count(), PendingImportCount::ZERO);
         // One Undo removes the whole (now-resolved) import.
         st.handle_command(ToileCommand::Undo);
         assert_eq!(st.element_count(), ElementCount::ZERO);
@@ -1043,17 +1043,17 @@ mod tests {
         );
         assert_eq!(
             (st.element_count(), st.media_count()),
-            (ElementCount::new(1), MediaEntries::new(1))
+            (ElementCount::new(1), MediaEntryCount::new(1))
         );
         st.handle_command(ToileCommand::Undo);
         assert_eq!(
             (st.element_count(), st.media_count()),
-            (ElementCount::ZERO, MediaEntries::ZERO)
+            (ElementCount::ZERO, MediaEntryCount::ZERO)
         );
         st.handle_command(ToileCommand::Redo);
         assert_eq!(
             (st.element_count(), st.media_count()),
-            (ElementCount::new(1), MediaEntries::new(1))
+            (ElementCount::new(1), MediaEntryCount::new(1))
         );
         assert!(st.media_meta("realhash").is_some());
     }
@@ -1081,7 +1081,7 @@ mod tests {
         );
         assert_eq!(
             st.pending_import_count(),
-            PendingImports::ZERO,
+            PendingImportCount::ZERO,
             "the registry is drained"
         );
     }

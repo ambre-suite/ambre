@@ -500,7 +500,7 @@ impl FixtureGen for ToileBenchFixture {
             // viewport, so a cull that returned everything shows up as a figure.
             Self::Board50k => build_spread_board(
                 &mut state,
-                Tiles::new(100),
+                TileCount::new(100),
                 BoardLength::new(4_000.0),
                 BoardLength::new(160.0),
             ),
@@ -508,7 +508,7 @@ impl FixtureGen for ToileBenchFixture {
             // camera, so every element of this board is a visible element.
             Self::DenseViewport2k => build_spread_board(
                 &mut state,
-                Tiles::new(4),
+                TileCount::new(4),
                 BoardLength::new(600.0),
                 BoardLength::new(24.0),
             ),
@@ -522,7 +522,7 @@ impl FixtureGen for ToileBenchFixture {
 
 ambre_core::define_tally! {
     /// How many copies of the one built block a spread board holds.
-    pub struct Tiles;
+    pub struct TileCount;
 }
 
 /// Elements of one [`TILE`] block, spread over `tiles` copies on a
@@ -542,7 +542,7 @@ ambre_core::define_tally! {
 ///   meets a mix rather than one geometry repeated.
 fn build_spread_board(
     state: &mut ToileState,
-    tiles: Tiles,
+    tiles: TileCount,
     tile_pitch: BoardLength,
     element_pitch: BoardLength,
 ) {

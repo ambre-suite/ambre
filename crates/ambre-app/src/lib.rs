@@ -709,7 +709,7 @@ pub fn main() {
     // the view published. They write back one intent at a time, the same seam
     // as the inspector's model / restyle pair.
     let toile_comments = toile_chrome::CommentSignals {
-        panel: RwSignal::new(Default::default()),
+        panel: RwSignal::new(ambre_toile::ui::PanelState::Closed),
         list: RwSignal::new(Vec::new()),
         open: RwSignal::new(None),
         draft: RwSignal::new(None),
@@ -718,7 +718,7 @@ pub fn main() {
     // The deck (`toile-presentation`): the panel renders the frames the view
     // read back and answers with one order edit at a time.
     let toile_deck = toile_chrome::DeckSignals {
-        panel: RwSignal::new(Default::default()),
+        panel: RwSignal::new(ambre_toile::ui::PanelState::Closed),
         view: RwSignal::new(Default::default()),
         intent: RwSignal::new(None),
     };
@@ -1741,14 +1741,14 @@ pub fn main() {
     let ch_toile_float_bar = RwSignal::new(None::<toile_chrome::FloatBar>);
     let ch_toile_quick_style = RwSignal::new(None::<toile_chrome::StyleEdit>);
     let ch_toile_comments = toile_chrome::CommentSignals {
-        panel: RwSignal::new(Default::default()),
+        panel: RwSignal::new(ambre_toile::ui::PanelState::Closed),
         list: RwSignal::new(Vec::new()),
         open: RwSignal::new(None),
         draft: RwSignal::new(None),
         intent: RwSignal::new(None),
     };
     let ch_toile_deck = toile_chrome::DeckSignals {
-        panel: RwSignal::new(Default::default()),
+        panel: RwSignal::new(ambre_toile::ui::PanelState::Closed),
         view: RwSignal::new(Default::default()),
         intent: RwSignal::new(None),
     };
