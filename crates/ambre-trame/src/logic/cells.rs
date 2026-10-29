@@ -369,11 +369,7 @@ impl TrameState {
                 Err(refused) => {
                     // The write is refused, and `finish_cell_writes` says so
                     // (`TRAME-UI-164`).
-                    self.write_refusals.push(match refused {
-                        Unmaterialized::BeyondCap => WriteRefusal::BeyondCap,
-                        Unmaterialized::IdsExhausted => WriteRefusal::IdsExhausted,
-                        Unmaterialized::Unwritten => WriteRefusal::Unwritten,
-                    });
+                    self.write_refusals.push(WriteRefusal::from(refused));
                     return;
                 }
             };
@@ -484,6 +480,17 @@ pub(super) enum Unmaterialized {
     IdsExhausted,
     /// The document refused a new line, so the cell still has none.
     Unwritten,
+}
+
+impl From<Unmaterialized> for WriteRefusal {
+    /// The refusal a batch reports for a cell given no lines.
+    fn from(refused: Unmaterialized) -> Self {
+        match refused {
+            Unmaterialized::BeyondCap => Self::BeyondCap,
+            Unmaterialized::IdsExhausted => Self::IdsExhausted,
+            Unmaterialized::Unwritten => Self::Unwritten,
+        }
+    }
 }
 
 impl Unmaterialized {

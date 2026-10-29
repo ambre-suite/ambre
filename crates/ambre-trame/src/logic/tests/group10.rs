@@ -294,3 +294,61 @@ fn copied(state: &mut TrameState) -> crate::ClipboardPayload {
     };
     payload
 }
+
+/// Whether `out` carries the notice for a session out of fresh uids.
+fn says_ids_exhausted(out: &TrameOutcome) -> bool {
+    out.display
+        .iter()
+        .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh row")))
+}
+
+/// A merged fill whose tile needs a line the session cannot mint says so.
+/// The tile is left unmerged, and the refusal reaches the user (`TRAME-243`).
+#[test]
+fn a_merged_tile_short_of_a_line_says_so() {
+    let mut state = TrameState::new();
+    set(&mut state, 0, 0, "1");
+    let at = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    state.handle_command(TrameCommand::MergeCells {
+        rect: crate::CellRect::spanning(at(0), at(1)),
+    });
+    state.uid_counter = Some(ambre_core::IdCounter::new(u32::MAX));
+    let out = state.handle_command(TrameCommand::FillRange {
+        sheet_id: state.active_sheet.clone(),
+        src: crate::CellRect::spanning(at(0), at(1)),
+        dest: crate::CellRect::spanning(at(0), at(3)),
+        mode: FillMode::Copy,
+    });
+    assert!(says_ids_exhausted(&out), "the refused merge says so");
+    assert!(
+        !state.merges.contains_key(&at(2)),
+        "no merge without its lines"
+    );
+}
+
+/// A fill that carries a style onto a cell short of a line says so, even when
+/// the value it copies is empty (`TRAME-243`).
+#[test]
+fn a_carried_style_short_of_a_line_says_so() {
+    let mut state = TrameState::new();
+    select(&mut state, 0, 0, 0, 0);
+    state.handle_command(TrameCommand::SetCellStyle {
+        patch: crate::StylePatch {
+            bold: Some(ambre_bus::Weight::Bold),
+            ..Default::default()
+        },
+    });
+    state.uid_counter = Some(ambre_core::IdCounter::new(u32::MAX));
+    let at = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let out = state.handle_command(TrameCommand::FillRange {
+        sheet_id: state.active_sheet.clone(),
+        src: crate::CellRect::spanning(at(0), at(0)),
+        dest: crate::CellRect::spanning(at(0), at(2)),
+        mode: FillMode::Copy,
+    });
+    assert!(says_ids_exhausted(&out), "the refused style says so");
+    assert!(
+        state.bold.contains(&at(1)),
+        "the cell with a line is styled"
+    );
+}

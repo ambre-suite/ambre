@@ -235,6 +235,13 @@ impl TrameState {
         series: Option<Series>,
     ) {
         let master = tile.top_left;
+        // The whole tile needs its lines, its far corner last. A tile short
+        // of them is left as it was, and the refusal is reported once
+        // (`TRAME-243`).
+        if let Err(refused) = self.materialize(tile.bottom_right) {
+            self.write_refusals.push(WriteRefusal::from(refused));
+            return;
+        }
         let text = if let Some(series) = series {
             let Some(value) = series.at(term) else {
                 self.write_refusals.push(WriteRefusal::PastLargestNumber);
@@ -259,8 +266,10 @@ impl TrameState {
         // Carry the source master's formatting onto the tile master.
         self.carry_style(src_master, master);
         // A tile cut down to one cell by the drag edge is a plain cell.
-        if !tile.is_single_cell() {
-            let _ = self.insert_merge_entry(tile);
+        if !tile.is_single_cell()
+            && let Err(refused) = self.insert_merge_entry(tile)
+        {
+            self.write_refusals.push(WriteRefusal::from(refused));
         }
     }
 
@@ -324,7 +333,14 @@ impl TrameState {
         sources: &[FormulaSource],
         series: Option<Series>,
     ) {
-        let _ = self.materialize(at);
+        // The value and the carried style both need the cell's lines. A cell
+        // short of them is refused once, and the refusal is reported. That
+        // holds for an empty value too, which writes no line of its own
+        // (`TRAME-243`).
+        if let Err(refused) = self.materialize(at) {
+            self.write_refusals.push(WriteRefusal::from(refused));
+            return;
+        }
 
         let text = if let Some(series) = series {
             let Some(value) = series.at(term) else {
