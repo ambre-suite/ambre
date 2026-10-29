@@ -294,8 +294,11 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     // Never pre-allocate the whole ceiling. Grow the buffer as we go, reading
     // one byte past the ceiling to distinguish "exactly at the limit" from
     // "over the limit". `take` caps the reader at `ceiling + 1` bytes.
+    //
     // A refused body leaves a partial plaintext in `out`. It drops under the
-    // wrapper, which wipes it.
+    // wrapper, which wipes it: the wrapper is built only to drop. That wipe
+    // reaches `out` alone. The decoder's own block and window buffers, and
+    // each buffer `read_to_end` outgrows, drop unwiped, out of its reach.
     let mut out = Vec::new();
     let refusal = match decoder
         .by_ref()
@@ -334,7 +337,9 @@ fn open_payload(
 ) -> Result<OpenedPayload, PipelineError> {
     // The opened bytes are lent, with no copy, through the door `ARCH-047`
     // admits. They are still compressed, and the wrapper wipes them as it
-    // drops, on the error paths too.
+    // drops, on the error paths too. The zstd decoder copies them on the
+    // way, into its block and window buffers and into each buffer
+    // `read_to_end` outgrows. Those copies are out of the wrapper's reach.
     let opened = envelope::open(sealed, aad, doc_key, author_pub)?;
     opened.with_plaintext(|plaintext| {
         let (version, body) = plaintext.split_first().ok_or(PipelineError::Decompress)?;
