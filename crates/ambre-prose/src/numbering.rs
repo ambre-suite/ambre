@@ -148,17 +148,22 @@ pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<ListOrdinal>
 /// answer is the tree's own parent chain, so it cannot disagree with the shape
 /// the peers converged on.
 #[must_use]
-pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> u32 {
-    let mut depth = 0_u32;
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> ListDepth {
+    let mut depth = ListDepth::ZERO;
     let mut here = *item_id;
     while let Some(loro::TreeParentId::Node(parent)) = tree.parent(here) {
         if doc::block_type_of(tree, &parent) != Some(crate::events::BlockType::ListItem) {
             break;
         }
-        depth = depth.saturating_add(1);
+        depth = depth.incremented();
         here = parent;
     }
     depth
+}
+
+ambre_core::define_tally! {
+    /// How many list items an item nests inside: zero for a top item.
+    pub struct ListDepth;
 }
 
 /// Visit every live block in document order, depth first and parents before
@@ -426,8 +431,14 @@ mod tests {
         state.handle_command(ProseCommand::IndentList { block_id: second });
 
         let tree = doc::blocks(state.document());
-        assert_eq!(list_depth(&tree, &crate::events::tree_id(first)), 0);
-        assert_eq!(list_depth(&tree, &crate::events::tree_id(second)), 1);
+        assert_eq!(
+            list_depth(&tree, &crate::events::tree_id(first)),
+            ListDepth::ZERO
+        );
+        assert_eq!(
+            list_depth(&tree, &crate::events::tree_id(second)),
+            ListDepth::new(1)
+        );
         // The nested item opens a run of its own under its new parent.
         assert_eq!(ordinal(&state, &second), Some(1));
     }

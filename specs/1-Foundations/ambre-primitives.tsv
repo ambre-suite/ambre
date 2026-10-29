@@ -1847,7 +1847,6 @@ ambre-prose | src/commands.rs | crate::commands | save_file_title() | ret | Stri
 ambre-prose | src/commands.rs | crate::commands | strikethrough_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | underline_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/commands.rs | crate::commands | undo_title() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/comment.rs | crate::comment | reply_at(index) | param | usize	math	count, size or local index
 ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/count.rs | crate::count | tally(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | Anchor.value | field | String	free-text	text content / label / parser input
@@ -1976,7 +1975,6 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.bold |
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.italic | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.strike | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.underline | field | bool	generic	independent flag or predicate
-ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer.shaped | field | u64	math	count, size or local index
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::coverage_grew() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure_run(text) | param | &str	free-text	text content / label / parser input
@@ -1984,7 +1982,6 @@ ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::register_faces(bytes) | param | Vec<u8>	math	count, size or local index
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shape(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shape_window((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
-ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::shaped() | ret | u64	math	count, size or local index
 ambre-prose | src/layout/measure.rs | crate::layout::measure | REACH | const | usize	math	count, size or local index
 ambre-prose | src/layout/measure.rs | crate::layout::measure | ShapeFn | alias | dyn FnMut(&str,&[MarkedSpan],&EffectiveStyle)->Layout<ParleyBrush>+'a	free-text	text content / label / parser input
 ambre-prose | src/layout/measure.rs | crate::layout::measure | WINDOW_SHARE | const | usize	math	count, size or local index
@@ -2011,9 +2008,6 @@ ambre-prose | src/layout/place.rs | crate::layout::place | MeasuredBlock.keep_wi
 ambre-prose | src/layout/place.rs | crate::layout::place | MeasuredBlock::splittable() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/place.rs | crate::layout::place | moves_to_keep_with_successor() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::register_faces(bytes) | param | Vec<u8>	math	count, size or local index
-ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::settle_toc() | ret | usize	math	count, size or local index
-ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::shaped() | ret | u64	math	count, size or local index
-ambre-prose | src/layout/reflow.rs | crate::layout::reflow | TOC_SETTLE_PASSES | const | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | <ShapedRun as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::is_empty() | ret | bool	generic	independent flag or predicate
@@ -2100,7 +2094,6 @@ ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | Data
 ambre-prose | src/logic/clipboard/sink.rs | crate::logic::clipboard::sink | NodeId.0 | field | usize	newtype-inner	the slot of a node in the parse arena, handed out only by Nodes::push
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::add_comment(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::edit_reply(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::own_reply() | ret | Result<(LoroList,usize),ProseOutcome>	math	count, size or local index
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::refresh_anchors() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::reply_to_comment(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_anchors() | ret | bool	generic	independent flag or predicate
@@ -2158,12 +2151,10 @@ ambre-prose | src/mark.rs | crate::mark | is_owned_anchor() | ret | bool	generic
 ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	generic	predicate result
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	math	count, size or local index
-ambre-prose | src/numbering.rs | crate::numbering | list_depth() | ret | u32	math	count, size or local index
 ambre-prose | src/numbering.rs | crate::numbering | walk(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	independent flag or predicate
 ambre-prose | src/numbering.rs | crate::numbering | walk::descend() | ret | bool	generic	tree walk callback: continue or stop
 ambre-prose | src/numbering.rs | crate::numbering | walk::descend(visit) | param | &mut impl FnMut(&LoroTree,&TreeID)->bool	generic	tree walk callback: continue or stop
-ambre-prose | src/probe.rs | crate::probe | KeyProbe.frame | field | u64	math	count, size or local index
-ambre-prose | src/probe.rs | crate::probe | KeyProbe.unconfirmed | field | Vec<(ambre_bus::app::prose::TextAck,ambre_core::PageTime,u64)>	math	count, size or local index
+ambre-prose | src/probe.rs | crate::probe | FrameNumber.0 | field | u64	newtype-inner	how many animation frames began before a moment, held at the top
 ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	layout geometry local to algorithm

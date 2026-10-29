@@ -261,6 +261,11 @@ pub(crate) fn shipped_measurer() -> Measurer {
     measurer
 }
 
+ambre_core::define_tally! {
+    /// How many runs a measurer shaped.
+    pub struct ShapedCount;
+}
+
 /// The shaper, and the two contexts parley reuses between blocks.
 ///
 /// One per layout pass. Holding it across a pass is what keeps a font from
@@ -270,7 +275,7 @@ pub struct Measurer {
     layout_cx: LayoutContext<ParleyBrush>,
     /// How many runs have been shaped. It is what makes a reflow that
     /// re-shapes an untouched block observable (`PROSE-083`).
-    shaped: u64,
+    shaped: ShapedCount,
     /// The scripts met since the last full run that no loaded face covers
     /// (`PROSE-110`). A layout carries it so a consumer can tell a settled
     /// measurement from one still waiting for a face.
@@ -294,14 +299,14 @@ impl Measurer {
         Self {
             font_cx: ambre_draw::sealed_font_context(),
             layout_cx: LayoutContext::new(),
-            shaped: 0,
+            shaped: ShapedCount::ZERO,
             missing: ScriptSet::new(),
         }
     }
 
     /// How many runs this measurer has shaped since it was built.
     #[must_use]
-    pub fn shaped(&self) -> u64 {
+    pub fn shaped(&self) -> ShapedCount {
         self.shaped
     }
 
@@ -352,7 +357,7 @@ impl Measurer {
         style: &EffectiveStyle,
         width: DocPx,
     ) -> Layout<ParleyBrush> {
-        self.shaped = self.shaped.saturating_add(1);
+        self.shaped = self.shaped.incremented();
         let absent = fonts::missing_scripts(&mut self.font_cx, text);
         self.missing.extend(absent);
         shape_paragraph(
@@ -449,7 +454,7 @@ impl Measurer {
                 shape_paragraph(font_cx, layout_cx, (part, spans), style, width)
             },
         )?;
-        self.shaped = self.shaped.saturating_add(1);
+        self.shaped = self.shaped.incremented();
         Some(ShapedRun::from_data(data))
     }
 
@@ -962,7 +967,7 @@ mod tests {
             );
             let (whole_metrics, _, whole) =
                 measurer.measure_with_lines((&text, &marks), &style, DocPx::new(width), &[], None);
-            assert_eq!(measurer.shaped(), before + 2);
+            assert_eq!(measurer.shaped(), before.plus(ShapedCount::new(2)));
             if next.data().segment_count() > RunSegmentCount::ONE {
                 partial += 1;
             }

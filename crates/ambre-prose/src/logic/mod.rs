@@ -428,8 +428,10 @@ impl ProseState {
 
     /// How many runs the paginator has shaped, over its life.
     #[cfg(test)]
-    pub(crate) fn shaped_count(&self) -> u64 {
-        self.paginator.as_ref().map_or(0, Paginator::shaped)
+    pub(crate) fn shaped_count(&self) -> crate::layout::measure::ShapedCount {
+        self.paginator
+            .as_ref()
+            .map_or(crate::layout::measure::ShapedCount::ZERO, Paginator::shaped)
     }
 
     /// How many faces this document measures on (`PROSE-115`).

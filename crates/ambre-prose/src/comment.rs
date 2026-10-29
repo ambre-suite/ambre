@@ -67,10 +67,29 @@ pub(crate) fn replies_of(entry: &Fields<AnnotKey>) -> Option<LoroList> {
     }
 }
 
-/// Reply `index` of a list.
+ambre_core::define_index! {
+    /// The place of a reply in its thread's list, the head being zero.
+    pub struct ReplySlot(usize);
+    /// A number of replies of one thread.
+    pub struct ReplySlotCount;
+    /// The signed gap between two replies of one thread.
+    pub struct ReplySlotDelta(isize);
+    /// A stretch of replies of one thread.
+    pub struct ReplySlotSpan;
+    /// A list indexed by reply of one thread.
+    pub struct ReplySlotVec;
+}
+
+/// Every place of a reply list, the head first.
 #[must_use]
-pub(crate) fn reply_at(list: &LoroList, index: usize) -> Option<Fields<ReplyKey>> {
-    match list.get(index) {
+pub(crate) fn reply_slots(list: &LoroList) -> ReplySlotSpan {
+    ReplySlotSpan::from_count(ReplySlot::ZERO, ReplySlotCount::from_len(list.len()))
+}
+
+/// Reply `slot` of a list.
+#[must_use]
+pub(crate) fn reply_at(list: &LoroList, slot: ReplySlot) -> Option<Fields<ReplyKey>> {
+    match list.get(slot.to_usize()) {
         Some(ValueOrContainer::Container(Container::Map(map))) => Some(Fields::of(map)),
         _ => None,
     }
@@ -100,8 +119,9 @@ pub(crate) fn replies(entry: &Fields<AnnotKey>) -> Vec<CommentReply> {
     let Some(list) = replies_of(entry) else {
         return Vec::new();
     };
-    (0..list.len())
-        .filter_map(|index| reply_at(&list, index))
+    reply_slots(&list)
+        .into_iter()
+        .filter_map(|slot| reply_at(&list, slot))
         .filter_map(|map| read_reply(&map))
         .collect()
 }

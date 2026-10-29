@@ -21,7 +21,7 @@ use loro::{LoroDoc, TreeID};
 
 use crate::doc;
 use crate::layout::geometry::PageBox;
-use crate::layout::measure::{BlockIndex, Measurer};
+use crate::layout::measure::{BlockIndex, Measurer, ShapedCount};
 use crate::layout::pass::{self, PageLayout};
 use crate::layout::place::{self, BlockLayout, MeasuredBlock, Placement};
 use crate::layout::run::LayoutVersion;
@@ -34,7 +34,12 @@ use crate::toc;
 /// A document whose entries move the pages they list, which move the entries,
 /// could otherwise lay itself out without end. The bound makes it cheap rather
 /// than fatal: the last layout stands, one page number possibly off.
-pub const TOC_SETTLE_PASSES: usize = 3;
+pub const TOC_SETTLE_PASSES: PassCount = PassCount::new(3);
+
+ambre_core::define_tally! {
+    /// How many layouts one settling of the tables of contents ran.
+    pub struct PassCount;
+}
 
 /// The layout of one document, and what it takes to update it in place.
 ///
@@ -98,7 +103,7 @@ impl Paginator {
 
     /// How many runs have been shaped, over the life of this paginator.
     #[must_use]
-    pub fn shaped(&self) -> u64 {
+    pub fn shaped(&self) -> ShapedCount {
         self.measurer.shaped()
     }
 
@@ -314,14 +319,14 @@ impl Paginator {
     /// once no page moved, or after [`TOC_SETTLE_PASSES`] layouts, and answers
     /// how many it ran. No reflow calls it: a keystroke never pays for it
     /// (`PROSE-084`).
-    pub fn settle_toc(&mut self, document: &LoroDoc) -> usize {
+    pub fn settle_toc(&mut self, document: &LoroDoc) -> PassCount {
         let Some(tree) = doc::blocks_read(document) else {
-            return 0;
+            return PassCount::ZERO;
         };
         if self.measured.is_empty() {
             let _ = self.full(document);
         }
-        let mut passes = 0;
+        let mut passes = PassCount::ZERO;
         while passes < TOC_SETTLE_PASSES {
             let pages = toc::heading_pages(&tree, &self.layout.blocks);
             if pages == self.toc_pages {
@@ -329,7 +334,7 @@ impl Paginator {
             }
             self.toc_pages = pages;
             let _ = self.reflow(document, &[]);
-            passes += 1;
+            passes = passes.incremented();
         }
         passes
     }
@@ -584,7 +589,7 @@ mod tests {
         grow(&document, edited, 2);
         let _ = paginator.reflow(&document, std::slice::from_ref(edited));
         // `PROSE-083`: one block was named, so one run was shaped.
-        assert_eq!(paginator.shaped(), after_full + 1);
+        assert_eq!(paginator.shaped(), after_full.incremented());
     }
 
     #[test]
@@ -601,7 +606,10 @@ mod tests {
         let _ = paginator.reflow(&document, &[]);
         // `PROSE-082`: the inherited size moved, so every block is re-styled
         // and shaped again, even though no block was named dirty.
-        assert_eq!(paginator.shaped(), after_full + ids.len() as u64);
+        assert_eq!(
+            paginator.shaped(),
+            after_full.plus(ShapedCount::of_len(ids.len()))
+        );
     }
 
     #[test]
@@ -617,7 +625,10 @@ mod tests {
         let _ = crate::doc::Fields::of(page).insert(crate::doc::PageKey::WidthMm, 100.0);
         let _ = paginator.reflow(&document, &[]);
         // `PROSE-082`: the width moved, so every block is shaped again.
-        assert_eq!(paginator.shaped(), after_full + ids.len() as u64);
+        assert_eq!(
+            paginator.shaped(),
+            after_full.plus(ShapedCount::of_len(ids.len()))
+        );
     }
 
     #[test]
@@ -699,13 +710,16 @@ mod tests {
         let passes = paginator.settle_toc(&document);
         // `PROSE-019`: at least one pass, since the first layout measured the
         // entries on no page at all, and never more than the bound.
-        assert!((1..=TOC_SETTLE_PASSES).contains(&passes), "{passes}");
+        assert!(
+            passes > PassCount::ZERO && passes <= TOC_SETTLE_PASSES,
+            "{passes}"
+        );
         let tree = crate::doc::blocks(&document);
         let pages = crate::toc::heading_pages(&tree, &paginator.layout().blocks);
         assert_eq!(&pages, paginator.toc_pages());
         assert_eq!(pages.len(), headings.len());
         // Settled, a second call finds nothing to move.
-        assert_eq!(paginator.settle_toc(&document), 0);
+        assert_eq!(paginator.settle_toc(&document), PassCount::ZERO);
     }
 
     #[test]
@@ -751,7 +765,7 @@ mod convergence {
     use loro::LoroDoc;
     use proptest::prelude::*;
 
-    use super::Paginator;
+    use super::{Paginator, ShapedCount};
 
     /// Where the faces the application ships sit in the workspace.
     const FONT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
@@ -856,7 +870,10 @@ mod convergence {
         };
         paginator.register_faces(bytes);
         let layout = paginator.reflow(&document, &[]).clone();
-        assert_eq!(paginator.shaped(), after_full + paragraphs.len() as u64);
+        assert_eq!(
+            paginator.shaped(),
+            after_full.plus(ShapedCount::of_len(paragraphs.len()))
+        );
         assert!(layout.missing_scripts.is_empty());
     }
 }

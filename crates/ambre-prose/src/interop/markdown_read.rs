@@ -24,10 +24,7 @@ pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize(16 * 1024 * 1024
 /// hostile file cannot grow the recursion of the passes that follow.
 pub const MAX_LIST_DEPTH: ListDepth = ListDepth::new(16);
 
-ambre_core::define_tally! {
-    /// How many list items an item nests inside: zero for a top item.
-    pub struct ListDepth;
-}
+pub use crate::numbering::ListDepth;
 
 /// Read `bytes` as Markdown.
 ///
