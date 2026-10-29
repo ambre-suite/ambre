@@ -215,10 +215,11 @@ impl ToileState {
                 .unwrap_or_else(PoisonError::into_inner)
                 .wires,
         );
-        if noted.unplaced || !noted.ids.is_empty() {
+        let whole = noted.reach == super::caches::Reach::Whole;
+        if whole || !noted.ids.is_empty() {
             let mut wires = self.wires.borrow_mut();
             let mut ids: Vec<ConnectorId> = noted.ids.into_iter().collect();
-            if noted.unplaced {
+            if whole {
                 // Every arrow the cache held, and every one the map holds.
                 ids.extend(wires.keys().cloned());
                 ids.extend(

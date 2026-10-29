@@ -2660,10 +2660,7 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_svg(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | push_element() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.layers | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | BoardTouched.unplaced | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
-ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | WiresTouched.unplaced | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | body_of() | ret | Option<String>	generic	generic parser/reader/formatter over text: None when the key is missing

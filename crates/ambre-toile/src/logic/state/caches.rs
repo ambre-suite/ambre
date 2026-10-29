@@ -91,14 +91,14 @@ impl ToileState {
                 .unwrap_or_else(PoisonError::into_inner)
                 .board,
         );
-        if touched.unplaced {
+        if touched.reach == Reach::Whole {
             self.rebuild_caches();
             return;
         }
         for id in &touched.elements {
             self.refresh_element(id);
         }
-        if touched.layers {
+        if touched.layers == PaintOrder::Changed {
             self.rematerialize_layers();
         }
         self.refresh_groups(&touched.elements);
@@ -309,19 +309,34 @@ struct BoardTouched {
     /// Every element a change wrote to: its entry, or a container under it.
     elements: HashSet<ElementId>,
     /// Whether the paint order changed.
-    layers: bool,
-    /// Set by a change under the element map the events do not place under
-    /// one element. The caches then rebuild whole.
-    unplaced: bool,
+    layers: PaintOrder,
+    /// `Whole` once a change under the element map the events do not place
+    /// under one element arrives. The caches then rebuild whole.
+    reach: Reach,
 }
 
 /// The arrows a change wrote.
 #[derive(Debug, Default)]
 pub(super) struct WiresTouched {
     pub(super) ids: HashSet<ConnectorId>,
-    /// Set by a change under the arrow map the events do not place under one
-    /// arrow. The arrow cache then reads the whole map again.
-    pub(super) unplaced: bool,
+    /// `Whole` once a change under the arrow map the events do not place under
+    /// one arrow arrives. The arrow cache then reads the whole map again.
+    pub(super) reach: Reach,
+}
+
+ambre_core::define_flag! {
+    /// Whether a commit changed the paint order.
+    enum PaintOrder {
+        Kept,
+        Changed,
+    }
+
+    /// What a cache refresh reads: the entries the events named, or the whole
+    /// map, when a change landed under it that no event places.
+    pub(super) enum Reach {
+        Entries,
+        Whole,
+    }
 }
 
 /// The shared sink a document subscription writes into.
@@ -346,14 +361,14 @@ pub(super) fn watch(doc: &LoroDoc) -> (TouchedSink, Subscription) {
 fn note(change: &ContainerDiff<'_>, touched: &mut Touched) {
     if matches!(change.target, ContainerID::Root { name, .. } if name.as_str() == Root::Layers.as_str())
     {
-        touched.board.layers = true;
+        touched.board.layers = PaintOrder::Changed;
         return;
     }
     let board = &mut touched.board;
     if let Some(keys) = keys_under(change, Root::Elements) {
         match keys {
             Some(keys) => board.elements.extend(keys.into_iter().map(ElementId)),
-            None => board.unplaced = true,
+            None => board.reach = Reach::Whole,
         }
         return;
     }
@@ -361,7 +376,7 @@ fn note(change: &ContainerDiff<'_>, touched: &mut Touched) {
     if let Some(keys) = keys_under(change, Root::Connectors) {
         match keys {
             Some(keys) => wires.ids.extend(keys.into_iter().map(ConnectorId)),
-            None => wires.unplaced = true,
+            None => wires.reach = Reach::Whole,
         }
     }
 }
