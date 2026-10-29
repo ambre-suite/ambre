@@ -7,7 +7,7 @@
 //! It is pure and holds no CRDT, so the UI may call it (`UI-THREAD-051`).
 //! Both threads then compute the same text from the same three strings.
 
-use ambre_core::{CharCount, CharOffset};
+use ambre_core::{ByteCount, CharCount, CharOffset};
 
 /// Edit steps past which a diff stops looking for the shortest script. A
 /// longer change becomes one hunk over everything between the common prefix
@@ -25,8 +25,8 @@ enum Side {
 /// One run of the base, `start..end` in characters, replaced by `text`. An
 /// empty run is an insertion before `start`.
 struct Hunk {
-    start: usize,
-    end: usize,
+    start: CharOffset,
+    end: CharOffset,
     text: String,
     side: Side,
 }
@@ -34,9 +34,9 @@ struct Hunk {
 /// One step of an edit script over the trimmed middle of the base.
 enum Step {
     /// The base character at this index goes.
-    Delete(usize),
+    Delete(CharOffset),
     /// The character comes in before the base character at this index.
-    Insert(usize, char),
+    Insert(CharOffset, char),
 }
 
 /// One edit of the stored text: `delete` characters from `at` go, and `insert`
@@ -79,14 +79,17 @@ pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
     // the middle is decoded and diffed. A close then costs little more than a
     // copy of the body, however long it is (`TOILE-UI-383`).
     let (head, tail) = common_ends(base, stored, typed);
-    fn middle(s: &str, head: usize, tail: usize) -> &str {
-        s.get(head..s.len() - tail).unwrap_or_default()
+    fn middle(s: &str, head: ByteCount, tail: ByteCount) -> &str {
+        s.get(head.to_usize()..s.len() - tail.to_usize())
+            .unwrap_or_default()
     }
     let mut merge = merge_middle(
         middle(base, head, tail),
         middle(stored, head, tail),
         middle(typed, head, tail),
     );
+    // A Rust string slices at bytes, so the ends cross into bytes here only.
+    let (head, tail) = (head.to_usize(), tail.to_usize());
     let shift = base.get(..head).unwrap_or_default().chars().count();
     for e in &mut merge.edits {
         e.at += CharCount::from_len(shift);
@@ -103,7 +106,7 @@ pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
 
 /// The bytes the three texts share at their start and at their end. Both cut
 /// at a character boundary, and they never overlap in any of the three.
-fn common_ends(base: &str, stored: &str, typed: &str) -> (usize, usize) {
+fn common_ends(base: &str, stored: &str, typed: &str) -> (ByteCount, ByteCount) {
     let (a, b, c) = (base.as_bytes(), stored.as_bytes(), typed.as_bytes());
     let same = |((x, y), z): &((&u8, &u8), &u8)| x == y && y == z;
     let mut head = a.iter().zip(b).zip(c).take_while(same).count();
@@ -124,7 +127,7 @@ fn common_ends(base: &str, stored: &str, typed: &str) -> (usize, usize) {
     while !base.is_char_boundary(base.len() - tail) {
         tail -= 1;
     }
-    (head, tail)
+    (ByteCount::from_len(head), ByteCount::from_len(tail))
 }
 
 /// [`merge_edits`] over texts that share no start and no end, positions
@@ -142,11 +145,10 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
     // The characters written so far: where the next edit lands in the stored
     // text once the edits before it apply.
     let mut pos = 0;
-    let mut at = 0;
+    let mut at = CharOffset::ZERO;
     let mut rest = hunks.as_slice();
     while let Some(first) = rest.first() {
-        let (len, end) = cluster(rest);
-        let (group, tail) = rest.split_at(len);
+        let (group, tail, end) = cluster(rest);
         let kept = run(&base, at, first.start);
         out.extend(kept);
         pos += kept.len();
@@ -188,22 +190,23 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
         at = end;
         rest = tail;
     }
-    out.extend(run(&base, at, base.len()));
+    out.extend(run(&base, at, CharOffset::from_usize(base.len())));
     Merge { text: out, edits }
 }
 
 /// The base characters `start..end`, or none when the run is out of range.
-fn run(base: &[char], start: usize, end: usize) -> &[char] {
-    base.get(start..end).unwrap_or_default()
+fn run(base: &[char], start: CharOffset, end: CharOffset) -> &[char] {
+    base.get(start.to_usize()..end.to_usize())
+        .unwrap_or_default()
 }
 
-/// How many leading hunks of a sorted list collide, and the base index their
-/// group ends at. Two runs collide when they overlap, and two insertions
-/// collide when they land at the same index. An insertion at the edge of a
-/// run does not collide with it: it lands before or after it.
-fn cluster(hunks: &[Hunk]) -> (usize, usize) {
+/// The leading hunks of a sorted list that collide, the hunks after them, and
+/// the base index their group ends at. Two runs collide when they overlap, and
+/// two insertions collide when they land at the same index. An insertion at
+/// the edge of a run does not collide with it: it lands before or after it.
+fn cluster(hunks: &[Hunk]) -> (&[Hunk], &[Hunk], CharOffset) {
     let Some(first) = hunks.first() else {
-        return (0, 0);
+        return (&[], hunks, CharOffset::ZERO);
     };
     let mut end = first.end;
     let mut points = first.start == first.end;
@@ -217,12 +220,19 @@ fn cluster(hunks: &[Hunk]) -> (usize, usize) {
         points &= point;
         len += 1;
     }
-    (len, end)
+    let (group, rest) = hunks.split_at(len);
+    (group, rest, end)
 }
 
 /// The base run `start..end` with the hunks of one side applied, or `None`
 /// when that side leaves the run alone.
-fn region(base: &[char], group: &[Hunk], side: Side, start: usize, end: usize) -> Option<String> {
+fn region(
+    base: &[char],
+    group: &[Hunk],
+    side: Side,
+    start: CharOffset,
+    end: CharOffset,
+) -> Option<String> {
     let mut hunks = group.iter().filter(|h| h.side == side).peekable();
     hunks.peek()?;
     let mut out = String::new();
@@ -251,8 +261,8 @@ fn diff(base: &[char], side: &[char], tag: Side) -> Vec<Hunk> {
     let a = a.get(..a.len() - tail).unwrap_or_default();
     let b = b.get(..b.len() - tail).unwrap_or_default();
     let whole = || Hunk {
-        start: head,
-        end: head + a.len(),
+        start: CharOffset::from_usize(head),
+        end: CharOffset::from_usize(head + a.len()),
         text: b.iter().collect(),
         side: tag,
     };
@@ -260,7 +270,7 @@ fn diff(base: &[char], side: &[char], tag: Side) -> Vec<Hunk> {
         (true, true) => Vec::new(),
         (true, false) | (false, true) => vec![whole()],
         (false, false) => match myers(a, b) {
-            Some(steps) => hunks(steps, head, tag),
+            Some(steps) => hunks(steps, CharCount::from_len(head), tag),
             None => vec![whole()],
         },
     }
@@ -268,12 +278,12 @@ fn diff(base: &[char], side: &[char], tag: Side) -> Vec<Hunk> {
 
 /// Group a script into hunks, shifting each index by `head`. Adjacent steps
 /// share one hunk.
-fn hunks(steps: Vec<Step>, head: usize, tag: Side) -> Vec<Hunk> {
+fn hunks(steps: Vec<Step>, head: CharCount, tag: Side) -> Vec<Hunk> {
     let mut out: Vec<Hunk> = Vec::new();
     for step in steps {
         let (at, gone, ch) = match step {
-            Step::Delete(i) => (i + head, 1, None),
-            Step::Insert(i, c) => (i + head, 0, Some(c)),
+            Step::Delete(i) => (i + head, CharCount::new(1), None),
+            Step::Insert(i, c) => (i + head, CharCount::ZERO, Some(c)),
         };
         match out.last_mut() {
             Some(h) if h.end == at => {
@@ -358,7 +368,7 @@ fn backtrack(trace: &[Vec<isize>], b: &[char], n: isize, m: isize) -> Option<Vec
         let prev_x = reach(v, prev_k, offset)?;
         let prev_y = prev_x - prev_k;
         if d > 0 {
-            let at = usize::try_from(prev_x).ok()?;
+            let at = CharOffset::from_usize(usize::try_from(prev_x).ok()?);
             steps.push(if down {
                 Step::Insert(at, *b.get(usize::try_from(prev_y).ok()?)?)
             } else {
@@ -457,7 +467,8 @@ mod tests {
             let base: Vec<char> = base.chars().collect();
             let side: Vec<char> = side.chars().collect();
             let hunks = diff(&base, &side, Side::Typed);
-            let rebuilt = region(&base, &hunks, Side::Typed, 0, base.len())
+            let end = CharOffset::from_usize(base.len());
+            let rebuilt = region(&base, &hunks, Side::Typed, CharOffset::ZERO, end)
                 .unwrap_or_else(|| base.iter().collect());
             proptest::prop_assert_eq!(rebuilt, side.iter().collect::<String>());
         }

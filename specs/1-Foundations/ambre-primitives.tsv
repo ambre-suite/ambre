@@ -2749,37 +2749,28 @@ ambre-toile | src/logic/stroke.rs | crate::logic::stroke | SEGMENTS_PER_SPAN | c
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | catmull_rom(t) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | EDIT_CAP | const | usize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Edit.insert | field | String	free-text	user text being merged
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Hunk.end | field | usize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Hunk.start | field | usize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Hunk.text | field | String	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Merge.text | field | String	free-text	user text being merged
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Step::Delete.0 | field | usize	newtype-inner	single field of its own wrapper
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Step::Insert.0 | field | usize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Step::Insert.1 | field | char	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(b) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(m) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(n) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(trace) | param | &[Vec<isize>]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | cluster() | ret | (usize,usize)	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down() | ret | Option<bool>	local	private Myers step: whether the path comes down (an insertion), read by the two diff loops
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(d) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(k) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(offset) | param | isize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(v) | param | &[isize]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends() | ret | (usize,usize)	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends(base) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends(stored) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends(typed) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | diff(base) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | diff(side) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | hunks(head) | param | usize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits(base) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits(stored) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits(typed) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits::middle() | ret | &str	generic	string helper local to the merge
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits::middle(head) | param | usize	generic	string helper local to the merge
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits::middle(s) | param | &str	generic	string helper local to the merge
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_edits::middle(tail) | param | usize	generic	string helper local to the merge
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_middle(base) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_middle(stored) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_middle(typed) | param | &str	free-text	user text being merged
@@ -2795,12 +2786,8 @@ ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach(offset)
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach(v) | param | &[isize]	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region() | ret | Option<String>	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region(base) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region(end) | param | usize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region(start) | param | usize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run() | ret | &[char]	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run(base) | param | &[char]	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run(end) | param | usize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run(start) | param | usize	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | TEXT_LIMIT | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_announcement() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_text() | ret | Option<&str>	free-text	label, message or user text
