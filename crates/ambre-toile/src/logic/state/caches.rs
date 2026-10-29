@@ -174,8 +174,7 @@ impl ToileState {
     /// The whole element map, resolved. Every deep read of the board goes
     /// through here, so `board_walks` counts what a command costs (`TOILE-056`).
     pub(super) fn walk_elements(&self) -> LoroValue {
-        self.board_walks
-            .set(self.board_walks.get().saturating_add(1));
+        self.board_walks.set(self.board_walks.get().incremented());
         self.doc.get_map(Root::Elements.as_str()).get_deep_value()
     }
 

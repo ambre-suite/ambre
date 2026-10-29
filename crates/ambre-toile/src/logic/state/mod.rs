@@ -50,6 +50,7 @@ mod groups;
 mod import;
 mod names;
 mod presence;
+pub use import::{MediaEntries, PendingImports};
 pub use presence::PRESENCE_TTL;
 pub(crate) mod presentation;
 mod reactions;
@@ -92,6 +93,12 @@ pub(crate) use names::{
     ConfigKey, ConnectorKey, Fields, MediaKey, MessageKey, ThreadKey, board, entry, root_map,
 };
 
+ambre_core::define_tally! {
+    /// How many times the whole element map has been resolved: a cost probe
+    /// (`TOILE-056`).
+    pub struct BoardWalks;
+}
+
 /// Per-document Toile engine.
 pub struct ToileState {
     doc: LoroDoc,
@@ -124,7 +131,7 @@ pub struct ToileState {
     /// How many times the whole element map has been resolved. A cost probe a
     /// test reads to show a read walks no board (`TOILE-056`); a `Cell`, since
     /// the reads that would walk take `&self`.
-    board_walks: Cell<u64>,
+    board_walks: Cell<BoardWalks>,
     /// Per-session monotonic id-minting counter.
     counter: IdCounter,
     peer: ambre_core::PeerId,
@@ -357,7 +364,7 @@ impl ToileState {
             _watch: watch,
             wires: std::cell::RefCell::default(),
             wires_gone: std::cell::RefCell::default(),
-            board_walks: Cell::new(0),
+            board_walks: Cell::new(BoardWalks::ZERO),
             counter: IdCounter::ZERO,
             peer: ambre_core::PeerId(peer),
             viewport: Viewport::default(),
@@ -1185,7 +1192,7 @@ impl ToileState {
     }
 
     /// How many times the whole element map has been resolved. Test helper.
-    pub fn board_walks(&self) -> u64 {
+    pub fn board_walks(&self) -> BoardWalks {
         self.board_walks.get()
     }
 

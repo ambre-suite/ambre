@@ -123,8 +123,8 @@ impl SpatialIndex {
     }
 
     /// Number of leaves. Test helper.
-    pub fn len(&self) -> usize {
-        self.tree.size()
+    pub fn len(&self) -> ambre_core::ElementCount {
+        ambre_core::ElementCount::of_len(self.tree.size())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -211,7 +211,7 @@ mod tests {
             idx.remove(&ElementId(format!("e{i}")));
         }
         assert_eq!(idx.walks(), 0, "no call walked the index");
-        assert_eq!(idx.len(), 4_900);
+        assert_eq!(idx.len(), ambre_core::ElementCount::new(4_900));
         let moved = Viewport {
             center: Point::new(8.0, 5.0),
             zoom: ambre_core::ZoomFactor::positive(1.0),
@@ -229,7 +229,7 @@ mod tests {
         idx.insert(bounds("a", 0.0, 0.0, 10.0, 10.0));
         idx.insert(bounds("nan", f64::NAN, 0.0, 10.0, 10.0));
         idx.remove(&ElementId("nan".to_owned()));
-        assert_eq!(idx.len(), 1);
+        assert_eq!(idx.len(), ambre_core::ElementCount::new(1));
         assert_eq!(idx.walks(), 1);
     }
 }

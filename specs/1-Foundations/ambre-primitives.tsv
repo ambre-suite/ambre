@@ -2626,14 +2626,10 @@ ambre-toile | src/logic/connector.rs | crate::logic::connector | anchor_is_horiz
 ambre-toile | src/logic/connector.rs | crate::logic::connector | outline_meets() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/connector.rs | crate::logic::connector | segment_meets() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::is_empty() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::len() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_axis() | ret | f64	foreign-api	the f64 a kurbo Point or Rect holds on one axis
 ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_axis(v) | param | f64	foreign-api	the f64 a kurbo Point or Rect holds on one axis
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | Entry.pixels | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache.capacity | field | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::is_empty() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::len() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::new(capacity) | param | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::pixels() | ret | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve(pixels) | param | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
@@ -2728,23 +2724,12 @@ ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | rend
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::frame_name() | ret | Option<String>	free-text	label, message or user text: None when the frame has no name
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::is_group() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileState::rename_frame(name) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | IMPORT_SLICE | const | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ImportJob.creates | field | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ImportJob.done | field | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ImportJob::total() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_service_error(reason) | param | String	free-text	error reason text from ApiError, shown in a toast
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::has_pending_work() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::media_count() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::pending_import_count() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::run_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::seed_media() | ret | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::start_import(budget) | param | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.board_walks | field | Cell<u64>	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.entry_end | field | Option<i32>	generic	Loro Counter (i32) as Loro defines it
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecodable | field | std::cell::Cell<bool>	local	private latch: whether a stored value failed to decode; read only by the notice of this state
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_session() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::board_walks() | ret | u64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_push_layer_raw(s) | param | &str	generic	debug/test accessor over raw fields
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_raw_layers() | ret | Vec<String>	generic	debug/test accessor over raw fields
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::import_remote(update) | param | &[u8]	generic	Loro import bytes: a delta or a snapshot alike, the caller holds which
