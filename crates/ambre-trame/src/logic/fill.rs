@@ -11,6 +11,7 @@
 use super::*;
 use crate::formula::shift::shift_formula;
 use ambre_bus::FillMode;
+use ambre_bus::app::trame::CellNumber;
 
 /// A cell's or a tile's place in its fill line's series, counted from the
 /// source origin. Signed: a fill runs either way.
@@ -27,17 +28,18 @@ impl Term {
 }
 
 /// An arithmetic series a fill line extrapolates: the value at the source
-/// origin, and the difference between two neighbours.
+/// origin, and the difference between two neighbours. Both are finite.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Series {
-    start: f64,
-    step: f64,
+    start: CellNumber,
+    step: CellNumber,
 }
 
 impl Series {
-    /// The value at `term`.
-    fn at(self, term: Term) -> f64 {
-        self.start + term.0 as f64 * self.step
+    /// The value at `term`, `None` past the largest number: the series stops
+    /// there (`TRAME-UI-180`).
+    fn at(self, term: Term) -> Option<CellNumber> {
+        CellNumber::new(self.start.get() + term.0 as f64 * self.step.get()).ok()
     }
 }
 
@@ -234,7 +236,11 @@ impl TrameState {
     ) {
         let master = tile.top_left;
         let text = if let Some(series) = series {
-            FormulaSource::new(format_number(series.at(term)))
+            let Some(value) = series.at(term) else {
+                self.write_refusals.push(WriteRefusal::PastLargestNumber);
+                return;
+            };
+            format_number(value)
         } else if src_raw.is_formula() {
             shift_formula(
                 src_raw,
@@ -321,7 +327,11 @@ impl TrameState {
         let _ = self.materialize(at);
 
         let text = if let Some(series) = series {
-            FormulaSource::new(format_number(series.at(term)))
+            let Some(value) = series.at(term) else {
+                self.write_refusals.push(WriteRefusal::PastLargestNumber);
+                return;
+            };
+            format_number(value)
         } else {
             // Tiled source index: wrap into the source line so a fill longer
             // than the source repeats the pattern (an upward fill stays in range).
@@ -409,29 +419,27 @@ pub(super) fn merged_tiles<P: Line>(s1: P, s2: P, d1: P, d2: P, block: P::Count)
 ///   progression (this is the [`FillMode::Auto`] trigger).
 /// - [`FillMode::Series`] with a single numeric source: step `1` (Excel/Sheets
 ///   "Fill Series" on a lone number).
-/// - Anything else: `None` (the line is copied).
+/// - Anything else: `None` (the line is copied). A step past the largest
+///   number is no series either (`TRAME-UI-180`).
 fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
     if mode == FillMode::Copy {
         return None;
     }
     // Every source cell must be a plain numeric literal (a formula or text breaks
     // the series and the line falls back to copy/reindex).
-    let nums: Vec<f64> = sources
-        .iter()
-        .map(|s| parse_num(s.as_str()))
-        .collect::<Option<_>>()?;
+    let nums: Vec<CellNumber> = sources.iter().map(parse_num).collect::<Option<_>>()?;
     match nums.as_slice() {
         [] => None,
         [only] => (mode == FillMode::Series).then_some(Series {
             start: *only,
-            step: 1.0,
+            step: CellNumber::new(1.0).ok()?,
         }),
         [first, second, rest @ ..] => {
-            let step = second - first;
+            let step = CellNumber::new(second.get() - first.get()).ok()?;
             let arithmetic = rest
                 .iter()
                 .zip(nums.iter().skip(1))
-                .all(|(v, prev)| (v - prev - step).abs() < 1e-9);
+                .all(|(v, prev)| (v.get() - prev.get() - step.get()).abs() < 1e-9);
             arithmetic.then_some(Series {
                 start: *first,
                 step,
@@ -442,20 +450,21 @@ fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
 
 /// Parse a plain numeric literal, or `None` for empty / non-numeric / formula
 /// cells (which cannot participate in a numeric series).
-fn parse_num(raw: &str) -> Option<f64> {
-    let t = raw.trim();
+fn parse_num(raw: &FormulaSource) -> Option<CellNumber> {
+    let t = raw.as_str().trim();
     if t.is_empty() || t.starts_with('=') {
         return None;
     }
-    crate::formula::types::finite_number(t)
+    crate::formula::types::finite_number(t).and_then(|n| CellNumber::new(n).ok())
 }
 
 /// Render an extrapolated series value as cell text: an integral value drops the
 /// decimals (`3.0 -> "3"`), otherwise Rust's shortest round-trip form is used.
-fn format_number(v: f64) -> String {
-    if v.fract() == 0.0 && v.abs() < 1e15 {
+fn format_number(value: CellNumber) -> FormulaSource {
+    let v = value.get();
+    FormulaSource::new(if v.fract() == 0.0 && v.abs() < 1e15 {
         format!("{}", v as i64)
     } else {
         format!("{v}")
-    }
+    })
 }

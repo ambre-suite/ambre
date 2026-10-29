@@ -3218,10 +3218,6 @@ ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bo
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
-ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number(v) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num() | ret | Option<f64>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(haystack) | param | &str	free-text	the displayed text of a cell; the query is the typed FoldedNeedle and the extent a MatchExtent
@@ -3606,9 +3602,6 @@ ambre-murmure | src/paint.rs | crate::paint | LaidRow::holds() | ret | bool	gene
 ambre-murmure | src/paint.rs | crate::paint | RowBounds::holds() | ret | bool	generic	predicate result
 ambre-murmure | src/paint.rs | crate::paint | painter_px(at) | param | f64	math	the f64 a kurbo rectangle of the surface takes, converted at the painter boundary
 ambre-murmure | src/paint.rs | crate::paint | surface_px() | ret | f64	math	the f64 a kurbo rectangle of the surface takes, converted at the painter boundary
-ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.start | field | f64	math	start and step of the linear fill series, a cell value
-ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	start and step of the linear fill series, a cell value
-ambre-trame | src/logic/fill.rs | crate::logic::fill | Series::at() | ret | f64	math	start and step of the linear fill series, a cell value
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.hours | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.minutes | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.seconds | field | u32	math	calendar arithmetic: a field of the time of day the number format prints

@@ -434,13 +434,15 @@ impl TrameState {
             .count();
         let spent = refusals.contains(&WriteRefusal::IdsExhausted);
         let unwritten_lines = refusals.contains(&WriteRefusal::Unwritten);
+        let past_largest = refusals.contains(&WriteRefusal::PastLargestNumber);
         let mut unknown: Vec<SheetName> = refusals
             .into_iter()
             .filter_map(|r| match r {
                 WriteRefusal::UnknownSheet(name) => Some(name),
-                WriteRefusal::BeyondCap | WriteRefusal::IdsExhausted | WriteRefusal::Unwritten => {
-                    None
-                }
+                WriteRefusal::BeyondCap
+                | WriteRefusal::IdsExhausted
+                | WriteRefusal::Unwritten
+                | WriteRefusal::PastLargestNumber => None,
             })
             .collect();
         unknown.sort();
@@ -458,6 +460,11 @@ impl TrameState {
         }
         if unwritten_lines {
             events.push(unwritten());
+        }
+        if past_largest {
+            events.push(TrameEvent::Error {
+                message: "the series runs past the largest number; the fill stops there".to_owned(),
+            });
         }
         events.extend(unknown.into_iter().map(|name| TrameEvent::Error {
             message: format!("no sheet is named \"{name}\": the formula was not written"),

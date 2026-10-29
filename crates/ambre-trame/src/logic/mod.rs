@@ -122,6 +122,9 @@ enum WriteRefusal {
     IdsExhausted,
     /// The document refused the cell's new line.
     Unwritten,
+    /// A fill series runs past the largest number at the cell, so the fill
+    /// stops there (`TRAME-UI-180`).
+    PastLargestNumber,
 }
 
 /// Per-document state for a Trame (spreadsheet) document.

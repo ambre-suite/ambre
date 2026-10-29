@@ -94,8 +94,8 @@ fn an_imported_number_that_is_not_finite_stays_text() {
     assert_eq!(numbers_in_col_a(&mut state, 8), no_numbers(8));
 }
 
-/// A fill copies a spelling of a number that is not finite as text. A series
-/// that runs past the largest number writes text too (`TRAME-245`).
+/// A fill copies a spelling of a number that is not finite as text
+/// (`TRAME-245`).
 #[test]
 fn a_filled_number_that_is_not_finite_stays_text() {
     let mut state = TrameState::new();
@@ -108,22 +108,50 @@ fn a_filled_number_that_is_not_finite_stays_text() {
         dest: crate::CellRect::spanning(cell(0), cell(1)),
         mode: crate::FillMode::Copy,
     });
-    seed_col_a(&mut state, &["NaN", "NaN", "1e308", "1.7e308"]);
-    state.handle_command(TrameCommand::FillRange {
+    assert_eq!(read_cell(&mut state, 1, 0), "NaN");
+    assert_eq!(numbers_in_col_a(&mut state, 2), no_numbers(2));
+}
+
+/// A series stops at its last finite value: the cells past it keep what
+/// they held, and the fill says so. The series wrote the text `inf` there
+/// before (`TRAME-UI-180`).
+#[test]
+fn a_series_past_the_largest_number_stops_there() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["1e308", "1.7e308", "", "kept"]);
+    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let sheet_id = state.active_sheet.clone();
+    let out = state.handle_command(TrameCommand::FillRange {
         sheet_id,
-        src: crate::CellRect::spanning(cell(2), cell(3)),
-        dest: crate::CellRect::spanning(cell(2), cell(4)),
+        src: crate::CellRect::spanning(cell(0), cell(1)),
+        dest: crate::CellRect::spanning(cell(0), cell(3)),
         mode: crate::FillMode::Series,
     });
-    assert_eq!(read_cell(&mut state, 1, 0), "NaN");
-    assert_eq!(read_cell(&mut state, 4, 0), "inf");
-    assert_eq!(numbers_in_col_a(&mut state, 5), {
-        let mut expected = no_numbers(5);
-        let yes = CellValue::Boolean(true).to_display();
-        expected[2] = yes.clone();
-        expected[3] = yes;
-        expected
+    assert_eq!(read_cell(&mut state, 2, 0), "");
+    assert_eq!(read_cell(&mut state, 3, 0), "kept");
+    assert!(
+        out.display.iter().any(
+            |e| matches!(e, TrameEvent::Error { message } if message.contains("largest number"))
+        ),
+        "the fill says where it stopped"
+    );
+}
+
+/// A step that is not finite makes no series: the source repeats, and no
+/// cell reads `inf` (`TRAME-UI-180`).
+#[test]
+fn a_step_past_the_largest_number_repeats_the_source() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["-1.7e308", "1.7e308"]);
+    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let sheet_id = state.active_sheet.clone();
+    state.handle_command(TrameCommand::FillRange {
+        sheet_id,
+        src: crate::CellRect::spanning(cell(0), cell(1)),
+        dest: crate::CellRect::spanning(cell(0), cell(2)),
+        mode: crate::FillMode::Series,
     });
+    assert_eq!(read_cell(&mut state, 2, 0), "-1.7e308");
 }
 
 /// A function the library does not know reads as `#N/A`, never as a blank
