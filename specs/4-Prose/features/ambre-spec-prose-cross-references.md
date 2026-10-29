@@ -92,7 +92,12 @@ struct Record {
     kind:    CrossRefKind,
 }
 
-pub fn encode(target: TreeID, kind: &CrossRefKind) -> String;
+/// The hex text of a `Record`, as the mark stores it. It spells a label of the document, so it
+/// has no `Debug`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct CrossRefMark(String);
+
+pub fn encode(target: TreeID, kind: &CrossRefKind) -> CrossRefMark;
 pub fn decode(value: &str) -> Option<(TreeID, CrossRefKind)>;
 
 // ambre_bus::app::prose. The variant's position is its stored code: a new kind is appended,
