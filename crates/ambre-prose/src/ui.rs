@@ -340,6 +340,25 @@ pub struct ExportFile {
     pub bytes: ambre_core::FileBytes,
 }
 
+ambre_core::define_flag! {
+    /// Whether a press waits for the first block it asked for.
+    pub(crate) enum BlockWait {
+        /// No press waits.
+        Idle,
+        /// A press waits, and the caret goes to the block once a layout
+        /// carries it.
+        Awaiting,
+    }
+
+    /// Whether a sync holds the input until it is answered.
+    pub(crate) enum SyncHold {
+        /// The input flows on while the sync is in flight.
+        Passes,
+        /// The sync follows a structural command, and the input waits.
+        Holds,
+    }
+}
+
 /// The UI thread's whole state for one open Prose document.
 ///
 /// Every field is either handed over by the Logic thread or local to this
@@ -439,7 +458,7 @@ pub struct ProseUiState {
     pub(crate) last_press: Option<crate::input::Press>,
     /// A press asked for a first block, and the caret goes to it once a
     /// layout carries it (`PROSE-UI-072`).
-    pub(crate) awaiting_block: bool,
+    pub(crate) awaiting_block: BlockWait,
     /// A block asked to show that the layout in force does not carry. The
     /// view scrolls to it once a layout does (`PROSE-UI-212`).
     pub(crate) awaited_reveal: Option<BlockId>,
@@ -486,7 +505,7 @@ pub struct ProseUiState {
     pub(crate) popped: ambre_bus::app::prose::TextAck,
     /// The syncs sent and not yet answered, oldest first. One sent after a
     /// structural command holds the input until it is answered.
-    pub(crate) syncs: VecDeque<bool>,
+    pub(crate) syncs: VecDeque<SyncHold>,
     /// The input held meanwhile, replayed in order once it is answered.
     pub(crate) queued: VecDeque<crate::input::ProseInput>,
 }
@@ -638,7 +657,7 @@ impl ProseUiState {
             ProseEvent::Synced { acked } => {
                 self.take_acked(*acked, ChangeOrigin::Local);
                 // A split the document refused mints nothing to wait for.
-                if self.syncs.pop_front() == Some(true)
+                if self.syncs.pop_front() == Some(SyncHold::Holds)
                     && self
                         .splitting
                         .is_some_and(|split| split.new_block.is_none())

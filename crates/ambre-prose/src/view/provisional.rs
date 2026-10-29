@@ -78,7 +78,18 @@ pub(crate) struct Piece {
     pub table: Option<Arc<TableShape>>,
     /// Whether `run` is provisional, or `table` holds the provisional runs of
     /// its cell blocks: their offsets are then the document's.
-    pub provisional: bool,
+    pub provisional: PieceRuns,
+}
+
+ambre_core::define_flag! {
+    /// Whether a piece draws the runs the layout carries, or provisional
+    /// ones shaped on this thread.
+    pub(crate) enum PieceRuns {
+        /// The runs the layout carries: their offsets are the run's.
+        Laid,
+        /// Provisional runs: their offsets are the document's.
+        Provisional,
+    }
 }
 
 /// The marks over `bytes` of a text, counted from its start.
@@ -363,7 +374,7 @@ impl ProseUiState {
                     fragment: piece,
                     run: None,
                     table: Some(table),
-                    provisional,
+                    provisional: PieceRuns::from_bool(provisional),
                 });
                 continue;
             }
@@ -403,7 +414,7 @@ impl ProseUiState {
                 fragment: piece,
                 run,
                 table: None,
-                provisional: provisional.is_some(),
+                provisional: PieceRuns::from_bool(provisional.is_some()),
             });
         }
         let ghost_at = ghost_at

@@ -13,7 +13,7 @@ use ambre_core::{StepDirection, ViewPoint, ViewPx};
 
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
 use crate::layout::run::Affinity;
-use crate::ui::{ProseUiState, SendResult};
+use crate::ui::{BlockWait, ProseUiState, SendResult, SyncHold};
 use crate::view::caret::{Direction, SelectUnit, Spot};
 
 /// Two presses closer than this in time, and in place, count as one gesture.
@@ -243,7 +243,7 @@ impl ProseUiState {
         };
         self.sent_seen = sent_seen;
         if synced {
-            self.syncs.push_back(false);
+            self.syncs.push_back(SyncHold::Passes);
         }
         let mut barrier = false;
         for note in sent {
@@ -266,7 +266,7 @@ impl ProseUiState {
         }
         if barrier && send(ProseCommand::Sync { seen: self.seen }).accepted() {
             self.sent_seen = self.seen;
-            self.syncs.push_back(true);
+            self.syncs.push_back(SyncHold::Holds);
         }
         consumed
     }
@@ -309,7 +309,7 @@ impl ProseUiState {
 
     /// Whether a structural command is still unanswered.
     fn waiting(&self) -> bool {
-        self.syncs.iter().any(|holds| *holds)
+        self.syncs.contains(&SyncHold::Holds)
     }
 
     /// Act on the input held while a structural command was unanswered, in
@@ -324,7 +324,7 @@ impl ProseUiState {
             && send(ProseCommand::Sync { seen: self.seen }).accepted()
         {
             self.sent_seen = self.seen;
-            self.syncs.push_back(false);
+            self.syncs.push_back(SyncHold::Passes);
         }
         let mut consumed = false;
         while !self.waiting() {
@@ -853,7 +853,7 @@ impl ProseUiState {
                 style_id: None,
             };
             if send(command).accepted() {
-                self.awaiting_block = true;
+                self.awaiting_block = BlockWait::Awaiting;
             }
             return true;
         }
@@ -903,7 +903,7 @@ impl ProseUiState {
     /// A layout was taken: a caret a press asked a block for goes to the
     /// first one now (`PROSE-UI-072`).
     pub(crate) fn settle_awaited_block(&mut self) {
-        if !self.awaiting_block {
+        if self.awaiting_block == BlockWait::Idle {
             return;
         }
         let first = self
@@ -912,7 +912,7 @@ impl ProseUiState {
             .find(|(_, block)| self.shaped.blocks.contains_key(&block.block_id))
             .map(|(_, block)| crate::events::block_id(block.block_id));
         if let Some(block) = first {
-            self.awaiting_block = false;
+            self.awaiting_block = BlockWait::Idle;
             self.set_caret((block, DocOffset::ZERO));
         }
     }

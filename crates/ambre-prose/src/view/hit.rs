@@ -14,6 +14,7 @@ use crate::layout::place::BlockLayout;
 use crate::layout::run::{CellShape, RunOffset, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
+use crate::view::provisional::PieceRuns;
 use ambre_bus::app::prose::{DocOffset, VAlign};
 
 /// The part of a block one page shows.
@@ -343,7 +344,8 @@ impl ProseUiState {
             if let Some((id, offset)) = cell_hit(table, x, y) {
                 // A table drawn with its provisional runs counts the document
                 // in them, even once an input replayed since made them stale.
-                let drawn = chosen.provisional && self.drawn_provisional_run(id).is_some();
+                let drawn = chosen.provisional == PieceRuns::Provisional
+                    && self.drawn_provisional_run(id).is_some();
                 let offset = if drawn {
                     HitOffset::Drawn(DocOffset::new(offset.get()))
                 } else {
@@ -362,7 +364,7 @@ impl ProseUiState {
             }
             None => RunOffset::ZERO,
         };
-        let offset = if chosen.provisional {
+        let offset = if chosen.provisional == PieceRuns::Provisional {
             HitOffset::Drawn(DocOffset::new(offset.get()))
         } else {
             HitOffset::Laid(offset)
