@@ -3472,7 +3472,7 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(name) |
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(start) | param | &str	free-text	free text: user content, label, message or display string
 ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
-ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-api	the mark key a loro text delta reports; parsed into a HeaderField at once, the inverse of field_mark
+ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-api	the mark key a loro text delta reports; parsed into a HeaderField at once, the inverse of FieldMark
 ambre-prose | src/probe.rs | crate::probe | ProbeName::as_str() | ret | &'static str	foreign-api	the name performance.measure and performance.mark take, which the profiler shows
 ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conversion factor, millimetres to pixels
 ambre-prose | src/band.rs | crate::band | CivilDate.day | field | u32	newtype-inner	a component of the civil-date type, 1 to 31
