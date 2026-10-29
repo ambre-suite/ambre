@@ -168,6 +168,17 @@ mod tests {
         }
     }
 
+    /// Each level keeps the scale the level-indexed table gave it, shallowest
+    /// first, so no arm of the match swaps two levels.
+    #[test]
+    fn each_heading_level_is_drawn_at_its_own_scale() {
+        let table: [f32; 6] = [2.0, 1.5, 1.25, 1.1, 1.0, 0.9];
+        assert_eq!(table.len(), HeadingLevel::ALL.len());
+        for (level, scale) in HeadingLevel::ALL.into_iter().zip(table) {
+            assert_eq!(heading_scale(level).to_bits(), scale.to_bits(), "{level}");
+        }
+    }
+
     /// A property is taken from the first level that carries it
     /// (`PROSE-FEAT-311`).
     #[test]
