@@ -352,3 +352,20 @@ fn a_carried_style_short_of_a_line_says_so() {
         "the cell with a line is styled"
     );
 }
+
+/// An empty unstyled value filled onto a cell short of a line writes
+/// nothing the cell does not already read, so no notice is raised.
+#[test]
+fn an_empty_fill_onto_a_cell_short_of_a_line_says_nothing() {
+    let mut state = TrameState::new();
+    set(&mut state, 0, 1, "beside");
+    state.uid_counter = Some(ambre_core::IdCounter::new(u32::MAX));
+    let at = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let out = state.handle_command(TrameCommand::FillRange {
+        sheet_id: state.active_sheet.clone(),
+        src: crate::CellRect::spanning(at(0), at(0)),
+        dest: crate::CellRect::spanning(at(0), at(2)),
+        mode: FillMode::Copy,
+    });
+    assert!(!says_ids_exhausted(&out), "nothing was refused");
+}

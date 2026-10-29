@@ -32,14 +32,17 @@ impl Term {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Series {
     start: CellNumber,
-    step: CellNumber,
+    /// The value one term past the start. The step between the two may pass
+    /// the largest number, and every term but the start then does too.
+    next: CellNumber,
 }
 
 impl Series {
     /// The value at `term`, `None` past the largest number: the series stops
     /// there (`TRAME-UI-180`).
     fn at(self, term: Term) -> Option<CellNumber> {
-        CellNumber::new(self.start.get() + term.0 as f64 * self.step.get()).ok()
+        let step = self.next.get() - self.start.get();
+        CellNumber::new(self.start.get() + term.0 as f64 * step).ok()
     }
 }
 
@@ -333,15 +336,6 @@ impl TrameState {
         sources: &[FormulaSource],
         series: Option<Series>,
     ) {
-        // The value and the carried style both need the cell's lines. A cell
-        // short of them is refused once, and the refusal is reported. That
-        // holds for an empty value too, which writes no line of its own
-        // (`TRAME-243`).
-        if let Err(refused) = self.materialize(at) {
-            self.write_refusals.push(WriteRefusal::from(refused));
-            return;
-        }
-
         let text = if let Some(series) = series {
             let Some(value) = series.at(term) else {
                 self.write_refusals.push(WriteRefusal::PastLargestNumber);
@@ -360,8 +354,24 @@ impl TrameState {
                 None => FormulaSource::default(),
             }
         };
+        // The value and the carried style both need the cell's lines. A cell
+        // short of them is refused once, and the refusal is reported. A cell
+        // with no line is blank and unstyled already, so an empty value with
+        // no style to carry leaves nothing to refuse (`TRAME-243`).
+        if let Err(refused) = self.materialize(at) {
+            if !text.as_str().is_empty() || self.carries_style(from) {
+                self.write_refusals.push(WriteRefusal::from(refused));
+            }
+            return;
+        }
         self.write_cell(at, &text);
         self.carry_style(from, at);
+    }
+
+    /// Whether `from` holds a style a fill carries: bold, italic or a rich
+    /// style.
+    fn carries_style(&self, from: CellPos) -> bool {
+        self.bold.contains(&from) || self.italic.contains(&from) || self.styles.contains_key(&from)
     }
 
     /// Carry the formatting of `from` (bold/italic + rich style) onto `to`.
@@ -436,7 +446,7 @@ pub(super) fn merged_tiles<P: Line>(s1: P, s2: P, d1: P, d2: P, block: P::Count)
 /// - [`FillMode::Series`] with a single numeric source: step `1` (Excel/Sheets
 ///   "Fill Series" on a lone number).
 /// - Anything else: `None` (the line is copied). A step past the largest
-///   number is no series either (`TRAME-UI-180`).
+///   number is still a series, and it stops at its start (`TRAME-UI-180`).
 fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
     if mode == FillMode::Copy {
         return None;
@@ -446,19 +456,21 @@ fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
     let nums: Vec<CellNumber> = sources.iter().map(parse_num).collect::<Option<_>>()?;
     match nums.as_slice() {
         [] => None,
-        [only] => (mode == FillMode::Series).then_some(Series {
+        // One past the largest number adds nothing, so `next` is always finite.
+        [only] if mode == FillMode::Series => Some(Series {
             start: *only,
-            step: CellNumber::new(1.0).ok()?,
+            next: CellNumber::new(only.get() + 1.0).ok()?,
         }),
+        [_] => None,
         [first, second, rest @ ..] => {
-            let step = CellNumber::new(second.get() - first.get()).ok()?;
+            let step = second.get() - first.get();
             let arithmetic = rest
                 .iter()
                 .zip(nums.iter().skip(1))
-                .all(|(v, prev)| (v.get() - prev.get() - step.get()).abs() < 1e-9);
+                .all(|(v, prev)| (v.get() - prev.get() - step).abs() < 1e-9);
             arithmetic.then_some(Series {
                 start: *first,
-                step,
+                next: *second,
             })
         }
     }

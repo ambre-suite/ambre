@@ -137,21 +137,27 @@ fn a_series_past_the_largest_number_stops_there() {
     );
 }
 
-/// A step that is not finite makes no series: the source repeats, and no
-/// cell reads `inf` (`TRAME-UI-180`).
+/// A step past the largest number passes it at the first filled cell. The
+/// series stops there and says so, and no cell reads `inf` (`TRAME-UI-180`).
 #[test]
-fn a_step_past_the_largest_number_repeats_the_source() {
+fn a_step_past_the_largest_number_stops_at_once() {
     let mut state = TrameState::new();
-    seed_col_a(&mut state, &["-1.7e308", "1.7e308"]);
+    seed_col_a(&mut state, &["-1.7e308", "1.7e308", "kept"]);
     let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
     let sheet_id = state.active_sheet.clone();
-    state.handle_command(TrameCommand::FillRange {
+    let out = state.handle_command(TrameCommand::FillRange {
         sheet_id,
         src: crate::CellRect::spanning(cell(0), cell(1)),
         dest: crate::CellRect::spanning(cell(0), cell(2)),
         mode: crate::FillMode::Series,
     });
-    assert_eq!(read_cell(&mut state, 2, 0), "-1.7e308");
+    assert_eq!(read_cell(&mut state, 2, 0), "kept");
+    assert!(
+        out.display.iter().any(
+            |e| matches!(e, TrameEvent::Error { message } if message.contains("largest number"))
+        ),
+        "the fill says where it stopped"
+    );
 }
 
 /// A function the library does not know reads as `#N/A`, never as a blank

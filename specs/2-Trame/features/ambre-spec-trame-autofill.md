@@ -19,7 +19,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-067` | `POST` | A numeric pattern in the source MUST continue across the filled range. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_extrapolates_numeric_series`; `::fill_series_single_cell_increments_by_one`; `group6::fill_merged_series_increments_per_block` | none | verified |
-| `TRAME-UI-180` | `FAIL` | A series that runs past the largest number MUST NOT write the cells past it, and MUST answer with a notice saying so. | this spec section 3; `ambre-spec-trame-function-library.md` (`TRAME-244`) | `ambre_trame::logic::tests::group12::a_series_past_the_largest_number_stops_there` -- the cells past it keep what they held; `::a_step_past_the_largest_number_repeats_the_source` -- a step past it makes no series | none | verified |
+| `TRAME-UI-180` | `FAIL` | A series that runs past the largest number MUST NOT write the cells past it, and MUST answer with a notice saying so. | this spec section 3; `ambre-spec-trame-function-library.md` (`TRAME-244`) | `ambre_trame::logic::tests::group12::a_series_past_the_largest_number_stops_there` -- the cells past it keep what they held; `::a_step_past_the_largest_number_stops_at_once` -- a step past it stops at the first filled cell | none | verified |
 | `TRAME-UI-068` | `POST` | A source with no numeric pattern MUST be repeated verbatim. | this spec section 3 | `ambre_trame::logic::tests::group10::a_text_source_repeats_verbatim`; `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks` -- the merged path | none | verified |
 | `TRAME-UI-069` | `POST` | A filled formula MUST have its relative references shifted by its own offset from the source. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_copies_text_and_reindexes_formula` | none | verified |
 | `TRAME-UI-070` | `POST` | A source tiled by equal merged blocks MUST fill block by block, not cell by cell. | this spec section 3 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks`; `::fill_merged_series_increments_per_block`; `::fill_multi_merged_source_continues_pattern` | none | verified |
@@ -76,7 +76,7 @@ fill_drag: Option<(CellRect, (u32, u32))>,  // the source rectangle, and its blo
 3. It picks the mode: `Auto` without the modifier, otherwise `Series` on a single value and `Copy`
    on several.
 4. The Logic thread walks each fill line, extrapolating a numeric series or tiling the source. A
-   series stops at its last finite value, and a step past the largest number makes no series.
+   series stops at its last finite value, so a step past the largest number stops it at once.
 5. Each written formula shifts by its own offset; each written cell carries the source style.
 6. The selection grows to the whole filled rectangle.
 
