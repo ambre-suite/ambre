@@ -210,7 +210,16 @@ impl ToileState {
     /// and the caches.
     fn unbind_group(&mut self, group: &ElementId) {
         let children = self.children_of(group);
-        let parent = self.enclosing_group(group);
+        // The group's own container takes the children (`TOILE-157`): its
+        // enclosing group, else the frame that holds it. Concurrent adds can
+        // put it in two frames, and the smallest id wins on every peer.
+        let parent = self.enclosing_group(group).or_else(|| {
+            self.parents_of(group)
+                .iter()
+                .filter(|p| self.is_frame(p))
+                .min_by(|a, b| a.as_str().cmp(b.as_str()))
+                .cloned()
+        });
 
         // Remove the group element; the caller strips its layers node.
         let _ = self
@@ -218,17 +227,19 @@ impl ToileState {
             .get_map(Root::Elements.as_str())
             .delete(group.as_str());
 
-        // Re-parent the children to the enclosing group (board parent is implicit).
-        // Drop the ungrouped group from the parent's `children`, else it lingers as
-        // a dangling ref, desyncing recompute_groups from a full rebuild. Then
-        // append the surviving children.
-        if let Some(p) = &parent {
-            self.remove_child(p, group);
-            if let Some(list) = self.children_list(p) {
-                for c in &children {
-                    if list.push(c.as_str()).is_ok() {
-                        self.link_parent(c, p);
-                    }
+        // Drop the group from every list that names it, else it lingers as a
+        // dangling entry, desyncing the parent cache from a full rebuild. Then
+        // append the surviving children to its container (the board, when it
+        // had none).
+        for container in self.parents_of(group).to_vec() {
+            self.remove_child(&container, group);
+        }
+        if let Some(p) = &parent
+            && let Some(list) = self.children_list(p)
+        {
+            for c in &children {
+                if list.push(c.as_str()).is_ok() {
+                    self.link_parent(c, p);
                 }
             }
         }
@@ -355,8 +366,12 @@ impl ToileState {
     /// The ids of `ids` that some frame's children list holds, in the order
     /// given. Membership is the list, never the box (`TOILE-UI-384`). Read from
     /// the parent cache, so the cost follows `ids`, not the board (`TOILE-056`).
+    /// An id the board no longer holds is no member, though a list still names
+    /// it (`TOILE-272`). A frame add concurrent with the delete leaves that
+    /// entry, and so does a board the delete of an earlier build wrote.
     pub(super) fn framed_among(&self, ids: &[ElementId]) -> Vec<ElementId> {
         ids.iter()
+            .filter(|id| self.element_map(id).is_some())
             .filter(|id| self.parents_of(id).iter().any(|p| self.is_frame(p)))
             .cloned()
             .collect()
@@ -495,11 +510,12 @@ impl ToileState {
             .cloned()
     }
 
-    /// Remove `child` from `group`'s `children` list (first match). The cache
-    /// forgets the link even when `group` is gone, as a cascading delete leaves it.
-    pub(super) fn remove_child(&mut self, group: &ElementId, child: &ElementId) {
-        self.unlink_parent(child, group);
-        let Some(list) = self.children_list(group) else {
+    /// Remove `child` from the `children` list of `container`, a group or a
+    /// frame (first match). The cache forgets the link even when `container` is
+    /// gone, as a cascading delete leaves it.
+    pub(super) fn remove_child(&mut self, container: &ElementId, child: &ElementId) {
+        self.unlink_parent(child, container);
+        let Some(list) = self.children_list(container) else {
             return;
         };
         if let LoroValue::List(items) = list.get_deep_value()
@@ -575,9 +591,12 @@ impl ToileState {
                 let _ = elems.delete(id.as_str());
                 self.bounds.remove(id);
                 self.index.remove(id);
-                if let Some(g) = self.enclosing_group(id) {
-                    self.remove_child(&g, id);
+                // A frame can hold the emptied group, so every list that
+                // names it drops it (`TOILE-271`).
+                for container in self.parents_of(id).to_vec() {
+                    self.remove_child(&container, id);
                 }
+                self.forget_links(id);
             }
             self.strip_layers(|node| !matches!(node, NodeId::Element(e) if removed.contains(e)));
         }

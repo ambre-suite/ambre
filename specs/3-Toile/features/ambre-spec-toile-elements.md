@@ -64,6 +64,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-034` | `POST` | Deleting an element MUST drop its paint-order entry, its bounds and its index entry in the commit that removes it. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors` -- it reads the population and the paint order once the removal lands | none | verified |
 | `TOILE-198` | `POST` | Deleting an element MUST remove every connector that touched it at either endpoint. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors` -- it deletes one of two joined elements and leaves the board with the other alone | none | verified |
 | `TOILE-199` | `POST` | Deleting a container MUST take its members with it, drop each removed id from its membership list, and prune what the removal emptied. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_a_group_cascades_to_members` | none | verified |
+| `TOILE-271` | `POST` | Deleting an element MUST drop its id from every membership list that names it, a frame's as well as a group's. | this spec section 3; `TOILE-149` | `ambre_toile::logic::convergence_tests::a_delete_takes_the_id_off_its_frame_list` -- the frame's list read back on the deleter and on the peer the delta reached; `::a_pruned_group_leaves_its_frame_list` -- a group the delete emptied leaves the frame that held it; `::a_delete_concurrent_with_a_reorder_leaves_no_frame_member_behind` -- the history `TOILE-017` found, each peer's caches equal to a rebuild | none | verified |
 | `TOILE-200` | `FRAME` | A delete MUST NOT remove an element that is neither named nor a member of one that is. | this spec section 3 | structural -- the handler expands the named ids to their subtrees once and walks that set alone | none | verified |
 | `TOILE-201` | `FAIL` | A delete naming an element the board does not hold MUST answer an error. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_delete_naming_a_missing_element_answers_an_error` -- it names a ghost id and reads a `NoSuchElement` error back | none | verified |
 
@@ -92,10 +93,10 @@ status values are normative in `ambre-spec-template.md`.
   multiplier (`features/ambre-spec-toile-tools.md`).
 * **Boundary.** none of its own: an element lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). No lifecycle command opens a socket or holds a key.
-* **Verification.** 33 `verified`, 0 `failing`, 0 `untested`. Align and distribute holds
-  through nine tests over the pure geometry and five over the handler. A place in the 2-peer property
-  strategy lets `TOILE-037` claim convergence rather than assert it. The lock is driven through every
-  command it binds. A birth is held on its box, its seed and its style.
+* **Verification.** 34 `verified`. Align and distribute holds through nine tests over the pure
+  geometry and five over the handler. A place in the 2-peer property strategy lets `TOILE-037` claim
+  convergence rather than assert it. The lock is driven through every command it binds. A birth is
+  held on its box, its seed and its style.
 
 ---
 
@@ -157,7 +158,9 @@ kind is that document's field table.
 1. expand every listed id to its whole subtree, so deleting a group takes its members
    (`features/ambre-spec-toile-groups.md`);
 2. remove each element map, and stop when nothing was there (`TOILE-201`);
-3. drop each removed id from its container's membership list;
+3. drop each removed id from every membership list that names it, a frame's as well as a group's
+   (`TOILE-271`). The removal is a document write, so a peer refreshing that container unlinks the
+   id too;
 4. remove every connector that referenced a removed id at either endpoint (`TOILE-198`);
 5. strip both the elements and those connectors from the paint order;
 6. drop the bounds and index entries, then prune a container the deletion emptied (`TOILE-199`);

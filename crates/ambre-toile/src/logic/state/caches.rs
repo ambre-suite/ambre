@@ -204,6 +204,14 @@ impl ToileState {
         }
     }
 
+    /// Drop every entry naming `id`, as a member and as a container, once the
+    /// board no longer holds it and no list names it. A peer refreshing the
+    /// removed map drops the links its list held, so the two caches agree.
+    pub(super) fn forget_links(&mut self, id: &ElementId) {
+        self.forget_parents(id);
+        self.relink_members(id, Vec::new());
+    }
+
     /// Replace what `parent`'s `children` list names with `kids`, read back
     /// from the document after a change touched it.
     fn relink_members(&mut self, parent: &ElementId, kids: Vec<ElementId>) {

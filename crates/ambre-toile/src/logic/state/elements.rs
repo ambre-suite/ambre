@@ -521,12 +521,17 @@ impl ToileState {
         if !removed_any {
             return false;
         }
-        // Drop any group membership referencing a deleted node.
+        // Drop the id from every list that names it, a frame's as a group's
+        // (`TOILE-271`). The removal is a document write, so a peer that
+        // refreshes the container unlinks the id too. The parent cache names
+        // each list once per entry, so a list holding the id twice loses both.
+        // A deleted frame keeps its members on the board, and the cache drops
+        // the links its list held.
         for id in &expanded {
-            if let Some(g) = self.enclosing_group(id) {
-                self.remove_child(&g, id);
+            for container in self.parents_of(id).to_vec() {
+                self.remove_child(&container, id);
             }
-            self.forget_parents(id);
+            self.forget_links(id);
         }
         // Drop locally-owned connectors whose endpoint was deleted and
         // strip both elements and orphaned connectors from `layers`.

@@ -22,6 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-011` | `INV` | A frame's children MUST paint after the frame: a child's place in the paint order MUST be later than its frame's. | this spec section 3 | `ambre_toile::logic::convergence_tests::frame_children_paint_after_their_frame` -- it creates both children before the frame so the clamp has to fire, and reads the paint order back. The two membership tests this row also cited never read that order. `ambre_toile::logic::state::groups::tests::the_frame_clamp_ends_on_a_duplicate_entry` -- the clamp ends on a paint order holding a duplicate entry | none | verified |
 | `TOILE-049` | `INV` | An element MUST belong to at most one container: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group` -- both memberships are read back | none | verified |
+| `TOILE-272` | `INV` | A frame MUST NOT count as its member an element the board no longer holds, even when its list still names it. | this spec section 3; `TOILE-120` | `ambre_toile::logic::convergence_tests::a_frame_entry_for_a_deleted_element_names_no_member` -- a frame add concurrent with the delete, read on both peers and on a fresh load of the stored bytes, each with caches equal to a rebuild | none | verified |
 | `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
 | `TOILE-252` | `CONC` | Two users naming one frame at once MUST converge on one writer's whole name. | this spec section 3; `TOILE-018` | `ambre_toile::logic::convergence_tests::concurrent_names_converge_on_one_whole_name` -- two peers naming one frame, converging on one of the two names entire | none | verified |
 | `TOILE-253` | `OBS` | A frame MUST show its title on the board, outside its own box so nothing inside it is covered. A frame nobody named MUST show a placeholder in its place. | this spec section 4 | `ambre_toile::ui::render::tests::a_named_frame_reserves_a_title_band_above_itself` -- the band above the frame's own top edge, starting at its corner, widening with the title; `ambre_toile::ui::render::tests::an_unnamed_frame_reads_as_a_placeholder` -- the placeholder standing in, and never empty; `ambre_toile::ui::tool::tests::an_unnamed_frame_can_still_be_pressed_by_its_band` -- the placeholder band takes a press; `ambre_toile::ui::render::tests::a_frame_title_is_drawn_above_the_frame_in_its_ink` -- the glyphs shaped with the shipped face, drawn above the frame's top edge in screen space, a title in the title ink and the placeholder in the secondary ink | none | verified |
@@ -69,11 +70,10 @@ status values are normative in `ambre-spec-template.md`.
   child, so the figure is per child out of order and no bench measures it.
 * **Boundary.** none of its own: a frame and its membership live in the Logic thread's document and
   leave as bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 23 `verified`, 0 `untested`. What holds is membership as data, the
-  title beside it, and what a press or a double-click on it does. An element joins one frame,
-  detaches from its group and paints after it in one undo item, and the notes and the name converge.
-  The membership gesture is driven through what it refuses and skips, and the title's glyphs are
-  read back.
+* **Verification.** 24 `verified`. What holds is membership as data, the title beside it, and what a
+  press or a double-click on it does. An element joins one frame, detaches from its group and paints
+  after it in one undo item, and the notes and the name converge. The membership gesture is driven
+  through what it refuses and skips, and the title's glyphs are read back.
 
 ---
 
@@ -119,6 +119,12 @@ resizing, rotating, reordering and deleting a frame use the ordinary element com
 6. prune a group the move emptied;
 7. clamp every child that sits below the frame in the paint order to just above it (`TOILE-011`);
 8. commit once, so the membership and the clamp undo together (`TOILE-048`).
+
+**A list entry can outlive its element.** A delete takes the id off every list that names it
+(`TOILE-271`). A frame add concurrent with that delete still leaves the entry in the merged list.
+A board stored before `TOILE-271` holds such entries too, since its delete wrote no frame list. The
+read skips the entry, as the paint order skips a dead entry (`TOILE-120`), and no peer repairs it
+(`TOILE-272`).
 
 **Steps, when a frame is named:**
 
@@ -189,6 +195,7 @@ implied by position.
 | The ordering rule is enforced, not assumed | trusting the writers | a concurrent reorder can put a child under its frame, and the frame would then paint over its own contents. Clamping is cheap and makes the nesting a property rather than a convention |
 | The ordering rule is enforced, not assumed | painting the frame in a pass of its own | a frame painted in its own pass is always in front or always behind, so the paint order stops saying anything about two frames overlapping, and the author loses a control they had |
 | An element belongs to one container | multiple membership, resolved at derivation | a shape in a frame and in a group has two owners for one position, and the two would fight over it on every transform |
+| A member entry for a deleted element is skipped, not repaired | pruning the entry when a peer reads it | it turns a read into a write, and every peer reading the board at once would write the same removal. The skip costs one lookup per asked id |
 | Deleting a frame keeps its members | cascading like a group | it makes a frame dangerous to delete. A frame is a region, so removing the region should not remove what was inside it; a group is the opposite, because a group is a binding |
 | The notes and membership containers are born with the frame | seeding them on first use | the concurrent-first-write collision is silent and loses user text, and it costs two empty containers per frame to make impossible |
 

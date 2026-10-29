@@ -6183,39 +6183,309 @@ fn wide_viewport() -> crate::logic::index::Viewport {
     }
 }
 
+/// Two peers pinned to `peers`, which drive `ops_a` and `ops_b` in rounds. Each
+/// round applies one op per peer locally, then hands each delta to the other
+/// peer. Operations therefore target a partly-shared state. A final exchange of
+/// snapshots settles a straggler. An op picks its target by rank among ids
+/// that embed the peer. A found case therefore replays only under the same two
+/// ids, so the two ids are pinned.
+fn interleave(
+    peers: (ambre_core::PeerId, ambre_core::PeerId),
+    ops_a: &[PeerOp],
+    ops_b: &[PeerOp],
+) -> (ToileState, ToileState) {
+    let mut a = ToileState::with_peer(peers.0);
+    let mut b = ToileState::with_peer(peers.1);
+    // Distinct canonical identities, as `SessionReady` would seed them. A
+    // `ReactNth` on each peer then writes under its own key, and concurrent
+    // reactions on one target must both survive.
+    a.set_user_id(UserId::new());
+    b.set_user_id(UserId::new());
+    let rounds = ops_a.len().max(ops_b.len());
+    for i in 0..rounds {
+        let da = ops_a.get(i).and_then(|op| apply_local(&mut a, op));
+        let db = ops_b.get(i).and_then(|op| apply_local(&mut b, op));
+        if let Some(d) = da {
+            b.apply_remote(&d);
+        }
+        if let Some(d) = db {
+            a.apply_remote(&d);
+        }
+    }
+    for _ in 0..2 {
+        let da = a.export_snapshot();
+        let db = b.export_snapshot();
+        b.apply_remote_snapshot(&da);
+        a.apply_remote_snapshot(&db);
+    }
+    (a, b)
+}
+
+/// The derived caches a fresh engine rebuilds from `st`'s document.
+fn rebuilt_caches(st: &ToileState) -> String {
+    let mut fresh = ToileState::new();
+    fresh
+        .import_snapshot(&st.export_snapshot())
+        .expect("a board this build wrote");
+    fresh.debug_caches()
+}
+
+/// `TOILE-017`, `TOILE-271`: the history `two_peers_converge` found. Peer A frames
+/// B's stroke, then deletes it while B concurrently sends it to the back. The
+/// delete left the stroke on the frame's list. A's parent cache forgot the
+/// link, while B and a rebuild kept it, so B still named the stroke framed. The
+/// two ids are pinned in the order that put the stroke under both picks.
+#[test]
+fn a_delete_concurrent_with_a_reorder_leaves_no_frame_member_behind() {
+    let ops_a = [
+        PeerOp::FrameNth { frame: 0, nth: 3 },
+        PeerOp::ReactNth {
+            nth: 1,
+            emoji: false,
+            weight: -2,
+        },
+        PeerOp::CreateFrame { x: 190.8, y: -13.9 },
+        PeerOp::FrameNth { frame: 3, nth: 2 },
+        PeerOp::UngroupNth { nth: 4 },
+        PeerOp::SetSlideOrderRot { by: 1 },
+        PeerOp::DeleteNth { nth: 3 },
+    ];
+    let ops_b = [
+        PeerOp::MoveNth {
+            nth: 1,
+            dx: -13.5,
+            dy: 4.6,
+        },
+        PeerOp::MoveNth {
+            nth: 1,
+            dx: 16.5,
+            dy: -22.5,
+        },
+        PeerOp::Stroke {
+            x: -100.9,
+            y: -177.5,
+        },
+        PeerOp::ConnectNth { i: 5, j: 1 },
+        PeerOp::SetAutoLayoutNth {
+            nth: 1,
+            dir: 1,
+            gap: 6.7,
+        },
+        PeerOp::Create { x: 34.0, y: 126.7 },
+        PeerOp::ReorderNthToBack { nth: 3 },
+        PeerOp::SetSlideOrderRot { by: 5 },
+        PeerOp::ConnectNth { i: 0, j: 4 },
+        PeerOp::CreateFrame { x: 124.9, y: 138.9 },
+        PeerOp::Stroke { x: 112.0, y: 184.4 },
+        PeerOp::UngroupNth { nth: 4 },
+    ];
+    let peers = (ambre_core::PeerId(PEER_A), ambre_core::PeerId(PEER_B));
+    let (mut a, mut b) = interleave(peers, &ops_a, &ops_b);
+    let live = live_ids(&a);
+    assert_eq!(
+        framed_of(&mut a, live.clone()),
+        framed_of(&mut b, live),
+        "frame membership diverged"
+    );
+    assert_eq!(a.debug_caches(), rebuilt_caches(&a), "peer A");
+    assert_eq!(b.debug_caches(), rebuilt_caches(&b), "peer B");
+}
+
+/// Two peers holding one frame and one rect, the rect a member of the frame.
+fn a_framed_rect_on_two_peers() -> (ToileState, ToileState, ElementId, ElementId) {
+    let mut a = ToileState::new();
+    let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let rect = create_rect(&mut a, Point::new(10.0, 10.0), Size::new(20.0, 20.0));
+    a.handle_command(ToileCommand::SetFrameChildren {
+        frame: frame.clone(),
+        add: vec![rect.clone()],
+        remove: vec![],
+    });
+    let mut b = ToileState::new();
+    b.apply_remote_snapshot(&a.export_snapshot());
+    (a, b, frame, rect)
+}
+
+/// `TOILE-271`: deleting a framed element takes its id off the frame's list, on
+/// the peer that deleted and on the peer that received the delta. Each peer's
+/// caches then equal a rebuild of its own document.
+#[test]
+fn a_delete_takes_the_id_off_its_frame_list() {
+    let (mut a, mut b, frame, rect) = a_framed_rect_on_two_peers();
+    let delta = a
+        .handle_command(ToileCommand::DeleteElements {
+            ids: vec![rect.clone()],
+        })
+        .update
+        .expect("a delta");
+    b.apply_remote(&delta);
+    for (name, st) in [("deleter", &mut a), ("receiver", &mut b)] {
+        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new(), "{name}");
+        assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
+    }
+}
+
+/// `TOILE-017`, found by `caches_match_a_full_rebuild`: a deleted frame keeps
+/// its member on the board. The deleter's parent cache kept the link the
+/// frame's list held, where the receiver and a rebuild dropped it.
+#[test]
+fn deleting_a_frame_drops_the_links_its_list_held() {
+    let (mut a, mut b, frame, rect) = a_framed_rect_on_two_peers();
+    let delta = a
+        .handle_command(ToileCommand::DeleteElements {
+            ids: vec![frame.clone()],
+        })
+        .update
+        .expect("a delta");
+    b.apply_remote(&delta);
+    for (name, st) in [("deleter", &mut a), ("receiver", &mut b)] {
+        assert!(st.bounds_of(&rect).is_some(), "{name}: the member stays");
+        assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
+    }
+}
+
+/// `TOILE-271`, found by `two_peers_converge`: deleting both members of a group
+/// a frame holds prunes the group, and the frame's list drops the group too.
+#[test]
+fn a_pruned_group_leaves_its_frame_list() {
+    let mut a = ToileState::new();
+    let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let x = create_rect(&mut a, Point::new(10.0, 10.0), Size::new(20.0, 20.0));
+    let y = create_rect(&mut a, Point::new(50.0, 10.0), Size::new(20.0, 20.0));
+    a.handle_command(ToileCommand::SetFrameChildren {
+        frame: frame.clone(),
+        add: vec![x.clone(), y.clone()],
+        remove: vec![],
+    });
+    let group = created_id(&a.handle_command(ToileCommand::GroupElements {
+        ids: vec![x.clone(), y.clone()],
+    }));
+    assert_eq!(
+        a.membership_of(&frame),
+        vec![group],
+        "the group took their place"
+    );
+    let mut b = ToileState::new();
+    b.apply_remote_snapshot(&a.export_snapshot());
+    let delta = a
+        .handle_command(ToileCommand::DeleteElements { ids: vec![x, y] })
+        .update
+        .expect("a delta");
+    b.apply_remote(&delta);
+    for (name, st) in [("deleter", &mut a), ("receiver", &mut b)] {
+        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new(), "{name}");
+        assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
+    }
+}
+
+/// `TOILE-157`, found by `two_peers_converge`: ungrouping a group a
+/// frame holds hands its children to the frame. The frame's list kept the dead
+/// group and lost the children, and the caches disagreed with a rebuild.
+#[test]
+fn ungrouping_a_framed_group_hands_its_children_to_the_frame() {
+    let mut a = ToileState::new();
+    let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let x = create_rect(&mut a, Point::new(10.0, 10.0), Size::new(20.0, 20.0));
+    let y = create_rect(&mut a, Point::new(50.0, 10.0), Size::new(20.0, 20.0));
+    a.handle_command(ToileCommand::SetFrameChildren {
+        frame: frame.clone(),
+        add: vec![x.clone(), y.clone()],
+        remove: vec![],
+    });
+    let group = created_id(&a.handle_command(ToileCommand::GroupElements {
+        ids: vec![x.clone(), y.clone()],
+    }));
+    let mut b = ToileState::new();
+    b.apply_remote_snapshot(&a.export_snapshot());
+    let delta = a
+        .handle_command(ToileCommand::UngroupElements {
+            groups: vec![group],
+        })
+        .update
+        .expect("a delta");
+    b.apply_remote(&delta);
+    for (name, st) in [("ungrouper", &mut a), ("receiver", &mut b)] {
+        assert_eq!(
+            st.membership_of(&frame),
+            vec![x.clone(), y.clone()],
+            "{name}"
+        );
+        assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
+    }
+}
+
+/// `TOILE-272`: B frames an element while A deletes it, so the merged list
+/// names an element neither peer holds. A board an earlier build stored holds
+/// the same entry, since its delete left every frame list alone. Each peer, and
+/// a fresh load of the stored bytes, names no member and keeps caches equal to
+/// a rebuild.
+#[test]
+fn a_frame_entry_for_a_deleted_element_names_no_member() {
+    let (mut a, mut b, frame, _) = a_framed_rect_on_two_peers();
+    let other = create_rect(&mut a, Point::new(50.0, 50.0), Size::new(20.0, 20.0));
+    b.apply_remote_snapshot(&a.export_snapshot());
+    let da = a
+        .handle_command(ToileCommand::DeleteElements {
+            ids: vec![other.clone()],
+        })
+        .update
+        .expect("a delta");
+    let db = b
+        .handle_command(ToileCommand::SetFrameChildren {
+            frame: frame.clone(),
+            add: vec![other.clone()],
+            remove: vec![],
+        })
+        .update
+        .expect("a delta");
+    b.apply_remote(&da);
+    a.apply_remote(&db);
+    let mut stored = ToileState::new();
+    stored
+        .import_snapshot(&a.export_snapshot())
+        .expect("a board with a dangling member loads");
+    for (name, st) in [
+        ("deleter", &mut a),
+        ("framer", &mut b),
+        ("stored", &mut stored),
+    ] {
+        assert!(
+            st.membership_of(&frame).contains(&other),
+            "{name}: the entry"
+        );
+        assert_eq!(
+            framed_of(st, vec![other.clone()]),
+            Vec::<ElementId>::new(),
+            "{name}"
+        );
+        assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
+    }
+}
+
+/// The two peer ids the regression above replays under.
+const PEER_A: u64 = 2;
+/// See [`PEER_A`].
+const PEER_B: u64 = 1;
+
+/// The pair of peer ids a case runs under, both orders drawn, so a found case
+/// carries its order and replays.
+fn peers_strategy() -> impl Strategy<Value = (ambre_core::PeerId, ambre_core::PeerId)> {
+    let (a, b) = (ambre_core::PeerId(PEER_A), ambre_core::PeerId(PEER_B));
+    prop_oneof![Just((a, b)), Just((b, a))]
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(48))]
 
     #[test]
     fn two_peers_converge(ops_a in proptest::collection::vec(op_strategy(), 0..20),
-                          ops_b in proptest::collection::vec(op_strategy(), 0..20)) {
-        let mut a = ToileState::new();
-        let mut b = ToileState::new();
-        // Distinct canonical identities, as `SessionReady` would seed them. A
-        // `ReactNth` on each peer then writes under its own key, and concurrent
-        // reactions on one target must both survive.
-        a.set_user_id(UserId::new());
-        b.set_user_id(UserId::new());
+                          ops_b in proptest::collection::vec(op_strategy(), 0..20),
+                          peers in peers_strategy()) {
+        let (mut a, mut b) = interleave(peers, &ops_a, &ops_b);
 
-        // Interleave: each peer applies its op locally, then the round exchanges
-        // both pending deltas. Operations therefore target a partly-shared state.
-        let rounds = ops_a.len().max(ops_b.len());
-        for i in 0..rounds {
-            let da = ops_a.get(i).and_then(|op| apply_local(&mut a, op));
-            let db = ops_b.get(i).and_then(|op| apply_local(&mut b, op));
-            if let Some(d) = da { b.apply_remote(&d); }
-            if let Some(d) = db { a.apply_remote(&d); }
-        }
-
-        // Final drain: re-sync both directions until quiescent. A create on one
-        // side may reference-order after the other's delete; a couple of extra
-        // exchanges settle any straggler.
-        for _ in 0..2 {
-            let da = a.export_snapshot();
-            let db = b.export_snapshot();
-            b.apply_remote_snapshot(&da);
-            a.apply_remote_snapshot(&db);
-        }
+        // Each peer's incremental caches equal a rebuild of its own document.
+        prop_assert_eq!(a.debug_caches(), rebuilt_caches(&a), "peer A diverged from a rebuild");
+        prop_assert_eq!(b.debug_caches(), rebuilt_caches(&b), "peer B diverged from a rebuild");
 
         // Identical derived caches.
         let mut la: Vec<_> = live_ids(&a);
@@ -6322,6 +6592,8 @@ proptest! {
         a.handle_command(ToileCommand::SetViewport(wide_viewport()));
         b.handle_command(ToileCommand::SetViewport(wide_viewport()));
 
+        // Every cache the engine keeps, the parent cache included.
+        prop_assert_eq!(a.debug_caches(), b.debug_caches(), "caches diverged from a rebuild");
         prop_assert_eq!(a.element_count(), b.element_count(), "element count diverged from rebuild");
         prop_assert_eq!(a.layer_order(), b.layer_order(), "layers diverged from rebuild");
         // The parent cache: the group each painted element names is in the

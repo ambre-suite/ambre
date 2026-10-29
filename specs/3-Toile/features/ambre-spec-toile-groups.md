@@ -54,7 +54,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-010` | `POST` | Ungrouping MUST preserve the surviving children and their relative order. | this spec section 3 | `ambre_toile::logic::convergence_tests::ungroup_keeps_children_and_order` -- its second assertion, where the paint order after the unbind reads the two children in their prior order | none | verified |
 | `TOILE-156` | `POST` | Ungrouping MUST remove the group itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::ungroup_keeps_children_and_order` -- its first assertion, where the group has no box after the unbind | none | verified |
-| `TOILE-157` | `POST` | The children MUST be re-parented to the group's own container. | this spec section 3 | `ambre_toile::logic::structure_tests::a_nested_ungroup_hands_its_children_up_and_moves_nothing` -- a nested group ungrouped: its children read back in the enclosing group's list | none | verified |
+| `TOILE-157` | `POST` | The children MUST be re-parented to the group's own container. | this spec section 3 | `ambre_toile::logic::structure_tests::a_nested_ungroup_hands_its_children_up_and_moves_nothing` -- a nested group ungrouped: its children read back in the enclosing group's list; `ambre_toile::logic::convergence_tests::ungrouping_a_framed_group_hands_its_children_to_the_frame` -- a group a frame holds: its children read back in the frame's list, on both peers | none | verified |
 | `TOILE-158` | `FRAME` | Ungrouping MUST NOT move any element. | this spec section 3 | `ambre_toile::logic::structure_tests::a_nested_ungroup_hands_its_children_up_and_moves_nothing` -- every element's box read back after the ungroup, equal to its box before | none | verified |
 | `TOILE-159` | `FAIL` | Ungrouping an id that is not a group MUST change nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_ungroup_of_a_non_group_answers_an_error` -- a plain rect yields a `NotAGroup` error and nothing moves | none | verified |
 | `TOILE-264` | `POST` | An ungroup whose list holds a group MUST unbind its groups and answer nothing for the ids that are not groups. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_mixed_ungroup_answers_nothing_for_its_non_groups` -- a group between two rects unbinds with no error, and the two rects alone answer one `NotAGroup` | none | verified |
@@ -117,9 +117,12 @@ the derived bounds cache and the spatial index (`TOILE-009`).
    the frame keeps what it held (`TOILE-149`);
 7. commit once, then recompute every group's box to a fixed point.
 
-**Steps, when groups are unbound:** for each listed group, remove the group element. Re-parent its
-children to the group's own parent (`TOILE-157`), dropping the dead reference from that parent
-before appending them. Then strip the paint-order entries in one rewrite, commit once and recompute
+**Steps, when groups are unbound:** for each listed group, remove the group element. Every list that
+names the group drops it, so no frame keeps a dead entry. The group's own parent then takes its
+children (`TOILE-157`). That parent is the enclosing group, else the frame with the smallest id
+that holds the group.
+
+Then strip the paint-order entries in one rewrite, commit once and recompute
 (`TOILE-010`, `TOILE-156`, `TOILE-094`). An id that is not a group changes nothing (`TOILE-159`).
 Beside a group it answers nothing, and a list with no group answers one error (`TOILE-264`). The
 chord sends the whole selection rather than filter it: the selection payload may lag a click, and
