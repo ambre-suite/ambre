@@ -264,6 +264,32 @@ fn an_import_is_one_undo_item() {
     assert_eq!(read_cell(&mut state, 0, 0), "kept", "the edit before stays");
 }
 
+/// An import into a new sheet, with the sheet counter spent, says so and
+/// writes nothing: no sheet, no cell, no undo item. The undo that follows
+/// takes back the edit before it (`TRAME-243`).
+#[test]
+fn an_import_with_a_spent_sheet_counter_writes_nothing() {
+    let mut state = with_one_edit();
+    state.sheet_counter = None;
+    let undo_before = state.undo_manager.undo_count();
+    let vv_before = state.doc.oplog_vv();
+    let out = import(&mut state, b"1,2\n3,4\n", None);
+    assert!(
+        out.display.iter().any(
+            |e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh sheet id"))
+        ),
+        "the refusal says so"
+    );
+    assert!(out.update.is_none());
+    state.doc.commit();
+    assert_eq!(state.doc.oplog_vv(), vv_before, "nothing left pending");
+    assert_eq!(state.undo_manager.undo_count(), undo_before);
+    assert_eq!(state.sheet_order_ids().len(), 1);
+    assert_eq!(state.active_sheet, crate::logic::default_sheet());
+    state.handle_command(TrameCommand::Undo);
+    assert_eq!(read_cell(&mut state, 0, 0), "", "the edit before is undone");
+}
+
 /// A file with no record writes nothing: no sheet, no delta, no undo item.
 /// The undo that follows takes back the edit before it (`TRAME-IO-028`).
 #[test]

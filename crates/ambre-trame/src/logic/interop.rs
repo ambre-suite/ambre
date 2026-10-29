@@ -54,25 +54,29 @@ impl TrameState {
             )]);
         }
 
-        // Open the undo group up front. A freshly created sheet and every cell
-        // write then collapse into a single undo item, sealed by the next
-        // command's fallback `group_end` (like `SetCellText`).
-        let _ = self.undo_manager.group_start();
-
         // Resolve the target sheet: an existing id is reused, anything else
-        // (including `None`) creates a fresh "CSV Import" sheet.
+        // (including `None`) creates a fresh "CSV Import" sheet. The id is
+        // minted before the undo group opens, so a spent counter refuses the
+        // import with the document and the undo stack untouched (`TRAME-243`).
         let (sheet_id, created) = match target_sheet_id {
             Some(id) if self.all_sheet_ids().iter().any(|s| s == &id) => (id, false),
             _ => {
-                // Mint before the first write: a spent counter refuses the
-                // import with the document untouched.
                 let Some(id) = self.mint_sheet_id() else {
-                    return TrameOutcome::display_only(vec![super::sheets::sheet_ids_exhausted()]);
+                    let mut display = vec![super::sheets::sheet_ids_exhausted()];
+                    display.extend(unreadable_notice);
+                    return TrameOutcome::display_only(display);
                 };
-                self.hold_default_sheet();
                 (id, true)
             }
         };
+
+        // Open the undo group before the first write. A freshly created sheet
+        // and every cell write then collapse into a single undo item, sealed
+        // by the next command's fallback `group_end` (like `SetCellText`).
+        let _ = self.undo_manager.group_start();
+        if created {
+            self.hold_default_sheet();
+        }
         // Make the target the active sheet so the write path targets its
         // containers, then rebuild the active-sheet caches against it.
         self.active_sheet = sheet_id.clone();
