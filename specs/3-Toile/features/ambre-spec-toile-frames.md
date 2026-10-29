@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-011` | `INV` | A frame's children MUST paint after the frame: a child's place in the paint order MUST be later than its frame's. | this spec section 3 | `ambre_toile::logic::convergence_tests::frame_children_paint_after_their_frame` -- it creates both children before the frame so the clamp has to fire, and reads the paint order back. The two membership tests this row also cited never read that order. `ambre_toile::logic::state::groups::tests::the_frame_clamp_ends_on_a_duplicate_entry` -- the clamp ends on a paint order holding a duplicate entry | none | verified |
+| `TOILE-011` | `INV` | A frame's children MUST paint after the frame: a child's place in the paint order MUST be later than its frame's. | this spec section 3 | `ambre_toile::logic::convergence_tests::frame_children_paint_after_their_frame` -- it creates both children before the frame so the clamp has to fire, and reads the paint order back. The two membership tests this row also cited never read that order. `ambre_toile::logic::state::groups::tests::the_frame_clamp_ends_on_a_duplicate_entry` -- the clamp ends on a paint order holding a duplicate entry; `ambre_toile::logic::convergence_tests::an_ungroup_into_a_frame_lifts_the_children_above_it` -- a framed group ungrouped: its children paint above the frame on both peers, and one undo restores the order | none | verified |
 | `TOILE-049` | `INV` | An element MUST belong to at most one container: joining a frame MUST detach it from its group. | this spec section 3 | `ambre_toile::logic::convergence_tests::set_frame_children_detaches_from_a_group` -- both memberships are read back | none | verified |
 | `TOILE-272` | `INV` | A frame MUST NOT count as its member an element the board no longer holds, even when its list still names it. | this spec section 3; `TOILE-120` | `ambre_toile::logic::convergence_tests::a_frame_entry_for_a_deleted_element_names_no_member` -- a frame add concurrent with the delete, read on both peers and on a fresh load of the stored bytes, each with caches equal to a rebuild | none | verified |
 | `TOILE-051` | `CONC` | A frame's speaker-notes container MUST exist from its birth, so two peers editing it first MUST converge. | this spec section 3; `TOILE-029` | `ambre_toile::logic::convergence_tests::concurrent_notes_edits_converge` | none | verified |
@@ -125,6 +125,11 @@ resizing, rotating, reordering and deleting a frame use the ordinary element com
 A board stored before `TOILE-271` holds such entries too, since its delete wrote no frame list. The
 read skips the entry, as the paint order skips a dead entry (`TOILE-120`), and no peer repairs it
 (`TOILE-272`).
+
+**An ungroup can hand children to a frame.** When no group encloses the group, the frame with the
+smallest id that holds it takes the children (`TOILE-157`). The clamp then lifts them above it
+(`TOILE-011`). Two peers that saw different frames holding the group can each pick their own, so the
+children land in two frames. A concurrent frame add opens the same breach of `TOILE-049`.
 
 **Steps, when a frame is named:**
 

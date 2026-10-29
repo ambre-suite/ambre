@@ -6414,6 +6414,58 @@ fn ungrouping_a_framed_group_hands_its_children_to_the_frame() {
     }
 }
 
+/// `TOILE-011`: the clamp lifts a framed group alone, so its children still
+/// paint below the frame. When the group goes, the frame takes them, and they
+/// must then paint above it on both peers. The clamp lands in the ungroup's
+/// commit, so one undo restores the group, its frame link and the paint order.
+#[test]
+fn an_ungroup_into_a_frame_lifts_the_children_above_it() {
+    let mut a = ToileState::new();
+    let x = create_rect(&mut a, Point::new(10.0, 10.0), Size::new(20.0, 20.0));
+    let y = create_rect(&mut a, Point::new(50.0, 10.0), Size::new(20.0, 20.0));
+    let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let group = created_id(&a.handle_command(ToileCommand::GroupElements {
+        ids: vec![x.clone(), y.clone()],
+    }));
+    a.handle_command(ToileCommand::SetFrameChildren {
+        frame: frame.clone(),
+        add: vec![group.clone()],
+        remove: vec![],
+    });
+    let before = a.layer_order().to_vec();
+    let mut b = ToileState::new();
+    b.apply_remote_snapshot(&a.export_snapshot());
+    let delta = a
+        .handle_command(ToileCommand::UngroupElements {
+            groups: vec![group.clone()],
+        })
+        .update
+        .expect("a delta");
+    b.apply_remote(&delta);
+    for (name, st) in [("ungrouper", &a), ("receiver", &b)] {
+        let order = st.layer_order();
+        let idx = |id: &ElementId| order.iter().position(|n| n == &NodeId::Element(id.clone()));
+        assert_eq!(
+            st.membership_of(&frame),
+            vec![x.clone(), y.clone()],
+            "{name}"
+        );
+        assert!(
+            idx(&frame) < idx(&x),
+            "{name}: x under its frame in {order:?}"
+        );
+        assert!(
+            idx(&frame) < idx(&y),
+            "{name}: y under its frame in {order:?}"
+        );
+    }
+    a.handle_command(ToileCommand::Undo);
+    assert_eq!(a.membership_of(&frame), vec![group.clone()]);
+    assert_eq!(a.membership_of(&group), vec![x, y]);
+    assert_eq!(a.layer_order(), before);
+    assert_eq!(a.debug_caches(), rebuilt_caches(&a));
+}
+
 /// `TOILE-272`: B frames an element while A deletes it, so the merged list
 /// names an element neither peer holds. A board an earlier build stored holds
 /// the same entry, since its delete left every frame list alone. Each peer, and

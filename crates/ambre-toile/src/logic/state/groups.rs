@@ -168,6 +168,7 @@ impl ToileState {
         let mut display = Vec::new();
         let mut unbound = Vec::new();
         let mut not_a_group = None;
+        let mut frames = Vec::new();
         let mut seen = HashSet::new();
         for group in groups {
             if !seen.insert(group) {
@@ -179,7 +180,7 @@ impl ToileState {
                     not_a_group = not_a_group.or(Some(group));
                 }
                 Some(_) => {
-                    self.unbind_group(group);
+                    frames.extend(self.unbind_group(group));
                     unbound.push(group);
                 }
             }
@@ -193,6 +194,11 @@ impl ToileState {
         // One rewrite of the paint order for the whole list, not one per group.
         let gone: HashSet<&ElementId> = unbound.iter().copied().collect();
         self.strip_layers(|node| !matches!(node, NodeId::Element(e) if gone.contains(e)));
+        // A frame that took children clamps them above it (`TOILE-011`). The
+        // clamp lands in the same commit, so it undoes with the membership.
+        for frame in &frames {
+            self.enforce_frame_zorder(frame);
+        }
         self.doc.commit();
 
         for group in unbound {
@@ -207,12 +213,14 @@ impl ToileState {
 
     /// Write one group's unbind into the open transaction. The caller has
     /// checked that `group` is a group, and owns the paint order, the commit
-    /// and the caches.
-    fn unbind_group(&mut self, group: &ElementId) {
+    /// and the caches. Answers the frame that took the children, if one did,
+    /// so the caller can clamp them above it once the group's node is gone.
+    fn unbind_group(&mut self, group: &ElementId) -> Option<ElementId> {
         let children = self.children_of(group);
         // The group's own container takes the children (`TOILE-157`): its
         // enclosing group, else the frame that holds it. Concurrent adds can
-        // put it in two frames, and the smallest id wins on every peer.
+        // put it in two frames, and the smallest id makes the pick
+        // deterministic. Peers that saw different frames can still pick two.
         let parent = self.enclosing_group(group).or_else(|| {
             self.parents_of(group)
                 .iter()
@@ -247,6 +255,7 @@ impl ToileState {
             self.unlink_parent(c, group);
         }
         self.forget_parents(group);
+        parent.filter(|p| self.is_frame(p))
     }
 
     // -- frames ---------------------------------------------------------

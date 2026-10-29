@@ -122,7 +122,8 @@ names the group drops it, so no frame keeps a dead entry. The group's own parent
 children (`TOILE-157`). That parent is the enclosing group, else the frame with the smallest id
 that holds the group.
 
-Then strip the paint-order entries in one rewrite, commit once and recompute
+Then strip the paint-order entries in one rewrite. A frame that took children clamps them above
+it (`TOILE-011`) before the commit, so the clamp undoes with the unbind. Commit once and recompute
 (`TOILE-010`, `TOILE-156`, `TOILE-094`). An id that is not a group changes nothing (`TOILE-159`).
 Beside a group it answers nothing, and a list with no group answers one error (`TOILE-264`). The
 chord sends the whole selection rather than filter it: the selection payload may lag a click, and
