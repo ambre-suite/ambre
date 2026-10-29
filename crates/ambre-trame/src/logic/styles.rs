@@ -197,7 +197,8 @@ impl TrameState {
         if beyond_cap > 0 {
             display.push(TrameEvent::Error {
                 message: format!(
-                    "{beyond_cap} cell(s) lie beyond the sheet's {MATERIALIZE_CAP}-line limit and were not formatted"
+                    "{beyond_cap} cell(s) lie beyond the sheet's {}-line limit and were not formatted",
+                    MATERIALIZE_ROWS.get()
                 ),
             });
         }

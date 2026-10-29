@@ -1291,7 +1291,7 @@ fn formula_naming_a_missing_sheet_is_refused() {
 #[test]
 fn write_beyond_the_cap_is_refused_and_said() {
     let mut state = TrameState::new();
-    let row = crate::logic::schema::MATERIALIZE_CAP as u32 + 5;
+    let row = crate::logic::schema::MATERIALIZE_ROWS.get() + 5;
     let evts = state.handle_command(TrameCommand::SetCellText {
         row: Row::new(row),
         col: Col::new(0),

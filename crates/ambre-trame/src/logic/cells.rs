@@ -196,7 +196,7 @@ impl TrameState {
     /// `rows_/cols_` lists) and return the `(row_lid, col_lid)` pair to key the
     /// cell with. Extends the dense used range by pushing placeholder elements,
     /// capturing each new element's stable id. The write is refused when the
-    /// jump past the high-water mark exceeds [`MATERIALIZE_CAP`]. It is refused
+    /// jump past the high-water mark exceeds [`MATERIALIZE_ROWS`]. It is refused
     /// too when the session cannot mint every uid the cell needs. Every uid is minted
     /// before the first push, so a refusal for want of one pushes no line.
     pub(super) fn materialize(&mut self, at: CellPos) -> Result<(Uid, Uid), Unmaterialized> {
@@ -447,7 +447,8 @@ impl TrameState {
         if beyond_cap > 0 {
             events.push(TrameEvent::Error {
                 message: format!(
-                    "{beyond_cap} cell(s) lie beyond the sheet's {MATERIALIZE_CAP}-line limit and were not written"
+                    "{beyond_cap} cell(s) lie beyond the sheet's {}-line limit and were not written",
+                    MATERIALIZE_ROWS.get()
                 ),
             });
         }
@@ -474,7 +475,7 @@ impl TrameState {
 /// reports both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Unmaterialized {
-    /// The cell lies past the materialization cap ([`MATERIALIZE_CAP`]).
+    /// The cell lies past the materialization cap ([`MATERIALIZE_ROWS`]).
     BeyondCap,
     /// The cell needs a new line, and the session cannot mint its uid.
     IdsExhausted,
@@ -499,7 +500,8 @@ impl Unmaterialized {
         match self {
             Self::BeyondCap => TrameEvent::Error {
                 message: format!(
-                    "the cell lies beyond the sheet's {MATERIALIZE_CAP}-line limit and was not written"
+                    "the cell lies beyond the sheet's {}-line limit and was not written",
+                    MATERIALIZE_ROWS.get()
                 ),
             },
             Self::IdsExhausted => ids_exhausted(),

@@ -114,7 +114,7 @@ struct TrackedSelection {
 /// Why a cell write was refused. Nothing of it reached the document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum WriteRefusal {
-    /// The cell lies past the materialization cap ([`MATERIALIZE_CAP`]).
+    /// The cell lies past the materialization cap ([`MATERIALIZE_ROWS`]).
     BeyondCap,
     /// The formula qualifies a sheet no tab carries (`TRAME-211`).
     UnknownSheet(SheetName),

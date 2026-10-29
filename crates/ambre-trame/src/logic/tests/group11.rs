@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::logic::schema::{
-    MATERIALIZE_CAP, MIN_COL_WIDTH, SheetContainer, SheetRoot, default_sheet,
+    MATERIALIZE_ROWS, MIN_COL_WIDTH, SheetContainer, SheetRoot, default_sheet,
 };
 use crate::model::CellKey;
 use crate::{FillMode, SelectionKind};
@@ -167,7 +167,7 @@ fn a_merge_past_the_cap_writes_no_entry() {
     let mut state = TrameState::new();
     set(&mut state, 0, 0, "a");
     let before = own_ops(&state);
-    let out = merge(&mut state, 0, 0, MATERIALIZE_CAP as u32 + 5, 0);
+    let out = merge(&mut state, 0, 0, MATERIALIZE_ROWS.get() + 5, 0);
     assert!(out.update.is_none(), "the refused merge sent a delta");
     assert_eq!(own_ops(&state), before);
     assert!(
@@ -443,7 +443,7 @@ fn a_column_is_never_narrower_than_its_minimum() {
 #[test]
 fn a_write_past_the_line_cap_is_refused() {
     let mut state = TrameState::new();
-    let cap = MATERIALIZE_CAP as u32;
+    let cap = MATERIALIZE_ROWS.get();
     // The document's own setup leaves first, so only the write is measured.
     state.flush_delta();
     let before = own_ops(&state);

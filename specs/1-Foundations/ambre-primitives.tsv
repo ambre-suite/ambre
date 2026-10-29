@@ -3195,8 +3195,8 @@ ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains()
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	the finite number a cell's text spells, inside the formula engine
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	local geometry / pixel arithmetic
+ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	one of the two formula numbers compared, the order of the two free
+ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	the other formula number compared, the order of the two free
 ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	math	an operator's result inside the formula engine
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
@@ -3233,7 +3233,6 @@ ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | fie
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.undecodable | field | std::cell::Cell<bool>	generic	state flag
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | const | [&str;7]	free-text	the English day names a ddd or dddd run prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | MONTHS | const | [&str;12]	free-text	the English month names a mmm or mmmm run prints
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Token::Date.1 | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Token::Literal.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(pattern) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3244,7 +3243,6 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_t
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands(text) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | lex(section) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad(len) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad(n) | param | u32	math	the date or time component printed, on two digits when the run asks
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_fraction() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_fraction(digits) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3257,7 +3255,6 @@ ambre-trame | src/logic/number_format.rs | crate::logic::number_format | split_s
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | split_sections(pattern) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	the formula number formatted to the cell format
-ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	newtype-inner	the per-sheet root name SheetContainer holds, which the Loro call that opens the root reads
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3278,7 +3275,6 @@ ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_di
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::note_undecodable(bytes) | param | &[u8]	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
 ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
 ambre-trame | src/model/line.rs | crate::model::line | Line::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length

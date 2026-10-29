@@ -370,8 +370,8 @@ impl TrameState {
     /// An **empty** register is not a failure: a cell with no formatting carries
     /// no bytes. Only a non-empty blob the decoder refuses is a record this
     /// build cannot read.
-    pub(super) fn note_undecodable(&self, bytes: &[u8]) {
-        if !bytes.is_empty() {
+    pub(super) fn note_undecodable(&self, register: &loro::LoroBinaryValue) {
+        if !register.is_empty() {
             self.undecodable.set(true);
         }
     }

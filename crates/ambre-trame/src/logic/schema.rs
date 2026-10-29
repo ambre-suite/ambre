@@ -160,17 +160,14 @@ ambre_core::crdt_names! {
     }
 }
 
-/// Maximum number of rows/columns a single write may materialize past the
-/// current used-range high-water mark. Bounds the pathological "lone value far
-/// down the grid" case that would otherwise create ~100k placeholder elements
-/// (see `trame-rows-and-columns`). The write path drops anything beyond it.
-pub(crate) const MATERIALIZE_CAP: usize = 10_000;
+/// Maximum number of rows a single write may materialize past the current
+/// used-range high-water mark. Bounds the pathological "lone value far down
+/// the grid" case that would otherwise create ~100k placeholder elements (see
+/// `trame-rows-and-columns`). The write path drops anything beyond it.
+pub(crate) const MATERIALIZE_ROWS: RowCount = RowCount::new(10_000);
 
-/// [`MATERIALIZE_CAP`] as a number of rows.
-pub(crate) const MATERIALIZE_ROWS: RowCount = RowCount::new(MATERIALIZE_CAP as u32);
-
-/// [`MATERIALIZE_CAP`] as a number of columns.
-pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(MATERIALIZE_CAP as u32);
+/// The same cap on the columns: one limit holds on both axes.
+pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(MATERIALIZE_ROWS.get());
 
 /// The whole shared-filter definition as one CRDT record
 /// (`trame-shared-filter`). postcard-encoded into the single `filters_{sheet}`
