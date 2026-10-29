@@ -16,7 +16,7 @@ use ambre_commands::{
     Command, CommandCategory, CommandId, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale,
     Modifiers,
 };
-use ambre_core::{DocumentId, UserId};
+use ambre_core::{ByteCount, DocumentId, UserId};
 
 use crate::{MessageRef, MurmurePane, Region};
 
@@ -215,7 +215,10 @@ ambre_core::define_flag! {
 
 /// The message the actions are open on, as the view found it under the
 /// pointer (the Murmure message list spec).
-#[derive(Debug, Clone, PartialEq)]
+///
+/// `Debug` prints the length of the text alone: it is plaintext a member
+/// wrote.
+#[derive(Clone, PartialEq)]
 pub struct MessageTarget {
     /// The channel the message lies in.
     pub channel: ChannelId,
@@ -245,6 +248,25 @@ pub struct MessageTarget {
     pub from_thread: Option<FromThread>,
 }
 
+impl std::fmt::Debug for MessageTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MessageTarget")
+            .field("channel", &self.channel)
+            .field("at", &self.at)
+            .field("message", &self.message)
+            .field("author", &self.author)
+            .field("text", &ByteCount::from_len(self.text.len()))
+            .field("mentions", &self.mentions.len())
+            .field("styles", &self.styles.len())
+            .field("writer", &self.writer)
+            .field("deleted", &self.deleted)
+            .field("pressed", &self.pressed)
+            .field("canvas", &self.canvas)
+            .field("from_thread", &self.from_thread)
+            .finish()
+    }
+}
+
 /// Where the root of the thread a copy came from lies, as the list holds it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FromThread {
@@ -256,7 +278,9 @@ pub enum FromThread {
 }
 
 /// What an action of a message asks the page to do.
-#[derive(Debug, Clone)]
+///
+/// `Debug` prints the length of the text a copy carries alone.
+#[derive(Clone)]
 pub enum MessageAction {
     /// Show this pane.
     Open(MurmurePane),
@@ -270,6 +294,22 @@ pub enum MessageAction {
     Edit(PendingEdit),
     /// Open the emoji picker, whose pick reacts to this message.
     React(PendingReaction),
+}
+
+impl std::fmt::Debug for MessageAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Open(pane) => f.debug_tuple("Open").field(pane).finish(),
+            Self::Send(command) => f.debug_tuple("Send").field(command).finish(),
+            Self::Copy(text) => f
+                .debug_tuple("Copy")
+                .field(&ByteCount::from_len(text.len()))
+                .finish(),
+            Self::ConfirmDelete(delete) => f.debug_tuple("ConfirmDelete").field(delete).finish(),
+            Self::Edit(edit) => f.debug_tuple("Edit").field(edit).finish(),
+            Self::React(reaction) => f.debug_tuple("React").field(reaction).finish(),
+        }
+    }
 }
 
 /// A message the emoji picker reacts to, once an emoji is picked
@@ -312,7 +352,9 @@ pub enum Picking {
 
 /// A message the member asked to edit, which the composer of its channel
 /// loads (`MURMURE-203`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the text alone.
+#[derive(Clone, PartialEq, Eq)]
 pub struct PendingEdit {
     /// The channel the message lies in.
     pub channel: ChannelId,
@@ -326,6 +368,19 @@ pub struct PendingEdit {
     pub mentions: Vec<Mention>,
     /// How its runs read.
     pub styles: Vec<StyleMark>,
+}
+
+impl std::fmt::Debug for PendingEdit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PendingEdit")
+            .field("channel", &self.channel)
+            .field("at", &self.at)
+            .field("message", &self.message)
+            .field("text", &ByteCount::from_len(self.text.len()))
+            .field("mentions", &self.mentions.len())
+            .field("styles", &self.styles.len())
+            .finish()
+    }
 }
 
 /// A deletion the member asked for and has not confirmed yet
@@ -666,6 +721,30 @@ mod tests {
             pressed: None,
             canvas: ambre_core::CanvasId::CONTENT,
             from_thread: None,
+        }
+    }
+
+    /// A target, an edit and a copy each debug the length of the text alone.
+    /// A message is plaintext.
+    #[test]
+    fn a_message_text_debugs_its_length_alone() {
+        let target = target(MessageAt::Segment(SegmentId::new()), "secret words", false);
+        let edit = PendingEdit {
+            channel: target.channel,
+            at: target.at,
+            message: target.message,
+            text: target.text.clone(),
+            mentions: Vec::new(),
+            styles: Vec::new(),
+        };
+        let shown = [
+            format!("{target:?}"),
+            format!("{edit:?}"),
+            format!("{:?}", MessageAction::Copy(target.text.clone())),
+        ];
+        for shown in shown {
+            assert!(!shown.contains("secret"), "{shown}");
+            assert!(shown.contains("12"), "{shown}");
         }
     }
 

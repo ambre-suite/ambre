@@ -6,7 +6,7 @@
 //! mention over it rides with the message (`MURMURE-552`).
 
 use ambre_bus::{MentionTarget, UserId};
-use ambre_core::{ByteOffset, ViewPoint};
+use ambre_core::{ByteCount, ByteOffset, ViewPoint};
 
 use crate::Region;
 
@@ -53,10 +53,21 @@ impl OfferIndex {
 }
 
 /// One entry of the list: what a pick names, and the name it writes.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the name alone: a member chose it.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Offer {
     pub target: MentionTarget,
     pub name: ambre_core::DisplayName,
+}
+
+impl std::fmt::Debug for Offer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Offer")
+            .field("target", &self.target)
+            .field("name", &ByteCount::from_len(self.name.as_str().len()))
+            .finish()
+    }
 }
 
 impl Offer {
@@ -68,7 +79,9 @@ impl Offer {
 
 /// What the page draws of an open list: the names, the one Enter picks, and
 /// the caret it hangs from (`MURMURE-555`).
-#[derive(Debug, Clone, PartialEq)]
+///
+/// `Debug` counts the entries alone: each one names a member.
+#[derive(Clone, PartialEq)]
 pub struct MentionList {
     /// Each entry as the list shows it, `@channel` first.
     pub entries: OfferVec<String>,
@@ -78,6 +91,17 @@ pub struct MentionList {
     pub at: ViewPoint,
     /// The region the list hangs from.
     pub region: Region,
+}
+
+impl std::fmt::Debug for MentionList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MentionList")
+            .field("entries", &self.entries.len())
+            .field("chosen", &self.chosen)
+            .field("at", &self.at)
+            .field("region", &self.region)
+            .finish()
+    }
 }
 
 /// The query an `@` opens before the byte `caret` of `text`: the offset of
@@ -139,6 +163,26 @@ pub fn offers(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The debug form of an entry and of the list names no member: it
+    /// prints a length and a count.
+    #[test]
+    fn an_offer_debugs_its_name_length_alone() {
+        let name = ambre_core::DisplayName::new("Secretary").expect("a name");
+        let members = [(UserId::new(), name)];
+        let found = offers("sec", &members, None);
+        let shown = format!("{found:?}");
+        assert!(!shown.contains("Secretary"), "{shown}");
+        assert!(shown.contains('9'), "{shown}");
+        let list = MentionList {
+            entries: found.iter().map(Offer::written).collect(),
+            chosen: OfferIndex::ZERO,
+            at: ViewPoint::default(),
+            region: Region::Channel,
+        };
+        let shown = format!("{list:?}");
+        assert!(!shown.contains("Secretary"), "{shown}");
+    }
 
     /// An `@` opens a query only where it starts a word, and the query runs
     /// to the caret until a space ends it (`MURMURE-551`).

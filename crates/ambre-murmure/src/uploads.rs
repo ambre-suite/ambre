@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType, RequestId};
-use ambre_core::{ExportFilename, KnownMediaType};
+use ambre_core::{ByteCount, ExportFilename, KnownMediaType};
 
 use crate::composer::DraftOf;
 
@@ -28,12 +28,25 @@ ambre_core::define_index! {
 }
 
 /// A file the member dropped or pasted on the composer, as the page read it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the name alone, and the bytes print their
+/// length too: both are plaintext the member chose.
+#[derive(Clone, PartialEq, Eq)]
 pub struct PickedFile {
     pub name: String,
     /// The type the browser named, empty when it named none.
     pub media_type: MediaType,
     pub data: ambre_core::MediaBytes,
+}
+
+impl std::fmt::Debug for PickedFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PickedFile")
+            .field("name", &ByteCount::from_len(self.name.len()))
+            .field("media_type", &self.media_type)
+            .field("data", &self.data)
+            .finish()
+    }
 }
 
 /// A size as a reader reads it: "512 B", "2 KB", "3.4 MB".
@@ -93,12 +106,25 @@ pub fn download_name(file: &Attachment) -> ExportFilename {
 }
 
 /// A file whose upload the relay has not answered yet.
-#[derive(Debug, Clone)]
+///
+/// `Debug` prints the length of the name alone: the member named the file.
+#[derive(Clone)]
 struct Pending {
     of: DraftOf,
     name: String,
     media_type: MediaType,
     size: ByteSize,
+}
+
+impl std::fmt::Debug for Pending {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pending")
+            .field("of", &self.of)
+            .field("name", &ByteCount::from_len(self.name.len()))
+            .field("media_type", &self.media_type)
+            .field("size", &self.size)
+            .finish()
+    }
 }
 
 /// What an answer did to the draft it belonged to.
@@ -112,10 +138,22 @@ pub enum Uploaded {
 }
 
 /// The uploads of every draft, keyed by the request that carries each.
-#[derive(Debug, Default)]
+///
+/// `Debug` counts the files uploaded: each attachment names its file.
+#[derive(Default)]
 pub struct Uploads {
     pending: HashMap<RequestId, Pending>,
     ready: HashMap<DraftOf, Vec<Attachment>>,
+}
+
+impl std::fmt::Debug for Uploads {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ready: usize = self.ready.values().map(Vec::len).sum();
+        f.debug_struct("Uploads")
+            .field("pending", &self.pending)
+            .field("ready", &ready)
+            .finish()
+    }
 }
 
 impl Uploads {
@@ -258,6 +296,25 @@ mod tests {
             MediaType("image/png".to_owned()),
             ByteSize(10),
         )
+    }
+
+    /// The debug form of a picked file and of a file still uploading names
+    /// the length of its name, never a char of it.
+    #[test]
+    fn a_file_name_debugs_its_length_alone() {
+        let picked = PickedFile {
+            name: "secret.pdf".to_owned(),
+            media_type: MediaType("application/pdf".to_owned()),
+            data: ambre_core::MediaBytes::new(b"secret".to_vec()),
+        };
+        let shown = format!("{picked:?}");
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains("10"), "{shown}");
+        let mut uploads = Uploads::default();
+        assert!(begin(&mut uploads, 1, channel(), "secret.pdf"));
+        uploads.restore(channel(), vec![received("secret.txt")]);
+        let shown = format!("{uploads:?}");
+        assert!(!shown.contains("secret"), "{shown}");
     }
 
     /// A fetched file named `name`.

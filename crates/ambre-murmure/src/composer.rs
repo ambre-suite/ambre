@@ -172,7 +172,7 @@ enum Change {
 /// The history of one draft: the texts an undo goes back to, and those a redo
 /// goes forward to. A step gathers the edits of one way. A caret move, a line
 /// break, a paste or a space seals it, so one undo takes back a word.
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct History {
     undo: Vec<String>,
     redo: Vec<String>,
@@ -311,7 +311,7 @@ struct Editing {
 
 /// The mentions and the styles of a draft, and the text whose chars their
 /// ranges count.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 struct Marks {
     text: String,
     mentions: Vec<Mention>,
@@ -346,7 +346,7 @@ impl Marks {
 }
 
 /// The `@` list open in a draft (`MURMURE-551`).
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct Asking {
     of: DraftOf,
     /// The byte of its `@`, and what follows it up to the caret.

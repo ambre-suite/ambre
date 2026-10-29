@@ -8,9 +8,19 @@
 use unicode_segmentation::UnicodeSegmentation;
 
 /// The words of a query, folded. A query holds at least one.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` counts the words alone: a member typed them.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Query {
     words: Vec<String>,
+}
+
+impl std::fmt::Debug for Query {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Query")
+            .field("words", &self.words.len())
+            .finish()
+    }
 }
 
 impl Query {
@@ -189,6 +199,15 @@ fn is_mark(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The debug form of a query counts its words, never a char of them.
+    #[test]
+    fn a_query_debugs_its_word_count_alone() {
+        let query = Query::parse("secret budget").expect("two words");
+        let shown = format!("{query:?}");
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains('2'), "{shown}");
+    }
 
     /// The words fold to lowercase without their diacritics, composed or
     /// decomposed, so either spelling finds the other.

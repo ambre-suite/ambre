@@ -435,7 +435,10 @@ pub struct MurmureRelay {
 
 /// The search box: whether it is open, the query typed, and the last answer
 /// to that query (the Murmure search spec).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the query and counts the channels alone:
+/// a member typed the one, and the other carries message texts.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct SearchBox {
     /// Whether the box shows in the command bar.
     pub open: ambre_chrome::Openness,
@@ -445,11 +448,23 @@ pub struct SearchBox {
     pub channels: Vec<ChannelMatches>,
 }
 
+impl std::fmt::Debug for SearchBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SearchBox")
+            .field("open", &self.open)
+            .field("query", &ambre_core::ByteCount::from_len(self.query.len()))
+            .field("channels", &self.channels.len())
+            .finish()
+    }
+}
+
 /// The heading of the matches of a channel with no name read yet.
 const UNNAMED_CHANNEL: &str = "Unnamed channel";
 
 /// The matches of one channel, as the result list shows them.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` counts the matches alone: each one carries a message text.
+#[derive(Clone, PartialEq, Eq)]
 pub struct SearchGroup {
     /// The channel a click on a match opens.
     pub channel_id: ChannelId,
@@ -461,6 +476,17 @@ pub struct SearchGroup {
     pub matches: Vec<(MessageRef, String)>,
     /// Which part of its history was read, as "2 of 14 segments".
     pub coverage: String,
+}
+
+impl std::fmt::Debug for SearchGroup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SearchGroup")
+            .field("channel_id", &self.channel_id)
+            .field("name", &self.name)
+            .field("matches", &self.matches.len())
+            .field("coverage", &self.coverage)
+            .finish()
+    }
 }
 
 /// "1 segment", or "2 segments": the coverage line counts in segments.

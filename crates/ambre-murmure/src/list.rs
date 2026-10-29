@@ -5,7 +5,7 @@
 //! header and the words of each row. Pure, so the host tests hold it. The painter in
 //! `paint` lays the rows out and draws them.
 
-use ambre_core::{ByteOffset, ByteSpan, CharOffset, CharVec, ViewPx};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec, ViewPx};
 
 use crate::MessageCount;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -322,7 +322,9 @@ pub struct BodyMark {
 }
 
 /// The words of a header that opens a group: who wrote, and when.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the name alone: a member chose it.
+#[derive(Clone, PartialEq, Eq)]
 pub struct HeaderWords {
     /// The author's display name.
     pub author: String,
@@ -330,8 +332,20 @@ pub struct HeaderWords {
     pub time: String,
 }
 
+impl std::fmt::Debug for HeaderWords {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HeaderWords")
+            .field("author", &ByteCount::from_len(self.author.len()))
+            .field("time", &self.time)
+            .finish()
+    }
+}
+
 /// What a row shows, in words.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the body alone, and counts the marks and
+/// the files: each is plaintext a member wrote or named.
+#[derive(Clone, PartialEq, Eq)]
 pub struct RowWords {
     /// The header, on a row that opens a group.
     pub header: Option<HeaderWords>,
@@ -351,6 +365,20 @@ pub struct RowWords {
     /// The files under the body, one chip each, which a click fetches. A
     /// deleted message carries none.
     pub files: Vec<Attachment>,
+}
+
+impl std::fmt::Debug for RowWords {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RowWords")
+            .field("header", &self.header)
+            .field("body", &ByteCount::from_len(self.body.len()))
+            .field("ink", &self.ink)
+            .field("marks", &self.marks.len())
+            .field("replies", &self.replies)
+            .field("reactions", &self.reactions.len())
+            .field("files", &self.files.len())
+            .finish()
+    }
 }
 
 impl<'a> Row<'a> {
@@ -1076,6 +1104,20 @@ pub(crate) mod tests {
             ],
         );
         assert_eq!(headers(&list), [true, false]);
+    }
+
+    /// The debug form of a row names the length of its body and of its
+    /// author's name, never a char of either: both are plaintext.
+    #[test]
+    fn a_row_debugs_its_lengths_alone() {
+        let message = message(UserId::new(), ambre_bus::Timestamp(7), "secret body");
+        let row = words(&message, true);
+        let shown = format!("{row:?}");
+        assert!(
+            !shown.contains("secret") && !shown.contains("Ada"),
+            "{shown}"
+        );
+        assert!(shown.contains("11"), "{shown}");
     }
 
     /// A deleted message shows a muted line in place of its body

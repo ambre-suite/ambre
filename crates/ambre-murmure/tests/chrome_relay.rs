@@ -1338,6 +1338,14 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     let texts: Vec<&str> = groups[0].matches.iter().map(|(_, t)| t.as_str()).collect();
     assert_eq!(texts, ["the budget for May"]);
     assert_eq!(groups[0].coverage, "1 of 2 segments");
+    // The debug forms count the matches and measure the query: no message
+    // text and no typed word shows.
+    for shown in [
+        format!("{:?}", groups[0]),
+        format!("{:?}", relay.search.get_untracked()),
+    ] {
+        assert!(!shown.contains("May") && !shown.contains("bud"), "{shown}");
+    }
     let channels = relay.search.get_untracked().channels;
     assert_eq!(
         coverage(&channels),
