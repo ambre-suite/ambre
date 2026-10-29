@@ -124,6 +124,20 @@ fn style_applied_mirrors_into_style_state() {
     assert_eq!(state.format.get(), CellFormat::Percent);
 }
 
+/// The replacement is document content, so the Debug form of a replace
+/// request holds its length alone.
+#[wasm_bindgen_test]
+fn a_replace_request_prints_the_replacement_length_alone() {
+    let query = chrome::FindQuery::new("q".to_owned(), Default::default());
+    let request = chrome::ReplaceRequest {
+        query: query.expect("a test query is not empty"),
+        replacement: "salary".to_owned(),
+    };
+    let printed = format!("{request:?}");
+    assert!(!printed.contains("salary"), "{printed}");
+    assert!(printed.contains("replacement_chars: 6"), "{printed}");
+}
+
 /// Any non-`StyleApplied` event leaves the `StyleState` untouched. The launcher
 /// calls the mirror for every relayed event, so it must be a strict no-op for
 /// the rest.

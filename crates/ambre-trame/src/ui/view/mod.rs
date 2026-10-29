@@ -520,7 +520,7 @@ pub(crate) enum FormulaBarSync {
 ///
 /// The browser copies its signals and its focus in before the sync, and copies
 /// the result back out. A host test sets the fields itself.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub(crate) struct FormulaBar {
     /// The reference of the cell an edit will reach (`TRAME-UI-091`).
     pub(crate) reference: String,
@@ -542,6 +542,21 @@ ambre_core::define_flag! {
         Blurred,
         /// The bar holds the focus, so a key types into it.
         Focused,
+    }
+}
+
+/// The lengths alone: the reference names a sheet, and the texts are cell
+/// content.
+impl std::fmt::Debug for FormulaBar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chars = |text: &str| text.chars().count();
+        f.debug_struct("FormulaBar")
+            .field("reference_chars", &chars(&self.reference))
+            .field("text_chars", &chars(&self.text))
+            .field("shown_chars", &chars(&self.shown))
+            .field("action", &self.action)
+            .field("focused", &self.focused)
+            .finish()
     }
 }
 
@@ -625,6 +640,21 @@ mod tests {
         // The user typed while the peer wrote: the typing wins.
         assert_eq!(bar("old5").sync("new"), FormulaBarSync::OpenSession);
         assert_eq!(bar("old").sync("old"), FormulaBarSync::Idle);
+    }
+
+    /// The formula bar holds cell content, so its Debug form holds lengths.
+    #[test]
+    fn the_formula_bar_prints_lengths_alone() {
+        let bar = FormulaBar {
+            reference: "Payroll!A1".to_owned(),
+            text: "=salary".to_owned(),
+            shown: "salary".to_owned(),
+            ..FormulaBar::default()
+        };
+        let printed = format!("{bar:?}");
+        assert!(!printed.contains("Payroll"), "{printed}");
+        assert!(!printed.contains("salary"), "{printed}");
+        assert!(printed.contains("text_chars: 7"), "{printed}");
     }
 
     fn scroll_cmd(version: u64) -> TrameCommand {

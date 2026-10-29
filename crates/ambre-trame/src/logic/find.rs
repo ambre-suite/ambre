@@ -25,8 +25,15 @@ fn fold_needle(query: &FindText, case: CaseMatch) -> FoldedNeedle {
 
 /// The text a replace writes in place of each match, as the user typed it.
 /// Any text, the empty one included, is a replacement.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(super) struct Replacement(String);
+
+/// The length alone: the text is document content.
+impl std::fmt::Debug for Replacement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Replacement({} chars)", self.0.chars().count())
+    }
+}
 
 impl Replacement {
     /// The replacement `text`.
@@ -505,6 +512,13 @@ mod tests {
         assert_eq!(ci("abc", "abc", ""), "");
         // A replacement containing the query must not be rescanned.
         assert_eq!(ci("a", "a", "aa"), "aa");
+    }
+
+    /// A replacement is document content, so its Debug form is its length.
+    #[test]
+    fn a_replacement_prints_its_length_alone() {
+        let printed = format!("{:?}", Replacement::new("secret".to_owned()));
+        assert_eq!(printed, "Replacement(6 chars)");
     }
 
     #[test]
