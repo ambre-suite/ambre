@@ -25,7 +25,7 @@ use ambre_bus::app::toile::{
 use ambre_core::{CssPoint, Rgba, ViewPoint, ViewPx};
 use ambre_draw::{Point, Rect};
 
-use super::style::MixedFlags;
+use super::style::{Mix, MixedFlags};
 use super::viewport::ViewportTransform;
 
 /// The floating selection toolbar's published model (`toile-styles`): `at` is
@@ -184,14 +184,14 @@ pub fn build_floatbar(
         match base {
             None => base = Some(s),
             Some(b) => {
-                mixed.fill |= s.fill != b.fill;
-                mixed.text_color |= s.text_color != b.text_color;
-                mixed.font_family |= s.font.family != b.font.family;
-                mixed.font_size |= s.font.size != b.font.size;
-                mixed.bold |= (s.font.weight.is_bold()) != (b.font.weight.is_bold());
-                mixed.italic |= s.font.italic != b.font.italic;
-                mixed.underline |= s.font.underline != b.font.underline;
-                mixed.strikethrough |= s.font.strikethrough != b.font.strikethrough;
+                mixed.fill |= Mix::when(s.fill != b.fill);
+                mixed.text_color |= Mix::when(s.text_color != b.text_color);
+                mixed.font_family |= Mix::when(s.font.family != b.font.family);
+                mixed.font_size |= Mix::when(s.font.size != b.font.size);
+                mixed.bold |= Mix::when(s.font.weight.is_bold() != b.font.weight.is_bold());
+                mixed.italic |= Mix::when(s.font.italic != b.font.italic);
+                mixed.underline |= Mix::when(s.font.underline != b.font.underline);
+                mixed.strikethrough |= Mix::when(s.font.strikethrough != b.font.strikethrough);
             }
         }
     }
@@ -199,7 +199,7 @@ pub fn build_floatbar(
     // Nothing in the selection is present in the culled set: hide the bar.
     let union = union?;
     let at = top_center_anchor(union, cam, canvas_origin);
-    let fill = base.and_then(|b| if mixed.fill { None } else { b.fill });
+    let fill = base.and_then(|b| if mixed.fill.is_mixed() { None } else { b.fill });
     Some(FloatBar {
         at,
         multi: count >= 2,
@@ -672,15 +672,15 @@ mod tests {
             CssPoint::default(),
         )
         .expect("bar");
-        assert!(bar.mixed.text_color);
-        assert!(bar.mixed.font_family);
-        assert!(bar.mixed.font_size);
-        assert!(bar.mixed.bold);
-        assert!(bar.mixed.italic);
-        assert!(bar.mixed.underline);
-        assert!(bar.mixed.strikethrough);
+        assert!(bar.mixed.text_color.is_mixed());
+        assert!(bar.mixed.font_family.is_mixed());
+        assert!(bar.mixed.font_size.is_mixed());
+        assert!(bar.mixed.bold.is_mixed());
+        assert!(bar.mixed.italic.is_mixed());
+        assert!(bar.mixed.underline.is_mixed());
+        assert!(bar.mixed.strikethrough.is_mixed());
         // The shared fill is not mixed, and it reaches the swatch.
-        assert!(!bar.mixed.fill);
+        assert!(!bar.mixed.fill.is_mixed());
         assert_eq!(bar.fill, shared_fill);
     }
 }

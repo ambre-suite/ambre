@@ -2870,17 +2870,8 @@ ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label(title) | 
 ambre-toile | src/ui/status.rs | crate::ui::status | bounds_label() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/status.rs | crate::ui::status | count_label() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/status.rs | crate::ui::status | fmt_world() | ret | String	free-text	label, message or user text
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.bold | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.fill | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.font_family | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.font_size | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.italic | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.opacity | field | bool	generic	a fact, selects no mode: whether the selection mixes opacities
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.strikethrough | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.stroke | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.stroke_w | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.text_color | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.underline | field | bool	generic	local state flag or value, not a mode selector
+ambre-toile | src/ui/style.rs | crate::ui::style | Mix::is_mixed() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/ui/style.rs | crate::ui::style | Mix::when(differs) | param | bool	newtype-inner	the bool the one constructor of Mix reads into its variant
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags::any() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | SelectTool::is_dragging() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | SelectTool::pressed_empty_board() | ret | bool	generic	predicate or handled-flag result

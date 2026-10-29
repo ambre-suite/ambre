@@ -202,13 +202,14 @@ pub fn SelectionToolbar(
                                 on_toggle=on_strike
                             />
                             {mixed_hint(
-                                b.mixed.bold || b.mixed.italic || b.mixed.underline
-                                    || b.mixed.strikethrough,
+                                (b.mixed.bold | b.mixed.italic | b.mixed.underline
+                                    | b.mixed.strikethrough)
+                                    .is_mixed(),
                             )}
                             <FontPicker current=font_family.into() on_pick=on_font />
-                            {mixed_hint(b.mixed.font_family)}
+                            {mixed_hint(b.mixed.font_family.is_mixed())}
                             <FontSizeSelect current=size_current on_pick=on_size auto_label="Auto" />
-                            {mixed_hint(b.mixed.font_size)}
+                            {mixed_hint(b.mixed.font_size.is_mixed())}
                             <ColorPopover
                                 title="Text colour"
                                 icon=icondata::MdiFormatColorText
@@ -217,7 +218,7 @@ pub fn SelectionToolbar(
                                 reset_label="Default"
                                 on_pick=on_text_color
                             />
-                            {mixed_hint(b.mixed.text_color)}
+                            {mixed_hint(b.mixed.text_color.is_mixed())}
                             <ColorPopover
                                 title="Fill"
                                 icon=icondata::MdiFormatColorFill
@@ -226,7 +227,7 @@ pub fn SelectionToolbar(
                                 reset_label="No fill"
                                 on_pick=on_fill
                             />
-                            {mixed_hint(b.mixed.fill)}
+                            {mixed_hint(b.mixed.fill.is_mixed())}
                             // -- Structural actions (strict subset of the context menu) --
                             {cmd_button(menu::DUPLICATE)}
                             {cmd_button(menu::DELETE)}

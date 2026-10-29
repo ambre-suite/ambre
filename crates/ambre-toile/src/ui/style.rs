@@ -29,33 +29,71 @@ use ambre_bus::app::toile::{
 /// restyle, `TOILE-018`). Only the fields the inspector exposes are tracked.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct MixedFlags {
-    pub fill: bool,
-    pub stroke: bool,
-    pub stroke_w: bool,
-    pub opacity: bool,
-    pub text_color: bool,
-    pub font_family: bool,
-    pub font_size: bool,
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strikethrough: bool,
+    pub fill: Mix,
+    pub stroke: Mix,
+    pub stroke_w: Mix,
+    pub opacity: Mix,
+    pub text_color: Mix,
+    pub font_family: Mix,
+    pub font_size: Mix,
+    pub bold: Mix,
+    pub italic: Mix,
+    pub underline: Mix,
+    pub strikethrough: Mix,
 }
 
 impl MixedFlags {
     /// True when at least one tracked field differs across the selection.
     pub fn any(self) -> bool {
-        self.fill
-            || self.stroke
-            || self.stroke_w
-            || self.opacity
-            || self.text_color
-            || self.font_family
-            || self.font_size
-            || self.bold
-            || self.italic
-            || self.underline
-            || self.strikethrough
+        (self.fill
+            | self.stroke
+            | self.stroke_w
+            | self.opacity
+            | self.text_color
+            | self.font_family
+            | self.font_size
+            | self.bold
+            | self.italic
+            | self.underline
+            | self.strikethrough)
+            .is_mixed()
+    }
+}
+
+/// Whether one style field agrees across the selection, or differs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum Mix {
+    /// Every selected element holds the same value.
+    #[default]
+    Uniform,
+    /// Two selected elements hold different values.
+    Mixed,
+}
+
+impl Mix {
+    /// `Mixed` when the field `differs` between two selected elements.
+    pub fn when(differs: bool) -> Self {
+        if differs { Self::Mixed } else { Self::Uniform }
+    }
+
+    /// True for `Mixed`.
+    pub fn is_mixed(self) -> bool {
+        self == Self::Mixed
+    }
+}
+
+/// A field is mixed across a selection when it is mixed across either part.
+impl std::ops::BitOr for Mix {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        if self.is_mixed() { self } else { other }
+    }
+}
+
+impl std::ops::BitOrAssign for Mix {
+    fn bitor_assign(&mut self, other: Self) {
+        *self = *self | other;
     }
 }
 
@@ -103,17 +141,17 @@ pub fn style_scope_for(selection: &[ElementId], selected: &[DisplayElement]) -> 
     // Fold the rest, raising a mixed flag as soon as a field diverges from base.
     let mut mixed = MixedFlags::default();
     for s in styles {
-        mixed.fill |= s.fill != base.fill;
-        mixed.stroke |= s.stroke != base.stroke;
-        mixed.stroke_w |= s.stroke_w != base.stroke_w;
-        mixed.opacity |= s.opacity != base.opacity;
-        mixed.text_color |= s.text_color != base.text_color;
-        mixed.font_family |= s.font.family != base.font.family;
-        mixed.font_size |= s.font.size != base.font.size;
-        mixed.bold |= (s.font.weight.is_bold()) != (base.font.weight.is_bold());
-        mixed.italic |= s.font.italic != base.font.italic;
-        mixed.underline |= s.font.underline != base.font.underline;
-        mixed.strikethrough |= s.font.strikethrough != base.font.strikethrough;
+        mixed.fill |= Mix::when(s.fill != base.fill);
+        mixed.stroke |= Mix::when(s.stroke != base.stroke);
+        mixed.stroke_w |= Mix::when(s.stroke_w != base.stroke_w);
+        mixed.opacity |= Mix::when(s.opacity != base.opacity);
+        mixed.text_color |= Mix::when(s.text_color != base.text_color);
+        mixed.font_family |= Mix::when(s.font.family != base.font.family);
+        mixed.font_size |= Mix::when(s.font.size != base.font.size);
+        mixed.bold |= Mix::when(s.font.weight.is_bold() != base.font.weight.is_bold());
+        mixed.italic |= Mix::when(s.font.italic != base.font.italic);
+        mixed.underline |= Mix::when(s.font.underline != base.font.underline);
+        mixed.strikethrough |= Mix::when(s.font.strikethrough != base.font.strikethrough);
     }
 
     Some(StyleModel { base, mixed })
@@ -218,7 +256,7 @@ mod tests {
             })
             .collect();
         let model = style_scope_for(&[eid("a"), eid("b")], &selected).expect("model");
-        assert!(model.mixed.fill, "off-screen b's fill differs");
+        assert!(model.mixed.fill.is_mixed(), "off-screen b's fill differs");
     }
 
     #[test]
@@ -235,10 +273,10 @@ mod tests {
         let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
         // Base is the first element's style; only fill diverges.
         assert_eq!(model.base, a);
-        assert!(model.mixed.fill);
-        assert!(!model.mixed.stroke);
-        assert!(!model.mixed.stroke_w);
-        assert!(!model.mixed.opacity);
+        assert!(model.mixed.fill.is_mixed());
+        assert!(!model.mixed.stroke.is_mixed());
+        assert!(!model.mixed.stroke_w.is_mixed());
+        assert!(!model.mixed.opacity.is_mixed());
         assert!(model.mixed.any());
     }
 
@@ -264,10 +302,10 @@ mod tests {
         };
         let dv = viewport(vec![elem("a", a), elem("b", b)]);
         let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
-        assert!(model.mixed.stroke_w);
-        assert!(model.mixed.opacity);
-        assert!(!model.mixed.fill);
-        assert!(!model.mixed.stroke);
+        assert!(model.mixed.stroke_w.is_mixed());
+        assert!(model.mixed.opacity.is_mixed());
+        assert!(!model.mixed.fill.is_mixed());
+        assert!(!model.mixed.stroke.is_mixed());
     }
 
     /// `TOILE-UI-397`: an element that names no family shows the picker's
@@ -304,7 +342,7 @@ mod tests {
         crate::ui::floatbar::StyleEdit::Font(None).apply_to(&mut reset);
         let dv = viewport(vec![elem("a", fresh), elem("b", reset)]);
         let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
-        assert!(!model.mixed.font_family);
+        assert!(!model.mixed.font_family.is_mixed());
     }
 
     #[test]
@@ -330,8 +368,8 @@ mod tests {
         };
         let dv = viewport(vec![elem("a", a), elem("b", b)]);
         let model = style_scope_for(&[eid("a"), eid("b")], &els(&dv)).expect("model");
-        assert!(model.mixed.underline);
-        assert!(model.mixed.strikethrough);
+        assert!(model.mixed.underline.is_mixed());
+        assert!(model.mixed.strikethrough.is_mixed());
         // The base is the first element; its decorations are off.
         assert_eq!(model.base.font.underline, ambre_core::Underline::Plain);
         assert_eq!(
@@ -339,7 +377,18 @@ mod tests {
             ambre_core::Strikethrough::Plain
         );
         // Weight / italic agree, so they are not flagged.
-        assert!(!model.mixed.bold);
-        assert!(!model.mixed.italic);
+        assert!(!model.mixed.bold.is_mixed());
+        assert!(!model.mixed.italic.is_mixed());
+    }
+
+    /// A field is mixed across a selection once any pair differs, and a later
+    /// agreeing pair never clears it.
+    #[test]
+    fn a_mixed_field_stays_mixed() {
+        let mut field = Mix::when(false);
+        assert_eq!(field, Mix::Uniform);
+        field |= Mix::when(true);
+        field |= Mix::when(false);
+        assert_eq!(field, Mix::Mixed);
     }
 }

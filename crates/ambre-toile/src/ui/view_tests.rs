@@ -2493,7 +2493,7 @@ fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
     rig.sent();
     let model = crate::ui::style::style_scope_for(&rig.view.selection, &rig.view.selection_data)
         .expect("a resolved selection has a model");
-    assert!(model.mixed.stroke_w, "the stroke width is mixed");
+    assert!(model.mixed.stroke_w.is_mixed(), "the stroke width is mixed");
     let mut style = model.base;
     crate::ui::floatbar::StyleEdit::Fill(Some(Rgba::from_bits(0x1122_33ff))).apply_to(&mut style);
     rig.view.apply_restyle(style.clone());

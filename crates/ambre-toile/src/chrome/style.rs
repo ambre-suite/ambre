@@ -36,7 +36,7 @@ use leptos::prelude::*;
 use crate::ui::floatbar::StyleEdit;
 use crate::ui::menu;
 use crate::ui::menu::CtxScope;
-use crate::ui::style::StyleModel;
+use crate::ui::style::{Mix, StyleModel};
 
 /// How long the inspector waits after the last edit before emitting the coalesced
 /// `RestyleElements` (`toile-styles`, "edits are debounced"). Short enough to feel
@@ -164,8 +164,10 @@ pub fn StyleInspector(
     });
 
     // A "Mixed" hint shown beside a control whose value differs across selection.
-    let mixed_hint = move |differs: bool| {
-        differs.then(|| view! { <span class="ambre-inspector-mixed">"Mixed"</span> })
+    let mixed_hint = move |field: Mix| {
+        field
+            .is_mixed()
+            .then(|| view! { <span class="ambre-inspector-mixed">"Mixed"</span> })
     };
 
     // Reactive per-field mixed flags (default when no model, that is, panel hidden).
@@ -303,8 +305,8 @@ pub fn StyleInspector(
                             on_toggle=on_strike
                         />
                         {move || mixed_hint(
-                            mixed().bold || mixed().italic || mixed().underline
-                                || mixed().strikethrough,
+                            mixed().bold | mixed().italic | mixed().underline
+                                | mixed().strikethrough,
                         )}
                     </div>
                 </div>
