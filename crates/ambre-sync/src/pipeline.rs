@@ -154,6 +154,12 @@ pub struct UpdateBody {
 /// cannot leave unframed. Only [`update_body`] frames one, and only
 /// [`open_update`] yields one from the relay, for [`split_update_body`] to
 /// check. It holds document plaintext, so `Debug` prints the length alone.
+///
+/// A frame is a transient on the way to the seal or out of the open: the
+/// delta it carries lives on as a [`ambre_core::DeltaBytes`]. So each frame
+/// wipes its bytes as it drops, through `Secret::wipe`. That covers the frame
+/// [`update_body`] builds once the seal has read it, and the opened frame
+/// [`split_update_body`] drops on success and on each refusal.
 #[derive(Clone, PartialEq, Eq)]
 pub struct UpdateFrame(Vec<u8>);
 
@@ -167,8 +173,8 @@ impl UpdateFrame {
     /// The framed bytes, owned, for a fuzz target that reads them back.
     #[cfg(any(test, feature = "fuzz"))]
     #[must_use]
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.0
+    pub fn into_bytes(mut self) -> Vec<u8> {
+        std::mem::take(&mut self.0)
     }
 
     /// How many bytes it holds.
@@ -188,6 +194,12 @@ impl UpdateFrame {
 impl std::fmt::Debug for UpdateFrame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "UpdateFrame({} bytes)", self.0.len())
+    }
+}
+
+impl Drop for UpdateFrame {
+    fn drop(&mut self) {
+        ambre_core::Secret::wipe(std::mem::take(&mut self.0));
     }
 }
 
@@ -296,8 +308,9 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     // "over the limit". `take` caps the reader at `ceiling + 1` bytes.
     //
     // A refused body leaves a partial plaintext in `out`, and `Secret::wipe`
-    // wipes it. That wipe reaches `out` alone. The decoder's own block and window buffers, and
-    // each buffer `read_to_end` outgrows, drop unwiped, out of its reach.
+    // wipes it. That wipe reaches `out` alone. The decoder's own block and
+    // window buffers, and each buffer `read_to_end` outgrows, drop unwiped,
+    // out of the wrapper's reach.
     let mut out = Vec::new();
     let refusal = match decoder
         .by_ref()
