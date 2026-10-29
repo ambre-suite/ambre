@@ -3085,10 +3085,11 @@ ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | to_index() | ret | Option<usize>	math	local: the 1-based number argument of INDEX; its axis, row or column, is known only after the arity is read
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | unary_math(f) | param | fn(f64)->f64	math	the std f64 function a one-argument formula function applies
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | values_equal_ci() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor() | ret | f64	math	the annuity factor PMT, PV and FV divide by, a formula number
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(nper) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(paytype) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(rate) | param | f64	math	local geometry / pixel arithmetic
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.periods | field | f64	math	the count of periods of an annuity, a formula number the call passed
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.rate | field | f64	math	the rate per period of an annuity, a formula number the call passed
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity::factor() | ret | f64	math	the annuity factor PMT, PV, FV and RATE read, a formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth() | ret | f64	math	the factor one payment grows by before it counts, a formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth(rate) | param | f64	math	the rate per period of the annuity, a formula number
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	an optional numeric argument of a call, or its default formula number
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	the formula number an absent argument reads as
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | row_col(current) | param | Option<f64>	math	formula number: the evaluating cell's 1-based row or column

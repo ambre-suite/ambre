@@ -479,6 +479,25 @@ fn financial_functions() {
     );
 }
 
+/// The type argument of an annuity names when a payment falls: 0 at the end
+/// of a period, any other number at its start. A type of 2 once scaled the
+/// rate twice over and answered a third timing.
+#[test]
+fn an_annuity_type_other_than_zero_reads_as_the_start() {
+    let at = |kind: f64| {
+        let args = [num(0.05), num(10.0), num(1000.0), num(0.0), num(kind)];
+        (
+            pmt(&args).to_display(),
+            fv(&args).to_display(),
+            pv(&args).to_display(),
+            nper(&args).to_display(),
+        )
+    };
+    assert_eq!(at(2.0), at(1.0));
+    assert_eq!(at(-1.0), at(1.0));
+    assert_ne!(at(1.0), at(0.0));
+}
+
 #[test]
 fn logic_info_functions() {
     assert_eq!(is_text(&[txt("x")]).to_display(), "true");

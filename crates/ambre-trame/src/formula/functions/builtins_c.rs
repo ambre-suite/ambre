@@ -100,9 +100,52 @@ pub(crate) fn mode(args: &[CellValue]) -> CellValue {
     CellValue::Number(best)
 }
 
-/// `(1+r)^n * pmt-coefficient` shared by the annuity formulas.
-pub(crate) fn annuity_factor(rate: f64, nper: f64, paytype: f64) -> f64 {
-    ((1.0 + rate).powf(nper) - 1.0) / rate * (1.0 + rate * paytype)
+/// When the payments of an annuity fall, from its type argument.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PayTiming {
+    /// Type 0, the default: at the end of each period.
+    End,
+    /// Any other type: at the start of each period.
+    Start,
+}
+
+impl PayTiming {
+    /// The timing the type argument at `i` names. An absent or zero type is
+    /// the end, and any other number the start: a type of 2 is no third
+    /// timing.
+    pub(crate) fn of_arg(args: &[CellValue], i: ArgIndex) -> Self {
+        if opt_num(args, i, 0.0) == 0.0 {
+            Self::End
+        } else {
+            Self::Start
+        }
+    }
+
+    /// What one payment grows by before it counts: one period of interest
+    /// at the start, nothing at the end.
+    pub(crate) fn growth(self, rate: f64) -> f64 {
+        match self {
+            Self::End => 1.0,
+            Self::Start => 1.0 + rate,
+        }
+    }
+}
+
+/// The terms of an annuity the formulas share. Named fields, so the rate and
+/// the count of periods cannot trade places.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Annuity {
+    pub(crate) rate: f64,
+    pub(crate) periods: f64,
+    pub(crate) timing: PayTiming,
+}
+
+impl Annuity {
+    /// `((1+r)^n - 1) / r` times the growth of one payment: what the stream
+    /// of payments is worth at the last period.
+    pub(crate) fn factor(self) -> f64 {
+        ((1.0 + self.rate).powf(self.periods) - 1.0) / self.rate * self.timing.growth(self.rate)
+    }
 }
 
 /// Optional positional argument as a number, with a default.
@@ -124,14 +167,19 @@ pub(crate) fn pmt(args: &[CellValue]) -> CellValue {
         opt_num(args, ArgIndex::new(2), 0.0),
     );
     let fv = opt_num(args, ArgIndex::new(3), 0.0);
-    let paytype = opt_num(args, ArgIndex::new(4), 0.0);
+    let timing = PayTiming::of_arg(args, ArgIndex::new(4));
     if nper == 0.0 {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
+    let annuity = Annuity {
+        rate,
+        periods: nper,
+        timing,
+    };
     let value = if rate == 0.0 {
         -(pv + fv) / nper
     } else {
-        -(pv * (1.0 + rate).powf(nper) + fv) / annuity_factor(rate, nper, paytype)
+        -(pv * (1.0 + rate).powf(nper) + fv) / annuity.factor()
     };
     CellValue::Number(value)
 }
@@ -147,11 +195,15 @@ pub(crate) fn fv(args: &[CellValue]) -> CellValue {
         opt_num(args, ArgIndex::new(2), 0.0),
     );
     let pv = opt_num(args, ArgIndex::new(3), 0.0);
-    let paytype = opt_num(args, ArgIndex::new(4), 0.0);
+    let annuity = Annuity {
+        rate,
+        periods: nper,
+        timing: PayTiming::of_arg(args, ArgIndex::new(4)),
+    };
     let value = if rate == 0.0 {
         -(pv + pmt_v * nper)
     } else {
-        -(pv * (1.0 + rate).powf(nper) + pmt_v * annuity_factor(rate, nper, paytype))
+        -(pv * (1.0 + rate).powf(nper) + pmt_v * annuity.factor())
     };
     CellValue::Number(value)
 }
@@ -167,11 +219,15 @@ pub(crate) fn pv(args: &[CellValue]) -> CellValue {
         opt_num(args, ArgIndex::new(2), 0.0),
     );
     let fv = opt_num(args, ArgIndex::new(3), 0.0);
-    let paytype = opt_num(args, ArgIndex::new(4), 0.0);
+    let annuity = Annuity {
+        rate,
+        periods: nper,
+        timing: PayTiming::of_arg(args, ArgIndex::new(4)),
+    };
     let value = if rate == 0.0 {
         -(fv + pmt_v * nper)
     } else {
-        -(fv + pmt_v * annuity_factor(rate, nper, paytype)) / (1.0 + rate).powf(nper)
+        -(fv + pmt_v * annuity.factor()) / (1.0 + rate).powf(nper)
     };
     CellValue::Number(value)
 }
@@ -187,14 +243,14 @@ pub(crate) fn nper(args: &[CellValue]) -> CellValue {
         opt_num(args, ArgIndex::new(2), 0.0),
     );
     let fv = opt_num(args, ArgIndex::new(3), 0.0);
-    let paytype = opt_num(args, ArgIndex::new(4), 0.0);
+    let timing = PayTiming::of_arg(args, ArgIndex::new(4));
     if rate == 0.0 {
         if pmt_v == 0.0 {
             return CellValue::Error(FormulaError::DivisionByZero);
         }
         return CellValue::Number(-(pv + fv) / pmt_v);
     }
-    let adj = pmt_v * (1.0 + rate * paytype);
+    let adj = pmt_v * timing.growth(rate);
     let num = adj - fv * rate;
     let den = adj + pv * rate;
     if den == 0.0 || num / den <= 0.0 {
@@ -215,14 +271,19 @@ pub(crate) fn rate(args: &[CellValue]) -> CellValue {
         opt_num(args, ArgIndex::new(2), 0.0),
     );
     let fv = opt_num(args, ArgIndex::new(3), 0.0);
-    let paytype = opt_num(args, ArgIndex::new(4), 0.0);
+    let timing = PayTiming::of_arg(args, ArgIndex::new(4));
     let mut r = opt_num(args, ArgIndex::new(5), 0.1);
-    // f(r) = pv*(1+r)^n + pmt*(1+r*type)*((1+r)^n-1)/r + fv
+    // f(r) = pv*(1+r)^n + pmt*growth(r)*((1+r)^n-1)/r + fv
     let f = |r: f64| -> f64 {
         if r == 0.0 {
             pv + pmt_v * nper + fv
         } else {
-            pv * (1.0 + r).powf(nper) + pmt_v * annuity_factor(r, nper, paytype) + fv
+            let annuity = Annuity {
+                rate: r,
+                periods: nper,
+                timing,
+            };
+            pv * (1.0 + r).powf(nper) + pmt_v * annuity.factor() + fv
         }
     };
     for _ in 0..100 {
