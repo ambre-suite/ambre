@@ -5389,6 +5389,7 @@
   {"edge": "verified-by", "from": "TOILE-271", "to": "ambre_toile::logic::convergence_tests::a_delete_takes_the_id_off_its_frame_list"},
   {"edge": "verified-by", "from": "TOILE-271", "to": "::a_pruned_group_leaves_its_frame_list"},
   {"edge": "verified-by", "from": "TOILE-271", "to": "::a_delete_concurrent_with_a_reorder_leaves_no_frame_member_behind"},
+  {"edge": "verified-by", "from": "TOILE-271", "to": "ambre_toile::logic::state::groups::cache_tests::a_stored_frame_list_naming_a_deleted_element_still_edits"},
   {"edge": "cites-section", "from": "TOILE-200", "section": "3", "to": "3-Toile/features/ambre-spec-toile-elements.md"},
   {"edge": "cites-section", "from": "TOILE-201", "section": "3", "to": "3-Toile/features/ambre-spec-toile-elements.md"},
   {"edge": "verified-by", "from": "TOILE-201", "to": "ambre_toile::logic::convergence_tests::a_delete_naming_a_missing_element_answers_an_error"},

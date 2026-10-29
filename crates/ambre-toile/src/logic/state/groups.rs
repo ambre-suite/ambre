@@ -828,4 +828,42 @@ mod cache_tests {
         assert!(!st.children_of(&group).contains(&r), "still grouped");
         assert_eq!(st.debug_caches(), rebuilt_caches(&st));
     }
+
+    /// A board stored before `TOILE-271` can name a deleted element on a
+    /// frame's list. Such a board loads, and a remove of the stale id or a
+    /// delete of the frame leaves caches equal to a rebuild.
+    #[test]
+    fn a_stored_frame_list_naming_a_deleted_element_still_edits() {
+        let mut old = ToileState::new();
+        let gone = create(&mut old, ElementKind::Shape(ShapeKind::Rect));
+        let frame = frame_with(&mut old, &gone);
+        // The delete of an older build: the element goes, its entry stays.
+        let _ = old
+            .doc
+            .get_map(super::super::Root::Elements.as_str())
+            .delete(gone.as_str());
+        old.doc.commit();
+        let stored = old.export_snapshot();
+        let load = || {
+            let mut st = ToileState::new();
+            st.import_snapshot(&stored)
+                .expect("a board this build wrote");
+            st
+        };
+
+        let mut st = load();
+        assert_eq!(st.membership_of(&frame), vec![gone.clone()]);
+        st.handle_command(ToileCommand::SetFrameChildren {
+            frame: frame.clone(),
+            add: vec![],
+            remove: vec![gone.clone()],
+        });
+        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new());
+        assert_eq!(st.debug_caches(), rebuilt_caches(&st));
+
+        let mut st = load();
+        st.handle_command(ToileCommand::DeleteElements { ids: vec![frame] });
+        assert_eq!(st.parents_of(&gone), &[] as &[ElementId]);
+        assert_eq!(st.debug_caches(), rebuilt_caches(&st));
+    }
 }
