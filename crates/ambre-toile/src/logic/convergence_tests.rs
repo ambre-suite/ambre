@@ -6198,9 +6198,10 @@ fn interleave(
     let mut b = ToileState::with_peer(peers.1);
     // Distinct canonical identities, as `SessionReady` would seed them. A
     // `ReactNth` on each peer then writes under its own key, and concurrent
-    // reactions on one target must both survive.
-    a.set_user_id(UserId::new());
-    b.set_user_id(UserId::new());
+    // reactions on one target must both survive. They are pinned too, so a
+    // found case replays with the same reaction keys.
+    a.set_user_id(UserId::from_bytes([0xA1; 16]));
+    b.set_user_id(UserId::from_bytes([0xB2; 16]));
     let rounds = ops_a.len().max(ops_b.len());
     for i in 0..rounds {
         let da = ops_a.get(i).and_then(|op| apply_local(&mut a, op));
