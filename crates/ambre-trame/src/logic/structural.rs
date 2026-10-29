@@ -72,19 +72,12 @@ impl TrameState {
         if at > P::end(&self.index) {
             return TrameOutcome::display_only(vec![]);
         }
-        let Some(index) = at.to_index() else {
-            return TrameOutcome::display_only(vec![]);
-        };
         // The new line carries a freshly minted, move-invariant uid value
         // (`trame-rows-and-columns`).
         let Some(uid) = self.mint_uid() else {
             return TrameOutcome::display_only(vec![super::cells::ids_exhausted()]);
         };
-        if self
-            .line_list::<P>()
-            .insert(index, uid.to_key_part().as_str())
-            .is_err()
-        {
+        if at.insert_into(&self.line_list::<P>(), &uid).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
         self.reanchor_formulas(P::edit(LineEdit::Insert { at, n: P::ONE }));
@@ -134,11 +127,7 @@ impl TrameState {
     fn remove_line<P: SheetLine>(&mut self, at: P) -> Option<bool> {
         // A virtual line has nothing materialized to remove.
         let removed = P::uid(&self.index, at)?;
-        let index = at.to_index()?;
-        let list = self.line_list::<P>();
-        if list.delete(index, 1).is_err() {
-            return None;
-        }
+        at.delete_from(&self.line_list::<P>())?;
         Some(self.purge_axis(removed, P::AXIS))
     }
 
@@ -154,11 +143,7 @@ impl TrameState {
         if from == to || from >= end || to >= end {
             return TrameOutcome::display_only(vec![]);
         }
-        let (Some(from), Some(to)) = (from.to_index(), to.to_index()) else {
-            return TrameOutcome::display_only(vec![]);
-        };
-        let list = self.line_list::<P>();
-        if list.mov(from, to).is_err() {
+        if from.move_in(&self.line_list::<P>(), to).is_none() {
             return TrameOutcome::display_only(vec![]);
         }
         let rewritten = self.reanchor_formulas(P::edit(LineEdit::Reorder));

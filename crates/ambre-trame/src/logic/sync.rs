@@ -45,7 +45,7 @@ fn write_entry(
     doc: &LoroDoc,
     peer: ambre_core::PeerId,
     entry: &ambre_core::PeerEntry,
-) -> Option<i32> {
+) -> Option<ambre_core::OpCounter> {
     if let Err(e) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
         .insert(ambre_core::PeerKey::of(peer).as_str(), entry.to_bytes())
@@ -56,7 +56,10 @@ fn write_entry(
     doc.commit_with(
         loro::CommitOptions::new().origin(ambre_core::crdt::CommitOrigin::Peers.as_str()),
     );
-    doc.oplog_vv().get(&peer.0).copied()
+    doc.oplog_vv()
+        .get(&peer.0)
+        .copied()
+        .map(ambre_core::OpCounter)
 }
 
 impl TrameState {
@@ -70,7 +73,12 @@ impl TrameState {
         // The registry entry alone is no edit: it waits for the first one and
         // travels with it (`AUTHOR-009`).
         if let Some(end) = self.entry_end {
-            if current.get(&self.doc.peer_id()) == Some(&end) {
+            if current
+                .get(&self.doc.peer_id())
+                .copied()
+                .map(ambre_core::OpCounter)
+                == Some(end)
+            {
                 return None;
             }
             self.entry_end = None;

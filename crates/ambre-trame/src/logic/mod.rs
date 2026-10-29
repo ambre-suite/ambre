@@ -273,7 +273,7 @@ pub struct TrameState {
     /// This PeerID's counter just past its registry entry, while the entry is
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
-    entry_end: Option<i32>,
+    entry_end: Option<ambre_core::OpCounter>,
 }
 
 /// The workbook scaffolding, which every peer writes on open, before any edit.

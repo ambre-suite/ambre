@@ -10,6 +10,7 @@ use std::hash::Hash;
 use std::ops::Add;
 
 use ambre_bus::{Col, ColCount, Row, RowCount};
+use loro::LoroMovableList;
 
 use super::{SheetIndex, Uid};
 
@@ -24,8 +25,18 @@ pub trait Line: Copy + Ord + Hash + Debug {
     /// One line.
     const ONE: Self::Count;
 
-    /// The position as an index into a foreign list, `None` past `usize`.
-    fn to_index(self) -> Option<usize>;
+    /// Insert the line `uid` at this position of `list`, the list that orders
+    /// the axis. `None` when the list refuses it, or the position lies past
+    /// the indices the list takes.
+    fn insert_into(self, list: &LoroMovableList, uid: &Uid) -> Option<()>;
+
+    /// Delete the line at this position of `list`. `None` as for
+    /// [`insert_into`](Self::insert_into).
+    fn delete_from(self, list: &LoroMovableList) -> Option<()>;
+
+    /// Move the line at this position of `list` to the position `to`. `None`
+    /// as for [`insert_into`](Self::insert_into).
+    fn move_in(self, list: &LoroMovableList, to: Self) -> Option<()>;
 
     /// The number of lines in a slice of `len` items, saturating.
     fn count_of(len: usize) -> Self::Count;
@@ -67,8 +78,15 @@ impl Line for Row {
     const FIRST: Self = Row::ZERO;
     const ONE: RowCount = RowCount::ONE;
 
-    fn to_index(self) -> Option<usize> {
-        Row::to_index(self)
+    fn insert_into(self, list: &LoroMovableList, uid: &Uid) -> Option<()> {
+        list.insert(self.to_index()?, uid.to_key_part().as_str())
+            .ok()
+    }
+    fn delete_from(self, list: &LoroMovableList) -> Option<()> {
+        list.delete(self.to_index()?, 1).ok()
+    }
+    fn move_in(self, list: &LoroMovableList, to: Self) -> Option<()> {
+        list.mov(self.to_index()?, to.to_index()?).ok()
     }
     fn count_of(len: usize) -> RowCount {
         RowCount::from_len(len)
@@ -111,8 +129,15 @@ impl Line for Col {
     const FIRST: Self = Col::ZERO;
     const ONE: ColCount = ColCount::ONE;
 
-    fn to_index(self) -> Option<usize> {
-        Col::to_index(self)
+    fn insert_into(self, list: &LoroMovableList, uid: &Uid) -> Option<()> {
+        list.insert(self.to_index()?, uid.to_key_part().as_str())
+            .ok()
+    }
+    fn delete_from(self, list: &LoroMovableList) -> Option<()> {
+        list.delete(self.to_index()?, 1).ok()
+    }
+    fn move_in(self, list: &LoroMovableList, to: Self) -> Option<()> {
+        list.mov(self.to_index()?, to.to_index()?).ok()
     }
     fn count_of(len: usize) -> ColCount {
         ColCount::from_len(len)

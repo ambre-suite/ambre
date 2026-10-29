@@ -3237,7 +3237,6 @@ ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimite
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.entry_end | field | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.undecodable | field | std::cell::Cell<bool>	generic	state flag
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | const | [&str;7]	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3288,19 +3287,15 @@ ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_di
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::note_undecodable(bytes) | param | &[u8]	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry() | ret | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
-ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::to_index() | ret | Option<usize>	newtype-inner	the Line view of Col::to_index, the newtype conversion to a Loro list index
 ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
-ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::to_index() | ret | Option<usize>	newtype-inner	the Line view of Row::to_index, the newtype conversion to a Loro list index
 ambre-trame | src/model/line.rs | crate::model::line | Line::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
-ambre-trame | src/model/line.rs | crate::model::line | Line::to_index() | ret | Option<usize>	newtype-inner	the axis newtype conversion to a Loro list index, one per axis
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 | field | String	newtype-inner	the stored cell key CellKey types
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	foreign-api	the stored cell key, for the Loro call into the map
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	newtype-inner	Uid's own field, key-part formatter and parser
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	newtype-inner	Uid's own field, key-part formatter and parser
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	generic	the key part a list element stores, read back into a uid: the codec of a struct of two fields
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	generic	the key part a list element stores for a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(need) | param | f64	math	local geometry / pixel arithmetic
@@ -3512,7 +3507,7 @@ ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount::new(months) | param | i64	newtype-inner	a count of months from January, past either end of the year
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | UNIX_EPOCH_SERIAL | const | i64	math	calendar arithmetic: a count of days
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(CivilDate)->i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	free-text	the search text the user typed, folded by the case it is compared under
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
