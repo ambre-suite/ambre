@@ -4212,6 +4212,8 @@
   {"edge": "verified-by", "from": "TRAME-245", "to": "::an_imported_number_that_is_not_finite_stays_text"},
   {"edge": "verified-by", "from": "TRAME-245", "to": "::a_filled_number_that_is_not_finite_stays_text"},
   {"edge": "verified-by", "from": "TRAME-245", "to": "ambre_trame::formula::functions::tests::text_that_spells_no_finite_number_counts_in_no_total"},
+  {"edge": "verified-by", "from": "TRAME-245", "to": "::a_criterion_that_spells_no_finite_number_compares_as_text"},
+  {"edge": "verified-by", "from": "TRAME-245", "to": "ambre_trame::logic::tests::group5::a_filter_operand_that_spells_no_finite_number_compares_as_text"},
   {"edge": "verified-by", "from": "TRAME-245", "to": "ambre_trame::formula::parser::tests::a_literal_past_the_largest_number_is_refused"},
   {"edge": "cites-section", "from": "TRAME-233", "section": "3", "to": "2-Trame/features/ambre-spec-trame-formula-engine.md"},
   {"edge": "cites-rule", "from": "TRAME-233", "to": "TRAME-006"},

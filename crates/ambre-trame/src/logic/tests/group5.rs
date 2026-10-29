@@ -474,6 +474,19 @@ fn condition_pass_covers_every_operator() {
     assert!(!condition_pass(FilterOp::IsNotEmpty, &empty, ""));
 }
 
+/// A filter operand that spells no finite number compares as text. Read as a
+/// number, `NaN` would order equal to every number, so `>=` would keep them
+/// all (`TRAME-245`).
+#[test]
+fn a_filter_operand_that_spells_no_finite_number_compares_as_text() {
+    use super::super::condition_pass;
+    use crate::formula::types::CellValue;
+    let num = CellValue::Number(10.0);
+    assert!(!condition_pass(FilterOp::Gte, &num, "NaN"));
+    assert!(condition_pass(FilterOp::Lte, &num, "NaN"));
+    assert!(!condition_pass(FilterOp::Eq, &num, "1e999"));
+}
+
 /// `filter_pass` for the values mode.
 #[test]
 fn filter_pass_values() {

@@ -864,6 +864,17 @@ fn text_that_spells_no_finite_number_counts_in_no_total() {
     assert!(txt("1e999").as_number().is_err());
 }
 
+/// A criterion that spells no finite number compares as text. Read as a
+/// number, `inf` would match no text cell and `>1e999` no cell at all
+/// (`TRAME-245`).
+#[test]
+fn a_criterion_that_spells_no_finite_number_compares_as_text() {
+    let r = range(3, 1, vec![num(1.0), txt("inf"), txt("NaN")]);
+    assert_eq!(countif(&[r.clone(), txt("inf")]).to_display(), "1");
+    assert_eq!(countif(&[r.clone(), txt("=NaN")]).to_display(), "1");
+    assert_eq!(countif(&[r, txt(">1e999")]).to_display(), "2");
+}
+
 /// Text that reads as a number counts in a total, from a range as from a
 /// scalar; text that does not is left out (`TRAME-200`).
 #[test]
