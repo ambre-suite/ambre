@@ -2552,6 +2552,7 @@ ambre-sync | src/pipeline.rs | crate::pipeline | decompress_zstd_bounded() | ret
 ambre-sync | src/pipeline.rs | crate::pipeline | decompress_zstd_bounded(body) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | OpenedPayload.0 | field | Vec<u8>	newtype-inner	the opened and decompressed plaintext, moved without a copy into the payload role its caller names
 ambre-sync | src/pipeline.rs | crate::pipeline | seal_payload(payload) | param | &[u8]	generic	generic byte/text API or codec
+ambre-sync | src/pipeline.rs | crate::pipeline | split_frame(body) | param | &[u8]	generic	generic byte/text API or codec: an update frame read in place before it is wiped
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | CompressionVersion::from_byte(byte) | param | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
 ambre-sync | src/pipeline.rs | crate::pipeline | SummaryMarker::byte() | ret | u8	newtype-inner	CompressionVersion/SummaryMarker byte codec
