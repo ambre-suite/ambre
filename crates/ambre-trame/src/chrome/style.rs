@@ -13,6 +13,57 @@ use leptos::prelude::*;
 
 use super::commands::{REDO, UNDO};
 
+/// A style attribute a toolbar toggle flips: the variant a click sets.
+pub(crate) trait Flip {
+    /// The other variant.
+    fn flipped(self) -> Self;
+}
+
+impl Flip for ambre_bus::Weight {
+    fn flipped(self) -> Self {
+        match self {
+            Self::Regular => Self::Bold,
+            Self::Bold => Self::Regular,
+        }
+    }
+}
+
+impl Flip for ambre_bus::Slant {
+    fn flipped(self) -> Self {
+        match self {
+            Self::Upright => Self::Italic,
+            Self::Italic => Self::Upright,
+        }
+    }
+}
+
+impl Flip for ambre_bus::Underline {
+    fn flipped(self) -> Self {
+        match self {
+            Self::Plain => Self::Underlined,
+            Self::Underlined => Self::Plain,
+        }
+    }
+}
+
+impl Flip for ambre_bus::Strikethrough {
+    fn flipped(self) -> Self {
+        match self {
+            Self::Plain => Self::Struck,
+            Self::Struck => Self::Plain,
+        }
+    }
+}
+
+impl Flip for ambre_bus::WordBreak {
+    fn flipped(self) -> Self {
+        match self {
+            Self::Whole => Self::Anywhere,
+            Self::Anywhere => Self::Whole,
+        }
+    }
+}
+
 /// The Send toggle signals the Trame chrome components subscribe to, resolved
 /// once from the launcher's `CommandStates` store. Plain `RwSignal`s, so this is
 /// `Copy` and `Send` and may live inside the `<Router>` subtree. The `!Send`

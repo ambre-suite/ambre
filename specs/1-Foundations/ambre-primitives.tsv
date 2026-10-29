@@ -3179,6 +3179,10 @@ ambre-trame | src/formula/render.rs | crate::formula::render | render_range() | 
 ambre-trame | src/formula/render.rs | crate::formula::render | render_span() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_stored() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_uid() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_char() | ret | impl Iterator<Item=char>	generic	the folded form of one char of a text a comparison ignoring case folds
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_char(ch) | param | char	generic	one char of a text a comparison ignoring case folds: a query, a cell's text or a SEARCH argument
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_char_simple() | ret | char	generic	the one char a char folds to, or the char itself when its fold is several
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_char_simple(ch) | param | char	generic	one char of a SEARCH argument, folded to one so positions stay aligned
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Boolean.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Number.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Text.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
@@ -3193,7 +3197,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushBool.0 | fi
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushStr.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::is_empty() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	the finite number a cell's text spells, inside the formula engine
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	free-text	free text: user content, label, message or display string
@@ -3205,13 +3208,12 @@ ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bo
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
+ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::carries_style() | ret | bool	generic	predicate: whether a cell holds a style a fill carries
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(haystack) | param | &str	free-text	the displayed text of a cell; the query is the typed FoldedNeedle and the extent a MatchExtent
 ambre-trame | src/logic/find.rs | crate::logic::find | fold() | ret | String	generic	case-folds any text; a folded query is a FoldedNeedle
-ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	free-text	text folded for a comparison: the query, which only fold_needle hands it, or a cell's displayed text
-ambre-trame | src/logic/find.rs | crate::logic::find | fold_char() | ret | impl Iterator<Item=char>	generic	the folded form of one char of a text a comparison folds
-ambre-trame | src/logic/find.rs | crate::logic::find | fold_char(ch) | param | char	generic	one char of a text a comparison folds: the query or a cell's text
+ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	free-text	the query text, which only fold_needle hands it to fold
 ambre-trame | src/logic/find.rs | crate::logic::find | strip_ci_match() | ret | Option<&'a str>	free-text	the raw text of a cell past a match of the query
 ambre-trame | src/logic/find.rs | crate::logic::find | strip_ci_match(hay) | param | &'a str	free-text	the raw text of a cell, scanned for the query; the query is the typed FoldedNeedle
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci() | ret | String	free-text	free text: user content, label, message or display string

@@ -9,6 +9,7 @@
 // super::*`.
 
 use super::*;
+use crate::formula::text::fold_char;
 use crate::formula::types::CellId;
 use ambre_bus::app::find::{FindText, MatchCount, MatchIndex};
 
@@ -360,22 +361,27 @@ fn fold(s: &str, case: CaseMatch) -> String {
     }
 }
 
-/// One char lowercased, with a final sigma read as a plain one, as Unicode
-/// case folding reads it. A whole-string lowercase picks the final sigma by
-/// context, and a char alone cannot: folding char by char gives find and
-/// replace one form.
-fn fold_char(ch: char) -> impl Iterator<Item = char> {
-    ch.to_lowercase()
-        .map(|lower| if lower == '\u{3C2}' { '\u{3C3}' } else { lower })
-}
-
 /// Whether `haystack` matches `needle`, folded by the needle's case: exact
 /// equality for a whole-cell match, else substring containment.
+///
+/// An insensitive match reads the cell through [`strip_ci_match`], as a
+/// replace does. A needle that ends inside the fold of one char matches for
+/// neither. So a find meets no cell a replace leaves untouched.
 fn cell_matches(haystack: &str, needle: &FoldedNeedle, extent: MatchExtent) -> bool {
-    let hay = fold(haystack, needle.case);
-    match extent {
-        MatchExtent::WholeCell => hay == needle.text,
-        MatchExtent::Substring => hay.contains(needle.text.as_str()),
+    match (needle.case, extent) {
+        (CaseMatch::Sensitive, MatchExtent::WholeCell) => haystack == needle.text,
+        (CaseMatch::Sensitive, MatchExtent::Substring) => haystack.contains(needle.text.as_str()),
+        (CaseMatch::Insensitive, MatchExtent::WholeCell) => {
+            strip_ci_match(haystack, needle) == Some("")
+        }
+        (CaseMatch::Insensitive, MatchExtent::Substring) => {
+            haystack.char_indices().any(|(at, _)| {
+                haystack
+                    .get(at..)
+                    .and_then(|rest| strip_ci_match(rest, needle))
+                    .is_some()
+            })
+        }
     }
 }
 
@@ -502,6 +508,20 @@ mod tests {
         };
         assert!(hit("\u{3BF}\u{3C3}", "\u{39F}\u{3A3}"));
         assert!(hit("\u{39F}\u{3A3}", "\u{3BF}\u{3C3}"));
+    }
+
+    /// A capital I with a dot folds to two chars. A needle that ends between
+    /// them is no match for a replace, so a find must not meet it either.
+    #[test]
+    fn a_find_meets_no_cell_a_replace_leaves_untouched() {
+        let hit = |hay: &str, query: &str, extent| {
+            super::cell_matches(hay, &needle(query, CaseMatch::Insensitive), extent)
+        };
+        assert!(!hit("\u{130}", "i", MatchExtent::Substring));
+        assert_eq!(ci("\u{130}", "i", "Z"), "\u{130}");
+        assert!(hit("a\u{130}b", "\u{130}B", MatchExtent::Substring));
+        assert!(hit("\u{130}", "\u{130}", MatchExtent::WholeCell));
+        assert!(!hit("ab", "a", MatchExtent::WholeCell));
     }
 
     #[test]

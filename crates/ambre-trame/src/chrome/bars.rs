@@ -42,7 +42,7 @@ fn merge_command(merged: ambre_bus::Merge) -> CommandId {
 use super::popovers::{
     BordersPopover, ColorPopover, FontPopover, HAlignPopover, NumberFormatPopover, VAlignPopover,
 };
-use super::style::{StyleState, Toggles};
+use super::style::{Flip, StyleState, Toggles};
 
 /// The Trame format toolbar (the launcher mounts it inside the chrome `Toolbar`
 /// slot). Bold/Italic/Undo/Redo invoke their `CommandId` through `on_command`,
@@ -153,9 +153,7 @@ pub fn FormatBar(
             icon=icondata::BsTypeUnderline
             pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.underline.get().as_bool()))
             on_toggle=Callback::new(move |()| on_style.run(StylePatch {
-                underline: Some(ambre_bus::Underline::from_bool(
-                    !style.underline.get_untracked().as_bool(),
-                )),
+                underline: Some(style.underline.get_untracked().flipped()),
                 ..Default::default()
             }))
         />
@@ -164,9 +162,7 @@ pub fn FormatBar(
             icon=icondata::BsTypeStrikethrough
             pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.strikethrough.get().as_bool()))
             on_toggle=Callback::new(move |()| on_style.run(StylePatch {
-                strikethrough: Some(ambre_bus::Strikethrough::from_bool(
-                    !style.strikethrough.get_untracked().as_bool(),
-                )),
+                strikethrough: Some(style.strikethrough.get_untracked().flipped()),
                 ..Default::default()
             }))
         />
@@ -248,7 +244,7 @@ pub fn FormatBar(
             aria-pressed=move || ambre_chrome::Pressed::from_bool(style.wrap.get().as_bool()).aria()
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_style.run(StylePatch {
-                wrap: Some(ambre_bus::WordBreak::from_bool(!style.wrap.get_untracked().as_bool())),
+                wrap: Some(style.wrap.get_untracked().flipped()),
                 ..Default::default()
             })
         >

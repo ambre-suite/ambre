@@ -20,7 +20,7 @@ use super::commands::{
 };
 use super::find_replace::{FindMode, FindReplaceState};
 use super::popovers::FilterPopoverState;
-use super::style::StyleState;
+use super::style::{Flip, StyleState};
 
 /// The signals Trame's commands open its panels through. Each is `Copy`, so
 /// the handler is too.
@@ -63,14 +63,10 @@ impl TrameHandler {
         let mut patch = StylePatch::default();
         match style {
             StyleToggle::Bold => {
-                patch.bold = Some(ambre_bus::Weight::from_bool(
-                    !self.style.bold.get_untracked().as_bool(),
-                ));
+                patch.bold = Some(self.style.bold.get_untracked().flipped());
             }
             StyleToggle::Italic => {
-                patch.italic = Some(ambre_bus::Slant::from_bool(
-                    !self.style.italic.get_untracked().as_bool(),
-                ));
+                patch.italic = Some(self.style.italic.get_untracked().flipped());
             }
         }
         AppCommand::Trame(TrameCommand::SetCellStyle { patch })

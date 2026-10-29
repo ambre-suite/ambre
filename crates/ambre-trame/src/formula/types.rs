@@ -152,20 +152,6 @@ impl RangeDep {
             && cell.col >= self.col_start
             && cell.col <= self.col_end
     }
-
-    /// Number of cells spanned by this range, held at the top. A range over
-    /// every row and column holds past 64 bits of cells, and a `usize`
-    /// product overflowed there.
-    pub fn len(&self) -> ambre_core::CellCount {
-        let rows = u64::from(self.row_end.count_from(self.row_start).get()) + 1;
-        let cols = u64::from(self.col_end.count_from(self.col_start).get()) + 1;
-        ambre_core::CellCount::new(rows.saturating_mul(cols))
-    }
-
-    /// Returns `true` when the range spans zero cells.
-    pub fn is_empty(&self) -> bool {
-        self.len().is_zero()
-    }
 }
 
 /// The lines a range takes whole, on one axis. Both bounds are inclusive, and
@@ -905,17 +891,6 @@ pub(crate) use crate::columns::{alpha_to_col, col_to_alpha};
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A range over every row and every column holds more cells than a
-    /// `usize` counts. The count holds at the top, and never overflows.
-    #[test]
-    fn a_whole_sheet_range_counts_its_cells_without_overflow() {
-        let whole = RangeDep::new(Row::ZERO, Row::new(u32::MAX), Col::ZERO, Col::new(u32::MAX));
-        assert_eq!(whole.len(), ambre_core::CellCount::new(u64::MAX));
-        let block = RangeDep::new(Row::ZERO, Row::new(1), Col::ZERO, Col::new(2));
-        assert_eq!(block.len(), ambre_core::CellCount::new(6));
-        assert!(!block.is_empty());
-    }
 
     #[test]
     fn col_to_alpha_basics() {

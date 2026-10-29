@@ -587,6 +587,11 @@ fn search_counts_the_chars_of_the_text_it_was_given() {
         search_fn(&[txt("\u{3C3}"), txt("A\u{3A3}")]).to_display(),
         "2"
     );
+    // A capital I with a dot has no simple fold, so a plain i does not meet it.
+    assert!(matches!(
+        search_fn(&[txt("i"), txt("\u{130}")]),
+        CellValue::Error(_)
+    ));
 }
 
 #[test]

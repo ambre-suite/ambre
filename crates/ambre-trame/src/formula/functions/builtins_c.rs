@@ -485,11 +485,7 @@ pub(crate) fn search_fn(args: &[CellValue]) -> CellValue {
         value
             .to_display()
             .chars()
-            .map(|ch| match ch.to_lowercase().next() {
-                Some('\u{3C2}') => '\u{3C3}',
-                Some(lower) => lower,
-                None => ch,
-            })
+            .map(crate::formula::text::fold_char_simple)
             .collect()
     };
     let lowered = vec![
