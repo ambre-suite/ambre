@@ -51,8 +51,36 @@ pub use svg_import::import_svg;
 /// [`ImportBatch::groups`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportRef {
-    Slot(usize),
-    Group(usize),
+    Slot(ImportElementSlot),
+    Group(ImportGroupSlot),
+}
+
+ambre_core::define_index! {
+    /// The rank of a `CreateElement` in [`ImportBatch::commands`]. It means
+    /// nothing outside that batch.
+    pub struct ImportElementSlot(u32);
+    /// A number of element creates in one import batch.
+    pub struct ImportElementSlotCount;
+    /// The signed gap between two element slots.
+    pub struct ImportElementSlotDelta(i64);
+    /// A run of element slots.
+    pub struct ImportElementSlotSpan;
+    /// A list indexed by element slot.
+    pub struct ImportElementSlotVec;
+}
+
+ambre_core::define_index! {
+    /// The rank of a group in [`ImportBatch::groups`]. It means nothing
+    /// outside that batch.
+    pub struct ImportGroupSlot(u32);
+    /// A number of groups in one import batch.
+    pub struct ImportGroupSlotCount;
+    /// The signed gap between two group slots.
+    pub struct ImportGroupSlotDelta(i64);
+    /// A run of group slots.
+    pub struct ImportGroupSlotSpan;
+    /// A list indexed by group slot.
+    pub struct ImportGroupSlotVec;
 }
 
 /// A `<g>` (or a Figma/Miro group) to rebuild via `GroupElements` after the

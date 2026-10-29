@@ -19,7 +19,7 @@ use crate::logic::model::ElementKind;
 
 /// Largest edge (px) of the placeholder thumbnail stored inline in the media
 /// entry. Small enough to paint instantly, large enough to preview.
-const THUMB_MAX_EDGE: u32 = 256;
+const THUMB_MAX_EDGE: WholePx<ambre_core::ImagePx> = WholePx::new(256);
 
 /// Import a single raster file: decode, bound, thumbnail, and place one
 /// `image` element at the origin sized to the native (clamped) resolution. The
@@ -94,8 +94,8 @@ pub(super) fn decode_media(
     // so it round-trips losslessly and the UI can paint it before the full-res
     // blob arrives. `thumbnail` also scales up, so a picture already within
     // the edge is kept as it is rather than inflated in the document.
-    let thumb_img = if width.max(height) > THUMB_MAX_EDGE {
-        decoded.thumbnail(THUMB_MAX_EDGE, THUMB_MAX_EDGE)
+    let thumb_img = if size.width.max(size.height) > THUMB_MAX_EDGE {
+        decoded.thumbnail(THUMB_MAX_EDGE.get(), THUMB_MAX_EDGE.get())
     } else {
         decoded
     };
@@ -232,7 +232,8 @@ mod tests {
         .unwrap();
         // The thumbnail decodes back to something within the max edge.
         let thumb = image::load_from_memory(blob.thumb.as_bytes()).unwrap();
-        assert!(thumb.width() <= THUMB_MAX_EDGE && thumb.height() <= THUMB_MAX_EDGE);
+        let edge = THUMB_MAX_EDGE.get();
+        assert!(thumb.width() <= edge && thumb.height() <= edge);
     }
 
     /// A picture smaller than the thumbnail edge keeps its own size: the

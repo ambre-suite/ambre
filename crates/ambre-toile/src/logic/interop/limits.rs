@@ -18,8 +18,8 @@ ambre_core::define_tally! {
 }
 
 /// The symmetric bound an imported coordinate is clamped to, per axis. Finite
-/// and not negative: a NaN bound would let every coordinate through, and a
-/// negative one would turn the clamp range inside out.
+/// and not negative: with a NaN or a negative bound, the old `f64::clamp`
+/// panicked, since its range was empty or undefined.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CoordBound(BoardLength);
 
@@ -80,22 +80,18 @@ impl Limits {
 
     /// Clamp a point to the world bound.
     pub fn clamp_point(&self, p: Point) -> Point {
-        Point::new(self.clamp_axis(p.x), self.clamp_axis(p.y))
+        Point::new(
+            self.clamp_coord(BoardLength::new(p.x)).get(),
+            self.clamp_coord(BoardLength::new(p.y)).get(),
+        )
     }
 
     /// Clamp a rect's origin and far corner to the world bound. Width/height stay
     /// non-negative (a clamp can only shrink, never invert, the box).
     pub fn clamp_rect(&self, r: Rect) -> Rect {
-        let x0 = self.clamp_axis(r.x0.min(r.x1));
-        let y0 = self.clamp_axis(r.y0.min(r.y1));
-        let x1 = self.clamp_axis(r.x0.max(r.x1));
-        let y1 = self.clamp_axis(r.y0.max(r.y1));
-        Rect::new(x0, y0, x1, y1)
-    }
-
-    /// [`Self::clamp_coord`] on one kurbo axis value, a board coordinate.
-    fn clamp_axis(&self, v: f64) -> f64 {
-        self.clamp_coord(BoardLength::new(v)).get()
+        let low = self.clamp_point(Point::new(r.x0.min(r.x1), r.y0.min(r.y1)));
+        let high = self.clamp_point(Point::new(r.x0.max(r.x1), r.y0.max(r.y1)));
+        Rect::from_points(low, high)
     }
 
     /// Fail the import if adding one more element would exceed [`max_elements`].

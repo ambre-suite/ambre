@@ -2617,8 +2617,6 @@ ambre-toile | src/logic/connector.rs | crate::logic::connector | anchor_is_horiz
 ambre-toile | src/logic/connector.rs | crate::logic::connector | outline_meets() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/connector.rs | crate::logic::connector | segment_meets() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::is_empty() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_axis() | ret | f64	foreign-api	the f64 a kurbo Point or Rect holds on one axis
-ambre-toile | src/logic/interop/limits.rs | crate::logic::interop::limits | Limits::clamp_axis(v) | param | f64	foreign-api	the f64 a kurbo Point or Rect holds on one axis
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | Entry.pixels | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::pixels() | ret | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
@@ -2629,11 +2627,8 @@ ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::De
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Json.format | field | &'static str	free-text	format label in an error message (variant unused)
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Json.msg | field | String	free-text	foreign error message
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportError::Parse.0 | field | String	free-text	foreign error message
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportRef::Group.0 | field | usize	newtype-inner	ImportRef variant carries its own index space
-ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportRef::Slot.0 | field | usize	newtype-inner	ImportRef variant carries its own index space
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportReport::skip(reason) | param | impl Into<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/pdf_export.rs | crate::logic::interop::pdf_export | PdfExportError::Serialize.0 | field | String	free-text	foreign error message
-ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | THUMB_MAX_EDGE | const | u32	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | decode_media(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster | import_raster(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_export.rs | crate::logic::interop::svg_export | SvgExport.document | field | String	generic	SVG serialisation text
@@ -2652,7 +2647,6 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct::EPS | const | f64	math	a constant local to one function
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_svg(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | push_element() | ret | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
@@ -2697,7 +2691,6 @@ ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(haystack) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find | text_matches(needle) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | ToileState::canonical_dump() | ret | String	generic	schema-freeze / fixture tooling text and counts
-ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_deck::PITCH | const | f64	local	the board spacing between two slides of the fixture deck, read once in its function
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board::COLS | const | u32	math	a constant local to one function
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | build_spread_board::ROWS | const | u32	math	a constant local to one function
 ambre-toile | src/logic/state/fixtures.rs | crate::logic::state::fixtures | hex_of() | ret | String	generic	schema-freeze / fixture tooling text and counts
@@ -2923,13 +2916,13 @@ ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_by_center(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	the multiplier one zoom step applies to the zoom
-ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	math	the widest radius four cubics draw within 0.1 of the ellipse, in the space of the rect ellipse_path fills: the board walk and the screen-space draft both call it, so no one length type fits
+ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	generic	the widest radius four cubics draw within 0.1 of the ellipse, in the space of the rect ellipse_path fills: the board walk and the screen-space draft both call it, so no one length type fits
 ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	the multiplier a radius takes to place a quarter-circle Bezier control point
 ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	the sRGB transfer table, one linear value per 8-bit channel
 ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	the contrast ratio (L1 + 0.05) / (L2 + 0.05) of two luminances
 ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	the relative luminance, a weighted sum of the linear channels
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	math	the corner radius, in the space of the kurbo rect it rounds: the board walk passes board units and the link badge passes screen pixels
+ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	generic	the corner radius, in the space of the kurbo rect it rounds: the board walk passes board units and the link badge passes screen pixels
 ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | new_doc_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | status_label() | ret | &'static str	free-text	free text: user content, label, message or display string

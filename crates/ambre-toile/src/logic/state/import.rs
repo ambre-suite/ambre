@@ -496,8 +496,8 @@ impl ToileState {
         group_ids: &[Option<ElementId>],
     ) -> Option<ElementId> {
         let id = match r {
-            ImportRef::Slot(i) => slot_ids.get(i).cloned().flatten(),
-            ImportRef::Group(i) => group_ids.get(i).cloned().flatten(),
+            ImportRef::Slot(i) => slot_ids.get(i.to_usize()).cloned().flatten(),
+            ImportRef::Group(i) => group_ids.get(i.to_usize()).cloned().flatten(),
         }?;
         self.bounds.contains_key(&id).then_some(id)
     }
@@ -580,7 +580,10 @@ mod tests {
     use kurbo::{Point, Size};
 
     use crate::logic::command::{ImportSlot, InitContent, MediaRef, ToileCommand};
-    use crate::logic::interop::{ContentHash, ImportBatch, ImportGroup, ImportRef, MediaBlob};
+    use crate::logic::interop::{
+        ContentHash, ImportBatch, ImportElementSlot, ImportGroup, ImportGroupSlot, ImportRef,
+        MediaBlob,
+    };
     use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
     use crate::logic::state::ToileState;
 
@@ -655,10 +658,16 @@ mod tests {
             styles: vec![None; 3],
             groups: vec![
                 ImportGroup {
-                    members: vec![ImportRef::Slot(0), ImportRef::Slot(1)],
+                    members: vec![
+                        ImportRef::Slot(ImportElementSlot::ZERO),
+                        ImportRef::Slot(ImportElementSlot::new(1)),
+                    ],
                 },
                 ImportGroup {
-                    members: vec![ImportRef::Slot(2), ImportRef::Group(0)],
+                    members: vec![
+                        ImportRef::Slot(ImportElementSlot::new(2)),
+                        ImportRef::Group(ImportGroupSlot::ZERO),
+                    ],
                 },
             ],
             ..Default::default()
