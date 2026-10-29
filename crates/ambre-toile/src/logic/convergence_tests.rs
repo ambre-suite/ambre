@@ -6292,6 +6292,49 @@ fn a_delete_concurrent_with_a_reorder_leaves_no_frame_member_behind() {
     assert_eq!(b.debug_caches(), rebuilt_caches(&b), "peer B");
 }
 
+/// Two peers that each add one rect to one frame, concurrently, leave the id
+/// on the frame's list twice. A remove then takes every entry off, so the rect
+/// leaves the frame, and each peer's caches equal a rebuild.
+#[test]
+fn a_remove_takes_every_entry_a_concurrent_add_left() {
+    let mut a = ToileState::new();
+    let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let rect = create_rect(&mut a, Point::new(10.0, 10.0), Size::new(20.0, 20.0));
+    let mut b = ToileState::new();
+    b.apply_remote_snapshot(&a.export_snapshot());
+    let add = |st: &mut ToileState| {
+        st.handle_command(ToileCommand::SetFrameChildren {
+            frame: frame.clone(),
+            add: vec![rect.clone()],
+            remove: vec![],
+        })
+        .update
+        .expect("a delta")
+    };
+    let from_a = add(&mut a);
+    let from_b = add(&mut b);
+    a.apply_remote(&from_b);
+    b.apply_remote(&from_a);
+    assert_eq!(
+        a.membership_of(&frame),
+        vec![rect.clone(), rect.clone()],
+        "the merge holds both adds"
+    );
+    let removed = a
+        .handle_command(ToileCommand::SetFrameChildren {
+            frame: frame.clone(),
+            add: vec![],
+            remove: vec![rect.clone()],
+        })
+        .update
+        .expect("a delta");
+    b.apply_remote(&removed);
+    for (name, st) in [("remover", &mut a), ("receiver", &mut b)] {
+        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new(), "{name}");
+        assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
+    }
+}
+
 /// Two peers holding one frame and one rect, the rect a member of the frame.
 fn a_framed_rect_on_two_peers() -> (ToileState, ToileState, ElementId, ElementId) {
     let mut a = ToileState::new();

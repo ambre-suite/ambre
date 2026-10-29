@@ -11,7 +11,7 @@ use loro::{LoroMap, LoroMovableList, LoroValue};
 use crate::logic::command::{ToileError, ToileEvent, ToileOutcome};
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{ElementId, ElementKind, NodeId};
-use ambre_bus::app::toile::FRAME_NAME_MAX;
+use ambre_bus::app::toile::{ElementCount, FRAME_NAME_MAX};
 
 use super::ToileState;
 use super::codec::{em_seed_group, str_of};
@@ -94,13 +94,39 @@ impl ToileState {
             .first()
             .and_then(frame_of)
             .filter(|f| members.iter().all(|m| frame_of(m).as_ref() == Some(f)));
-        // Detach each member, then prune any group emptied by the detach, so the
-        // incremental caches stay equal to a full rebuild. Done before computing
-        // `insert_at` since pruning shifts `layers`.
+        // Write the group and its member list before the first detach. A board
+        // that refuses the container then refuses the group with the members
+        // where they were.
+        let refused = || ToileError::WriteFailed("the board refused the new group".to_owned());
+        let elements = self.doc.get_map(Root::Elements.as_str());
+        let Ok(em) = elements
+            .insert_container(id.as_str(), LoroMap::new())
+            .map(Fields::<ElementKey>::of)
+        else {
+            return Err(refused());
+        };
+        em_seed_group(&em);
+        let Ok(children) = em.insert_container(ElementKey::Children, LoroMovableList::new()) else {
+            let _ = elements.delete(id.as_str());
+            return Err(refused());
+        };
+        let held: Vec<&ElementId> = members
+            .iter()
+            .filter(|m| children.push(m.as_str()).is_ok())
+            .collect();
+
+        // Detach each member from the containers it sat in. Then prune any
+        // group the detach emptied, so the incremental caches stay equal to a
+        // full rebuild. The new group holds its members already, so the prune
+        // keeps it. Done before computing `insert_at` since pruning shifts
+        // `layers`.
         for m in &members {
             for p in self.parents_of(m).to_vec() {
                 self.remove_child(&p, m);
             }
+        }
+        for m in held {
+            self.link_parent(m, &id);
         }
         self.prune_empty_groups();
         self.rematerialize_layers();
@@ -116,24 +142,6 @@ impl ToileState {
             .min()
             .unwrap_or(0);
 
-        let refused = || ToileError::WriteFailed("the board refused the new group".to_owned());
-        let Ok(em) = self
-            .doc
-            .get_map(Root::Elements.as_str())
-            .insert_container(id.as_str(), LoroMap::new())
-            .map(Fields::<ElementKey>::of)
-        else {
-            return Err(refused());
-        };
-        em_seed_group(&em);
-        let Ok(children) = em.insert_container(ElementKey::Children, LoroMovableList::new()) else {
-            return Err(refused());
-        };
-        for m in &members {
-            if children.push(m.as_str()).is_ok() {
-                self.link_parent(m, &id);
-            }
-        }
         // Insert the group NodeId just below its lowest member.
         let _ = self
             .doc
@@ -285,16 +293,10 @@ impl ToileState {
         };
 
         let mut changed = false;
-        // Remove first, so a same-id remove+add re-appends at the end.
+        // Remove first, so a same-id remove+add re-appends at the end. Every
+        // entry goes: two concurrent adds leave one id on the list twice.
         for id in remove {
-            if let LoroValue::List(items) = list.get_deep_value()
-                && let Some(idx) = items
-                    .iter()
-                    .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == id.as_str()))
-            {
-                if list.delete(idx, 1).is_ok() {
-                    self.unlink_parent(id, frame);
-                }
+            if self.delete_entries(&list, frame, id) > ElementCount::ZERO {
                 changed = true;
             }
         }
@@ -519,21 +521,46 @@ impl ToileState {
             .cloned()
     }
 
-    /// Remove `child` from the `children` list of `container`, a group or a
-    /// frame (first match). The cache forgets the link even when `container` is
-    /// gone, as a cascading delete leaves it.
+    /// Remove every entry of `child` from the `children` list of `container`,
+    /// a group or a frame. Two concurrent adds leave one id on a list twice.
+    /// The cache forgets the link even when `container` is gone, as a
+    /// cascading delete leaves it.
     pub(super) fn remove_child(&mut self, container: &ElementId, child: &ElementId) {
-        self.unlink_parent(child, container);
         let Some(list) = self.children_list(container) else {
+            self.unlink_parent(child, container);
             return;
         };
-        if let LoroValue::List(items) = list.get_deep_value()
-            && let Some(idx) = items
-                .iter()
-                .position(|v| matches!(v, LoroValue::String(s) if s.as_str() == child.as_str()))
-        {
-            let _ = list.delete(idx, 1);
+        if self.delete_entries(&list, container, child) == ElementCount::ZERO {
+            self.unlink_parent(child, container);
         }
+    }
+
+    /// Delete every entry of `list`, the `children` list of `container`, that
+    /// names `child`, and the cache link each one held. The last goes first,
+    /// so each index still names its entry. Returns how many went.
+    fn delete_entries(
+        &mut self,
+        list: &LoroMovableList,
+        container: &ElementId,
+        child: &ElementId,
+    ) -> ElementCount {
+        let LoroValue::List(items) = list.get_deep_value() else {
+            return ElementCount::ZERO;
+        };
+        let mut gone = ElementCount::ZERO;
+        let at = items
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| matches!(v, LoroValue::String(s) if s.as_str() == child.as_str()))
+            .map(|(i, _)| i)
+            .rev();
+        for idx in at {
+            if list.delete(idx, 1).is_ok() {
+                self.unlink_parent(child, container);
+                gone = gone.incremented();
+            }
+        }
+        gone
     }
 
     /// Append `id`'s subtree leaves (non-group descendants) to `out`. A plain
