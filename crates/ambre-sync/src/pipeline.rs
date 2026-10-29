@@ -294,17 +294,20 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     // Never pre-allocate the whole ceiling. Grow the buffer as we go, reading
     // one byte past the ceiling to distinguish "exactly at the limit" from
     // "over the limit". `take` caps the reader at `ceiling + 1` bytes.
+    // A refused body leaves a partial plaintext in `out`. It drops under the
+    // wrapper, which wipes it.
     let mut out = Vec::new();
-    let read = decoder
+    let refusal = match decoder
         .by_ref()
         .take(ceiling.0.saturating_add(1))
         .read_to_end(&mut out)
-        .map_err(|_| PipelineError::Decompress)?;
-
-    if ByteSize::of_len(read) > ceiling {
-        return Err(PipelineError::DecompressTooLarge);
-    }
-    Ok(out)
+    {
+        Err(_) => PipelineError::Decompress,
+        Ok(read) if ByteSize::of_len(read) > ceiling => PipelineError::DecompressTooLarge,
+        Ok(_) => return Ok(out),
+    };
+    drop(ambre_core::Secret::new(out));
+    Err(refusal)
 }
 
 // -- Generic seal / open over the (version || body) plaintext ------------------
@@ -329,19 +332,20 @@ fn open_payload(
     doc_key: &DocumentKey,
     author_pub: &PublicKey,
 ) -> Result<OpenedPayload, PipelineError> {
-    // The model reads the bytes, so they are copied once, through the door
-    // `ARCH-047` admits. Nothing wipes that copy: the wrapper is typing only
-    // here, with no wipe gain.
-    let plaintext = envelope::open(sealed, aad, doc_key, author_pub)?.to_plaintext();
-    let (version, body) = plaintext.split_first().ok_or(PipelineError::Decompress)?;
-    decompress(CompressionVersion::from_byte(*version)?, body).map(OpenedPayload)
+    // The opened bytes are lent, with no copy, through the door `ARCH-047`
+    // admits. They are still compressed, and the wrapper wipes them as it
+    // drops, on the error paths too.
+    let opened = envelope::open(sealed, aad, doc_key, author_pub)?;
+    opened.with_plaintext(|plaintext| {
+        let (version, body) = plaintext.split_first().ok_or(PipelineError::Decompress)?;
+        decompress(CompressionVersion::from_byte(*version)?, body).map(OpenedPayload)
+    })
 }
 
 /// A payload opened and decompressed, before its caller names its role. Each
-/// open moves it into the one role it reads, with no copy on the way. A
-/// `SecretBytes` here would cost a second copy through `to_plaintext`. Its
-/// wipe would gain nothing, since the role keeps the bytes in the clear
-/// (`ARCH-047`).
+/// open moves it into the one role it reads, with no copy on the way. The
+/// role keeps the bytes in the clear for the document model. A wipe here
+/// would find an emptied buffer, so it is left out (`ARCH-047`).
 struct OpenedPayload(Vec<u8>);
 
 impl OpenedPayload {

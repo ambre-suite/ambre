@@ -214,6 +214,14 @@ impl SecretBytes {
     pub fn to_plaintext(&self) -> Vec<u8> {
         self.0.expose().clone()
     }
+
+    /// Lends the opened bytes to `read`, with no copy, for the code that
+    /// reads them on the way to another form. The bytes stay under the
+    /// wrapper, which wipes them when the last copy drops, on every path out
+    /// of `read`. What `read` builds from them is its own.
+    pub fn with_plaintext<R>(&self, read: impl FnOnce(&[u8]) -> R) -> R {
+        read(self.0.expose())
+    }
 }
 
 impl From<Vec<u8>> for SecretBytes {
@@ -574,6 +582,15 @@ mod tests {
         assert_eq!(bytes, postcard::to_allocvec(b"plain".as_slice()).unwrap());
         let back: SecretBytes = postcard::from_bytes(&bytes).unwrap();
         assert_eq!(back.to_plaintext(), b"plain");
+    }
+
+    #[test]
+    fn opened_bytes_are_lent_with_no_copy() {
+        let plain = SecretBytes::new(b"plain".to_vec());
+        let held = plain.secret().expose().as_ptr();
+        let (lent, read) = plain.with_plaintext(|bytes| (bytes.as_ptr(), bytes.to_vec()));
+        assert_eq!(lent, held);
+        assert_eq!(read, b"plain");
     }
 
     /// The form each credential had on the wire before its wrapper: a
