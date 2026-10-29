@@ -10,7 +10,9 @@ use parley::{
     LayoutContext, LineHeight, StyleProperty,
 };
 
-use ambre_bus::app::prose::{Align, DocOffset, LineHeight as StoredLineHeight, ParagraphStyle};
+use ambre_bus::app::prose::{
+    Align, DocOffset, KeepTogether, KeepWithNext, LineHeight as StoredLineHeight, ParagraphStyle,
+};
 use ambre_core::{ByteDelta, ByteOffset, ByteSpan, DocPx, Pt, Weight, char_to_byte};
 
 use ambre_draw::{BundledFamily, ParleyBrush, ScriptSet};
@@ -36,10 +38,21 @@ const MAX_SEGMENTS: RunSegmentCount = RunSegmentCount::new(16);
 pub struct MarkedSpan {
     pub start: ByteOffset,
     pub end: ByteOffset,
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strike: bool,
+    pub bold: Weight,
+    pub italic: ambre_core::Slant,
+    pub underline: ambre_core::Underline,
+    pub strike: ambre_core::Strikethrough,
+}
+
+impl MarkedSpan {
+    /// Whether the span carries any mark the shaper reads.
+    #[must_use]
+    pub fn is_marked(&self) -> bool {
+        self.bold.as_bool()
+            || self.italic.as_bool()
+            || self.underline.as_bool()
+            || self.strike.as_bool()
+    }
 }
 
 /// The text of a block and the spans of it that carry bold or italic, in
@@ -63,13 +76,13 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
         let span = MarkedSpan {
             start: ByteOffset::from_usize(out.len()),
             end: ByteOffset::from_usize(out.len() + insert.len()),
-            bold: on("b"),
-            italic: on("i"),
-            underline: on("u"),
-            strike: on("s"),
+            bold: Weight::from_bool(on("b")),
+            italic: ambre_core::Slant::from_bool(on("i")),
+            underline: ambre_core::Underline::from_bool(on("u")),
+            strike: ambre_core::Strikethrough::from_bool(on("s")),
         };
         out.push_str(&insert);
-        if span.bold || span.italic || span.underline || span.strike {
+        if span.is_marked() {
             spans.push(span);
         }
     }
@@ -101,8 +114,8 @@ pub struct EffectiveStyle {
     pub indent_right: DocPx,
     pub space_before: DocPx,
     pub space_after: DocPx,
-    pub keep_together: bool,
-    pub keep_with_next: bool,
+    pub keep_together: KeepTogether,
+    pub keep_with_next: KeepWithNext,
 }
 
 impl EffectiveStyle {
@@ -142,8 +155,8 @@ impl EffectiveStyle {
             indent_right: paragraph.indent_right.unwrap_or(Pt::ZERO).to_doc_px(),
             space_before: paragraph.space_before.unwrap_or(Pt::ZERO).to_doc_px(),
             space_after: paragraph.space_after.unwrap_or(Pt::ZERO).to_doc_px(),
-            keep_together: paragraph.keep_together.unwrap_or_default().as_bool(),
-            keep_with_next: paragraph.keep_with_next.unwrap_or_default().as_bool(),
+            keep_together: paragraph.keep_together.unwrap_or_default(),
+            keep_with_next: paragraph.keep_with_next.unwrap_or_default(),
         }
     }
 
@@ -740,16 +753,16 @@ fn build(
     }
     for span in marks {
         let range = ByteSpan::new(span.start, span.end).to_usize_range();
-        if span.bold {
+        if span.bold == Weight::Bold {
             builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
         }
-        if span.italic {
+        if span.italic == ambre_core::Slant::Italic {
             builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
         }
-        if span.underline {
+        if span.underline == ambre_core::Underline::Underlined {
             builder.push(StyleProperty::Underline(true), range.clone());
         }
-        if span.strike {
+        if span.strike == ambre_core::Strikethrough::Struck {
             builder.push(StyleProperty::Strikethrough(true), range);
         }
     }
@@ -919,7 +932,7 @@ mod tests {
             vec![MarkedSpan {
                 start: ByteOffset::new(20),
                 end: ByteOffset::from_usize(text.len() / 2),
-                bold: true,
+                bold: Weight::Bold,
                 ..MarkedSpan::default()
             }]
         };
@@ -995,7 +1008,7 @@ mod tests {
             vec![MarkedSpan {
                 start: ByteOffset::from_usize(text.len() - 200),
                 end: ByteOffset::from_usize(text.len() - 100),
-                bold: true,
+                bold: Weight::Bold,
                 ..MarkedSpan::default()
             }]
         };
@@ -1055,7 +1068,7 @@ mod tests {
         let marks = [MarkedSpan {
             start: ByteOffset::from_usize(edited.len() - 300),
             end: ByteOffset::from_usize(edited.len() - 10),
-            bold: true,
+            bold: Weight::Bold,
             ..MarkedSpan::default()
         }];
         let (_, _, windowed) = measurer.measure_with_lines(

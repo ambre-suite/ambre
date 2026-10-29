@@ -10,7 +10,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::{
-    BlockType, DocOffset, FootnoteOrdinal, PageCount, PageIndex, PageNumber, ParagraphStyle,
+    BlockType, DocOffset, FootnoteOrdinal, KeepTogether, KeepWithNext, PageCount, PageIndex,
+    PageNumber, ParagraphStyle,
 };
 use ambre_core::{DocPx, FootnoteId, Pt};
 use ambre_draw::ScriptSet;
@@ -404,8 +405,8 @@ pub(crate) fn measure_band(
             height: DocPx::ZERO,
             space_before: DocPx::ZERO,
             space_after: DocPx::ZERO,
-            keep_together: false,
-            keep_with_next: false,
+            keep_together: KeepTogether::Splittable,
+            keep_with_next: KeepWithNext::Free,
             metrics: None,
             notes: Vec::new(),
             run: None,

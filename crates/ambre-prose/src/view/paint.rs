@@ -1572,7 +1572,7 @@ mod tests {
                 .expect("the paragraph is shaped again");
             let (start, end) = (at as usize, at as usize + 3);
             run.data().marks().iter().any(|span| {
-                span.bold
+                span.bold == ambre_core::Weight::Bold
                     && span.start <= ByteOffset::from_usize(start)
                     && span.end >= ByteOffset::from_usize(end)
             })

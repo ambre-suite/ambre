@@ -16,6 +16,45 @@ pub use ambre_bus::app::prose::mark::{
     parse_color, parse_font_size, validate_value,
 };
 
+ambre_core::define_flag! {
+    /// Whether a run is set as inline code.
+    pub enum InlineCode {
+        /// The run is set as prose.
+        Prose,
+        /// The run is set as code, in the monospace family.
+        Code,
+    }
+
+    /// Whether a run carries the raised mark.
+    pub enum Superscript {
+        /// The run carries no raised mark.
+        Level,
+        /// The run carries the raised mark.
+        Raised,
+    }
+
+    /// Whether a run carries the lowered mark.
+    pub enum Subscript {
+        /// The run carries no lowered mark.
+        Level,
+        /// The run carries the lowered mark.
+        Lowered,
+    }
+}
+
+/// Where the cascade sets a run against the baseline. A run that carries
+/// both marks is raised (`PROSE-FEAT-174`), so the two never hold at once.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Script {
+    /// On the baseline.
+    #[default]
+    Baseline,
+    /// Raised above it.
+    Raised,
+    /// Lowered below it.
+    Lowered,
+}
+
 /// The formatting keys: the mark's value is the formatting itself, and an
 /// insertion at the edge of the range takes the formatting with it.
 ///

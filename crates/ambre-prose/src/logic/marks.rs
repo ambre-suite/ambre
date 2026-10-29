@@ -561,7 +561,7 @@ pub(crate) mod tests {
         });
         let bolded: String = runs(&state, &block)
             .into_iter()
-            .filter(|(_, style)| style.bold)
+            .filter(|(_, style)| style.bold.as_bool())
             .map(|(text, _)| text)
             .collect();
         assert_eq!(bolded, "one");
@@ -711,7 +711,7 @@ pub(crate) mod tests {
 
         assert_eq!(state.text_of(&block).unwrap_or_default(), "hello");
         let (_, style) = runs(&state, &block).remove(0);
-        assert!(style.bold && style.italic);
+        assert!(style.bold.as_bool() && style.italic.as_bool());
         assert_eq!(state.paragraph_style_of(&block).align, Some(Align::Center));
     }
 
@@ -740,13 +740,13 @@ pub(crate) mod tests {
         let resolved = runs(&state, &block);
         let bold: String = resolved
             .iter()
-            .filter(|(_, style)| style.bold)
+            .filter(|(_, style)| style.bold.as_bool())
             .map(|(text, _)| text.clone())
             .collect();
         // The key covers no character of the range, and every one outside it.
         assert_eq!(bold, " two");
         assert!(
-            resolved.iter().all(|(_, style)| style.italic),
+            resolved.iter().all(|(_, style)| style.italic.as_bool()),
             "the other key is untouched"
         );
     }
@@ -779,7 +779,7 @@ pub(crate) mod tests {
 
         assert_eq!(state.text_of(&block).unwrap_or_default(), "hello");
         let (_, style) = runs(&state, &block).remove(0);
-        assert!(!style.bold && !style.italic);
+        assert!(!style.bold.as_bool() && !style.italic.as_bool());
         assert_eq!(style.color, None);
         assert_eq!(style.link, None, "the link is presentation, and it goes");
         assert!(
@@ -828,7 +828,7 @@ pub(crate) mod tests {
         assert_eq!(state.export_snapshot(), before);
 
         assert_eq!(state.text_of(&block).unwrap_or_default(), "hello");
-        assert!(runs(&state, &block).remove(0).1.bold);
+        assert!(runs(&state, &block).remove(0).1.bold.as_bool());
         assert_eq!(
             state.paragraph_style_of(&other).align,
             None,
@@ -861,7 +861,7 @@ pub(crate) mod tests {
             });
             let covered: String = runs(&state, &block)
                 .into_iter()
-                .filter(|(_, style)| style.bold || style.link.is_some())
+                .filter(|(_, style)| style.bold.as_bool() || style.link.is_some())
                 .map(|(text, _)| text)
                 .collect();
             assert_eq!(covered == "oneX", continues, "{key}");

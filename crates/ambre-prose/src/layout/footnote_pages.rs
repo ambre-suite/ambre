@@ -168,7 +168,7 @@ fn a_note_sits_on_the_page_of_the_line_that_calls_it() {
             .iter()
             .find(|e| e.block_id == block)
             .expect("placed");
-        assert!(entry.is_split, "the paragraph crosses a page");
+        assert!(entry.is_split(), "the paragraph crosses a page");
         for (id, _, page) in placed(&layout) {
             let call = entry
                 .notes
