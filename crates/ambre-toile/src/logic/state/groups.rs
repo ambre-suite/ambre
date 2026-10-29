@@ -747,7 +747,8 @@ mod tests {
 }
 
 /// The membership tests that read the caches, which print on the host only.
-#[cfg(all(test, not(target_arch = "wasm32")))]
+#[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod cache_tests {
     use crate::logic::command::{ToileCommand, ToileError};
     use crate::logic::model::{ElementId, ElementKind, ShapeKind};
