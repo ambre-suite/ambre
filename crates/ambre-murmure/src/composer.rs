@@ -49,6 +49,7 @@ use crate::mention_list::{MentionList, Offer, OfferIndex, OfferVec, offers, quer
 use crate::paint::{RowBounds, draw, shape, surface_px, text_height, text_width, view_rect};
 use crate::read_aloud::{self, Say};
 use crate::uploads::{FileIndex, Uploads};
+use crate::view::WindowWidth;
 
 /// The strip above the field while the composer holds an edit.
 pub const EDITING_LINE: &str = "Editing a message. Escape cancels.";
@@ -179,27 +180,45 @@ struct History {
     last: String,
     /// The way of the step still open, `None` once sealed.
     open: Option<Change>,
-    /// Seal the step once the next paint records the edit that asked it.
-    seal_after: bool,
-    /// An edit waits for the next paint.
-    pending: bool,
+    /// What the next paint does with the step once it records the edit.
+    seal_after: SealAfter,
+    /// Whether an edit waits for the next paint.
+    pending: Pending,
     /// The steps asked since the last paint.
     asked: Vec<HistoryStep>,
+}
+
+ambre_core::define_flag! {
+    /// Whether an edit of a draft waits for the next paint to record it.
+    enum Pending {
+        /// Every edit is recorded.
+        Idle,
+        /// An edit waits for the next paint.
+        Waiting,
+    }
+
+    /// What the next paint does with the open step of a history once it
+    /// records the edit.
+    enum SealAfter {
+        /// The step stays open, and the next edit of its way joins it.
+        Keep,
+        /// The step closes, and the next edit starts one of its own.
+        Seal,
+    }
 }
 
 impl History {
     /// An edit landed, which the next paint records.
     fn edit(&mut self) {
-        self.pending = true;
+        self.pending = Pending::Waiting;
     }
 
     /// The next edit starts a step of its own. An edit not yet painted still
     /// joins the step it lands in, and closes it.
     fn seal(&mut self) {
-        if self.pending {
-            self.seal_after = true;
-        } else {
-            self.open = None;
+        match self.pending {
+            Pending::Waiting => self.seal_after = SealAfter::Seal,
+            Pending::Idle => self.open = None,
         }
     }
 
@@ -207,8 +226,8 @@ impl History {
     /// break.
     fn apart(&mut self) {
         self.open = None;
-        self.seal_after = true;
-        self.pending = true;
+        self.seal_after = SealAfter::Seal;
+        self.pending = Pending::Waiting;
     }
 
     /// The draft reads `text` after a paint. A change opens a step, or joins
@@ -227,10 +246,10 @@ impl History {
             self.redo.clear();
             self.open = Some(change);
         }
-        if std::mem::take(&mut self.seal_after) {
+        if std::mem::take(&mut self.seal_after) == SealAfter::Seal {
             self.open = None;
         }
-        self.pending = false;
+        self.pending = Pending::Idle;
     }
 
     /// Walk one step back, or forward for a redo, and answer the text the
@@ -427,6 +446,40 @@ fn kept_mentions(old: &str, new: &str, mentions: &[Mention]) -> Vec<Mention> {
         .collect()
 }
 
+ambre_core::define_flag! {
+    /// What the keys of a region reach.
+    enum Focus {
+        /// The list: the arrows move between its messages.
+        List,
+        /// The composer: the keys write the draft.
+        Composer,
+    }
+
+    /// Whether an input method composes in the composer.
+    enum Composing {
+        /// No input method composes: the composer takes its keys.
+        Idle,
+        /// An input method shows a preview: its keys are its own.
+        Preview,
+    }
+
+    /// Whether a key changed a draft since the view last asked.
+    enum Typing {
+        /// No key changed one: a caret move or a selection alone.
+        Clean,
+        /// A key changed one.
+        Typed,
+    }
+
+    /// Whether a press in the field of the composer holds a drag.
+    enum Drag {
+        /// No press holds one.
+        Idle,
+        /// A press holds one: a move extends the selection.
+        Selecting,
+    }
+}
+
 /// The composer of a region, and the draft of every channel or thread it
 /// showed.
 #[derive(Default)]
@@ -438,16 +491,16 @@ pub struct Composer {
     histories: HashMap<DraftOf, History>,
     /// The edit each composer holds, in place of its draft.
     editing: HashMap<DraftOf, Editing>,
-    /// The keys reach the composer, not the list.
-    focused: bool,
-    /// An input method composes: its keys are its own.
-    composing: bool,
+    /// What the keys reach: the composer, or the list.
+    focus: Focus,
+    /// Whether an input method composes: its keys are its own.
+    composing: Composing,
     /// Enter asked to send this draft.
     send: Option<DraftOf>,
-    /// A key changed a draft since the view last asked.
-    typed: bool,
-    /// A press in the field holds a drag.
-    dragging: bool,
+    /// Whether a key changed a draft since the view last asked.
+    typed: Typing,
+    /// Whether a press in the field holds a drag.
+    drag: Drag,
     /// The height of the band at the last paint, `0` with no channel.
     band: ViewPx,
     /// Where the text of the field started at the last paint.
@@ -456,9 +509,9 @@ pub struct Composer {
     also: HashSet<DraftOf>,
     /// The row of that box at the last paint, as its top and bottom.
     also_row: Option<RowBounds>,
-    /// The window is as wide as a desktop, so the box names its chord
-    /// (`MURMURE-544`).
-    chords: bool,
+    /// The width of the window: as wide as a desktop, the box names its
+    /// chord (`MURMURE-544`).
+    width: WindowWidth,
     /// The mentions each draft carries (`MURMURE-552`).
     marks: HashMap<DraftOf, Marks>,
     /// The `@` list, while a query is open.
@@ -527,18 +580,19 @@ impl Composer {
 
     /// Whether the keys reach the composer.
     pub fn focused(&self) -> bool {
-        self.focused
+        self.focus == Focus::Composer
     }
 
-    /// Show the chord of the box, or hide it. `true` when it changed.
-    pub fn show_chords(&mut self, on: bool) -> bool {
-        std::mem::replace(&mut self.chords, on) != on
+    /// The window is `width` wide: the box names its chord on a desktop
+    /// alone. `true` when the chord shows or hides.
+    pub fn show_chords(&mut self, width: WindowWidth) -> bool {
+        std::mem::replace(&mut self.width, width) != width
     }
 
     /// The keys go back to the list.
     pub fn blur(&mut self) {
-        self.focused = false;
-        self.dragging = false;
+        self.focus = Focus::List;
+        self.drag = Drag::Idle;
     }
 
     /// The draft `of` a channel or a thread as its editor holds it, `None`
@@ -559,7 +613,7 @@ impl Composer {
             .histories
             .get(&of)
             .is_some_and(|history| !history.asked.is_empty());
-        idle && !asked && !self.composing && !self.editing(of)
+        idle && !asked && self.composing == Composing::Idle && !self.editing(of)
     }
 
     /// The text selected in the draft `of` a channel or a thread.
@@ -593,7 +647,7 @@ impl Composer {
     /// Whether a key changed a draft since the last call. A move of the
     /// caret or a selection changes none.
     pub fn take_typed(&mut self) -> bool {
-        std::mem::take(&mut self.typed)
+        std::mem::take(&mut self.typed) == Typing::Typed
     }
 
     /// What a screen reader hears of the last paint, once
@@ -604,7 +658,7 @@ impl Composer {
 
     /// The editor of the draft `of`, opened empty on first use.
     fn editor(&mut self, of: DraftOf) -> &mut TextEditor {
-        self.focused = true;
+        self.focus = Focus::Composer;
         self.drafts
             .entry(of)
             .or_insert_with(|| TextEditor::new("", body_style(Color::BLACK)))
@@ -651,7 +705,7 @@ impl Composer {
                 kept,
             },
         );
-        self.focused = true;
+        self.focus = Focus::Composer;
     }
 
     /// Give back a draft its author did not send, with its mentions and the
@@ -662,7 +716,7 @@ impl Composer {
             return false;
         }
         self.load(of, draft, echo);
-        self.focused = true;
+        self.focus = Focus::Composer;
         true
     }
 
@@ -767,7 +821,9 @@ impl Composer {
     /// Text the pipe committed: a typed key, a paste, a word an input
     /// method chose. A paste is a step of its own, and a space ends a word's.
     pub fn text(&mut self, of: DraftOf, text: &str) {
-        self.typed |= !text.is_empty();
+        if !text.is_empty() {
+            self.typed = Typing::Typed;
+        }
         // The screen reader echoes a typed key itself.
         self.saying = None;
         let history = self.history(of);
@@ -775,7 +831,9 @@ impl Composer {
             history.apart();
         }
         history.edit();
-        history.seal_after |= text.ends_with(char::is_whitespace);
+        if text.ends_with(char::is_whitespace) {
+            history.seal_after = SealAfter::Seal;
+        }
         // A paste is text, whatever its last char (`MURMURE-197`).
         if markers::closes(text) {
             self.closing = Some(of);
@@ -786,8 +844,14 @@ impl Composer {
     /// The preview of an input method, or its final word once it ends.
     pub fn compose(&mut self, of: DraftOf, text: &str, stage: Composition) {
         let end = stage == Composition::Final;
-        self.composing = !end && !text.is_empty();
-        self.typed |= !text.is_empty();
+        self.composing = if end || text.is_empty() {
+            Composing::Idle
+        } else {
+            Composing::Preview
+        };
+        if !text.is_empty() {
+            self.typed = Typing::Typed;
+        }
         self.history(of).edit();
         let editor = self.editor(of);
         if end {
@@ -802,7 +866,7 @@ impl Composer {
         let editor = self.drafts.get_mut(&of)?;
         let text = editor.selected_text()?;
         editor.delete_selection();
-        self.typed = true;
+        self.typed = Typing::Typed;
         self.saying = Some((of, Say::Removed));
         self.history(of).apart();
         Some(text)
@@ -818,7 +882,7 @@ impl Composer {
     /// whether the composer took the key. `Ctrl` here is the primary
     /// accelerator, the command key on macOS (`UI-THREAD-028`).
     pub fn key(&mut self, of: DraftOf, key: Key, mods: Modifiers) -> bool {
-        if self.composing {
+        if self.composing == Composing::Preview {
             return false;
         }
         if mods == Modifiers::NONE && self.list_key(of, key) {
@@ -862,7 +926,7 @@ impl Composer {
                 } else {
                     HistoryStep::Undo
                 };
-                self.typed = true;
+                self.typed = Typing::Typed;
                 self.editor(of);
                 self.history(of).asked.push(step);
                 self.saying = Some((of, Say::Draft));
@@ -897,7 +961,9 @@ impl Composer {
             intent,
             EditIntent::Newline | EditIntent::Backspace | EditIntent::Delete
         );
-        self.typed |= edits;
+        if edits {
+            self.typed = Typing::Typed;
+        }
         self.saying = match intent {
             EditIntent::Newline => None,
             EditIntent::Backspace | EditIntent::Delete => Some((of, Say::Removed)),
@@ -963,7 +1029,7 @@ impl Composer {
             .is_some_and(|asking| asking.of == of && asking.offers.get(index).is_some());
         if shows {
             self.picked = Some((of, index));
-            self.typed = true;
+            self.typed = Typing::Typed;
             self.history(of).apart();
         }
     }
@@ -1000,7 +1066,7 @@ impl Composer {
     /// take it off. A chord asks for it, or a press on the format bar
     /// (`MURMURE-431`, `MURMURE-432`).
     pub fn toggle(&mut self, of: DraftOf, style: TextStyle) {
-        self.typed = true;
+        self.typed = Typing::Typed;
         self.editor(of);
         self.toggles.push((of, style));
     }
@@ -1224,7 +1290,7 @@ impl Composer {
     fn ask(&mut self, of: DraftOf, editor: &TextEditor) {
         let text = editor.text();
         let query = editor.caret().and_then(|caret| query_at(&text, caret));
-        let Some((at, query)) = query.filter(|_| self.focused) else {
+        let Some((at, query)) = query.filter(|_| self.focused()) else {
             self.asking = None;
             self.dismissed = None;
             return;
@@ -1257,18 +1323,18 @@ impl Composer {
     pub fn press(&mut self, of: DraftOf, at: ViewPoint) {
         let at = self.in_field(at);
         // The field that takes the focus says its draft (`MURMURE-574`).
-        if !self.focused {
+        if !self.focused() {
             self.saying = Some((of, Say::Draft));
         }
         self.history(of).seal();
         self.editor(of).point_down(at);
-        self.dragging = true;
+        self.drag = Drag::Selecting;
     }
 
     /// A pointer moved: a drag from the field extends the selection.
     /// Answers whether the composer held a drag.
     pub fn drag_to(&mut self, of: DraftOf, at: ViewPoint) -> bool {
-        if !self.dragging {
+        if self.drag == Drag::Idle {
             return false;
         }
         let at = self.in_field(at);
@@ -1278,7 +1344,7 @@ impl Composer {
 
     /// The button lifted. Answers whether the composer held a drag.
     pub fn release(&mut self) -> bool {
-        std::mem::take(&mut self.dragging)
+        std::mem::take(&mut self.drag) == Drag::Selecting
     }
 
     /// A double click in the field selects the word under it.
@@ -1515,7 +1581,7 @@ impl Composer {
                     palette.header_text,
                 );
                 // Below the desktop width, no chord shows (`CHROME-057`).
-                if self.chords {
+                if self.width == WindowWidth::Desktop {
                     let chord = shape(
                         font_cx,
                         cache,
@@ -1537,7 +1603,7 @@ impl Composer {
         };
         let field = rect(SPACE_4, top + SPACE_2, width - SPACE_4, height - SPACE_2);
         surface.fill_rect(field, palette.header_bg);
-        let edge = if self.focused {
+        let edge = if self.focused() {
             palette.selection
         } else {
             palette.cell_border
@@ -1549,7 +1615,8 @@ impl Composer {
         };
         self.origin = ViewPoint::new(SPACE_8, inner.top);
         let editor = self.drafts.get_mut(&shown);
-        let empty = editor.as_ref().is_none_or(|e| e.text().is_empty()) && !self.composing;
+        let empty = editor.as_ref().is_none_or(|e| e.text().is_empty())
+            && self.composing == Composing::Idle;
         if empty {
             let hint = shape(
                 font_cx,
@@ -1577,7 +1644,7 @@ impl Composer {
             surface,
             origin,
             palette.selection,
-            ambre_canvas::Caret::shown_if(self.focused),
+            ambre_canvas::Caret::shown_if(self.focus == Focus::Composer),
         );
         // A quote's rule and a list's dots, in the indent of their lines.
         if let (Some(layout), Some(marks)) = (editor.layout(), self.marks.get(&shown)) {
@@ -1596,7 +1663,7 @@ impl Composer {
             }
         }
         surface.pop_clip();
-        let caret = editor.caret_local().filter(|_| self.focused)?;
+        let caret = editor.caret_local().filter(|_| self.focused())?;
         // The surface takes the caret in the same logical pixels; only the
         // float narrows.
         #[allow(clippy::cast_possible_truncation)]

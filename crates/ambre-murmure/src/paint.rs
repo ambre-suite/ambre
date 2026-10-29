@@ -17,8 +17,8 @@ use ambre_draw::{
 };
 
 use crate::list::{
-    HeaderWords, JUMP_TO_LATEST, ListRow, ListRowCount, ListRowVec, MessageList, RowKey, RowWords,
-    UNREAD_LINE, chip_label, file_label, window,
+    BodyInk, HeaderWords, JUMP_TO_LATEST, ListRow, ListRowCount, ListRowVec, MessageList, OnScreen,
+    RowKey, RowWords, UNREAD_LINE, chip_label, file_label, window,
 };
 use crate::look;
 use crate::pictures::{Pictures, frame_at, frame_key, previews};
@@ -138,12 +138,12 @@ pub struct Painted {
     /// The rows laid out: the ones the viewport reaches, never the whole
     /// list.
     pub laid_out: ListRowCount,
-    /// The latest row is on screen.
-    pub latest_shown: bool,
-    /// The oldest row the list holds is on screen (`MURMURE-191`).
-    pub oldest_shown: bool,
-    /// The unread line is on screen (`MURMURE-184`).
-    pub line_shown: bool,
+    /// Whether the latest row is on screen.
+    pub latest_shown: OnScreen,
+    /// Whether the oldest row the list holds is on screen (`MURMURE-191`).
+    pub oldest_shown: OnScreen,
+    /// Whether the unread line is on screen (`MURMURE-184`).
+    pub line_shown: OnScreen,
     /// The row the list rests on and its top, `None` on the latest row.
     pub rest: Option<(ListRow, ViewPx)>,
     /// The first row on screen and its top, wherever the list rests.
@@ -224,15 +224,19 @@ pub fn paint_list<S: DrawSurface>(
     surface.fill_rect(backdrop, palette.content_bg);
     let rows = shown.list.rows();
     let text_width = (width - SPACE_8 * 2.0).max(ViewPx::new(1.0));
-    let mut words: HashMap<ListRow, (RowWords, bool)> = HashMap::new();
+    let mut words: HashMap<ListRow, (RowWords, LineAbove)> = HashMap::new();
     let reached = window(rows.len(), height, shown.anchor, |i| {
         let Some(row) = rows.get(i) else {
             return ViewPx::ZERO;
         };
-        let line = shown.unread.is_some() && shown.unread == row.message().map(|m| m.id);
+        let line = if shown.unread.is_some() && shown.unread == row.message().map(|m| m.id) {
+            LineAbove::Unread
+        } else {
+            LineAbove::Nothing
+        };
         let row = row.words(name_of, time_of);
         let mut tall = measure(font_cx, cache, &row, shown.pictures, text_width);
-        if line {
+        if line == LineAbove::Unread {
             tall += line_height(font_cx, cache, text_width);
         }
         words.insert(i, (row, line));
@@ -275,7 +279,7 @@ pub fn paint_list<S: DrawSurface>(
         .click
         .and_then(|at| file_at(font_cx, cache, &laid, &words, at, text_width, pics));
     let mut played = Played::default();
-    let mut line_shown = false;
+    let mut line_shown = OnScreen::Hidden;
     let mut focus = None;
     for &LaidRow {
         index: i,
@@ -319,8 +323,8 @@ pub fn paint_list<S: DrawSurface>(
         }
         let bottom = top + tall;
         let mut top = top;
-        if *line {
-            line_shown = true;
+        if *line == LineAbove::Unread {
+            line_shown = OnScreen::Shown;
             top = draw_line(surface, font_cx, cache, top, width, palette);
         }
         draw_row(
@@ -375,7 +379,7 @@ fn chip_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<ListRow, (RowWords, bool)>,
+    words: &HashMap<ListRow, (RowWords, LineAbove)>,
     at: ViewPoint,
     width: ViewPx,
     pics: Option<Pictured<'_>>,
@@ -545,7 +549,7 @@ fn file_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<ListRow, (RowWords, bool)>,
+    words: &HashMap<ListRow, (RowWords, LineAbove)>,
     at: ViewPoint,
     width: ViewPx,
     pics: Option<Pictured<'_>>,
@@ -581,7 +585,7 @@ fn link_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<ListRow, (RowWords, bool)>,
+    words: &HashMap<ListRow, (RowWords, LineAbove)>,
     at: ViewPoint,
     width: ViewPx,
 ) -> Option<ambre_core::LinkUrl> {
@@ -612,7 +616,7 @@ fn spot_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<ListRow, (RowWords, bool)>,
+    words: &HashMap<ListRow, (RowWords, LineAbove)>,
     keys: &ListRowVec<RowKey>,
     at: ViewPoint,
     width: ViewPx,
@@ -632,18 +636,28 @@ fn spot_at(
     })
 }
 
+ambre_core::define_flag! {
+    /// What a row of the list draws above its header.
+    enum LineAbove {
+        /// Nothing: its header opens it.
+        Nothing,
+        /// The unread line: the first unread message follows (`MURMURE-184`).
+        Unread,
+    }
+}
+
 /// Where the body of a row whose top is at `top` starts: below the unread
 /// line and the header, as [`draw_row`] paints them.
 fn body_top(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     row: &RowWords,
-    line: bool,
+    line: LineAbove,
     top: ViewPx,
     width: ViewPx,
 ) -> ViewPx {
     let mut y = top + SPACE_2;
-    if line {
+    if line == LineAbove::Unread {
         y += line_height(font_cx, cache, width);
     }
     y + header_height(font_cx, cache, row, width)
@@ -980,10 +994,9 @@ fn draw_row<S: DrawSurface>(
         );
         y += author_tall.max(time_tall);
     }
-    let ink = if row.muted {
-        palette.header_text
-    } else {
-        palette.cell_text
+    let ink = match row.ink {
+        BodyInk::Muted => palette.header_text,
+        BodyInk::Plain => palette.cell_text,
     };
     let layout = body(font_cx, cache, row, width);
     let body_tall = text_height(layout);
@@ -1243,7 +1256,7 @@ pub(crate) mod tests {
             .collect();
         list.absorb(SegmentId::new(), messages);
         let (surface, painted) = paint(&list, 200.0);
-        assert!(painted.latest_shown);
+        assert_eq!(painted.latest_shown, OnScreen::Shown);
         assert!(
             painted.laid_out.get() > 1 && painted.laid_out.get() < 20,
             "{painted:?}"
@@ -1272,13 +1285,14 @@ pub(crate) mod tests {
         };
         let (_, painted) = paint_from(at((ListRow::new(10), ViewPx::ZERO)), 200.0);
         assert_eq!(painted.rest, Some((ListRow::new(10), ViewPx::ZERO)));
-        assert!(!painted.latest_shown && !painted.oldest_shown);
+        let shown = |painted: &Painted| (painted.oldest_shown, painted.latest_shown);
+        assert_eq!(shown(&painted), (OnScreen::Hidden, OnScreen::Hidden));
         assert!(painted.laid_out.get() < 20, "{painted:?}");
         let (_, top) = paint_from(at((ListRow::ZERO, ViewPx::ZERO)), 200.0);
-        assert!(top.oldest_shown && !top.latest_shown);
+        assert_eq!(shown(&top), (OnScreen::Shown, OnScreen::Hidden));
         let (_, bottom) = paint(&list, 200.0);
         assert_eq!(bottom.rest, None);
-        assert!(bottom.latest_shown && !bottom.oldest_shown);
+        assert_eq!(shown(&bottom), (OnScreen::Hidden, OnScreen::Shown));
     }
 
     /// The rows paint top to bottom in the order of the list, under one
@@ -1757,7 +1771,7 @@ pub(crate) mod tests {
 
         let (surface, painted) = paint_above(&list, unread, 600.0);
         assert_eq!(painted.laid_out.get(), 2);
-        assert!(painted.line_shown);
+        assert_eq!(painted.line_shown, OnScreen::Shown);
         let line = runs(&surface, LIGHT.selection);
         let [(line_y, glyphs)] = line.as_slice() else {
             panic!("one run of the line, got {line:?}");
@@ -1889,9 +1903,9 @@ pub(crate) mod tests {
             painted,
             Painted {
                 laid_out: ListRowCount::ZERO,
-                latest_shown: false,
-                oldest_shown: false,
-                line_shown: false,
+                latest_shown: OnScreen::Hidden,
+                oldest_shown: OnScreen::Hidden,
+                line_shown: OnScreen::Hidden,
                 rest: None,
                 top: None,
                 bottom: None,

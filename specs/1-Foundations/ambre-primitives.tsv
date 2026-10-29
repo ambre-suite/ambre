@@ -1324,12 +1324,7 @@ ambre-murmure | src/composer.rs | crate::composer | ALSO_CHORD | const | &str	fr
 ambre-murmure | src/composer.rs | crate::composer | ALSO_IN_CHANNEL | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | Asking.query | field | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | COMPOSER_HINT | const | &str	free-text	UI text/label const
-ambre-murmure | src/composer.rs | crate::composer | Composer.chords | field | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer.composing | field | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer.dragging | field | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer.focused | field | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer.said | field | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer.typed | field | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::blank() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::close_with(found) | param | impl FnOnce(&str,&[CharSpan])->Option<markers::Closed>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::compose(text) | param | &str	free-text	text, label or user content
@@ -1347,16 +1342,13 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::release() | ret | 
 ambre-murmure | src/composer.rs | crate::composer | Composer::restore() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::selected() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::show_chords() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::show_chords(on) | param | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::take_said() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::take_typed() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::text(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | EDITING_LINE | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | Editing.original | field | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | History.last | field | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | History.pending | field | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | History.redo | field | Vec<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | History.seal_after | field | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | History.undo | field | Vec<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | History::record(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | History::step() | ret | Option<String>	free-text	text, label or user content
@@ -1406,17 +1398,13 @@ ambre-murmure | src/list.rs | crate::list | JUMP_HINT | const | &str	free-text	U
 ambre-murmure | src/list.rs | crate::list | JUMP_TO_LATEST | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | MessageList::is_empty() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | MessageList::place() | ret | usize	math	local count/index/counter
-ambre-murmure | src/list.rs | crate::list | Row::Message.header | field | bool	generic	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement() | ret | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement(time_of) | param | impl Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | Row<'a>::words(time_of) | param | impl Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | RowWords.body | field | String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | RowWords.muted | field | bool	generic	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | RowWords.replies | field | Option<String>	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | UNKNOWN_MEMBER | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | UNREAD_LINE | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | Window.latest | field | bool	generic	state flag/predicate
-ambre-murmure | src/list.rs | crate::list | Window.oldest | field | bool	generic	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | band_words(time_of) | param | impl Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | chip_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | file_label() | ret | String	free-text	text, label or user content
@@ -1469,10 +1457,6 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | par
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | OfferVec<String>	free-text	text, label or user content
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | PLACEHOLDER_ASPECT | const | f32	math	a ratio: the width-to-height aspect of a picture not decoded yet
-ambre-murmure | src/paint.rs | crate::paint | Painted.latest_shown | field | bool	generic	state flag/predicate
-ambre-murmure | src/paint.rs | crate::paint | Painted.line_shown | field | bool	generic	state flag/predicate
-ambre-murmure | src/paint.rs | crate::paint | Painted.oldest_shown | field | bool	generic	state flag/predicate
-ambre-murmure | src/paint.rs | crate::paint | body_top(line) | param | bool	generic	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | chip_boxes(labels) | param | &[String]	free-text	text, label or user content
 ambre-murmure | src/paint.rs | crate::paint | paint_list(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/paint.rs | crate::paint | shape(text) | param | &str	free-text	text, label or user content
@@ -1546,9 +1530,6 @@ ambre-murmure | src/uploads.rs | crate::uploads | Uploads::uploading() | ret | V
 ambre-murmure | src/uploads.rs | crate::uploads | FALLBACK_STEM | const | &str	free-text	a stem the suite names itself
 ambre-murmure | src/uploads.rs | crate::uploads | size_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | AT_FRACTION | const | f32	math	a ratio: where in the viewport a named message rests, a fraction of the list height
-ambre-murmure | src/view.rs | crate::view | MurmureView.dirty | field | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView.pending | field | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView.reveal | field | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::clipboard() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | MurmureView::close_thread() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::composer_input() | ret | Option<bool>	generic	state flag/predicate
@@ -1556,7 +1537,6 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::copy() | ret | Option<S
 ambre-murmure | src/view.rs | crate::view | MurmureView::drags_text() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::finger_down() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::handle_input() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::hear_latest(at_bottom) | param | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::in_composer() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::mark_shown_read() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::on_jump() | ret | bool	generic	state flag/predicate
@@ -3627,10 +3607,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::as_str() | ret | &
 ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::new(text) | param | &str	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash.0 | field | String	free-text	the rejected text the error prints
 ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	free-text	the manifest's wire word for a build with no commit id
-ambre-murmure | src/paint.rs | crate::paint | chip_at(words) | param | &HashMap<ListRow,(RowWords,bool)>	generic	the ListRow of the painted window keying its words and a fact flag; the flag selects no mode
-ambre-murmure | src/paint.rs | crate::paint | file_at(words) | param | &HashMap<ListRow,(RowWords,bool)>	generic	the ListRow of the painted window keying its words and a fact flag; the flag selects no mode
-ambre-murmure | src/paint.rs | crate::paint | link_at(words) | param | &HashMap<ListRow,(RowWords,bool)>	generic	the ListRow of the painted window keying its words and a fact flag; the flag selects no mode
-ambre-murmure | src/paint.rs | crate::paint | spot_at(words) | param | &HashMap<ListRow,(RowWords,bool)>	generic	the ListRow of the painted window keying its words and a fact flag; the flag selects no mode
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(BlockIndex,&Cursor)->bool	generic	the stop predicate over a block and the cursor
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | SlashChoiceVec<&'static str>	free-text	the labels of the slash menu entries
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | InstanceId.0 | field | uuid::Uuid	newtype-inner	the newtype's own inside, accessor or constructor

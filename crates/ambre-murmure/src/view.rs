@@ -37,8 +37,8 @@ use crate::commands::{
 use crate::composer::{Composer, Composition, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::drafts::DraftShelf;
 use crate::list::{
-    Conversations, JUMP_HINT, ListRow, ListRowDelta, ListRowVec, MessageList, ReadMarks, Row,
-    RowKey, UnreadLine, row_of,
+    Conversations, JUMP_HINT, ListRow, ListRowDelta, ListRowVec, MessageList, OnScreen, ReadMarks,
+    Row, RowKey, UnreadLine, row_of,
 };
 use crate::markers::MarkBar;
 use crate::mention_list::MentionList;
@@ -267,9 +267,8 @@ pub struct MurmureView {
     hover: Option<Point>,
     /// Where the list rests.
     rest: Rest,
-    /// The row [`Rest::Row`] names is not in the list yet: the list rests
-    /// on its latest row until it comes.
-    pending: bool,
+    /// Whether the row [`Rest::Row`] names is in the list yet.
+    pending: RestRow,
     /// The first row on screen at the last paint, and its top.
     top_row: Option<(RowKey, ambre_core::ViewPx)>,
     /// The way the last step went: below zero towards the oldest row.
@@ -285,8 +284,8 @@ pub struct MurmureView {
     /// The row that holds the focus, `None` before Up or Down
     /// (`MURMURE-205`).
     focus: Option<RowKey>,
-    /// The focus moved: the next paint brings its row into view.
-    reveal: bool,
+    /// Whether the next paint brings the row of the focus into view.
+    reveal: Reveal,
     /// The list and the latest message this region last heard, so a new one
     /// is announced once (`MURMURE-208`).
     heard: (Option<ListOf>, Option<(MessageId, Timestamp)>),
@@ -318,7 +317,35 @@ pub struct MurmureView {
     barred: Option<MarkBar>,
     /// The version of the shelf the last plan read.
     shelf_seen: crate::drafts::ShelfVersion,
-    dirty: bool,
+    /// Whether the content changed since the last paint.
+    dirty: Repaint,
+}
+
+ambre_core::define_flag! {
+    /// Whether the content of a region changed since its last paint.
+    enum Repaint {
+        /// Nothing changed: the next frame reuses the last paint.
+        Clean,
+        /// Something changed: the next frame paints the content again.
+        Due,
+    }
+
+    /// Whether the row a list rests on is in the list yet.
+    enum RestRow {
+        /// The row is in the list, or the list rests on its latest row.
+        Listed,
+        /// The row is not in the list yet: the list rests on its latest
+        /// row until it comes.
+        Awaited,
+    }
+
+    /// Whether the next paint brings the focused row into view.
+    enum Reveal {
+        /// The focused row stays where it is.
+        Settled,
+        /// The focus moved: the next paint brings its row into view.
+        Due,
+    }
 }
 
 impl Drop for MurmureView {
@@ -363,14 +390,14 @@ impl MurmureView {
             size: view_size(size),
             hover: None,
             rest: Rest::Latest,
-            pending: false,
+            pending: RestRow::Listed,
             top_row: None,
             heading: ViewPx::ZERO,
             kinetic: Kinetic::default(),
             asked_older: None,
             jump: None,
             focus: None,
-            reveal: false,
+            reveal: Reveal::Settled,
             heard: (None, None),
             selecting: Selecting::default(),
             drag: None,
@@ -383,7 +410,7 @@ impl MurmureView {
             listed: None,
             barred: None,
             shelf_seen: crate::drafts::ShelfVersion::ZERO,
-            dirty: true,
+            dirty: Repaint::Due,
         }
     }
 
@@ -521,7 +548,7 @@ impl MurmureView {
             }
             ev => return Some(ev),
         }
-        self.dirty = true;
+        self.dirty = Repaint::Due;
         None
     }
 
@@ -529,7 +556,7 @@ impl MurmureView {
     /// latest row.
     pub fn resting_on(&self) -> Option<(RowKey, ambre_core::ViewPx)> {
         match self.rest {
-            Rest::Row { key, anchor_y } if !self.pending => Some((key, anchor_y)),
+            Rest::Row { key, anchor_y } if self.pending == RestRow::Listed => Some((key, anchor_y)),
             _ => None,
         }
     }
@@ -539,7 +566,7 @@ impl MurmureView {
     /// the ends of the list.
     pub fn scroll_by(&mut self, step: ScrollStep) {
         let from = match self.rest {
-            Rest::Row { key, anchor_y } if !self.pending => Some((key, anchor_y)),
+            Rest::Row { key, anchor_y } if self.pending == RestRow::Listed => Some((key, anchor_y)),
             _ => self.top_row,
         };
         let Some((key, anchor_y)) = from else {
@@ -549,9 +576,9 @@ impl MurmureView {
             key,
             anchor_y: anchor_y - step.y(),
         };
-        self.pending = false;
+        self.pending = RestRow::Listed;
         self.heading = step.y();
-        self.dirty = true;
+        self.dirty = Repaint::Due;
     }
 
     /// Move the list by one viewport the way `step` names. The model takes
@@ -573,9 +600,9 @@ impl MurmureView {
     /// paint shows it, and only then is it read (`MURMURE-506`).
     fn rest_at_latest(&mut self) {
         self.rest = Rest::Latest;
-        self.pending = false;
+        self.pending = RestRow::Listed;
         self.kinetic.stop();
-        self.dirty = true;
+        self.dirty = Repaint::Due;
     }
 
     /// Whether `at` falls on the control back to the latest message.
@@ -688,7 +715,7 @@ impl MurmureView {
                     data: file.data,
                 },
             });
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
     }
 
@@ -837,9 +864,9 @@ impl MurmureView {
             key: RowKey::Message(message),
             anchor_y: self.list_height() * AT_FRACTION,
         };
-        self.pending = false;
+        self.pending = RestRow::Listed;
         self.kinetic.stop();
-        self.dirty = true;
+        self.dirty = Repaint::Due;
     }
 
     /// Ask again for the segment of the band under `y` at the last paint, if
@@ -922,7 +949,7 @@ impl MurmureView {
         };
         let keys = list.keys();
         // A focus just moved is on its way into view.
-        let on_screen = self.reveal
+        let on_screen = self.reveal == Reveal::Due
             || self
                 .last
                 .as_ref()
@@ -944,8 +971,8 @@ impl MurmureView {
             return;
         };
         self.focus = Some(key);
-        self.reveal = true;
-        self.dirty = true;
+        self.reveal = Reveal::Due;
+        self.dirty = Repaint::Due;
         (self.reads.announce)(&row.announcement(&*self.reads.name_of, &*self.reads.time_of));
     }
 
@@ -953,7 +980,7 @@ impl MurmureView {
     /// screen comes to rest at the top, and the next paint checks it again.
     fn reveal_focus(&mut self, painted: &Painted, at: Option<ListRow>, keys: &ListRowVec<RowKey>) {
         let Some(key) = at.and_then(|i| keys.get(i).copied()) else {
-            self.reveal = false;
+            self.reveal = Reveal::Settled;
             return;
         };
         let Some(RowBounds { top, bottom }) = painted.focus else {
@@ -961,11 +988,11 @@ impl MurmureView {
                 key,
                 anchor_y: ambre_core::ViewPx::ZERO,
             };
-            self.pending = false;
-            self.dirty = true;
+            self.pending = RestRow::Listed;
+            self.dirty = Repaint::Due;
             return;
         };
-        self.reveal = false;
+        self.reveal = Reveal::Settled;
         let over = if top < -REVEAL_SLACK {
             top
         } else if bottom > self.list_height() + REVEAL_SLACK {
@@ -1013,14 +1040,14 @@ impl MurmureView {
             Some(at) if self.composer.on_also(at.y) => {
                 if let Some(of) = self.writes_in() {
                     self.composer.toggle_also(of);
-                    self.dirty = true;
+                    self.dirty = Repaint::Due;
                 }
                 None
             }
             Some(at) if self.composer.file_at(at).is_some() => {
                 if let (Some(of), Some(index)) = (self.writes_in(), self.composer.file_at(at)) {
                     self.composer.uploads_mut().remove(of, index);
-                    self.dirty = true;
+                    self.dirty = Repaint::Due;
                 }
                 None
             }
@@ -1029,14 +1056,14 @@ impl MurmureView {
                     self.composer.press(of, at);
                     self.composer.release();
                     self.reads.pipe.focus();
-                    self.dirty = true;
+                    self.dirty = Repaint::Due;
                 }
                 None
             }
             Some(at) if self.retry_at(at.y) => None,
             Some(at) => {
                 self.selecting.click = Some(at);
-                self.dirty = true;
+                self.dirty = Repaint::Due;
                 Some(at)
             }
             None => None,
@@ -1069,7 +1096,7 @@ impl MurmureView {
     pub fn leave_composer(&mut self) {
         if self.composer.focused() {
             self.composer.blur();
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
     }
 
@@ -1109,7 +1136,7 @@ impl MurmureView {
         let theme = self.theme_ctl.get();
         if theme != self.theme {
             self.theme = theme;
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
         let shown = ((self.reads.pane)(), self.lists.borrow().revision);
         if shown.0 != self.painted.0 {
@@ -1117,18 +1144,18 @@ impl MurmureView {
         }
         if shown != self.painted {
             self.painted = shown;
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
         // A picture on screen reached its next frame (`MURMURE-136`).
         if self.next_frame.is_some_and(|at| now >= at) {
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
         // Rows read back after a reload, or a loss, change what the composer
         // shows: the next paint reads the shelf (`MURMURE-210`).
         let shelved = self.reads.drafts.version();
         if shelved != self.shelf_seen {
             self.shelf_seen = shelved;
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
         if let Some(step) = self.kinetic.tick(now)
             && step.y() != ViewPx::ZERO
@@ -1147,7 +1174,7 @@ impl MurmureView {
         if let Some(edit) = (self.reads.take_edit)(self.region) {
             self.composer.start_edit(edit);
             self.reads.pipe.focus();
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
         // A click in the `@` list picks its entry, and the keys stay in the
         // composer (`MURMURE-555`).
@@ -1156,7 +1183,7 @@ impl MurmureView {
         {
             self.composer.pick(of, index);
             self.typed();
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
         // An emoji picked for the composer lands at its caret, as a paste
         // does, and the keys come back to it (`MURMURE-139`).
@@ -1166,7 +1193,7 @@ impl MurmureView {
             self.composer.text(of, emoji.as_str());
             self.reads.pipe.focus();
             self.typed();
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
         // A press on the format bar toggles its style as its chord does, and
         // the keys stay in the composer (`MURMURE-432`).
@@ -1175,7 +1202,7 @@ impl MurmureView {
         {
             self.composer.toggle(of, style);
             self.typed();
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
         // A file dropped on the canvas uploads, and joins the draft once
         // the relay answers (`MURMURE-132`).
@@ -1198,15 +1225,14 @@ impl MurmureView {
                 .restore(of, std::mem::take(&mut held.attachments));
             if self.composer.restore(of, held.draft, also) {
                 self.reads.pipe.focus();
-                self.dirty = true;
+                self.dirty = Repaint::Due;
             }
         }
         let dirty = std::mem::take(&mut self.dirty);
         RepaintPlan {
-            content: if dirty {
-                ContentRepaint::Full
-            } else {
-                ContentRepaint::Reuse
+            content: match dirty {
+                Repaint::Due => ContentRepaint::Full,
+                Repaint::Clean => ContentRepaint::Reuse,
             },
             content_strip: None,
             overlay: LayerRepaint::Reuse,
@@ -1257,7 +1283,11 @@ impl MurmureView {
             Rest::Row { key, anchor_y } => row_of(&keys, key).map(|i| (i, anchor_y)),
             Rest::Latest => None,
         };
-        self.pending = matches!(self.rest, Rest::Row { .. }) && anchor.is_none();
+        self.pending = if matches!(self.rest, Rest::Row { .. }) && anchor.is_none() {
+            RestRow::Awaited
+        } else {
+            RestRow::Listed
+        };
         let at_bottom = self.rest == Rest::Latest;
         let focus = self.focus.and_then(|key| row_of(&keys, key));
         if focus.is_none() {
@@ -1307,10 +1337,11 @@ impl MurmureView {
             ..Selecting::default()
         };
         self.settle(&painted, &keys);
-        if self.reveal {
+        if self.reveal == Reveal::Due {
             self.reveal_focus(&painted, focus, &keys);
         }
-        let higher_up = !painted.latest_shown && !list.is_empty();
+        let latest_shown = painted.latest_shown == OnScreen::Shown;
+        let higher_up = !latest_shown && !list.is_empty();
         let palette = self.theme.palette();
         let shown_before = self.jump.is_some();
         self.jump = higher_up.then(|| paint_jump(surface, font_cx, text_cache, list_size, palette));
@@ -1358,9 +1389,10 @@ impl MurmureView {
             // (`MURMURE-509`).
             (self.reads.announce)(JUMP_HINT);
         }
-        self.hear_latest(self.list_of(pane), list, at_bottom && painted.latest_shown);
+        let latest_row = OnScreen::from_bool(at_bottom && latest_shown);
+        self.hear_latest(self.list_of(pane), list, latest_row);
         if self.region == Region::Channel
-            && painted.oldest_shown
+            && painted.oldest_shown == OnScreen::Shown
             && let Some((channel, oldest)) = on_screen.zip(list.oldest_segment())
             && self.asked_older.replace(oldest) != Some(oldest)
         {
@@ -1371,7 +1403,7 @@ impl MurmureView {
                 command: MurmureCommand::LoadOlder { segment: oldest },
             });
         }
-        let Some(latest) = list.latest().map(|m| m.id).filter(|_| painted.latest_shown) else {
+        let Some(latest) = list.latest().map(|m| m.id).filter(|_| latest_shown) else {
             return;
         };
         let command = match (self.region, pane) {
@@ -1389,10 +1421,12 @@ impl MurmureView {
         }
     }
 
-    /// Announce a message newer than the latest one this region heard, when
-    /// the list was at the bottom (`MURMURE-208`). The first list a channel
-    /// shows is not news, and the focus stays where it was (`MURMURE-209`).
-    fn hear_latest(&mut self, of: Option<ListOf>, list: &MessageList, at_bottom: bool) {
+    /// Announce a message newer than the latest one this region heard. Only
+    /// a list at rest on its latest row announces, as `latest_row` says
+    /// (`MURMURE-208`). The first list a channel shows is not news, and the
+    /// focus stays where it was (`MURMURE-209`).
+    fn hear_latest(&mut self, of: Option<ListOf>, list: &MessageList, latest_row: OnScreen) {
+        let at_bottom = latest_row == OnScreen::Shown;
         let latest = list.latest().map(|m| (m.id, m.ts));
         let (heard_in, heard) = std::mem::replace(&mut self.heard, (of, latest));
         let news = match (heard, latest) {
@@ -1503,7 +1537,7 @@ impl MurmureView {
         self.top_row = None;
         self.asked_older = None;
         self.focus = None;
-        self.reveal = false;
+        self.reveal = Reveal::Settled;
         self.selecting = Selecting::default();
         self.drag = None;
         self.kinetic.stop();
@@ -1514,7 +1548,7 @@ impl MurmureView {
     fn settle(&mut self, painted: &Painted, keys: &ListRowVec<RowKey>) {
         let key_of = |(i, y): (ListRow, ambre_core::ViewPx)| keys.get(i).map(|&key| (key, y));
         self.top_row = painted.top.and_then(key_of);
-        if !self.pending {
+        if self.pending == RestRow::Listed {
             self.rest = painted
                 .rest
                 .and_then(key_of)
@@ -1527,7 +1561,7 @@ impl MurmureView {
         let edge = if self.heading > ViewPx::ZERO {
             at_latest
         } else {
-            at_oldest || (at_latest && painted.oldest_shown)
+            at_oldest || (at_latest && painted.oldest_shown == OnScreen::Shown)
         };
         if self.heading != ViewPx::ZERO && edge {
             self.kinetic.stop();
@@ -1570,14 +1604,14 @@ impl MurmureView {
     /// The region now lays out at `size` logical pixels (`CANVAS-044`).
     pub fn resize(&mut self, size: ambre_canvas::CssSize) {
         self.size = view_size(size);
-        self.dirty = true;
+        self.dirty = Repaint::Due;
     }
 
     /// The window is as wide as a desktop, or no longer is. The box under a
     /// thread's composer names its chord only then (`MURMURE-544`).
     pub fn set_width(&mut self, width: WindowWidth) {
-        if self.composer.show_chords(width == WindowWidth::Desktop) {
-            self.dirty = true;
+        if self.composer.show_chords(width) {
+            self.dirty = Repaint::Due;
         }
     }
 
@@ -1604,7 +1638,7 @@ impl MurmureView {
     pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
         if let Some(consumed) = self.composer_input(ev) {
             self.typed();
-            self.dirty = true;
+            self.dirty = Repaint::Due;
             return consumed;
         }
         match *ev {
@@ -1618,7 +1652,7 @@ impl MurmureView {
                 // A press in the list gives the keys back to it.
                 if self.composer.focused() {
                     self.composer.blur();
-                    self.dirty = true;
+                    self.dirty = Repaint::Due;
                 }
                 if button == PointerButton::Secondary {
                     // The page's menu event follows, and opens the actions of
@@ -1630,7 +1664,7 @@ impl MurmureView {
                         ..Selecting::default()
                     };
                     self.drag = Some(Drag::Held);
-                    self.dirty = true;
+                    self.dirty = Repaint::Due;
                 }
             }
             InputEvent::PointerMove { at } => {
@@ -1638,7 +1672,7 @@ impl MurmureView {
                 if let Some(drag) = self.drag.as_mut() {
                     *drag = Drag::Moved;
                     self.selecting.drag = Some(at);
-                    self.dirty = true;
+                    self.dirty = Repaint::Due;
                     self.drag_past_edge(at.y);
                 }
             }
@@ -1648,7 +1682,7 @@ impl MurmureView {
                 let drag = self.drag.take();
                 if drag == Some(Drag::Moved) {
                     self.selecting.drag = Some(pointer);
-                    self.dirty = true;
+                    self.dirty = Repaint::Due;
                     return false;
                 }
                 if self.on_jump(at) {
@@ -1664,7 +1698,7 @@ impl MurmureView {
                 // next paint finds under it (`MURMURE-567`).
                 if drag == Some(Drag::Held) {
                     self.selecting.click = Some(pointer);
-                    self.dirty = true;
+                    self.dirty = Repaint::Due;
                 }
             }
             InputEvent::Key {
@@ -1804,7 +1838,7 @@ impl MurmureView {
             }
             let text = self.composer.cut(channel);
             self.typed();
-            self.dirty = true;
+            self.dirty = Repaint::Due;
             return text;
         }
         self.copy().filter(|_| write == ClipboardWrite::Copy)
@@ -1817,7 +1851,7 @@ impl MurmureView {
         {
             self.composer.text(channel, text);
             self.typed();
-            self.dirty = true;
+            self.dirty = Repaint::Due;
         }
     }
 
@@ -2247,7 +2281,8 @@ mod tests {
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         send(&page, channel, MurmureEvent::FirstUnread { message: first });
         page.pane.set(MurmurePane::Channel { channel, at: None });
-        let line = |view: &MurmureView| view.last_painted().map(|p| p.line_shown);
+        let line =
+            |view: &MurmureView| view.last_painted().map(|p| p.line_shown == OnScreen::Shown);
         assert!(frame(&mut page.view));
         assert_eq!(line(&page.view), Some(true));
         assert_eq!(reads(&page).0, 1);
@@ -2604,7 +2639,7 @@ mod tests {
         assert_eq!(reads(&page).0, 1);
         segment(&page, channel, 5_000, 1);
         assert!(frame(&mut page.view));
-        assert!(shown(&page.view).latest_shown);
+        assert_eq!(shown(&page.view).latest_shown, OnScreen::Shown);
         assert_eq!(page.view.resting_on(), None);
         assert_eq!(reads(&page).0, 1, "the new message shows, and is read");
     }
@@ -2622,7 +2657,7 @@ mod tests {
         );
         assert!(frame(&mut page.view));
         let rested = page.view.resting_on().expect("resting higher up");
-        assert!(!shown(&page.view).latest_shown);
+        assert_eq!(shown(&page.view).latest_shown, OnScreen::Hidden);
         segment(&page, channel, 5_000, 1);
         assert!(frame(&mut page.view));
         assert_eq!(page.view.resting_on(), Some(rested));
@@ -2639,7 +2674,7 @@ mod tests {
         assert_eq!(older(&page), [], "the oldest row is far above");
         wheel(&mut page, -100_000.0, 0, ambre_bus::PageTime(10.0));
         assert!(frame(&mut page.view));
-        assert!(shown(&page.view).oldest_shown);
+        assert_eq!(shown(&page.view).oldest_shown, OnScreen::Shown);
         let oldest = page
             .view
             .lists
@@ -2660,7 +2695,7 @@ mod tests {
             Some(rested),
             "the rows above move nothing"
         );
-        assert!(!shown(&page.view).oldest_shown);
+        assert_eq!(shown(&page.view).oldest_shown, OnScreen::Hidden);
         wheel(&mut page, -100_000.0, 0, ambre_bus::PageTime(30.0));
         assert!(frame(&mut page.view));
         assert_eq!(older(&page).len(), 1, "the new oldest segment asks again");
@@ -2757,7 +2792,7 @@ mod tests {
             ambre_bus::PageTime(20.0)
         ));
         frame_at(&mut paged.view, ambre_bus::PageTime(20.0));
-        assert!(shown(&paged.view).latest_shown);
+        assert_eq!(shown(&paged.view).latest_shown, OnScreen::Shown);
         assert!(
             !key(
                 &mut paged,
@@ -2792,7 +2827,7 @@ mod tests {
                 ambre_bus::PageTime(10.0),
             );
             frame(&mut page.view);
-            assert!(!shown(&page.view).latest_shown);
+            assert_eq!(shown(&page.view).latest_shown, OnScreen::Hidden);
         };
 
         up(&mut page);
@@ -2803,7 +2838,7 @@ mod tests {
             ambre_bus::PageTime(20.0)
         ));
         frame(&mut page.view);
-        assert!(shown(&page.view).latest_shown);
+        assert_eq!(shown(&page.view).latest_shown, OnScreen::Shown);
         assert_eq!(page.view.resting_on(), None);
         assert_eq!(page.view.jump, None);
 
@@ -2816,7 +2851,7 @@ mod tests {
         };
         assert!(page.view.handle_input(&click), "the click is taken");
         frame(&mut page.view);
-        assert!(shown(&page.view).latest_shown);
+        assert_eq!(shown(&page.view).latest_shown, OnScreen::Shown);
 
         up(&mut page);
         let at = centre(&page.view);
@@ -2830,7 +2865,7 @@ mod tests {
             "the tap is taken"
         );
         frame(&mut page.view);
-        assert!(shown(&page.view).latest_shown);
+        assert_eq!(shown(&page.view).latest_shown, OnScreen::Shown);
     }
 
     /// A jump marks read only the latest message it showed. Pages that stop
@@ -2858,7 +2893,7 @@ mod tests {
             ambre_bus::PageTime(40.0),
         );
         frame_at(&mut page.view, ambre_bus::PageTime(40.0));
-        assert!(!shown(&page.view).latest_shown);
+        assert_eq!(shown(&page.view).latest_shown, OnScreen::Hidden);
         assert_eq!(
             reads(&page).0,
             0,
@@ -2946,7 +2981,7 @@ mod tests {
         }
         assert_eq!(page.view.focused(), row(&rows, 339));
         assert!(
-            !shown(&page.view).latest_shown,
+            shown(&page.view).latest_shown == OnScreen::Hidden,
             "the list followed the focus up"
         );
     }
@@ -2987,7 +3022,7 @@ mod tests {
             frame(&mut page.view);
         }
         assert!(page.view.focused().is_some());
-        assert!(!shown(&page.view).latest_shown);
+        assert_eq!(shown(&page.view).latest_shown, OnScreen::Hidden);
         assert_eq!(reads(&page).0, 0, "the focus read nothing");
     }
 
@@ -3120,13 +3155,21 @@ mod tests {
         assert_eq!(*page.said.borrow(), ["Ada, t: hello"]);
         assert!(press(&mut view, Key::PageUp, ambre_bus::PageTime(20.0)));
         press(&mut view, Key::PageUp, ambre_bus::PageTime(30.0));
-        assert!(!shown(&view).latest_shown, "the pages moved the thread");
+        assert_eq!(
+            shown(&view).latest_shown,
+            OnScreen::Hidden,
+            "the pages moved the thread"
+        );
         assert_eq!(
             page.said.borrow().last().map(String::as_str),
             Some(JUMP_HINT)
         );
         assert!(press(&mut view, Key::End, ambre_bus::PageTime(40.0)));
-        assert!(shown(&view).latest_shown, "End is back at the latest reply");
+        assert_eq!(
+            shown(&view).latest_shown,
+            OnScreen::Shown,
+            "End is back at the latest reply"
+        );
         assert_eq!(page.view.focused(), None, "the channel kept its own focus");
 
         page.said.borrow_mut().clear();
@@ -3516,7 +3559,7 @@ mod tests {
         };
         let at = messages.iter().position(|m| m.id == top);
         assert!(at.is_some_and(|i| (14..20).contains(&i)), "{at:?}");
-        assert!(!shown(&page.view).latest_shown);
+        assert_eq!(shown(&page.view).latest_shown, OnScreen::Hidden);
 
         let later = message(UserId::new(), ambre_bus::Timestamp(9_000), "later");
         let at = MessageRef {
@@ -3533,7 +3576,11 @@ mod tests {
         let messages = vec![later.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         assert!(frame(&mut page.view));
-        assert!(shown(&page.view).latest_shown, "it came as the latest");
+        assert_eq!(
+            shown(&page.view).latest_shown,
+            OnScreen::Shown,
+            "it came as the latest"
+        );
     }
 
     /// The region follows the pointer and consumes nothing.
@@ -4507,12 +4554,19 @@ mod tests {
             },
         );
         frame(&mut page.view);
-        assert!(!shown(&page.view).line_shown, "the line is far up");
+        assert_eq!(
+            shown(&page.view).line_shown,
+            OnScreen::Hidden,
+            "the line is far up"
+        );
         assert_eq!(reads(&page).0, 1);
         assert!(shift_key(&mut page, Key::PageUp), "the list takes the key");
         frame(&mut page.view);
         let painted = shown(&page.view);
-        assert!(painted.line_shown && !painted.latest_shown);
+        assert_eq!(
+            (painted.line_shown, painted.latest_shown),
+            (OnScreen::Shown, OnScreen::Hidden)
+        );
         assert_eq!(reads(&page), (0, 0), "a jump reads nothing");
 
         let (mut quiet, _, _) = long_channel(400);
