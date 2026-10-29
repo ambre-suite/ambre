@@ -2579,7 +2579,7 @@ fn frame_snapshot_captures_declared_children_props() {
     // empty and the populated frame fades every child in (endpoint sanity).
     let empty = st.frame_snapshot(&b); // b is a plain rect, no children
     assert!(empty.elements.is_empty());
-    let anim = smart_animate(&empty, &snap, 1.0);
+    let anim = smart_animate(&empty, &snap, crate::logic::animate::Phase::END);
     assert_eq!(anim.len(), 2);
     assert!(
         anim.iter()

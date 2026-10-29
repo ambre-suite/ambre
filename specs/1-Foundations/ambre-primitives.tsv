@@ -2602,19 +2602,12 @@ ambre-toile | src/chrome/mod.rs | crate::chrome | new_doc_label() | ret | &'stat
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterIntent::EditNotes.base | field | String	free-text	label, message or user text
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterPanel(notes) | param | RwSignal<String>	free-text	label, message or user text
 ambre-toile | src/chrome/relay.rs | crate::chrome::relay | ToileRelay.presenter_notes | field | RwSignal<String>	free-text	label, message or user text
-ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_in(t) | param | f64	math	the transition phase, a 0..1 factor scaled into the opacity
-ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::fade_out(t) | param | f64	math	the transition phase, a 0..1 factor whose complement scales the opacity
-ambre-toile | src/logic/animate.rs | crate::logic::animate | AnimatedElement::lerp(t) | param | f64	math	the eased phase, a 0..1 factor weighting rotation, opacity and bounds
-ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic() | ret | f64	math	the eased phase, a 0..1 factor
-ambre-toile | src/logic/animate.rs | crate::logic::animate | ease_in_out_cubic(t) | param | f64	math	the raw phase, clamped to 0..1 before the easing curve
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_rgba(t) | param | f64	math	the eased phase, a 0..1 factor applied per colour channel
+ambre-toile | src/logic/animate.rs | crate::logic::animate | Phase.0 | field | f64	newtype-inner	the factor a Phase holds, in 0..1 and never NaN
+ambre-toile | src/logic/animate.rs | crate::logic::animate | Phase::clamped(t) | param | f64	newtype-inner	the raw phase the one constructor of Phase clamps
+ambre-toile | src/logic/animate.rs | crate::logic::animate | Phase::get() | ret | f64	newtype-inner	the accessor of Phase, read by each interpolation it weights
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64() | ret | f64	generic	the interpolation a + (b - a) * t over any f64 pair: a coordinate or a colour channel by caller
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(a) | param | f64	generic	the start value of the interpolation: a coordinate or a colour channel by caller
 ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(b) | param | f64	generic	the end value of the interpolation: a coordinate or a colour channel by caller
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_f64(t) | param | f64	math	the interpolation factor in a + (b - a) * t
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_fill(t) | param | f64	math	the eased phase, a 0..1 factor: compared with one half, then applied per channel
-ambre-toile | src/logic/animate.rs | crate::logic::animate | lerp_rect(t) | param | f64	math	the eased phase, a 0..1 factor applied to each rect edge
-ambre-toile | src/logic/animate.rs | crate::logic::animate | smart_animate(t) | param | f64	math	the eased phase, a 0..1 factor handed to the per-element interpolations
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Contour | alias | Vec<[f64;2]>	foreign-api	the point ring i_overlay takes and returns
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | FlattenTol::get() | ret | f64	newtype-inner	the tolerance as the f64 kurbo flatten takes
 ambre-toile | src/logic/boolean.rs | crate::logic::boolean | Shape | alias | Vec<Contour>	foreign-api	the contour list i_overlay takes and returns
@@ -2927,7 +2920,6 @@ ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	m
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a ZoomFactor
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	the padding fraction the bounds are scaled by, as 1 + pad_frac
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	the padding fraction forwarded to the same 1 + pad_frac scale
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::glide(t) | param | f64	math	the eased phase in 0..1 that interpolates zoom and pan
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_by_center(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	the multiplier one zoom step applies to the zoom

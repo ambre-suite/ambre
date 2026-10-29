@@ -30,6 +30,44 @@ use crate::logic::model::ElementId;
 // thread owns no board state. This solver stays here as the sole consumer.
 pub use ambre_bus::app::toile::{FrameSnapshot, SnapElement};
 
+/// A transition phase, in `0.0 ..= 1.0`: `START` shows the source, `END` the
+/// target. It is never NaN, so no interpolation it weights turns NaN.
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct Phase(f64);
+
+impl Phase {
+    /// The source of the transition.
+    pub const START: Self = Self(0.0);
+    /// The target of the transition.
+    pub const END: Self = Self(1.0);
+
+    /// The phase `t`, clamped to `0.0 ..= 1.0`. A NaN maps to [`Self::START`].
+    pub fn clamped(t: f64) -> Self {
+        if t.is_nan() {
+            Self::START
+        } else {
+            Self(t.clamp(0.0, 1.0))
+        }
+    }
+
+    /// The phase as a factor.
+    pub fn get(self) -> f64 {
+        self.0
+    }
+
+    /// The remaining share, `1 - t`.
+    #[must_use]
+    pub fn rest(self) -> Self {
+        Self(1.0 - self.0)
+    }
+
+    /// The phase after the ease-in-out cubic curve (see [`ease_in_out_cubic`]).
+    #[must_use]
+    pub fn eased(self) -> Self {
+        ease_in_out_cubic(self)
+    }
+}
+
 /// The interpolated presentation of one element for a single transition frame.
 /// Same shape as [`SnapElement`]; produced by [`lerp`](AnimatedElement::lerp) /
 /// [`fade_in`](AnimatedElement::fade_in) / [`fade_out`](AnimatedElement::fade_out).
@@ -47,37 +85,37 @@ impl AnimatedElement {
     /// `t`. Every property is a plain `lerp`, so `t = 0` reproduces `a`
     /// exactly and `t = 1` reproduces `b` exactly (the endpoint guarantee tested
     /// in). `t` arrives already eased (see [`ease_in_out_cubic`]).
-    pub fn lerp(a: &SnapElement, b: &SnapElement, t: f64) -> Self {
+    pub fn lerp(a: &SnapElement, b: &SnapElement, t: Phase) -> Self {
         Self {
             // The id is shared by construction; keep it as the animated identity.
             id: b.id.clone(),
             bounds: lerp_rect(a.bounds, b.bounds, t),
-            rotation: a.rotation + (b.rotation - a.rotation) * t,
-            opacity: a.opacity.lerp(b.opacity, t),
+            rotation: a.rotation + (b.rotation - a.rotation) * t.get(),
+            opacity: a.opacity.lerp(b.opacity, t.get()),
             fill: lerp_fill(a.fill, b.fill, t),
         }
     }
 
     /// An element new in B: hold its geometry, ramp opacity from 0 up to its own
     /// target with `t`. `t = 0` -> invisible, `t = 1` -> full.
-    pub fn fade_in(e: &SnapElement, t: f64) -> Self {
+    pub fn fade_in(e: &SnapElement, t: Phase) -> Self {
         Self {
             id: e.id.clone(),
             bounds: e.bounds,
             rotation: e.rotation,
-            opacity: e.opacity.scaled(t as f32),
+            opacity: e.opacity.scaled(t.get() as f32),
             fill: e.fill,
         }
     }
 
     /// An element gone in B: hold its geometry, ramp opacity down from its own
     /// value to 0 with `t`. `t = 0` -> full, `t = 1` -> invisible.
-    pub fn fade_out(a: &SnapElement, t: f64) -> Self {
+    pub fn fade_out(a: &SnapElement, t: Phase) -> Self {
         Self {
             id: a.id.clone(),
             bounds: a.bounds,
             rotation: a.rotation,
-            opacity: a.opacity.scaled((1.0 - t) as f32),
+            opacity: a.opacity.scaled(t.rest().get() as f32),
             fill: a.fill,
         }
     }
@@ -91,7 +129,7 @@ impl AnimatedElement {
 /// `by_id` scan, to fit the < 4 ms / 500-element transition-frame budget.
 /// The output paint order is `to`'s order (tweens + fade-ins) followed by the
 /// fade-outs, matching the pseudo-code map/chain of `toile-presentation`.
-pub fn smart_animate(from: &FrameSnapshot, to: &FrameSnapshot, t: f64) -> Vec<AnimatedElement> {
+pub fn smart_animate(from: &FrameSnapshot, to: &FrameSnapshot, t: Phase) -> Vec<AnimatedElement> {
     let from_by_id: HashMap<&str, &SnapElement> =
         from.elements.iter().map(|e| (e.id.as_str(), e)).collect();
     let to_by_id: HashMap<&str, &SnapElement> =
@@ -114,25 +152,25 @@ pub fn smart_animate(from: &FrameSnapshot, to: &FrameSnapshot, t: f64) -> Vec<An
 
 /// The standard ease-in-out cubic curve the camera pass applies before feeding
 /// `t` to [`smart_animate`] ("eased lerp"). Kept here so Phase 1 reuses the
-/// same easing the tests pin. Input is clamped to `0.0 ..= 1.0`; the curve is
-/// symmetric (`ease(0.5) == 0.5`) and monotonic.
-pub fn ease_in_out_cubic(t: f64) -> f64 {
-    let t = t.clamp(0.0, 1.0);
-    if t < 0.5 {
+/// same easing the tests pin. A [`Phase`] is in `0.0 ..= 1.0` already; the
+/// curve is symmetric (`ease(0.5) == 0.5`) and monotonic.
+pub fn ease_in_out_cubic(t: Phase) -> Phase {
+    let t = t.get();
+    Phase::clamped(if t < 0.5 {
         4.0 * t * t * t
     } else {
         let f = -2.0 * t + 2.0;
         1.0 - f * f * f / 2.0
-    }
+    })
 }
 
 // -- interpolation primitives -------------------------------------------------
 
-fn lerp_f64(a: f64, b: f64, t: f64) -> f64 {
-    a + (b - a) * t
+fn lerp_f64(a: f64, b: f64, t: Phase) -> f64 {
+    a + (b - a) * t.get()
 }
 
-fn lerp_rect(a: Rect, b: Rect, t: f64) -> Rect {
+fn lerp_rect(a: Rect, b: Rect, t: Phase) -> Rect {
     Rect::new(
         lerp_f64(a.x0, b.x0, t),
         lerp_f64(a.y0, b.y0, t),
@@ -145,11 +183,11 @@ fn lerp_rect(a: Rect, b: Rect, t: f64) -> Rect {
 /// is no common color to blend, so crossfade to the `t`-dominant side (`< 0.5`
 /// keeps `a`, `>= 0.5` takes `b`). This keeps the tween deterministic and never
 /// invents a color out of `None`.
-fn lerp_fill(a: Option<Rgba>, b: Option<Rgba>, t: f64) -> Option<Rgba> {
+fn lerp_fill(a: Option<Rgba>, b: Option<Rgba>, t: Phase) -> Option<Rgba> {
     match (a, b) {
         (Some(ca), Some(cb)) => Some(lerp_rgba(ca, cb, t)),
         _ => {
-            if t < 0.5 {
+            if t.get() < 0.5 {
                 a
             } else {
                 b
@@ -159,7 +197,7 @@ fn lerp_fill(a: Option<Rgba>, b: Option<Rgba>, t: f64) -> Option<Rgba> {
 }
 
 /// Per-channel lerp of two RGBA colors.
-fn lerp_rgba(a: Rgba, b: Rgba, t: f64) -> Rgba {
+fn lerp_rgba(a: Rgba, b: Rgba, t: Phase) -> Rgba {
     let (a, b) = (a.bits(), b.bits());
     let ch = |shift: u32| {
         let ca = ((a >> shift) & 0xFF) as f64;
@@ -172,6 +210,11 @@ fn lerp_rgba(a: Rgba, b: Rgba, t: f64) -> Rgba {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The phase `t`, for a test that names it by value.
+    fn at(t: f64) -> Phase {
+        Phase::clamped(t)
+    }
 
     fn snap(
         id: &str,
@@ -215,7 +258,7 @@ mod tests {
         let to = FrameSnapshot {
             elements: vec![b.clone()],
         };
-        let out = smart_animate(&from, &to, 0.5);
+        let out = smart_animate(&from, &to, at(0.5));
         assert_eq!(out.len(), 1);
         let m = &out[0];
         assert_eq!(m.id, ElementId("e1".to_owned()));
@@ -240,7 +283,7 @@ mod tests {
         let to = FrameSnapshot {
             elements: vec![b.clone()],
         };
-        let out = smart_animate(&from, &to, 0.25);
+        let out = smart_animate(&from, &to, at(0.25));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].id, b.id);
         assert_eq!(out[0].bounds, b.bounds); // geometry held at target
@@ -260,7 +303,7 @@ mod tests {
             elements: vec![a.clone()],
         };
         let to = FrameSnapshot::default();
-        let out = smart_animate(&from, &to, 0.25);
+        let out = smart_animate(&from, &to, at(0.25));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].id, a.id);
         assert_eq!(out[0].bounds, a.bounds); // geometry held at source
@@ -284,22 +327,28 @@ mod tests {
             Some(Rgba::from_bits(0xFFFF_FFFF)),
         );
         // t = 0 reproduces A, t = 1 reproduces B.
-        let at0 = AnimatedElement::lerp(&a, &b, 0.0);
+        let at0 = AnimatedElement::lerp(&a, &b, Phase::START);
         assert_eq!(at0.bounds, a.bounds);
         assert_eq!(at0.rotation, a.rotation);
         assert_eq!(at0.opacity, a.opacity);
         assert_eq!(at0.fill, a.fill);
-        let at1 = AnimatedElement::lerp(&a, &b, 1.0);
+        let at1 = AnimatedElement::lerp(&a, &b, Phase::END);
         assert_eq!(at1.bounds, b.bounds);
         assert_eq!(at1.rotation, b.rotation);
         // f32 lerp `a + (b - a) * 1.0` reproduces b within rounding.
         assert!((at1.opacity.get() - b.opacity.get()).abs() < 1e-6);
         assert_eq!(at1.fill, b.fill);
         // Fade endpoints.
-        assert_eq!(AnimatedElement::fade_in(&b, 0.0).opacity.get(), 0.0);
-        assert_eq!(AnimatedElement::fade_in(&b, 1.0).opacity, b.opacity);
-        assert_eq!(AnimatedElement::fade_out(&a, 0.0).opacity, a.opacity);
-        assert_eq!(AnimatedElement::fade_out(&a, 1.0).opacity.get(), 0.0);
+        assert_eq!(
+            AnimatedElement::fade_in(&b, Phase::START).opacity.get(),
+            0.0
+        );
+        assert_eq!(AnimatedElement::fade_in(&b, Phase::END).opacity, b.opacity);
+        assert_eq!(
+            AnimatedElement::fade_out(&a, Phase::START).opacity,
+            a.opacity
+        );
+        assert_eq!(AnimatedElement::fade_out(&a, Phase::END).opacity.get(), 0.0);
     }
 
     #[test]
@@ -315,7 +364,7 @@ mod tests {
         let to = FrameSnapshot {
             elements: vec![a2, c],
         };
-        let out = smart_animate(&from, &to, 0.5);
+        let out = smart_animate(&from, &to, at(0.5));
         // a tweened, c faded in, b faded out -> three animated elements.
         assert_eq!(out.len(), 3);
         // Order: to's order (a, c) then the fade-outs (b).
@@ -332,18 +381,23 @@ mod tests {
         let e = snap("x", rect(0.0, 0.0, 1.0, 1.0), 0.0, 1.0, None);
         // both empty -> nothing.
         assert!(
-            smart_animate(&FrameSnapshot::default(), &FrameSnapshot::default(), 0.5).is_empty()
+            smart_animate(
+                &FrameSnapshot::default(),
+                &FrameSnapshot::default(),
+                at(0.5)
+            )
+            .is_empty()
         );
         // from empty -> all fade in.
         let to = FrameSnapshot {
             elements: vec![e.clone()],
         };
-        let out = smart_animate(&FrameSnapshot::default(), &to, 0.5);
+        let out = smart_animate(&FrameSnapshot::default(), &to, at(0.5));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].opacity.get(), 0.5);
         // to empty -> all fade out.
         let from = FrameSnapshot { elements: vec![e] };
-        let out = smart_animate(&from, &FrameSnapshot::default(), 0.5);
+        let out = smart_animate(&from, &FrameSnapshot::default(), at(0.5));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].opacity.get(), 0.5);
     }
@@ -360,18 +414,34 @@ mod tests {
 
     #[test]
     fn ease_in_out_cubic_curve() {
-        assert_eq!(ease_in_out_cubic(0.0), 0.0);
-        assert_eq!(ease_in_out_cubic(1.0), 1.0);
-        assert!((ease_in_out_cubic(0.5) - 0.5).abs() < 1e-9);
+        let ease = |t: f64| ease_in_out_cubic(at(t)).get();
+        assert_eq!(ease(0.0), 0.0);
+        assert_eq!(ease(1.0), 1.0);
+        assert!((ease(0.5) - 0.5).abs() < 1e-9);
         // Monotonic non-decreasing over the unit interval.
         let mut prev = -1.0;
         for i in 0..=100 {
-            let v = ease_in_out_cubic(i as f64 / 100.0);
+            let v = ease(f64::from(i) / 100.0);
             assert!(v >= prev, "ease must be monotonic");
             prev = v;
         }
         // Out-of-range clamps.
-        assert_eq!(ease_in_out_cubic(-1.0), 0.0);
-        assert_eq!(ease_in_out_cubic(2.0), 1.0);
+        assert_eq!(ease(-1.0), 0.0);
+        assert_eq!(ease(2.0), 1.0);
+    }
+
+    /// A phase stays in `0.0 ..= 1.0`, and a NaN clock reads as the source,
+    /// so no interpolation it weights turns NaN.
+    #[test]
+    fn a_phase_stays_in_the_unit_interval_and_is_never_nan() {
+        assert_eq!(Phase::clamped(f64::NAN), Phase::START);
+        assert_eq!(Phase::clamped(-3.0), Phase::START);
+        assert_eq!(Phase::clamped(7.0), Phase::END);
+        assert_eq!(Phase::clamped(f64::INFINITY), Phase::END);
+        let a = snap("a", rect(0.0, 0.0, 10.0, 10.0), 0.0, 1.0, None);
+        let b = snap("a", rect(10.0, 10.0, 10.0, 10.0), 1.0, 0.5, None);
+        let mid = AnimatedElement::lerp(&a, &b, Phase::clamped(f64::NAN).eased());
+        assert_eq!(mid.bounds, a.bounds);
+        assert!(mid.opacity.get().is_finite());
     }
 }

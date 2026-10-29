@@ -160,8 +160,9 @@ impl ViewportTransform {
         from: ViewportTransform,
         to_center: Point,
         to_zoom: ZoomFactor,
-        t: f64,
+        t: crate::logic::animate::Phase,
     ) -> ViewportTransform {
+        let t = t.get();
         ViewportTransform {
             center: Point::new(
                 from.center.x + (to_center.x - from.center.x) * t,
@@ -388,15 +389,16 @@ mod tests {
         let to_center = Point::new(100.0, 200.0);
         let to_zoom = ambre_core::ZoomFactor::positive(3.0);
         // t = 0 reproduces the source exactly.
-        let g0 = ViewportTransform::glide(from, to_center, to_zoom, 0.0);
+        use crate::logic::animate::Phase;
+        let g0 = ViewportTransform::glide(from, to_center, to_zoom, Phase::START);
         assert!(approx(g0.center, from.center));
         assert!((g0.zoom.get() - from.zoom.get()).abs() < 1e-9);
         // t = 1 lands exactly on the target.
-        let g1 = ViewportTransform::glide(from, to_center, to_zoom, 1.0);
+        let g1 = ViewportTransform::glide(from, to_center, to_zoom, Phase::END);
         assert!(approx(g1.center, to_center));
         assert!((g1.zoom.get() - to_zoom.get()).abs() < 1e-9);
         // Midpoint is the linear halfway (easing is applied by the caller).
-        let gm = ViewportTransform::glide(from, to_center, to_zoom, 0.5);
+        let gm = ViewportTransform::glide(from, to_center, to_zoom, Phase::clamped(0.5));
         assert!(approx(gm.center, Point::new(50.0, 100.0)));
         assert!((gm.zoom.get() - 2.0).abs() < 1e-9);
         // Size is carried through unchanged.

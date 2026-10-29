@@ -15,7 +15,7 @@
 use ambre_bus::app::toile::FrameSnapshot;
 use ambre_draw::Point;
 
-use crate::logic::animate::{AnimatedElement, ease_in_out_cubic, smart_animate};
+use crate::logic::animate::{AnimatedElement, Phase, ease_in_out_cubic, smart_animate};
 
 use super::viewport::ViewportTransform;
 
@@ -94,9 +94,9 @@ impl Transition {
     pub fn advance(&mut self, now: ambre_core::PageTime) -> TransitionFrame {
         let start = *self.started_at.get_or_insert(now);
         let raw = if self.dur.is_zero() {
-            1.0
+            Phase::END
         } else {
-            ((now - start) / ambre_core::PageMillis::from_duration(self.dur)).clamp(0.0, 1.0)
+            Phase::clamped((now - start) / ambre_core::PageMillis::from_duration(self.dur))
         };
         let eased = ease_in_out_cubic(raw);
         TransitionFrame {
@@ -107,7 +107,7 @@ impl Transition {
                 eased,
             ),
             overrides: smart_animate(&self.from, &self.to, eased),
-            phase: TransitionPhase::from_bool(raw >= 1.0),
+            phase: TransitionPhase::from_bool(raw == Phase::END),
         }
     }
 }
