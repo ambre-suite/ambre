@@ -46,9 +46,11 @@ impl ToileState {
     }
 
     /// Bind `ids` into a fresh group element **without** committing, returning the
-    /// group id. The refusal is [`ToileError::GroupNeedsTwo`] when fewer than two
-    /// distinct members survive filtering, and [`ToileError::IdsExhausted`] when
-    /// the session has no fresh id.
+    /// group id. Each refusal leaves every member where it was. The refusal
+    /// is [`ToileError::GroupNeedsTwo`] when fewer than two distinct members
+    /// survive filtering. It is [`ToileError::IdsExhausted`] when the session
+    /// has no fresh id, and [`ToileError::WriteFailed`] when the board refuses
+    /// the group's map or its list.
     /// The caller owns the `doc.commit()` so an import rebuilds each `<g>` inside
     /// the one import undo group (`toile-import-export`). Intermediate cache reads
     /// (`prune_empty_groups`, `rematerialize_layers`) are pure and stay here so the
@@ -95,8 +97,8 @@ impl ToileState {
             .and_then(frame_of)
             .filter(|f| members.iter().all(|m| frame_of(m).as_ref() == Some(f)));
         // Write the group and its member list before the first detach. A board
-        // that refuses the container then refuses the group with the members
-        // where they were.
+        // that refuses the group's map or list then refuses the group with the
+        // members where they were.
         let refused = || ToileError::WriteFailed("the board refused the new group".to_owned());
         let elements = self.doc.get_map(Root::Elements.as_str());
         let Ok(em) = elements
@@ -115,12 +117,12 @@ impl ToileState {
             .filter(|m| children.push(m.as_str()).is_ok())
             .collect();
 
-        // Detach each member from the containers it sat in. Then prune any
-        // group the detach emptied, so the incremental caches stay equal to a
-        // full rebuild. The new group holds its members already, so the prune
-        // keeps it. Done before computing `insert_at` since pruning shifts
-        // `layers`.
-        for m in &members {
+        // Detach each member the new group holds from the group or frame it
+        // sat in; a member the list refused stays there. Then prune any group
+        // the detach emptied, so the incremental caches stay equal to a full
+        // rebuild. The new group holds its members already, so the prune keeps
+        // it. Done before computing `insert_at` since pruning shifts `layers`.
+        for m in &held {
             for p in self.parents_of(m).to_vec() {
                 self.remove_child(&p, m);
             }
@@ -695,7 +697,7 @@ mod tests {
 
     use super::super::{Root, ToileState};
 
-    fn create(st: &mut ToileState, kind: ElementKind) -> ElementId {
+    pub(super) fn create(st: &mut ToileState, kind: ElementKind) -> ElementId {
         let out: ToileOutcome = st.handle_command(ToileCommand::CreateElement {
             kind,
             at: Point::ZERO,
@@ -740,5 +742,89 @@ mod tests {
                 .position(|n| n == &NodeId::Element(id.clone()))
         };
         assert!(at(&f) < at(&r), "the child paints below its frame");
+    }
+}
+
+/// The membership tests that read the caches, which print on the host only.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod cache_tests {
+    use crate::logic::command::{ToileCommand, ToileError};
+    use crate::logic::model::{ElementId, ElementKind, ShapeKind};
+
+    use super::super::ToileState;
+    use super::tests::create;
+
+    /// The caches a fresh state builds from `st`'s document.
+    fn rebuilt_caches(st: &ToileState) -> String {
+        let mut fresh = ToileState::new();
+        fresh
+            .import_snapshot(&st.export_snapshot())
+            .expect("a board this build wrote");
+        fresh.debug_caches()
+    }
+
+    fn frame_with(st: &mut ToileState, child: &ElementId) -> ElementId {
+        let frame = create(st, ElementKind::Frame);
+        st.handle_command(ToileCommand::SetFrameChildren {
+            frame: frame.clone(),
+            add: vec![child.clone()],
+            remove: vec![],
+        });
+        frame
+    }
+
+    /// `TOILE-149`: a board that refuses the group's map refuses the group, and
+    /// each member stays in the frame it sat in. The group was once written
+    /// after the detach, so the cache dropped the frame link the board kept.
+    #[test]
+    fn a_refused_group_leaves_each_member_where_it_was() {
+        let mut st = ToileState::new();
+        let framed = create(&mut st, ElementKind::Shape(ShapeKind::Rect));
+        let free = create(&mut st, ElementKind::Shape(ShapeKind::Rect));
+        let frame = frame_with(&mut st, &framed);
+        // A detached document refuses every write.
+        st.doc.detach();
+        assert!(st.doc.is_detached(), "the board is detached");
+
+        let refused = st.group_inner(&[framed.clone(), free]);
+
+        assert!(
+            matches!(refused, Err(ToileError::WriteFailed(_))),
+            "{refused:?}"
+        );
+        assert_eq!(st.membership_of(&frame), vec![framed.clone()]);
+        assert_eq!(st.parents_of(&framed), std::slice::from_ref(&frame));
+        assert_eq!(st.debug_caches(), rebuilt_caches(&st));
+    }
+
+    /// `TOILE-049`: an element joins a frame only out of its group. Two
+    /// concurrent adds leave its id twice on the group's list, and the test
+    /// writes the two entries directly. Moving it into a frame takes both
+    /// entries, so it is no longer grouped.
+    #[test]
+    fn a_member_listed_twice_leaves_its_group_for_a_frame() {
+        let mut st = ToileState::new();
+        let [x, y, r] = [(); 3].map(|()| create(&mut st, ElementKind::Shape(ShapeKind::Rect)));
+        let group = st.group_inner(&[x, y]).expect("a group of two members");
+        st.doc.commit();
+        let list = st.children_list(&group).expect("the group's list");
+        for _ in 0..2 {
+            list.push(r.as_str()).expect("an attached board");
+        }
+        st.doc.commit();
+        let mut st = {
+            let mut fresh = ToileState::new();
+            fresh
+                .import_snapshot(&st.export_snapshot())
+                .expect("a board this build wrote");
+            fresh
+        };
+        assert_eq!(st.parents_of(&r), [group.clone(), group.clone()]);
+
+        let frame = frame_with(&mut st, &r);
+
+        assert_eq!(st.parents_of(&r), std::slice::from_ref(&frame));
+        assert!(!st.children_of(&group).contains(&r), "still grouped");
+        assert_eq!(st.debug_caches(), rebuilt_caches(&st));
     }
 }
