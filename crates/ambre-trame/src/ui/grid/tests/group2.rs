@@ -332,12 +332,9 @@ fn dirty_and_error_lifecycle() {
     state.set_cell_text(CellPos::new(Row::new(0), Col::new(0)), "=A2".to_owned());
     assert!(state.dirty_cells.contains(&at(0, 0)), "edit marks dirty");
 
-    state.set_formula_error(CellPos::new(Row::new(0), Col::new(0)), "#REF!".to_owned());
+    state.set_formula_error(CellPos::new(Row::new(0), Col::new(0)));
     assert!(!state.dirty_cells.contains(&at(0, 0)), "error clears dirty");
-    assert_eq!(
-        state.formula_errors.get(&at(0, 0)).map(String::as_str),
-        Some("#REF!")
-    );
+    assert!(state.formula_errors.contains(&at(0, 0)));
 
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_bus::ViewportVersion(1),
@@ -359,7 +356,7 @@ fn dirty_and_error_lifecycle() {
         }],
     });
     assert!(
-        !state.formula_errors.contains_key(&at(0, 0)),
+        !state.formula_errors.contains(&at(0, 0)),
         "valid value clears error"
     );
     assert!(

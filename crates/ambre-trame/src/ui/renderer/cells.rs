@@ -173,7 +173,7 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
     // assembled from 1px horizontal lines. It then renders on the GPU
     // surface, since `WgpuSurface` does not implement fill_path.
     let err = palette.cell_error;
-    for &at in state.formula_errors.keys() {
+    for &at in &state.formula_errors {
         if !span.contains(at) || state.is_row_hidden(at.row) {
             continue;
         }

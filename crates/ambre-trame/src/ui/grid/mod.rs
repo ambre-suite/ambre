@@ -501,10 +501,11 @@ pub struct TrameUiState {
     /// the next `ViewportData` carries it. UI-only derived state -- never synced.
     pub dirty_cells: HashSet<CellPos>,
 
-    /// Cells whose formula evaluation failed, keyed to the error string (for example
-    /// `#DIV/0!`). Rendered with a small corner marker. Populated by
-    /// `TrameEvent::FormulaError`, cleared when a valid value arrives. UI-only.
-    pub formula_errors: HashMap<CellPos, String>,
+    /// Cells whose formula evaluation failed, rendered with a small corner
+    /// marker. Populated by [`TrameUiState::set_formula_error`], cleared when a
+    /// valid value arrives. UI-only. No event of the bus calls the setter
+    /// today, so only a test fills it.
+    pub formula_errors: HashSet<CellPos>,
 
     /// Version of the last accepted `ViewportData` response (anti-flicker).
     pub accepted_version: ambre_bus::ViewportVersion,

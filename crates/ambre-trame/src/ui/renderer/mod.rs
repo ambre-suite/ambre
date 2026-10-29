@@ -908,7 +908,7 @@ mod tests {
         // A formula error on (1,1) draws the corner marker with the error colour;
         // a clean cell draws none.
         let mut state = fixture(&[(1, 1, "")]);
-        state.set_formula_error(CellPos::new(Row::new(1), Col::new(1)), "#DIV/0!".to_owned());
+        state.set_formula_error(CellPos::new(Row::new(1), Col::new(1)));
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 

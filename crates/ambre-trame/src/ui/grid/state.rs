@@ -27,7 +27,7 @@ impl TrameUiState {
             zoom: ambre_core::ZoomFactor::ONE,
             cell_cache: HashMap::new(),
             dirty_cells: HashSet::new(),
-            formula_errors: HashMap::new(),
+            formula_errors: HashSet::new(),
             accepted_version: ambre_bus::ViewportVersion(0),
             active_sheet: ambre_bus::SheetId::default(),
             next_version: ambre_bus::ViewportVersion(1),

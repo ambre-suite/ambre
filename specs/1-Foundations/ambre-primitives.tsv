@@ -3314,7 +3314,6 @@ ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidde
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(text) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_formula_error(error) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.text | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData::content(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::commit_command(text) | param | String	free-text	free text: user content, label, message or display string
@@ -3328,7 +3327,6 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains() | ret
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::is_multi() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.formula_errors | field | HashMap<CellPos,String>	free-text	formula error message, keyed by cell
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::is_row_hidden() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_by() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_to_include() | ret | bool	generic	predicate or did-it-change return
@@ -3412,9 +3410,8 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.viewport_changed 
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(value) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_input_focused() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_mark(name) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(name) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(start) | param | &str	free-text	free text: user content, label, message or display string
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | PerfMark::name() | ret | &'static str	newtype-inner	the name the browser Performance panel knows the mark by
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | PerfMeasure::name() | ret | &'static str	newtype-inner	the name the browser Performance panel knows the measure by
 ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
 ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-api	the mark key a loro text delta reports; parsed into a HeaderField at once, the inverse of FieldMark

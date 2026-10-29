@@ -551,7 +551,7 @@ impl TrameView {
             // travels the same Text path, so it is covered too.
             if let Some(t0) = self.pending_input_mark.take() {
                 self.draw_stats.input_latency = self.clock.now() - t0;
-                performance_measure("ambre:input-to-caret", "ambre:input");
+                performance_measure(PerfMeasure::InputToCaret);
             }
         }
 

@@ -133,26 +133,69 @@ fn fill_dest(src: CellRect, at: CellPos, block: MergeSpan) -> CellRect {
     }
 }
 
-/// Drop a mark named `name` on the browser's Performance panel. A native build
-/// has no panel.
-fn performance_mark(name: &str) {
-    #[cfg(target_arch = "wasm32")]
-    if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
-        let _ = perf.mark(name);
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    let _ = name;
+/// A mark the view drops on the browser's Performance panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PerfMark {
+    /// A key or a text input reached the view.
+    Input,
 }
 
-/// Draw the measure `name` from the mark `start` on the browser's Performance
-/// panel. A native build has no panel.
-fn performance_measure(name: &str, start: &str) {
+// Only the browser reads the names: a native build has no panel.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+impl PerfMark {
+    /// The name the Performance panel shows.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Input => "ambre:input",
+        }
+    }
+}
+
+/// A measure the view draws on the browser's Performance panel, from the
+/// mark it starts at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PerfMeasure {
+    /// From an input to the frame that drew its caret.
+    InputToCaret,
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+impl PerfMeasure {
+    /// The name the Performance panel shows.
+    fn name(self) -> &'static str {
+        match self {
+            Self::InputToCaret => "ambre:input-to-caret",
+        }
+    }
+
+    /// The mark the measure starts at.
+    fn start(self) -> PerfMark {
+        match self {
+            Self::InputToCaret => PerfMark::Input,
+        }
+    }
+}
+
+/// Drop `mark` on the browser's Performance panel. A native build has no
+/// panel.
+fn performance_mark(mark: PerfMark) {
     #[cfg(target_arch = "wasm32")]
     if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
-        let _ = perf.measure_with_start_mark(name, start);
+        let _ = perf.mark(mark.name());
     }
     #[cfg(not(target_arch = "wasm32"))]
-    let _ = (name, start);
+    let _ = mark;
+}
+
+/// Draw `measure` from its start mark on the browser's Performance panel. A
+/// native build has no panel.
+fn performance_measure(measure: PerfMeasure) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
+        let _ = perf.measure_with_start_mark(measure.name(), measure.start().name());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = measure;
 }
 
 /// Result of folding the pixel accumulator into a viewport pan.

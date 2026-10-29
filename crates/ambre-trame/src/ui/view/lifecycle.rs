@@ -299,7 +299,7 @@ impl TrameView {
         // Arm the latency probe: timestamp now (~keydown), and drop a
         // `performance.mark` so the measure shows in the browser Performance panel.
         self.pending_input_mark = Some(now);
-        performance_mark("ambre:input");
+        performance_mark(PerfMark::Input);
     }
 
     /// Seed text for an editor opened on `at`: the cell's current text, or

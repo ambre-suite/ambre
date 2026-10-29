@@ -19,12 +19,11 @@ impl HitTest for TrameUiState {
 }
 
 impl TrameUiState {
-    /// Record a formula evaluation failure for `at` (from
-    /// `TrameEvent::FormulaError`). The cell renders with a corner error marker
-    /// until a valid `ViewportData` value clears it.
-    pub fn set_formula_error(&mut self, at: CellPos, error: String) {
+    /// Record a formula evaluation failure for `at`. The cell renders with a
+    /// corner error marker until a valid `ViewportData` value clears it.
+    pub fn set_formula_error(&mut self, at: CellPos) {
         self.dirty_cells.remove(&at);
-        self.formula_errors.insert(at, error);
+        self.formula_errors.insert(at);
     }
 
     /// Optimistically set a cell's text after a local edit commit, preserving
