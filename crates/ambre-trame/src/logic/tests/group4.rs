@@ -709,6 +709,10 @@ fn selection_stats_sums_as_a_formula_over_the_same_cells_does() {
         band_and_formula_sums(&[BIG, BIG]),
         (None, "#NUM!".to_owned())
     );
+    assert_eq!(
+        band_and_formula_sums(&[MINUS_BIG, MINUS_BIG]),
+        (None, "#NUM!".to_owned())
+    );
 }
 
 /// A disjoint selection reaches the Logic thread whole: a range intent styles

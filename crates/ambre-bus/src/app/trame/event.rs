@@ -69,8 +69,8 @@ impl std::fmt::Display for CellNumber {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumericStats {
     count: CellCount,
-    /// `None` when the exact total of the numbers is past the largest finite
-    /// number, whatever their order.
+    /// The total `of_all` was handed. Its caller passes the exact total of
+    /// the numbers, `None` when it is past the largest finite number.
     sum: Option<CellNumber>,
     min: CellNumber,
     max: CellNumber,
@@ -79,9 +79,11 @@ pub struct NumericStats {
 impl NumericStats {
     /// The totals of `numbers`, `None` when there is none.
     ///
-    /// `sum` is their total as the Logic thread's formulas compute it, so
-    /// the band and a formula over the same cells read one total
-    /// (`TRAME-FEAT-029`). `None` is a total past the largest finite number.
+    /// The caller passes in `sum` the exact total of `numbers`, as the Logic
+    /// thread's formulas compute it. It passes `None` for a total past the
+    /// largest finite number. The band and a formula over the same cells then read
+    /// one total (`TRAME-FEAT-029`). This crate cannot see that sum, so the
+    /// type does not check it: `of_all` keeps the `sum` it is handed.
     #[must_use]
     pub fn of_all(numbers: &[CellNumber], sum: Option<CellNumber>) -> Option<Self> {
         let (&first, rest) = numbers.split_first()?;
