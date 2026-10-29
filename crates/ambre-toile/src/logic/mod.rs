@@ -48,16 +48,23 @@ impl std::fmt::Debug for TextLen<'_> {
     }
 }
 
-/// A board content that a `Debug` form prints as its size alone: how many
-/// of the unit it holds, never what they are (`ZK-006`).
-pub(crate) struct ContentLen {
-    pub(crate) len: usize,
-    pub(crate) unit: &'static str,
+/// A board document as a `Debug` form prints it: its length in bytes and
+/// none of its content (`ZK-006`).
+pub(crate) struct ByteLen<'a>(pub(crate) &'a str);
+
+impl std::fmt::Debug for ByteLen<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<{} bytes>", self.0.len())
+    }
 }
 
-impl std::fmt::Debug for ContentLen {
+/// A board outline as a `Debug` form prints it: how many path elements it
+/// holds and none of their points (`ZK-006`).
+pub(crate) struct PathLen<'a>(pub(crate) &'a kurbo::BezPath);
+
+impl std::fmt::Debug for PathLen<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<{} {}>", self.len, self.unit)
+        write!(f, "<{} path elements>", self.0.elements().len())
     }
 }
 

@@ -2642,8 +2642,7 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct::EPS | const | f64	math	a constant local to one function
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_svg(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/logic/mod.rs | crate::logic | ContentLen.len | field | usize	generic	the size of whatever board content a debug form measures, in the unit the caller names
-ambre-toile | src/logic/mod.rs | crate::logic | ContentLen.unit | field | &'static str	free-text	the unit name a debug form prints beside a size
+ambre-toile | src/logic/mod.rs | crate::logic | ByteLen.0 | field | &'a str	newtype-inner	the board document a debug form measures in bytes and never prints
 ambre-toile | src/logic/mod.rs | crate::logic | TextLen.0 | field | &'a str	newtype-inner	the board text a debug form measures and never prints
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text

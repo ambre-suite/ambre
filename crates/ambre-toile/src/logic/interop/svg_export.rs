@@ -37,13 +37,7 @@ pub struct SvgExport {
 impl std::fmt::Debug for SvgExport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SvgExport")
-            .field(
-                "document",
-                &crate::logic::ContentLen {
-                    len: self.document.len(),
-                    unit: "bytes",
-                },
-            )
+            .field("document", &crate::logic::ByteLen(&self.document))
             .field("skipped", &self.skipped)
             .finish()
     }
