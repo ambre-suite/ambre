@@ -635,8 +635,22 @@ pub enum Op {
     /// built-in function; the result is pushed back.
     CallFn {
         name: FunctionName,
-        n_args: usize,
+        n_args: Arity,
     },
+}
+
+ambre_core::define_index! {
+    /// The place of an argument in a formula call, from zero. Its own type,
+    /// so the place of a value inside a range argument cannot take it.
+    pub struct ArgIndex(u32);
+    /// How many arguments a formula call passes.
+    pub struct Arity;
+    /// The signed gap between two argument places.
+    pub struct ArgDelta(i64);
+    /// A run of argument places.
+    pub struct ArgSpan;
+    /// A list indexed by argument place.
+    pub struct ArgVec;
 }
 
 // -----------------------------------------------------------------------------

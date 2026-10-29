@@ -3,24 +3,27 @@
 // resolve through the module glob mesh.
 
 use super::*;
+use crate::formula::types::ArgIndex;
 use ambre_core::CharCount;
 
 /// The argument at `i`, or an empty cell when the call passed fewer. Every
 /// builtin checks its arity first, so the fallback only guards a slip there.
 /// A wrong arity check answers a value instead of killing the Logic thread.
-pub(crate) fn arg(args: &[CellValue], i: usize) -> &CellValue {
+pub(crate) fn arg(args: &[CellValue], i: ArgIndex) -> &CellValue {
     static EMPTY: CellValue = CellValue::Empty;
-    args.get(i).unwrap_or(&EMPTY)
+    i.to_index().and_then(|i| args.get(i)).unwrap_or(&EMPTY)
 }
 
 /// The argument at `i` as a one-element slice, or an empty one when absent.
-pub(crate) fn one(args: &[CellValue], i: usize) -> &[CellValue] {
-    args.get(i..=i).unwrap_or_default()
+pub(crate) fn one(args: &[CellValue], i: ArgIndex) -> &[CellValue] {
+    i.to_index()
+        .and_then(|i| args.get(i..=i))
+        .unwrap_or_default()
 }
 
 /// The arguments from `i` on, or an empty slice when the call passed fewer.
-pub(crate) fn rest_from(args: &[CellValue], i: usize) -> &[CellValue] {
-    args.get(i..).unwrap_or_default()
+pub(crate) fn rest_from(args: &[CellValue], i: ArgIndex) -> &[CellValue] {
+    i.to_index().and_then(|i| args.get(i..)).unwrap_or_default()
 }
 
 /// Flatten all arguments into a single numeric iterator. Range values are
@@ -226,7 +229,7 @@ pub(crate) fn abs(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    match flatten_numeric(one(args, 0)).first() {
+    match flatten_numeric(one(args, ArgIndex::new(0))).first() {
         Some(n) => CellValue::Number(n.abs()),
         None => CellValue::Error(FormulaError::TypeError),
     }
@@ -236,12 +239,12 @@ pub(crate) fn round(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    let num = match flatten_numeric(one(args, 0)).first() {
+    let num = match flatten_numeric(one(args, ArgIndex::new(0))).first() {
         Some(n) => *n,
         None => return CellValue::Error(FormulaError::TypeError),
     };
     let digits = if args.len() >= 2 {
-        flatten_numeric(one(args, 1))
+        flatten_numeric(one(args, ArgIndex::new(1)))
             .first()
             .copied()
             .unwrap_or(0.0) as i32
@@ -256,7 +259,7 @@ pub(crate) fn sqrt(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    match flatten_numeric(one(args, 0)).first() {
+    match flatten_numeric(one(args, ArgIndex::new(0))).first() {
         Some(&n) if n >= 0.0 => CellValue::Number(n.sqrt()),
         Some(_) => CellValue::Error(FormulaError::NumError),
         None => CellValue::Error(FormulaError::TypeError),
@@ -267,11 +270,11 @@ pub(crate) fn power(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let base = match flatten_numeric(one(args, 0)).first() {
+    let base = match flatten_numeric(one(args, ArgIndex::new(0))).first() {
         Some(n) => *n,
         None => return CellValue::Error(FormulaError::TypeError),
     };
-    let exp = match flatten_numeric(one(args, 1)).first() {
+    let exp = match flatten_numeric(one(args, ArgIndex::new(1))).first() {
         Some(n) => *n,
         None => return CellValue::Error(FormulaError::TypeError),
     };
@@ -285,7 +288,9 @@ pub(crate) fn power(args: &[CellValue]) -> CellValue {
 
 /// Read the first argument as a single number, or `None` if absent/non-numeric.
 pub(crate) fn first_num(args: &[CellValue]) -> Option<f64> {
-    flatten_numeric(one(args, 0)).first().copied()
+    flatten_numeric(one(args, ArgIndex::new(0)))
+        .first()
+        .copied()
 }
 
 /// INT(n) -- round down to the nearest integer (toward negative infinity).
@@ -301,7 +306,10 @@ pub(crate) fn mod_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (a, b) = match (first_num(one(args, 0)), first_num(one(args, 1))) {
+    let (a, b) = match (
+        first_num(one(args, ArgIndex::new(0))),
+        first_num(one(args, ArgIndex::new(1))),
+    ) {
         (Some(a), Some(b)) => (a, b),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
@@ -318,7 +326,7 @@ pub(crate) fn round_dir(args: &[CellValue], way: Rounding) -> CellValue {
         None => return CellValue::Error(FormulaError::TypeError),
     };
     let digits = if args.len() >= 2 {
-        flatten_numeric(one(args, 1))
+        flatten_numeric(one(args, ArgIndex::new(1)))
             .first()
             .copied()
             .unwrap_or(0.0) as i32
@@ -341,7 +349,7 @@ pub(crate) fn ceil_floor(args: &[CellValue], way: Rounding) -> CellValue {
         None => return CellValue::Error(FormulaError::TypeError),
     };
     let sig = if args.len() >= 2 {
-        flatten_numeric(one(args, 1))
+        flatten_numeric(one(args, ArgIndex::new(1)))
             .first()
             .copied()
             .unwrap_or(1.0)
@@ -425,11 +433,11 @@ pub(crate) fn if_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let condition = is_truthy(arg(args, 0));
+    let condition = is_truthy(arg(args, ArgIndex::new(0)));
     if condition {
-        arg(args, 1).clone()
+        arg(args, ArgIndex::new(1)).clone()
     } else if args.len() >= 3 {
-        arg(args, 2).clone()
+        arg(args, ArgIndex::new(2)).clone()
     } else {
         CellValue::Boolean(false)
     }
@@ -455,7 +463,7 @@ pub(crate) fn not(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    CellValue::Boolean(!is_truthy(arg(args, 0)))
+    CellValue::Boolean(!is_truthy(arg(args, ArgIndex::new(0))))
 }
 
 /// XOR(...) -- TRUE when an odd number of arguments are truthy.
@@ -510,7 +518,7 @@ fn str_count_arg(args: &[CellValue], default: CharCount) -> Result<CharCount, Fo
     if args.len() < 2 {
         return Ok(default);
     }
-    let n = flatten_numeric(one(args, 1))
+    let n = flatten_numeric(one(args, ArgIndex::new(1)))
         .first()
         .copied()
         .unwrap_or(f64::from(default.get()));
@@ -525,7 +533,7 @@ pub(crate) fn left(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    let s = arg(args, 0).to_display();
+    let s = arg(args, ArgIndex::new(0)).to_display();
     let n = match str_count_arg(args, CharCount::new(1)) {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
@@ -537,7 +545,7 @@ pub(crate) fn right(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    let s = arg(args, 0).to_display();
+    let s = arg(args, ArgIndex::new(0)).to_display();
     let n = match str_count_arg(args, CharCount::new(1)) {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
@@ -551,14 +559,14 @@ pub(crate) fn mid(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let s = arg(args, 0).to_display();
-    let start = flatten_numeric(one(args, 1))
+    let s = arg(args, ArgIndex::new(0)).to_display();
+    let start = flatten_numeric(one(args, ArgIndex::new(1)))
         .first()
         .copied()
         .unwrap_or(1.0)
         .max(1.0) as usize
         - 1;
-    let n = flatten_numeric(one(args, 2))
+    let n = flatten_numeric(one(args, ArgIndex::new(2)))
         .first()
         .copied()
         .unwrap_or(0.0)
@@ -572,21 +580,21 @@ pub(crate) fn upper(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    CellValue::Text(arg(args, 0).to_display().to_uppercase())
+    CellValue::Text(arg(args, ArgIndex::new(0)).to_display().to_uppercase())
 }
 
 pub(crate) fn lower(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    CellValue::Text(arg(args, 0).to_display().to_lowercase())
+    CellValue::Text(arg(args, ArgIndex::new(0)).to_display().to_lowercase())
 }
 
 pub(crate) fn trim(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    let s = arg(args, 0).to_display();
+    let s = arg(args, ArgIndex::new(0)).to_display();
     CellValue::Text(s.trim().to_string())
 }
 
@@ -594,5 +602,5 @@ pub(crate) fn len(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    CellValue::Number(arg(args, 0).to_display().chars().count() as f64)
+    CellValue::Number(arg(args, ArgIndex::new(0)).to_display().chars().count() as f64)
 }

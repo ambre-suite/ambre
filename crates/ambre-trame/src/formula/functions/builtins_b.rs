@@ -3,6 +3,7 @@
 // resolve through the module glob mesh.
 
 use super::*;
+use crate::formula::types::ArgIndex;
 
 /// PROPER(text) -- capitalize the first letter of each word, lowercase the rest.
 pub(crate) fn proper(args: &[CellValue]) -> CellValue {
@@ -11,7 +12,7 @@ pub(crate) fn proper(args: &[CellValue]) -> CellValue {
     }
     let mut out = String::new();
     let mut at_word_start = true;
-    for c in arg(args, 0).to_display().chars() {
+    for c in arg(args, ArgIndex::new(0)).to_display().chars() {
         if c.is_alphabetic() {
             if at_word_start {
                 out.extend(c.to_uppercase());
@@ -35,9 +36,9 @@ pub(crate) fn substitute(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let text = arg(args, 0).to_display();
-    let old = arg(args, 1).to_display();
-    let new = arg(args, 2).to_display();
+    let text = arg(args, ArgIndex::new(0)).to_display();
+    let old = arg(args, ArgIndex::new(1)).to_display();
+    let new = arg(args, ArgIndex::new(2)).to_display();
     if old.is_empty() {
         return CellValue::Text(text);
     }
@@ -74,12 +75,12 @@ pub(crate) fn rept(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let n = match arg(args, 1).as_number() {
+    let n = match arg(args, ArgIndex::new(1)).as_number() {
         Ok(n) if n >= 0.0 => n as usize,
         Ok(_) => return CellValue::Error(FormulaError::NumError),
         Err(e) => return CellValue::Error(e),
     };
-    CellValue::Text(arg(args, 0).to_display().repeat(n))
+    CellValue::Text(arg(args, ArgIndex::new(0)).to_display().repeat(n))
 }
 
 /// FIND(find_text, within_text, [start]) -- 1-based, case-sensitive position of
@@ -88,8 +89,8 @@ pub(crate) fn find_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let needle = arg(args, 0).to_display();
-    let haystack: Vec<char> = arg(args, 1).to_display().chars().collect();
+    let needle = arg(args, ArgIndex::new(0)).to_display();
+    let haystack: Vec<char> = arg(args, ArgIndex::new(1)).to_display().chars().collect();
     let start = args
         .get(2)
         .and_then(|v| v.as_number().ok())
@@ -115,7 +116,7 @@ pub(crate) fn value_fn(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    match arg(args, 0).as_number() {
+    match arg(args, ArgIndex::new(0)).as_number() {
         Ok(n) => CellValue::Number(n),
         Err(_) => CellValue::Error(FormulaError::TypeError),
     }
@@ -132,10 +133,10 @@ pub(crate) fn text(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let fmt = arg(args, 1).to_display();
-    let num = match arg(args, 0).as_number() {
+    let fmt = arg(args, ArgIndex::new(1)).to_display();
+    let num = match arg(args, ArgIndex::new(0)).as_number() {
         Ok(n) => n,
-        Err(_) => return CellValue::Text(arg(args, 0).to_display()),
+        Err(_) => return CellValue::Text(arg(args, ArgIndex::new(0)).to_display()),
     };
 
     let decimals = match fmt.split_once('.') {
@@ -181,8 +182,8 @@ pub(crate) fn countif(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let crit = Criterion::parse(arg(args, 1));
-    let n = range_cells(arg(args, 0))
+    let crit = Criterion::parse(arg(args, ArgIndex::new(1)));
+    let n = range_cells(arg(args, ArgIndex::new(0)))
         .filter(|v| crit.matches(v))
         .count();
     CellValue::Number(n as f64)
@@ -197,8 +198,8 @@ pub(crate) fn sumif(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let crit = Criterion::parse(arg(args, 1));
-    let test: Vec<CellValue> = range_cells(arg(args, 0)).cloned().collect();
+    let crit = Criterion::parse(arg(args, ArgIndex::new(1)));
+    let test: Vec<CellValue> = range_cells(arg(args, ArgIndex::new(0))).cloned().collect();
     let sum_src: Vec<CellValue> = match args.get(2) {
         Some(r) => range_cells(r).cloned().collect(),
         None => test.clone(),
@@ -223,8 +224,8 @@ pub(crate) fn iferror(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    match arg(args, 0) {
-        CellValue::Error(_) => arg(args, 1).clone(),
+    match arg(args, ArgIndex::new(0)) {
+        CellValue::Error(_) => arg(args, ArgIndex::new(1)).clone(),
         other => other.clone(),
     }
 }
@@ -239,11 +240,11 @@ pub(crate) fn vlookup(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let table = match arg(args, 1) {
+    let table = match arg(args, ArgIndex::new(1)) {
         CellValue::Range(r) => r,
         _ => return CellValue::Error(FormulaError::NaError),
     };
-    let col_index = match arg(args, 2).as_number() {
+    let col_index = match arg(args, ArgIndex::new(2)).as_number() {
         Ok(n) if n >= 1.0 => Col::from_usize(n as usize - 1),
         _ => return CellValue::Error(FormulaError::NaError),
     };
@@ -274,7 +275,7 @@ pub(crate) fn vlookup(args: &[CellValue]) -> CellValue {
         };
         if approximate {
             // Largest key <= lookup (first column assumed ascending).
-            if compare_cells(key, arg(args, 0))
+            if compare_cells(key, arg(args, ArgIndex::new(0)))
                 .map(|o| o.is_le())
                 .unwrap_or(false)
             {
@@ -282,7 +283,7 @@ pub(crate) fn vlookup(args: &[CellValue]) -> CellValue {
             } else {
                 break;
             }
-        } else if values_equal_ci(key, arg(args, 0)) {
+        } else if values_equal_ci(key, arg(args, ArgIndex::new(0))) {
             best = Some(row);
             break;
         }
@@ -301,18 +302,18 @@ pub(crate) fn index(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let range = match arg(args, 0) {
+    let range = match arg(args, ArgIndex::new(0)) {
         CellValue::Range(r) => r,
         // A scalar behaves like a 1x1 range.
         other => {
-            return if to_index(arg(args, 1)) == Some(1) {
+            return if to_index(arg(args, ArgIndex::new(1))) == Some(1) {
                 other.clone()
             } else {
                 CellValue::Error(FormulaError::NaError)
             };
         }
     };
-    let n1 = match to_index(arg(args, 1)) {
+    let n1 = match to_index(arg(args, ArgIndex::new(1))) {
         Some(n) => n,
         None => return CellValue::Error(FormulaError::NaError),
     };
@@ -336,7 +337,7 @@ pub(crate) fn match_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let cells: Vec<&CellValue> = range_cells(arg(args, 1)).collect();
+    let cells: Vec<&CellValue> = range_cells(arg(args, ArgIndex::new(1))).collect();
     let match_type = args
         .get(2)
         .and_then(|v| v.as_number().ok())
@@ -345,7 +346,7 @@ pub(crate) fn match_fn(args: &[CellValue]) -> CellValue {
 
     if match_type == 0 {
         for (i, c) in cells.iter().enumerate() {
-            if values_equal_ci(c, arg(args, 0)) {
+            if values_equal_ci(c, arg(args, ArgIndex::new(0))) {
                 return CellValue::Number((i + 1) as f64);
             }
         }
@@ -365,7 +366,7 @@ pub(crate) fn match_fn(args: &[CellValue]) -> CellValue {
         if matches!(c, CellValue::Empty) {
             continue;
         }
-        let ord = match compare_cells(c, arg(args, 0)) {
+        let ord = match compare_cells(c, arg(args, ArgIndex::new(0))) {
             Some(o) => o,
             None => continue,
         };
@@ -448,9 +449,9 @@ pub(crate) fn date(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (y, m, d) = match (
-        arg(args, 0).as_number(),
-        arg(args, 1).as_number(),
-        arg(args, 2).as_number(),
+        arg(args, ArgIndex::new(0)).as_number(),
+        arg(args, ArgIndex::new(1)).as_number(),
+        arg(args, ArgIndex::new(2)).as_number(),
     ) {
         (Ok(y), Ok(m), Ok(d)) => (y as i64, m as i64, d as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
@@ -478,7 +479,7 @@ pub(crate) fn date_part(args: &[CellValue], pick: fn(CivilDate) -> i64) -> CellV
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    match arg(args, 0).as_number() {
+    match arg(args, ArgIndex::new(0)).as_number() {
         Ok(serial) => {
             let date = DateSerial::new(serial).day().civil();
             CellValue::Number(pick(date) as f64)
@@ -506,7 +507,7 @@ pub(crate) fn trunc(args: &[CellValue]) -> CellValue {
         None => return CellValue::Error(FormulaError::TypeError),
     };
     let digits = if args.len() >= 2 {
-        flatten_numeric(one(args, 1))
+        flatten_numeric(one(args, ArgIndex::new(1)))
             .first()
             .copied()
             .unwrap_or(0.0) as i32
@@ -564,7 +565,7 @@ pub(crate) fn log_fn(args: &[CellValue]) -> CellValue {
         None => return CellValue::Error(FormulaError::TypeError),
     };
     let base = if args.len() >= 2 {
-        flatten_numeric(one(args, 1))
+        flatten_numeric(one(args, ArgIndex::new(1)))
             .first()
             .copied()
             .unwrap_or(10.0)
@@ -587,28 +588,49 @@ pub(crate) fn criteria_pairs(args: &[CellValue]) -> Option<Vec<(Vec<CellValue>, 
         args.chunks_exact(2)
             .map(|c| {
                 (
-                    range_cells(arg(c, 0)).cloned().collect(),
-                    Criterion::parse(arg(c, 1)),
+                    range_cells(arg(c, ArgIndex::new(0))).cloned().collect(),
+                    Criterion::parse(arg(c, ArgIndex::new(1))),
                 )
             })
             .collect(),
     )
 }
 
+/// The place of a value among the values of a range argument, from zero. Its
+/// own type, so the place of an argument in the call cannot take it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ValueIndex(usize);
+
+impl ValueIndex {
+    /// The value at this place of `values`, `None` past their end.
+    fn of(self, values: &[CellValue]) -> Option<&CellValue> {
+        values.get(self.0)
+    }
+}
+
 /// Positions where every criterion in `pairs` matches (ranges paired by index).
-pub(crate) fn matching_indices(pairs: &[(Vec<CellValue>, Criterion)]) -> Vec<usize> {
+pub(crate) fn matching_indices(pairs: &[(Vec<CellValue>, Criterion)]) -> Vec<ValueIndex> {
     let len = pairs.iter().map(|(v, _)| v.len()).min().unwrap_or(0);
     (0..len)
-        .filter(|&i| pairs.iter().all(|(vals, crit)| crit.matches(arg(vals, i))))
+        .map(ValueIndex)
+        .filter(|&i| {
+            pairs
+                .iter()
+                .all(|(vals, crit)| i.of(vals).is_some_and(|v| crit.matches(v)))
+        })
+        .collect()
+}
+
+/// The numbers of `src` at the places `idx`.
+fn numbers_at(src: &[CellValue], idx: &[ValueIndex]) -> Vec<f64> {
+    idx.iter()
+        .filter_map(|i| i.of(src).and_then(|v| v.as_number().ok()))
         .collect()
 }
 
 /// Sum the numeric values of `src` at the given indices.
-pub(crate) fn sum_at(src: &[CellValue], idx: &[usize]) -> f64 {
-    exact_sum(
-        idx.iter()
-            .filter_map(|&i| src.get(i).and_then(|v| v.as_number().ok())),
-    )
+pub(crate) fn sum_at(src: &[CellValue], idx: &[ValueIndex]) -> f64 {
+    exact_sum(numbers_at(src, idx))
 }
 
 /// AVERAGEIF(range, criterion, [average_range]).
@@ -616,17 +638,17 @@ pub(crate) fn averageif(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let crit = Criterion::parse(arg(args, 1));
-    let test: Vec<CellValue> = range_cells(arg(args, 0)).cloned().collect();
+    let crit = Criterion::parse(arg(args, ArgIndex::new(1)));
+    let test: Vec<CellValue> = range_cells(arg(args, ArgIndex::new(0))).cloned().collect();
     let avg_src: Vec<CellValue> = match args.get(2) {
         Some(r) => range_cells(r).cloned().collect(),
         None => test.clone(),
     };
-    let idx: Vec<usize> = test
+    let idx: Vec<ValueIndex> = test
         .iter()
         .enumerate()
         .filter(|(_, v)| crit.matches(v))
-        .map(|(i, _)| i)
+        .map(|(i, _)| ValueIndex(i))
         .collect();
     average_at(&avg_src, &idx)
 }
@@ -636,19 +658,16 @@ pub(crate) fn averageifs(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let avg_src: Vec<CellValue> = range_cells(arg(args, 0)).cloned().collect();
-    let Some(pairs) = criteria_pairs(rest_from(args, 1)) else {
+    let avg_src: Vec<CellValue> = range_cells(arg(args, ArgIndex::new(0))).cloned().collect();
+    let Some(pairs) = criteria_pairs(rest_from(args, ArgIndex::new(1))) else {
         return CellValue::Error(FormulaError::NaError);
     };
     average_at(&avg_src, &matching_indices(&pairs))
 }
 
 /// Average the numeric values of `src` at the given indices (`#DIV/0!` if none).
-pub(crate) fn average_at(src: &[CellValue], idx: &[usize]) -> CellValue {
-    let nums: Vec<f64> = idx
-        .iter()
-        .filter_map(|&i| src.get(i).and_then(|v| v.as_number().ok()))
-        .collect();
+pub(crate) fn average_at(src: &[CellValue], idx: &[ValueIndex]) -> CellValue {
+    let nums = numbers_at(src, idx);
     if nums.is_empty() {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
@@ -661,8 +680,8 @@ pub(crate) fn sumifs(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let sum_src: Vec<CellValue> = range_cells(arg(args, 0)).cloned().collect();
-    let Some(pairs) = criteria_pairs(rest_from(args, 1)) else {
+    let sum_src: Vec<CellValue> = range_cells(arg(args, ArgIndex::new(0))).cloned().collect();
+    let Some(pairs) = criteria_pairs(rest_from(args, ArgIndex::new(1))) else {
         return CellValue::Error(FormulaError::NaError);
     };
     CellValue::Number(sum_at(&sum_src, &matching_indices(&pairs)))

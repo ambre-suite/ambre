@@ -274,7 +274,7 @@ impl<'a> EvalContext<'a> {
                     stack.push(CellValue::Boolean(!truthy));
                 }
                 Op::CallFn { name, n_args } => {
-                    let split = stack.len().saturating_sub(*n_args);
+                    let split = stack.len().saturating_sub(n_args.to_usize());
                     let args: Vec<CellValue> = stack.drain(split..).collect();
                     let fnctx = super::functions::FnCtx {
                         now_serial: self.now_serial,

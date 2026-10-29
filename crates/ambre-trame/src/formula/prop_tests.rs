@@ -222,7 +222,10 @@ fn stack_balanced(ops: &[Op]) -> bool {
             | Op::Ge
             | Op::Concat => (2, -1),
             Op::Neg | Op::Not => (1, 0),
-            Op::CallFn { n_args, .. } => (*n_args as i64, 1 - *n_args as i64),
+            Op::CallFn { n_args, .. } => {
+                let n = i64::from(n_args.get());
+                (n, 1 - n)
+            }
         };
         if depth < needs {
             return false;

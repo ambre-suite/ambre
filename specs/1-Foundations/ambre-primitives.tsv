@@ -3065,7 +3065,6 @@ ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::ev
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::is_formula_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/engine.rs | crate::formula::engine | literal_value(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | SUM_SCALE | const | f64	math	the power of two an exact sum scales its terms by when a partial overflows
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | arg(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials() | ret | f64	math	the exact sum of the terms inside the formula engine
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials(nums) | param | impl IntoIterator<Item=f64>	math	the terms of an exact sum inside the formula engine
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum() | ret | f64	math	the exact sum of the terms inside the formula engine
@@ -3075,17 +3074,14 @@ ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric_inner(out) | param | &mut Vec<f64>	math	the accumulator of the flattened formula numbers
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_total() | ret | Result<Vec<f64>,CellValue>	math	the flattened formula numbers, or the first error value
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | is_truthy() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | one(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | rest_from(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | average_at(idx) | param | &[usize]	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | ValueIndex.0 | field | usize	newtype-inner	the place of a value among the values of a range argument, from zero
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | keys_ascending() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | log_checked(f) | param | fn(f64)->f64	math	the std f64 logarithm a LOG function applies to a formula number
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | matching_indices() | ret | Vec<usize>	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | numbers_at() | ret | Vec<f64>	math	the formula numbers of a range argument at the matched places
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | push_display(out) | param | &mut String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at() | ret | f64	math	the sum of the formula numbers at the matched indices
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at(idx) | param | &[usize]	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | to_index() | ret | Option<usize>	math	local: the 1-based number argument of INDEX; its axis, row or column, is known only after the arity is read
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | unary_math(f) | param | fn(f64)->f64	math	the std f64 function a one-argument formula function applies
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | values_equal_ci() | ret | bool	generic	predicate or did-it-change return
@@ -3095,7 +3091,6 @@ ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(rate) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	an optional numeric argument of a call, or its default formula number
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	the formula number an absent argument reads as
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | row_col(current) | param | Option<f64>	math	formula number: the evaluating cell's 1-based row or column
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	the formula number a criterion compares against
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
@@ -3192,7 +3187,6 @@ ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet.0 | fie
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::index() | ret | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::new(index) | param | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::position() | ret | usize	newtype-inner	EngineSheet field, constructor or accessor
-ambre-trame | src/formula/types.rs | crate::formula::types | Op::CallFn.n_args | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushBool.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushStr.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
