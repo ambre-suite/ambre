@@ -20,11 +20,12 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    DisplayElement, ElementId, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
+    DisplayElement, ElementCount, ElementId, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
 };
 use ambre_core::{CssPoint, Rgba, ViewPoint, ViewPx};
 use ambre_draw::{Point, Rect};
 
+use super::menu::{GroupHeld, LockMix};
 use super::style::{Mix, MixedFlags};
 use super::viewport::ViewportTransform;
 
@@ -40,20 +41,26 @@ use super::viewport::ViewportTransform;
 pub struct FloatBar {
     /// The selection's top-edge midpoint on the page.
     pub at: CssPoint,
-    /// At least two elements selected -> Group applies.
-    pub multi: bool,
-    /// At least one selected element is a group node -> Ungroup applies.
-    pub has_group: bool,
-    /// At least one selected element is locked -> Unlock applies.
-    pub any_locked: bool,
-    /// At least one selected element is unlocked -> Lock applies.
-    pub any_unlocked: bool,
+    /// Number of selected elements. Two or more -> Group applies.
+    pub count: ElementCount,
+    /// A selected element is a group node -> Ungroup applies.
+    pub groups: GroupHeld,
+    /// The lock states the selection holds: Unlock applies to a locked one,
+    /// Lock to an unlocked one.
+    pub locks: LockMix,
     /// The selection's common fill (`ElementStyle` RGBA), or `None` when unset or
     /// diverging across the selection -- the quick-colour swatch seed.
     pub fill: Option<Rgba>,
     /// The fields the bar edits that differ across the selection. A set flag
     /// means the bar shows a mixed state for that control, not a value.
     pub mixed: MixedFlags,
+}
+
+impl FloatBar {
+    /// At least two elements selected -> Group applies.
+    pub fn multi(&self) -> bool {
+        self.count >= ElementCount::new(2)
+    }
 }
 
 /// A single-field style edit the floating bar emits back (`toile-styles`). Unlike the
@@ -154,10 +161,9 @@ pub fn build_floatbar(
     }
 
     let mut union: Option<Rect> = None;
-    let mut count = 0usize;
-    let mut has_group = false;
-    let mut any_locked = false;
-    let mut any_unlocked = false;
+    let mut count = ElementCount::ZERO;
+    let mut groups = GroupHeld::NoGroup;
+    let mut locks = LockMix::Empty;
     // The bar's own fold: a base style plus one difference flag per field it
     // edits (`TOILE-UI-164`).
     let mut base: Option<&ElementStyle> = None;
@@ -167,15 +173,11 @@ pub fn build_floatbar(
         let Some(e) = find_element(selected, id) else {
             continue;
         };
-        count += 1;
+        count = count.incremented();
         if e.kind == ElementKind::Group {
-            has_group = true;
+            groups = GroupHeld::Group;
         }
-        if e.locked == ambre_bus::app::toile::LockState::Locked {
-            any_locked = true;
-        } else {
-            any_unlocked = true;
-        }
+        locks = locks.with(e.locked);
         union = Some(match union {
             Some(u) => u.union(e.bounds),
             None => e.bounds,
@@ -202,10 +204,9 @@ pub fn build_floatbar(
     let fill = base.and_then(|b| if mixed.fill.is_mixed() { None } else { b.fill });
     Some(FloatBar {
         at,
-        multi: count >= 2,
-        has_group,
-        any_locked,
-        any_unlocked,
+        count,
+        groups,
+        locks,
         fill,
         mixed,
     })
@@ -351,7 +352,7 @@ mod tests {
         )]);
         let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), CssPoint::default()).expect("bar");
         assert_eq!(bar.at, page(520.0, 420.0));
-        assert!(!bar.multi);
+        assert!(!bar.multi());
         assert_eq!(bar.fill, Some(Rgba::from_bits(0x00ff_00ff)));
     }
 
@@ -398,7 +399,7 @@ mod tests {
         )
         .expect("bar");
         assert_eq!(bar.at, page(540.0, 410.0));
-        assert!(bar.multi);
+        assert!(bar.multi());
     }
 
     #[test]
@@ -426,10 +427,9 @@ mod tests {
             CssPoint::default(),
         )
         .expect("bar");
-        assert!(bar.has_group);
-        assert!(bar.any_locked);
-        assert!(bar.any_unlocked);
-        assert!(bar.multi);
+        assert_eq!(bar.groups, GroupHeld::Group);
+        assert_eq!(bar.locks, LockMix::Both);
+        assert!(bar.multi());
     }
 
     #[test]

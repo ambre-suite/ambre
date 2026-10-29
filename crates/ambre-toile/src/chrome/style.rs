@@ -321,10 +321,10 @@ pub fn StyleInspector(
 
                 // -- Lock / Unlock (shown per the selection's lock state) --
                 <div class="ambre-inspector-section ambre-commandbar" role="toolbar" aria-label="Lock">
-                    <Show when=move || scope.get().any_unlocked fallback=|| ()>
+                    <Show when=move || scope.get().locks.any_unlocked() fallback=|| ()>
                         {cmd_button(menu::LOCK, "Lock", icondata::MdiLock)}
                     </Show>
-                    <Show when=move || scope.get().any_locked fallback=|| ()>
+                    <Show when=move || scope.get().locks.any_locked() fallback=|| ()>
                         {cmd_button(menu::UNLOCK, "Unlock", icondata::MdiLockOpenVariant)}
                     </Show>
                 </div>

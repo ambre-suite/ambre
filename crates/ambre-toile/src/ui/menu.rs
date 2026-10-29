@@ -21,8 +21,8 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementKind, NodeId,
-    Reaction, ReactionKind, ToileCommand, ZTarget,
+    AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementCount, ElementId, ElementKind,
+    LockState, NodeId, Reaction, ReactionKind, ToileCommand, ZTarget,
 };
 use ambre_commands::CommandId;
 use kurbo::{Rect, Vec2};
@@ -166,25 +166,87 @@ pub const COMMANDS: &[CommandId] = &[
 /// Select-All).
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct CtxScope {
-    /// True when the right-click landed on a non-empty selection. False on empty
-    /// canvas: only Paste + Select-All apply.
-    pub over_selection: bool,
-    /// Number of selected elements.
-    pub count: usize,
-    /// At least two elements selected -> Group applies.
-    pub multi: bool,
-    /// At least one selected element is a group node -> Ungroup applies.
-    pub has_group: bool,
-    /// At least one selected element is locked -> Unlock applies.
-    pub any_locked: bool,
-    /// At least one selected element is unlocked -> Lock applies.
-    pub any_unlocked: bool,
+    /// Where the right-click landed. On empty canvas only Paste + Select-All
+    /// apply.
+    pub site: ClickSite,
+    /// Number of selected elements. Two or more -> Group applies.
+    pub count: ElementCount,
+    /// A selected element is a group node -> Ungroup applies.
+    pub groups: GroupHeld,
+    /// The lock states the selection holds: Unlock applies to a locked one,
+    /// Lock to an unlocked one.
+    pub locks: LockMix,
     /// The frame that geometrically contains the whole selection (if any and not
     /// itself selected) -> Add to frame applies.
     pub containing_frame: Option<ElementId>,
-    /// At least one selected element is held by a frame, whatever its box ->
-    /// Remove from frame applies (`TOILE-UI-384`).
-    pub framed: bool,
+    /// A selected element is held by a frame, whatever its box -> Remove from
+    /// frame applies (`TOILE-UI-384`).
+    pub framed: FrameHeld,
+}
+
+impl CtxScope {
+    /// At least two elements selected -> Group applies.
+    pub fn multi(&self) -> bool {
+        self.count >= ElementCount::new(2)
+    }
+}
+
+ambre_core::define_flag! {
+    /// Where a right-click landed: on empty canvas, or on a non-empty selection.
+    pub enum ClickSite {
+        Canvas,
+        Selection,
+    }
+
+    /// Whether a selection holds a group node.
+    pub enum GroupHeld {
+        NoGroup,
+        Group,
+    }
+
+    /// Whether a frame holds any element of a selection.
+    pub enum FrameHeld {
+        Unframed,
+        Framed,
+    }
+}
+
+/// The lock states a selection holds. A selection can hold both, and each
+/// side offers its own command (`TOILE-UI-366`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum LockMix {
+    /// No element read yet.
+    #[default]
+    Empty,
+    /// Every element read is unlocked.
+    Unlocked,
+    /// Every element read is locked.
+    Locked,
+    /// Some elements are locked and some are not.
+    Both,
+}
+
+impl LockMix {
+    /// The mix once one more element, in lock state `lock`, is read.
+    #[must_use]
+    pub fn with(self, lock: LockState) -> Self {
+        let locked = lock == LockState::Locked;
+        match (self, locked) {
+            (Self::Empty | Self::Unlocked, false) => Self::Unlocked,
+            (Self::Empty | Self::Locked, true) => Self::Locked,
+            _ => Self::Both,
+        }
+    }
+
+    /// At least one element is locked -> Unlock applies.
+    pub fn any_locked(self) -> bool {
+        matches!(self, Self::Locked | Self::Both)
+    }
+
+    /// At least one element is unlocked -> Lock applies.
+    pub fn any_unlocked(self) -> bool {
+        matches!(self, Self::Unlocked | Self::Both)
+    }
 }
 
 /// Find a selected element by id (linear over the selection's data, which the
@@ -215,10 +277,9 @@ pub fn ctx_scope_for(
         return CtxScope::default();
     }
 
-    let mut count = 0usize;
-    let mut has_group = false;
-    let mut any_locked = false;
-    let mut any_unlocked = false;
+    let mut count = ElementCount::ZERO;
+    let mut groups = GroupHeld::NoGroup;
+    let mut locks = LockMix::Empty;
     // Union of the selected elements' bounds, to find an enclosing frame.
     let mut union: Option<Rect> = None;
 
@@ -226,15 +287,11 @@ pub fn ctx_scope_for(
         let Some(elem) = find_element(selected, id) else {
             continue;
         };
-        count += 1;
+        count = count.incremented();
         if elem.kind == ElementKind::Group {
-            has_group = true;
+            groups = GroupHeld::Group;
         }
-        if elem.locked == ambre_bus::app::toile::LockState::Locked {
-            any_locked = true;
-        } else {
-            any_unlocked = true;
-        }
+        locks = locks.with(elem.locked);
         union = Some(match union {
             Some(u) => u.union(elem.bounds),
             None => elem.bounds,
@@ -244,14 +301,12 @@ pub fn ctx_scope_for(
     let containing_frame = union.and_then(|u| containing_frame(display, selection, u));
 
     CtxScope {
-        over_selection: true,
+        site: ClickSite::Selection,
         count,
-        multi: count >= 2,
-        has_group,
-        any_locked,
-        any_unlocked,
+        groups,
+        locks,
         containing_frame,
-        framed: selection.iter().any(|id| framed.contains(id)),
+        framed: FrameHeld::from_bool(selection.iter().any(|id| framed.contains(id))),
     }
 }
 
@@ -282,15 +337,19 @@ fn containing_frame(
 pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
     let mut ids: Vec<Option<CommandId>> = Vec::new();
 
-    if !scope.over_selection {
+    if scope.site == ClickSite::Canvas {
         // Empty canvas: Paste + Select-All only.
         ids.extend([Some(PASTE), Some(SELECT_ALL)]);
         return ids;
     }
+    let multi = scope.multi();
+    let group = scope.groups == GroupHeld::Group;
+    let framed = scope.framed == FrameHeld::Framed;
+    let (any_locked, any_unlocked) = (scope.locks.any_locked(), scope.locks.any_unlocked());
 
     // Clipboard: a locked selection keeps copy and paste, and drops the three
     // that move or remove (`TOILE-UI-126`).
-    if scope.any_locked {
+    if any_locked {
         ids.extend([Some(COPY), Some(PASTE)]);
     } else {
         ids.extend([
@@ -313,18 +372,18 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
     ]);
 
     // Grouping (only the applicable side).
-    if scope.multi || scope.has_group {
+    if multi || group {
         ids.push(None);
-        if scope.multi {
+        if multi {
             ids.push(Some(GROUP));
         }
-        if scope.has_group {
+        if group {
             ids.push(Some(UNGROUP));
         }
     }
 
     // Z-order: a locked selection omits all four (`TOILE-UI-126`).
-    if !scope.any_locked {
+    if !any_locked {
         ids.push(None);
         ids.extend([
             Some(BRING_FRONT),
@@ -335,19 +394,19 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
     }
 
     // Lock / unlock (only the applicable side).
-    if scope.any_unlocked || scope.any_locked {
+    if any_unlocked || any_locked {
         ids.push(None);
-        if scope.any_unlocked {
+        if any_unlocked {
             ids.push(Some(LOCK));
         }
-        if scope.any_locked {
+        if any_locked {
             ids.push(Some(UNLOCK));
         }
     }
 
     // Align and distribute: below two boxes there is no reference edge, below
     // three no interior gap.
-    if scope.count >= 2 {
+    if multi {
         ids.push(None);
         ids.extend([
             Some(ALIGN_LEFT),
@@ -357,7 +416,7 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
             Some(ALIGN_VCENTER),
             Some(ALIGN_BOTTOM),
         ]);
-        if scope.count >= 3 {
+        if scope.count >= ElementCount::new(3) {
             ids.extend([Some(DISTRIBUTE_H), Some(DISTRIBUTE_V)]);
         }
     }
@@ -366,12 +425,12 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
     // removing needs a frame that lists it, wherever its box now sits
     // (`TOILE-UI-384`).
     let add = scope.containing_frame.is_some();
-    if add || scope.framed {
+    if add || framed {
         ids.push(None);
         if add {
             ids.push(Some(ADD_TO_FRAME));
         }
-        if scope.framed {
+        if framed {
             ids.push(Some(REMOVE_FROM_FRAME));
         }
     }
@@ -727,7 +786,7 @@ mod tests {
         let dv = viewport(vec![]);
         let scope = ctx_scope_for(&[], None, &els(&dv), &[], &dv);
         assert_eq!(scope, CtxScope::default());
-        assert!(!scope.over_selection);
+        assert_eq!(scope.site, ClickSite::Canvas);
     }
 
     #[test]
@@ -739,12 +798,11 @@ mod tests {
             ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
-        assert!(scope.over_selection);
-        assert_eq!(scope.count, 1);
-        assert!(!scope.multi);
-        assert!(!scope.has_group);
-        assert!(scope.any_unlocked);
-        assert!(!scope.any_locked);
+        assert_eq!(scope.site, ClickSite::Selection);
+        assert_eq!(scope.count, ElementCount::new(1));
+        assert!(!scope.multi());
+        assert_eq!(scope.groups, GroupHeld::NoGroup);
+        assert_eq!(scope.locks, LockMix::Unlocked);
     }
 
     #[test]
@@ -764,8 +822,8 @@ mod tests {
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &els(&dv), &[], &dv);
-        assert!(scope.multi);
-        assert_eq!(scope.count, 2);
+        assert!(scope.multi());
+        assert_eq!(scope.count, ElementCount::new(2));
     }
 
     #[test]
@@ -785,9 +843,8 @@ mod tests {
             ),
         ]);
         let scope = ctx_scope_for(&[eid("g"), eid("l")], None, &els(&dv), &[], &dv);
-        assert!(scope.has_group);
-        assert!(scope.any_locked);
-        assert!(scope.any_unlocked);
+        assert_eq!(scope.groups, GroupHeld::Group);
+        assert_eq!(scope.locks, LockMix::Both);
     }
 
     #[test]
@@ -850,7 +907,7 @@ mod tests {
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[eid("a")], &dv);
-        assert!(scope.framed);
+        assert_eq!(scope.framed, FrameHeld::Framed);
         let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
         assert!(ids.contains(&REMOVE_FROM_FRAME), "removal not offered");
         assert!(
@@ -909,10 +966,24 @@ mod tests {
             ),
         ];
         let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &selected, &[], &dv);
-        assert_eq!(scope.count, 2);
-        assert!(scope.multi);
-        assert!(scope.any_locked);
-        assert!(scope.any_unlocked);
+        assert_eq!(scope.count, ElementCount::new(2));
+        assert!(scope.multi());
+        assert_eq!(scope.locks, LockMix::Both);
+    }
+
+    /// A lock mix that has read both states stays `Both`, whatever it reads
+    /// next, and an empty one offers neither command.
+    #[test]
+    fn a_lock_mix_keeps_both_states_once_read() {
+        use LockState::{Locked, Unlocked};
+        assert!(!LockMix::Empty.any_locked() && !LockMix::Empty.any_unlocked());
+        let both = LockMix::Empty.with(Locked).with(Unlocked);
+        assert_eq!(both, LockMix::Both);
+        assert_eq!(both.with(Locked), LockMix::Both);
+        assert_eq!(both.with(Unlocked), LockMix::Both);
+        assert!(both.any_locked() && both.any_unlocked());
+        assert_eq!(LockMix::Empty.with(Locked).with(Locked), LockMix::Locked);
+        assert_eq!(LockMix::Empty.with(Unlocked), LockMix::Unlocked);
     }
 
     #[test]

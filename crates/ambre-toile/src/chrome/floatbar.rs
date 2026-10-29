@@ -34,7 +34,7 @@ use ambre_chrome::{ColorPopover, FontPicker, FontSizeSelect, FormatToggle};
 use leptos::prelude::*;
 
 use crate::ui::floatbar::{FloatBar, StyleEdit};
-use crate::ui::menu;
+use crate::ui::menu::{self, GroupHeld};
 use crate::ui::style::StyleModel;
 
 /// The floating selection toolbar. `bar` is the per-frame published placement +
@@ -231,13 +231,13 @@ pub fn SelectionToolbar(
                             // -- Structural actions (strict subset of the context menu) --
                             {cmd_button(menu::DUPLICATE)}
                             {cmd_button(menu::DELETE)}
-                            {b.multi
+                            {b.multi()
                                 .then(|| cmd_button(menu::GROUP))}
-                            {b.has_group
+                            {(b.groups == GroupHeld::Group)
                                 .then(|| cmd_button(menu::UNGROUP))}
-                            {b.any_unlocked
+                            {b.locks.any_unlocked()
                                 .then(|| cmd_button(menu::LOCK))}
-                            {b.any_locked
+                            {b.locks.any_locked()
                                 .then(|| {
                                     cmd_button(menu::UNLOCK)
                                 })}

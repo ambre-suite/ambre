@@ -30,8 +30,8 @@ use ambre_bus::UserId;
 use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{
     Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
-    ElementId, PresencePayload, PresenceUpdate, PresentMode, SlideCount, SlideIndex, SlidePosition,
-    ToileCommand, ToileEvent,
+    ElementCount, ElementId, PresencePayload, PresenceUpdate, PresentMode, SlideCount, SlideIndex,
+    SlidePosition, ToileCommand, ToileEvent,
 };
 use ambre_bus::{AppCommand, AppEvent, DocumentId, UiEvent};
 use ambre_canvas::PerfSnapshot;
@@ -48,7 +48,7 @@ use ambre_toile::chrome::{
     UNDO,
 };
 use ambre_toile::ui::Tool;
-use ambre_toile::ui::menu::{self, CtxScope};
+use ambre_toile::ui::menu::{self, ClickSite, CtxScope, GroupHeld, LockMix};
 use ambre_toile::ui::menu_bar::ZOOM_IN;
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -267,9 +267,9 @@ fn context_menu_copy_row_fires_copy_command() {
     // A single unlocked element: the clipboard group renders; clicking Copy fires
     // the COPY id the view resolves against its selection.
     let scope = CtxScope {
-        over_selection: true,
-        count: 1,
-        any_unlocked: true,
+        site: ClickSite::Selection,
+        count: ElementCount::new(1),
+        locks: LockMix::Unlocked,
         ..CtxScope::default()
     };
     let (root, fired) = mount_ctx_menu(scope);
@@ -292,10 +292,9 @@ fn context_menu_multi_selection_offers_group() {
     let owner = Owner::new();
     owner.set();
     let scope = CtxScope {
-        over_selection: true,
-        count: 2,
-        multi: true,
-        any_unlocked: true,
+        site: ClickSite::Selection,
+        count: ElementCount::new(2),
+        locks: LockMix::Unlocked,
         ..CtxScope::default()
     };
     let (root, fired) = mount_ctx_menu(scope);
@@ -313,9 +312,9 @@ fn context_menu_locked_selection_offers_only_unlock() {
     owner.set();
     // A wholly-locked selection: Unlock applies, Lock is omitted.
     let scope = CtxScope {
-        over_selection: true,
-        count: 1,
-        any_locked: true,
+        site: ClickSite::Selection,
+        count: ElementCount::new(1),
+        locks: LockMix::Locked,
         ..CtxScope::default()
     };
     let (root, fired) = mount_ctx_menu(scope);
@@ -425,10 +424,9 @@ fn selection_toolbar_delete_fires_command() {
     // gated by the same flags as the context menu.
     let bar = RwSignal::new(Some(FloatBar {
         at: css_point(40.0, 20.0),
-        multi: false,
-        has_group: false,
-        any_locked: false,
-        any_unlocked: true,
+        count: ElementCount::new(1),
+        groups: GroupHeld::NoGroup,
+        locks: LockMix::Unlocked,
         fill: None,
         mixed: Default::default(),
     }));
@@ -508,10 +506,9 @@ fn the_button_bars_announce_the_registry_labels() {
     // command button the bar has.
     let bar = RwSignal::new(Some(FloatBar {
         at: css_point(40.0, 20.0),
-        multi: true,
-        has_group: true,
-        any_locked: true,
-        any_unlocked: true,
+        count: ElementCount::new(2),
+        groups: GroupHeld::Group,
+        locks: LockMix::Both,
         fill: None,
         mixed: Default::default(),
     }));

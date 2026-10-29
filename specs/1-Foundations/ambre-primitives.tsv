@@ -2816,10 +2816,7 @@ ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::retain_if() | ret
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedSessions::is_open() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | references() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | routes_to_child() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_locked | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.any_unlocked | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.has_group | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar.multi | field | bool	generic	local state flag or value, not a mode selector
+ambre-toile | src/ui/floatbar.rs | crate::ui::floatbar | FloatBar::multi() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | ellipse_contains() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | exact_hit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | path_contains() | ret | bool	generic	predicate or handled-flag result
@@ -2832,13 +2829,9 @@ ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message() | ret | 
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | Under::grabbable_if(grabbable) | param | bool	newtype-inner	the bool the one constructor of Under reads into its variant
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | coast() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/link.rs | crate::ui::link | wants_follow() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.any_locked | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.any_unlocked | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.count | field | usize	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.framed | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.has_group | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.multi | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.over_selection | field | bool	generic	local state flag or value, not a mode selector
+ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope::multi() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/ui/menu.rs | crate::ui::menu | LockMix::any_locked() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/ui/menu.rs | crate::ui::menu | LockMix::any_unlocked() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu.rs | crate::ui::menu | rect_contains_rect() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu_bar.rs | crate::ui::menu_bar | TOP_MENUS | const | &[(MenuId,&str)]	free-text	label, message or user text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor.0 | field | Cow<'static,str>	newtype-inner	CanvasCursor inner
