@@ -2573,10 +2573,8 @@ ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame.0 | field | Vec<u8>
 ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame::as_bytes() | ret | &[u8]	newtype-inner	UpdateFrame newtype, read by the seal
 ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame::into_bytes() | ret | Vec<u8>	newtype-inner	UpdateFrame newtype, handed back to a fuzz target
 ambre-sync | src/pipeline.rs | crate::pipeline | UpdateFrame::len() | ret | usize	math	byte length, for a log line
-ambre-sync | src/rekey.rs | crate::rekey | Rekey.failures | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/rekey.rs | crate::rekey | Rekey.refused | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::delta_refused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/rekey.rs | crate::rekey | Rekey::failed() | ret | Option<u32>	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::hold() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::holds_refused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/rekey.rs | crate::rekey | Rekey::owes() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2588,14 +2586,11 @@ ambre-sync | src/rekey.rs | crate::rekey | UNCONFIRMED_LIMIT | const | usize	mat
 ambre-sync | src/sharing.rs | crate::sharing | ROTATION_TRIES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/sharing.rs | crate::sharing | api_error(message) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/sharing.rs | crate::sharing | invitee_keys() | ret | Result<InviteeKeys,(ApiFailure,String)>	free-text	error message text
-ambre-sync | src/updates.rs | crate::updates | HoldCause::Failed.0 | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/updates.rs | crate::updates | OpenedMembers.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/updates.rs | crate::updates | RESEND_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | members_failure_message() | ret | String	free-text	error message text
-ambre-sync | src/updates.rs | crate::updates | resend_retry_delay(failure) | param | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | REPLAY_RETRY_LIMIT | const | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | ReplayStops.count | field | u32	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/websocket.rs | crate::websocket | SyncState::close_quietly(reason) | param | &str	free-text	free text: message, label, name or report

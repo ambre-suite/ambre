@@ -9,7 +9,7 @@ const RESEND_RETRY_BASE: ambre_core::Millis = ambre_core::Millis(1_000);
 
 /// The failures Sync sends again after. One more holds the document
 /// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
-const RESEND_RETRY_LIMIT: u32 = 5;
+const RESEND_RETRY_LIMIT: ambre_core::FailureCount = ambre_core::FailureCount::new(5);
 
 /// Why a document holds its edits: the relay refused one, or failed to
 /// sequence one past the retry budget. It prints the cause the warning reads.
@@ -18,7 +18,7 @@ enum HoldCause {
     /// A refusal the relay named.
     Refused(ambre_core::RefusalCode),
     /// The failures counted since the last echo.
-    Failed(u32),
+    Failed(ambre_core::FailureCount),
 }
 
 impl std::fmt::Display for HoldCause {
@@ -32,10 +32,11 @@ impl std::fmt::Display for HoldCause {
 
 /// The delay before sending again after the `failure`-th failure since the
 /// last echo, counted from one. Past the budget there is none.
-fn resend_retry_delay(failure: u32) -> Option<ambre_core::Millis> {
-    (1..=RESEND_RETRY_LIMIT)
+fn resend_retry_delay(failure: ambre_core::FailureCount) -> Option<ambre_core::Millis> {
+    let first = ambre_core::FailureCount::new(1);
+    (first..=RESEND_RETRY_LIMIT)
         .contains(&failure)
-        .then(|| ambre_core::Millis(RESEND_RETRY_BASE.0 << (failure - 1)))
+        .then(|| RESEND_RETRY_BASE.doubled(failure.minus(first)))
 }
 
 impl SyncState {
@@ -3678,12 +3679,14 @@ mod tests {
     /// the budget the document holds it, reported once as a refused edit.
     #[test]
     fn a_delta_failing_past_the_budget_holds_its_document() {
-        assert_eq!(resend_retry_delay(1), Some(RESEND_RETRY_BASE));
+        let failure = ambre_core::FailureCount::new;
+        assert_eq!(resend_retry_delay(failure(0)), None);
+        assert_eq!(resend_retry_delay(failure(1)), Some(RESEND_RETRY_BASE));
         assert_eq!(
-            resend_retry_delay(2),
+            resend_retry_delay(failure(2)),
             Some(ambre_core::Millis(2 * RESEND_RETRY_BASE.0))
         );
-        assert_eq!(resend_retry_delay(RESEND_RETRY_LIMIT + 1), None);
+        assert_eq!(resend_retry_delay(RESEND_RETRY_LIMIT.incremented()), None);
 
         let (mut state, rx, doc, _key, sk, _snap) = setup();
         state.signing_key = Some(sk);
@@ -3692,7 +3695,7 @@ mod tests {
         state.handle_send_update(doc, b"a".to_vec());
         let mut signature = signatures(&drain_ws(&ws_rx))[0];
         let _ = drain(&rx);
-        for _ in 0..RESEND_RETRY_LIMIT {
+        for _ in 0..RESEND_RETRY_LIMIT.get() {
             let ticket = fail_sequencing(&mut state, doc, signature);
             state.handle_sync_event(SyncEvent::ResendRetry {
                 document_id: doc,

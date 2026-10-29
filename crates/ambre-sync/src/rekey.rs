@@ -90,7 +90,7 @@ pub(crate) struct Rekey {
     /// the ticket of the timer armed for it (`SYNC-159`).
     failed: Option<(Signature, ResendTicket)>,
     /// Sequencing failures since the relay last echoed a delta of this log.
-    failures: u32,
+    failures: ambre_core::FailureCount,
 }
 
 impl Rekey {
@@ -112,7 +112,7 @@ impl Rekey {
             return;
         };
         self.sent.drain(..=at);
-        self.failures = 0;
+        self.failures = ambre_core::FailureCount::ZERO;
         if self.refused_from.is_some_and(|c| c <= clock) {
             self.refused_from = None;
         }
@@ -131,10 +131,14 @@ impl Rekey {
     /// fault of its own (`SYNC-159`). It stays in the log, to leave again
     /// once the timer `ticket` fires. Returns the failures counted since the
     /// last echo, or `None` when no delta here carries that signature.
-    pub(crate) fn failed(&mut self, signature: &Signature, ticket: ResendTicket) -> Option<u32> {
+    pub(crate) fn failed(
+        &mut self,
+        signature: &Signature,
+        ticket: ResendTicket,
+    ) -> Option<ambre_core::FailureCount> {
         self.position(signature)?;
         self.failed = Some((*signature, ticket));
-        self.failures = self.failures.saturating_add(1);
+        self.failures = self.failures.incremented();
         Some(self.failures)
     }
 
