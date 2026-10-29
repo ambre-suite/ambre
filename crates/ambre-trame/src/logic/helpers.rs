@@ -76,8 +76,11 @@ pub(crate) fn condition_pass(op: FilterOp, value: &CellValue, operand: &str) -> 
     use std::cmp::Ordering;
     let text = value.to_display();
     // A numeric comparison applies only when *both* operands are numeric.
-    let nums = match (value.as_number(), operand.parse::<f64>()) {
-        (Ok(a), Ok(b)) => Some((a, b)),
+    let nums = match (
+        value.as_number(),
+        crate::formula::types::finite_number(operand),
+    ) {
+        (Ok(a), Some(b)) => Some((a, b)),
         _ => None,
     };
     // Only treat as numeric when the cell itself is a number (avoid "abc"->Err

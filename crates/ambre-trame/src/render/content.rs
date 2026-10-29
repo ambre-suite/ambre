@@ -54,7 +54,7 @@ impl<'a> CellContent<'a> {
             underline: false,
             strikethrough: false,
             h_align: ambre_bus::HAlign::Auto,
-            numeric: text.parse::<f64>().is_ok(),
+            numeric: crate::formula::types::finite_number(&text).is_some(),
             v_align: ambre_bus::VAlign::Middle,
             fg: None,
             bg: None,

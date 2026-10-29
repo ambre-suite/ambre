@@ -4,6 +4,7 @@
 // native file paths. Helpers via `use super::*`.
 
 use super::*;
+use crate::formula::types::CellValue;
 use crate::logic::schema::{SheetContainer, SheetRoot};
 use loro::LoroValue;
 
@@ -28,6 +29,101 @@ fn import(state: &mut TrameState, data: &[u8], target_sheet_id: Option<SheetId>)
         start_row: Row::new(0),
         start_col: Col::new(0),
     })
+}
+
+/// Text that Rust's number parse reads, but as a number that is not finite.
+const NOT_FINITE: [&str; 8] = [
+    "NaN",
+    "nan",
+    "inf",
+    "-INF",
+    "Infinity",
+    "+infinity",
+    "1e999",
+    "-1e999",
+];
+
+/// What `ISNUMBER` answers for each of the first `rows` cells of column A,
+/// read through formulas in column C.
+fn numbers_in_col_a(state: &mut TrameState, rows: u32) -> Vec<String> {
+    (0..rows)
+        .map(|r| {
+            state.handle_command(TrameCommand::SetCellText {
+                row: Row::new(r),
+                col: Col::new(2),
+                text: format!("=ISNUMBER(A{})", r + 1),
+            });
+            read_cell(state, r, 2)
+        })
+        .collect()
+}
+
+/// The answer of [`numbers_in_col_a`] when no cell holds a number.
+fn no_numbers(rows: usize) -> Vec<String> {
+    vec![CellValue::Boolean(false).to_display(); rows]
+}
+
+/// A typed spelling of a number that is not finite stays text, as in Excel
+/// (`TRAME-245`).
+#[test]
+fn a_typed_number_that_is_not_finite_stays_text() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &NOT_FINITE);
+    assert_eq!(numbers_in_col_a(&mut state, 8), no_numbers(8));
+    assert_eq!(read_cell(&mut state, 2, 0), "inf");
+}
+
+/// A pasted spelling of a number that is not finite stays text (`TRAME-245`).
+#[test]
+fn a_pasted_number_that_is_not_finite_stays_text() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::PasteText {
+        text: NOT_FINITE.join("\n"),
+    });
+    assert_eq!(read_cell(&mut state, 7, 0), "-1e999");
+    assert_eq!(numbers_in_col_a(&mut state, 8), no_numbers(8));
+}
+
+/// An imported spelling of a number that is not finite stays text
+/// (`TRAME-245`).
+#[test]
+fn an_imported_number_that_is_not_finite_stays_text() {
+    let mut state = TrameState::new();
+    import(&mut state, NOT_FINITE.join("\n").as_bytes(), None);
+    assert_eq!(read_cell(&mut state, 7, 0), "-1e999");
+    assert_eq!(numbers_in_col_a(&mut state, 8), no_numbers(8));
+}
+
+/// A fill copies a spelling of a number that is not finite as text. A series
+/// that runs past the largest number writes text too (`TRAME-245`).
+#[test]
+fn a_filled_number_that_is_not_finite_stays_text() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["NaN", "1e308", "1.7e308"]);
+    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let sheet_id = state.active_sheet.clone();
+    state.handle_command(TrameCommand::FillRange {
+        sheet_id: sheet_id.clone(),
+        src: crate::CellRect::spanning(cell(0), cell(0)),
+        dest: crate::CellRect::spanning(cell(0), cell(1)),
+        mode: crate::FillMode::Copy,
+    });
+    seed_col_a(&mut state, &["NaN", "NaN", "1e308", "1.7e308"]);
+    state.handle_command(TrameCommand::FillRange {
+        sheet_id,
+        src: crate::CellRect::spanning(cell(2), cell(3)),
+        dest: crate::CellRect::spanning(cell(2), cell(4)),
+        mode: crate::FillMode::Series,
+    });
+    assert_eq!(read_cell(&mut state, 1, 0), "NaN");
+    assert_eq!(read_cell(&mut state, 4, 0), "inf");
+    assert_eq!(numbers_in_col_a(&mut state, 5), {
+        let mut expected = no_numbers(5);
+        let yes = CellValue::Boolean(true).to_display();
+        expected[2] = yes.clone();
+        expected[3] = yes;
+        expected
+    });
 }
 
 /// A function the library does not know reads as `#N/A`, never as a blank

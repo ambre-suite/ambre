@@ -447,7 +447,7 @@ fn parse_num(raw: &str) -> Option<f64> {
     if t.is_empty() || t.starts_with('=') {
         return None;
     }
-    t.parse::<f64>().ok()
+    crate::formula::types::finite_number(t)
 }
 
 /// Render an extrapolated series value as cell text: an integral value drops the

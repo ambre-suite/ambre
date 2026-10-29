@@ -443,6 +443,15 @@ pub enum CellValue {
     Error(FormulaError),
 }
 
+/// The number `text` spells, when it is a finite one (`TRAME-245`).
+///
+/// Rust's parse also reads `NaN`, `inf` and `infinity` in any case, and an
+/// overflowing literal such as `1e999` as an infinity. None of them is a
+/// number a cell holds, so each stays text, as in Excel.
+pub(crate) fn finite_number(text: &str) -> Option<f64> {
+    text.parse::<f64>().ok().filter(|n| n.is_finite())
+}
+
 impl CellValue {
     /// Coerce this value to a numeric `f64`, or return an error.
     ///
@@ -453,7 +462,7 @@ impl CellValue {
     pub fn as_number(&self) -> Result<f64, FormulaError> {
         match self {
             CellValue::Number(n) => Ok(*n),
-            CellValue::Text(s) => s.parse().map_err(|_| FormulaError::TypeError),
+            CellValue::Text(s) => finite_number(s).ok_or(FormulaError::TypeError),
             CellValue::Boolean(b) => Ok(if *b { 1.0 } else { 0.0 }),
             CellValue::Empty => Ok(0.0),
             CellValue::Range(_) => Err(FormulaError::TypeError),

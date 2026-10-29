@@ -7,7 +7,7 @@
 
 use ambre_bus::{Col, ColCount, Row, RowCount};
 
-use super::types::{CellValue, FormulaError, FunctionName, nearly_equal};
+use super::types::{CellValue, FormulaError, FunctionName, finite_number, nearly_equal};
 use ambre_bus::{CivilDate, DateSerial, DayCount, DayOfMonth, DaySerial, MonthCount, Year};
 
 // -----------------------------------------------------------------------------
@@ -260,9 +260,9 @@ impl Criterion {
             "<>" => (Equal, Polarity::NotMatch),
             _ => (Equal, Polarity::Match),
         };
-        match rest.parse::<f64>() {
-            Ok(n) => Criterion::Num(ord, n, negated),
-            Err(_) => Criterion::Text(ord, rest.to_string(), negated),
+        match finite_number(rest) {
+            Some(n) => Criterion::Num(ord, n, negated),
+            None => Criterion::Text(ord, rest.to_string(), negated),
         }
     }
 

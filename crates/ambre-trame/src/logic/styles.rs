@@ -331,9 +331,9 @@ impl TrameState {
     pub(super) fn format_display(&self, _at: CellPos, text: String, style: &CellStyle) -> String {
         match style.format {
             CellFormat::General | CellFormat::Text => text,
-            ref fmt => match text.parse::<f64>() {
-                Ok(v) => format_number(v, fmt, style.decimals),
-                Err(_) => text,
+            ref fmt => match crate::formula::types::finite_number(&text) {
+                Some(v) => format_number(v, fmt, style.decimals),
+                None => text,
             },
         }
     }

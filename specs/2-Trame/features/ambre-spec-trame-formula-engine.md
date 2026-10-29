@@ -51,6 +51,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-211` | `PRE` | A sheet a formula qualifies MUST already exist when the formula is typed. | this spec section 3 | `ambre_trame::logic::tests::group3::formula_naming_a_missing_sheet_is_refused` | none | verified |
 | `TRAME-011` | `POST` | Typing into a cell MUST compile that cell again. | this spec section 3 | `ambre_trame::formula::cache::tests::stale_cell_recompiled`; `::non_formula_clears_cache` | none | verified |
 | `TRAME-040` | `POST` | An edit MUST update every cell that reads it, directly or through a range. | this spec section 3 | `ambre_trame::formula::dag::tests::simple_dependency_propagation`; `::range_dirty_collection`; `::collect_dirty_reaches_a_fixpoint_over_chained_ranges`; `ambre_trame::formula::engine::tests::cascade_after_edit`; `::range_dependency_propagates_through_a_chain` | none | verified |
+| `TRAME-245` | `POST` | A cell's text that spells a number that is not finite MUST read as text. | this spec section 3 | `ambre_trame::logic::tests::group12::a_typed_number_that_is_not_finite_stays_text`; `::a_pasted_number_that_is_not_finite_stays_text`; `::an_imported_number_that_is_not_finite_stays_text`; `::a_filled_number_that_is_not_finite_stays_text` -- `NaN`, the infinities and `1e999`, in mixed case, typed, pasted, imported and filled; `ambre_trame::formula::functions::tests::text_that_spells_no_finite_number_counts_in_no_total`; `ambre_trame::formula::parser::tests::a_literal_past_the_largest_number_is_refused` | none | verified |
 | `TRAME-233` | `POST` | Writing a cell MUST update every formula that read it while it lay past the used range. | this spec section 3; `TRAME-006` | `ambre_trame::logic::tests::group8::a_formula_typed_before_its_cell_reads_the_cell_once_written` | none | verified |
 | `TRAME-041` | `FRAME` | An edit MUST NOT recompute a cell that reads nothing it changed. | this spec section 3 | `ambre_trame::formula::dag::tests::range_outside_no_dirty`; `ambre_trame::formula::cache::tests::not_stale_no_recompile` | none | verified |
 | `TRAME-212` | `FRAME` | Retyping the text a cell already holds MUST NOT recompile it. | this spec section 6 | `ambre_trame::formula::engine::tests::retyping_the_same_text_does_not_recompile` | none | verified |
@@ -92,7 +93,7 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 45 `verified`. What holds is the graph and its recompute, the best-covered
+* **Verification.** 46 `verified`. What holds is the graph and its recompute, the best-covered
   engine of the workspace, and the stored form a structural edit carries. A range buffer is sized by
   a grant that only the caps make, so a range over them allocates nothing.
 
@@ -210,6 +211,11 @@ circular-reference error (`TRAME-042`). A cell already resolved returns its memo
 pushed, executed, popped and memoised. This is the only guard against a loop the cell graph cannot see.
 
 **The value domain.** What the machine pushes, what a builtin receives, and what the cache holds.
+A plain cell's text is a `Number` when it spells a finite number, and `Text` otherwise. Rust's
+parse also reads `NaN`, `inf` and `1e999`, but none is a number a cell holds, so each stays text,
+as in Excel (`TRAME-245`). The document stores the text alone, so no stored byte moves: a sheet
+that held such text before reads it as text now. A formula literal past the largest number is a
+parse error.
 
 ```rust
 #[derive(Debug, Clone)]

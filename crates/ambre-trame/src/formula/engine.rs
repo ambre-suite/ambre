@@ -188,11 +188,12 @@ fn now_serial() -> DateSerial {
     }
 }
 
-/// Parse a plain cell's raw text into a literal [`CellValue`].
+/// Parse a plain cell's raw text into a literal [`CellValue`]. Text that
+/// spells no finite number stays text (`TRAME-245`).
 fn literal_value(raw: &str) -> CellValue {
-    match raw.parse::<f64>() {
-        Ok(n) => CellValue::Number(n),
-        Err(_) => CellValue::Text(raw.to_string()),
+    match super::types::finite_number(raw) {
+        Some(n) => CellValue::Number(n),
+        None => CellValue::Text(raw.to_string()),
     }
 }
 

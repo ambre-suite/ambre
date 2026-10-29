@@ -43,7 +43,7 @@ pub(crate) fn flatten_numeric_inner(value: &CellValue, out: &mut Vec<f64>) {
         CellValue::Boolean(true) => out.push(1.0),
         CellValue::Boolean(false) => out.push(0.0),
         CellValue::Text(s) => {
-            if let Ok(n) = s.parse::<f64>() {
+            if let Some(n) = finite_number(s) {
                 out.push(n);
             }
         }

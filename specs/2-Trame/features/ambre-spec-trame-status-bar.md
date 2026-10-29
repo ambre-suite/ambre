@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-108` | `OBS` | A selection of one cell MUST show no aggregate. | this spec section 3 | `ambre_trame::ui::view::view_tests::a_lone_cell_asks_for_no_aggregate`; `ambre_trame::ui::view::lifecycle::tests::a_single_cell_clears_and_sends_nothing` | none | verified |
 | `TRAME-UI-110` | `OBS` | A row the filter hides MUST count in an aggregate, as it counts in a formula over the same cells. | this spec section 4 | `ambre_trame::logic::tests::group5::status_bar_total_matches_sum_under_a_filter` | none | verified |
 | `TRAME-UI-135` | `OBS` | An aggregate MUST read with no decimals when it is a whole number, and with two otherwise. | this spec section 3 | `ambre_trame::tests::chrome_ui::an_aggregate_reads_whole_or_with_two_decimals` | none | verified |
-| `TRAME-UI-178` | `OBS` | A cell value that is not a finite number MUST count in `count` and in no numeric aggregate. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_leaves_a_value_that_is_not_finite_out_of_the_totals` -- a typed `NaN`, two infinities and `1e999` beside two numbers; type-level -- the totals hold a `CellNumber`, which refuses a value that is not finite | none | verified |
+| `TRAME-UI-178` | `OBS` | A cell value that is not a finite number MUST count in `count` and in no numeric aggregate. | this spec section 2 | `ambre_trame::logic::tests::group4::selection_stats_leaves_a_value_that_is_not_finite_out_of_the_totals` -- a typed `NaN`, two infinities and `1e999`, which read as text, beside two numbers; type-level -- the totals hold a `CellNumber`, which refuses a value that is not finite | none | verified |
 | `TRAME-UI-179` | `OBS` | A sum whose exact total is past the largest finite number MUST read `#NUM!`, and so MUST its average. | this spec section 2; section 3 | `ambre_trame::logic::tests::group4::selection_stats_sums_as_a_formula_over_the_same_cells_does` -- the sum, in two orders, beside `=SUM` over the same cells; `ambre_bus::app::trame::event::tests::an_overflowed_sum_leaves_no_average_and_exact_extremes` -- the average; `ambre_trame::tests::chrome_ui::a_sum_past_the_largest_number_reads_num` -- the band | none | verified |
 
 ### 1.2 Select a different block
@@ -85,8 +85,14 @@ pub struct CellNumber(f64);
 ```
 
 **The cell number.** The formula engine computes in `f64`. A cell's text comes from a keystroke, a
-paste, an import or a peer. A literal such as `NaN` or `1e999` parses as a number that is not
-finite. Such a value is no cell number, so it enters no total (`TRAME-UI-178`).
+paste, an import or a peer. Text such as `NaN` or `1e999` reads as text, not as a number
+(`TRAME-245`), and a formula whose result is not finite reads `#NUM!` (`TRAME-244`). A value that
+is not finite is no cell number either way, so it enters no total (`TRAME-UI-178`).
+
+**The one difference from `SUM`.** The band totals the cells that hold a number. `SUM` also counts
+text that reads as a number (`TRAME-200`) and a boolean in a range, so over such cells the two
+read two totals. Excel's own band leaves them out the same way. Every other total agrees
+(`TRAME-FEAT-029`).
 
 **Steps, when the Logic thread answers a request:**
 

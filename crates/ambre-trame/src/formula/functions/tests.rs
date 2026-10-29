@@ -853,6 +853,17 @@ fn a_tiny_term_beside_the_largest_numbers_sums_the_same_in_any_order() {
     assert_eq!(lost, [0.0, 0.0]);
 }
 
+/// Text that spells a number that is not finite counts in no total, from a
+/// range as from a scalar. No operator reads it as a number (`TRAME-245`).
+#[test]
+fn text_that_spells_no_finite_number_counts_in_no_total() {
+    let r = range(3, 1, vec![num(1.0), txt("inf"), txt("NaN")]);
+    assert_eq!(sum(std::slice::from_ref(&r)).to_display(), "1");
+    assert_eq!(sum(&[txt("-infinity"), num(1.0)]).to_display(), "1");
+    assert_eq!(average(&[r]).to_display(), "1");
+    assert!(txt("1e999").as_number().is_err());
+}
+
 /// Text that reads as a number counts in a total, from a range as from a
 /// scalar; text that does not is left out (`TRAME-200`).
 #[test]

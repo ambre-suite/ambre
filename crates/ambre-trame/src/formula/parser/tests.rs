@@ -8,6 +8,17 @@ fn parse(input: &str) -> Expr {
     parse_formula(input).unwrap_or_else(|e| panic!("parse failed: {e}"))
 }
 
+/// A literal past the largest number is no number a formula holds, so the
+/// formula is refused rather than read as an infinity (`TRAME-245`).
+#[test]
+fn a_literal_past_the_largest_number_is_refused() {
+    let digits = format!("1{}", "0".repeat(400));
+    assert!(parse_formula(&digits).is_err());
+    assert!(parse_formula(&format!("{digits}-1")).is_err());
+    // 300 digits are still a finite number.
+    assert!(parse_formula(&"9".repeat(300)).is_ok());
+}
+
 #[test]
 fn literal_number() {
     assert!(matches!(

@@ -130,8 +130,9 @@ pub enum SortOrder { #[default] Ascending, Descending }
 Two values of one type compare naturally: numbers numerically, text by code point, `false` before
 `true`. Two errors, and two empty cells, compare equal, so a stable sort leaves them in place
 (`TRAME-180`). A number that is not a number ranks with the errors, so the comparator stays a total
-order whatever a cell holds (`TRAME-181`). `POWER`, the one builtin that could build one, answers
-`#NUM!` instead.
+order whatever a cell holds (`TRAME-181`). No source builds one today. A function or an operator
+whose result is not finite answers `#NUM!` (`TRAME-244`). Text that spells one stays text
+(`TRAME-245`).
 
 **Steps, when a user sorts:**
 
@@ -201,7 +202,7 @@ makes the viewport re-fetch, so the grid repaints in the new order with the same
 | Concurrent sorts are resolved by last-writer-wins on the row order | merging the two permutations | it gives an order nobody asked for. A sort is one intent over one list, so electing the whole list at least yields an order a user did ask for |
 | The single-column sort takes no dialog | one dialog for both sorts | the two menu entries are the whole gesture, and a dialog for one column and one direction is two clicks for nothing |
 | A sort leaves the active cell and the selection at their positions (`TRAME-183`) | the selection following the rows it was drawn over | it is what Excel and Sheets do, and it is the one reading that holds for a lone cell: a selected cell following its row is a selection that moved. The sorted block is the same rectangle before and after |
-| A NaN ranks with the errors, and `POWER` refuses to build one (`TRAME-181`) | ruling one of the two alone | the source guard keeps a NaN out of a formula result, and the rank keeps the comparator total for a NaN the source did not make, such as a literal `NaN` typed as text a number parse accepts |
+| A NaN ranks with the errors, and `POWER` refuses to build one (`TRAME-181`) | ruling one of the two alone | the source guards keep a NaN out of a formula result and out of a cell's text (`TRAME-244`, `TRAME-245`), and the rank keeps the comparator total should a later source make one |
 | A sort orders the hidden rows too | Excel's rule, leaving filtered rows in place and sorting around them | the hidden mark is keyed by row identity, so it travels with its row and needs no recompute after the move; sorting around the gaps would need one |
 
 ---

@@ -3208,6 +3208,8 @@ ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains(
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::is_empty() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
+ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	the finite number a cell's text spells, inside the formula engine
+ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	local geometry / pixel arithmetic

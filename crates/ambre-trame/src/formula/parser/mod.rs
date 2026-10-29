@@ -41,10 +41,11 @@ where
 // Literals
 // -----------------------------------------------------------------------------
 
+/// A number literal. One past the largest number is refused (`TRAME-245`).
 fn number(input: &str) -> nom::IResult<&str, f64> {
-    map_res(
+    map_opt(
         recognize((opt(char('-')), digit1, opt((char('.'), digit1)))),
-        |s: &str| s.parse::<f64>(),
+        super::types::finite_number,
     )
     .parse(input)
 }
