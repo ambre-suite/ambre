@@ -175,24 +175,29 @@ impl TrameState {
         }
     }
 
+    /// Mint a fresh, peer-scoped row/column [`Uid`] (`trame-rows-and-columns`).
+    /// The pair
+    /// `(document PeerID, per-session counter)` is unique across peers, so
+    /// concurrent materialize/insert ops never collide. `None` once the session
+    /// has minted its last counter: a repeated uid would make two lines one.
+    pub(super) fn mint_uid(&mut self) -> Option<Uid> {
+        let Some(counter) = self.uid_counter else {
+            tracing::warn!("[Logic] the session has no fresh row or column uid; write dropped");
+            return None;
+        };
+        self.uid_counter = counter.next();
+        Some(Uid {
+            peer: ambre_core::PeerId(self.doc.peer_id()),
+            counter,
+        })
+    }
+
     /// Ensure the cell `at` is materialized (its row and column exist in the
     /// `rows_/cols_` lists) and return the `(row_lid, col_lid)` pair to key the
     /// cell with. Extends the dense used range by pushing placeholder elements,
     /// capturing each new element's stable id. Returns `None` -- dropping the
-    /// write -- if the jump past the high-water mark exceeds [`MATERIALIZE_CAP`].
-    /// Mint a fresh, peer-scoped row/column [`Uid`] (`trame-rows-and-columns`).
-    /// The pair
-    /// `(document PeerID, per-session counter)` is unique across peers, so
-    /// concurrent materialize/insert ops never collide.
-    pub(super) fn mint_uid(&mut self) -> Uid {
-        let uid = Uid {
-            peer: ambre_core::PeerId(self.doc.peer_id()),
-            counter: self.uid_counter,
-        };
-        self.uid_counter = self.uid_counter.incremented();
-        uid
-    }
-
+    /// write -- if the jump past the high-water mark exceeds [`MATERIALIZE_CAP`],
+    /// or if the session has no fresh uid.
     pub(super) fn materialize(&mut self, at: CellPos) -> Option<(Uid, Uid)> {
         let (rows, cols) = (self.index.row_len(), self.index.col_len());
         if at.row.count_from(rows.as_end()) >= MATERIALIZE_ROWS
@@ -206,7 +211,7 @@ impl TrameState {
         }
         let mut grew = false;
         while self.index.row_len().as_end() <= at.row {
-            let uid = self.mint_uid();
+            let uid = self.mint_uid()?;
             let rows = self
                 .doc
                 .get_movable_list(SheetContainer::of(SheetRoot::Rows, &self.active_sheet).as_str());
@@ -215,7 +220,7 @@ impl TrameState {
             grew = true;
         }
         while self.index.col_len().as_end() <= at.col {
-            let uid = self.mint_uid();
+            let uid = self.mint_uid()?;
             let cols = self
                 .doc
                 .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
@@ -332,9 +337,15 @@ impl TrameState {
                 return;
             }
             let Some((rl, cl)) = self.materialize(at) else {
-                // Beyond the materialization cap: the write is refused, and
-                // `finish_cell_writes` says so (`TRAME-UI-164`).
-                self.write_refusals.push(WriteRefusal::BeyondCap);
+                // Beyond the materialization cap, or out of fresh uids: the
+                // write is refused, and `finish_cell_writes` says so
+                // (`TRAME-UI-164`).
+                let refusal = if self.uid_counter.is_none() {
+                    WriteRefusal::IdsExhausted
+                } else {
+                    WriteRefusal::BeyondCap
+                };
+                self.write_refusals.push(refusal);
                 return;
             };
             // Bound once the cell's own lines exist, so a reference to its row
@@ -392,11 +403,12 @@ impl TrameState {
             .iter()
             .filter(|r| **r == WriteRefusal::BeyondCap)
             .count();
+        let spent = refusals.contains(&WriteRefusal::IdsExhausted);
         let mut unknown: Vec<SheetName> = refusals
             .into_iter()
             .filter_map(|r| match r {
                 WriteRefusal::UnknownSheet(name) => Some(name),
-                WriteRefusal::BeyondCap => None,
+                WriteRefusal::BeyondCap | WriteRefusal::IdsExhausted => None,
             })
             .collect();
         unknown.sort();
@@ -409,10 +421,22 @@ impl TrameState {
                 ),
             });
         }
+        if spent {
+            events.push(ids_exhausted());
+        }
         events.extend(unknown.into_iter().map(|name| TrameEvent::Error {
             message: format!("no sheet is named \"{name}\": the formula was not written"),
         }));
         events
+    }
+}
+
+/// The notice for a write that needs a new row or column after the session
+/// minted its last uid. A reopened sheet mints under a new PeerID.
+pub(super) fn ids_exhausted() -> TrameEvent {
+    TrameEvent::Error {
+        message: "this session has no fresh row or column id; reopen the sheet to add more"
+            .to_owned(),
     }
 }
 

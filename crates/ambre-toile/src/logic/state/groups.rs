@@ -26,10 +26,11 @@ impl ToileState {
     /// `NodeId` is inserted into `layers` just below its lowest member so the
     /// members keep painting above it in their current relative order.
     pub(super) fn group_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
-        let Some(id) = self.group_inner(ids) else {
-            // Fewer than two distinct members: refuse loudly, not in silence
-            // (`TOILE-055`).
-            return ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::GroupNeedsTwo)]);
+        // A refusal is loud, never silent (`TOILE-055`): fewer than two
+        // distinct members, or no fresh id.
+        let id = match self.group_inner(ids) {
+            Ok(id) => id,
+            Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
         };
         self.doc.commit();
         self.rematerialize_layers();
@@ -45,12 +46,14 @@ impl ToileState {
     }
 
     /// Bind `ids` into a fresh group element **without** committing, returning the
-    /// group id (or `None` when fewer than two distinct members survive filtering).
+    /// group id. The refusal is [`ToileError::GroupNeedsTwo`] when fewer than two
+    /// distinct members survive filtering, and [`ToileError::IdsExhausted`] when
+    /// the session has no fresh id.
     /// The caller owns the `doc.commit()` so an import rebuilds each `<g>` inside
     /// the one import undo group (`toile-import-export`). Intermediate cache reads
     /// (`prune_empty_groups`, `rematerialize_layers`) are pure and stay here so the
     /// `insert_at` computation sees the detached state.
-    pub(super) fn group_inner(&mut self, ids: &[ElementId]) -> Option<ElementId> {
+    pub(super) fn group_inner(&mut self, ids: &[ElementId]) -> Result<ElementId, ToileError> {
         // Keep only existing, distinct members, in the request order.
         let mut members: Vec<ElementId> = Vec::new();
         for id in ids {
@@ -73,7 +76,7 @@ impl ToileState {
             .cloned()
             .collect();
         if members.len() < 2 {
-            return None;
+            return Err(ToileError::GroupNeedsTwo);
         }
         // A member leaves every container it sat in, a frame included, since
         // it belongs to one at most (`TOILE-149`). When every member sat in one
@@ -110,17 +113,19 @@ impl ToileState {
             .min()
             .unwrap_or(0);
 
-        let id = self.mint_element_id();
-        let elems = self.doc.get_map(Root::Elements.as_str());
-        let Ok(em) = elems
+        let id = self.mint_element_id()?;
+        let refused = || ToileError::WriteFailed("the board refused the new group".to_owned());
+        let Ok(em) = self
+            .doc
+            .get_map(Root::Elements.as_str())
             .insert_container(id.as_str(), LoroMap::new())
             .map(Fields::<ElementKey>::of)
         else {
-            return None;
+            return Err(refused());
         };
         em_seed_group(&em);
         let Ok(children) = em.insert_container(ElementKey::Children, LoroMovableList::new()) else {
-            return None;
+            return Err(refused());
         };
         for m in &members {
             if children.push(m.as_str()).is_ok() {
@@ -140,7 +145,7 @@ impl ToileState {
             }
             self.enforce_frame_zorder(&f);
         }
-        Some(id)
+        Ok(id)
     }
 
     /// Drop each group's binding: remove the group node and re-parent its

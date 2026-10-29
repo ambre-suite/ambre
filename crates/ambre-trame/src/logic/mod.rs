@@ -118,6 +118,8 @@ enum WriteRefusal {
     BeyondCap,
     /// The formula qualifies a sheet no tab carries (`TRAME-211`).
     UnknownSheet(SheetName),
+    /// The cell needs a new line, and the session has no fresh uid.
+    IdsExhausted,
 }
 
 /// Per-document state for a Trame (spreadsheet) document.
@@ -241,8 +243,9 @@ pub struct TrameState {
     /// (`trame-rows-and-columns`): two peers that
     /// concurrently materialize/insert a line mint distinct uids that both
     /// survive. Not persisted -- once minted, a uid lives in the CRDT as the list
-    /// element's value.
-    uid_counter: ambre_core::IdCounter,
+    /// element's value. `None` once the session has minted `u32::MAX`: a
+    /// repeated uid would make two lines one.
+    uid_counter: Option<ambre_core::IdCounter>,
     /// Set once the first [`TrameCommand::ScrollViewport`] has been served. The
     /// UI thread has no dedicated "fetch sheet list" command. The first viewport
     /// request (sent on load) therefore rides a [`TrameEvent::SheetList`] back,
@@ -408,7 +411,7 @@ impl TrameState {
             edit_anchor: None,
             undo_manager,
             sheet_counter: 0,
-            uid_counter: ambre_core::IdCounter::ZERO,
+            uid_counter: Some(ambre_core::IdCounter::ZERO),
             sheet_list_sent: false,
             undecodable: std::cell::Cell::new(false),
             entry_end: None,

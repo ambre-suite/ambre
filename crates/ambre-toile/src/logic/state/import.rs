@@ -414,7 +414,7 @@ impl ToileState {
             let built = if members.len() < 2 {
                 None
             } else {
-                self.group_inner(&members)
+                self.group_inner(&members).ok()
             };
             if built.is_some() {
                 // Seed the fresh group's derived bounds now, so a later
@@ -437,14 +437,17 @@ impl ToileState {
             job.report.skip("connector: endpoint did not resolve");
             return;
         };
-        self.create_connector_inner(
+        // A refused connector is left out and reported, as a refused create.
+        if let Err(e) = self.create_connector_inner(
             from,
             conn.from_anch,
             to,
             conn.to_anch,
             conn.path_type,
             conn.arrows,
-        );
+        ) {
+            job.report.skip(format!("connector: {e}"));
+        }
     }
 
     /// Resolve an [`ImportRef`] to a live [`ElementId`], or `None` if its slot or

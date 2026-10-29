@@ -78,7 +78,7 @@ impl ToileState {
             return Err(ToileError::UnusableSize);
         }
 
-        let id = self.mint_element_id();
+        let id = self.mint_element_id()?;
         let elems = self.doc.get_map(Root::Elements.as_str());
         let Ok(em) = elems
             .insert_container(id.as_str(), LoroMap::new())
@@ -593,7 +593,10 @@ impl ToileState {
         points: Vec<StrokePoint>,
         style: ElementStyle,
     ) -> ToileOutcome {
-        let id = self.mint_element_id();
+        let id = match self.mint_element_id() {
+            Ok(id) => id,
+            Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
+        };
         // World AABB of the raw samples.
         let rect = stroke_aabb(&points);
         let elems = self.doc.get_map(Root::Elements.as_str());
@@ -709,7 +712,7 @@ mod inner_tests {
             ..ElementStyle::default()
         };
         assert!(st.restyle_inner(std::slice::from_ref(&a), &style));
-        assert!(st.group_inner(&[a, b]).is_some());
+        assert!(st.group_inner(&[a, b]).is_ok());
         st.doc.commit();
         st.rematerialize_layers();
         st.recompute_groups();
@@ -718,6 +721,48 @@ mod inner_tests {
         // One Undo removes the whole batch (creates + restyle + group).
         st.handle_command(ToileCommand::Undo);
         assert_eq!(st.element_count(), ambre_core::ElementCount::ZERO);
+    }
+
+    /// A session whose counter reached `u32::MAX` mints no further id. Each
+    /// create refuses, and the element that holds the last id keeps its box:
+    /// a repeated id would overwrite it.
+    #[test]
+    fn a_spent_counter_refuses_each_create_and_overwrites_nothing() {
+        use crate::logic::command::ToileError;
+        let mut st = ToileState::new();
+        let a = rect_at(&mut st, 0.0);
+        st.counter = ambre_bus::app::toile::IdCounter::new(u32::MAX - 1);
+        let last = rect_at(&mut st, 20.0);
+        assert!(last.as_str().ends_with("_ffffffff"));
+        st.doc.commit();
+        let refused = st.create_element_inner(
+            ElementKind::Shape(ShapeKind::Rect),
+            Point::new(90.0, 90.0),
+            Size::new(5.0, 5.0),
+            InitContent::None,
+            None,
+        );
+        assert_eq!(refused, Err(ToileError::IdsExhausted));
+        assert_eq!(
+            st.group_inner(&[a.clone(), last.clone()]),
+            Err(ToileError::IdsExhausted)
+        );
+        let pasted = st.handle_command(ToileCommand::DuplicateElements {
+            ids: vec![a],
+            delta: kurbo::Vec2::new(5.0, 5.0),
+        });
+        assert!(
+            pasted
+                .display
+                .iter()
+                .any(|e| matches!(e, ToileEvent::Error(ToileError::IdsExhausted)))
+        );
+        st.doc.commit();
+        assert_eq!(st.element_count(), ambre_core::ElementCount::new(2));
+        assert_eq!(
+            st.bounds.get(&last).map(|r| (r.x0, r.width())),
+            Some((20.0, 10.0))
+        );
     }
 
     /// A rect of `w` x 10 at `(x, y)`, committed on its own. Each fixture is

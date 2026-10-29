@@ -765,6 +765,9 @@ ambre-core | src/activity.rs | crate::activity | MAX_ANCHOR_LEN | const | usize	
 ambre-core | src/activity.rs | crate::activity | MAX_MENTIONS | const | usize	generic	bound / bit constant
 ambre-core | src/activity.rs | crate::activity | SummaryError::UnknownKind.0 | field | u8	newtype-inner	error carries the unknown byte
 ambre-core | src/authorship.rs | crate::authorship | ENTRY_SIGNATURE_LEN | const | usize	generic	length constant
+ambre-core | src/authorship.rs | crate::authorship | IdCounter.0 | field | u32	newtype-inner	the id part a minted id spells after its PeerID
+ambre-core | src/authorship.rs | crate::authorship | IdCounter::get() | ret | u32	newtype-inner	the newtype's own inside, for the hex an id spells
+ambre-core | src/authorship.rs | crate::authorship | IdCounter::new(n) | param | u32	newtype-inner	the newtype's own inside, as a stored id spells it
 ambre-core | src/authorship.rs | crate::authorship | OpCounter.0 | field | i32	newtype-inner	OpCounter newtype accessor, the Loro ID counter it wraps
 ambre-core | src/authorship.rs | crate::authorship | PEER_ENTRY_LEN | const | usize	generic	length constant
 ambre-core | src/authorship.rs | crate::authorship | PeerEntry::from_bytes(bytes) | param | &[u8]	generic	PeerEntry byte codec

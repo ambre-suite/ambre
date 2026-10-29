@@ -95,7 +95,9 @@ pub mod version;
 pub mod zoom;
 
 // Re-export the main types for convenient use.
-pub use authorship::{OpCounter, PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce};
+pub use authorship::{
+    IdCounter, OpCounter, PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce,
+};
 pub use canvas_id::CanvasId;
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, InvalidOpacity, Opacity, Rgb, Rgba};
@@ -173,7 +175,7 @@ pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
     UnreadableCause, WriteStatus,
 };
-pub use tally::{CellCount, ElementCount, IdCounter};
+pub use tally::{CellCount, ElementCount};
 pub use text_offset::{
     ByteCount, ByteDelta, ByteOffset, ByteSpan, ByteVec, CharCount, CharDelta, CharOffset,
     CharSpan, CharVec, Utf16Count, Utf16Delta, Utf16Offset, Utf16Span, Utf16Vec,

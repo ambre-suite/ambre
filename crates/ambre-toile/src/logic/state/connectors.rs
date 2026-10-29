@@ -51,21 +51,18 @@ impl ToileState {
             }
         }
         match self.create_connector_inner(from, from_anch, to, to_anch, path_type, arrows) {
-            Some(_) => {
+            Ok(_) => {
                 self.doc.commit();
                 self.emit_with_update(vec![self.viewport_event()])
             }
-            // Unreachable in practice: a container insert of a freshly minted,
-            // unique id never collides. Reported defensively as a failed
-            // write, since no connector id exists to name.
-            None => ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::WriteFailed(
-                "the board refused the new connector".to_owned(),
-            ))]),
+            Err(e) => ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
         }
     }
 
     /// Create one connector and push it onto the incremental layer cache, **without**
-    /// committing. Returns the minted id (or `None` if the container insert failed).
+    /// committing. Returns the minted id. The refusal is
+    /// [`ToileError::IdsExhausted`] when the session has no fresh id, and a
+    /// failed write when the container insert fails.
     /// The caller owns the `doc.commit()` so an import lands its connectors inside
     /// the one import undo group (`toile-import-export`).
     #[allow(clippy::too_many_arguments)]
@@ -77,14 +74,19 @@ impl ToileState {
         to_anch: Anchor,
         path_type: PathType,
         arrows: EndCaps,
-    ) -> Option<ConnectorId> {
-        let id = self.mint_connector_id();
+    ) -> Result<ConnectorId, ToileError> {
+        let id = self.mint_connector_id()?;
         let conns = self.doc.get_map(Root::Connectors.as_str());
         let Ok(cm) = conns
             .insert_container(id.as_str(), LoroMap::new())
             .map(Fields::<ConnectorKey>::of)
         else {
-            return None;
+            // Unreachable in practice: a container insert of a freshly minted,
+            // unique id never collides. Reported defensively as a failed
+            // write, since no connector id exists to name.
+            return Err(ToileError::WriteFailed(
+                "the board refused the new connector".to_owned(),
+            ));
         };
         write_connector(&cm, &from, from_anch, &to, to_anch, path_type, arrows);
         let _ = self
@@ -92,7 +94,7 @@ impl ToileState {
             .get_movable_list(Root::Layers.as_str())
             .push(NodeId::Connector(id.clone()).encode().as_str());
         self.layers.push(NodeId::Connector(id.clone()));
-        Some(id)
+        Ok(id)
     }
 
     pub(super) fn retarget_connector(

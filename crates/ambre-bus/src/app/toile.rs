@@ -2447,6 +2447,11 @@ pub enum ToileError {
     BooleanEmpty,
     #[error("the board engine could not write the change: {0}")]
     WriteFailed(String),
+    /// The session has minted every id its counter holds. A fresh id would
+    /// repeat one, and overwrite the thing that holds it. A reopened board
+    /// mints under a new PeerID.
+    #[error("this session has no fresh id left; reopen the board to create more")]
+    IdsExhausted,
 }
 
 // =============================================================================
@@ -2783,7 +2788,7 @@ mod tests {
             "000000000000001f_0000002a"
         );
         assert_eq!(
-            ConnectorId::mint(peer, counter.incremented()).as_str(),
+            ConnectorId::mint(peer, IdCounter::new(0x2b)).as_str(),
             "000000000000001f_0000002b"
         );
     }

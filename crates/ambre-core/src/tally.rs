@@ -72,9 +72,6 @@ macro_rules! define_tally {
 define_tally! {
     /// How many elements a selection, a board or an import holds.
     pub struct ElementCount;
-    /// How many ids one session has minted: the part of a Toile element id
-    /// or of a Trame row or column uid after its peer.
-    pub struct IdCounter;
 }
 
 /// How many cells a selection or a sheet holds of some kind. A sheet's cells

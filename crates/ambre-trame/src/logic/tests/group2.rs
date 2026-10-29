@@ -333,6 +333,49 @@ fn insert_row_shifts_cells_down() {
     );
 }
 
+/// A session that minted its last uid adds no line: a repeated uid would make
+/// two rows one. A cell write that needs a new row and a row insert both
+/// refuse, and say so. The rows minted before keep their own uids and cells.
+#[test]
+fn a_spent_uid_counter_refuses_new_lines_and_overwrites_nothing() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(0),
+        col: Col::new(0),
+        text: "top".to_owned(),
+    });
+    state.uid_counter = Some(ambre_core::IdCounter::new(u32::MAX));
+    state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(1),
+        col: Col::new(0),
+        text: "last".to_owned(),
+    });
+    assert_eq!(state.uid_counter, None);
+    let refused = |out: &TrameOutcome| {
+        out.display
+            .iter()
+            .any(|e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh row")))
+    };
+    let late = state.handle_command(TrameCommand::SetCellText {
+        row: Row::new(2),
+        col: Col::new(0),
+        text: "late".to_owned(),
+    });
+    assert!(refused(&late), "the write past the last uid says so");
+    let insert = state.handle_command(TrameCommand::InsertRow { at: Row::new(0) });
+    assert!(refused(&insert), "the insert past the last uid says so");
+    assert_eq!(read_cell(&mut state, 0, 0), "top");
+    assert_eq!(read_cell(&mut state, 1, 0), "last");
+    assert_eq!(read_cell(&mut state, 2, 0), "");
+    let rows = state.index.row_ids();
+    assert_eq!(rows.len(), RowCount::new(2));
+    assert_ne!(
+        rows.get(Row::new(0)),
+        rows.get(Row::new(1)),
+        "two rows, two uids"
+    );
+}
+
 /// Deleting a row shifts the rows below it up and drops the deleted row's
 /// cell content (no orphan entry resurfaces).
 #[test]

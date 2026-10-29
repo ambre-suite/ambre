@@ -85,7 +85,10 @@ impl ToileState {
                 return ToileOutcome::display_only(Vec::new());
             }
         };
-        let thread = self.mint_element_id();
+        let thread = match self.mint_element_id() {
+            Ok(id) => id,
+            Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
+        };
         let seeded = self.seed_thread(&thread, bytes, author, ts, body).is_some();
         // Commit in both outcomes. Loro carries an uncommitted op into the next
         // commit, so a partial seed would join the next user edit and land on

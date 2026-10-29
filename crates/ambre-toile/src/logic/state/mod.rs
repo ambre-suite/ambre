@@ -71,7 +71,7 @@ use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
 use ambre_bus::UserId;
-use ambre_bus::app::toile::ElementCount;
+use ambre_bus::app::toile::{ElementCount, IdCounter};
 use ambre_core::schema::SchemaError;
 use ambre_core::{HistoryStep, Rgba};
 
@@ -126,7 +126,7 @@ pub struct ToileState {
     /// the reads that would walk take `&self`.
     board_walks: Cell<u64>,
     /// Per-session monotonic id-minting counter.
-    counter: ambre_bus::app::toile::IdCounter,
+    counter: IdCounter,
     peer: ambre_core::PeerId,
     /// Last viewport the UI reported; drives culling.
     viewport: Viewport,
@@ -358,7 +358,7 @@ impl ToileState {
             wires: std::cell::RefCell::default(),
             wires_gone: std::cell::RefCell::default(),
             board_walks: Cell::new(0),
-            counter: ambre_bus::app::toile::IdCounter::ZERO,
+            counter: IdCounter::ZERO,
             peer: ambre_core::PeerId(peer),
             viewport: Viewport::default(),
             viewport_version: ambre_bus::ViewportVersion(0),
@@ -456,14 +456,20 @@ impl ToileState {
 
     // -- id minting -----------------------------------------------------
 
-    pub(super) fn mint_element_id(&mut self) -> ElementId {
-        self.counter = self.counter.incremented();
-        ElementId::mint(self.peer, self.counter)
+    /// The next id part of this session. A session past `u32::MAX` mints
+    /// nothing: a repeated id would overwrite the element that holds it.
+    fn next_counter(&mut self) -> Result<IdCounter, ToileError> {
+        let next = self.counter.next().ok_or(ToileError::IdsExhausted)?;
+        self.counter = next;
+        Ok(next)
     }
 
-    pub(super) fn mint_connector_id(&mut self) -> ConnectorId {
-        self.counter = self.counter.incremented();
-        ConnectorId::mint(self.peer, self.counter)
+    pub(super) fn mint_element_id(&mut self) -> Result<ElementId, ToileError> {
+        Ok(ElementId::mint(self.peer, self.next_counter()?))
+    }
+
+    pub(super) fn mint_connector_id(&mut self) -> Result<ConnectorId, ToileError> {
+        Ok(ConnectorId::mint(self.peer, self.next_counter()?))
     }
 
     // -- command dispatch ------------------------------------------------------

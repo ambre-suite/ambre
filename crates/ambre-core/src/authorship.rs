@@ -52,6 +52,45 @@ impl std::fmt::LowerHex for PeerId {
 #[serde(transparent)]
 pub struct OpCounter(pub i32);
 
+/// The part of a minted id after its PeerID: a Toile element or connector
+/// id, or a Trame row or column uid. One session mints each value once, so
+/// the pair with its PeerID names one thing.
+///
+/// An id part, not a tally: two mints of one value would give two things
+/// one id. So it has no step that holds at the top or wraps, only
+/// [`next`](Self::next), which ends at `u32::MAX`.
+/// `#[serde(transparent)]`, so it reads and writes the bare integer.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
+)]
+#[serde(transparent)]
+pub struct IdCounter(u32);
+
+impl IdCounter {
+    /// The first value of a session.
+    pub const ZERO: Self = Self(0);
+
+    /// The id part `n`, as a stored id spells it.
+    pub const fn new(n: u32) -> Self {
+        Self(n)
+    }
+
+    /// The value itself, for the hex an id spells.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+
+    /// The value after this one, or `None` past `u32::MAX`: the session has
+    /// no fresh id part left.
+    #[must_use]
+    pub const fn next(self) -> Option<Self> {
+        match self.0.checked_add(1) {
+            Some(n) => Some(Self(n)),
+            None => None,
+        }
+    }
+}
+
 /// 128 random bits drawn when a client opens a document (`AUTHOR-002`).
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct SessionNonce(pub [u8; SESSION_NONCE_LEN]);
@@ -172,6 +211,20 @@ impl PeerKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An id part steps to the next value and ends at the top, never back to
+    /// a value it gave. It crosses the wire as the bare number.
+    #[test]
+    fn an_id_counter_ends_at_the_top_and_crosses_the_wire_bare() {
+        assert_eq!(IdCounter::ZERO.next(), Some(IdCounter::new(1)));
+        assert_eq!(
+            IdCounter::new(u32::MAX - 1).next(),
+            Some(IdCounter::new(u32::MAX))
+        );
+        assert_eq!(IdCounter::new(u32::MAX).next(), None);
+        let bytes = postcard::to_allocvec(&IdCounter::new(7)).unwrap();
+        assert_eq!(bytes, postcard::to_allocvec(&7_u32).unwrap());
+    }
 
     #[test]
     fn an_entry_reads_back_and_a_truncated_one_does_not() {

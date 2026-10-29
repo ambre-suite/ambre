@@ -153,13 +153,22 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         }
         // Mint every fresh id up front so membership / connectors can remap slots
-        // to new ids before anything is written.
-        let new_ids: ClipSlotVec<ElementId> = (0..payload.elements.len())
+        // to new ids before anything is written. A session out of fresh ids
+        // thus refuses the whole paste, and writes nothing.
+        let new_ids: ClipSlotVec<ElementId> = match (0..payload.elements.len())
             .map(|_| self.mint_element_id())
-            .collect();
-        let new_conns: Vec<ConnectorId> = (0..payload.connectors.len())
+            .collect()
+        {
+            Ok(ids) => ids,
+            Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
+        };
+        let new_conns: Vec<ConnectorId> = match (0..payload.connectors.len())
             .map(|_| self.mint_connector_id())
-            .collect();
+            .collect()
+        {
+            Ok(ids) => ids,
+            Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
+        };
 
         let elems = self.doc.get_map(Root::Elements.as_str());
         let layers = self.doc.get_movable_list(Root::Layers.as_str());

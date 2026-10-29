@@ -69,7 +69,10 @@ impl ToileState {
         // Write the result element. `path` is stored in absolute world coords,
         // exactly as `derive::geom_for` reads it back (the element's rotation is
         // identity here, so no local/world reframe is needed).
-        let id = self.mint_element_id();
+        let id = match self.mint_element_id() {
+            Ok(id) => id,
+            Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
+        };
         let elems = self.doc.get_map(Root::Elements.as_str());
         let Ok(em) = elems
             .insert_container(id.as_str(), LoroMap::new())

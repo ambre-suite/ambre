@@ -59,8 +59,11 @@ what two peers reach, not what one holds. Grammar and status values are normativ
 
 One identity type serves rows, columns and sheets.
 
-* `Uid` is `{peer: u64, counter: u32}`, rendered `"{peer:016x}_{counter:08x}"` -- 25 characters.
+* `Uid` is `{peer: PeerId, counter: IdCounter}`, rendered `"{peer:016x}_{counter:08x}"` -- 25
+  characters.
 * `peer` is the document `PeerID`; `counter` is a per-session monotonic counter.
+* A session mints each counter once. Past `u32::MAX` it mints no uid, and the write that needs a
+  new line is refused, so a uid never repeats.
 * A cell key joins two halves with `:`: `"{row_uid}:{col_uid}"`, 51 characters, fixed length.
 * A `sheet_id` uses the same rendering, minted from the document `PeerID` and a sheet counter. The
   implicit first sheet is the constant `"s0"`.

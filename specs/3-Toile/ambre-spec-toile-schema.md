@@ -67,7 +67,9 @@ status values are normative in `ambre-spec-template.md`.
 One identity type serves elements, connectors, frames and comment threads.
 
 * `ElementId` is `"{peer:016x}_{counter:08x}"` -- 25 characters. `peer` is the document `PeerID`;
-  `counter` is a per-session monotonic counter.
+  `counter` is a per-session monotonic counter, an `IdCounter`.
+* A session mints each counter once. Past `u32::MAX` it mints no id, and the create is refused
+  with `ToileError::IdsExhausted`, so an id never repeats and never overwrites an element.
 * `ConnectorId` uses the same rendering and is a distinct type, so the compiler refuses one where
   the other is meant. `FrameId` and `TargetId` are aliases of `ElementId`.
 * A `layers` entry joins a tag and an id with `:`: `"E:{element_id}"` or `"C:{connector_id}"`.

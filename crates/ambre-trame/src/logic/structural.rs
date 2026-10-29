@@ -77,7 +77,9 @@ impl TrameState {
         };
         // The new line carries a freshly minted, move-invariant uid value
         // (`trame-rows-and-columns`).
-        let uid = self.mint_uid();
+        let Some(uid) = self.mint_uid() else {
+            return TrameOutcome::display_only(vec![super::cells::ids_exhausted()]);
+        };
         if self
             .line_list::<P>()
             .insert(index, uid.to_key_part().as_str())
