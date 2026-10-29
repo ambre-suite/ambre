@@ -37,8 +37,11 @@ fn open_blob(
     let address =
         MediaAddress::parse(content_hash).ok_or(SyncError::Malformed(Part::MediaAddress))?;
     let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)?;
-    let data = ambre_core::MediaBytes::new(data.to_plaintext());
+    // The media file keeps its bytes in the clear by role, so they move out
+    // of the wrapper with no copy. A blob the address refuses is wiped.
+    let data = ambre_core::MediaBytes::new(data.into_plaintext());
     if ambre_crypto::commitment::media_address(doc_key, &data) != address {
+        ambre_core::Secret::wipe(data.into_bytes());
         return Err(SyncError::BlobMismatch);
     }
     Ok(data)

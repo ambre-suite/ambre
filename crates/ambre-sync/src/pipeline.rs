@@ -295,9 +295,8 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     // one byte past the ceiling to distinguish "exactly at the limit" from
     // "over the limit". `take` caps the reader at `ceiling + 1` bytes.
     //
-    // A refused body leaves a partial plaintext in `out`. It drops under the
-    // wrapper, which wipes it: the wrapper is built only to drop. That wipe
-    // reaches `out` alone. The decoder's own block and window buffers, and
+    // A refused body leaves a partial plaintext in `out`, and `Secret::wipe`
+    // wipes it. That wipe reaches `out` alone. The decoder's own block and window buffers, and
     // each buffer `read_to_end` outgrows, drop unwiped, out of its reach.
     let mut out = Vec::new();
     let refusal = match decoder
@@ -309,7 +308,7 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
         Ok(read) if ByteSize::of_len(read) > ceiling => PipelineError::DecompressTooLarge,
         Ok(_) => return Ok(out),
     };
-    drop(ambre_core::Secret::new(out));
+    ambre_core::Secret::wipe(out);
     Err(refusal)
 }
 
@@ -321,10 +320,15 @@ fn seal_payload(
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<Sealed, PipelineError> {
+    // The body is a plaintext too, compressed or not. It is wiped once it is
+    // copied into the sealed plaintext, before the seal can fail. The sealed
+    // plaintext drops under its wrapper on every path. The zstd encoder's own
+    // buffers drop unwiped, out of reach of both.
     let (version, body) = compress(payload);
     let mut plaintext = Vec::with_capacity(1 + body.len());
     plaintext.push(version.byte());
     plaintext.extend_from_slice(&body);
+    ambre_core::Secret::wipe(body);
     let plaintext = ambre_core::SecretBytes::new(plaintext);
     Ok(envelope::seal(&plaintext, aad, doc_key, signing_key)?)
 }

@@ -423,8 +423,14 @@ pub(crate) fn open_name(
     let wanted = pipeline::object_key(sealed).ok()?;
     let key = crate::chain::find_key(document_id, current, &[], &chain, wanted)?;
     let plaintext = pipeline::open_object(sealed, &pipeline::name_aad(document_id), &key).ok()?;
-    let text = String::from_utf8(plaintext.to_plaintext()).ok()?;
-    ambre_core::Name::new(text).ok()
+    // The name is read in place and copied once it is taken, so a refused
+    // name leaves no copy behind. The wrapper wipes the opened bytes.
+    plaintext.with_plaintext(|bytes| {
+        let text = std::str::from_utf8(bytes)
+            .ok()
+            .filter(|text| ambre_core::name_fits(text))?;
+        ambre_core::Name::new(text).ok()
+    })
 }
 
 #[cfg(test)]
@@ -485,6 +491,37 @@ mod tests {
         );
         let past = "a".repeat(ambre_core::SealedName::MAX_CHARS + 1);
         assert_eq!(ambre_core::Name::new(past), Err(ambre_core::NameTooLong));
+    }
+
+    /// A sealed name that is no text, or that runs past the cap, opens to no
+    /// name. A member who seals one by hand gets the same answer as a forgery.
+    #[test]
+    fn a_sealed_name_that_is_no_text_or_past_the_cap_opens_to_none() {
+        let document_id = DocumentId::new();
+        let doc_key = DocumentKey::generate();
+        let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
+        let seal = |bytes: Vec<u8>| {
+            let sealed = pipeline::seal_object(
+                &ambre_core::SecretBytes::new(bytes),
+                &pipeline::name_aad(document_id),
+                &doc_key,
+                &signing_key,
+            )
+            .unwrap();
+            ambre_core::SealedName::new(sealed.into_bytes())
+        };
+        let at_cap = "a".repeat(ambre_core::NAME_MAX_CHARS);
+        let past = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);
+        let open =
+            |bytes: &[u8]| open_name(document_id, &doc_key, &seal(bytes.to_vec()), Vec::new());
+        assert_eq!(
+            open(at_cap.as_bytes())
+                .as_ref()
+                .map(ambre_core::Name::as_str),
+            Some(at_cap.as_str())
+        );
+        assert_eq!(open(past.as_bytes()), None);
+        assert_eq!(open(&[0xff, 0xfe]), None);
     }
 
     /// A name sealed three rotations ago opens with the current key and the
