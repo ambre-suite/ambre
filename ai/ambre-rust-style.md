@@ -46,7 +46,11 @@
       `enum`, its own representation. That covers the wire, the store, a DOM attribute, a CSS
       word and the name a foreign API knows it by.
     * The same reader sets `generic` for an `enum` that carries data. The site is its codec.
+      A struct that is no newtype takes `generic` too. That covers a CSS class it derives from
+      its fields, or the CSS variable name of each field.
     * A person sets `free-text`: a display label, or the words of an error message.
+    * A trait method that is a type's own spelling takes the spelling's category, not `trait`:
+      the `FromStr` or `TryFrom` of a fieldless `enum` is `newtype-inner`.
   * A SQL query, a Lua script and a whole markup document are `free-text`.
   * An error that echoes the refused raw value is `generic`, as is a count it gives of that
     value. That holds for the one field of a tuple variant of an error, which the gate would

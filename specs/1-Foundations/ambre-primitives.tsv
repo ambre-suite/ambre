@@ -66,7 +66,7 @@ ambre-app | src/landing.rs | crate::landing | open_document(navigate) | param | 
 ambre-app | src/landing.rs | crate::landing | rel_time() | ret | String	free-text	relative time label
 ambre-app | src/lib.rs | crate | CHILD_BACKLOG_LIMIT | const | usize	math	backlog count
 ambre-app | src/lib.rs | crate | ChromeStatus.hydrating | field | bool	generic	a fact that selects no mode: whether the first sync is still landing; the link itself is LinkState, and no caller writes it as a literal
-ambre-app | src/lib.rs | crate | ChromeStatus::dot_class() | ret | &'static str	free-text	css class
+ambre-app | src/lib.rs | crate | ChromeStatus::dot_class() | ret | &'static str	generic	the codec of a struct that is no newtype: the CSS class of the status dot, derived from both fields, which the stylesheet matches
 ambre-app | src/lib.rs | crate | ChromeStatus::label() | ret | &'static str	free-text	label
 ambre-app | src/lib.rs | crate | ChromeStatus::open_failed() | ret | Option<&'static str>	free-text	notice text
 ambre-app | src/lib.rs | crate | Wiring.filter_values | field | RwSignal<Vec<String>>	free-text	filter values text
@@ -661,11 +661,11 @@ ambre-canvas | src/theme.rs | crate::theme | Theme::from_u8(v) | param | u8	newt
 ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of ScaleName validates as snake_case
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
 ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	free-text	the Palette field name of each typed colour, written into the generated Rust module
-ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);13]	free-text	the CSS variable name of each typed colour, written into the generated files
-ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'static str,&dyn fmt::Display);4]	free-text	the CSS variable name of each typed effect, written into the generated stylesheet
+ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);13]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated files the stylesheets read
+ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'static str,&dyn fmt::Display);4]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed effect, written into the generated stylesheet
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.css | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.rust | field | String	free-text	a whole generated file: the stylesheet or the Rust module
-ambre-canvas | src/tokens.rs | crate::tokens | Photo::vars() | ret | [(&'static str,TokenColour);7]	free-text	the CSS variable name of each typed colour, written into the generated stylesheet
+ambre-canvas | src/tokens.rs | crate::tokens | Photo::vars() | ret | [(&'static str,TokenColour);7]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated stylesheet
 ambre-canvas | src/tokens.rs | crate::tokens | Px.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
 ambre-canvas | src/tokens.rs | crate::tokens | ScaleName.0 | field | String	newtype-inner	newtype inner, a scale name its constructor checked
 ambre-canvas | src/tokens.rs | crate::tokens | TokenError::Refused.0 | field | String	generic	the refusal message of the source
@@ -742,7 +742,7 @@ ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt() | ret 
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::contains() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::primary() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::shift() | ret | bool	generic	whether the set holds a named member, a predicate answer
-ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | param | &str	foreign-api	DOM KeyboardEvent.key string parsed into Key
+ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | param | &str	generic	the codec of an enum that carries data: the DOM KeyboardEvent.key name, which the caller reads and this parses into a Key
 ambre-commands | src/lib.rs | crate | Command.title | field | fn(&Locale)->String	free-text	text, label or user content
 ambre-commands | src/lib.rs | crate | CommandCategory.0 | field | &'static str	newtype-inner	newtype inner
 ambre-commands | src/lib.rs | crate | CommandId.0 | field | &'static str	newtype-inner	newtype inner
@@ -1931,8 +1931,8 @@ ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Rea
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::text(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | read(bytes) | param | &[u8]	math	count, size or local index
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | same_marks() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::close() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::open() | ret | &'static str	free-text	text content / label / parser input
+ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::close() | ret | String	generic	the codec of an enum that carries data: the markdown delimiter that closes a span, a link's target included, which a markdown parser reads back
+ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::open() | ret | &'static str	generic	the codec of an enum that carries data: the markdown delimiter that opens a span, which a markdown parser reads back
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer.out | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::block(indent) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::blocks(indent) | param | &str	free-text	text content / label / parser input
