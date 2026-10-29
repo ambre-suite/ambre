@@ -98,8 +98,8 @@ impl Rekey {
     pub(crate) fn record_sent(&mut self, sent: SentFrame) -> bool {
         self.sent.push_back(sent);
         let over = self.sent.len() > UNCONFIRMED_LIMIT;
-        if over {
-            self.sent.pop_front();
+        if over && let Some(forgotten) = self.sent.pop_front() {
+            forgotten.payload.wipe();
         }
         over
     }
@@ -111,7 +111,9 @@ impl Rekey {
         let Some((at, clock)) = self.position(signature) else {
             return;
         };
-        self.sent.drain(..=at);
+        for landed in self.sent.drain(..=at) {
+            landed.payload.wipe();
+        }
         self.failures = ambre_core::FailureCount::ZERO;
         if self.refused_from.is_some_and(|c| c <= clock) {
             self.refused_from = None;
@@ -174,7 +176,9 @@ impl Rekey {
     /// is the first refusal, the one to report.
     pub(crate) fn delta_refused(&mut self, signature: &Signature) -> bool {
         if let Some((at, _)) = self.position(signature) {
-            self.sent.truncate(at);
+            for dropped in self.sent.drain(at..) {
+                dropped.payload.wipe();
+            }
         }
         self.refused_from = None;
         self.failed = None;

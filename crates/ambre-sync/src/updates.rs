@@ -1017,8 +1017,10 @@ impl SyncState {
     /// created or owes a rotation. The body carries its nonce, so a frame
     /// sent again later keeps the PeerID it was written under.
     pub(crate) fn send_body(&mut self, document_id: DocumentId, body: UpdateFrame) {
+        // Each arm that drops the frame wipes it (`UpdateFrame::wipe`).
         let (Some(signing_key), Some(pub_key)) = (self.signing_key.clone(), self.author_pub_key())
         else {
+            body.wipe();
             return;
         };
         // Lazy server creation: a local-only doc materializes on its first update.
@@ -1039,6 +1041,7 @@ impl SyncState {
             // No session of this document: the update cannot reach the relay,
             // so the refusal is said aloud (`SYNC-069`).
             tracing::warn!("[Sync] SendUpdate for unknown doc {document_id:?}");
+            body.wipe();
             self.send_to_logic(LogicEvent::SyncWarning {
                 document_id,
                 code: SyncWarningCode::UpdateRefused,
@@ -1050,6 +1053,7 @@ impl SyncState {
         // on an edit the relay lacks (`SYNC-156`).
         if doc_state.rekey.holds_refused() {
             tracing::debug!("[Sync] edit held: doc={document_id} has a refused delta");
+            body.wipe();
             return;
         }
         // An owed rotation is paid before any frame: the edit waits unsealed,
@@ -1062,17 +1066,27 @@ impl SyncState {
         }
         doc_state.local_clock = doc_state.local_clock.next();
         let clock = doc_state.local_clock;
-        if let Some((key_id, signature)) =
+        let Some((key_id, signature)) =
             self.seal_and_send(document_id, clock, &body, &signing_key, pub_key)
-            && let Some(doc_state) = self.documents.get_mut(&document_id)
-            && doc_state.rekey.record_sent(SentFrame {
-                clock,
-                key_id,
-                signature,
-                payload: body,
-            })
-        {
-            tracing::warn!("[Sync] unconfirmed log full doc={document_id}, oldest forgotten");
+        else {
+            body.wipe();
+            return;
+        };
+        let sent = SentFrame {
+            clock,
+            key_id,
+            signature,
+            payload: body,
+        };
+        match self.documents.get_mut(&document_id) {
+            Some(doc_state) => {
+                if doc_state.rekey.record_sent(sent) {
+                    tracing::warn!(
+                        "[Sync] unconfirmed log full doc={document_id}, oldest forgotten"
+                    );
+                }
+            }
+            None => sent.payload.wipe(),
         }
     }
 

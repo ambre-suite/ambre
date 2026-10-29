@@ -156,10 +156,9 @@ pub struct UpdateBody {
 /// check. It holds document plaintext, so `Debug` prints the length alone.
 ///
 /// A frame is a transient on the way to the seal or out of the open: the
-/// delta it carries lives on as a [`ambre_core::DeltaBytes`]. So each frame
-/// wipes its bytes as it drops, through `Secret::wipe`. That covers the frame
-/// [`update_body`] builds once the seal has read it, and the opened frame
-/// [`split_update_body`] drops on success and on each refusal.
+/// delta it carries lives on as a [`ambre_core::DeltaBytes`]. The Sync worker
+/// runs no destructor (`ARCH-015`), so an owner that drops a frame wipes it
+/// through [`UpdateFrame::wipe`].
 #[derive(Clone, PartialEq, Eq)]
 pub struct UpdateFrame(Vec<u8>);
 
@@ -173,8 +172,13 @@ impl UpdateFrame {
     /// The framed bytes, owned, for a fuzz target that reads them back.
     #[cfg(any(test, feature = "fuzz"))]
     #[must_use]
-    pub fn into_bytes(mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0)
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.0
+    }
+
+    /// Wipes the frame as its owner drops it, through `Secret::wipe`.
+    pub(crate) fn wipe(self) {
+        ambre_core::Secret::wipe(self.0);
     }
 
     /// How many bytes it holds.
@@ -194,12 +198,6 @@ impl UpdateFrame {
 impl std::fmt::Debug for UpdateFrame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "UpdateFrame({} bytes)", self.0.len())
-    }
-}
-
-impl Drop for UpdateFrame {
-    fn drop(&mut self) {
-        ambre_core::Secret::wipe(std::mem::take(&mut self.0));
     }
 }
 
@@ -239,7 +237,14 @@ pub fn update_body(
 /// [`PipelineError::ShortBody`], [`PipelineError::UnknownSummary`] and
 /// [`PipelineError::Summary`].
 pub fn split_update_body(body: UpdateFrame) -> Result<UpdateBody, PipelineError> {
-    let (nonce, rest) = SessionNonce::split_from(&body.0).ok_or(PipelineError::ShortBody)?;
+    // The frame is read in place, then wiped on success and on each refusal.
+    let split = split_frame(&body.0);
+    body.wipe();
+    split
+}
+
+fn split_frame(body: &[u8]) -> Result<UpdateBody, PipelineError> {
+    let (nonce, rest) = SessionNonce::split_from(body).ok_or(PipelineError::ShortBody)?;
     let (&marker, rest) = rest.split_first().ok_or(PipelineError::ShortBody)?;
     let (summary, delta) = match SummaryMarker::from_byte(marker)? {
         SummaryMarker::Absent => (None, rest),
