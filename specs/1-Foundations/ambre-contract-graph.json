@@ -4107,6 +4107,7 @@
   {"edge": "verified-by", "from": "TRAME-231", "to": "ambre_trame::logic::tests::group7::a_reader_that_sent_nothing_holds_no_history_of_its_own"},
   {"edge": "cites-section", "from": "TRAME-UI-077", "section": "4", "to": "2-Trame/features/ambre-spec-trame-find-replace.md"},
   {"edge": "verified-by", "from": "TRAME-UI-077", "to": "ambre_trame::logic::tests::group6::find_next_honors_case_and_whole_cell"},
+  {"edge": "verified-by", "from": "TRAME-UI-077", "to": "ambre_trame::logic::find::tests::case_insensitive_replace_meets_what_find_meets_over_a_final_sigma"},
   {"edge": "cites-section", "from": "TRAME-UI-078", "section": "3", "to": "2-Trame/features/ambre-spec-trame-find-replace.md"},
   {"edge": "verified-by", "from": "TRAME-UI-078", "to": "ambre_trame::logic::tests::group7::find_matches_the_formatted_value"},
   {"edge": "cites-section", "from": "TRAME-UI-079", "section": "3", "to": "2-Trame/features/ambre-spec-trame-find-replace.md"},
