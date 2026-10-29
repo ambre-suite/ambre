@@ -84,6 +84,14 @@ impl<T: Zeroize> Secret<T> {
     pub fn expose(&self) -> &T {
         &self.0
     }
+
+    /// Wipes `value` now: a plaintext that no wrapper holds and that its
+    /// owner drops, such as the bytes a refused parse hands back. Code
+    /// outside this module wipes a value through this call alone
+    /// (`ARCH-046`). A copy `value` left elsewhere is out of its reach.
+    pub fn wipe(mut value: T) {
+        value.zeroize();
+    }
 }
 
 impl<T: Zeroize + Default> Secret<T> {
@@ -221,6 +229,20 @@ impl SecretBytes {
     /// of `read`. What `read` builds from them is its own.
     pub fn with_plaintext<R>(&self, read: impl FnOnce(&[u8]) -> R) -> R {
         read(self.0.expose())
+    }
+
+    /// Moves the opened bytes out, with no copy, into a role that keeps them
+    /// in the clear by design. A media file and a CRDT state are such roles.
+    /// The receiver owns the bytes from here: it keeps them clear by
+    /// its role, or it wipes them itself. The wrapper is left empty, so its
+    /// own wipe finds nothing. A wrapper that another owner still shares
+    /// hands out a copy instead, and that owner keeps and wipes the original.
+    #[must_use]
+    pub fn into_plaintext(self) -> Vec<u8> {
+        match Arc::try_unwrap(self.0) {
+            Ok(mut alone) => std::mem::take(&mut *alone.0),
+            Err(shared) => shared.expose().clone(),
+        }
     }
 }
 
@@ -591,6 +613,34 @@ mod tests {
         let (lent, read) = plain.with_plaintext(|bytes| (bytes.as_ptr(), bytes.to_vec()));
         assert_eq!(lent, held);
         assert_eq!(read, b"plain");
+    }
+
+    #[test]
+    fn opened_bytes_move_out_with_no_copy() {
+        let plain = SecretBytes::new(b"plain".to_vec());
+        let held = plain.secret().expose().as_ptr();
+        let moved = plain.into_plaintext();
+        assert_eq!(moved.as_ptr(), held);
+        assert_eq!(moved, b"plain");
+    }
+
+    #[test]
+    fn shared_opened_bytes_move_out_as_a_copy_and_stay_with_the_other_owner() {
+        let plain = SecretBytes::new(b"plain".to_vec());
+        let other = plain.clone();
+        let held = other.secret().expose().as_ptr();
+        let copy = plain.into_plaintext();
+        assert_ne!(copy.as_ptr(), held);
+        assert_eq!(copy, b"plain");
+        assert_eq!(other.secret().expose().as_ptr(), held);
+        assert_eq!(other.secret().expose(), b"plain");
+    }
+
+    #[test]
+    fn a_value_handed_to_wipe_is_wiped_once() {
+        let wipes = Arc::new(AtomicU32::new(0));
+        Secret::wipe(Spy(Arc::clone(&wipes)));
+        assert_eq!(wipes.load(Ordering::Relaxed), 1);
     }
 
     /// The form each credential had on the wire before its wrapper: a
