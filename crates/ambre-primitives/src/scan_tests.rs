@@ -775,9 +775,6 @@ fn a_newtype_inner_line_is_refuted_off_a_single_field_struct() {
     let scan = scanned(
         "pub struct Rect { w: u32, h: u32 }\n\
          pub struct Row(u32);\n\
-         pub enum Key { Char(char) }\n\
-         pub enum Align { Left }\n\
-         impl Align { pub fn code(self) -> u8 { 0 } }\n\
          impl Rect { pub fn new(w: u32) -> Self { x() } }\n\
          define_layout_version! { pub enum Shape { V1 = 1 } }\n\
          impl Shape { pub fn get(self) -> u8 { 1 } }\n\
@@ -792,8 +789,6 @@ fn a_newtype_inner_line_is_refuted_off_a_single_field_struct() {
     );
     for item in [
         "Rect.w",
-        "Key::Char.0",
-        "Align::code()",
         "Rect::new(w)",
         "Shape::get()",
         "Row::MAX",
@@ -811,11 +806,104 @@ fn a_newtype_inner_line_is_refuted_off_a_single_field_struct() {
 fn a_newtype_inner_line_reads_the_type_its_own_module_declares() {
     let scan = scanned(
         "mod a { pub struct Media(String); impl Media { pub fn as_str(&self) -> &str { x() } } }\n\
-         mod b { pub enum Media { Image } impl Media { pub fn tag(self) -> &'static str { x() } } }",
+         mod b { pub enum Media { Image(Url) } impl Media { pub fn tag(self) -> &'static str { x() } } }",
     );
     assert_eq!(scan.newtype_inner(&site(&scan, "Media.0")), Ok(()));
     assert_eq!(scan.newtype_inner(&site(&scan, "Media::as_str()")), Ok(()));
     assert!(scan.newtype_inner(&site(&scan, "Media::tag()")).is_err());
+}
+
+#[test]
+fn a_newtype_inner_line_holds_on_the_codec_of_a_fieldless_enum() {
+    let scan = scanned(
+        "pub enum Align { Left, Right = 2 }\n\
+         impl Align {\n\
+             pub fn from_byte(byte: u8) -> Option<Self> { None }\n\
+             pub fn parse(text: &str) -> Result<Align, Error> { x() }\n\
+             pub fn left_if(left: bool) -> Self { Align::Left }\n\
+             pub fn byte(self) -> u8 { 0 }\n\
+             pub fn as_str(&self) -> &'static str { \"left\" }\n\
+         }\n\
+         impl TryFrom<u8> for Align { fn try_from(value: u8) -> Result<Self, Self::Error> { x() } }",
+    );
+    for item in [
+        "Align::from_byte(byte)",
+        "Align::parse(text)",
+        "Align::left_if(left)",
+        "Align::byte()",
+        "Align::as_str()",
+        "<Align as TryFrom<u8>>::try_from(value)",
+    ] {
+        assert_eq!(scan.newtype_inner(&site(&scan, item)), Ok(()), "{item}");
+    }
+}
+
+#[test]
+fn a_newtype_inner_line_holds_on_the_one_field_of_a_tuple_variant() {
+    let scan = scanned(
+        "pub enum FontFamily { Serif, Other(String) }\n\
+         enum Key { Char(char), Code(u32) }",
+    );
+    for item in ["FontFamily::Other.0", "Key::Char.0", "Key::Code.0"] {
+        assert_eq!(scan.newtype_inner(&site(&scan, item)), Ok(()), "{item}");
+    }
+}
+
+#[test]
+fn a_newtype_inner_line_is_refuted_off_the_own_representation_of_an_enum() {
+    let scan = scanned(
+        "pub enum Font { Serif, Other(String) }\n\
+         impl Font {\n\
+             pub fn from_name(name: &str) -> Self { x() }\n\
+             pub fn name(&self) -> &str { x() }\n\
+         }\n\
+         pub enum Pair { Two(u8, u16), Named { x: u32 }, One { y: i64 } }\n\
+         pub union Bits { word: u32, half: u16 }\n\
+         pub enum Align { Left }\n\
+         impl Align {\n\
+             pub const MAX: u8 = 1;\n\
+             pub fn count() -> u8 { 1 }\n\
+             pub fn shift(self, step: i32) -> i32 { step }\n\
+         }",
+    );
+    let refusals = [
+        ("Font::from_name(name)", "carries data"),
+        ("Font::name()", "carries data"),
+        ("Pair::Two.0", "variant of Pair"),
+        ("Pair::Two.1", "variant of Pair"),
+        ("Pair::Named.x", "variant of Pair"),
+        ("Pair::One.y", "variant of Pair"),
+        ("Bits.word", "union"),
+        ("Align::MAX", "const"),
+        ("Align::count()", "takes no self"),
+        ("Align::shift(step)", "returns neither"),
+    ];
+    for (item, reason) in refusals {
+        let refusal = scan.newtype_inner(&site(&scan, item));
+        assert!(
+            refusal.as_ref().is_err_and(|text| text.contains(reason)),
+            "{item}: {refusal:?}"
+        );
+    }
+}
+
+#[test]
+fn a_newtype_inner_line_is_refuted_on_a_fieldless_enum_of_another_crate() {
+    let mut tree = demo(&[("src/lib.rs", "pub enum Align { Left, Right }")]);
+    tree.0
+        .insert(PathBuf::from(CRATES).join("user/Cargo.toml"), String::new());
+    tree.0.insert(
+        PathBuf::from(CRATES).join("user/src/lib.rs"),
+        "impl Line for demo::Align { fn index(&self) -> usize { 0 } }".to_owned(),
+    );
+    let scan = scan(&tree, Path::new(CRATES));
+    let refusal = scan.newtype_inner(&site(&scan, "<demo::Align as Line>::index()"));
+    assert!(
+        refusal
+            .as_ref()
+            .is_err_and(|reason| reason.contains("another crate")),
+        "{refusal:?}"
+    );
 }
 
 #[test]
@@ -918,7 +1006,7 @@ fn with_user(demo_lib: &str, user: &str) -> Scan {
     );
     tree.0.insert(
         PathBuf::from(CRATES).join("other/src/lib.rs"),
-        "pub enum Row { A, B }".to_owned(),
+        "pub enum Row { A(u8), B }".to_owned(),
     );
     tree.0.insert(
         PathBuf::from(CRATES).join("user/src/lib.rs"),
@@ -930,19 +1018,26 @@ fn with_user(demo_lib: &str, user: &str) -> Scan {
 #[test]
 fn a_newtype_inner_line_holds_in_an_impl_the_orphan_rule_places_in_the_trait_crate() {
     let scan = with_user(
-        "pub struct Row(u32);\npub struct Rect { w: u32, h: u32 }",
+        "pub struct Row(u32);\npub struct Rect { w: u32, h: u32 }\n\
+         pub enum Align { Left }\npub enum Font { Other(String) }",
         "pub trait Line { fn index(&self) -> usize; }\n\
          impl Line for demo::Row { fn index(&self) -> usize { 0 } }\n\
-         impl crate::Line for demo::Rect { fn index(&self) -> usize { 0 } }",
+         impl crate::Line for demo::Rect { fn index(&self) -> usize { 0 } }\n\
+         impl Line for demo::Align { fn index(&self) -> usize { 0 } }\n\
+         impl Line for demo::Font { fn index(&self) -> usize { 0 } }",
     );
-    assert_eq!(
-        scan.newtype_inner(&site(&scan, "<demo::Row as Line>::index()")),
-        Ok(())
-    );
-    assert!(
-        scan.newtype_inner(&site(&scan, "<demo::Rect as crate::Line>::index()"))
-            .is_err()
-    );
+    for item in [
+        "<demo::Row as Line>::index()",
+        "<demo::Align as Line>::index()",
+    ] {
+        assert_eq!(scan.newtype_inner(&site(&scan, item)), Ok(()), "{item}");
+    }
+    for item in [
+        "<demo::Rect as crate::Line>::index()",
+        "<demo::Font as Line>::index()",
+    ] {
+        assert!(scan.newtype_inner(&site(&scan, item)).is_err(), "{item}");
+    }
 }
 
 #[test]

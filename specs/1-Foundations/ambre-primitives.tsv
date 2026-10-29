@@ -1674,8 +1674,11 @@ ambre-primitives | src/scan.rs | crate::scan | Declared.traits | field | BTreeMa
 ambre-primitives | src/scan.rs | crate::scan | Declared::owns_root() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/scan.rs | crate::scan | Declared::owns_root(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::owns_trait() | ret | bool	generic	a predicate or a file read of the scanner
-ambre-primitives | src/scan.rs | crate::scan | Declared::single_field() | ret | Result<(),String>	free-text	error messages printed to the terminal
-ambre-primitives | src/scan.rs | crate::scan | Declared::single_field(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::own_representation() | ret | Result<(),String>	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Declared::own_representation(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Decl::holds() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | Decl::refusal() | ret | String	free-text	error messages printed to the terminal
+ambre-primitives | src/scan.rs | crate::scan | Decl::refusal(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | FileVisit.owner | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | FileVisit.types | field | Vec<(String,Declaration)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | FileVisit.traits | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name

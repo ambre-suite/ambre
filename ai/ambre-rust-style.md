@@ -41,7 +41,8 @@
   * A formula number is `math` inside the formula engine. It is a `CellNumber` once it crosses a
     public struct or the bus.
   * A closed set stays an `enum` on every path up to its display label. The site that turns the
-    `enum` into text for display or for the wire is `free-text`.
+    `enum` into text for display or for the wire is `free-text`. The spelling a fieldless `enum`
+    writes for the wire or the store may instead be `newtype-inner`, its own representation.
   * A SQL query, a Lua script and a whole markup document are `free-text`.
   * An error that echoes the refused raw value is `generic`.
   * A vertex layout that the GPU dictates is `foreign-api`. So is a constant that one foreign call
@@ -177,17 +178,30 @@
   The categories are a closed set, and no category means "to type later". A value still to type
   has no line, so the gate fails until the change types it.
   * A `foreign-api` line names the site of the foreign call, never an accessor that wraps it.
-  * A `newtype-inner` line names a site in the newtype's own impl. The newtype is a struct with
-    exactly one field, or a type that a workspace `define_*!` macro writes. A `PhantomData`
-    marker is not a field in that count. The orphan rule may put the impl of a workspace trait
-    for the newtype in the crate of the trait. That impl is the newtype's own too. The site is one
-    of three:
-    1. that field;
-    2. a parameter of an associated function of the newtype that returns `Self`, `Option<Self>`
-       or `Result<Self, _>`;
-    3. the return of a method of the newtype that takes `self` or `&self`.
+  * A `newtype-inner` line names the own representation of a type, in the type's own crate. The
+    type is one of three:
+    * a newtype: a struct with exactly one field, or a type that a workspace `define_*!` macro
+      writes. A `PhantomData` marker is not a field in that count;
+    * a fieldless `enum`: each of its variants is a unit variant;
+    * any `enum`, for the one field of a tuple variant with exactly one field.
 
-    An `enum`, a constant and a struct of two fields are never `newtype-inner`.
+    The orphan rule may put the impl of a workspace trait for the newtype or the fieldless `enum`
+    in the crate of the trait. That impl is the type's own too. The site is one of four:
+    1. the field of the newtype;
+    2. the one field of a tuple variant, as `FontFamily::Other(String)` holds it;
+    3. a parameter of an associated function of a newtype or a fieldless `enum` that returns
+       `Self`, `Option<Self>` or `Result<Self, _>`, as `from_byte(u8)`;
+    4. the return of a method of a newtype or a fieldless `enum` that takes `self` or `&self`,
+       as `byte(self) -> u8`.
+
+    These sites are never `newtype-inner`:
+    * a codec of an `enum` that carries data;
+    * a field of a variant with two fields, or with a named field;
+    * a field of a union, a constant, and a struct of two fields.
+
+    The gate checks the shape, never the meaning. A method can compute a derived value, such as
+    a ratio, a size or an index. That value is no representation, so its line takes its own
+    true category.
   * A `trait` line names a signature that the workspace cannot change. A trait the workspace does
     not own fixes it, or a generic bound the workspace cannot change. A closure or function
     pointer type that a foreign signature requires is `trait` too. A trait the workspace declares

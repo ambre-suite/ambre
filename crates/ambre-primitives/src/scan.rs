@@ -298,8 +298,8 @@ struct Place {
     /// The module path, as the key names it.
     module: String,
     kind: SiteKind,
-    /// The struct that declares the field. `None` for a field of an enum
-    /// variant or of a union, and for every other kind.
+    /// The struct that declares the field, or the enum of its variant.
+    /// `None` for a field of a union, and for every other kind.
     owner: Option<String>,
     /// The impl whose signature or constant the site is. `None` outside an
     /// impl, and in a body nested inside one.
@@ -464,7 +464,9 @@ enum Output {
     Itself,
 }
 
-/// What a type declaration is, as a newtype claim reads it.
+/// What a type declaration is, as a newtype claim reads it. A newtype and a
+/// fieldless enum have a codec of their own; the one field of a tuple
+/// variant is the representation of its variant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Decl {
     /// A struct with exactly one field, or a type a `define_*!` macro
@@ -472,7 +474,51 @@ enum Decl {
     Newtype,
     /// A struct with no field, or with two or more.
     Struct,
-    Enum,
+    /// An enum whose every variant is a unit variant.
+    FieldlessEnum,
+    /// An enum with a variant that holds a field.
+    DataEnum,
+}
+
+/// What part of a type's own representation a `newtype-inner` site claims.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Inside {
+    /// A field of a struct, or a field of a variant that is not the one
+    /// field of a tuple variant.
+    Field,
+    /// The one field of a tuple variant.
+    VariantValue,
+    /// A parameter of a constructor, or the return of a method.
+    Codec,
+}
+
+impl Decl {
+    /// Whether a site of `inside` is the own representation of this type.
+    fn holds(self, inside: Inside) -> bool {
+        matches!(
+            (self, inside),
+            (Self::Newtype, Inside::Field | Inside::Codec)
+                | (Self::FieldlessEnum, Inside::Codec)
+                | (Self::DataEnum, Inside::VariantValue)
+        )
+    }
+
+    /// Why a site of `inside` is not the own representation of `name`.
+    fn refusal(self, name: &str, inside: Inside) -> String {
+        match (self, inside) {
+            (Self::Struct, _) => format!("{name} is a struct with no field, or with two or more"),
+            (Self::DataEnum, Inside::Codec) => format!(
+                "{name} is an enum that carries data, not a struct with one field or a \
+                 fieldless enum"
+            ),
+            (Self::DataEnum, _) => format!(
+                "a field of a variant of {name} with a named field or two or more fields, not \
+                 the one field of a tuple variant"
+            ),
+            (Self::FieldlessEnum, _) => format!("{name} is a fieldless enum, which holds no field"),
+            (Self::Newtype, _) => format!("{name} is a struct, not an enum with a tuple variant"),
+        }
+    }
 }
 
 /// Which crates a newtype claim reads to find the type of an impl.
@@ -1289,14 +1335,20 @@ impl Declared {
         }
     }
 
-    /// Whether `name` is a struct with exactly one field, in the crate of
-    /// the site. The declaration in the module of the site wins; with none
-    /// there, every declaration of the crate must be one.
+    /// Whether a site of `inside` is the own representation of `name`, a
+    /// type of the crate of the site ([`Decl::holds`]). The declaration in
+    /// the module of the site wins; with none there, every declaration of
+    /// the crate must hold.
     ///
     /// Under [`Reach::TraitCrate`], a type the crate of the site lacks is
-    /// read in the crates it depends on. Every declaration there must be a
-    /// newtype.
-    fn single_field(&self, site: &Place, name: &str, reach: Reach) -> Result<(), String> {
+    /// read in the crates it depends on. Every declaration there must hold.
+    fn own_representation(
+        &self,
+        site: &Place,
+        name: &str,
+        reach: Reach,
+        inside: Inside,
+    ) -> Result<(), String> {
         let (krate, module) = (&site.krate, &site.module);
         let found = self.types.get(krate).and_then(|names| names.get(name));
         if found.is_none() && reach == Reach::TraitCrate {
@@ -1316,10 +1368,13 @@ impl Declared {
                 [] => Err(format!(
                     "{name} is no type of a crate {krate} depends on: an alias or a foreign type"
                 )),
-                decls if decls.iter().all(|decl| *decl == Decl::Newtype) => Ok(()),
-                _ => Err(format!(
-                    "{name} of another crate is not a struct with exactly one field"
-                )),
+                decls => match decls.iter().find(|decl| !decl.holds(inside)) {
+                    None => Ok(()),
+                    Some(decl) => Err(format!(
+                        "{name} of another crate: {}",
+                        decl.refusal(name, inside)
+                    )),
+                },
             };
         }
         let here: Option<Vec<Decl>> = found.map(|all| {
@@ -1341,13 +1396,10 @@ impl Declared {
             None => Err(format!(
                 "{name} is no type of {krate}: an alias or a foreign type"
             )),
-            Some(decls) if decls.iter().all(|decl| *decl == Decl::Newtype) => Ok(()),
-            Some(decls) if decls.contains(&Decl::Enum) => {
-                Err(format!("{name} is an enum, not a struct"))
-            }
-            Some(_) => Err(format!(
-                "{name} is a struct with no field, or with two or more"
-            )),
+            Some(decls) => match decls.iter().find(|decl| !decl.holds(inside)) {
+                None => Ok(()),
+                Some(decl) => Err(decl.refusal(name, inside)),
+            },
         }
     }
 }
@@ -1694,9 +1746,14 @@ impl<'ast> Visit<'ast> for BoolSeek {
 }
 
 impl Scan {
-    /// Checks the claim of a `newtype-inner` line (`ai/ambre-rust-style.md`).
-    /// The site sits in a struct with exactly one field. It is that field, a
-    /// parameter of a `fn` that returns the struct, or a method's return.
+    /// Checks the claim of a `newtype-inner` line (`ai/ambre-rust-style.md`):
+    /// the site is the own representation of its type. It is one of three:
+    ///
+    /// 1. the field of a struct with exactly one field, or the one field of
+    ///    a tuple variant;
+    /// 2. a parameter of a `fn` that returns a struct with one field or a
+    ///    fieldless enum, as `Self`, `Option<Self>` or `Result<Self, _>`;
+    /// 3. the return of a method of such a type.
     ///
     /// A key the scan did not find passes: the stale check reports it.
     ///
@@ -1709,16 +1766,26 @@ impl Scan {
             return Ok(());
         };
         match place.kind {
-            SiteKind::Field => match &place.owner {
-                Some(owner) => self.declared.single_field(place, owner, Reach::OwnCrate),
-                None => Err("a field of an enum variant or of a union, not of a struct".to_owned()),
-            },
+            SiteKind::Field => {
+                let inside = match place.role {
+                    FieldRole::VariantValue => Inside::VariantValue,
+                    FieldRole::Member => Inside::Field,
+                };
+                match &place.owner {
+                    Some(owner) => {
+                        self.declared
+                            .own_representation(place, owner, Reach::OwnCrate, inside)
+                    }
+                    None => Err("a field of a union, not of a struct or an enum".to_owned()),
+                }
+            }
             SiteKind::Param | SiteKind::Ret => {
                 let Some(host) = &place.host else {
                     return Err("a signature outside an impl, or nested in a body".to_owned());
                 };
                 let reach = self.declared.reach(place, host);
-                self.declared.single_field(place, &host.self_ty, reach)?;
+                self.declared
+                    .own_representation(place, &host.self_ty, reach, Inside::Codec)?;
                 match place.kind {
                     SiteKind::Param if host.output == Output::Itself => Ok(()),
                     SiteKind::Param => Err(format!(
@@ -4232,7 +4299,8 @@ struct FileVisit<'a> {
     children: Vec<Pending>,
     /// The impl item whose signature the visit reads, `None` elsewhere.
     host: Option<Host>,
-    /// The struct whose fields the visit reads, `None` elsewhere.
+    /// The struct or the enum whose fields the visit reads, `None`
+    /// elsewhere.
     owner: Option<String>,
     /// Every trait the file declares.
     traits: BTreeSet<String>,
@@ -4935,7 +5003,19 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         if test_only(&e.attrs) {
             return;
         }
-        self.declare(e.ident.to_string(), Decl::Enum);
+        // A variant behind a test `cfg` is out of every build the gate reads,
+        // so it holds no field that makes the enum carry data.
+        let carries = e
+            .variants
+            .iter()
+            .filter(|variant| !test_only(&variant.attrs))
+            .any(|variant| !variant.fields.is_empty());
+        let decl = if carries {
+            Decl::DataEnum
+        } else {
+            Decl::FieldlessEnum
+        };
+        self.declare(e.ident.to_string(), decl);
         self.generics.push(generic_names(&e.generics));
         for variant in e
             .variants
@@ -4951,12 +5031,14 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                 }
                 _ => FieldRole::Member,
             };
+            self.owner = Some(e.ident.to_string());
             self.fields(
                 &format!("{}::{}", e.ident, variant.ident),
                 &variant.fields,
                 privacy(&e.vis),
                 derived(&e.attrs),
             );
+            self.owner = None;
             self.role = FieldRole::Member;
         }
         self.generics.pop();
