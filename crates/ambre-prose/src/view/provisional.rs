@@ -37,12 +37,26 @@ pub struct Splitting {
 
 /// What the provisional runs were shaped from: the draft, the layout, the
 /// split and the text held behind it.
-type Key = (
-    crate::ui::DraftGeneration,
-    LayoutVersion,
-    Option<Splitting>,
-    String,
-);
+///
+/// The held text is document content, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq)]
+struct Key {
+    generation: crate::ui::DraftGeneration,
+    version: LayoutVersion,
+    splitting: Option<Splitting>,
+    held: String,
+}
+
+impl std::fmt::Debug for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Key")
+            .field("generation", &self.generation)
+            .field("version", &self.version)
+            .field("splitting", &self.splitting)
+            .field("held_len", &self.held.len())
+            .finish()
+    }
+}
 
 /// The provisional runs, and what they were shaped from.
 #[derive(Clone, Debug, Default)]
@@ -118,12 +132,12 @@ impl ProseUiState {
     }
 
     fn provisional_key(&self) -> Key {
-        (
-            self.draft.generation(),
-            self.layout_version,
-            self.splitting,
-            self.held_text(),
-        )
+        Key {
+            generation: self.draft.generation(),
+            version: self.layout_version,
+            splitting: self.splitting,
+            held: self.held_text(),
+        }
     }
 
     /// Whether the provisional runs read what the view shows now.
@@ -135,7 +149,7 @@ impl ProseUiState {
     /// frame draws them then, so a press reads them even when an input
     /// replayed since has made them stale.
     fn provisional_drawn(&self) -> bool {
-        self.provisional.key.as_ref().map(|key| key.1) == Some(self.layout_version)
+        self.provisional.key.as_ref().map(|key| key.version) == Some(self.layout_version)
     }
 
     /// The provisional run a frame draws for `block`, fresh or not.

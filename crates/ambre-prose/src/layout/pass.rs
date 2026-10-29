@@ -154,12 +154,26 @@ pub const NOTE_GAP: DocPx = DocPx::new(4.0);
 /// the caret reads a note like any other text (`PROSE-UI-187`).
 /// One reachable note: its id, its ordinal, its text and the marked spans
 /// of it (`PROSE-UI-207`).
-pub(crate) type NoteKey = (
-    FootnoteId,
-    FootnoteOrdinal,
-    String,
-    Vec<crate::layout::measure::MarkedSpan>,
-);
+///
+/// The text is document content, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq)]
+pub(crate) struct NoteKey {
+    id: FootnoteId,
+    ordinal: FootnoteOrdinal,
+    text: String,
+    marks: Vec<crate::layout::measure::MarkedSpan>,
+}
+
+impl std::fmt::Debug for NoteKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NoteKey")
+            .field("id", &self.id)
+            .field("ordinal", &self.ordinal)
+            .field("text_len", &self.text.len())
+            .field("marks", &self.marks)
+            .finish()
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct NotePlan {
@@ -193,7 +207,12 @@ impl NotePlan {
                 let (text, marks) = note::body(document, &id)
                     .map(|body| crate::layout::measure::marked_text(&body))
                     .unwrap_or_default();
-                (id, ordinal, text, marks)
+                NoteKey {
+                    id,
+                    ordinal,
+                    text,
+                    marks,
+                }
             })
             .collect()
     }
@@ -215,7 +234,13 @@ impl NotePlan {
         let mut numbers = HashMap::with_capacity(key.len());
         let mut texts = Vec::with_capacity(key.len());
         let mut notes = HashMap::with_capacity(key.len());
-        for (id, ordinal, text, marks) in &key {
+        for NoteKey {
+            id,
+            ordinal,
+            text,
+            marks,
+        } in &key
+        {
             let Some(block) = note::block(document, id) else {
                 continue;
             };

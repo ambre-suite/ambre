@@ -297,11 +297,47 @@ const BAR_KEYS: [MarkRoot; 5] = [
     MarkRoot::Code,
 ];
 
+/// What the runs folded so far say of one bar key. The bar reads whether
+/// some run carries the key and whether some run lacks it, never how many.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum KeySeen {
+    /// No run folded yet.
+    #[default]
+    Unseen,
+    /// Every run folded carries the key.
+    AllOn,
+    /// No run folded carries the key.
+    AllOff,
+    /// Some runs carry the key and some lack it.
+    Mixed,
+}
+
+impl KeySeen {
+    /// What the fold says once one more run, which carries the key or not,
+    /// is folded in.
+    fn with(self, carried: bool) -> Self {
+        match (self, carried) {
+            (Self::Unseen | Self::AllOn, true) => Self::AllOn,
+            (Self::Unseen | Self::AllOff, false) => Self::AllOff,
+            _ => Self::Mixed,
+        }
+    }
+
+    /// The state the bar shows for the key.
+    fn state(self) -> TriState {
+        match self {
+            Self::Unseen | Self::AllOff => TriState::Off,
+            Self::AllOn => TriState::On,
+            Self::Mixed => TriState::Mixed,
+        }
+    }
+}
+
 /// What the selected runs carry, run by run.
 #[derive(Default)]
 struct MarkFold {
-    /// Per bar key: how many runs carry it, and how many do not.
-    counts: [(u32, u32); 5],
+    /// Per bar key: whether the runs carry it.
+    seen: [KeySeen; 5],
     /// The link every run carries so far: `None` before the first run, and
     /// `Some(None)` once two runs disagree or one carries none.
     link: Option<Option<ambre_core::LinkUrl>>,
@@ -309,12 +345,8 @@ struct MarkFold {
 
 impl MarkFold {
     fn take(&mut self, marks: &MarkSet) {
-        for (key, (on, off)) in BAR_KEYS.iter().zip(self.counts.iter_mut()) {
-            if marks.contains_key(key.as_str()) {
-                *on += 1;
-            } else {
-                *off += 1;
-            }
+        for (key, seen) in BAR_KEYS.iter().zip(self.seen.iter_mut()) {
+            *seen = seen.with(marks.contains_key(key.as_str()));
         }
         let this = marks
             .get(MarkRoot::Link.as_str())
@@ -328,12 +360,7 @@ impl MarkFold {
     }
 
     fn finish(self) -> ActiveMarks {
-        let state = |(on, off): (u32, u32)| match (on, off) {
-            (0, _) => TriState::Off,
-            (_, 0) => TriState::On,
-            _ => TriState::Mixed,
-        };
-        let [bold, italic, underline, strikethrough, code] = self.counts.map(state);
+        let [bold, italic, underline, strikethrough, code] = self.seen.map(KeySeen::state);
         ActiveMarks {
             bold,
             italic,
@@ -400,6 +427,30 @@ pub(crate) mod tests {
     use crate::logic::ProseState;
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::prose::DocSpan;
+
+    /// The fold of one key reads as the count of the runs that carry it and
+    /// of the runs that lack it. Every order of up to four runs holds it.
+    #[test]
+    fn a_folded_key_reads_as_the_counts_of_its_runs() {
+        use super::KeySeen;
+        use ambre_bus::app::prose::TriState;
+        for runs in 0_u32..(1 << 4) {
+            for len in 0..=4 {
+                let carried: Vec<bool> = (0..len).map(|at| runs & (1 << at) != 0).collect();
+                let on = carried.iter().filter(|c| **c).count();
+                let off = carried.len() - on;
+                let counted = match (on, off) {
+                    (0, _) => TriState::Off,
+                    (_, 0) => TriState::On,
+                    _ => TriState::Mixed,
+                };
+                let folded = carried
+                    .iter()
+                    .fold(KeySeen::Unseen, |seen, c| seen.with(*c));
+                assert_eq!(folded.state(), counted, "{carried:?}");
+            }
+        }
+    }
 
     fn document_with_text(text: &str) -> (ProseState, crate::events::BlockId) {
         let mut state = ProseState::new().expect("a document is built");
