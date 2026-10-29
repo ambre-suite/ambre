@@ -460,7 +460,8 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
             let at = stored.at(3)?;
             let stored_widths = doc::col_widths(&tree, id);
             let content = PageBox::from_mm(doc::read_page_format(&reader.doc)).content_width;
-            let widths = column_widths(&stored_widths, stored_widths.len(), content);
+            let cols = crate::events::grid::ColCount::from_len(stored_widths.len());
+            let widths = column_widths(&stored_widths, cols, content);
             format!("column {} is {} px wide", at + 1, widths.get(at)?.get())
         }
         doc::AttrKey::Merged => {

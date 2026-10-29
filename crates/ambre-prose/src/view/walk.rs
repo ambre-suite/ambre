@@ -139,14 +139,19 @@ pub struct PageView<'v> {
 pub struct PageWalk<'t> {
     pub(crate) runs: &'t mut RunCache,
     /// The highlights the last call drew.
-    pub(crate) highlights_walked: u64,
+    pub(crate) highlights_walked: HighlightCount,
+}
+
+ambre_core::define_tally! {
+    /// How many highlights a paint read.
+    pub struct HighlightCount;
 }
 
 impl DocumentWalk for PageWalk<'_> {
     type View<'v> = PageView<'v>;
 
     fn walk<S: DrawSurface>(&mut self, view: &PageView<'_>, region: Rect, surface: &mut S) {
-        self.highlights_walked = 0;
+        self.highlights_walked = HighlightCount::ZERO;
         surface.push_clip(region);
         for page in view.pages {
             let bounds = Rect::new(
@@ -218,7 +223,7 @@ impl PageWalk<'_> {
             block.insertion.as_slice(),
         );
         for mark in &block.highlights {
-            self.highlights_walked = self.highlights_walked.saturating_add(1);
+            self.highlights_walked = self.highlights_walked.incremented();
             for rect in data.range_boxes(mark.span) {
                 let rect = to_rect(placed, &rect);
                 surface.fill_rect(rect, palette.highlight(mark.kind));

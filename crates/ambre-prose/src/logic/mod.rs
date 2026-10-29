@@ -102,6 +102,18 @@ pub const WINDOW_PAGES: PageCount = PageCount::new(8);
 /// (`PROSE-UI-212`).
 pub const WINDOW_MARGIN: PageCount = PageCount::new(4);
 
+/// What a layout handed to the view was computed from. Two layouts of one
+/// basis are the same picture.
+#[derive(Debug, PartialEq)]
+struct LayoutBasis {
+    /// The document's state.
+    frontiers: loro::Frontiers,
+    /// How many faces the layout was shaped on.
+    faces: FaceCount,
+    /// The pages it carries.
+    window: PageSpan,
+}
+
 /// The per-document Prose engine.
 pub struct ProseState {
     /// The CRDT, private and named by no public signature (`PROSE-001`).
@@ -164,7 +176,7 @@ pub struct ProseState {
     /// What the last layout handed to the view was computed from: the
     /// document's state and how many faces it was shaped on. A layout from the
     /// same basis is the same picture, so it is not handed over twice.
-    handed: Option<(loro::Frontiers, usize, PageSpan)>,
+    handed: Option<LayoutBasis>,
     /// The pages the view last asked for (`PROSE-125`).
     window: PageSpan,
     /// The version stamped on the last layout handed over. It only grows, even
@@ -343,7 +355,7 @@ impl ProseState {
         let paginator = self.paginator.get_or_insert_with(|| {
             let mut paginator = Paginator::new();
             for bytes in faces {
-                paginator.register_faces(bytes.as_bytes().to_vec());
+                paginator.register_faces(bytes.clone());
             }
             paginator
         });
@@ -401,7 +413,11 @@ impl ProseState {
     /// nothing out and sends nothing.
     pub fn layout_event(&mut self) -> Option<ProseEvent> {
         self.doc.commit();
-        let basis = (self.doc.state_frontiers(), self.faces.len(), self.window);
+        let basis = LayoutBasis {
+            frontiers: self.doc.state_frontiers(),
+            faces: self.face_count(),
+            window: self.window,
+        };
         if self.handed.as_ref() == Some(&basis) {
             return None;
         }
@@ -452,7 +468,7 @@ impl ProseState {
     pub fn load_faces(&mut self, faces: &[ambre_core::FontBytes]) {
         for bytes in faces {
             if let Some(paginator) = self.paginator.as_mut() {
-                paginator.register_faces(bytes.as_bytes().to_vec());
+                paginator.register_faces(bytes.clone());
             }
             self.faces.push(bytes.clone());
         }

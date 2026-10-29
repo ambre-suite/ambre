@@ -23,8 +23,8 @@ use crate::view::caret::Spot;
 use crate::view::hit::{Fragment, cell_frame};
 pub use crate::view::walk::PagePalette;
 use crate::view::walk::{
-    BlockPaint, CellPaint, Insertion, PageItem, PagePaint, PageView, PageWalk, Placed, draw_shape,
-    to_rect,
+    BlockPaint, CellPaint, HighlightCount, Insertion, PageItem, PagePaint, PageView, PageWalk,
+    Placed, draw_shape, to_rect,
 };
 
 /// How far the shadow falls from the sheet.
@@ -276,12 +276,10 @@ impl ProseUiState {
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
-            highlights_walked: 0,
+            highlights_walked: HighlightCount::ZERO,
         };
         walk.walk(&view, region, surface);
-        self.highlights_walked = self
-            .highlights_walked
-            .saturating_add(walk.highlights_walked);
+        self.highlights_walked = self.highlights_walked.plus(walk.highlights_walked);
 
         for block in &frame.blocks {
             self.page_frame = camera * Affine::translate((0.0, block.top.get()));
@@ -1118,7 +1116,10 @@ mod tests {
         paint(&mut ui);
         let built = ui.column.built_pages(&ui.viewport).expect("a page");
         let drawn: usize = built.into_iter().map(|page| ui.blocks_on(page).len()).sum();
-        assert_eq!(ui.highlights_walked, drawn as u64);
+        assert_eq!(
+            ui.highlights_walked,
+            crate::view::walk::HighlightCount::of_len(drawn)
+        );
         assert!(drawn < ids.len());
     }
 
@@ -2132,7 +2133,7 @@ mod tests {
             let mut walked = RecordingSurface::new();
             PageWalk {
                 runs: &mut runs,
-                highlights_walked: 0,
+                highlights_walked: crate::view::walk::HighlightCount::ZERO,
             }
             .walk(&view, region, &mut walked);
             proptest::prop_assert!(walked.count(glyphs) > 0);

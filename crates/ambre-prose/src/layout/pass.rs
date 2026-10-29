@@ -17,7 +17,7 @@ use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
-use crate::events::grid::{CellPos, Col, Row, RowCount, RowSpan, RowVec};
+use crate::events::grid::{CellPos, Col, ColCount, Row, RowCount, RowSpan, RowVec};
 use crate::layout::geometry::PageBox;
 use crate::layout::measure::{BlockLine, BlockLineCount, EffectiveStyle, Measurer, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
@@ -701,7 +701,11 @@ fn table_metrics(
         return (empty, TableShape::default());
     };
     let cols = grid.cells.iter().map(Vec::len).max().unwrap_or(0);
-    let widths = column_widths(&doc::col_widths(tree, table), cols, content_width);
+    let widths = column_widths(
+        &doc::col_widths(tree, table),
+        ColCount::from_len(cols),
+        content_width,
+    );
     let mut col_x = Vec::with_capacity(cols + 1);
     col_x.push(DocPx::ZERO);
     for width in &widths {
@@ -792,20 +796,20 @@ fn table_metrics(
 /// Each column's width in pixels. The stored widths are points, one per
 /// column. A list that does not match the grid, or holds an unusable width,
 /// gives every column an equal share.
-pub(crate) fn column_widths(stored: &[Pt], cols: usize, content_width: DocPx) -> Vec<DocPx> {
-    let usable = stored.len() == cols
+pub(crate) fn column_widths(stored: &[Pt], cols: ColCount, content_width: DocPx) -> Vec<DocPx> {
+    let usable = ColCount::from_len(stored.len()) == cols
         && stored
             .iter()
             .all(|width| width.is_finite() && *width > Pt::ZERO);
     if usable {
         stored.iter().map(|width| width.to_doc_px()).collect()
     } else {
-        let share = if cols == 0 {
+        let share = if cols.is_zero() {
             content_width
         } else {
-            content_width / cols as f32
+            content_width / cols.get() as f32
         };
-        vec![share; cols]
+        vec![share; cols.to_usize()]
     }
 }
 

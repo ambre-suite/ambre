@@ -111,7 +111,7 @@ impl Paginator {
     ///
     /// The next reflow recomputes in full when the face covers a script an
     /// earlier run was missing (`PROSE-111`).
-    pub fn register_faces(&mut self, bytes: Vec<u8>) {
+    pub fn register_faces(&mut self, bytes: ambre_core::FontBytes) {
         self.measurer.register_faces(bytes);
     }
 
@@ -508,7 +508,7 @@ fn first_dirty_page(before: &[BlockLayout], after: &[BlockLayout]) -> PageIndex 
 pub(crate) fn shipped_paginator() -> Paginator {
     let mut paginator = Paginator::new();
     for bytes in crate::layout::fonts::shipped_faces() {
-        paginator.register_faces(bytes.into_bytes());
+        paginator.register_faces(bytes);
     }
     paginator
 }
@@ -790,7 +790,7 @@ mod convergence {
             let Ok(bytes) = std::fs::read(format!("{FONT_DIR}{file}")) else {
                 continue;
             };
-            paginator.register_faces(bytes);
+            paginator.register_faces(ambre_core::FontBytes::new(bytes));
         }
         paginator
     }
@@ -868,7 +868,7 @@ mod convergence {
         let Ok(bytes) = std::fs::read(format!("{FONT_DIR}NotoSansSC-Regular.otf")) else {
             return;
         };
-        paginator.register_faces(bytes);
+        paginator.register_faces(ambre_core::FontBytes::new(bytes));
         let layout = paginator.reflow(&document, &[]).clone();
         assert_eq!(
             paginator.shaped(),

@@ -397,7 +397,7 @@ pub struct ProseUiState {
     pub(crate) remote_at: HashMap<BlockId, Vec<RemoteCursor>>,
     /// How many highlights paints have read, for the tests to hold
     /// `PROSE-UI-020` against.
-    pub(crate) highlights_walked: u64,
+    pub(crate) highlights_walked: crate::view::walk::HighlightCount,
     /// A link target a press asked to open, until the host takes it
     /// (`PROSE-UI-071`).
     pub followed: Option<ambre_core::LinkUrl>,
