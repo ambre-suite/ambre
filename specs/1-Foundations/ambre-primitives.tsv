@@ -230,7 +230,7 @@ ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Sticky.0 | field
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Text.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementId.0 | field | String	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementId::as_str() | ret | &str	newtype-inner	ElementId/ConnectorId newtype and its mint
-ambre-bus | src/app/toile.rs | crate::app::toile | ElementKind::type_tag() | ret | &'static str	free-text	the persisted type tag: the enum turned into text for the store, where a shape carries data and spells no variant of its own
+ambre-bus | src/app/toile.rs | crate::app::toile | ElementKind::type_tag() | ret | &'static str	generic	the codec of an enum that carries data: the type tag the store holds and the reader matches back, where every shape maps to one tag
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::to_bytes() | ret | Vec<u8>	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::try_from_bytes(bytes) | param | &[u8]	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | FontSizeChoice::from_whole_points(points) | param | Option<u16>	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
@@ -461,8 +461,8 @@ ambre-canvas | src/editor.rs | crate::editor | offset_box(dx) | param | f64	math
 ambre-canvas | src/editor.rs | crate::editor | offset_box(dy) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | reads_geometry() | ret | bool	generic	predicate result
 ambre-canvas | src/editor.rs | crate::editor | Caret::shown_if(visible) | param | bool	newtype-inner	enum/newtype own accessor or constructor
-ambre-canvas | src/editor.rs | crate::editor | Extend::select_if(shift) | param | bool	newtype-inner	the computed bool the one constructor of Extendreads into its variant
-ambre-canvas | src/editor.rs | crate::editor | Stride::word_if(word) | param | bool	newtype-inner	the computed bool the one constructor of Stridereads into its variant
+ambre-canvas | src/editor.rs | crate::editor | Extend::select_if(shift) | param | bool	newtype-inner	the bool the one constructor of Extend reads into its variant
+ambre-canvas | src/editor.rs | crate::editor | Stride::word_if(word) | param | bool	newtype-inner	the bool the one constructor of Stride reads into its variant
 ambre-canvas | src/fatal.rs | crate::fatal | FATAL_MSG | static | Mutex<String>	free-text	text, label or message
 ambre-canvas | src/fatal.rs | crate::fatal | fatal_message() | ret | Option<String>	free-text	text, label or message
 ambre-canvas | src/fatal.rs | crate::fatal | signal_fatal(message) | param | &str	free-text	text, label or message
@@ -653,10 +653,10 @@ ambre-canvas | src/text_input.rs | crate::text_input | TYPING_ATTR | const | &st
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput.focus_requests | field | Rc<Cell<u32>>	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput::announce(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_input.rs | crate::text_input | TextInput::focus_requests() | ret | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/text_input.rs | crate::text_input | Typing::text_if(typing) | param | bool	newtype-inner	the computed bool the one constructor of Typingreads into its variant
+ambre-canvas | src/text_input.rs | crate::text_input | Typing::text_if(typing) | param | bool	newtype-inner	the bool the one constructor of Typing reads into its variant
 ambre-canvas | src/theme.rs | crate::theme | THEME_CSS | const | &str	free-text	text, label or message
 ambre-canvas | src/theme.rs | crate::theme | Theme::as_u8() | ret | u8	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/theme.rs | crate::theme | Theme::data_attr() | ret | &'static str	free-text	text, label or message
+ambre-canvas | src/theme.rs | crate::theme | Theme::data_attr() | ret | &'static str	newtype-inner	the enum's own word on the data-theme attribute, which the stylesheet matches
 ambre-canvas | src/theme.rs | crate::theme | Theme::from_u8(v) | param | u8	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of ScaleName validates as snake_case
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
@@ -681,7 +681,7 @@ ambre-canvas | src/view.rs | crate::view | InputEvent::Text.text | field | Strin
 ambre-canvas | src/view.rs | crate::view | PointerButton::from_dom(button) | param | i16	newtype-inner	the DOM PointerEvent.button number, which the enum's own constructor reads into its variant
 ambre-chrome | src/app_shell.rs | crate::app_shell | CanvasCell(label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/app_shell.rs | crate::app_shell | Panel.label | field | Signal<String>	free-text	text, label or user content
-ambre-chrome | src/app_shell.rs | crate::app_shell | ShellRegion::as_str() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
+ambre-chrome | src/app_shell.rs | crate::app_shell | ShellRegion::as_str() | ret | &'static str	newtype-inner	the enum's own word on the data-focus attribute, which the stylesheet matches
 ambre-chrome | src/app_shell.rs | crate::app_shell | Sidebar.label | field | String	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials() | ret | String	free-text	text, label or user content
 ambre-chrome | src/avatar.rs | crate::avatar | avatar_initials(name) | param | &str	free-text	text, label or user content
@@ -701,7 +701,7 @@ ambre-chrome | src/dialog.rs | crate::dialog | ModalHold::new(set) | param | imp
 ambre-chrome | src/format.rs | crate::format | FontSizeSelect(auto_label) | param | &'static str	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatControl.label | field | String	free-text	text, label or user content
 ambre-chrome | src/format.rs | crate::format | FormatToggle(label) | param | String	free-text	text, label or user content
-ambre-chrome | src/format.rs | crate::format | Pressed::aria() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
+ambre-chrome | src/format.rs | crate::format | Pressed::aria() | ret | &'static str	newtype-inner	the enum's own aria-pressed value, which the DOM attribute takes
 ambre-chrome | src/format.rs | crate::format | Pressed::from_bool(on) | param | bool	newtype-inner	the enum's own constructor from the bool it replaces, On or Off
 ambre-chrome | src/handler.rs | crate::handler | FilePick.unreadable | field | &'static str	free-text	text, label or user content
 ambre-chrome | src/handler.rs | crate::handler | ShellAction::CopyText.0 | field | String	newtype-inner	newtype inner
@@ -728,7 +728,7 @@ ambre-chrome | src/passphrase.rs | crate::passphrase | PassphraseRefusal::messag
 ambre-chrome | src/status.rs | crate::status | StatusLabel(label) | param | String	free-text	text, label or user content
 ambre-chrome | src/status.rs | crate::status | ZoomChip(title) | param | Option<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toast.message | field | String	free-text	text, label or user content
-ambre-chrome | src/toast.rs | crate::toast | ToastKind::class() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
+ambre-chrome | src/toast.rs | crate::toast | ToastKind::class() | ret | &'static str	newtype-inner	the enum's own CSS class, which the stylesheet matches
 ambre-chrome | src/toast.rs | crate::toast | Toasts::error(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::info(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | impl Into<String>	free-text	text, label or user content
@@ -814,7 +814,7 @@ ambre-core | src/crdt.rs | crate::crdt | CommitOrigin::as_str() | ret | &'static
 ambre-core | src/crdt.rs | crate::crdt | ContainerFamily::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed container family, which the application joins to an id
 ambre-core | src/crdt.rs | crate::crdt | ContainerName::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed root name, for the call that opens the container
 ambre-core | src/crdt.rs | crate::crdt | FieldKey::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed map key, for the call into the map
-ambre-core | src/doc_type.rs | crate::doc_type | <DocType as FromStr>::from_str(word) | param | &str	trait	signature fixed by the trait
+ambre-core | src/doc_type.rs | crate::doc_type | <DocType as FromStr>::from_str(word) | param | &str	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/doc_type.rs | crate::doc_type | <DocType as TryFrom<String>>::try_from(word) | param | String	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/doc_type.rs | crate::doc_type | DocType::as_str() | ret | &'static str	newtype-inner	DocType codec
 ambre-core | src/doc_type.rs | crate::doc_type | DocType::as_u8() | ret | u8	newtype-inner	DocType codec
@@ -877,14 +877,14 @@ ambre-core | src/envelope.rs | crate::envelope | Nonce.0 | field | [u8;24]	newty
 ambre-core | src/envelope.rs | crate::envelope | Signature.0 | field | [u8;64]	newtype-inner	envelope byte newtype
 ambre-core | src/error.rs | crate::error | DocTypeError::InvalidDiscriminant.0 | field | u8	generic	the refused value the error echoes
 ambre-core | src/error.rs | crate::error | DocTypeError::InvalidString.0 | field | String	generic	the refused value the error echoes
-ambre-core | src/error.rs | crate::error | PublicKeyError::InvalidLength.0 | field | usize	generic	the refused value the error echoes
+ambre-core | src/error.rs | crate::error | PublicKeyError::InvalidLength.0 | field | usize	generic	the length of the refused input, which the error echoes
 ambre-core | src/error.rs | crate::error | RoleError::InvalidDiscriminant.0 | field | u8	generic	the refused value the error echoes
 ambre-core | src/error.rs | crate::error | RoleError::InvalidString.0 | field | String	generic	the refused value the error echoes
-ambre-core | src/error.rs | crate::error | UuidError::InvalidLength.0 | field | usize	generic	the refused value the error echoes
+ambre-core | src/error.rs | crate::error | UuidError::InvalidLength.0 | field | usize	generic	the length of the refused input, which the error echoes
 ambre-core | src/error.rs | crate::error | VersionError::OutOfRange.0 | field | u8	generic	the refused value the error echoes
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint.0 | field | String	newtype-inner	KeyFingerprint newtype
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint::as_str() | ret | &str	newtype-inner	KeyFingerprint newtype
-ambre-core | src/font.rs | crate::font | <FontFamily as From<String>>::from(label) | param | String	free-text	a font family label as written, read into a known family or kept whole
+ambre-core | src/font.rs | crate::font | <FontFamily as From<String>>::from(label) | param | String	generic	the codec of an enum that carries data: a font family label as written, read into a known family or kept whole
 ambre-core | src/font.rs | crate::font | <FontSize as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize.0 | field | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::from_whole_points(points) | param | u16	newtype-inner	FontSize field, constructor or accessor
@@ -895,8 +895,8 @@ ambre-core | src/font.rs | crate::font | InvalidFontSize.0 | field | f32	newtype
 ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	newtype-inner	the one points-to-pixels ratio, private to ambre-core; only Pt::to_doc_px, DocPx::to_pt and FontSize::to_px read it
 ambre-core | src/font.rs | crate::font | <FontWeight as TryFrom<u16>>::try_from(value) | param | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/font.rs | crate::font | FontFamily::Other.0 | field | String	newtype-inner	FontFamily constructor or accessor
-ambre-core | src/font.rs | crate::font | FontFamily::from_label(label) | param | &str	free-text	a font family name as the store or the picker writes it; any name reads, an unknown one as Other
-ambre-core | src/font.rs | crate::font | FontFamily::label() | ret | &str	free-text	the font family name the store writes and the renderer resolves to a face
+ambre-core | src/font.rs | crate::font | FontFamily::from_label(label) | param | &str	generic	the codec of an enum that carries data: a font family name as the store or the picker writes it; any name reads, an unknown one as Other
+ambre-core | src/font.rs | crate::font | FontFamily::label() | ret | &str	generic	the codec of an enum that carries data: the font family name the store writes and the renderer resolves to a face
 ambre-core | src/font.rs | crate::font | FontFamily::picker_label() | ret | Option<&'static str>	free-text	label shown in the font picker
 ambre-core | src/font.rs | crate::font | FontWeight.0 | field | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/font.rs | crate::font | FontWeight::get() | ret | u16	newtype-inner	newtype inner, accessor or constructor
@@ -972,7 +972,7 @@ ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | par
 ambre-core | src/residency.rs | crate::residency | Held.pinned | field | bool	generic	a residency fact, whether the user pinned the document; it selects no mode and no caller writes it as a literal
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch
 ambre-core | src/residency.rs | crate::residency | ViewTick.0 | field | u64	newtype-inner	ViewTick newtype
-ambre-core | src/role.rs | crate::role | <Role as FromStr>::from_str(s) | param | &str	trait	signature fixed by the trait
+ambre-core | src/role.rs | crate::role | <Role as FromStr>::from_str(s) | param | &str	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/role.rs | crate::role | <Role as TryFrom<String>>::try_from(word) | param | String	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/role.rs | crate::role | <Role as std::convert::TryFrom<u8>>::try_from(value) | param | u8	newtype-inner	the discriminant byte the enum's own fallible constructor reads
 ambre-core | src/role.rs | crate::role | Role::as_str() | ret | &'static str	newtype-inner	Role codec (u8 discriminant / wire word)
@@ -1035,7 +1035,7 @@ ambre-core | src/span.rs | crate::span | Timestamp::to_i64_saturating() | ret | 
 ambre-core | src/span.rs | crate::span | UnixMillis.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | UnixSeconds.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | UnixSeconds::to_i64_saturating() | ret | i64	newtype-inner	time newtype accessor
-ambre-core | src/status.rs | crate::status | <SnapshotStatus as FromStr>::from_str(word) | param | &str	trait	signature fixed by the trait
+ambre-core | src/status.rs | crate::status | <SnapshotStatus as FromStr>::from_str(word) | param | &str	newtype-inner	the word the relay stores, which the enum's own fallible constructor reads
 ambre-core | src/status.rs | crate::status | HttpStatus.0 | field | u16	newtype-inner	HttpStatus field or accessor
 ambre-core | src/status.rs | crate::status | HttpStatus::is_client_error() | ret | bool	generic	predicate result
 ambre-core | src/status.rs | crate::status | HttpStatus::is_success() | ret | bool	newtype-inner	HttpStatus field or accessor
@@ -1115,10 +1115,10 @@ ambre-draw | src/kinetic.rs | crate::kinetic | Pan.panned | field | bool	generic
 ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_BLEND | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | ImageKey.0 | field | u64	newtype-inner	ImageKey inner
 ambre-draw | src/lib.rs | crate | ImageKey::from_address(address) | param | &str	newtype-inner	ImageKey constructor
-ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	enum's own name accessor
-ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static str	newtype-inner	the enum's own asset path, one per script, which the face fetch reads
+ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	the enum's own family name, the one the shaper's font database matches a face by
+ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static str	free-text	the same-origin font path the face fetch reads, a property of the script and no spelling of it, as BASE_FONTS holds the base ones
 ambre-draw | src/text.rs | crate::text | LazyFont::bit() | ret | u8	newtype-inner	ScriptSet bit
-ambre-draw | src/text.rs | crate::text | LazyFont::face_name() | ret | &'static str	newtype-inner	enum's own name accessor
+ambre-draw | src/text.rs | crate::text | LazyFont::face_name() | ret | &'static str	newtype-inner	the enum's own family name, the one the shaper's font database matches a face by
 ambre-draw | src/text.rs | crate::text | LazyFont::for_char(c) | param | char	generic	generic parser/reader/formatter over text
 ambre-draw | src/text.rs | crate::text | ScriptSet.0 | field | u8	newtype-inner	ScriptSet inner
 ambre-draw | src/text.rs | crate::text | ScriptSet::contains() | ret | bool	generic	predicate or handled-flag result
@@ -1302,7 +1302,7 @@ ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | re
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | PageVisibility::visible_if(visible) | param | bool	newtype-inner	the computed bool the one constructor of PageVisibilityreads into its variant
+ambre-murmure | src/chrome.rs | crate::chrome | PageVisibility::visible_if(visible) | param | bool	newtype-inner	the bool the one constructor of PageVisibility reads into its variant
 ambre-murmure | src/chrome.rs | crate::chrome | ROOT_LOST | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | SearchBox.open | field | bool	generic	state flag/predicate
@@ -1608,7 +1608,7 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::touch_move() | ret | bo
 ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Timestamp)->String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | WindowWidth::desktop_if(desktop) | param | bool	newtype-inner	the computed bool the one constructor of WindowWidthreads into its variant
+ambre-murmure | src/view.rs | crate::view | WindowWidth::desktop_if(desktop) | param | bool	newtype-inner	the bool the one constructor of WindowWidth reads into its variant
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::heard() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::is_new() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::left() | ret | bool	generic	state flag/predicate
@@ -1873,7 +1873,7 @@ ambre-prose | src/doc.rs | crate::doc | BodyKey.0 | field | String	newtype-inner
 ambre-prose | src/doc.rs | crate::doc | BodyKey::as_str() | ret | &str	foreign-api	the body root name, for the Loro call that opens it
 ambre-prose | src/doc.rs | crate::doc | CARRIER | const | char	free-text	text content / label / parser input
 ambre-prose | src/doc.rs | crate::doc | Orientation::agrees_with() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/doc.rs | crate::doc | Orientation::as_str() | ret | &'static str	free-text	text content / label / parser input
+ambre-prose | src/doc.rs | crate::doc | Orientation::as_str() | ret | &'static str	newtype-inner	the enum's own word, which the page map stores under its orientation key
 ambre-prose | src/doc.rs | crate::doc | carries_hiding() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | is_ancestor_of() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/doc.rs | crate::doc | is_aside() | ret | bool	generic	independent flag or predicate
@@ -2372,7 +2372,7 @@ ambre-server | src/error.rs | crate::error | AppError::caller_message() | ret | 
 ambre-server | src/error.rs | crate::error | AppError::is_infrastructure() | ret | bool	generic	predicate result
 ambre-server | src/error.rs | crate::error | ErrorBody.message | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | ErrorBody::json(message) | param | impl Into<String>	free-text	user text or error message
-ambre-server | src/error.rs | crate::error | Resource::as_str() | ret | &'static str	newtype-inner	enum's own as_str/label accessor
+ambre-server | src/error.rs | crate::error | Resource::as_str() | ret | &'static str	free-text	the words a refusal message names the resource by
 ambre-server | src/hot_tail.rs | crate::hot_tail | kept_after_move() | ret | usize	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch() | ret | Result<usize,AppError>	math	count
 ambre-server | src/hot_tail.rs | crate::hot_tail | move_to_batch(keep) | param | Option<usize>	math	count
@@ -2383,7 +2383,7 @@ ambre-server | src/main.rs | crate | parse_cors_origins(allowed) | param | &str	
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | Peer::forwarded(entry) | param | &str	free-text	one X-Forwarded-For entry before its parse: an address, or a socket address whose port is dropped
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::classify(path) | param | &str	generic	path classifier
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::fail_closed() | ret | bool	generic	predicate result
-ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	free-text	key prefix label of a closed enum
+ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | RateLimitCategory::prefix() | ret | &'static str	newtype-inner	the enum's own word, the prefix of the Redis key its counter is stored and read under
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | SLIDING_WINDOW_LUA | const | &str	free-text	Lua script text
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | client_peer(x_forwarded_for) | param | Option<&str>	free-text	the X-Forwarded-For header text before its parse: client_peer reads its first entry into an IpAddr at once
 ambre-server | src/payload.rs | crate::payload | Payload.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
@@ -2420,7 +2420,7 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | store_refusal(error) | para
 ambre-server | src/redis_ops.rs | crate::redis_ops | store_refusal(what) | param | &str	free-text	context label
 ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | ACQUIRE_LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | RotationDebt::owed_if(owed) | param | bool	newtype-inner	the computed bool the one constructor of RotationDebtreads into its variant
+ambre-server | src/redis_ops.rs | crate::redis_ops | RotationDebt::owed_if(owed) | param | bool	newtype-inner	the bool the one constructor of RotationDebt reads into its variant
 ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_callback(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
 ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_login(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_client(word) | param | &str	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
@@ -2488,7 +2488,7 @@ ambre-sync | src/http.rs | crate::http | HttpError::is() | ret | bool	generic	pr
 ambre-sync | src/http.rs | crate::http | HttpError::is_conflict() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | MasterKeyResponse::setup_owed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | MembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | Method::as_str() | ret | &'static str	newtype-inner	the enum's own HTTP method word, as the request spells it
+ambre-sync | src/http.rs | crate::http | Method::as_str() | ret | &'static str	free-text	the method word an HTTP error message names; the request takes gloo_net's own Method
 ambre-sync | src/http.rs | crate::http | QueryKey::as_str() | ret | &'static str	newtype-inner	the parameter name of a closed-set key, as the query string spells it
 ambre-sync | src/http.rs | crate::http | RelayHost.0 | field | String	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/http.rs | crate::http | RelayHost::is_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2893,7 +2893,7 @@ ambre-toile | src/ui/interop.rs | crate::ui::interop | IMPORT_ACCEPT | const | &
 ambre-toile | src/ui/interop.rs | crate::ui::interop | SKIPPED_NAMED | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/interop.rs | crate::ui::interop | accepts() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message() | ret | String	free-text	label, message or user text
-ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | Under::grabbable_if(grabbable) | param | bool	newtype-inner	the computed bool the one constructor of Underreads into its variant
+ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | Under::grabbable_if(grabbable) | param | bool	newtype-inner	the bool the one constructor of Under reads into its variant
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | coast() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/label.rs | crate::ui::label | ARCLEN_ACCURACY | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_H | const | f64	math	geometry, layout, count or size local to the algorithm
@@ -2910,7 +2910,7 @@ ambre-toile | src/ui/menu.rs | crate::ui::menu | DUPLICATE_NUDGE | const | f64	m
 ambre-toile | src/ui/menu.rs | crate::ui::menu | rect_contains_rect() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu_bar.rs | crate::ui::menu_bar | TOP_MENUS | const | &[(MenuId,&str)]	free-text	label, message or user text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor.0 | field | Cow<'static,str>	newtype-inner	CanvasCursor inner
-ambre-toile | src/ui/palette.rs | crate::ui::palette | Host::content_editable_if(editable) | param | bool	newtype-inner	the computed bool the one constructor of Hostreads into its variant
+ambre-toile | src/ui/palette.rs | crate::ui::palette | Host::content_editable_if(editable) | param | bool	newtype-inner	the bool the one constructor of Host reads into its variant
 ambre-toile | src/ui/palette.rs | crate::ui::palette | MOVE_PATHS | static | std::sync::LazyLock<String>	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | ROTATE_CURSOR | static | std::sync::LazyLock<String>	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | STICKY_CURSOR | const | &str	generic	CSS cursor text
@@ -2981,7 +2981,7 @@ ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_CONTAINS | const | &st
 ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_HOLDS | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | NUDGE_LARGE | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | NUDGE_SMALL | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/view.rs | crate::ui::view | Panel::open_if(open) | param | bool	newtype-inner	the computed bool the one constructor of Panelreads into its variant
+ambre-toile | src/ui/view.rs | crate::ui::view | Panel::open_if(open) | param | bool	newtype-inner	the bool the one constructor of Panel reads into its variant
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.announce_next_data | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.data_dirty | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.detected_mouse | field | bool	generic	local state flag or value, not a mode selector
@@ -3521,7 +3521,7 @@ ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::get() | re
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::new(value) | param | u64	newtype-inner	newtype inner, accessor or constructor
 ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice() | ret | &'static str	free-text	the sentence a toast shows the user for a lost reply
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
-ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	free-text	the style name the tree stores: the enum turned into text for the store
+ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	generic	the codec of an enum that carries data: the style name the tree stores and the lookup matches back
 ambre-prose | src/doc.rs | crate::doc | RefusalCause::sentence() | ret | &'static str	free-text	log and refusal sentence of the cause
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | <DefinedName as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	looks a name table up by the key text the document stores
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | DefinedName.0 | field | String	newtype-inner	the text of a validated defined name
@@ -3601,7 +3601,7 @@ ambre-core | src/member_count.rs | crate::member_count | MemberCount::get() | re
 ambre-core | src/member_count.rs | crate::member_count | MemberCount::is_shared() | ret | bool	generic	predicate result
 ambre-core | src/member_count.rs | crate::member_count | MemberCount::new(n) | param | u32	newtype-inner	the count MemberCount wraps
 ambre-core | src/member_count.rs | crate::member_count | MemberCountError.0 | field | i64	newtype-inner	the refused store count, kept for the message
-ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	newtype-inner	the computed bool the one constructor of Visibilityreads into its variant
+ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	newtype-inner	the bool the one constructor of Visibility reads into its variant
 ambre-core | src/secret.rs | crate::secret | <SecretString as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of SecretString wraps
 ambre-core | src/secret.rs | crate::secret | SecretString::new(text) | param | String	newtype-inner	secret newtype
 ambre-server | src/db/mod.rs | crate::db | decode_member_count(count) | param | i64	foreign-api	the COUNT(*) column sqlx reads, decoded to MemberCount at once
