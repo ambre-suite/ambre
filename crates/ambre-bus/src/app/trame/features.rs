@@ -11,7 +11,7 @@
 // engine-level `RangeDep` (`ambre-trame`) is not visible from the bus. The Logic thread
 // resolves these positions to stable ids when each feature's handler lands.
 // -----------------------------------------------------------------------------
-use super::{CellRect, ColCount, DateSerial, FormulaSource, SheetId};
+use super::{CellNumber, CellRect, ColCount, DateSerial, FormulaSource, SheetId};
 use ambre_core::Rgb;
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
@@ -155,20 +155,21 @@ pub enum RangeBounds {
     Inclusive,
 }
 
-/// A pair of number limits refused: one is not finite, or `min` exceeds `max`.
+/// A pair of number limits refused: `min` exceeds `max`. A limit that is not
+/// finite is no [`CellNumber`], so it is refused before.
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
-#[error("{min} to {max} is not a range of finite numbers, lowest first")]
+#[error("{min} to {max} is not a range lowest first")]
 pub struct InvalidNumberBounds {
-    pub min: f64,
-    pub max: f64,
+    pub min: CellNumber,
+    pub max: CellNumber,
 }
 
-/// The two limits of a number range: both finite, `min` at most `max`
+/// The two limits of a number range: two cell numbers, `min` at most `max`
 /// (`trame-cell-editing`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NumberBounds {
-    min: f64,
-    max: f64,
+    min: CellNumber,
+    max: CellNumber,
 }
 
 impl NumberBounds {
@@ -176,10 +177,9 @@ impl NumberBounds {
     ///
     /// # Errors
     ///
-    /// [`InvalidNumberBounds`] when either limit is NaN or infinite, or
-    /// when `min` exceeds `max`.
-    pub fn new(min: f64, max: f64) -> Result<Self, InvalidNumberBounds> {
-        if min.is_finite() && max.is_finite() && min <= max {
+    /// [`InvalidNumberBounds`] when `min` exceeds `max`.
+    pub fn new(min: CellNumber, max: CellNumber) -> Result<Self, InvalidNumberBounds> {
+        if min <= max {
             Ok(Self { min, max })
         } else {
             Err(InvalidNumberBounds { min, max })
@@ -187,12 +187,12 @@ impl NumberBounds {
     }
 
     /// The lower limit.
-    pub const fn min(self) -> f64 {
+    pub const fn min(self) -> CellNumber {
         self.min
     }
 
     /// The upper limit.
-    pub const fn max(self) -> f64 {
+    pub const fn max(self) -> CellNumber {
         self.max
     }
 }
@@ -246,25 +246,40 @@ pub enum ValidationOnInvalid {
 
 #[cfg(test)]
 mod tests {
-    use super::{NumberBounds, Percent};
+    use super::{CellNumber, InvalidNumberBounds, NumberBounds, Percent};
 
-    /// A number range keeps its two finite limits, lowest first, and
-    /// refuses a reversed pair or a limit that is not finite.
+    /// The range from `min` to `max`, each limit refused first when it is
+    /// no cell number.
+    fn range(min: f64, max: f64) -> Option<Result<NumberBounds, InvalidNumberBounds>> {
+        let min = CellNumber::new(min).ok()?;
+        let max = CellNumber::new(max).ok()?;
+        Some(NumberBounds::new(min, max))
+    }
+
+    /// A number range keeps its two finite limits, lowest first. A reversed
+    /// pair is refused by the range, a limit that is not finite by the cell
+    /// number it must be first.
     #[test]
     fn a_number_range_runs_between_two_finite_limits_lowest_first() {
-        let bounds = NumberBounds::new(-1.5, 2.0).expect("ordered finite limits");
-        assert_eq!((bounds.min(), bounds.max()), (-1.5, 2.0));
-        assert!(NumberBounds::new(3.0, 3.0).is_ok(), "one value is a range");
+        let bounds = range(-1.5, 2.0)
+            .expect("finite limits")
+            .expect("ordered limits");
+        assert_eq!((bounds.min().get(), bounds.max().get()), (-1.5, 2.0));
+        assert!(
+            matches!(range(3.0, 3.0), Some(Ok(_))),
+            "one value is a range"
+        );
+        let reversed = range(2.0, 1.0).expect("finite limits");
+        assert_eq!(
+            reversed.map_err(|e| (e.min.get(), e.max.get())),
+            Err((2.0, 1.0))
+        );
         for (min, max) in [
-            (2.0, 1.0),
             (f64::NAN, 1.0),
             (0.0, f64::INFINITY),
             (f64::NEG_INFINITY, 0.0),
         ] {
-            assert!(
-                NumberBounds::new(min, max).is_err(),
-                "{min} to {max} is refused"
-            );
+            assert!(range(min, max).is_none(), "{min} to {max} is refused");
         }
     }
 

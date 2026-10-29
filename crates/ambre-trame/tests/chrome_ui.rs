@@ -261,7 +261,7 @@ fn status_bar_renders_label_and_aggregates() {
     let container = mount_in_container(|| {
         let stats = RwSignal::new(Some(SelStats {
             count: ambre_bus::app::trame::CellCount::new(3),
-            numbers: ambre_bus::app::trame::NumericStats::of_all([1.0, 2.0, 3.0]),
+            numbers: totals(&[1.0, 2.0, 3.0]),
         }));
         let perf = RwSignal::new(PerfSnapshot::default());
         let zoom = RwSignal::new(ambre_chrome::ZoomFactor::ONE);
@@ -725,6 +725,15 @@ fn a_lost_edit_reaches_the_user() {
     root.remove();
 }
 
+/// The totals of `values`, each a finite cell number.
+fn totals(values: &[f64]) -> Option<ambre_bus::app::trame::NumericStats> {
+    ambre_bus::app::trame::NumericStats::of_all(
+        values
+            .iter()
+            .map(|&v| ambre_bus::app::trame::CellNumber::new(v).unwrap()),
+    )
+}
+
 /// Mount the status band over `stats` and return its text.
 fn status_text(stats: Option<SelStats>) -> String {
     let container = mount_in_container(move || {
@@ -757,7 +766,7 @@ fn a_selection_with_no_number_shows_no_numeric_aggregate() {
     }
     let text = status_text(Some(SelStats {
         count: ambre_bus::app::trame::CellCount::new(4),
-        numbers: Some(ambre_bus::app::trame::NumericStats::of(5.0)),
+        numbers: totals(&[5.0]),
     }));
     for present in ["Sum: 5", "Avg: 5", "Min: 5", "Max: 5", "Count: 4"] {
         assert!(text.contains(present), "{present} not in {text}");
@@ -771,12 +780,28 @@ fn a_selection_with_no_number_shows_no_numeric_aggregate() {
 fn an_aggregate_reads_whole_or_with_two_decimals() {
     let text = status_text(Some(SelStats {
         count: ambre_bus::app::trame::CellCount::new(3),
-        numbers: ambre_bus::app::trame::NumericStats::of_all([-2.0, 1.0 / 3.0, 9.5 - 1.0 / 3.0]),
+        numbers: totals(&[-2.0, 1.0 / 3.0, 9.5 - 1.0 / 3.0]),
     }));
     for present in ["Sum: 7.50", "Avg: 2.50", "Min: -2", "Max: 9.17"] {
         assert!(text.contains(present), "{present} not in {text}");
     }
     assert!(!text.contains("-2.00"), "{text}");
+}
+
+/// A sum past the largest finite number reads `#NUM!`, and so does its
+/// average, while the extremes read as numbers (`TRAME-UI-179`).
+#[wasm_bindgen_test]
+fn a_sum_past_the_largest_number_reads_num() {
+    let text = status_text(Some(SelStats {
+        count: ambre_bus::app::trame::CellCount::new(2),
+        numbers: totals(&[f64::MAX, f64::MAX]),
+    }));
+    for present in ["Sum: #NUM!", "Avg: #NUM!", "Count: 2"] {
+        assert!(text.contains(present), "{present} not in {text}");
+    }
+    for absent in ["inf", "NaN"] {
+        assert!(!text.contains(absent), "{absent} in {text}");
+    }
 }
 
 /// A refusal from the Logic thread reaches the user as a toast

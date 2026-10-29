@@ -26,7 +26,7 @@
 | `trame-rows-and-columns` | A user inserts a row above the one they are on, deletes the three they selected, or drags a column to another position. | implemented | 20 |  |
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | implemented | 23 |  |
 | `trame-sort` | A user orders a block of rows by one column, or by several in priority order. | implemented | 24 |  |
-| `trame-status-bar` | A user selects a block of cells and reads its total without writing a formula. | implemented | 11 |  |
+| `trame-status-bar` | A user selects a block of cells and reads its total without writing a formula. | implemented | 13 |  |
 | `trame-cell-editing` | A user types into a cell. | partial | 41 |  |
 | `trame-cell-merges` | A user joins a rectangle of cells into one block. | partial | 38 |  |
 | `trame-cell-rendering` | A label wider than its column runs over the empty cells beside it. | partial | 13 |  |
@@ -41,4 +41,4 @@
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 35 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 12 implemented, 13 partial, 0 design-only. 480 contract rows, 0 loose.**
+**25 features: 12 implemented, 13 partial, 0 design-only. 482 contract rows, 0 loose.**

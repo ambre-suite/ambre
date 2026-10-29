@@ -16,6 +16,7 @@
 // FormatBar, Find&Replace) -- not a canvas `DrawSurface` band.
 // ============================================================================
 
+use ambre_bus::app::trame::CellNumber;
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip, ZoomFactor};
 use leptos::prelude::*;
@@ -33,8 +34,13 @@ pub struct SelStats {
 }
 
 /// Format an aggregate value: an integer shows without decimals, otherwise two
-/// decimals (trailing zeros kept for stable width).
-fn fmt_num(v: f64) -> String {
+/// decimals (trailing zeros kept for stable width). A total past the largest
+/// finite number is `None` and reads `#NUM!`, as a formula whose arithmetic
+/// overflows does (`TRAME-UI-179`).
+fn fmt_num(v: Option<CellNumber>) -> String {
+    let Some(v) = v.map(CellNumber::get) else {
+        return "#NUM!".to_owned();
+    };
     if v.fract() == 0.0 && v.abs() < 1e15 {
         format!("{v:.0}")
     } else {
@@ -60,8 +66,8 @@ pub fn StatusBar(
                 view! {
                     <span class="stat">"Sum: " {fmt_num(n.sum())}</span>
                     <span class="stat">"Avg: " {fmt_num(n.avg())}</span>
-                    <span class="stat">"Min: " {fmt_num(n.min())}</span>
-                    <span class="stat">"Max: " {fmt_num(n.max())}</span>
+                    <span class="stat">"Min: " {fmt_num(Some(n.min()))}</span>
+                    <span class="stat">"Max: " {fmt_num(Some(n.max()))}</span>
                 }
             });
             view! {

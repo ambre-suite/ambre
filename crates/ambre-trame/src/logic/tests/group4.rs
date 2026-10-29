@@ -3,6 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use ambre_bus::app::trame::CellNumber;
 
 const COL_0: Col = Col::new(0);
 const COL_2: Col = Col::new(2);
@@ -615,14 +616,44 @@ fn selection_stats_aggregate_numeric_cells() {
             let numbers = numbers.expect("three numbers are selected");
             assert_eq!(count.get(), 4, "10/20/30/apple are non-empty");
             assert_eq!(numbers.count().get(), 3, "only 10/20/30 are numeric");
-            assert_eq!(numbers.sum(), 60.0);
-            assert_eq!(numbers.avg(), 20.0);
-            assert_eq!(numbers.min(), 10.0);
-            assert_eq!(numbers.max(), 30.0);
+            assert_eq!(numbers.sum().map(CellNumber::get), Some(60.0));
+            assert_eq!(numbers.avg().map(CellNumber::get), Some(20.0));
+            assert_eq!(numbers.min().get(), 10.0);
+            assert_eq!(numbers.max().get(), 30.0);
         }
         other => panic!("expected SelectionStats, got {other:?}"),
     }
     assert!(evts.update.is_none(), "a stats query is read-only");
+}
+
+/// A typed `NaN`, an infinity and a literal past the largest number parse as
+/// a value that is not finite. Each counts as a non-empty cell and enters no
+/// numeric aggregate (`TRAME-UI-178`).
+#[test]
+fn selection_stats_leaves_a_value_that_is_not_finite_out_of_the_totals() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["10", "NaN", "inf", "-inf", "1e999", "20"]);
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: Row::new(5),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
+    });
+
+    let evts = state.handle_command(TrameCommand::RequestSelectionStats);
+    match &evts.display[0] {
+        TrameEvent::SelectionStats { count, numbers } => {
+            let numbers = numbers.expect("two finite numbers are selected");
+            assert_eq!(count.get(), 6, "every cell is non-empty");
+            assert_eq!(numbers.count().get(), 2, "only 10 and 20 are totalled");
+            assert_eq!(numbers.sum().map(CellNumber::get), Some(30.0));
+            assert_eq!(numbers.min().get(), 10.0);
+            assert_eq!(numbers.max().get(), 20.0);
+        }
+        other => panic!("expected SelectionStats, got {other:?}"),
+    }
 }
 
 /// A disjoint selection reaches the Logic thread whole: a range intent styles
@@ -688,7 +719,7 @@ fn selection_stats_covers_the_whole_band() {
             let numbers = numbers.expect("two numbers are selected");
             assert_eq!(count.get(), 2, "the off-screen row is tallied");
             assert_eq!(numbers.count().get(), 2);
-            assert_eq!(numbers.sum(), 30.0);
+            assert_eq!(numbers.sum().map(CellNumber::get), Some(30.0));
         }
         other => panic!("expected SelectionStats, got {other:?}"),
     }
@@ -728,7 +759,7 @@ fn selection_stats_totals_a_disjoint_selection() {
             let numbers = numbers.expect("two numbers are selected");
             assert_eq!(count.get(), 2, "both rectangles are tallied");
             assert_eq!(numbers.count().get(), 2);
-            assert_eq!(numbers.sum(), 30.0);
+            assert_eq!(numbers.sum().map(CellNumber::get), Some(30.0));
         }
         other => panic!("expected SelectionStats, got {other:?}"),
     }

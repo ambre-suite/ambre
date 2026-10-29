@@ -107,8 +107,13 @@ impl TrameState {
     /// bar and a formula over the same cells read one total (`TRAME-FEAT-029`). `count` tallies non-empty cells;
     /// numeric cells additionally feed the `NumericStats` totals. A read-only
     /// query: no CRDT delta.
+    ///
+    /// A number that is not finite counts as a non-empty cell and enters no
+    /// total (`TRAME-UI-178`). The text of a cell comes from a keystroke, a
+    /// paste, an import or a peer. A literal such as `NaN` or `1e999` parses
+    /// as such a number.
     pub(super) fn selection_stats(&mut self) -> TrameOutcome {
-        use ambre_bus::app::trame::{CellCount, NumericStats};
+        use ambre_bus::app::trame::{CellCount, CellNumber, NumericStats};
         // Make sure evaluated values are current before reading them.
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
@@ -125,7 +130,9 @@ impl TrameState {
                 CellValue::Empty => {}
                 CellValue::Number(n) => {
                     count = count.incremented();
-                    numbers = Some(numbers.map_or_else(|| NumericStats::of(n), |s| s.with(n)));
+                    if let Ok(n) = CellNumber::new(n) {
+                        numbers = Some(numbers.map_or_else(|| NumericStats::of(n), |s| s.with(n)));
+                    }
                 }
                 _ => count = count.incremented(),
             }

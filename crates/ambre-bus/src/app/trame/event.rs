@@ -13,24 +13,83 @@ use ambre_core::{DocPx, Rgb};
 // Trame (spreadsheet) -- events (Logic -> UI)
 // -----------------------------------------------------------------------------
 
+/// A number a cell holds, as it crosses a public struct or the bus: always
+/// finite. The formula engine computes in `f64`, and a NaN or an infinity it
+/// yields, or a literal it parses, is no cell number (`trame-status-bar`).
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+pub struct CellNumber(f64);
+
+/// A value refused as a [`CellNumber`]: NaN or an infinity.
+#[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
+#[error("{0} is not a finite number")]
+pub struct NotACellNumber(pub f64);
+
+impl CellNumber {
+    /// The cell number `value`.
+    ///
+    /// # Errors
+    ///
+    /// [`NotACellNumber`] when `value` is NaN or infinite.
+    pub fn new(value: f64) -> Result<Self, NotACellNumber> {
+        if value.is_finite() {
+            Ok(Self(value))
+        } else {
+            Err(NotACellNumber(value))
+        }
+    }
+
+    /// The number, for the arithmetic and the formatting that read it.
+    #[must_use]
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+
+    /// The lower of the two numbers.
+    #[must_use]
+    pub fn min(self, other: Self) -> Self {
+        Self(self.0.min(other.0))
+    }
+
+    /// The higher of the two numbers.
+    #[must_use]
+    pub fn max(self, other: Self) -> Self {
+        Self(self.0.max(other.0))
+    }
+
+    /// The sum of the two numbers, `None` when it leaves the finite range.
+    #[must_use]
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        Self::new(self.0 + other.0).ok()
+    }
+}
+
+impl std::fmt::Display for CellNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// The totals of the numeric cells of a selection (`trame-status-bar`). There
 /// is always at least one number: a selection with none has no totals, so no
 /// aggregate is ever an empty one's zero.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumericStats {
     count: CellCount,
-    sum: f64,
-    min: f64,
-    max: f64,
+    /// `None` from the first partial sum past the largest finite number on.
+    /// A sum is no cell number once it overflows, and no later term makes
+    /// the running sum exact again.
+    sum: Option<CellNumber>,
+    min: CellNumber,
+    max: CellNumber,
 }
 
 impl NumericStats {
     /// The totals of the single number `n`.
     #[must_use]
-    pub fn of(n: f64) -> Self {
+    pub const fn of(n: CellNumber) -> Self {
         Self {
             count: CellCount::new(1),
-            sum: n,
+            sum: Some(n),
             min: n,
             max: n,
         }
@@ -38,17 +97,17 @@ impl NumericStats {
 
     /// The totals with one more number, `n`.
     #[must_use]
-    pub fn with(self, n: f64) -> Self {
+    pub fn with(self, n: CellNumber) -> Self {
         Self {
             count: self.count.incremented(),
-            sum: self.sum + n,
+            sum: self.sum.and_then(|sum| sum.checked_add(n)),
             min: self.min.min(n),
             max: self.max.max(n),
         }
     }
 
     /// The totals of `numbers`, `None` when there is none.
-    pub fn of_all(numbers: impl IntoIterator<Item = f64>) -> Option<Self> {
+    pub fn of_all(numbers: impl IntoIterator<Item = CellNumber>) -> Option<Self> {
         numbers.into_iter().fold(None, |stats, n| {
             Some(stats.map_or_else(|| Self::of(n), |stats: Self| stats.with(n)))
         })
@@ -60,24 +119,27 @@ impl NumericStats {
         self.count
     }
 
+    /// The sum, `None` when it overflows past the largest finite number.
     #[must_use]
-    pub const fn sum(&self) -> f64 {
+    pub const fn sum(&self) -> Option<CellNumber> {
         self.sum
     }
 
-    /// The sum over the count.
+    /// The sum over the count, `None` when the sum overflows. A finite sum
+    /// over a count of at least one stays finite.
     #[must_use]
-    pub fn avg(&self) -> f64 {
-        self.sum / self.count.as_f64()
+    pub fn avg(&self) -> Option<CellNumber> {
+        self.sum
+            .and_then(|sum| CellNumber::new(sum.get() / self.count.as_f64()).ok())
     }
 
     #[must_use]
-    pub const fn min(&self) -> f64 {
+    pub const fn min(&self) -> CellNumber {
         self.min
     }
 
     #[must_use]
-    pub const fn max(&self) -> f64 {
+    pub const fn max(&self) -> CellNumber {
         self.max
     }
 }
@@ -564,13 +626,50 @@ mod tests {
 
     /// Totals exist only over at least one number, and the average is the sum
     /// over the count.
+    fn numbers(values: &[f64]) -> Vec<CellNumber> {
+        values
+            .iter()
+            .map(|&v| CellNumber::new(v).expect("a finite number"))
+            .collect()
+    }
+
     #[test]
     fn numeric_totals_need_a_number_and_average_over_their_count() {
         assert_eq!(NumericStats::of_all([]), None);
-        let totals = NumericStats::of_all([10.0, -4.0, 6.0]).expect("three numbers");
+        let totals = NumericStats::of_all(numbers(&[10.0, -4.0, 6.0])).expect("three numbers");
         assert_eq!(totals.count().get(), 3);
-        assert_eq!(totals.sum(), 12.0);
-        assert_eq!(totals.avg(), 4.0);
-        assert_eq!((totals.min(), totals.max()), (-4.0, 10.0));
+        assert_eq!(totals.sum().map(CellNumber::get), Some(12.0));
+        assert_eq!(totals.avg().map(CellNumber::get), Some(4.0));
+        assert_eq!((totals.min().get(), totals.max().get()), (-4.0, 10.0));
+    }
+
+    /// A cell number is finite: NaN and both infinities are refused, and the
+    /// refusal echoes the value.
+    #[test]
+    fn a_cell_number_refuses_a_value_that_is_not_finite() {
+        assert_eq!(CellNumber::new(-0.5).map(CellNumber::get), Ok(-0.5));
+        assert_eq!(CellNumber::new(f64::MAX).map(CellNumber::get), Ok(f64::MAX));
+        for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            let refused = CellNumber::new(value).expect_err("not finite");
+            assert_eq!(refused.0.to_bits(), value.to_bits());
+        }
+    }
+
+    /// A sum past the largest finite number is an overflow, never an
+    /// infinity, and so is its average. The extremes stay exact
+    /// (`TRAME-UI-179`).
+    #[test]
+    fn a_sum_past_the_largest_number_is_an_overflow() {
+        let totals =
+            NumericStats::of_all(numbers(&[f64::MAX, f64::MAX, -f64::MAX])).expect("numbers");
+        assert_eq!(totals.sum(), None);
+        assert_eq!(totals.avg(), None);
+        assert_eq!(totals.count().get(), 3);
+        assert_eq!(
+            (totals.min().get(), totals.max().get()),
+            (-f64::MAX, f64::MAX)
+        );
+        let below = NumericStats::of_all(numbers(&[-f64::MAX, -f64::MAX])).expect("numbers");
+        assert_eq!(below.sum(), None, "an overflow below is one too");
     }
 }

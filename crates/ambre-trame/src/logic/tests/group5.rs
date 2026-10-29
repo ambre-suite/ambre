@@ -397,7 +397,12 @@ fn status_bar_total_matches_sum_under_a_filter() {
         text: "=SUM(B1:B3)".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 3), "3");
-    assert_eq!(numbers.map(|n| n.sum()), Some(3.0));
+    assert_eq!(
+        numbers
+            .and_then(|n| n.sum())
+            .map(ambre_bus::app::trame::CellNumber::get),
+        Some(3.0)
+    );
     assert_eq!(count.get(), 3);
 }
 
