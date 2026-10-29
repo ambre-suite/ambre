@@ -57,16 +57,16 @@ const BORDER_STYLES: &[(BorderStyle, &str, &str)] = &[
 /// clicks.
 #[component]
 pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
     // The nested line-style picker's open state (a sub-popover inside this one).
-    let line_open = RwSignal::new(false);
+    let line_open = RwSignal::new(ambre_chrome::Openness::Closed);
     // The wrapper node, so a global pointer-down can tell clicks inside the
     // popover apart from clicks elsewhere (another cell, the canvas, a sibling).
     let root_ref = NodeRef::<html::Span>::new();
     // Close on any pointer-down outside the control: selecting a cell hits the
     // canvas, which is outside this node, so the popover dismisses.
     let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
-        if !open.get_untracked() {
+        if open.get_untracked() == ambre_chrome::Openness::Closed {
             return;
         }
         let inside = root_ref
@@ -75,7 +75,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
             .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
             .is_some_and(|(root, node)| root.contains(Some(&node)));
         if !inside {
-            open.set(false);
+            open.set(ambre_chrome::Openness::Closed);
         }
     });
     on_cleanup(move || handle.remove());
@@ -95,15 +95,15 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
             <button
                 aria-label="Borders"
                 aria-haspopup="true"
-                aria-expanded=move || ambre_chrome::Openness::from_bool(open.get()).aria()
+                aria-expanded=move || open.get().aria()
                 // Keep the grid's focus: a button steals it on mousedown, which
                 // would clear the active cell before on:click can apply the colour.
                 on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = !*o)
+                on:click=move |_| open.update(|o| *o = o.toggled())
             >
                 <Icon icon=icondata::BsBorderAll />
             </button>
-            <Show when=move || open.get() fallback=|| ()>
+            <Show when=move || open.get() == ambre_chrome::Openness::Open fallback=|| ()>
                 <div class="ambre-borders-popover">
                     // Preset grid: each applies the pen to its edges.
                     <div class="grid">
@@ -131,12 +131,12 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                                 class="line-style-trigger"
                                 aria-label="Border style"
                                 aria-haspopup="true"
-                                aria-expanded=move || ambre_chrome::Openness::from_bool(line_open.get()).aria()
-                                on:click=move |_| line_open.update(|o| *o = !*o)
+                                aria-expanded=move || line_open.get().aria()
+                                on:click=move |_| line_open.update(|o| *o = o.toggled())
                             >
                                 <Icon icon=icondata::BsBorderStyle />
                             </button>
-                            <Show when=move || line_open.get() fallback=|| ()>
+                            <Show when=move || line_open.get() == ambre_chrome::Openness::Open fallback=|| ()>
                                 <div class="ambre-line-style-popover">
                                     {BORDER_STYLES
                                         .iter()
@@ -147,7 +147,7 @@ pub(crate) fn BordersPopover(style: StyleState, on_style: Callback<StylePatch>) 
                                                     aria-label=label
                                                     on:click=move |_| {
                                                         style.border_line.set(bs);
-                                                        line_open.set(false);
+                                                        line_open.set(ambre_chrome::Openness::Closed);
                                                     }
                                                 >
                                                     <span class="check">
@@ -222,14 +222,14 @@ pub(crate) fn NumberFormatPopover(
     style: StyleState,
     on_style: Callback<StylePatch>,
 ) -> impl IntoView {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
     // The wrapper node, so a global pointer-down can tell clicks inside the menu
     // apart from clicks elsewhere (another cell, the canvas, a sibling control).
     let root_ref = NodeRef::<html::Span>::new();
     // Close on any pointer-down outside the control: selecting a cell hits the
     // canvas, which is outside this node, so the menu dismisses.
     let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
-        if !open.get_untracked() {
+        if open.get_untracked() == ambre_chrome::Openness::Closed {
             return;
         }
         let inside = root_ref
@@ -238,7 +238,7 @@ pub(crate) fn NumberFormatPopover(
             .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
             .is_some_and(|(root, node)| root.contains(Some(&node)));
         if !inside {
-            open.set(false);
+            open.set(ambre_chrome::Openness::Closed);
         }
     });
     on_cleanup(move || handle.remove());
@@ -247,15 +247,15 @@ pub(crate) fn NumberFormatPopover(
             <button
                 aria-label="Number format"
                 aria-haspopup="true"
-                aria-expanded=move || ambre_chrome::Openness::from_bool(open.get()).aria()
+                aria-expanded=move || open.get().aria()
                 // Keep the grid's focus: a button steals it on mousedown, which
                 // would clear the active cell before on:click can apply the colour.
                 on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = !*o)
+                on:click=move |_| open.update(|o| *o = o.toggled())
             >
                 <Icon icon=icondata::Bs123 />
             </button>
-            <Show when=move || open.get() fallback=|| ()>
+            <Show when=move || open.get() == ambre_chrome::Openness::Open fallback=|| ()>
                 <div class="ambre-number-format-popover">
                     {NUMBER_FORMATS
                         .iter()
@@ -270,7 +270,7 @@ pub(crate) fn NumberFormatPopover(
                                             format: Some(fmt.clone()),
                                             ..Default::default()
                                         });
-                                        open.set(false);
+                                        open.set(ambre_chrome::Openness::Closed);
                                     }
                                 >
                                     <span class="check">
@@ -330,10 +330,10 @@ const V_ALIGNS: &[(VAlign, icondata::Icon, &str)] = &[
 /// [`StylePatch`].
 #[component]
 pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
     let root_ref = NodeRef::<html::Span>::new();
     let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
-        if !open.get_untracked() {
+        if open.get_untracked() == ambre_chrome::Openness::Closed {
             return;
         }
         let inside = root_ref
@@ -342,7 +342,7 @@ pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
             .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
             .is_some_and(|(root, node)| root.contains(Some(&node)));
         if !inside {
-            open.set(false);
+            open.set(ambre_chrome::Openness::Closed);
         }
     });
     on_cleanup(move || handle.remove());
@@ -368,15 +368,15 @@ pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
             <button
                 aria-label="Horizontal alignment"
                 aria-haspopup="true"
-                aria-expanded=move || ambre_chrome::Openness::from_bool(open.get()).aria()
+                aria-expanded=move || open.get().aria()
                 // Keep the grid's focus: a button steals it on mousedown, which
                 // would clear the active cell before on:click can apply the colour.
                 on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = !*o)
+                on:click=move |_| open.update(|o| *o = o.toggled())
             >
                 <Icon icon=Signal::derive(current_icon) />
             </button>
-            <Show when=move || open.get() fallback=|| ()>
+            <Show when=move || open.get() == ambre_chrome::Openness::Open fallback=|| ()>
                 <div class="ambre-align-popover">
                     {H_ALIGNS
                         .iter()
@@ -390,7 +390,7 @@ pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
                                             h_align: Some(align),
                                             ..Default::default()
                                         });
-                                        open.set(false);
+                                        open.set(ambre_chrome::Openness::Closed);
                                     }
                                 >
                                     <span class="check">
@@ -421,10 +421,10 @@ pub(crate) fn HAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
 /// [`StylePatch`].
 #[component]
 pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -> impl IntoView {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
     let root_ref = NodeRef::<html::Span>::new();
     let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
-        if !open.get_untracked() {
+        if open.get_untracked() == ambre_chrome::Openness::Closed {
             return;
         }
         let inside = root_ref
@@ -433,7 +433,7 @@ pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
             .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
             .is_some_and(|(root, node)| root.contains(Some(&node)));
         if !inside {
-            open.set(false);
+            open.set(ambre_chrome::Openness::Closed);
         }
     });
     on_cleanup(move || handle.remove());
@@ -452,15 +452,15 @@ pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
             <button
                 aria-label="Vertical alignment"
                 aria-haspopup="true"
-                aria-expanded=move || ambre_chrome::Openness::from_bool(open.get()).aria()
+                aria-expanded=move || open.get().aria()
                 // Keep the grid's focus: a button steals it on mousedown, which
                 // would clear the active cell before on:click can apply the colour.
                 on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = !*o)
+                on:click=move |_| open.update(|o| *o = o.toggled())
             >
                 <Icon icon=Signal::derive(current_icon) />
             </button>
-            <Show when=move || open.get() fallback=|| ()>
+            <Show when=move || open.get() == ambre_chrome::Openness::Open fallback=|| ()>
                 <div class="ambre-align-popover">
                     {V_ALIGNS
                         .iter()
@@ -474,7 +474,7 @@ pub(crate) fn VAlignPopover(style: StyleState, on_style: Callback<StylePatch>) -
                                             v_align: Some(align),
                                             ..Default::default()
                                         });
-                                        open.set(false);
+                                        open.set(ambre_chrome::Openness::Closed);
                                     }
                                 >
                                     <span class="check">

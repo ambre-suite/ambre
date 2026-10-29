@@ -154,7 +154,7 @@ pub fn PerfChip(
     #[prop(optional)] perf_detail: Option<PerfDetail>,
 ) -> impl IntoView {
     // The detail panel is collapsed by default: only the fps chip shows.
-    let show = RwSignal::new(false);
+    let show = RwSignal::new(crate::Openness::Closed);
     let has_detail = perf_detail.is_some();
 
     view! {
@@ -164,7 +164,7 @@ pub fn PerfChip(
                 title="Toggle render diagnostics"
                 on:click=move |_| {
                     if has_detail {
-                        show.update(|v| *v = !*v);
+                        show.update(|v| *v = v.toggled());
                     }
                 }
             >
@@ -174,7 +174,7 @@ pub fn PerfChip(
                 .map(|d| {
                     let body = d.children;
                     view! {
-                        <Show when=move || show.get() fallback=|| ()>
+                        <Show when=move || show.get() == crate::Openness::Open fallback=|| ()>
                             {let body = body.clone();
                             move || body()}
                         </Show>

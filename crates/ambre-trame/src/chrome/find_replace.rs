@@ -26,6 +26,16 @@ pub enum FindMode {
     Replace,
 }
 
+impl FindMode {
+    /// Whether the replacement row shows: the disclosure the chevron toggles.
+    pub const fn replace_row(self) -> ambre_chrome::Openness {
+        match self {
+            Self::Find => ambre_chrome::Openness::Closed,
+            Self::Replace => ambre_chrome::Openness::Open,
+        }
+    }
+}
+
 /// Open state of the find/replace panel: the mode it was opened in. `None` means
 /// closed. The query, replacement and options live in the component's own
 /// signals (reset when the panel is reopened).
@@ -172,7 +182,7 @@ pub fn FindReplace(
 
     move || {
         state.get().map(|st| {
-            let replace_mode = st.mode == FindMode::Replace;
+            let replace_row = st.mode.replace_row();
             view! {
                 <div class="ambre-find-panel" style="position: fixed; top: 8px; right: 8px; z-index: 60;">
                     <div class="ambre-find-title">
@@ -186,14 +196,16 @@ pub fn FindReplace(
                         // mouse, isolated so it reads as the mode switch.
                         <button
                             class="ambre-find-toggle"
-                            aria-label=move || if replace_mode { "Hide replace" } else { "Show replace" }
-                            aria-expanded=move || ambre_chrome::Openness::from_bool(replace_mode).aria()
+                            aria-label=move || match replace_row {
+                                ambre_chrome::Openness::Open => "Hide replace",
+                                ambre_chrome::Openness::Closed => "Show replace",
+                            }
+                            aria-expanded=move || replace_row.aria()
                             on:click=move |_| toggle_mode()
                         >
-                            <Icon icon=move || if replace_mode {
-                                icondata::AiDownOutlined
-                            } else {
-                                icondata::AiRightOutlined
+                            <Icon icon=move || match replace_row {
+                                ambre_chrome::Openness::Open => icondata::AiDownOutlined,
+                                ambre_chrome::Openness::Closed => icondata::AiRightOutlined,
                             } />
                         </button>
                         <input
@@ -227,7 +239,7 @@ pub fn FindReplace(
                         </button>
                     </div>
 
-                    <Show when=move || replace_mode fallback=|| ()>
+                    <Show when=move || replace_row == ambre_chrome::Openness::Open fallback=|| ()>
                         <div class="ambre-find-row ambre-find-indent">
                             <input
                                 type="text"
@@ -264,7 +276,7 @@ pub fn FindReplace(
                             />
                             <span>"Whole cell"</span>
                         </label>
-                        <Show when=move || replace_mode fallback=|| ()>
+                        <Show when=move || replace_row == ambre_chrome::Openness::Open fallback=|| ()>
                             <label>
                                 <input
                                     type="checkbox"

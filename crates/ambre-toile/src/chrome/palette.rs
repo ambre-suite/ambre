@@ -74,7 +74,7 @@ fn tool_button(active: RwSignal<Tool>, command: CommandId) -> impl IntoView {
 /// pointer-down outside the control, such as a click on the canvas or on another
 /// tool.
 fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
-    let open = RwSignal::new(false);
+    let open = RwSignal::new(ambre_chrome::Openness::Closed);
     // The picked colour tints the button's strip so the palette shows what the
     // next note will be. Seeded from the current tool colour when Sticky is
     // armed, else the default (the first swatch).
@@ -88,7 +88,7 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
     // ColorPopover`): the wrapper node lets us tell inside from outside.
     let root_ref = NodeRef::<html::Span>::new();
     let handle = window_event_listener(leptos::ev::pointerdown, move |ev| {
-        if !open.get_untracked() {
+        if open.get_untracked() == ambre_chrome::Openness::Closed {
             return;
         }
         let inside = root_ref
@@ -97,7 +97,7 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
             .and_then(|(root, target)| target.dyn_into::<web_sys::Node>().ok().map(|n| (root, n)))
             .is_some_and(|(root, node)| root.contains(Some(&node)));
         if !inside {
-            open.set(false);
+            open.set(ambre_chrome::Openness::Closed);
         }
     });
     on_cleanup(move || handle.remove());
@@ -107,10 +107,10 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
             <button
                 aria-label=registry::title(TOOL_STICKY, &Locale::En).unwrap_or_default()
                 aria-haspopup="true"
-                aria-expanded=move || ambre_chrome::Openness::from_bool(open.get()).aria()
+                aria-expanded=move || open.get().aria()
                 aria-pressed=move || ambre_chrome::Pressed::from_bool(is_active()).aria()
                 on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| open.update(|o| *o = !*o)
+                on:click=move |_| open.update(|o| *o = o.toggled())
             >
                 <Icon icon=icondata::MdiNoteOutline />
                 <span
@@ -118,7 +118,7 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
                     style:background-color=move || format!("#{:06x}", strip_color().rgb().bits())
                 ></span>
             </button>
-            <Show when=move || open.get() fallback=|| ()>
+            <Show when=move || open.get() == ambre_chrome::Openness::Open fallback=|| ()>
                 <div class="ambre-color-popover">
                     <div class="swatches">
                         {STICKY_SWATCHES
@@ -131,7 +131,7 @@ fn sticky_button(active: RwSignal<Tool>) -> impl IntoView {
                                         on:mousedown=move |ev| ev.prevent_default()
                                         on:click=move |_| {
                                             active.set(Tool::Sticky(card));
-                                            open.set(false);
+                                            open.set(ambre_chrome::Openness::Closed);
                                         }
                                     ></button>
                                 }
