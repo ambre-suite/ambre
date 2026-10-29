@@ -190,7 +190,7 @@ impl<'a> EvalContext<'a> {
                         // `=1/A1` on a `#REF!` cell is `#REF!`, not `#TYPE!`.
                         (Err(e), _) | (_, Err(e)) => CellValue::Error(e),
                         (Ok(_), Ok(0.0)) => CellValue::Error(FormulaError::DivisionByZero),
-                        (Ok(x), Ok(y)) => CellValue::Number(x / y),
+                        (Ok(x), Ok(y)) => finite(x / y),
                     });
                 }
                 Op::Pow => {
@@ -201,10 +201,7 @@ impl<'a> EvalContext<'a> {
                         // Guard NaN/inf (for example `(-1)^0.5`, `0^-1`): a bare
                         // `powf` result would propagate silently through later
                         // arithmetic. Excel surfaces these as `#NUM!`.
-                        (Ok(x), Ok(y)) => match x.powf(y) {
-                            r if r.is_finite() => CellValue::Number(r),
-                            _ => CellValue::Error(FormulaError::NumError),
-                        },
+                        (Ok(x), Ok(y)) => finite(x.powf(y)),
                     });
                 }
                 Op::Eq => {
@@ -257,7 +254,7 @@ impl<'a> EvalContext<'a> {
                 Op::Neg => {
                     let v = stack.pop().unwrap_or(CellValue::Empty);
                     stack.push(match v.as_number() {
-                        Ok(n) => CellValue::Number(-n),
+                        Ok(n) => finite(-n),
                         Err(e) => CellValue::Error(e),
                     });
                 }
@@ -345,16 +342,19 @@ impl<'a> EvalContext<'a> {
         let b = stack.pop().unwrap_or(CellValue::Empty);
         let a = stack.pop().unwrap_or(CellValue::Empty);
         match (a.as_number(), b.as_number()) {
-            (Ok(x), Ok(y)) => {
-                let result = f(x, y);
-                if result.is_finite() {
-                    stack.push(CellValue::Number(result));
-                } else {
-                    stack.push(CellValue::Error(FormulaError::NumError));
-                }
-            }
+            (Ok(x), Ok(y)) => stack.push(finite(f(x, y))),
             (Err(e), _) | (_, Err(e)) => stack.push(CellValue::Error(e)),
         }
+    }
+}
+
+/// An operator's numeric result, or `#NUM!` when it is not finite
+/// (`TRAME-244`).
+fn finite(n: f64) -> CellValue {
+    if n.is_finite() {
+        CellValue::Number(n)
+    } else {
+        CellValue::Error(FormulaError::NumError)
     }
 }
 
@@ -718,6 +718,30 @@ mod tests {
             eval_formula("1/0"),
             CellValue::Error(FormulaError::DivisionByZero)
         ));
+    }
+
+    /// Every operator answers `#NUM!` for a result that is not a finite
+    /// number, division and negation included. `IFERROR` then catches it, and
+    /// `ISERROR` sees it (`TRAME-244`).
+    #[test]
+    fn an_operator_whose_result_is_not_finite_answers_num() {
+        let cells = || {
+            HashMap::from([
+                (cell(0, 0), CellValue::Number(1e308)),
+                (cell(1, 0), CellValue::Number(0.1)),
+                (cell(2, 0), CellValue::Number(f64::INFINITY)),
+            ])
+        };
+        for (src, reads) in [
+            ("A1/A2", "#NUM!"),
+            ("A3/A3", "#NUM!"),
+            ("-A3", "#NUM!"),
+            ("A1*10", "#NUM!"),
+            ("IFERROR(A1/A2, 0)", "0"),
+            ("ISERROR(A1/A2)", "true"),
+        ] {
+            assert_eq!(eval_with_cells(src, 1, cells()), reads, "formula: ={src}");
+        }
     }
 
     #[test]

@@ -4310,6 +4310,7 @@
   {"edge": "cites-section", "from": "TRAME-244", "section": "2", "to": "2-Trame/features/ambre-spec-trame-function-library.md"},
   {"edge": "cites-section", "from": "TRAME-244", "section": "3", "to": "2-Trame/features/ambre-spec-trame-function-library.md"},
   {"edge": "verified-by", "from": "TRAME-244", "to": "ambre_trame::formula::functions::tests::a_result_that_is_not_finite_answers_num"},
+  {"edge": "verified-by", "from": "TRAME-244", "to": "ambre_trame::formula::vm::tests::an_operator_whose_result_is_not_finite_answers_num"},
   {"edge": "cites-section", "from": "TRAME-060", "section": "5", "to": "2-Trame/features/ambre-spec-trame-function-library.md"},
   {"edge": "lands-with", "from": "TRAME-060", "to": "Dynamic arrays and spill"},
   {"edge": "cites-section", "from": "TRAME-206", "section": "5", "to": "2-Trame/features/ambre-spec-trame-function-library.md"},

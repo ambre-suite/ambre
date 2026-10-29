@@ -782,8 +782,10 @@ fn two_orders_of_one_decimal_total_agree() {
 }
 
 /// A call whose result is not a finite number answers `#NUM!`, as an
-/// operator that overflows does (`TRAME-244`). The calls are a total past the
-/// largest number, a product, an exponential, and a total given an infinity.
+/// operator does (`TRAME-244`). The calls are a total past the largest
+/// number, a product, an exponential, and a maximum given an infinity. The
+/// average follows its total: past the largest number, it reads `#NUM!` too,
+/// though the true average is finite.
 #[test]
 fn a_result_that_is_not_finite_answers_num() {
     let calls: [(&str, Vec<CellValue>); 8] = [

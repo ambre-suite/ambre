@@ -3211,6 +3211,7 @@ ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains()
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	local geometry / pixel arithmetic
+ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	math	an operator's result inside the formula engine
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
