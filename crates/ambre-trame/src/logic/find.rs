@@ -349,8 +349,17 @@ impl TrameState {
 fn fold(s: &str, case: CaseMatch) -> String {
     match case {
         CaseMatch::Sensitive => s.to_string(),
-        CaseMatch::Insensitive => s.to_lowercase(),
+        CaseMatch::Insensitive => s.chars().flat_map(fold_char).collect(),
     }
+}
+
+/// One char lowercased, with a final sigma read as a plain one, as Unicode
+/// case folding reads it. A whole-string lowercase picks the final sigma by
+/// context, and a char alone cannot: folding char by char gives find and
+/// replace one form.
+fn fold_char(ch: char) -> impl Iterator<Item = char> {
+    ch.to_lowercase()
+        .map(|lower| if lower == '\u{3C2}' { '\u{3C3}' } else { lower })
 }
 
 /// Whether `haystack` matches `needle`, folded by the needle's case: exact
@@ -382,30 +391,30 @@ fn rewrite(
     })
 }
 
-/// Byte length, measured in `hay`, of a case-insensitive match of the
-/// lower-cased `needle` anchored at the start of `hay`. `None` when `hay` does not start with it.
+/// What follows a case-insensitive match of the folded `needle` anchored at
+/// the start of `hay`. `None` when `hay` does not start with it.
 ///
-/// Lowercasing is compared character by character rather than on a pre-folded
+/// Folding is compared character by character rather than on a pre-folded
 /// copy of `hay`, because `to_lowercase` is not length-preserving. `I` (U+0130)
 /// grows from 2 bytes to 3, the Kelvin sign `K` (U+212A) shrinks from 3 to 1. An
 /// offset found in the folded text therefore does not address the original.
-fn ci_match_len(hay: &str, needle: &FoldedNeedle) -> Option<usize> {
+fn strip_ci_match<'a>(hay: &'a str, needle: &FoldedNeedle) -> Option<&'a str> {
     let mut needle = needle.text.chars();
     let mut pending = needle.next();
     for (offset, ch) in hay.char_indices() {
         if pending.is_none() {
-            return Some(offset);
+            return hay.get(offset..);
         }
         // One source char can lowercase to several; all of them must line up, so
         // a needle ending mid-expansion is not a match.
-        for lower in ch.to_lowercase() {
+        for lower in fold_char(ch) {
             match pending {
                 Some(want) if want == lower => pending = needle.next(),
                 _ => return None,
             }
         }
     }
-    pending.is_none().then_some(hay.len())
+    pending.is_none().then_some("")
 }
 
 /// Case-insensitive substring replace: replace every occurrence of `needle`
@@ -415,19 +424,21 @@ fn ci_match_len(hay: &str, needle: &FoldedNeedle) -> Option<usize> {
 fn replace_ci(raw: &str, needle: &FoldedNeedle, replacement: &Replacement) -> String {
     let mut out = String::with_capacity(raw.len());
     let mut rest = raw;
-    while let Some(ch) = rest.chars().next() {
+    let mut chars = rest.chars();
+    while let Some(ch) = chars.next() {
         // A non-empty needle always consumes at least one char, so `rest` shrinks
         // on every iteration whichever branch is taken.
-        match ci_match_len(rest, needle) {
-            Some(len) if len > 0 => {
+        match strip_ci_match(rest, needle) {
+            Some(after) if after.len() < rest.len() => {
                 out.push_str(replacement.as_str());
-                rest = &rest[len..];
+                rest = after;
             }
             _ => {
                 out.push(ch);
-                rest = &rest[ch.len_utf8()..];
+                rest = chars.as_str();
             }
         }
+        chars = rest.chars();
     }
     out
 }
@@ -465,6 +476,25 @@ mod tests {
         assert_eq!(ci("\u{212A}elvin", "elvin", "Z"), "\u{212A}Z");
         // The match may also start on the offending char itself.
         assert_eq!(ci("a\u{212A}b", "k", "Z"), "aZb");
+    }
+
+    /// A capital sigma lowercases to a final sigma at the end of a word in a
+    /// whole string, and to a plain sigma alone. A replace must meet every
+    /// match a find meets, so both fold a sigma to one letter.
+    #[test]
+    fn case_insensitive_replace_meets_what_find_meets_over_a_final_sigma() {
+        assert_eq!(ci("\u{39F}\u{3A3}", "\u{39F}\u{3A3}", "Z"), "Z");
+        assert_eq!(ci("\u{3BF}\u{3C2}", "\u{39F}\u{3A3}", "Z"), "Z");
+        assert_eq!(ci("\u{39F}\u{3A3}", "\u{3BF}\u{3C3}", "Z"), "Z");
+        let hit = |hay: &str, query: &str| {
+            super::cell_matches(
+                hay,
+                &needle(query, CaseMatch::Insensitive),
+                MatchExtent::Substring,
+            )
+        };
+        assert!(hit("\u{3BF}\u{3C3}", "\u{39F}\u{3A3}"));
+        assert!(hit("\u{39F}\u{3A3}", "\u{3BF}\u{3C3}"));
     }
 
     #[test]
