@@ -445,13 +445,17 @@ pub struct SearchBox {
     pub channels: Vec<ChannelMatches>,
 }
 
+/// The heading of the matches of a channel with no name read yet.
+const UNNAMED_CHANNEL: &str = "Unnamed channel";
+
 /// The matches of one channel, as the result list shows them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchGroup {
     /// The channel a click on a match opens.
     pub channel_id: ChannelId,
-    /// The name the sidebar shows.
-    pub name: String,
+    /// The name the sidebar shows, `None` for a channel with no name read
+    /// yet.
+    pub name: Option<Name>,
     /// Each matching message, where a click opens it, and its text, in
     /// channel order.
     pub matches: Vec<(MessageRef, String)>,
@@ -712,9 +716,7 @@ impl MurmureRelay {
                     .filter(|c| !c.matches.is_empty())
                     .map(|c| SearchGroup {
                         channel_id: c.channel_id,
-                        name: sidebar
-                            .with(|side| side.name_of(c.channel_id))
-                            .map_or_else(|| "Unnamed channel".to_owned(), Name::into_string),
+                        name: sidebar.with(|side| side.name_of(c.channel_id)),
                         matches: c
                             .matches
                             .iter()
@@ -1859,7 +1861,7 @@ fn search_group_view(
     view! {
         <section class="murmure-search-group">
             <h3 class="murmure-search-channel">
-                {group.name}
+                {group.name.map_or_else(|| UNNAMED_CHANNEL.to_owned(), Name::into_string)}
                 <span class="murmure-search-segments">{group.coverage}</span>
             </h3>
             <ul>

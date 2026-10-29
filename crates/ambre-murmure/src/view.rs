@@ -5470,7 +5470,9 @@ mod tests {
             .zip(narrow.iter().chain(std::iter::repeat(&0)))
             .position(|(w, n)| w != n)
             .expect("one more run at the desktop width");
-        assert_eq!(wide.remove(at), crate::composer::ALSO_CHORD.chars().count());
+        let chord = crate::composer::ALSO_CHORD.to_string();
+        assert_eq!(chord, "Alt+Enter");
+        assert_eq!(wide.remove(at), chord.chars().count());
         assert_eq!(wide, narrow, "only the chord is added");
         page.view.set_width(WindowWidth::Narrow);
         assert_eq!(glyph_runs(&mut page), narrow);

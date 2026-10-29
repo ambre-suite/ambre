@@ -1281,15 +1281,15 @@ ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.word | field | &'stat
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureHandler::run() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::has_members() | ret | Signal<bool>	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	text, label or user content
+ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	the text of the search box as the DOM hands it, blank included; a SearchQuery parses from it inside
 ambre-murmure | src/chrome.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | PageVisibility::visible_if(visible) | param | bool	newtype-inner	the bool the one constructor of PageVisibility reads into its variant
 ambre-murmure | src/chrome.rs | crate::chrome | ROOT_LOST | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
+ambre-murmure | src/chrome.rs | crate::chrome | UNNAMED_CHANNEL | const | &str	free-text	the heading a person reads over the search matches of a channel with no name read yet
 ambre-murmure | src/chrome.rs | crate::chrome | SearchBox.query | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.coverage | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.matches | field | Vec<(MessageRef,String)>	free-text	text, label or user content
-ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.name | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | coverage() | ret | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | entry_view(unnamed) | param | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | member_view(choose) | param | Option<(Callback<()>,&'static str)>	free-text	text, label or user content
@@ -1315,7 +1315,6 @@ ambre-murmure | src/commands.rs | crate::commands | react_title() | ret | String
 ambre-murmure | src/commands.rs | crate::commands | region_key(action) | param | &'static str	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | reply_title() | ret | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | search_title() | ret | String	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | ALSO_CHORD | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | ALSO_IN_CHANNEL | const | &str	free-text	UI text/label const
 ambre-murmure | src/composer.rs | crate::composer | Asking.query | field | String	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | COMPOSER_HINT | const | &str	free-text	UI text/label const
@@ -1437,7 +1436,6 @@ ambre-murmure | src/mention.rs | crate::mention | fits(text) | param | &str	free
 ambre-murmure | src/mention.rs | crate::mention | names() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/mention.rs | crate::mention | value_of() | ret | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | AT_CHANNEL | const | &str	free-text	UI text/label const
-ambre-murmure | src/mention_list.rs | crate::mention_list | Offer.name | field | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | Offer::written() | ret | String	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | matches() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/mention_list.rs | crate::mention_list | matches(query) | param | &str	free-text	the words a member typed after an @, matched against the start of each word of a name

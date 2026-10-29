@@ -56,13 +56,13 @@ impl OfferIndex {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Offer {
     pub target: MentionTarget,
-    pub name: String,
+    pub name: ambre_core::DisplayName,
 }
 
 impl Offer {
     /// The text a pick writes over the query: `@` and the name.
     pub fn written(&self) -> String {
-        format!("@{}", self.name)
+        format!("@{}", self.name.as_str())
     }
 }
 
@@ -117,17 +117,21 @@ pub fn offers(
         .filter(|(user, name)| Some(*user) != me && matches(name, query))
         .collect();
     kept.sort_by_cached_key(|(_, name)| name.as_str().to_lowercase());
+    // The word is a valid display name, so the offer is always built; a
+    // test holds it first in the list.
     let channel = AT_CHANNEL
         .starts_with(&query.to_lowercase())
-        .then(|| Offer {
+        .then(|| ambre_core::DisplayName::new(AT_CHANNEL).ok())
+        .flatten()
+        .map(|name| Offer {
             target: MentionTarget::Channel,
-            name: AT_CHANNEL.to_owned(),
+            name,
         });
     channel
         .into_iter()
         .chain(kept.into_iter().map(|(user, name)| Offer {
             target: MentionTarget::User(*user),
-            name: name.as_str().to_owned(),
+            name: name.clone(),
         }))
         .collect()
 }

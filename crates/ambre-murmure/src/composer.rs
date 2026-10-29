@@ -33,7 +33,7 @@ use ambre_bus::{
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
-use ambre_commands::{Key, KeyChar, Modifiers};
+use ambre_commands::{Key, KeyBinding, KeyChar, Modifiers};
 use ambre_core::{
     ByteCount, ByteOffset, CharSpan, DocPoint, HistoryStep, ViewPoint, ViewPx, ViewSize,
     ZoomFactor, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
@@ -70,8 +70,8 @@ const TYPING_HEIGHT: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_4.get());
 pub const ALSO_IN_CHANNEL: &str = "Also send to the channel";
 
 /// The chord that turns the box, named after its words at the desktop width
-/// (`MURMURE-544`).
-pub const ALSO_CHORD: &str = "Alt+Enter";
+/// (`MURMURE-544`). The box draws it as the binding spells itself.
+pub const ALSO_CHORD: KeyBinding = KeyBinding::new(Modifiers::ALT, Key::Enter);
 
 /// The height of the row of that box, under the field.
 pub(crate) const ALSO_HEIGHT: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_8.get());
@@ -1599,7 +1599,7 @@ impl Composer {
                     let chord = shape(
                         font_cx,
                         cache,
-                        ALSO_CHORD,
+                        &ALSO_CHORD.to_string(),
                         FONT_UI,
                         width,
                         ambre_canvas::Weight::Regular,

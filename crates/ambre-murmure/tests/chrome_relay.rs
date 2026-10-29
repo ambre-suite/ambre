@@ -1331,7 +1331,10 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     relay.absorb(&found("budget", budget, zeta));
     let groups = relay.search_groups().get_untracked();
     assert_eq!(groups.len(), 1, "a channel with no match shows no group");
-    assert_eq!(groups[0].name, "budget");
+    assert_eq!(
+        groups[0].name.as_ref().map(ambre_core::Name::as_str),
+        Some("budget")
+    );
     let texts: Vec<&str> = groups[0].matches.iter().map(|(_, t)| t.as_str()).collect();
     assert_eq!(texts, ["the budget for May"]);
     assert_eq!(groups[0].coverage, "1 of 2 segments");
