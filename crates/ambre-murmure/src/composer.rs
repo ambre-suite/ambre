@@ -1567,10 +1567,10 @@ impl Composer {
                     top: row,
                     bottom: height,
                 });
-                let side = surface_px(BOX_SIZE);
+                let side = surface_px(BOX_SIZE).get();
                 let (x, y) = (
-                    surface_px(SPACE_8),
-                    surface_px(row + (ALSO_HEIGHT - BOX_SIZE) / 2.0),
+                    surface_px(SPACE_8).get(),
+                    surface_px(row + (ALSO_HEIGHT - BOX_SIZE) / 2.0).get(),
                 );
                 let square = Rect::new(x, y, x + side, y + side);
                 if self.also.contains(&shown) {
@@ -1652,7 +1652,10 @@ impl Composer {
         let tall = editor.layout_height().unwrap_or(ViewPx::ZERO);
         let shift = (inner.bottom - inner.top - tall).min(ViewPx::ZERO);
         self.origin = ViewPoint::new(SPACE_8, inner.top + shift);
-        let origin = Point::new(surface_px(SPACE_8), surface_px(inner.top + shift));
+        let origin = Point::new(
+            surface_px(SPACE_8).get(),
+            surface_px(inner.top + shift).get(),
+        );
         surface.push_clip(rect(SPACE_4, inner.top, width - SPACE_4, inner.bottom));
         editor.render(
             surface,

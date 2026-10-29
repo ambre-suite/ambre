@@ -10,7 +10,9 @@ use std::collections::HashMap;
 use ambre_bus::{Attachment, Emoji, MediaRef, MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, ViewPoint, ViewPx, ViewSize, WholePx};
+use ambre_core::{
+    ByteCount, ByteOffset, ByteSpan, SurfacePx, ViewPoint, ViewPx, ViewSize, WholePx,
+};
 use ambre_draw::{
     Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource,
     Layout, ParleyBrush, Point, PositionedLayoutItem, Rect, Selection,
@@ -98,27 +100,27 @@ impl LaidRow {
     }
 }
 
-/// A length of the painter, as the float a rectangle of the surface takes.
-pub(crate) fn surface_px(length: ViewPx) -> f64 {
-    f64::from(length.get())
+/// A length of the painter, on the surface. The painter draws from the top
+/// left of the surface, so the two spaces share their origin; only the
+/// float widens.
+pub(crate) fn surface_px(length: ViewPx) -> SurfacePx {
+    length.on_surface(SurfacePx::ZERO)
 }
 
-/// A coordinate of the surface, as a length of the painter. The surface
-/// draws in the same logical pixels; only the float narrows.
-fn painter_px(at: f64) -> ViewPx {
-    #[allow(clippy::cast_possible_truncation)]
-    let at = at as f32;
-    ViewPx::new(at)
+/// A coordinate of the surface, as a length of the painter: the inverse of
+/// [`surface_px`]. Only the float narrows.
+fn painter_px(at: SurfacePx) -> ViewPx {
+    at.in_view(SurfacePx::ZERO)
 }
 
 /// The rectangle of the surface between the edges `left`, `top`, `right`
 /// and `bottom` of the painter.
 pub(crate) fn view_rect(left: ViewPx, top: ViewPx, right: ViewPx, bottom: ViewPx) -> Rect {
     Rect::new(
-        surface_px(left),
-        surface_px(top),
-        surface_px(right),
-        surface_px(bottom),
+        surface_px(left).get(),
+        surface_px(top).get(),
+        surface_px(right).get(),
+        surface_px(bottom).get(),
     )
 }
 
@@ -309,7 +311,7 @@ pub fn paint_list<S: DrawSurface>(
             for (bytes, color) in tints {
                 fill_bytes(surface, layout, bytes, body_y, color);
             }
-            let (x, y) = (surface_px(SPACE_8), surface_px(body_y));
+            let (x, y) = (surface_px(SPACE_8).get(), surface_px(body_y).get());
             for mark in &row.marks {
                 for at in look::margin(layout, &row.body, &mark.style, mark.bytes) {
                     let at = Rect::new(at.x0 + x, at.y0 + y, at.x1 + x, at.y1 + y);
@@ -396,7 +398,7 @@ fn chip_at(
         + previews_height(row, pics)
         + file_chips(font_cx, cache, row, width).1;
     let (boxes, _) = chips(font_cx, cache, row, width);
-    let (x, y) = (surface_px(x - SPACE_8), surface_px(y - chips_y));
+    let (x, y) = (surface_px(x - SPACE_8).get(), surface_px(y - chips_y).get());
     boxes
         .iter()
         .zip(&row.reactions)
@@ -498,7 +500,10 @@ fn draw_chips<S: DrawSurface>(
             width,
             ambre_canvas::Weight::Regular,
         );
-        let (left, top) = (painter_px(at.x0) + SPACE_4, painter_px(at.y0) + SPACE_2);
+        let (left, top) = (
+            painter_px(SurfacePx::new(at.x0)) + SPACE_4,
+            painter_px(SurfacePx::new(at.y0)) + SPACE_2,
+        );
         draw(
             surface,
             layout,
@@ -533,7 +538,10 @@ fn draw_files<S: DrawSurface>(
             width,
             ambre_canvas::Weight::Regular,
         );
-        let (left, top) = (painter_px(at.x0) + SPACE_4, painter_px(at.y0) + SPACE_2);
+        let (left, top) = (
+            painter_px(SurfacePx::new(at.x0)) + SPACE_4,
+            painter_px(SurfacePx::new(at.y0)) + SPACE_2,
+        );
         draw(
             surface,
             layout,
@@ -562,7 +570,10 @@ fn file_at(
     }
     let previews_y = body_top(font_cx, cache, row, *line, top, width)
         + text_height(body(font_cx, cache, row, width));
-    let (x, y) = (surface_px(x - SPACE_8), surface_px(y - previews_y));
+    let (x, y) = (
+        surface_px(x - SPACE_8).get(),
+        surface_px(y - previews_y).get(),
+    );
     let hit = |b: &Rect| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1;
     if let Some((file, _)) = preview_boxes(row, pics, width)
         .into_iter()
@@ -570,7 +581,7 @@ fn file_at(
     {
         return Some(file.clone());
     }
-    let y = y - surface_px(previews_height(row, pics));
+    let y = y - surface_px(previews_height(row, pics)).get();
     let (boxes, _) = file_chips(font_cx, cache, row, width);
     boxes
         .iter()
@@ -594,7 +605,7 @@ fn link_at(
     let (row, line) = words.get(&i)?;
     let body_y = body_top(font_cx, cache, row, *line, top, width);
     let layout = body(font_cx, cache, row, width);
-    let (x, y) = (surface_px(x - SPACE_8), surface_px(y - body_y));
+    let (x, y) = (surface_px(x - SPACE_8).get(), surface_px(y - body_y).get());
     row.marks.iter().find_map(|mark| {
         let TextStyle::Link(address) = &mark.style else {
             return None;
@@ -764,9 +775,10 @@ fn draw_line<S: DrawSurface>(
         ambre_canvas::Weight::Bold,
     );
     let (wide, tall) = (text_width(layout), text_height(layout));
-    let middle = surface_px(y + tall / 2.0);
-    let rule_from = surface_px(SPACE_8 + wide + SPACE_4);
-    let rule = Rect::new(rule_from, middle, surface_px(width - SPACE_8), middle + 1.0);
+    let middle = surface_px(y + tall / 2.0).get();
+    let rule_from = surface_px(SPACE_8 + wide + SPACE_4).get();
+    let rule_to = surface_px(width - SPACE_8).get();
+    let rule = Rect::new(rule_from, middle, rule_to, middle + 1.0);
     surface.fill_rect(rule, palette.selection);
     draw(
         surface,
@@ -823,7 +835,7 @@ fn fill_bytes<S: DrawSurface>(
 ) {
     let from = Cursor::from_byte_index(layout, bytes.start.get(), Affinity::Downstream);
     let to = Cursor::from_byte_index(layout, bytes.end.get(), Affinity::Upstream);
-    let (x, y) = (surface_px(SPACE_8), surface_px(body_y));
+    let (x, y) = (surface_px(SPACE_8).get(), surface_px(body_y).get());
     for (bb, _) in Selection::new(from, to).geometry(layout) {
         surface.fill_rect(Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y), color);
     }
@@ -1002,13 +1014,13 @@ fn draw_row<S: DrawSurface>(
     let body_tall = text_height(layout);
     draw_body(surface, layout, ViewPoint::new(x, y), ink, palette);
     y += body_tall;
-    let at = Point::new(surface_px(x), surface_px(y));
+    let at = Point::new(surface_px(x).get(), surface_px(y).get());
     draw_previews(surface, row, pics, at, width, palette, played);
     y += previews_height(row, pics);
-    let at = Point::new(surface_px(x), surface_px(y));
+    let at = Point::new(surface_px(x).get(), surface_px(y).get());
     draw_files(surface, font_cx, cache, row, at, width, palette);
     y += file_chips(font_cx, cache, row, width).1;
-    let at = Point::new(surface_px(x), surface_px(y));
+    let at = Point::new(surface_px(x).get(), surface_px(y).get());
     draw_chips(surface, font_cx, cache, row, at, width, palette, me);
     y += chips(font_cx, cache, row, width).1;
     if let Some(replies) = &row.replies {
@@ -1227,7 +1239,10 @@ pub(crate) mod tests {
             panic!("one ring: {rings:?}");
         };
         let RowBounds { top, bottom } = painted.focus.expect("the focused row is on screen");
-        assert_eq!((ring.y0, ring.y1), (surface_px(top), surface_px(bottom)));
+        assert_eq!(
+            (ring.y0, ring.y1),
+            (surface_px(top).get(), surface_px(bottom).get())
+        );
         assert!(top >= ViewPx::ZERO && bottom <= ViewPx::new(300.0) && bottom > top);
         assert_eq!(
             painted.bottom,
@@ -1683,11 +1698,11 @@ pub(crate) mod tests {
             let mut list = MessageList::default();
             list.absorb(SegmentId::new(), vec![sent]);
             let (surface, _) = paint(&list, 600.0);
-            let indent = surface_px(SPACE_8) + f64::from(look::BLOCK_INDENT.get());
+            let indent = surface_px(SPACE_8).get() + f64::from(look::BLOCK_INDENT.get());
             let marks = surface.count(|op| {
                 matches!(op, DrawOp::FillRect { color, rect }
                     if *color == LIGHT.header_text
-                        && rect.x0 >= surface_px(SPACE_8) && rect.x1 <= indent)
+                        && rect.x0 >= surface_px(SPACE_8).get() && rect.x1 <= indent)
             });
             let tints = surface.count(
                 |op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_hover),
@@ -1743,7 +1758,7 @@ pub(crate) mod tests {
             let [_, block @ .., (_, after)] = lines.as_slice() else {
                 panic!("the author and the body, got {lines:?}");
             };
-            let edge = surface_px(SPACE_8);
+            let edge = surface_px(SPACE_8).get();
             let indent = edge + f64::from(look::BLOCK_INDENT.get());
             assert!(block.len() >= 2, "the block wraps, got {block:?}");
             assert!(

@@ -3543,8 +3543,6 @@ ambre-murmure | src/list.rs | crate::list | HeaderWords.author | field | String	
 ambre-murmure | src/list.rs | crate::list | HeaderWords.time | field | String	free-text	header text a message row draws
 ambre-murmure | src/paint.rs | crate::paint | LaidRow::holds() | ret | bool	generic	predicate result
 ambre-murmure | src/paint.rs | crate::paint | RowBounds::holds() | ret | bool	generic	predicate result
-ambre-murmure | src/paint.rs | crate::paint | painter_px(at) | param | f64	math	the f64 a kurbo rectangle of the surface takes, converted at the painter boundary
-ambre-murmure | src/paint.rs | crate::paint | surface_px() | ret | f64	math	the f64 a kurbo rectangle of the surface takes, converted at the painter boundary
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.start | field | f64	math	start and step of the linear fill series, a cell value
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	start and step of the linear fill series, a cell value
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Series::at() | ret | f64	math	start and step of the linear fill series, a cell value
