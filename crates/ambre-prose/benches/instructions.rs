@@ -123,7 +123,7 @@ fn paragraph_shape() {
                 &style,
                 DocPx::new(COLUMN_PX),
             );
-            if run.data().segment_count() == 1 {
+            if run.data().segment_count() == ambre_prose::layout::run::RunSegmentCount::ONE {
                 found = Some((laid, typed));
                 break 'search;
             }

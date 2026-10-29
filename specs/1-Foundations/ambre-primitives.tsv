@@ -1972,7 +1972,6 @@ ambre-prose | src/layout/fonts.rs | crate::layout::fonts | register_faces(bytes)
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	local: a bare ratio of the content height, read only as the factor of DocPx * f32; a ratio is no length
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.keep_together | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | EffectiveStyle.keep_with_next | field | bool	generic	independent flag or predicate
-ambre-prose | src/layout/measure.rs | crate::layout::measure | MAX_SEGMENTS | const | usize	math	count, size or local index
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.bold | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.italic | field | bool	generic	independent flag or predicate
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan.strike | field | bool	generic	independent flag or predicate
@@ -2016,15 +2015,9 @@ ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::settle_t
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | Paginator::shaped() | ret | u64	math	count, size or local index
 ambre-prose | src/layout/reflow.rs | crate::layout::reflow | TOC_SETTLE_PASSES | const | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | <ShapedRun as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
-ambre-prose | src/layout/run.rs | crate::layout::run | CellShape.rows | field | std::ops::Range<usize>	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | LineAt.segment | field | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::cursor() | ret | (usize,Cursor)	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::is_empty() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::line_under(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::new(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::segment_count() | ret | usize	math	count, size or local index
-ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::segment_end(index) | param | usize	math	count, size or local index
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::text() | ret | &str	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ParleyRunData::with_window((text,marks)) | param | (&str,&[MarkedSpan])	free-text	text content / label / parser input
 ambre-prose | src/layout/run.rs | crate::layout::run | ShapedLayout::carries() | ret | bool	generic	independent flag or predicate
@@ -2128,6 +2121,7 @@ ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render(names) | p
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta() | ret | String	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
 ambre-prose | src/logic/ids.rs | crate::logic::ids | IdSequence.0 | field | u64	newtype-inner	the place of an id in a pinned peer's sequence, held under 2^62
+ambre-prose | src/logic/ids.rs | crate::logic::ids | pack() | ret | Uuid	generic	the id of a pinned peer's place, before mint wraps it in the annotation kind its caller names
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VARIANT | const | u128	generic	UUID bit layout constants
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VERSION | const | u128	generic	UUID bit layout constants
 ambre-prose | src/logic/interop.rs | crate::logic::interop | accepts() | ret | bool	generic	independent flag or predicate
@@ -2212,17 +2206,9 @@ ambre-prose | src/view/annotate.rs | crate::view::annotate | AnnotationIntent::R
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::hover() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_drafts(drafts) | param | &HashMap<CommentId,String>	free-text	text content / label / parser input
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect::contains() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/cache.rs | crate::view::cache | Entry.used | field | u64	math	count, size or local index
-ambre-prose | src/view/cache.rs | crate::view::cache | RUN_CACHE_RUNS | const | usize	math	count, size or local index
-ambre-prose | src/view/cache.rs | crate::view::cache | RunCache.built | field | u64	math	count, size or local index
-ambre-prose | src/view/cache.rs | crate::view::cache | RunCache.capacity | field | usize	math	count, size or local index
-ambre-prose | src/view/cache.rs | crate::view::cache | RunCache.clock | field | u64	math	count, size or local index
-ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::built() | ret | u64	math	count, size or local index
+ambre-prose | src/view/cache.rs | crate::view::cache | PaintTick.0 | field | u64	newtype-inner	the paint an entry was last drawn on, compared for order alone
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::holds() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::is_empty() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::len() | ret | usize	math	count, size or local index
-ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::with_capacity(capacity) | param | usize	math	count, size or local index
-ambre-prose | src/view/cache.rs | crate::view::cache | RunDrawState.glyph_runs | field | Vec<(RunLine,usize,DocPx)>	math	the item index within a line, local to the cache
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::end_drag() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::joins() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::shown_text() | ret | Option<String>	free-text	text content / label / parser input
@@ -3483,7 +3469,6 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layou
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextLength::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
 ambre-canvas | src/text_cache.rs | crate::text_cache | <DocPx as TextLength>::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
 ambre-canvas | src/text_cache.rs | crate::text_cache | <ViewPx as TextLength>::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
-ambre-prose | src/layout/run.rs | crate::layout::run | page_offset() | ret | Option<usize>	math	slot of a page in the window vector of the pages it carries
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState.handed | field | Option<(loro::Frontiers,usize,PageSpan)>	math	the usize is the number of faces the layout was shaped on, compared for equality
 ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor

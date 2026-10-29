@@ -772,7 +772,7 @@ mod tests {
     };
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
-    use crate::view::cache::{RunCache, RunKey};
+    use crate::view::cache::{BuildCount, RunCache, RunKey};
     use crate::view::tests::{append, down, laid_out};
     use crate::view::{Highlight, HighlightKind};
 
@@ -859,10 +859,10 @@ mod tests {
         let mut ui = ProseUiState::default();
         ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
-        assert_eq!(ui.runs.built(), 0);
+        assert_eq!(ui.runs.built(), BuildCount::ZERO);
         let first_paint = paint(&mut ui);
         let built = ui.runs.built();
-        assert!(built >= 6);
+        assert!(built >= BuildCount::new(6));
         let second_paint = paint(&mut ui);
         assert_eq!(ui.runs.built(), built);
         // A paint reads the layout and changes nothing: two paints agree.
@@ -882,7 +882,7 @@ mod tests {
             ui.scroll_by(down(800.0));
         }
         paint(&mut ui);
-        assert!(ui.runs.built() > super::super::cache::RUN_CACHE_RUNS as u64);
+        assert!(ui.runs.built().get() > super::super::cache::RUN_CACHE_RUNS.get());
         assert!(ui.runs.len() <= super::super::cache::RUN_CACHE_RUNS);
     }
 
@@ -1271,7 +1271,7 @@ mod tests {
         let (x0, y0) = first_text_at(&paint(&mut ui));
         let table = |ui: &ProseUiState| {
             ui.shaped.tables.values().next().map_or(DocPx::ZERO, |t| {
-                t.row_tops.last().copied().unwrap_or(DocPx::ZERO)
+                t.row_tops.iter().last().copied().unwrap_or(DocPx::ZERO)
             })
         };
         let height0 = table(&ui);
@@ -1423,7 +1423,7 @@ mod tests {
         let block = block_id(first_block_of(&state, cell));
         let mut ui = view_of(&mut state);
         let laid = ui.shaped.tables[&table].clone();
-        let row = laid.row_tops[1] - laid.row_tops[0];
+        let row = laid.row_tops.as_slice()[1] - laid.row_tops.as_slice()[0];
 
         ui.draft.push_str(
             ambre_bus::app::prose::TextAck(1),
@@ -1463,7 +1463,7 @@ mod tests {
             .iter()
             .find_map(|piece| piece.table.clone())
             .expect("the table is drawn");
-        let tall = grown.row_tops[1] - grown.row_tops[0];
+        let tall = grown.row_tops.as_slice()[1] - grown.row_tops.as_slice()[0];
         assert!(tall > row + run.data().height() / 2.0, "the row grows");
     }
 

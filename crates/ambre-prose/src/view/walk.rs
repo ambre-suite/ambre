@@ -267,20 +267,21 @@ fn draw_run<S: DrawSurface>(
 ) {
     let data: &ParleyRunData = run.data();
     let brush = Brush::Solid(color);
-    for (line_index, item_index, _) in &cache.draw_state(key, run).glyph_runs {
-        let Some((line, shift)) = data.line(*line_index) else {
+    for at in &cache.draw_state(key, run).glyph_runs {
+        let Some((line, shift)) = data.line(at.line) else {
             continue;
         };
         // A line shaped in a later segment is moved down to its place
         // (`PROSE-128`).
         let origin = placed.origin + (0.0, f64::from(shift.get()));
         let transform = Affine::translate(origin.to_vec2());
-        let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(*item_index) else {
+        let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(at.item.to_usize())
+        else {
             continue;
         };
         let mut cuts = insertions
             .iter()
-            .filter(|cut| cut.line == *line_index)
+            .filter(|cut| cut.line == at.line)
             .peekable();
         if cuts.peek().is_none() {
             surface.draw_glyphs(&glyphs, &brush, transform);

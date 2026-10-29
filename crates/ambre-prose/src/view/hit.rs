@@ -41,8 +41,8 @@ pub(crate) struct CellFrame {
 
 /// The frame of `cell` in `table`. The view draws and hits it alike.
 pub(crate) fn cell_frame(table: &TableShape, cell: &CellShape) -> Option<CellFrame> {
-    let y0 = *table.row_tops.get(cell.rows.start)?;
-    let y1 = *table.row_tops.get(cell.rows.end)?;
+    let y0 = table.row_top(cell.rows.start)?;
+    let y1 = table.row_top(cell.rows.end)?;
     let pad = cell.style.padding;
     let room = (y1 - y0 - pad * 2.0 - cell.content_height).max(DocPx::ZERO);
     let shift = match cell.style.valign {
@@ -412,7 +412,7 @@ mod tests {
         let far = ui.shaped.layout.blocks.len() - 2;
         let page = ui.shaped.layout.blocks[far].page_start;
         ui.viewport.scroll_y = DocPx::new(ui.column.page_top_y(page).get());
-        assert_eq!(ui.runs.built(), 0);
+        assert_eq!(ui.runs.built(), crate::view::cache::BuildCount::ZERO);
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);
             let hit = ui.hit_test(ViewPoint::new(ViewPx::new(x), ViewPx::new(y)));
@@ -420,7 +420,7 @@ mod tests {
             assert_eq!(hit, Some((expected, DocOffset::new(offset))));
         }
         // Resolving built nothing: the drawing state is a paint's alone.
-        assert_eq!(ui.runs.built(), 0);
+        assert_eq!(ui.runs.built(), crate::view::cache::BuildCount::ZERO);
     }
 
     #[test]

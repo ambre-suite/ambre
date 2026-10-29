@@ -17,7 +17,7 @@ use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
-use crate::events::grid::{CellPos, Col, Row};
+use crate::events::grid::{CellPos, Col, Row, RowCount, RowSpan, RowVec};
 use crate::layout::geometry::PageBox;
 use crate::layout::measure::{BlockLine, BlockLineCount, EffectiveStyle, Measurer, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
@@ -745,7 +745,7 @@ fn table_metrics(
                 cell: *cell,
                 x,
                 width,
-                rows: row..last.row.next().to_usize(),
+                rows: RowSpan::new(at.row, last.row.next()),
                 blocks,
                 content_height: top,
                 style,
@@ -755,25 +755,27 @@ fn table_metrics(
 
     // Single-row cells first, then each region takes what it lacks from the
     // last row it spans.
-    let mut row_heights = vec![DocPx::ZERO; grid.rows.len()];
+    let mut row_heights: RowVec<DocPx> = vec![DocPx::ZERO; grid.rows.len()].into();
     for (cell, height) in cells.iter().zip(&heights) {
-        if cell.rows.len() == 1
+        if cell.rows.len() == RowCount::ONE
             && let Some(slot) = row_heights.get_mut(cell.rows.start)
         {
             *slot = slot.max(*height);
         }
     }
     for (cell, height) in cells.iter().zip(&heights) {
-        if cell.rows.len() > 1 {
-            let spanned: DocPx = row_heights
-                .get(cell.rows.clone())
-                .map_or(DocPx::ZERO, |r| r.iter().copied().sum());
-            if let Some(last) = row_heights.get_mut(cell.rows.end - 1) {
+        if cell.rows.len() > RowCount::ONE {
+            let spanned: DocPx = cell
+                .rows
+                .into_iter()
+                .filter_map(|row| row_heights.get(row).copied())
+                .sum();
+            if let Some(last) = cell.rows.last().and_then(|row| row_heights.get_mut(row)) {
                 *last += (*height - spanned).max(DocPx::ZERO);
             }
         }
     }
-    let mut row_tops = vec![DocPx::ZERO];
+    let mut row_tops = RowVec::from(vec![DocPx::ZERO]);
     let mut height = DocPx::ZERO;
     for row_height in &row_heights {
         height += *row_height;
@@ -781,8 +783,8 @@ fn table_metrics(
     }
     let metrics = TextMetrics {
         text_height: height,
-        line_count: BlockLineCount::from_len(row_heights.len()),
-        line_tops: row_tops.clone(),
+        line_count: BlockLineCount::from_len(row_heights.len().to_usize()),
+        line_tops: row_tops.as_slice().to_vec(),
     };
     (metrics, TableShape { row_tops, cells })
 }

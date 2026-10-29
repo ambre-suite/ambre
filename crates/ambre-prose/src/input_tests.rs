@@ -528,7 +528,7 @@ fn a_press_places_the_caret_and_collapses_the_selection() {
         (block, DocOffset::new(4), None)
     );
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
-    assert_eq!(rig.ui.runs.built(), 0);
+    assert_eq!(rig.ui.runs.built(), crate::view::cache::BuildCount::ZERO);
     assert!(rig.ui.provisional_run(block).is_none());
 }
 

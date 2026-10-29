@@ -14,6 +14,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::events::grid::{RowCount, RowVec};
 use crate::events::{BlockId, PageIndex, tree_id};
 use crate::input::ProseInput;
 use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
@@ -173,7 +174,8 @@ impl ProseUiState {
     /// row never shrinks before the answer.
     fn provisional_table(&self, table: &TableShape) -> (TableShape, DocPx) {
         let mut shape = table.clone();
-        let mut growth = vec![DocPx::ZERO; table.row_tops.len().saturating_sub(1)];
+        let rows = table.row_tops.len().saturating_sub(RowCount::ONE);
+        let mut growth: RowVec<DocPx> = vec![DocPx::ZERO; rows.to_usize()].into();
         for cell in &mut shape.cells {
             let mut shift = DocPx::ZERO;
             for (block, top, run) in &mut cell.blocks {
@@ -187,27 +189,19 @@ impl ProseUiState {
                 continue;
             }
             cell.content_height = (cell.content_height + shift).max(DocPx::ZERO);
-            let spanned = match (
-                table.row_tops.get(cell.rows.start),
-                table.row_tops.get(cell.rows.end),
-            ) {
-                (Some(y0), Some(y1)) => *y1 - *y0,
+            let spanned = match (table.row_top(cell.rows.start), table.row_top(cell.rows.end)) {
+                (Some(y0), Some(y1)) => y1 - y0,
                 _ => continue,
             };
             let lack = cell.content_height + cell.style.padding * 2.0 - spanned;
-            if let Some(slot) = cell
-                .rows
-                .end
-                .checked_sub(1)
-                .and_then(|last| growth.get_mut(last))
-            {
+            if let Some(slot) = cell.rows.last().and_then(|last| growth.get_mut(last)) {
                 *slot = slot.max(lack);
             }
         }
         let mut grown = DocPx::ZERO;
-        for (at, lack) in growth.iter().enumerate() {
+        for (at, lack) in growth.iter_enumerated() {
             grown += lack.max(DocPx::ZERO);
-            if let Some(top) = shape.row_tops.get_mut(at + 1) {
+            if let Some(top) = shape.row_tops.get_mut(at.next()) {
                 *top += grown;
             }
         }
@@ -345,7 +339,7 @@ impl ProseUiState {
                 continue;
             };
             if let Some(table) = self.shaped.tables.get(&block.block_id) {
-                let Some(mut piece) = fragment(block, page, &table.row_tops) else {
+                let Some(mut piece) = fragment(block, page, table.row_tops.as_slice()) else {
                     continue;
                 };
                 piece.top += shift;

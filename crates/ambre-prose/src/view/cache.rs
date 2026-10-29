@@ -14,9 +14,53 @@ use loro::TreeID;
 
 use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
 
+ambre_core::define_tally! {
+    /// How many runs hold drawing state, or may.
+    pub struct CachedRunCount;
+
+    /// How many times the cache built the drawing state of a run.
+    pub struct BuildCount;
+}
+
+ambre_core::define_index! {
+    /// An item of one shaped line, in the order the shaper laid them out.
+    pub struct LineItem(usize);
+    /// A number of items of one shaped line.
+    pub struct LineItemCount;
+    /// The signed gap between two items of one shaped line.
+    pub struct LineItemDelta(isize);
+    /// A run of items of one shaped line.
+    pub struct LineItemSpan;
+    /// A list indexed by item of one shaped line.
+    pub struct LineItemVec;
+}
+
 /// How many runs the cache keeps drawing state for, about fifty pages
 /// (`ambre-spec-budgets.md section 6`).
-pub const RUN_CACHE_RUNS: usize = 500;
+pub const RUN_CACHE_RUNS: CachedRunCount = CachedRunCount::new(500);
+
+/// When an entry was last painted: the cache counts each paint. Only the
+/// order of two ticks means something.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct PaintTick(u64);
+
+impl PaintTick {
+    /// The tick after this one, held at the top.
+    fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+/// Where one glyph run of a shaped run sits.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GlyphRunAt {
+    /// The line of the run that holds it.
+    pub line: RunLine,
+    /// Its place among the items of that line.
+    pub item: LineItem,
+    /// The top of its line.
+    pub top: DocPx,
+}
 
 /// Which run an entry is for: a block, or a footnote.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -29,8 +73,8 @@ pub enum RunKey {
 /// order the shaper laid them out.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RunDrawState {
-    /// The line and the item of each glyph run, with the top of its line.
-    pub glyph_runs: Vec<(RunLine, usize, DocPx)>,
+    /// Where each glyph run sits.
+    pub glyph_runs: Vec<GlyphRunAt>,
 }
 
 impl RunDrawState {
@@ -43,7 +87,11 @@ impl RunDrawState {
 
             for (item_index, item) in line.items().enumerate() {
                 if matches!(item, ambre_draw::PositionedLayoutItem::GlyphRun(_)) {
-                    glyph_runs.push((RunLine::from_usize(line_index), item_index, top));
+                    glyph_runs.push(GlyphRunAt {
+                        line: RunLine::from_usize(line_index),
+                        item: LineItem::from_usize(item_index),
+                        top,
+                    });
                 }
             }
         }
@@ -61,7 +109,7 @@ static NO_GLYPHS: RunDrawState = RunDrawState {
 struct Entry {
     run: ShapedRun,
     draw: RunDrawState,
-    used: u64,
+    used: PaintTick,
 }
 
 /// The drawing state of the runs painted lately, bounded (`PROSE-UI-019`).
@@ -71,9 +119,9 @@ struct Entry {
 #[derive(Clone, Debug)]
 pub struct RunCache {
     entries: HashMap<RunKey, Entry>,
-    capacity: usize,
-    clock: u64,
-    built: u64,
+    capacity: CachedRunCount,
+    tick: PaintTick,
+    built: BuildCount,
 }
 
 impl Default for RunCache {
@@ -85,19 +133,19 @@ impl Default for RunCache {
 impl RunCache {
     /// A cache holding at most `capacity` runs, and always at least one.
     #[must_use]
-    pub fn with_capacity(capacity: usize) -> Self {
+    pub fn with_capacity(capacity: CachedRunCount) -> Self {
         Self {
             entries: HashMap::new(),
-            capacity: capacity.max(1),
-            clock: 0,
-            built: 0,
+            capacity: capacity.max(CachedRunCount::new(1)),
+            tick: PaintTick::default(),
+            built: BuildCount::ZERO,
         }
     }
 
     /// How many runs hold drawing state now.
     #[must_use]
-    pub fn len(&self) -> usize {
-        self.entries.len()
+    pub fn len(&self) -> CachedRunCount {
+        CachedRunCount::of_len(self.entries.len())
     }
 
     /// Whether no run holds drawing state.
@@ -108,7 +156,7 @@ impl RunCache {
 
     /// How many times drawing state was built, over the life of the cache.
     #[must_use]
-    pub fn built(&self) -> u64 {
+    pub fn built(&self) -> BuildCount {
         self.built
     }
 
@@ -123,8 +171,8 @@ impl RunCache {
     /// The drawing state of a run about to be painted: built on its first
     /// paint, reused after.
     pub fn draw_state(&mut self, key: RunKey, run: &ShapedRun) -> &RunDrawState {
-        self.clock = self.clock.saturating_add(1);
-        let now = self.clock;
+        self.tick = self.tick.next();
+        let now = self.tick;
         let hit = match self.entries.get_mut(&key) {
             Some(entry) if entry.run == *run => {
                 entry.used = now;
@@ -133,7 +181,7 @@ impl RunCache {
             _ => false,
         };
         if !hit {
-            self.built = self.built.saturating_add(1);
+            self.built = self.built.incremented();
             let entry = Entry {
                 run: run.clone(),
                 draw: RunDrawState::build(run.data()),
@@ -150,7 +198,7 @@ impl RunCache {
 
     /// Drop the least recently painted runs until the cache fits.
     fn evict(&mut self) {
-        while self.entries.len() > self.capacity {
+        while self.len() > self.capacity {
             let oldest = self
                 .entries
                 .iter()
@@ -184,17 +232,17 @@ mod tests {
                 )
             })
             .collect();
-        let mut cache = RunCache::with_capacity(2);
+        let mut cache = RunCache::with_capacity(CachedRunCount::new(2));
         cache.draw_state(runs[0].0, &runs[0].1);
         cache.draw_state(runs[1].0, &runs[1].1);
         // Touch the first again, so the second is now the oldest.
         cache.draw_state(runs[0].0, &runs[0].1);
         cache.draw_state(runs[2].0, &runs[2].1);
-        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.len(), CachedRunCount::new(2));
         assert!(cache.holds(runs[0].0, &runs[0].1));
         assert!(!cache.holds(runs[1].0, &runs[1].1));
         assert!(cache.holds(runs[2].0, &runs[2].1));
-        assert_eq!(cache.built(), 3);
+        assert_eq!(cache.built(), BuildCount::new(3));
     }
 
     #[test]
@@ -210,7 +258,7 @@ mod tests {
         let mut cache = RunCache::default();
         cache.draw_state(RunKey::Block(id), &old);
         cache.draw_state(RunKey::Block(id), &new);
-        assert_eq!(cache.built(), 2);
+        assert_eq!(cache.built(), BuildCount::new(2));
         assert!(!cache.holds(RunKey::Block(id), &old));
     }
 }

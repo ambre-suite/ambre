@@ -19,14 +19,15 @@ use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 use crate::doc;
 use crate::layout::fonts;
 use crate::layout::run::{
-    LocalLineCount, ParleyRunData, Resume, RunLine, RunLineCount, RunLineSpan, ShapedRun,
+    LocalLineCount, ParleyRunData, Resume, RunLine, RunLineCount, RunLineSpan, RunSegmentCount,
+    ShapedRun,
 };
 
 /// How many shaped stretches a run may hold before an edit shapes it whole
 /// again (`PROSE-128`). Typing at the end of a paragraph adds one per line,
 /// and an edit inside it at most two. Each holds a layout alive, so the cap
 /// bounds the memory a run keeps.
-const MAX_SEGMENTS: usize = 16;
+const MAX_SEGMENTS: RunSegmentCount = RunSegmentCount::new(16);
 
 /// A byte range of a block's text and the inline marks the shaper reads on
 /// it. A mark either changes the glyphs (`PROSE-UI-207`) or draws a line
@@ -962,7 +963,7 @@ mod tests {
             let (whole_metrics, _, whole) =
                 measurer.measure_with_lines((&text, &marks), &style, DocPx::new(width), &[], None);
             assert_eq!(measurer.shaped(), before + 2);
-            if next.data().segment_count() > 1 {
+            if next.data().segment_count() > RunSegmentCount::ONE {
                 partial += 1;
             }
             assert_eq!(metrics, whole_metrics, "heights after an edit at {at}");
@@ -1075,10 +1076,10 @@ mod tests {
         let longer = format!("{text}x");
         let (_, _, wider) =
             measurer.measure_with_lines((&longer, &[]), &style, DocPx::new(320.0), &[], Some(&run));
-        assert_eq!(wider.data().segment_count(), 1);
+        assert_eq!(wider.data().segment_count(), RunSegmentCount::ONE);
         let (_, _, same) =
             measurer.measure_with_lines((&longer, &[]), &style, DocPx::new(300.0), &[], Some(&run));
-        assert_eq!(same.data().segment_count(), 2);
+        assert_eq!(same.data().segment_count(), RunSegmentCount::new(2));
     }
 
     #[test]
