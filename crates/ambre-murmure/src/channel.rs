@@ -61,6 +61,23 @@ ambre_core::define_flag! {
         /// The document is opened.
         Open,
     }
+
+    /// Whether the active segment of a channel asked to close.
+    enum CloseAsk {
+        /// It did not, or the relay refused: the next send may ask.
+        Idle,
+        /// It asked, and waits for the answer.
+        Asked,
+    }
+
+    /// Whether a key rotation owes the close of the active segment.
+    enum Rotation {
+        /// The active segment was opened under the current key.
+        Settled,
+        /// A rotation retired its key: it closes at the next ask, whatever
+        /// it holds (`MURMURE-060`).
+        OwesClose,
+    }
 }
 
 /// One document the channel holds, with the identifier the Sync worker routes
@@ -250,10 +267,10 @@ pub struct ChannelState {
     /// The snapshot bytes past which the active segment asks to close.
     segment_snapshot_size: ambre_core::ByteSize,
     /// Whether the active segment asked to close and waits for the answer.
-    close_asked: bool,
+    close_asked: CloseAsk,
     /// Whether a rotation retired the key the active segment was opened
     /// under, so it closes whatever it holds.
-    key_rotated: bool,
+    key_rotated: Rotation,
     /// The successor another client created, whose bytes are in `pending`.
     successor: Option<SegmentId>,
     /// The identity issued for that successor, adopted once it is admitted.
@@ -445,8 +462,8 @@ impl ChannelState {
             sequences: HashMap::new(),
             segment_size: SEGMENT_MESSAGES,
             segment_snapshot_size: SEGMENT_SNAPSHOT_SIZE,
-            close_asked: false,
-            key_rotated: false,
+            close_asked: CloseAsk::Idle,
+            key_rotated: Rotation::Settled,
             successor: None,
             successor_session: None,
             successor_retry: None,

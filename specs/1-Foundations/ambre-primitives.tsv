@@ -1251,8 +1251,6 @@ ambre-logic | src/unopened.rs | crate::unopened | ListedChannels.listed | field 
 ambre-logic | src/waiting.rs | crate::waiting | Waiting.reported | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/waiting.rs | crate::waiting | Waiting::stalled() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-murmure | src/attachment.rs | crate::attachment | fits() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState.close_asked | field | bool	generic	state flag/predicate
-ambre-murmure | src/channel.rs | crate::channel | ChannelState.key_rotated | field | bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::cancel_older() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::count_in(counts) | param | impl Fn(&Fields<MessageKey>)->bool	generic	state flag/predicate
 ambre-murmure | src/channel.rs | crate::channel | ChannelState::holds() | ret | bool	generic	state flag/predicate
@@ -1273,7 +1271,6 @@ ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelSt
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_thread() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::note_thread_session() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::thread_failed() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/channel/threading.rs | crate::channel::threading | Seek.lost | field | bool	generic	state flag/predicate
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | ChannelHeader(has_members) | param | Signal<bool>	generic	state flag/predicate
@@ -1300,7 +1297,7 @@ ambre-murmure | src/chrome.rs | crate::chrome | panel_label() | ret | &'static s
 ambre-murmure | src/chrome.rs | crate::chrome | segments() | ret | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | KeyPlace::words() | ret | &'static str	free-text	the closed set's display label: the words the shortcut list shows for the place
 ambre-murmure | src/commands.rs | crate::commands | KeyRow.action | field | String	free-text	text, label or user content
-ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	newtype-inner	newtype inner
+ambre-murmure | src/commands.rs | crate::commands | MessageAction::Copy.0 | field | String	free-text	the text of a message a member wrote, as the clipboard takes it
 ambre-murmure | src/commands.rs | crate::commands | MessageTarget.text | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | PendingEdit.text | field | String	free-text	text, label or user content
 ambre-murmure | src/commands.rs | crate::commands | RegionKey.action | field | &'static str	free-text	text, label or user content
@@ -1376,7 +1373,7 @@ ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newt
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::from_bytes(bytes) | param | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::into_bytes() | ret | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
-ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	draft row encoder/decoder over &str
+ambre-murmure | src/drafts.rs | crate::drafts | SEPARATOR | const | char	generic	the char that parts the user, the channel and the thread root in the spelling of a DraftKey
 ambre-murmure | src/emoji.rs | crate::emoji | EmojiEntry.name | field | &'static str	free-text	the English name of an emoji, shown as is
 ambre-murmure | src/emoji.rs | crate::emoji | entry(name) | param | &'static str	free-text	the English name of an emoji, shown as is
 ambre-murmure | src/emoji.rs | crate::emoji | name_of() | ret | Option<&'static str>	free-text	the English name of an Emoji, the label a screen reader hears; the emoji itself is the typed Emoji
@@ -1394,7 +1391,7 @@ ambre-murmure | src/list.rs | crate::list | FROM_THREAD | const | &str	free-text
 ambre-murmure | src/list.rs | crate::list | JUMP_HINT | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | JUMP_TO_LATEST | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | MessageList::is_empty() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/list.rs | crate::list | MessageList::place() | ret | usize	math	local count/index/counter
+ambre-murmure | src/list.rs | crate::list | MessageList::place() | ret | usize	local	the place of a segment in the private segments of the list, which the one caller indexes at once
 ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement() | ret | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement(time_of) | param | impl Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | Row<'a>::words(time_of) | param | impl Fn(Timestamp)->String	free-text	text, label or user content
@@ -1463,8 +1460,8 @@ ambre-murmure | src/pictures.rs | crate::pictures | Pictures::want() | ret | boo
 ambre-murmure | src/pictures.rs | crate::pictures | Screens::last_painted() | ret | bool	generic	predicate result: whether a screen's last paint is the one named
 ambre-murmure | src/pictures.rs | crate::pictures | previews() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey.0 | field | String	newtype-inner	newtype inner, accessor or constructor
-ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::as_str() | ret | &str	foreign-api	the reaction key as the Loro map stores it
-ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::read(stored) | param | &str	foreign-api	a reaction key the Loro map returns
+ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::as_str() | ret | &str	newtype-inner	the spelling of a ReactionKey, the key the Loro map stores
+ambre-murmure | src/reaction.rs | crate::reaction | ReactionKey::read(stored) | param | &str	generic	the codec of a ReactionKey: a stored key, decoded back into its user and its emoji
 ambre-murmure | src/reaction.rs | crate::reaction | is_emoji() | ret | bool	generic	predicate result: the Murmure one-emoji rule over the shared Emoji, which Toile keeps free-form
 ambre-murmure | src/reaction.rs | crate::reaction | is_map() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/read_aloud.rs | crate::read_aloud | char_name() | ret | String	free-text	text, label or user content
@@ -1492,10 +1489,10 @@ ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	
 ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	generic	the text a read found, parsed into its role by the caller
 ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	generic	the store codec of a Timestamp: the i64 a Loro map holds, since Loro has no unsigned integer
 ambre-murmure | src/schema.rs | crate::schema | unsigned() | ret | Option<u64>	generic	a store reader: the non-negative integer under any FieldKey, which the caller types by the key's role
-ambre-murmure | src/search.rs | crate::search | Query.words | field | Vec<String>	free-text	text, label or user content
+ambre-murmure | src/search.rs | crate::search | Query.words | field | Vec<String>	newtype-inner	the folded words of a search, the own representation of a Query
 ambre-murmure | src/search.rs | crate::search | Query::matches() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/search.rs | crate::search | Query::matches(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/search.rs | crate::search | Query::parse(text) | param | &str	free-text	text, label or user content
+ambre-murmure | src/search.rs | crate::search | Query::parse(text) | param | &str	newtype-inner	the text a member typed, which the one constructor of Query folds into its words
 ambre-murmure | src/search.rs | crate::search | base() | ret | Option<&'static str>	free-text	text, label or user content
 ambre-murmure | src/search.rs | crate::search | base(c) | param | char	free-text	text, label or user content
 ambre-murmure | src/search.rs | crate::search | fold() | ret | String	free-text	text, label or user content

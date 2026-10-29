@@ -70,8 +70,19 @@ pub(super) struct Seek {
     target: Option<SegmentId>,
     /// The older segment the seek last asked for.
     asked: Option<SegmentId>,
-    /// Its probe failed, or named no listed segment. The next step says so.
-    lost: bool,
+    /// Whether its probe failed, or named no listed segment.
+    trail: Trail,
+}
+
+ambre_core::define_flag! {
+    /// Whether a seek for the root of a copy can still find it.
+    enum Trail {
+        /// The seek goes on, a segment at a time.
+        Open,
+        /// Its probe failed, or named no listed segment: the next step says
+        /// the root is lost.
+        Lost,
+    }
 }
 
 /// Where a seek for the root of a copy stands.
@@ -427,7 +438,7 @@ impl ChannelState {
             thread,
             target: None,
             asked: None,
-            lost: false,
+            trail: Trail::Open,
         });
         if self.root_naming(thread).is_some()
             || self.is_thread(thread)
@@ -459,7 +470,7 @@ impl ChannelState {
         if let Some(seek) = self.seek.as_mut().filter(|seek| seek.thread == document_id) {
             match &read {
                 Ok(segment) => seek.target = Some(*segment),
-                Err(_) => seek.lost = true,
+                Err(_) => seek.trail = Trail::Lost,
             }
         }
         read.map(|_| ())
@@ -492,7 +503,7 @@ impl ChannelState {
     pub fn seek_step(&mut self) -> Option<SeekStep> {
         let seek = self.seek?;
         let thread = seek.thread;
-        let step = if seek.lost {
+        let step = if seek.trail == Trail::Lost {
             SeekStep::Lost { thread }
         } else if let Some((segment, root)) = self.root_naming(thread) {
             SeekStep::Found {
@@ -543,7 +554,7 @@ impl ChannelState {
             .as_mut()
             .filter(|seek| seek.thread == document_id && seek.target.is_none())
         {
-            seek.lost = true;
+            seek.trail = Trail::Lost;
         }
     }
 
