@@ -12,10 +12,14 @@ use ambre_bus::app::prose::{
 };
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
+use ambre_core::{Slant, Strikethrough, Weight};
+
 use super::{
-    IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableCell, IrTableRow, ProseIr, Warnings,
+    IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableCell, IrTableRow, Merging, OwnStyle,
+    ProseIr, Warnings,
 };
 use crate::doc::StoredLevel;
+use crate::mark::InlineCode;
 
 /// The largest file a Markdown import reads.
 pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize(16 * 1024 * 1024);
@@ -314,9 +318,9 @@ impl Reader {
                 let runs = std::mem::take(&mut self.runs);
                 if let Some(Frame::Row { cells }) = self.frames.last_mut() {
                     cells.push(IrTableCell {
-                        styled: false,
+                        styled: OwnStyle::Plain,
                         blocks: vec![IrBlock::Paragraph {
-                            styled: false,
+                            styled: OwnStyle::Plain,
                             runs,
                         }],
                     });
@@ -332,7 +336,7 @@ impl Reader {
             TagEnd::Table => {
                 if let Some(Frame::Table { rows }) = self.frames.pop() {
                     self.place(IrBlock::Table {
-                        merged: false,
+                        merged: Merging::Unmerged,
                         rows,
                     });
                 }
@@ -365,10 +369,10 @@ impl Reader {
         }
         let run = IrRun {
             text: text.to_owned(),
-            bold: self.bold > 0,
-            italic: self.italic > 0,
-            strikethrough: self.strike > 0,
-            code: inline == Inline::Code,
+            bold: Weight::from_bool(self.bold > 0),
+            italic: Slant::from_bool(self.italic > 0),
+            strikethrough: Strikethrough::from_bool(self.strike > 0),
+            code: InlineCode::from_bool(inline == Inline::Code),
             link: self.links.last().cloned(),
             ..IrRun::default()
         };
@@ -401,7 +405,7 @@ impl Reader {
             return;
         }
         self.place(IrBlock::Paragraph {
-            styled: false,
+            styled: OwnStyle::Plain,
             runs,
         });
     }
@@ -475,7 +479,7 @@ mod tests {
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
         IrBlock::Paragraph {
-            styled: false,
+            styled: OwnStyle::Plain,
             runs,
         }
     }
@@ -495,7 +499,7 @@ mod tests {
                 para(vec![
                     IrRun::plain("Some "),
                     IrRun {
-                        bold: true,
+                        bold: Weight::Bold,
                         ..IrRun::plain("bold")
                     },
                     IrRun::plain(" and "),

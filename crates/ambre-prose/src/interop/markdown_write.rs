@@ -15,7 +15,13 @@ use ambre_bus::app::prose::{
 
 use crate::numbering::ListOrdinal;
 
-use super::{IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow, ProseIr, Warnings};
+use ambre_core::{Slant, Strikethrough, Weight};
+
+use super::{
+    Banding, IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow, Merging, OwnStyle, Paging,
+    ProseIr, Warnings,
+};
+use crate::mark::InlineCode;
 
 /// Write `ir` as Markdown in `flavor`, and the report of what it lost.
 #[must_use]
@@ -25,10 +31,10 @@ pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport)
         out: String::new(),
         warnings: Warnings::new(ConversionFormat::Markdown),
     };
-    if ir.meta.paged {
+    if ir.meta.paged == Paging::Paged {
         writer.warnings.unsupported(UnsupportedFeature::PageFormat);
     }
-    if ir.meta.bands {
+    if ir.meta.bands == Banding::Banded {
         writer
             .warnings
             .unsupported(UnsupportedFeature::HeaderAndFooter);
@@ -94,7 +100,7 @@ impl Writer {
     fn block(&mut self, block: &IrBlock, indent: &str) {
         match block {
             IrBlock::Paragraph { styled, runs } => {
-                if *styled {
+                if *styled == OwnStyle::Styled {
                     self.warnings
                         .unsupported(UnsupportedFeature::ParagraphFormatting);
                 }
@@ -122,7 +128,7 @@ impl Writer {
                 self.line(indent, &fence);
             }
             IrBlock::Table { merged, rows } => {
-                if *merged {
+                if *merged == Merging::Merged {
                     self.warnings.unsupported(UnsupportedFeature::MergedCells);
                 }
                 self.table(rows, indent);
@@ -214,7 +220,7 @@ impl Writer {
 
     fn table(&mut self, rows: &[IrTableRow], indent: &str) {
         for cell in rows.iter().flat_map(|row| &row.cells) {
-            if cell.styled {
+            if cell.styled == OwnStyle::Styled {
                 self.warnings
                     .unsupported(UnsupportedFeature::CellFormatting);
             }
@@ -261,7 +267,7 @@ impl Writer {
         for block in blocks {
             match block {
                 IrBlock::Paragraph { styled, runs } => {
-                    if *styled {
+                    if *styled == OwnStyle::Styled {
                         self.warnings
                             .unsupported(UnsupportedFeature::ParagraphFormatting);
                     }
@@ -314,7 +320,7 @@ impl Writer {
                 out.push_str(delimiter.open());
                 open.push(delimiter.clone());
             }
-            if run.code {
+            if run.code == InlineCode::Code {
                 out.push_str(&code_span(&run.text));
             } else {
                 out.push_str(&escape(&run.text));
@@ -340,13 +346,13 @@ impl Writer {
         if let Some(url) = &run.link {
             wanted.push(Delimiter::Link(url.clone()));
         }
-        if run.bold {
+        if run.bold == Weight::Bold {
             wanted.push(Delimiter::Bold);
         }
-        if run.italic {
+        if run.italic == Slant::Italic {
             wanted.push(Delimiter::Italic);
         }
-        if run.strikethrough && self.flavor == MarkdownFlavor::Gfm {
+        if run.strikethrough == Strikethrough::Struck && self.flavor == MarkdownFlavor::Gfm {
             wanted.push(Delimiter::Strike);
         }
         wanted
@@ -354,17 +360,17 @@ impl Writer {
 
     fn lost_marks(&mut self, run: &IrRun) {
         let lost: [(bool, UnsupportedFeature); 8] = [
-            (run.underline, UnsupportedFeature::Underline),
-            (run.superscript, UnsupportedFeature::Superscript),
-            (run.subscript, UnsupportedFeature::Subscript),
+            (run.underline.as_bool(), UnsupportedFeature::Underline),
+            (run.superscript.as_bool(), UnsupportedFeature::Superscript),
+            (run.subscript.as_bool(), UnsupportedFeature::Subscript),
             (
-                run.strikethrough && self.flavor != MarkdownFlavor::Gfm,
+                run.strikethrough.as_bool() && self.flavor != MarkdownFlavor::Gfm,
                 UnsupportedFeature::Strikethrough,
             ),
-            (run.styled, UnsupportedFeature::Styling),
-            (run.comment, UnsupportedFeature::Comment),
-            (run.suggestion, UnsupportedFeature::Suggestion),
-            (run.cross_ref, UnsupportedFeature::CrossReference),
+            (run.styled.as_bool(), UnsupportedFeature::Styling),
+            (run.comment.as_bool(), UnsupportedFeature::Comment),
+            (run.suggestion.as_bool(), UnsupportedFeature::Suggestion),
+            (run.cross_ref.as_bool(), UnsupportedFeature::CrossReference),
         ];
         for (on, feature) in lost {
             if on {
@@ -485,7 +491,7 @@ mod tests {
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
         IrBlock::Paragraph {
-            styled: false,
+            styled: OwnStyle::Plain,
             runs,
         }
     }
@@ -510,14 +516,14 @@ mod tests {
 
     fn cell(text: &str) -> IrTableCell {
         IrTableCell {
-            styled: false,
+            styled: OwnStyle::Plain,
             blocks: vec![para(vec![IrRun::plain(text)])],
         }
     }
 
     fn table() -> IrBlock {
         IrBlock::Table {
-            merged: false,
+            merged: Merging::Unmerged,
             rows: vec![
                 IrTableRow {
                     cells: vec![cell("a"), cell("b")],
@@ -532,12 +538,12 @@ mod tests {
     #[test]
     fn blocks_and_marks_write_as_markdown() {
         let bold = IrRun {
-            bold: true,
+            bold: Weight::Bold,
             ..IrRun::plain("bold")
         };
         let both = IrRun {
-            bold: true,
-            italic: true,
+            bold: Weight::Bold,
+            italic: Slant::Italic,
             ..IrRun::plain("both")
         };
         let link = IrRun {
@@ -645,13 +651,13 @@ mod tests {
         let mut doc = ir(vec![
             para(vec![
                 IrRun {
-                    underline: true,
+                    underline: ambre_core::Underline::Underlined,
                     ..IrRun::plain("u")
                 },
                 IrRun {
-                    underline: true,
-                    styled: true,
-                    comment: true,
+                    underline: ambre_core::Underline::Underlined,
+                    styled: OwnStyle::Styled,
+                    comment: crate::interop::Commenting::Commented,
                     ..IrRun::plain("v")
                 },
             ]),
@@ -660,8 +666,8 @@ mod tests {
         ]);
         doc.meta = IrMeta {
             title: None,
-            paged: true,
-            bands: true,
+            paged: Paging::Paged,
+            bands: Banding::Banded,
         };
         let (_, report) = write(&doc, MarkdownFlavor::Gfm);
         assert_eq!(
@@ -688,7 +694,7 @@ mod tests {
             para(vec![IrRun::plain("# not a heading *nor* [a link]")]),
             para(vec![IrRun::plain("1. not a list")]),
             para(vec![IrRun {
-                code: true,
+                code: InlineCode::Code,
                 ..IrRun::plain("a`b")
             }]),
         ]);

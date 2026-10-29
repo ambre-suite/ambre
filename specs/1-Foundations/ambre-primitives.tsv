@@ -1944,25 +1944,9 @@ ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | w
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::CodeBlock.lang | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::CodeBlock.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Image.alt | field | String	free-text	text content / label / parser input
-ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Paragraph.styled | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Table.merged | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrMeta.bands | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrMeta.paged | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrMeta.title | field | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.bold | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.code | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.comment | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.cross_ref | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.italic | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.strikethrough | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.styled | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.subscript | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.suggestion | field | bool	generic	independent flag or predicate
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.superscript | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun.text | field | String	free-text	text content / label / parser input
-ambre-prose | src/interop/mod.rs | crate::interop | IrRun.underline | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | IrRun::plain(text) | param | impl Into<String>	free-text	text content / label / parser input
-ambre-prose | src/interop/mod.rs | crate::interop | IrTableCell.styled | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/mod.rs | crate::interop | report_message() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | coverage_grew() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | missing_scripts(text) | param | &str	free-text	text content / label / parser input

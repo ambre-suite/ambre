@@ -33,8 +33,9 @@ use crate::doc::{self, StoredLevel};
 use crate::events::grid::{CellPos, Col, ColCount, Row, RowCount};
 use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
 use crate::interop::{
-    IrBlock, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrRun, IrTableCell, IrTableRow,
-    ProseIr, Warnings, markdown_read, markdown_write,
+    Banding, Commenting, IrBlock, IrFootnote, IrListStyle, IrMeta, IrOrderedStyle, IrRun,
+    IrTableCell, IrTableRow, Merging, OwnStyle, Paging, ProseIr, Referencing, Suggesting, Warnings,
+    markdown_read, markdown_write,
 };
 use crate::mark::MarkRoot;
 
@@ -292,13 +293,13 @@ fn ir_list_style(style: ListStyle) -> IrListStyle {
 fn marked_of(run: &IrRun) -> MarkedRun {
     let mut marks = Vec::new();
     let flags = [
-        (run.bold, MarkRoot::Bold),
-        (run.italic, MarkRoot::Italic),
-        (run.underline, MarkRoot::Underline),
-        (run.strikethrough, MarkRoot::Strike),
-        (run.superscript, MarkRoot::Superscript),
-        (run.subscript, MarkRoot::Subscript),
-        (run.code, MarkRoot::Code),
+        (run.bold.as_bool(), MarkRoot::Bold),
+        (run.italic.as_bool(), MarkRoot::Italic),
+        (run.underline.as_bool(), MarkRoot::Underline),
+        (run.strikethrough.as_bool(), MarkRoot::Strike),
+        (run.superscript.as_bool(), MarkRoot::Superscript),
+        (run.subscript.as_bool(), MarkRoot::Subscript),
+        (run.code.as_bool(), MarkRoot::Code),
     ];
     for (on, key) in flags {
         if on {
@@ -323,22 +324,22 @@ fn ir_run(run: MarkedRun, notes: &HashMap<FootnoteId, FootnoteOrdinal>) -> IrRun
             continue;
         }
         match key.root() {
-            "b" => out.bold = true,
-            "i" => out.italic = true,
-            "u" => out.underline = true,
-            "s" => out.strikethrough = true,
-            "sup" => out.superscript = true,
-            "sub" => out.subscript = true,
-            "c" => out.code = true,
+            "b" => out.bold = ambre_core::Weight::Bold,
+            "i" => out.italic = ambre_core::Slant::Italic,
+            "u" => out.underline = ambre_core::Underline::Underlined,
+            "s" => out.strikethrough = ambre_core::Strikethrough::Struck,
+            "sup" => out.superscript = crate::mark::Superscript::Raised,
+            "sub" => out.subscript = crate::mark::Subscript::Lowered,
+            "c" => out.code = crate::mark::InlineCode::Code,
             "a" => {
                 if let LoroValue::String(url) = value {
                     out.link = Some(ambre_core::LinkUrl::new(url.to_string()));
                 }
             }
-            "fg" | "bg" | "fs" | "ff" => out.styled = true,
-            "cm" => out.comment = true,
-            "si" | "sd" => out.suggestion = true,
-            "ref" => out.cross_ref = true,
+            "fg" | "bg" | "fs" | "ff" => out.styled = OwnStyle::Styled,
+            "cm" => out.comment = Commenting::Commented,
+            "si" | "sd" => out.suggestion = Suggesting::Suggested,
+            "ref" => out.cross_ref = Referencing::Reference,
             "fn" => {
                 if let LoroValue::String(id) = value
                     && let Ok(id) = FootnoteId::parse_str(&id)
@@ -374,8 +375,10 @@ impl ProseState {
         ProseIr {
             meta: IrMeta {
                 title: (!title.is_empty()).then_some(title),
-                paged: true,
-                bands: bands.header_enabled.is_on() || bands.footer_enabled.is_on(),
+                paged: Paging::Paged,
+                bands: Banding::from_bool(
+                    bands.header_enabled.is_on() || bands.footer_enabled.is_on(),
+                ),
             },
             blocks: self.walk_children(&tree, None, &notes),
             footnotes,
@@ -415,10 +418,12 @@ impl ProseState {
         };
         Some(match doc::block_type_of(tree, &id)? {
             BlockType::Paragraph => IrBlock::Paragraph {
-                styled: !doc::read_paragraph_style(tree, &id).is_empty()
-                    || doc::style_of(tree, &id).is_some_and(|style| {
-                        doc::BuiltInStyle::of(&style) != Some(doc::BuiltInStyle::Body)
-                    }),
+                styled: OwnStyle::from_bool(
+                    !doc::read_paragraph_style(tree, &id).is_empty()
+                        || doc::style_of(tree, &id).is_some_and(|style| {
+                            doc::BuiltInStyle::of(&style) != Some(doc::BuiltInStyle::Body)
+                        }),
+                ),
                 runs: runs(),
             },
             // The stored level, unclamped (`PROSE-FEAT-091`).
@@ -441,7 +446,7 @@ impl ProseState {
             BlockType::Table => {
                 let grid = Grid::read(tree, &id)?;
                 IrBlock::Table {
-                    merged: !doc::regions(tree, &id).is_empty(),
+                    merged: Merging::from_bool(!doc::regions(tree, &id).is_empty()),
                     rows: grid
                         .cells
                         .iter()
@@ -449,7 +454,7 @@ impl ProseState {
                             cells: cells
                                 .iter()
                                 .map(|cell| IrTableCell {
-                                    styled: cell_styled(tree, cell),
+                                    styled: OwnStyle::from_bool(cell_styled(tree, cell)),
                                     blocks: self.walk_children(tree, Some(*cell), notes),
                                 })
                                 .collect(),
