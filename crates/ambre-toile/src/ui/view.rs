@@ -221,11 +221,6 @@ const CARET_BLINK_PERIOD: ambre_core::PageMillis = ambre_core::PageMillis::new(5
 /// is, and the finished stroke reaches them as a CRDT delta when it commits.
 const LIVE_STROKE_TAIL: usize = 64;
 
-/// Max press-to-release travel (screen px) that still reads as a click, not a
-/// drag, for click-to-edit (`toile-text-editing`). Beyond it the gesture is a
-/// move, and the view arms no edit.
-const CLICK_SLOP: f64 = 4.0;
-
 /// Hand `data` to the browser as a download named `filename`
 /// (`TOILE-IO-085`). A `Blob` behind an object URL, clicked through a detached
 /// anchor: the same path Trame's CSV export takes, because the browser offers no
@@ -2843,7 +2838,7 @@ impl ToileView {
         if let Some((id, down)) = edit_candidate
             && self.editor.is_none()
             && self.selection.as_slice() == std::slice::from_ref(&id)
-            && (screen - down).hypot() <= CLICK_SLOP
+            && (screen - down).hypot() <= f64::from(super::embed::CLICK_SLOP.get())
         {
             self.open_editor(id);
             self.needs_full = true;

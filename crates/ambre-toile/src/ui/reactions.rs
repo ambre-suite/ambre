@@ -31,11 +31,12 @@ use super::viewport::ViewportTransform;
 const CHIP_FONT_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(13.0);
 /// The text padding inside a chip: across, then down.
 const CHIP_PAD: Vec2 = Vec2::new(6.0, 3.0);
-/// Gap between adjacent chips and between the element edge and the chip row.
-const CHIP_GAP: f64 = 4.0;
-const ROW_MARGIN: f64 = 6.0;
+/// Gap between adjacent chips, in logical pixels.
+const CHIP_GAP: ambre_core::ViewPx = ambre_core::ViewPx::new(4.0);
+/// Gap between the element's bottom edge and its chip row, in logical pixels.
+const ROW_MARGIN: ambre_core::ViewPx = ambre_core::ViewPx::new(6.0);
 /// Corner radius of a chip pill, in logical pixels.
-const CHIP_RADIUS: f64 = 8.0;
+const CHIP_RADIUS: ambre_core::ViewPx = ambre_core::ViewPx::new(8.0);
 
 /// Paint the reaction badge row for every element with a tally. Pure over
 /// `DrawSurface`: host-testable. Called from the overlay pass, unconditionally
@@ -76,19 +77,20 @@ fn paint_chip_row<S: DrawSurface>(
     palette: &Palette,
 ) {
     let mut x = rect.x0;
-    let y = rect.y1 + ROW_MARGIN;
+    let y = rect.y1 + f64::from(ROW_MARGIN.get());
 
     // Emoji chips first, in the tally's stable sorted order.
     for (emoji, count) in &tally.emoji {
         let label = format!("{} {count}", emoji.as_str());
-        x = paint_chip(
+        let edge = paint_chip(
             surface,
             &label,
             Point::new(x, y),
             font_cx,
             text_cache,
             palette,
-        ) + CHIP_GAP;
+        );
+        x = f64::from((edge + CHIP_GAP).get());
     }
 
     // A single trailing vote badge when any vote exists: signed weight sum
@@ -113,7 +115,8 @@ fn vote_label(total: VoteTotal, count: VoteCount) -> String {
 }
 
 /// Paint one chip (rounded pill + label) with its top-left at `at`.
-/// Returns the chip's right edge x so the caller can place the next one.
+/// Returns the chip's right edge x, a view coordinate, so the caller can place
+/// the next one.
 fn paint_chip<S: DrawSurface>(
     surface: &mut S,
     label: &str,
@@ -121,7 +124,7 @@ fn paint_chip<S: DrawSurface>(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     palette: &Palette,
-) -> f64 {
+) -> ambre_core::ViewPx {
     let layout = text_cache.get_or_build(
         font_cx,
         label,
@@ -139,7 +142,7 @@ fn paint_chip<S: DrawSurface>(
     // Rounded pill background + hairline border, in the theme's header colours.
     let pill = RoundedRect::from_rect(
         Rect::new(at.x, at.y, at.x + chip_w, at.y + chip_h),
-        CHIP_RADIUS,
+        f64::from(CHIP_RADIUS.get()),
     );
     let path = pill.to_path(0.1);
     surface.fill_path(&path, &Brush::Solid(palette.header_bg));
@@ -162,7 +165,7 @@ fn paint_chip<S: DrawSurface>(
             surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
         }
     }
-    at.x + chip_w
+    ambre_core::ViewPx::new((at.x + chip_w) as f32)
 }
 
 /// The non-emoji label colour (vote badges, counts). Emoji ignore it (they carry

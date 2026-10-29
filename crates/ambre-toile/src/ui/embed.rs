@@ -343,10 +343,11 @@ pub fn visible_web_embeds(
         .collect()
 }
 
-/// How far (logical pixels) the pointer may travel between press and release
-/// and still count as a click. A click focuses a `doc_embed`, and a longer
-/// travel is a drag that moves it ("Input focus").
-pub const CLICK_SLOP: f64 = 4.0;
+/// How far the pointer may travel between press and release and still count
+/// as a click. A click focuses a `doc_embed`, and a longer travel is a drag
+/// that moves it ("Input focus"). The view reads the same slop for
+/// click-to-edit (`toile-text-editing`).
+pub const CLICK_SLOP: ambre_core::ViewPx = ambre_core::ViewPx::new(4.0);
 
 /// Which `doc_embed`, if any, holds input focus, and the press-to-release
 /// arbitration that decides it ("Input focus"). View-local state, never
@@ -396,7 +397,7 @@ impl EmbedFocus {
         };
         // A drag moved something on the board; the focus rides along with none of
         // it. Only a click settles focus either way.
-        if (screen - from).hypot() > CLICK_SLOP {
+        if (screen - from).hypot() > f64::from(CLICK_SLOP.get()) {
             return false;
         }
         match hit {
@@ -840,7 +841,7 @@ mod tests {
         let at = Point::new(100.0, 100.0);
         f.on_press(Some(&eid("e1")), at);
         // Released within the slop -> a click -> focus, and focus changed.
-        assert!(f.on_release(at + Vec2::new(CLICK_SLOP - 0.5, 0.0)));
+        assert!(f.on_release(at + Vec2::new(f64::from(CLICK_SLOP.get()) - 0.5, 0.0)));
         assert_eq!(f.current(), Some(&eid("e1")));
     }
 
@@ -850,7 +851,7 @@ mod tests {
         let at = Point::new(100.0, 100.0);
         f.on_press(Some(&eid("e1")), at);
         // Past the slop -> a drag that moved the embed on the board -> no focus.
-        assert!(!f.on_release(at + Vec2::new(CLICK_SLOP + 0.5, 0.0)));
+        assert!(!f.on_release(at + Vec2::new(f64::from(CLICK_SLOP.get()) + 0.5, 0.0)));
         assert_eq!(f.current(), None);
     }
 

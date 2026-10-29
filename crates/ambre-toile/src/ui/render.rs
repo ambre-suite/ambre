@@ -68,7 +68,7 @@ pub fn missing_media(
 
 /// Stroke width, in screen pixels, of the line traced over a selected arrow.
 /// Heavier than the arrow itself so the selection reads at any zoom.
-const ARROW_SELECT_W: f64 = 3.0;
+const ARROW_SELECT_W: ambre_core::ViewPx = ambre_core::ViewPx::new(3.0);
 
 /// Paint the persistent content layer: board background + adaptive grid, then
 /// the board walk under the camera transform, then the frame titles.
@@ -417,7 +417,7 @@ fn paint_arrow_selection<S: DrawSurface>(
     surface.stroke_path(
         path,
         &Brush::Solid(palette.selection),
-        &Stroke::new(ARROW_SELECT_W / cam.zoom.get()),
+        &Stroke::new(cam.to_board(ARROW_SELECT_W).get()),
     );
     surface.pop_transform();
     let w2s = cam.world_to_screen();
@@ -461,7 +461,7 @@ fn paint_link_badges<S: DrawSurface>(
 pub const FRAME_TITLE_HEIGHT: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
 
 /// Gap between the title's baseline band and the frame's own top edge.
-const FRAME_TITLE_GAP: f64 = 4.0;
+const FRAME_TITLE_GAP: ambre_core::ViewPx = ambre_core::ViewPx::new(4.0);
 
 /// What a frame's band shows, and whether it is the frame's own title
 /// (`TOILE-253`).
@@ -517,7 +517,7 @@ pub fn frame_title_box(screen: Rect, title: &str) -> Option<Rect> {
     // target rather than a layout.
     let tall = f64::from(FRAME_TITLE_HEIGHT.get());
     let w = (title.chars().count() as f64) * tall * 0.6;
-    let bottom = screen.y0 - FRAME_TITLE_GAP;
+    let bottom = screen.y0 - f64::from(FRAME_TITLE_GAP.get());
     Some(Rect::new(screen.x0, bottom - tall, screen.x0 + w, bottom))
 }
 

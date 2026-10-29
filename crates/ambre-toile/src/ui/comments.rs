@@ -28,12 +28,12 @@ use kurbo::{Circle, Shape};
 
 /// Pin radius in logical pixels. Constant in screen space: the marker keeps one
 /// size whatever the zoom (`TOILE-UI-022`).
-const PIN_RADIUS: f64 = 11.0;
+const PIN_RADIUS: ambre_core::ViewPx = ambre_core::ViewPx::new(11.0);
 /// Badge font size, in logical pixels.
 const PIN_FONT_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(11.0);
 /// The pin's tail: the marker sits this far above and right of its anchor point,
 /// so it flags the anchor instead of covering it.
-const PIN_OFFSET: f64 = 10.0;
+const PIN_OFFSET: ambre_core::ViewPx = ambre_core::ViewPx::new(10.0);
 
 /// What the badge of a pin reads (`TOILE-UI-024`): the message count, or a check
 /// mark once a reader resolves the thread. Readable from the board alone,
@@ -56,7 +56,11 @@ pub fn pin_badge(pin: &CommentPin) -> String {
 /// (`TOILE-UI-022`).
 pub fn pin_circle(at: Point, w2s: &Affine) -> Circle {
     let p = *w2s * at;
-    Circle::new(Point::new(p.x + PIN_OFFSET, p.y - PIN_OFFSET), PIN_RADIUS)
+    let offset = f64::from(PIN_OFFSET.get());
+    Circle::new(
+        Point::new(p.x + offset, p.y - offset),
+        f64::from(PIN_RADIUS.get()),
+    )
 }
 
 /// The thread whose pin covers `screen`, topmost last-painted first, or `None`
@@ -319,7 +323,7 @@ mod tests {
         for w in &widths {
             assert_eq!(*w, widths[0], "pin width must not follow the zoom");
         }
-        assert_eq!(widths[0], 2.0 * PIN_RADIUS);
+        assert_eq!(widths[0], 2.0 * f64::from(PIN_RADIUS.get()));
     }
 
     /// The pick answers the pin under the click, and nothing when the click
@@ -339,7 +343,7 @@ mod tests {
             hit_pin(&pins, &w2s, centre),
             Some(ElementId("t1".to_owned()))
         );
-        let outside = Point::new(centre.x + PIN_RADIUS + 2.0, centre.y);
+        let outside = Point::new(centre.x + f64::from(PIN_RADIUS.get()) + 2.0, centre.y);
         assert_eq!(hit_pin(&pins, &w2s, outside), None);
     }
 

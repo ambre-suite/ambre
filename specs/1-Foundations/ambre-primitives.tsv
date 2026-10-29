@@ -2836,8 +2836,6 @@ ambre-toile | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Post.0 | field | String	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Reply.body | field | String	free-text	label, message or user text
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentSignals.panel | field | leptos::prelude::RwSignal<bool>	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/comments.rs | crate::ui::comments | PIN_OFFSET | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/comments.rs | crate::ui::comments | PIN_RADIUS | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/comments.rs | crate::ui::comments | ThreadFilter::keeps() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/comments.rs | crate::ui::comments | pin_badge() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckIntent::Rename.1 | field | String	free-text	label, message or user text
@@ -2849,7 +2847,6 @@ ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_frame_title(
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_label(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::opened_text() | ret | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::selected_text() | ret | Option<String>	free-text	label, message or user text
-ambre-toile | src/ui/embed.rs | crate::ui::embed | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::blur() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::on_release() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::retain_if() | ret | bool	generic	predicate or handled-flag result
@@ -2905,14 +2902,8 @@ ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(before)
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | notes_delta(new) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | notes_delta(old) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | slide_counter_label() | ret | String	free-text	label, message or user text
-ambre-toile | src/ui/reactions.rs | crate::ui::reactions | CHIP_GAP | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/reactions.rs | crate::ui::reactions | CHIP_RADIUS | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/reactions.rs | crate::ui::reactions | ROW_MARGIN | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/reactions.rs | crate::ui::reactions | paint_chip() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | paint_chip(label) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/reactions.rs | crate::ui::reactions | vote_label() | ret | String	free-text	label, message or user text
-ambre-toile | src/ui/render.rs | crate::ui::render | ARROW_SELECT_W | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/render.rs | crate::ui::render | FRAME_TITLE_GAP | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_bands() | ret | impl Iterator<Item=(&'a DisplayElement,Rect,&'a str,bool)>	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_box(title) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label() | ret | (&str,bool)	free-text	label, message or user text
@@ -2941,7 +2932,6 @@ ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::pressed_empty_boar
 ambre-toile | src/ui/tool.rs | crate::ui::tool | double_click_edit(editable) | param | impl Fn(&ElementId)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/ui/tool.rs | crate::ui::tool | drop_missing() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | is_group() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
 ambre-toile | src/ui/view.rs | crate::ui::view | EDIT_LOST | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | LIVE_STROKE_TAIL | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | NOTHING_TO_ZOOM | const | &str	free-text	label, message or user text
