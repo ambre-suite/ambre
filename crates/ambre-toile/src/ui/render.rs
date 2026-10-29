@@ -481,7 +481,7 @@ pub fn frame_title_label(title: &str) -> FrameTitle<'_> {
 
 /// What a frame's band shows: the title somebody typed, or the placeholder
 /// of a frame nobody named.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum FrameTitle<'a> {
     /// The frame's own title, trimmed.
     Named(&'a str),
@@ -498,6 +498,19 @@ impl<'a> FrameTitle<'a> {
         match self {
             Self::Named(title) => title,
             Self::Untitled => Self::PLACEHOLDER,
+        }
+    }
+}
+
+/// A typed title prints as its length alone (`ZK-006`).
+impl std::fmt::Debug for FrameTitle<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Named(title) => f
+                .debug_tuple("Named")
+                .field(&crate::logic::TextLen(title))
+                .finish(),
+            Self::Untitled => f.write_str("Untitled"),
         }
     }
 }
@@ -705,6 +718,15 @@ mod tests {
         assert_eq!(blank, FrameTitle::Untitled, "a blank title is not a title");
         let shown = blank.label();
         assert!(!shown.is_empty(), "the band would have nothing to show");
+    }
+
+    /// A frame title's debug form prints the title's length, none of it.
+    #[test]
+    fn a_frame_title_debug_form_prints_no_title() {
+        let form = format!("{:?}", frame_title_label("Q3 layoffs"));
+        assert!(!form.contains("layoffs"), "{form}");
+        assert!(form.contains("<10 chars>"), "{form}");
+        assert_eq!(format!("{:?}", FrameTitle::Untitled), "Untitled");
     }
 
     #[test]
