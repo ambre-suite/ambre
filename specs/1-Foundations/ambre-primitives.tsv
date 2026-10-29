@@ -2599,7 +2599,6 @@ ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.link_text | field | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | label() | ret | String	free-text	user-facing label of a media type
 ambre-toile | src/chrome/mod.rs | crate::chrome | new_doc_label() | ret | &'static str	free-text	label, message or user text
-ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterIntent::EditNotes.base | field | String	free-text	label, message or user text
 ambre-toile | src/chrome/presenter.rs | crate::chrome::presenter | PresenterPanel(notes) | param | RwSignal<String>	free-text	label, message or user text
 ambre-toile | src/chrome/relay.rs | crate::chrome::relay | ToileRelay.presenter_notes | field | RwSignal<String>	free-text	label, message or user text
 ambre-toile | src/logic/animate.rs | crate::logic::animate | Phase.0 | field | f64	newtype-inner	the factor a Phase holds, in 0..1 and never NaN
@@ -2647,6 +2646,9 @@ ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_impor
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | distinct::EPS | const | f64	math	a constant local to one function
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | import_svg(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/svg_import.rs | crate::logic::interop::svg_import | is_drawn() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/logic/mod.rs | crate::logic | ContentLen.len | field | usize	generic	the size of whatever board content a debug form measures, in the unit the caller names
+ambre-toile | src/logic/mod.rs | crate::logic | ContentLen.unit | field | &'static str	free-text	the unit name a debug form prints beside a size
+ambre-toile | src/logic/mod.rs | crate::logic | TextLen.0 | field | &'a str	newtype-inner	the board text a debug form measures and never prints
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | ToileState::strip_layers(keep) | param | impl Fn(&NodeId)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/logic/state/caches.rs | crate::logic::state::caches | keys_under() | ret | Option<Option<Vec<String>>>	generic	generic parser/reader/formatter over text
 ambre-toile | src/logic/state/codec.rs | crate::logic::state::codec | bin_of() | ret | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
@@ -2826,6 +2828,7 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(fal
 ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_TRAIL_MAX | const | usize	local	the most samples a laser trail keeps, read once to bound it
 ambre-toile | src/ui/presence.rs | crate::ui::presence | PeerCursors::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/presence.rs | crate::ui::presence | paint_cursor(label) | param | &str	free-text	label, message or user text
+ambre-toile | src/ui/presenter.rs | crate::ui::presenter | PresenterIntent::EditNotes.base | field | String	free-text	the speaker note a splice was measured against
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(after) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(before) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | notes_delta(new) | param | &str	free-text	label, message or user text

@@ -38,6 +38,29 @@ pub use model::{
 };
 pub use state::ToileState;
 
+/// A board text as a `Debug` form prints it: its length in characters and
+/// none of its content (`ZK-006`).
+pub(crate) struct TextLen<'a>(pub(crate) &'a str);
+
+impl std::fmt::Debug for TextLen<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<{} chars>", self.0.chars().count())
+    }
+}
+
+/// A board content that a `Debug` form prints as its size alone: how many
+/// of the unit it holds, never what they are (`ZK-006`).
+pub(crate) struct ContentLen {
+    pub(crate) len: usize,
+    pub(crate) unit: &'static str,
+}
+
+impl std::fmt::Debug for ContentLen {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<{} {}>", self.len, self.unit)
+    }
+}
+
 /// 2-peer CRDT convergence property test (DoD). Host-only.
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]

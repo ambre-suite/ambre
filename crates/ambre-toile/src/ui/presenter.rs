@@ -14,7 +14,53 @@
 
 use ambre_core::{CharCount, CharOffset, Utf16Offset, char_len, char_to_utf16, utf16_to_char};
 
+use ambre_bus::UserId;
+use ambre_bus::app::toile::Broadcast;
+
+use crate::logic::TextLen;
 use crate::logic::command::{SlideCount, SlidePosition, TextDelta};
+
+/// An intent emitted by the presenter panel. The launcher maps each variant to a
+/// `ToileCommand` sent to Logic. `Prev`/`Next` -> `PrevSlide`/`NextSlide`,
+/// `Exit` -> `ExitPresent`, and `EditNotes` -> `EditNotes { frame, base, delta }`, the
+/// launcher supplying the active `frame` from the last slide change. Then
+/// `ToggleBroadcast` -> `SetPresentBroadcast`, and `Follow` -> `FollowPresenter`
+/// ("Follow presenter").
+#[derive(Clone, PartialEq, Eq)]
+pub enum PresenterIntent {
+    Prev,
+    Next,
+    Exit,
+    /// A splice, and the note it was measured against (`TOILE-FEAT-088`).
+    EditNotes {
+        base: String,
+        delta: TextDelta,
+    },
+    /// Toggle whether this viewer broadcasts its playback position to peers.
+    ToggleBroadcast(Broadcast),
+    /// Follow the given presenter (`Some`) or stop following (`None`).
+    Follow(Option<UserId>),
+}
+
+/// The note and the splice's insert print as their lengths alone (`ZK-006`).
+impl std::fmt::Debug for PresenterIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Prev => f.write_str("Prev"),
+            Self::Next => f.write_str("Next"),
+            Self::Exit => f.write_str("Exit"),
+            Self::EditNotes { base, delta } => f
+                .debug_struct("EditNotes")
+                .field("base", &TextLen(base))
+                .field("at", &delta.at)
+                .field("delete", &delta.delete)
+                .field("insert", &TextLen(&delta.insert))
+                .finish(),
+            Self::ToggleBroadcast(b) => f.debug_tuple("ToggleBroadcast").field(b).finish(),
+            Self::Follow(who) => f.debug_tuple("Follow").field(who).finish(),
+        }
+    }
+}
 
 /// The presenter panel's slide counter, `1`-based for humans: `"3 / 10"`. An
 /// empty deck reads `"0 / 0"` rather than `"1 / 0"`.
@@ -94,6 +140,18 @@ pub fn caret_through(before: &str, caret: Utf16Offset, after: &str) -> Utf16Offs
 mod tests {
     use super::*;
     use crate::logic::command::SlideIndex;
+
+    /// A notes edit's debug form prints lengths, none of the note.
+    #[test]
+    fn a_notes_edit_debug_form_prints_no_note() {
+        let base = "merger talk".to_owned();
+        let delta = notes_delta(&base, "merger talk friday").expect("a splice");
+        let form = format!("{:?}", PresenterIntent::EditNotes { base, delta });
+        assert!(!form.contains("merger"), "{form}");
+        assert!(!form.contains("friday"), "{form}");
+        assert!(form.contains("<11 chars>"), "{form}");
+        assert!(form.contains("<7 chars>"), "{form}");
+    }
 
     #[test]
     fn a_caret_keeps_its_place_under_a_peer_write() {

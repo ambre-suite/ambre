@@ -230,7 +230,7 @@ pub struct CommentDraft {
 /// What the panel and the composer ask the canvas view to do
 /// (`TOILE-UI-023`). The DOM holds no board state, so the view drains every
 /// intent: it owns the camera and the command queue.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum CommentIntent {
     /// Post the draft composer's first message, opening the thread.
     Post(String),
@@ -249,6 +249,32 @@ pub enum CommentIntent {
         thread: ThreadId,
         anchor: CommentAnchor,
     },
+}
+
+/// A message body prints as its length alone (`ZK-006`).
+impl std::fmt::Debug for CommentIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::logic::TextLen;
+        match self {
+            Self::Post(body) => f.debug_tuple("Post").field(&TextLen(body)).finish(),
+            Self::Discard => f.write_str("Discard"),
+            Self::Reply { thread, body } => f
+                .debug_struct("Reply")
+                .field("thread", thread)
+                .field("body", &TextLen(body))
+                .finish(),
+            Self::Resolve { thread, state } => f
+                .debug_struct("Resolve")
+                .field("thread", thread)
+                .field("state", state)
+                .finish(),
+            Self::Focus { thread, anchor } => f
+                .debug_struct("Focus")
+                .field("thread", thread)
+                .field("anchor", anchor)
+                .finish(),
+        }
+    }
 }
 
 /// The signals the canvas view and the DOM panel share (`toile-comments`
@@ -287,6 +313,24 @@ mod tests {
     use super::*;
     use ambre_bus::app::toile::{ElementId, Viewport};
     use ambre_canvas::PointerButton;
+
+    /// An intent's debug form prints a body's length, none of it.
+    #[test]
+    fn an_intent_debug_form_prints_no_body() {
+        let thread = ElementId("t".to_owned());
+        let post = format!("{:?}", CommentIntent::Post("secret plan".to_owned()));
+        let reply = format!(
+            "{:?}",
+            CommentIntent::Reply {
+                thread,
+                body: "secret plan".to_owned(),
+            }
+        );
+        for form in [post, reply] {
+            assert!(!form.contains("secret"), "{form}");
+            assert!(form.contains("<11 chars>"), "{form}");
+        }
+    }
     use ambre_canvas::theme::LIGHT;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 

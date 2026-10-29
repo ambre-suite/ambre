@@ -20,7 +20,7 @@ use ambre_bus::{AppCommand, AppEvent, UiEvent, UserId};
 use leptos::prelude::*;
 
 use super::find::FindRequest;
-use super::presenter::PresenterIntent;
+use crate::ui::presenter::PresenterIntent;
 use crate::ui::status::SelStats;
 
 /// What one of Toile's panels asks of the board.

@@ -222,7 +222,7 @@ pub enum ImportError {
 /// round-trippable view model decoupled from the CRDT `DisplayElement`, so the
 /// SVG serializer stays pure and host-testable; a Phase-1 adapter maps a
 /// `DisplayViewport` into `[ExportElement]`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct ExportElement {
     pub kind: ElementKind,
     /// World-space AABB (unrotated) the element occupies.
@@ -242,6 +242,30 @@ pub struct ExportElement {
     /// board holds in plaintext; the full blob is ciphertext on the relay and
     /// no path here fetches it (`TOILE-IO-100`).
     pub image_png: Option<ambre_core::ThumbnailPng>,
+}
+
+/// The body and the outline print as their sizes alone (`ZK-006`); the
+/// thumbnail prints its own length.
+impl std::fmt::Debug for ExportElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::logic::{ContentLen, TextLen};
+        f.debug_struct("ExportElement")
+            .field("kind", &self.kind)
+            .field("rect", &self.rect)
+            .field("rotation", &self.rotation)
+            .field("style", &self.style)
+            .field(
+                "path",
+                &self.path.as_ref().map(|p| ContentLen {
+                    len: p.elements().len(),
+                    unit: "path elements",
+                }),
+            )
+            .field("text", &self.text.as_deref().map(TextLen))
+            .field("media_hash", &self.media_hash)
+            .field("image_png", &self.image_png)
+            .finish()
+    }
 }
 
 impl ExportElement {

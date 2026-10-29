@@ -18,31 +18,7 @@ use ambre_core::Utf16Offset;
 use leptos::html;
 use leptos::prelude::*;
 
-use crate::logic::command::TextDelta;
-
-use crate::ui::presenter::{caret_through, notes_delta, slide_counter_label};
-
-/// An intent emitted by the presenter panel. The launcher maps each variant to a
-/// `ToileCommand` sent to Logic. `Prev`/`Next` -> `PrevSlide`/`NextSlide`,
-/// `Exit` -> `ExitPresent`, and `EditNotes` -> `EditNotes { frame, base, delta }`, the
-/// launcher supplying the active `frame` from the last slide change. Then
-/// `ToggleBroadcast` -> `SetPresentBroadcast`, and `Follow` -> `FollowPresenter`
-/// ("Follow presenter").
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PresenterIntent {
-    Prev,
-    Next,
-    Exit,
-    /// A splice, and the note it was measured against (`TOILE-FEAT-088`).
-    EditNotes {
-        base: String,
-        delta: TextDelta,
-    },
-    /// Toggle whether this viewer broadcasts its playback position to peers.
-    ToggleBroadcast(Broadcast),
-    /// Follow the given presenter (`Some`) or stop following (`None`).
-    Follow(Option<UserId>),
-}
+use crate::ui::presenter::{PresenterIntent, caret_through, notes_delta, slide_counter_label};
 
 /// The presenter overlay panel. `open` is driven by `PresentModeChanged`;
 /// `slide` drives the counter; `notes` is re-seeded on every slide

@@ -25,11 +25,28 @@ use crate::logic::model::{ElementKind, ShapeKind};
 
 /// One SVG export: the document, and what it could not express
 /// (`TOILE-IO-025`).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct SvgExport {
     pub document: String,
     /// One line per element the serializer has no shape for, in board order.
     pub skipped: Vec<String>,
+}
+
+/// The document prints as its length alone (`ZK-006`). A skipped line names
+/// an element kind, never its content, so it prints whole.
+impl std::fmt::Debug for SvgExport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SvgExport")
+            .field(
+                "document",
+                &crate::logic::ContentLen {
+                    len: self.document.len(),
+                    unit: "bytes",
+                },
+            )
+            .field("skipped", &self.skipped)
+            .finish()
+    }
 }
 
 /// Serialize `elements` to a standalone SVG document. The `viewBox` spans the
@@ -318,6 +335,25 @@ mod tests {
             ..ElementStyle::default()
         };
         el
+    }
+
+    /// The debug forms of an export element and of an export print sizes,
+    /// none of the body, the outline or the document.
+    #[test]
+    fn an_export_debug_form_prints_no_content() {
+        let mut el = ExportElement::new(ElementKind::Text, Rect::new(0.0, 0.0, 50.0, 20.0));
+        el.text = Some("acquire rival".to_owned());
+        el.path = Some(kurbo::BezPath::from_svg("M 13 17 L 2468.25 31").expect("a path"));
+        let element = format!("{el:?}");
+        assert!(!element.contains("rival"), "{element}");
+        assert!(!element.contains("2468"), "{element}");
+        assert!(element.contains("<13 chars>"), "{element}");
+        assert!(element.contains("<2 path elements>"), "{element}");
+        let export = export_svg(&[el]);
+        let form = format!("{export:?}");
+        assert!(!form.contains("rival") && !form.contains("<svg"), "{form}");
+        let size = format!("<{} bytes>", export.document.len());
+        assert!(form.contains(&size), "{form}");
     }
 
     #[test]

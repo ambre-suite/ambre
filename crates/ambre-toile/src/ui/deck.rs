@@ -75,7 +75,7 @@ pub enum Move {
 /// holds no board state, so every intent is drained by the view, which owns the
 /// command queue. The view turns each into one `SetSlideOrder`, except
 /// `Goto`, which is local playback.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum DeckIntent {
     /// Add a frame the deck does not name yet, at the end.
     Add(FrameId),
@@ -89,6 +89,23 @@ pub enum DeckIntent {
     /// rather than a rank, because the panel's second list holds frames no
     /// rank addresses.
     Rename(FrameId, String),
+}
+
+/// A frame name prints as its length alone (`ZK-006`).
+impl std::fmt::Debug for DeckIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add(frame) => f.debug_tuple("Add").field(frame).finish(),
+            Self::Remove(at) => f.debug_tuple("Remove").field(at).finish(),
+            Self::Shift(at, step) => f.debug_tuple("Shift").field(at).field(step).finish(),
+            Self::Goto(at) => f.debug_tuple("Goto").field(at).finish(),
+            Self::Rename(frame, name) => f
+                .debug_tuple("Rename")
+                .field(frame)
+                .field(&crate::logic::TextLen(name))
+                .finish(),
+        }
+    }
 }
 
 /// The signals the canvas view and the DOM panel share (`toile-presentation`
@@ -110,6 +127,17 @@ pub struct DeckSignals {
 mod tests {
     use super::*;
     use ambre_bus::app::toile::ElementId;
+
+    /// A rename's debug form prints the name's length, none of it.
+    #[test]
+    fn a_rename_debug_form_prints_no_name() {
+        let form = format!(
+            "{:?}",
+            DeckIntent::Rename(ElementId("f".to_owned()), "Q3 layoffs".to_owned())
+        );
+        assert!(!form.contains("layoffs"), "{form}");
+        assert!(form.contains("<10 chars>"), "{form}");
+    }
 
     fn frame(id: &str, name: &str) -> DeckFrame {
         DeckFrame {

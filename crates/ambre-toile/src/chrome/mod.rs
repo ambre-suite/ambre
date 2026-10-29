@@ -60,13 +60,13 @@ pub use menu::context_entries_for;
 pub use menu_bar::TopMenuBar;
 mod icons;
 pub use palette::ToolPalette;
-pub use presenter::{PresenterIntent, PresenterPanel};
+pub use presenter::PresenterPanel;
 pub use status::StatusBar;
 
 // The presenter panel's pure model (counter + notes diff) is host-tested in
 // `ui::presenter`, like `ui::find`. Re-export it so the launcher and tests
 // name it through `toile_chrome`.
-pub use crate::ui::presenter::{notes_delta, slide_counter_label};
+pub use crate::ui::presenter::{PresenterIntent, notes_delta, slide_counter_label};
 pub use style::StyleInspector;
 
 // The inspector's pure model is host-tested in `ui::style` (like `ui::status` /

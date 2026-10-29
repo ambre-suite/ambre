@@ -42,11 +42,22 @@ enum Step {
 /// One edit of the stored text: `delete` characters from `at` go, and `insert`
 /// comes in their place. Positions count characters, and each edit's `at`
 /// reads the text with the edits before it already applied.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct Edit {
     pub at: CharOffset,
     pub delete: CharCount,
     pub insert: String,
+}
+
+/// The inserted text prints as its length alone (`ZK-006`).
+impl std::fmt::Debug for Edit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Edit")
+            .field("at", &self.at)
+            .field("delete", &self.delete)
+            .field("insert", &super::TextLen(&self.insert))
+            .finish()
+    }
 }
 
 /// A merge: the text it yields, and the edits that turn the stored text into
@@ -387,6 +398,19 @@ fn backtrack(trace: &[Vec<isize>], b: &[char], n: isize, m: isize) -> Option<Vec
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
+
+    /// An edit's debug form prints the insert's length, none of it.
+    #[test]
+    fn an_edit_debug_form_prints_no_text() {
+        let edit = Edit {
+            at: CharOffset::new(3),
+            delete: CharCount::new(1),
+            insert: "wire funds".to_owned(),
+        };
+        let form = format!("{edit:?}");
+        assert!(!form.contains("funds"), "{form}");
+        assert!(form.contains("<10 chars>"), "{form}");
+    }
 
     #[test]
     fn two_runs_apart_both_apply() {
