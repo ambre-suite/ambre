@@ -615,7 +615,7 @@ fn the_bar_and_the_cell_show_one_buffer() {
     rig.frame();
     rig.frame();
     assert_eq!(rig.view.formula.text, "ab");
-    rig.view.formula.focused = true;
+    rig.view.formula.focused = BarFocus::Focused;
     rig.view.formula.text = "abc".to_owned();
     rig.frame();
     assert_eq!(
@@ -645,7 +645,7 @@ fn only_a_text_typed_in_the_bar_opens_a_session() {
     rig.store((0, 0), "5", "5");
     rig.frame();
     rig.sent();
-    rig.view.formula.focused = true;
+    rig.view.formula.focused = BarFocus::Focused;
     rig.frame();
     assert!(
         rig.view.editor.is_none(),
@@ -693,7 +693,7 @@ fn a_commit_from_the_bar_writes_the_bar() {
     rig.type_text("ab");
     rig.frame();
     rig.sent();
-    rig.view.formula.focused = true;
+    rig.view.formula.focused = BarFocus::Focused;
     rig.view.formula.text = "xyz".to_owned();
     rig.view.formula.action = Some(FormulaAction::Commit(CommitDirection::Down));
     rig.frame();

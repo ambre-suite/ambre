@@ -40,7 +40,9 @@ impl TrameUiState {
         entry.raw = DisplayFormula::new(text.clone());
         // A literal the engine would read as a number aligns as one until the
         // pack confirms it.
-        entry.numeric = !is_formula && crate::formula::types::finite_number(&text).is_some();
+        entry.numeric = ambre_bus::CellValueKind::from_bool(
+            !is_formula && crate::formula::types::finite_number(&text).is_some(),
+        );
         entry.text = if is_formula { String::new() } else { text };
         // The shown value is now optimistic: a formula awaits recompute, and a
         // literal awaits the CRDT echo. Either way the prior error is stale.

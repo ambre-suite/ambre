@@ -326,7 +326,7 @@ fn row_headers_draw_hover_tint() {
         palette,
         None,
         Some(Row::new(1)),
-        false,
+        CornerHover::Plain,
         &mut fc,
         &mut tc,
         TextPass::WithText,
@@ -352,7 +352,7 @@ fn row_headers_draw_corner_hover_tint() {
         palette,
         None,
         None,
-        true,
+        CornerHover::Hovered,
         &mut fc,
         &mut tc,
         TextPass::WithText,
@@ -377,7 +377,7 @@ fn row_headers_draw_per_row_separators() {
         palette,
         None,
         None,
-        false,
+        CornerHover::Plain,
         &mut fc,
         &mut tc,
         TextPass::WithText,
@@ -406,7 +406,7 @@ fn row_headers_skip_tint_when_inactive() {
         palette,
         None,
         None,
-        false,
+        CornerHover::Plain,
         &mut fc,
         &mut tc,
         TextPass::WithText,
@@ -438,7 +438,7 @@ fn row_headers_draw_active_tint() {
         palette,
         Some(Row::new(2)),
         None,
-        false,
+        CornerHover::Plain,
         &mut fc,
         &mut tc,
         TextPass::WithText,
@@ -544,7 +544,7 @@ fn a_wrapped_cell_is_cut_at_its_own_box() {
     // `TRAME-UI-097`: wrap takes the cell out of the spill and clips it.
     let l = layout();
     let mut c = CellContent::plain(LONG);
-    c.wrap = true;
+    c.wrap = ambre_core::WordBreak::Anywhere;
     let ops = draw_one(&l, 0, 3, c);
     assert_eq!(
         the_clip(&ops),

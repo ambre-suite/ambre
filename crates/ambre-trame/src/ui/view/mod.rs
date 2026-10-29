@@ -532,7 +532,17 @@ pub(crate) struct FormulaBar {
     /// A commit or a cancel the bar raised, not served yet.
     pub(crate) action: Option<FormulaAction>,
     /// Whether the bar holds the keyboard focus.
-    pub(crate) focused: bool,
+    pub(crate) focused: BarFocus,
+}
+
+ambre_core::define_flag! {
+    /// Whether the formula bar holds the keyboard focus.
+    pub(crate) enum BarFocus {
+        /// The focus is elsewhere: the grid, or outside the page.
+        Blurred,
+        /// The bar holds the focus, so a key types into it.
+        Focused,
+    }
 }
 
 impl FormulaBar {

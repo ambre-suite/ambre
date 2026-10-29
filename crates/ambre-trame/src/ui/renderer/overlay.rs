@@ -244,7 +244,8 @@ pub fn draw_overlay<S: DrawSurface>(
         Some(grid::HeaderHit::RowBody(r)) => Some(r),
         _ => None,
     };
-    let hover_corner = matches!(state.hover_header, Some(grid::HeaderHit::Corner));
+    let hover_corner =
+        render::CornerHover::from_bool(matches!(state.hover_header, Some(grid::HeaderHit::Corner)));
     render::draw_col_headers_on(
         surface,
         &layout,

@@ -55,18 +55,18 @@ pub struct CellData {
     /// Raw cell text (formula source for formula cells, equal to `text`
     /// otherwise). Seeds the in-cell editor so formulas are editable as text.
     pub raw: DisplayFormula,
-    pub bold: bool,
-    pub italic: bool,
+    pub bold: ambre_bus::Weight,
+    pub italic: ambre_bus::Slant,
     /// Rich manual formatting (`trame-cell-styles`): underline run, alignments,
     /// wrap, text/fill colours, font family/size, border preset. Pinned to the
     /// cell, fed by [`DisplayCell`](crate::DisplayCell).
-    pub underline: bool,
-    pub strikethrough: bool,
+    pub underline: ambre_bus::Underline,
+    pub strikethrough: ambre_bus::Strikethrough,
     pub h_align: ambre_bus::HAlign,
-    /// The computed value is a number (`DisplayCell::numeric`).
-    pub numeric: bool,
+    /// What the computed value is (`DisplayCell::numeric`).
+    pub numeric: ambre_bus::CellValueKind,
     pub v_align: ambre_bus::VAlign,
-    pub wrap: bool,
+    pub wrap: ambre_bus::WordBreak,
     pub fg: Option<Rgb>,
     pub bg: Option<Rgb>,
     pub font: Option<ambre_core::FontFamily>,
@@ -77,7 +77,7 @@ pub struct CellData {
     pub merge_span: Option<MergeSpan>,
     /// The cell's row is hidden by the active shared filter (`trame-shared-filter`):
     /// the row axis collapses over it. Drives [`TrameUiState::hidden_rows`].
-    pub is_filtered: bool,
+    pub is_filtered: ambre_bus::RowFilter,
 }
 
 impl CellData {

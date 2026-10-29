@@ -491,21 +491,21 @@ impl TrameUiState {
                 CellData {
                     text: cell.text,
                     raw: DisplayFormula::new(cell.raw),
-                    bold: cell.bold.as_bool(),
-                    italic: cell.italic.as_bool(),
-                    underline: cell.underline.as_bool(),
-                    strikethrough: cell.strikethrough.as_bool(),
+                    bold: cell.bold,
+                    italic: cell.italic,
+                    underline: cell.underline,
+                    strikethrough: cell.strikethrough,
                     h_align: cell.h_align,
-                    numeric: cell.numeric.as_bool(),
+                    numeric: cell.numeric,
                     v_align: cell.v_align,
-                    wrap: cell.wrap.as_bool(),
+                    wrap: cell.wrap,
                     fg: cell.fg,
                     bg: cell.bg,
                     font: cell.font,
                     size: cell.size,
                     borders: cell.borders,
                     merge_span: cell.merge_span,
-                    is_filtered: cell.is_filtered.as_bool(),
+                    is_filtered: cell.is_filtered,
                 },
             );
         }
@@ -520,7 +520,7 @@ impl TrameUiState {
         let mut rows: Vec<Row> = self
             .cell_cache
             .iter()
-            .filter(|(_, c)| c.is_filtered)
+            .filter(|(_, c)| c.is_filtered == ambre_bus::RowFilter::Filtered)
             .map(|(at, _)| at.row)
             .collect();
         rows.sort_unstable();

@@ -17,16 +17,16 @@ use ambre_core::Rgb;
 #[derive(Clone, Copy)]
 pub struct CellContent<'a> {
     pub text: &'a str,
-    pub bold: bool,
-    pub italic: bool,
+    pub bold: Weight,
+    pub italic: Slant,
     /// Underline run drawn under the glyphs (`trame-cell-styles`).
-    pub underline: bool,
+    pub underline: Underline,
     /// Strikethrough run drawn through the glyphs.
-    pub strikethrough: bool,
+    pub strikethrough: Strikethrough,
     /// Horizontal alignment ([`HAlign::Auto`] resolves numbers right, text left).
     pub h_align: ambre_bus::HAlign,
-    /// The computed value is a number: what [`HAlign::Auto`] resolves on.
-    pub numeric: bool,
+    /// What the computed value is: what [`HAlign::Auto`] resolves on.
+    pub numeric: CellValueKind,
     /// Vertical alignment within the cell (or the span rect for a merge master).
     pub v_align: ambre_bus::VAlign,
     /// Text colour, packed `0xRRGGBB` (`None` = the palette default).
@@ -38,7 +38,7 @@ pub struct CellContent<'a> {
     /// Font size (`None` = the grid default [`BODY_FONT`](super::BODY_FONT)).
     pub size: Option<ambre_core::FontSize>,
     /// Wrap onto multiple lines inside the cell instead of overflowing.
-    pub wrap: bool,
+    pub wrap: WordBreak,
     /// Per-edge border (style + colour each); `None` edges are not drawn.
     pub borders: ambre_bus::Borders,
 }
@@ -49,18 +49,18 @@ impl<'a> CellContent<'a> {
     pub fn plain(text: &'a str) -> Self {
         Self {
             text,
-            bold: false,
-            italic: false,
-            underline: false,
-            strikethrough: false,
+            bold: Weight::Regular,
+            italic: Slant::Upright,
+            underline: Underline::Plain,
+            strikethrough: Strikethrough::Plain,
             h_align: ambre_bus::HAlign::Auto,
-            numeric: crate::formula::types::finite_number(text).is_some(),
+            numeric: CellValueKind::from_bool(crate::formula::types::finite_number(text).is_some()),
             v_align: ambre_bus::VAlign::Middle,
             fg: None,
             bg: None,
             font: None,
             size: None,
-            wrap: false,
+            wrap: WordBreak::Whole,
             borders: ambre_bus::Borders::default(),
         }
     }
@@ -73,14 +73,16 @@ pub struct Decoration {
     pub strikethrough: Strikethrough,
 }
 
+use ambre_bus::CellValueKind;
+use ambre_core::{Slant, Weight, WordBreak};
 pub use ambre_core::{Strikethrough, Underline};
 
 impl Decoration {
     /// The lines the style of `content` asks for.
     pub fn of(content: &CellContent<'_>) -> Self {
         Self {
-            underline: Underline::from_bool(content.underline),
-            strikethrough: Strikethrough::from_bool(content.strikethrough),
+            underline: content.underline,
+            strikethrough: content.strikethrough,
         }
     }
 }
@@ -94,17 +96,14 @@ pub(super) fn rgb(packed: Rgb) -> Color {
 /// Resolve a cell's parley alignment from its [`HAlign`], deferring `Auto` to
 /// whether the cell computes to a number. The formatted text is not asked: a
 /// currency or a fraction no longer parses as one (`TRAME-UI-093`).
-pub(super) fn cell_alignment(h: ambre_bus::HAlign, numeric: bool) -> Alignment {
-    match h {
-        ambre_bus::HAlign::Left => Alignment::Start,
-        ambre_bus::HAlign::Center => Alignment::Center,
-        ambre_bus::HAlign::Right => Alignment::End,
-        ambre_bus::HAlign::Auto => {
-            if numeric {
-                Alignment::End
-            } else {
-                Alignment::Start
-            }
+pub(super) fn cell_alignment(h: ambre_bus::HAlign, numeric: CellValueKind) -> Alignment {
+    match (h, numeric) {
+        (ambre_bus::HAlign::Left, _) | (ambre_bus::HAlign::Auto, CellValueKind::Text) => {
+            Alignment::Start
+        }
+        (ambre_bus::HAlign::Center, _) => Alignment::Center,
+        (ambre_bus::HAlign::Right, _) | (ambre_bus::HAlign::Auto, CellValueKind::Number) => {
+            Alignment::End
         }
     }
 }

@@ -124,6 +124,16 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether the pointer rests on the top-left select-all corner.
+    pub enum CornerHover {
+        /// The pointer is elsewhere: the corner draws plain.
+        Plain,
+        /// The pointer rests on the corner: it draws the hover tint.
+        Hovered,
+    }
+}
+
 /// Draw the left row-header strip. The order is the opaque background, then the
 /// hover tint (when `hover_row` is visible and not the active row). Then the
 /// active-row tint (when `active_row` is visible), the right separator, and the
@@ -138,7 +148,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     palette: &Palette,
     active_row: Option<Row>,
     hover_row: Option<Row>,
-    hover_corner: bool,
+    hover_corner: CornerHover,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     text_pass: TextPass,
@@ -153,7 +163,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
 
     // Hover tint on the top-left corner (select-all affordance). The corner is
     // the last bg drawn over this region, so the tint sits cleanly on top.
-    if hover_corner {
+    if hover_corner == CornerHover::Hovered {
         surface.fill_rect(Rect::new(0.0, top, hw, cells_top), palette.header_hover);
     }
 

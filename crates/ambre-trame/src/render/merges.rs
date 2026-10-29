@@ -65,17 +65,21 @@ where
             // Wrap constrains the layout to the span width, breaking long tokens
             // within the word. Otherwise the line lays out unbounded, and is
             // clipped to the span rect below (`trame-cell-rendering`).
-            let max_w = if content.wrap { avail as f32 } else { f32::MAX };
+            let max_w = if content.wrap == ambre_canvas::WordBreak::Anywhere {
+                avail as f32
+            } else {
+                f32::MAX
+            };
             let layout_text: &Layout<ParleyBrush> = text_cache.get_or_build_font(
                 font_cx,
                 content.text,
                 font_size,
                 ViewPx::new(max_w),
                 Alignment::Start,
-                ambre_canvas::Weight::from_bool(content.bold),
-                ambre_canvas::Slant::from_bool(content.italic),
+                content.bold,
+                content.italic,
                 content.font,
-                ambre_canvas::WordBreak::from_bool(content.wrap),
+                content.wrap,
             );
             let text_h = layout_text.height() as f64;
             let text_w = layout_text.width() as f64;

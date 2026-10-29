@@ -101,19 +101,22 @@ fn style_applied_mirrors_into_style_state() {
         ),
     );
 
-    assert!(
+    assert_eq!(
         state.bold.get(),
+        ambre_bus::Weight::Bold,
         "bold reported separately must be mirrored"
     );
-    assert!(!state.italic.get());
-    assert!(
+    assert_eq!(state.italic.get(), ambre_bus::Slant::Upright);
+    assert_eq!(
         state.merged.get(),
+        ambre_bus::Merge::Merged,
         "merge pressed-state drives the merge toggle"
     );
-    assert!(state.underline.get());
-    assert!(state.wrap.get());
-    assert!(
+    assert_eq!(state.underline.get(), ambre_bus::Underline::Underlined);
+    assert_eq!(state.wrap.get(), ambre_bus::WordBreak::Anywhere);
+    assert_eq!(
         state.numeric.get(),
+        ambre_bus::CellValueKind::Number,
         "numeric gates Auto-alignment resolution"
     );
     assert_eq!(state.h_align.get(), HAlign::Right);
@@ -129,14 +132,15 @@ fn style_state_ignores_unrelated_events() {
     let _owner = OwnerScope::new();
 
     let state = StyleState::new();
-    state.bold.set(true);
+    state.bold.set(ambre_bus::Weight::Bold);
     let ev = UiEvent::Viewport {
         document_id: DocumentId::new(),
         event: AppEvent::Trame(TrameEvent::DataReset),
     };
     chrome::apply_style_event(&state, &ev);
-    assert!(
+    assert_eq!(
         state.bold.get(),
+        ambre_bus::Weight::Bold,
         "DataReset must not clobber the style state"
     );
 }

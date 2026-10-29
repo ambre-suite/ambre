@@ -56,18 +56,18 @@ status values are normative in `ambre-spec-template.md`.
 #[derive(Clone, Copy)]
 pub struct CellContent<'a> {      // one cell, as the renderer sees it
     pub text: &'a str,            // already number-formatted by the Logic thread
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strikethrough: bool,
+    pub bold: Weight,
+    pub italic: Slant,
+    pub underline: Underline,
+    pub strikethrough: Strikethrough,
     pub h_align: HAlign,          // Auto resolves against `numeric`
-    pub numeric: bool,            // the computed value is a number
+    pub numeric: CellValueKind,   // Number aligns right under Auto
     pub v_align: VAlign,
     pub fg: Option<Rgb>,          // None = the palette's cell text colour
     pub bg: Option<Rgb>,          // None = the palette's content background
     pub font: Option<&'a FontFamily>,
     pub size: Option<FontSize>,   // points, before zoom
-    pub wrap: bool,
+    pub wrap: WordBreak,          // Anywhere wraps inside the cell
     pub borders: Borders,
 }
 ```

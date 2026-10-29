@@ -64,12 +64,12 @@ impl TrameHandler {
         match style {
             StyleToggle::Bold => {
                 patch.bold = Some(ambre_bus::Weight::from_bool(
-                    !self.style.bold.get_untracked(),
+                    !self.style.bold.get_untracked().as_bool(),
                 ));
             }
             StyleToggle::Italic => {
                 patch.italic = Some(ambre_bus::Slant::from_bool(
-                    !self.style.italic.get_untracked(),
+                    !self.style.italic.get_untracked().as_bool(),
                 ));
             }
         }

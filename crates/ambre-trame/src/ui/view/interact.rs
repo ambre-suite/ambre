@@ -145,8 +145,8 @@ impl TrameView {
                         size,
                         DocPx::new(f32::MAX),
                         Alignment::Start,
-                        ambre_canvas::Weight::from_bool(data.bold),
-                        ambre_canvas::Slant::from_bool(data.italic),
+                        data.bold,
+                        data.italic,
                         data.font.as_ref(),
                         ambre_canvas::WordBreak::Whole,
                     );

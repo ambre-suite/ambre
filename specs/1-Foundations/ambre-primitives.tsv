@@ -3055,13 +3055,6 @@ ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | NU
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | V_ALIGNS | const | &[(VAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.bold | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.italic | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.merged | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.numeric | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.strikethrough | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.underline | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.wrap | field | RwSignal<bool>	generic	state flag
 ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | col_to_alpha() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | row_label() | ret | String	free-text	free text: user content, label, message or display string
@@ -3311,21 +3304,13 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(need) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.bold | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.italic | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.numeric | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.strikethrough | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.text | field | &'a str	free-text	free text: user content, label, message or display string
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.underline | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.wrap | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | border_stroke() | ret | (f64,f64)	math	local geometry / pixel arithmetic
-ambre-trame | src/render/content.rs | crate::render::content | cell_alignment(numeric) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset(box_h) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset(text_h) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | has_border() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(hover_corner) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.height | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.top | field | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.width | field | f64	math	local geometry / pixel arithmetic
@@ -3345,14 +3330,7 @@ ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_formula_error(error) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.bold | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.is_filtered | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.italic | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.numeric | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.strikethrough | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.text | field | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.underline | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.wrap | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData::content(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::commit_command(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::follow() | ret | bool	generic	predicate or did-it-change return
@@ -3431,7 +3409,6 @@ ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView:
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears(is_multi) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears(send) | param | impl FnOnce()->bool	generic	state flag
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.focused | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.reference | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.shown | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.text | field | String	free-text	free text: user content, label, message or display string

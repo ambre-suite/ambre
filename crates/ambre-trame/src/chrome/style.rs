@@ -50,17 +50,17 @@ impl Toggles {
 /// style event, so bold/italic live here too. Lives in the `<Router>` subtree.
 #[derive(Clone, Copy)]
 pub struct StyleState {
-    pub bold: RwSignal<bool>,
-    pub italic: RwSignal<bool>,
-    pub underline: RwSignal<bool>,
-    pub strikethrough: RwSignal<bool>,
-    pub wrap: RwSignal<bool>,
+    pub bold: RwSignal<ambre_bus::Weight>,
+    pub italic: RwSignal<ambre_bus::Slant>,
+    pub underline: RwSignal<ambre_bus::Underline>,
+    pub strikethrough: RwSignal<ambre_bus::Strikethrough>,
+    pub wrap: RwSignal<ambre_bus::WordBreak>,
     pub h_align: RwSignal<HAlign>,
     pub v_align: RwSignal<VAlign>,
-    /// Whether the active cell's value is numeric. Lets the alignment control
-    /// resolve [`HAlign::Auto`] the way the renderer does (numbers right, text
-    /// left) so an `Auto` cell shows its de-facto alignment.
-    pub numeric: RwSignal<bool>,
+    /// What the active cell's value is. Lets the alignment control resolve
+    /// [`HAlign::Auto`] the way the renderer does (numbers right, text left)
+    /// so an `Auto` cell shows its de-facto alignment.
+    pub numeric: RwSignal<ambre_bus::CellValueKind>,
     pub format: RwSignal<CellFormat>,
     /// Borders popover picker state: the stroke style and colour the next preset
     /// click applies. Seeded (best-effort) from the active cell's first present
@@ -73,7 +73,7 @@ pub struct StyleState {
     pub size: RwSignal<Option<ambre_core::FontSize>>,
     /// Whether the active cell is part of a merge, driving the toolbar's
     /// merge/unmerge toggle pressed state.
-    pub merged: RwSignal<bool>,
+    pub merged: RwSignal<ambre_bus::Merge>,
 }
 
 impl Default for StyleState {
@@ -86,14 +86,14 @@ impl StyleState {
     /// Build a fresh state with every control at its default value.
     pub fn new() -> Self {
         Self {
-            bold: RwSignal::new(false),
-            italic: RwSignal::new(false),
-            underline: RwSignal::new(false),
-            strikethrough: RwSignal::new(false),
-            wrap: RwSignal::new(false),
+            bold: RwSignal::new(ambre_bus::Weight::Regular),
+            italic: RwSignal::new(ambre_bus::Slant::Upright),
+            underline: RwSignal::new(ambre_bus::Underline::Plain),
+            strikethrough: RwSignal::new(ambre_bus::Strikethrough::Plain),
+            wrap: RwSignal::new(ambre_bus::WordBreak::Whole),
             h_align: RwSignal::new(HAlign::Auto),
             v_align: RwSignal::new(VAlign::Middle),
-            numeric: RwSignal::new(false),
+            numeric: RwSignal::new(ambre_bus::CellValueKind::Text),
             format: RwSignal::new(CellFormat::General),
             border_line: RwSignal::new(BorderStyle::Solid),
             border_color: RwSignal::new(None),
@@ -101,7 +101,7 @@ impl StyleState {
             bg: RwSignal::new(None),
             font: RwSignal::new(None),
             size: RwSignal::new(None),
-            merged: RwSignal::new(false),
+            merged: RwSignal::new(ambre_bus::Merge::default()),
         }
     }
 }
@@ -121,15 +121,15 @@ pub fn apply_style_event(s: &StyleState, ev: &UiEvent) {
         ..
     } = ev
     {
-        s.bold.set(bold.as_bool());
-        s.italic.set(italic.as_bool());
-        s.merged.set(merged.as_bool());
-        s.underline.set(style.underline.as_bool());
-        s.strikethrough.set(style.strikethrough.as_bool());
-        s.wrap.set(style.wrap.as_bool());
+        s.bold.set(*bold);
+        s.italic.set(*italic);
+        s.merged.set(*merged);
+        s.underline.set(style.underline);
+        s.strikethrough.set(style.strikethrough);
+        s.wrap.set(style.wrap);
         s.h_align.set(style.h_align);
         s.v_align.set(style.v_align);
-        s.numeric.set(numeric.as_bool());
+        s.numeric.set(*numeric);
         s.format.set(style.format.clone());
         // The borders pen (line style + colour) is user-owned and sticky: it is
         // NOT reseeded from the selected cell. Seeding it here would clobber an
