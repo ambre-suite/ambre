@@ -99,7 +99,7 @@ pub enum DeckIntent {
 #[derive(Clone, Copy)]
 pub struct DeckSignals {
     /// Whether the panel is open (the Present menu sets it).
-    pub panel: leptos::prelude::RwSignal<bool>,
+    pub panel: leptos::prelude::RwSignal<super::PanelState>,
     /// The board's frames, deck first: re-read on every deck change.
     pub view: leptos::prelude::RwSignal<ambre_bus::app::toile::DeckView>,
     /// The panel's next intent, drained by the view each frame.

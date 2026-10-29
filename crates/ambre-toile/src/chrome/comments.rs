@@ -19,14 +19,15 @@ use ambre_bus::app::toile::{CommentSummary, CommentThread};
 use leptos::html;
 use leptos::prelude::*;
 
+use crate::ui::PanelState;
 use crate::ui::comments::{CommentDraft, CommentIntent, ThreadFilter};
 
-/// The comments panel. `state` is the open flag; the View menu, a pin click and
+/// The comments panel. `state` says whether it shows; the View menu, a pin click and
 /// a fresh thread all set it. `list` and `open` are what the view read back
 /// from the board; `on_intent` carries every action out.
 #[component]
 pub fn CommentsPanel(
-    state: RwSignal<bool>,
+    state: RwSignal<PanelState>,
     list: RwSignal<Vec<CommentSummary>>,
     open: RwSignal<Option<CommentThread>>,
     on_intent: Callback<CommentIntent>,
@@ -35,7 +36,7 @@ pub fn CommentsPanel(
     let reply = RwSignal::new(String::new());
 
     let close = move || {
-        state.set(false);
+        state.set(PanelState::Closed);
         open.set(None);
     };
 
@@ -52,7 +53,7 @@ pub fn CommentsPanel(
     };
 
     move || {
-        state.get().then(|| {
+        state.get().is_open().then(|| {
             view! {
                 <div class="ambre-comments-panel" style="position: fixed; top: 8px; right: 8px; z-index: 60;">
                     <div class="ambre-comments-title">

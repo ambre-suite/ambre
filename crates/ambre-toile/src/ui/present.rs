@@ -36,11 +36,19 @@ pub struct Transition {
 
 /// The camera + content state for one transition frame, returned by
 /// [`Transition::advance`]. `overrides` are the Smart Animate elements to paint
-/// this frame; `done` is set once the eased phase reaches its end.
+/// this frame; `phase` is `Done` once the eased phase reaches its end.
 pub struct TransitionFrame {
     pub cam: ViewportTransform,
     pub overrides: Vec<AnimatedElement>,
-    pub done: bool,
+    pub phase: TransitionPhase,
+}
+
+ambre_core::define_flag! {
+    /// Whether a transition still runs or has reached its end.
+    pub enum TransitionPhase {
+        Running,
+        Done,
+    }
 }
 
 impl Transition {
@@ -81,7 +89,7 @@ impl Transition {
     /// Advance to the page clock's `now`, stamping the start on the first call. The
     /// raw phase `t` is `(now - start) / dur` clamped to `0..=1`. It is eased
     /// before both the camera glide and the content solve, so the whole
-    /// transition shares one easing curve. `done` uses the raw (un-eased) phase
+    /// transition shares one easing curve. `phase` uses the raw (un-eased) phase
     /// so the end is reached exactly at `dur`.
     pub fn advance(&mut self, now: ambre_core::PageTime) -> TransitionFrame {
         let start = *self.started_at.get_or_insert(now);
@@ -99,7 +107,7 @@ impl Transition {
                 eased,
             ),
             overrides: smart_animate(&self.from, &self.to, eased),
-            done: raw >= 1.0,
+            phase: TransitionPhase::from_bool(raw >= 1.0),
         }
     }
 }
@@ -156,7 +164,7 @@ mod tests {
         // t = 0: camera is exactly the source, no progress yet.
         assert_eq!(f.cam.center, Point::new(0.0, 0.0));
         assert_eq!(f.cam.zoom.get(), 1.0);
-        assert!(!f.done);
+        assert_eq!(f.phase, TransitionPhase::Running);
         // The shared element sits at its source bounds; the new element is fully
         // transparent (fade-in at t=0).
         let shared = f
@@ -178,7 +186,11 @@ mod tests {
         let mut t = transition();
         t.advance(ambre_bus::PageTime(1000.0)); // stamp start
         let f = t.advance(ambre_bus::PageTime(1000.0 + 300.0));
-        assert!(f.done, "the transition is done at its full duration");
+        assert_eq!(
+            f.phase,
+            TransitionPhase::Done,
+            "the transition is done at its full duration"
+        );
         // Camera reached the fit target exactly.
         assert_eq!(f.cam.center, Point::new(105.0, 105.0));
         assert!((f.cam.zoom.get() - 2.0).abs() < 1e-9);
@@ -203,7 +215,7 @@ mod tests {
         let mut t = transition();
         t.advance(ambre_bus::PageTime(0.0)); // start at 0
         let f = t.advance(ambre_bus::PageTime(150.0)); // half of 300 ms
-        assert!(!f.done);
+        assert_eq!(f.phase, TransitionPhase::Running);
         // Eased 0.5 == 0.5, so the shared element sits at the geometric midpoint
         // and the camera is halfway to the target.
         let shared = f
@@ -231,8 +243,9 @@ mod tests {
             std::time::Duration::ZERO,
         );
         let f = t.advance(ambre_bus::PageTime(42.0));
-        assert!(
-            f.done,
+        assert_eq!(
+            f.phase,
+            TransitionPhase::Done,
             "a zero-duration transition is done on first advance"
         );
         assert_eq!(f.cam.center, Point::new(10.0, 10.0));

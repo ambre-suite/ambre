@@ -90,7 +90,7 @@ async fn deck_panel_lists_the_slides_in_order() {
     let root = mount_in_container(move || {
         view! {
             <DeckPanel
-                state=RwSignal::new(true)
+                state=RwSignal::new(ambre_toile::ui::PanelState::Open)
                 view=view
                 on_intent=Callback::new(|_: DeckIntent| {})
             />

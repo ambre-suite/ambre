@@ -2591,9 +2591,7 @@ ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | place_web_embed(typed) | param | RwSignal<String>	free-text	text the user is typing
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(error) | param | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/choosers.rs | crate::chrome::choosers | set_web_link(typed) | param | RwSignal<String>	free-text	text the user is typing
-ambre-toile | src/chrome/comments.rs | crate::chrome::comments | CommentsPanel(state) | param | RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/chrome/comments.rs | crate::chrome::comments | clock_label() | ret | String	free-text	label, message or user text
-ambre-toile | src/chrome/deck.rs | crate::chrome::deck | DeckPanel(state) | param | RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/chrome/find.rs | crate::chrome::find | FindPanelState::is_open() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_error | field | RwSignal<Option<&'static str>>	free-text	AddressError message text
 ambre-toile | src/chrome/handler.rs | crate::chrome::handler | ToileDialogs.embed_web_text | field | RwSignal<String>	free-text	text the user is typing
@@ -2798,11 +2796,9 @@ ambre-toile | src/ui/commands.rs | crate::ui::commands | letter(c) | param | cha
 ambre-toile | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Post.0 | field | String	newtype-inner	single field of its own wrapper
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Reply.body | field | String	free-text	label, message or user text
-ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentSignals.panel | field | leptos::prelude::RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/comments.rs | crate::ui::comments | ThreadFilter::keeps() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/comments.rs | crate::ui::comments | pin_badge() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckIntent::Rename.1 | field | String	free-text	label, message or user text
-ambre-toile | src/ui/deck.rs | crate::ui::deck | DeckSignals.panel | field | leptos::prelude::RwSignal<bool>	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/deck.rs | crate::ui::deck | deck_label() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::committed_text() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open(text) | param | &str	free-text	label, message or user text
@@ -2834,6 +2830,7 @@ ambre-toile | src/ui/menu.rs | crate::ui::menu | LockMix::any_locked() | ret | b
 ambre-toile | src/ui/menu.rs | crate::ui::menu | LockMix::any_unlocked() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu.rs | crate::ui::menu | rect_contains_rect() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu_bar.rs | crate::ui::menu_bar | TOP_MENUS | const | &[(MenuId,&str)]	free-text	label, message or user text
+ambre-toile | src/ui/mod.rs | crate::ui | PanelState::is_open() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor.0 | field | Cow<'static,str>	newtype-inner	CanvasCursor inner
 ambre-toile | src/ui/palette.rs | crate::ui::palette | Host::content_editable_if(editable) | param | bool	newtype-inner	the bool the one constructor of Host reads into its variant
 ambre-toile | src/ui/palette.rs | crate::ui::palette | MOVE_PATHS | static | std::sync::LazyLock<String>	generic	CSS cursor text
@@ -2848,7 +2845,6 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(fal
 ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_TRAIL_MAX | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/presence.rs | crate::ui::presence | PeerCursors::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/presence.rs | crate::ui::presence | paint_cursor(label) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/present.rs | crate::ui::present | TransitionFrame.done | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(after) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(before) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | notes_delta(new) | param | &str	free-text	label, message or user text
@@ -2880,7 +2876,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | LIVE_STROKE_TAIL | const | usiz
 ambre-toile | src/ui/view.rs | crate::ui::view | NOTHING_TO_ZOOM | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_CONTAINS | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_HOLDS | const | &str	free-text	label, message or user text
-ambre-toile | src/ui/view.rs | crate::ui::view | Panel::open_if(open) | param | bool	newtype-inner	the bool the one constructor of Panel reads into its variant
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.announce_next_data | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.data_dirty | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.detected_mouse | field | bool	generic	local state flag or value, not a mode selector

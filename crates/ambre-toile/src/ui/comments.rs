@@ -259,7 +259,7 @@ pub enum CommentIntent {
 #[derive(Clone, Copy)]
 pub struct CommentSignals {
     /// Whether the panel is open (the View menu and a pin click set it).
-    pub panel: leptos::prelude::RwSignal<bool>,
+    pub panel: leptos::prelude::RwSignal<super::PanelState>,
     /// The board-wide thread list, re-read on every change.
     pub list: leptos::prelude::RwSignal<Vec<ambre_bus::app::toile::CommentSummary>>,
     /// The thread the panel currently shows whole, bodies included.

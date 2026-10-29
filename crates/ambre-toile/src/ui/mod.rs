@@ -46,3 +46,19 @@ pub mod walk;
 pub use tool::Tool;
 pub use view::ToileView;
 pub use viewport::ViewportTransform;
+
+/// Whether a side panel (comments, deck) is open. A closed panel re-reads
+/// nothing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PanelState {
+    #[default]
+    Closed,
+    Open,
+}
+
+impl PanelState {
+    /// The panel shows.
+    pub fn is_open(self) -> bool {
+        self == Self::Open
+    }
+}

@@ -47,9 +47,9 @@ use ambre_toile::chrome::{
     StatusBar, StyleEdit, StyleModel, Toggles, ToileIntent, ToileRelay, ToolPalette, TopMenuBar,
     UNDO,
 };
-use ambre_toile::ui::Tool;
 use ambre_toile::ui::menu::{self, ClickSite, CtxScope, GroupHeld, LockMix};
 use ambre_toile::ui::menu_bar::ZOOM_IN;
+use ambre_toile::ui::{PanelState, Tool};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
@@ -742,7 +742,7 @@ fn mount_deck(
     slides: Vec<DeckFrame>,
     off_deck: Vec<DeckFrame>,
 ) -> (web_sys::Element, RwSignal<Option<DeckIntent>>) {
-    let state = RwSignal::new(true);
+    let state = RwSignal::new(PanelState::Open);
     let view = RwSignal::new(DeckView { slides, off_deck });
     let fired = RwSignal::new(None::<DeckIntent>);
     let on_intent = Callback::new(move |i: DeckIntent| fired.set(Some(i)));
@@ -956,7 +956,7 @@ fn mount_choosers(
     let dialogs = ToileDialogs::new();
     let placed = RwSignal::new(None);
     let deck = DeckSignals {
-        panel: RwSignal::new(false),
+        panel: RwSignal::new(PanelState::Closed),
         view: RwSignal::new(DeckView::default()),
         intent: RwSignal::new(None),
     };
@@ -1106,7 +1106,7 @@ fn texts(root: &web_sys::Element, selector: &str) -> Vec<String> {
 async fn the_comment_panel_shows_what_the_board_answered() {
     let owner = Owner::new();
     owner.set();
-    let state = RwSignal::new(true);
+    let state = RwSignal::new(PanelState::Open);
     let list = RwSignal::new(vec![summary("t1", "first"), summary("t2", "second")]);
     let open = RwSignal::new(None::<CommentThread>);
     let fired = RwSignal::new(None::<CommentIntent>);

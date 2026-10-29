@@ -49,6 +49,7 @@ use ambre_draw::{FontContext, Point, Rect, Vec2};
 use crate::logic::animate::AnimatedElement;
 use crate::logic::text_merge::merge_text;
 
+use super::PanelState;
 use super::arrow;
 #[cfg(target_arch = "wasm32")]
 use super::comments::CommentIntent;
@@ -2295,7 +2296,7 @@ impl ToileView {
     /// panel keeps no answer of its own (`TOILE-UI-023`).
     #[cfg(target_arch = "wasm32")]
     fn reread_comments(&mut self, thread: &ThreadId) {
-        let panel = Panel::open_if(self.comments.panel.get_untracked());
+        let panel = self.comments.panel.get_untracked();
         let showing = self.comments.open.get_untracked().map(|t| t.id);
         self.reread_comments_shown(panel, showing.as_ref(), thread);
     }
@@ -2310,11 +2311,11 @@ impl ToileView {
     )]
     fn reread_comments_shown(
         &mut self,
-        panel: Panel,
+        panel: PanelState,
         showing: Option<&ThreadId>,
         thread: &ThreadId,
     ) {
-        if panel == Panel::Closed {
+        if !panel.is_open() {
             return;
         }
         self.send_edit(ToileCommand::ReadComments { thread: None });
@@ -2328,7 +2329,7 @@ impl ToileView {
     /// Show the panel and refresh its board-wide list.
     #[cfg(target_arch = "wasm32")]
     fn show_comments_panel(&mut self) {
-        self.comments.panel.set(true);
+        self.comments.panel.set(PanelState::Open);
         self.send_edit(ToileCommand::ReadComments { thread: None });
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -2362,7 +2363,7 @@ impl ToileView {
     /// threads these are.
     #[cfg(target_arch = "wasm32")]
     fn clear_comments(&mut self) {
-        self.comments.panel.set(false);
+        self.comments.panel.set(PanelState::Closed);
         self.comments.list.set(Vec::new());
         self.comments.open.set(None);
         self.comments.draft.set(None);
@@ -2374,7 +2375,7 @@ impl ToileView {
     /// Drop everything the deck panel shows: a closed document leaves no deck.
     #[cfg(target_arch = "wasm32")]
     fn clear_deck(&mut self) {
-        self.deck.panel.set(false);
+        self.deck.panel.set(PanelState::Closed);
         self.deck.view.set(Default::default());
         self.deck.intent.set(None);
     }
@@ -2436,7 +2437,7 @@ impl ToileView {
     /// Show the deck panel and read the board's frames into it.
     #[cfg(target_arch = "wasm32")]
     fn show_deck_panel(&mut self) {
-        self.deck.panel.set(true);
+        self.deck.panel.set(PanelState::Open);
         self.send_edit(ToileCommand::ReadDeck);
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -2446,7 +2447,7 @@ impl ToileView {
     /// Re-read the deck after it changed, while the panel is open.
     #[cfg(target_arch = "wasm32")]
     fn reread_deck(&mut self) {
-        self.reread_deck_shown(Panel::open_if(self.deck.panel.get_untracked()));
+        self.reread_deck_shown(self.deck.panel.get_untracked());
     }
     #[cfg(not(target_arch = "wasm32"))]
     fn reread_deck(&mut self) {}
@@ -2457,8 +2458,8 @@ impl ToileView {
         not(target_arch = "wasm32"),
         allow(dead_code, reason = "the panel signal that feeds it is wasm-only")
     )]
-    fn reread_deck_shown(&mut self, panel: Panel) {
-        if panel == Panel::Open {
+    fn reread_deck_shown(&mut self, panel: PanelState) {
+        if panel.is_open() {
             self.send_edit(ToileCommand::ReadDeck);
         }
     }
@@ -3853,7 +3854,7 @@ impl ToileView {
                 .map(|a| (a.id.clone(), a))
                 .collect();
             self.needs_full = true;
-            if frame.done {
+            if frame.phase == super::present::TransitionPhase::Done {
                 self.transition = None;
                 self.anim_overrides.clear();
                 self.queue_viewport();
@@ -4420,25 +4421,6 @@ fn canvas_client_offset() -> ambre_core::CssPoint {
             ambre_core::CssPoint::new(CssPx::new(r.left() as f32), CssPx::new(r.top() as f32))
         })
         .unwrap_or_default()
-}
-
-/// Whether a side panel is open, as its signal last said. A closed panel
-/// re-reads nothing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Panel {
-    Closed,
-    Open,
-}
-
-impl Panel {
-    /// `Open` when `open` holds, `Closed` otherwise.
-    #[cfg_attr(
-        not(target_arch = "wasm32"),
-        allow(dead_code, reason = "the panel signals that feed it are wasm-only")
-    )]
-    fn open_if(open: bool) -> Self {
-        if open { Panel::Open } else { Panel::Closed }
-    }
 }
 
 // Host-only: the view drives a detached text pipe, which the browser build

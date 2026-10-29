@@ -2828,12 +2828,13 @@ fn a_changed_thread_is_read_again_while_the_panel_shows_it() {
     rig.sent();
     let t = eid("t");
 
-    rig.view.reread_comments_shown(Panel::Open, Some(&t), &t);
+    rig.view
+        .reread_comments_shown(PanelState::Open, Some(&t), &t);
     assert_eq!(reads(&mut rig), [None, Some(t.clone())]);
     rig.view
-        .reread_comments_shown(Panel::Open, Some(&eid("other")), &t);
+        .reread_comments_shown(PanelState::Open, Some(&eid("other")), &t);
     assert_eq!(reads(&mut rig), [None], "the list alone");
-    rig.view.reread_comments_shown(Panel::Closed, None, &t);
+    rig.view.reread_comments_shown(PanelState::Closed, None, &t);
     assert!(reads(&mut rig).is_empty(), "a closed panel reads nothing");
 }
 
@@ -2843,9 +2844,9 @@ fn a_changed_thread_is_read_again_while_the_panel_shows_it() {
 fn a_changed_deck_is_read_again_while_the_panel_is_open() {
     let mut rig = Rig::new();
     rig.sent();
-    rig.view.reread_deck_shown(Panel::Open);
+    rig.view.reread_deck_shown(PanelState::Open);
     assert!(matches!(rig.sent().as_slice(), [ToileCommand::ReadDeck]));
-    rig.view.reread_deck_shown(Panel::Closed);
+    rig.view.reread_deck_shown(PanelState::Closed);
     assert!(rig.sent().is_empty(), "a closed panel reads nothing");
 }
 

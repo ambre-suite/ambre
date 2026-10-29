@@ -14,6 +14,7 @@ use ambre_bus::app::toile::{DeckView, FrameId, SlideCount, SlideIndex};
 use leptos::prelude::*;
 use wasm_bindgen::JsCast as _;
 
+use crate::ui::PanelState;
 use crate::ui::deck::{DeckIntent, Move, deck_label};
 
 /// The `change` handler of one row's title field: it emits the typed name for
@@ -34,17 +35,17 @@ fn name_handler(
     }
 }
 
-/// The deck panel. `state` is the open flag, set by the Present menu. `view`
-/// is the board's frames as the view last read them, and `on_intent` carries
-/// every action out.
+/// The deck panel. `state` says whether it shows, set by the Present menu.
+/// `view` is the board's frames as the view last read them, and `on_intent`
+/// carries every action out.
 #[component]
 pub fn DeckPanel(
-    state: RwSignal<bool>,
+    state: RwSignal<PanelState>,
     view: RwSignal<DeckView>,
     on_intent: Callback<DeckIntent>,
 ) -> impl IntoView {
     move || {
-        state.get().then(|| {
+        state.get().is_open().then(|| {
             view! {
                 <div class="ambre-deck-panel" style="position: fixed; top: 8px; right: 8px; z-index: 60;">
                     <div class="ambre-deck-title">
@@ -52,7 +53,7 @@ pub fn DeckPanel(
                         <button
                             class="ambre-deck-close"
                             aria-label="Close"
-                            on:click=move |_| state.set(false)
+                            on:click=move |_| state.set(PanelState::Closed)
                         >
                             "x"
                         </button>
