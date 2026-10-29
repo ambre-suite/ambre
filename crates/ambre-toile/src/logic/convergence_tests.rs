@@ -6335,9 +6335,9 @@ fn a_remove_takes_every_entry_a_concurrent_add_left() {
     }
 }
 
-/// An undo of a delete puts the id back on its frame's list, and a peer
-/// that took the member out and in again meanwhile left one entry of its
-/// own. The list then names the member twice, and each peer's caches still
+/// An undo of a delete puts the id back on its frame's list. A peer that
+/// took the member out and in again meanwhile left one entry of its own.
+/// The list then names the member twice, and each peer's caches still
 /// equal a rebuild of its own document. One remove then takes both entries.
 #[test]
 fn an_undone_delete_after_a_concurrent_re_add_keeps_the_caches_whole() {

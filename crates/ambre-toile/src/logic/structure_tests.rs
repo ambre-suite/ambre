@@ -340,7 +340,7 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
 // Groups
 // -----------------------------------------------------------------------------
 
-/// `TOILE-149`: an element belongs to one container at most. Framed out of
+/// `TOILE-149`: an element belongs to one group or frame at most. Framed out of
 /// its group, it leaves the group; grouped out of its frame, it leaves the
 /// frame.
 #[test]

@@ -1,7 +1,8 @@
 //! Grouping, frame membership and the group/frame tree helpers for
 //! [`ToileState`](super::ToileState). Split out of
-//! `state/mod.rs`. A node belongs to at most one container; group geometry is
-//! derived (never in the CRDT) and lives only in the `bounds` / R-tree caches.
+//! `state/mod.rs`. A node belongs to at most one group or frame. Group
+//! geometry is derived (never in the CRDT) and lives only in the `bounds` /
+//! R-tree caches.
 
 use std::collections::HashSet;
 
@@ -83,7 +84,7 @@ impl ToileState {
         // Mint before the first write: a spent counter refuses the group with
         // the board untouched, so no detach rides along with the next commit.
         let id = self.mint_element_id()?;
-        // A member leaves every container it sat in, a frame included, since
+        // A member leaves every parent it sat in, a frame included, since
         // it belongs to one at most (`TOILE-149`). When every member sat in one
         // frame, the new group takes their place in it.
         let frame_of = |m: &ElementId| {
@@ -227,7 +228,7 @@ impl ToileState {
     /// so the caller can clamp them above it once the group's node is gone.
     fn unbind_group(&mut self, group: &ElementId) -> Option<ElementId> {
         let children = self.children_of(group);
-        // The group's own container takes the children (`TOILE-157`): its
+        // The group's own parent takes the children (`TOILE-157`): its
         // enclosing group, else the frame that holds it. Concurrent adds can
         // put it in two frames, and the smallest id makes the pick
         // deterministic. Peers that saw different frames can still pick two.
@@ -247,10 +248,10 @@ impl ToileState {
 
         // Drop the group from every list that names it, else it lingers as a
         // dangling entry, desyncing the parent cache from a full rebuild. Then
-        // append the surviving children to its container (the board, when it
+        // append the surviving children to its parent (the board, when it
         // had none).
-        for container in self.parents_of(group).to_vec() {
-            self.remove_child(&container, group);
+        for holder in self.parents_of(group).to_vec() {
+            self.remove_child(&holder, group);
         }
         if let Some(p) = &parent
             && let Some(list) = self.children_list(p)
@@ -272,7 +273,7 @@ impl ToileState {
 
     /// Set a frame's membership: remove then add ids on the frame's `children`
     /// list, and enforce the frame/child z-order invariant. A node belongs
-    /// to at most one container, so an added id is first detached from any group.
+    /// to at most one group or frame, so an added id is first detached from any group.
     /// One undo item.
     pub(super) fn set_frame_children(
         &mut self,
@@ -523,27 +524,27 @@ impl ToileState {
             .cloned()
     }
 
-    /// Remove every entry of `child` from the `children` list of `container`,
+    /// Remove every entry of `child` from the `children` list of `parent`,
     /// a group or a frame. Two concurrent adds leave one id on a list twice.
-    /// The cache forgets the link even when `container` is gone, as a
+    /// The cache forgets the link even when `parent` is gone, as a
     /// cascading delete leaves it.
-    pub(super) fn remove_child(&mut self, container: &ElementId, child: &ElementId) {
-        let Some(list) = self.children_list(container) else {
-            self.unlink_parent(child, container);
+    pub(super) fn remove_child(&mut self, parent: &ElementId, child: &ElementId) {
+        let Some(list) = self.children_list(parent) else {
+            self.unlink_parent(child, parent);
             return;
         };
-        if self.delete_entries(&list, container, child) == ElementCount::ZERO {
-            self.unlink_parent(child, container);
+        if self.delete_entries(&list, parent, child) == ElementCount::ZERO {
+            self.unlink_parent(child, parent);
         }
     }
 
-    /// Delete every entry of `list`, the `children` list of `container`, that
+    /// Delete every entry of `list`, the `children` list of `parent`, that
     /// names `child`, and the cache link each one held. The last goes first,
     /// so each index still names its entry. Returns how many went.
     fn delete_entries(
         &mut self,
         list: &LoroMovableList,
-        container: &ElementId,
+        parent: &ElementId,
         child: &ElementId,
     ) -> ElementCount {
         let LoroValue::List(items) = list.get_deep_value() else {
@@ -558,7 +559,7 @@ impl ToileState {
             .rev();
         for idx in at {
             if list.delete(idx, 1).is_ok() {
-                self.unlink_parent(child, container);
+                self.unlink_parent(child, parent);
                 gone = gone.incremented();
             }
         }
@@ -631,8 +632,8 @@ impl ToileState {
                 self.index.remove(id);
                 // A frame can hold the emptied group, so every list that
                 // names it drops it (`TOILE-271`).
-                for container in self.parents_of(id).to_vec() {
-                    self.remove_child(&container, id);
+                for holder in self.parents_of(id).to_vec() {
+                    self.remove_child(&holder, id);
                 }
                 self.forget_links(id);
             }

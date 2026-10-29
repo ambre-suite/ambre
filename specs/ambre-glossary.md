@@ -128,6 +128,7 @@
 | sealed container | a container a passphrase opens | | `1-Foundations/ambre-spec-docfile.md` |
 | commit | land a transaction | | `1-Foundations/ambre-spec-docfile.md` |
 | schema version | the version of the CRDT shape inside a payload | | `1-Foundations/ambre-spec-schema-version.md` |
+| CRDT container | a map, list, text or counter inside a document's CRDT | | `1-Foundations/ambre-spec-schema-version.md` |
 | migration | one forward step between two versions | | `1-Foundations/ambre-spec-schema-version.md` |
 
 ## 4. THE SCREEN

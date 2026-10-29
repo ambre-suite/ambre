@@ -79,7 +79,7 @@ pub(super) const IMPORT_SLICE: ImportUnits = ImportUnits::new(64);
 
 /// How much of a running import one call applies.
 #[derive(Clone, Copy)]
-enum ImportBudget {
+enum ImportPace {
     /// One slice of [`IMPORT_SLICE`] units, so the board's other commands
     /// wait no longer than that.
     Slice,
@@ -207,17 +207,17 @@ impl ToileState {
     /// an undo group. One Loro undo group spans every slice, which keeps the
     /// whole file one undo step (`TOILE-IO-001`).
     fn finish_import(&mut self, batch: ImportBatch) -> ToileOutcome {
-        self.start_import(batch, ImportBudget::Slice)
+        self.start_import(batch, ImportPace::Slice)
     }
 
-    /// Open the import's undo group and apply its first `budget`.
-    fn start_import(&mut self, batch: ImportBatch, budget: ImportBudget) -> ToileOutcome {
+    /// Open the import's undo group and apply its first `pace`.
+    fn start_import(&mut self, batch: ImportBatch, pace: ImportPace) -> ToileOutcome {
         let mut display = self.finish_running_import();
         if let Err(e) = self.undo.group_start() {
             tracing::warn!("[Toile] the import could not open its undo group: {e:?}");
         }
         self.import_job = Some(Box::new(ImportJob::new(batch)));
-        display.extend(self.run_import(budget));
+        display.extend(self.run_import(pace));
         self.emit_with_update(display)
     }
 
@@ -225,7 +225,7 @@ impl ToileState {
     /// way past the media round trip and the slicing.
     #[cfg(test)]
     pub(super) fn apply_import(&mut self, batch: ImportBatch) -> (ImportReport, ToileOutcome) {
-        let outcome = self.start_import(batch, ImportBudget::Whole);
+        let outcome = self.start_import(batch, ImportPace::Whole);
         let report = outcome
             .display
             .iter()
@@ -256,7 +256,7 @@ impl ToileState {
         if self.import_job.is_none() {
             return ToileOutcome::display_only(Vec::new());
         }
-        let display = self.run_import(ImportBudget::Slice);
+        let display = self.run_import(ImportPace::Slice);
         let outcome = self.emit_with_update(display);
         self.announce_write(outcome)
     }
@@ -271,19 +271,19 @@ impl ToileState {
         if self.import_job.is_none() {
             return Vec::new();
         }
-        self.run_import(ImportBudget::Whole)
+        self.run_import(ImportPace::Whole)
     }
 
-    /// Apply the `budget` of the running import, then commit. The caller
+    /// Apply the `pace` of the running import, then commit. The caller
     /// flushes the delta. A slice short of the end repaints, and the last one
     /// closes the import.
-    fn run_import(&mut self, budget: ImportBudget) -> Vec<ToileEvent> {
+    fn run_import(&mut self, pace: ImportPace) -> Vec<ToileEvent> {
         let Some(mut job) = self.import_job.take() else {
             return Vec::new();
         };
-        let end = match budget {
-            ImportBudget::Slice => job.done.plus(IMPORT_SLICE).min(job.total()),
-            ImportBudget::Whole => job.total(),
+        let end = match pace {
+            ImportPace::Slice => job.done.plus(IMPORT_SLICE).min(job.total()),
+            ImportPace::Whole => job.total(),
         };
         while job.done < end {
             self.apply_unit(&mut job);
