@@ -153,8 +153,8 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
     `MasterSeed::recovery_words`, `MasterSeed::open_from_storage`, `SecretToken::present_bearer`,
     `SecretToken::to_access_token`, `SecretBytes::with_plaintext`, `SecretBytes::into_plaintext`,
     `seal_row` and `seal_file`. A sink that lends the text to one foreign call is named in the file
-    of that call alone (`ARCH-049`). Only the Secret module names `zeroize` (`ARCH-046`). Other
-    code wipes a plaintext buffer it drops through `Secret::wipe`.
+    of that call alone (`ARCH-049`). Only the Secret module names `zeroize` (`ARCH-046`). Code
+    outside it that wipes a buffer does so through `Secret::wipe`.
 * The access token of `WsClientMsg::Authenticate` is the one secret `ambre-protocol` carries, and
   it does so through the hand-written serde of `AccessToken`. One that crosses the bus or the store
   does so through the hand-written serde of its newtype, never a derive (`ARCH-047`).

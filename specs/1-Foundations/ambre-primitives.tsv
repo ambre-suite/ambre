@@ -3748,7 +3748,7 @@ ambre-core | src/secret.rs | crate::secret | Passphrase::matches() | ret | bool	
 ambre-core | src/secret.rs | crate::secret | Passphrase::new(text) | param | String	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | Passphrase::secret() | ret | &Secret<String>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretBytes.0 | field | Arc<Secret<Vec<u8>>>	newtype-inner	secret newtype over a shared ambre_core::Secret
-ambre-core | src/secret.rs | crate::secret | SecretBytes::into_plaintext() | ret | Vec<u8>	newtype-inner	the opened bytes moved out with no copy, into a role that keeps them in the clear by design; the wrapper is left empty (ARCH-047)
+ambre-core | src/secret.rs | crate::secret | SecretBytes::into_plaintext() | ret | Vec<u8>	newtype-inner	the opened bytes moved out with no copy, into a role that keeps them in the clear by design; the wrapper is left empty, and a shared wrapper hands out a copy that leaves the original to its other owner, who wipes it (ARCH-047)
 ambre-core | src/secret.rs | crate::secret | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretBytes::secret() | ret | &Secret<Vec<u8>>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretBytes::with_plaintext(read) | param | impl FnOnce(&[u8])->R	generic	lends the opened bytes with no copy to the code that reads them, while the wrapper keeps and wipes them (ARCH-047)
