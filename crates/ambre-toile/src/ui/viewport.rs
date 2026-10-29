@@ -77,6 +77,13 @@ impl ViewportTransform {
         BoardLength::new(f64::from(screen.get()) / self.zoom.get())
     }
 
+    /// The screen length that the board length `board` covers at `zoom`, in
+    /// the `f64` of the drawing surface, so a padding keeps its precision.
+    #[must_use]
+    pub fn to_surface(board: BoardLength, zoom: ZoomFactor) -> ambre_core::SurfacePx {
+        ambre_core::SurfacePx::new(board.get() * zoom.get())
+    }
+
     /// The inverse mapping (screen -> world). Always invertible: `zoom > 0`.
     pub fn screen_to_world(&self) -> Affine {
         self.world_to_screen().inverse()

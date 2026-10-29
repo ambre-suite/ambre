@@ -29,7 +29,7 @@ use super::{ToileState, write_edits};
 #[derive(Clone, Debug)]
 pub(super) struct Wire {
     pub(super) conn: Connector,
-    pub(super) reach: f64,
+    pub(super) reach: ambre_core::BoardLength,
 }
 
 impl ToileState {
@@ -258,12 +258,12 @@ impl ToileState {
     fn read_wire(&self, id: &ConnectorId) -> Option<Wire> {
         let cm = self.connector_map(id)?;
         let conn = read_connector(id.clone(), &cm)?;
-        let stroke = f64::from(
+        let stroke = ambre_core::BoardLength::new(f64::from(
             self.style_read(bin_of(&cm, ConnectorKey::Style).as_deref())
                 .stroke_w
                 .get()
                 .max(1.0),
-        );
+        ));
         Some(Wire {
             conn,
             reach: LABEL_W / 2.0 + stroke / 2.0,

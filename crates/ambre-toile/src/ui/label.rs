@@ -12,18 +12,20 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{ConnectorId, DisplayNode};
+use ambre_core::BoardLength;
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurve, ParamCurveArclen, PathSeg};
 
 /// Arc-length accuracy for the mid-point search, in world units. A caption that
 /// sits a tenth of a pixel off centre is a caption in the right place.
-const ARCLEN_ACCURACY: f64 = 0.1;
+const ARCLEN_ACCURACY: BoardLength = BoardLength::new(0.1);
 
 /// The caption box, in world units. Fixed rather than text-derived: the box is
 /// the wrap width and the click target. Both must be knowable before the font
 /// context exists (the editor opens outside the paint pass).
-pub const LABEL_W: f64 = 160.0;
-pub const LABEL_H: f64 = 24.0;
+pub const LABEL_W: BoardLength = BoardLength::new(160.0);
+/// The height of the caption box, in world units.
+pub const LABEL_H: BoardLength = BoardLength::new(24.0);
 
 /// Caption font size in world units, scaled by the camera at paint time like
 /// every other body on the board.
@@ -35,7 +37,10 @@ pub const LABEL_FONT_SIZE: ambre_core::DocPx = ambre_core::DocPx::new(14.0);
 pub fn label_anchor(path: &BezPath) -> Option<Point> {
     let segs: Vec<PathSeg> = path.segments().collect();
     let (first, last) = (segs.first()?, segs.last()?);
-    let lens: Vec<f64> = segs.iter().map(|s| s.arclen(ARCLEN_ACCURACY)).collect();
+    let lens: Vec<f64> = segs
+        .iter()
+        .map(|s| s.arclen(ARCLEN_ACCURACY.get()))
+        .collect();
     let total: f64 = lens.iter().sum();
     if total <= 0.0 || !total.is_finite() {
         // A zero-length path: both endpoints resolved to one point.
@@ -44,7 +49,7 @@ pub fn label_anchor(path: &BezPath) -> Option<Point> {
     let mut want = total / 2.0;
     for (seg, len) in segs.iter().zip(&lens) {
         if want <= *len {
-            return Some(seg.eval(seg.inv_arclen(want, ARCLEN_ACCURACY)));
+            return Some(seg.eval(seg.inv_arclen(want, ARCLEN_ACCURACY.get())));
         }
         want -= len;
     }
@@ -54,11 +59,12 @@ pub fn label_anchor(path: &BezPath) -> Option<Point> {
 /// The caption's world box: the fixed label box centred on the anchor.
 pub fn label_rect(path: &BezPath) -> Option<Rect> {
     let c = label_anchor(path)?;
+    let (half_w, half_h) = ((LABEL_W / 2.0).get(), (LABEL_H / 2.0).get());
     Some(Rect::new(
-        c.x - LABEL_W / 2.0,
-        c.y - LABEL_H / 2.0,
-        c.x + LABEL_W / 2.0,
-        c.y + LABEL_H / 2.0,
+        c.x - half_w,
+        c.y - half_h,
+        c.x + half_w,
+        c.y + half_h,
     ))
 }
 

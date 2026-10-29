@@ -207,12 +207,8 @@ pub enum PointerMode {
 
 /// Keyboard-nudge step in world units: a fine 1-unit tap, or a coarse 10-unit
 /// jump with Shift held (`toile-elements`).
-const NUDGE_SMALL: f64 = 1.0;
-const NUDGE_LARGE: f64 = 10.0;
-/// Diagonal offset applied to a `Ctrl/Cmd+D` duplicate so the copy is visibly
-/// distinct from its source (`toile-clipboard`), matching the alt-drag
-/// nudge.
-const DUPLICATE_NUDGE: f64 = 10.0;
+const NUDGE_SMALL: ambre_core::BoardLength = ambre_core::BoardLength::new(1.0);
+const NUDGE_LARGE: ambre_core::BoardLength = ambre_core::BoardLength::new(10.0);
 
 /// Inline-edit caret blink half-period: the caret shows for one interval,
 /// hides for the next (`toile-tools`). ~530 ms is the familiar desktop
@@ -3017,7 +3013,7 @@ impl ToileView {
                 Key::Char(KeyChar::D) if !self.selection.is_empty() => {
                     self.send_edit(ToileCommand::DuplicateElements {
                         ids: self.selection.clone(),
-                        delta: Vec2::new(DUPLICATE_NUDGE, DUPLICATE_NUDGE),
+                        delta: super::menu::duplicate_delta(),
                     });
                 }
                 // Group / ungroup the selection (`toile-groups`).
@@ -3113,7 +3109,7 @@ impl ToileView {
             Key::ArrowUp | Key::ArrowDown | Key::ArrowLeft | Key::ArrowRight
                 if !self.selection.is_empty() =>
             {
-                let step = if shift { NUDGE_LARGE } else { NUDGE_SMALL };
+                let step = if shift { NUDGE_LARGE } else { NUDGE_SMALL }.get();
                 let delta = match key {
                     Key::ArrowUp => Vec2::new(0.0, -step),
                     Key::ArrowDown => Vec2::new(0.0, step),
@@ -3173,7 +3169,7 @@ impl ToileView {
     /// screen pixels of a world box. Also its full screen rect, for hit tests.
     fn edit_geometry_of(&self, world: Rect) -> (Point, ViewPx, Rect) {
         let sb = world_rect_to_screen(world, &self.cam);
-        let pad = InlineEditor::pad(self.cam.zoom);
+        let pad = InlineEditor::pad(self.cam.zoom).get();
         let origin = Point::new(sb.x0 + pad, sb.y0 + pad);
         let wrap_w = ViewPx::new((sb.width() - 2.0 * pad).max(1.0) as f32);
         (origin, wrap_w, sb)
@@ -3235,7 +3231,7 @@ impl ToileView {
                     .find_element(id)
                     .or_else(|| self.edit_frame.as_ref().filter(|e| &e.id == id))?;
                 let band = self.frame_title_band(e)?;
-                let pad = InlineEditor::pad(self.cam.zoom);
+                let pad = InlineEditor::pad(self.cam.zoom).get();
                 let s2w = self.cam.screen_to_world();
                 let world = Rect::from_points(
                     s2w * Point::new(band.x0 - pad, band.y0 - pad),

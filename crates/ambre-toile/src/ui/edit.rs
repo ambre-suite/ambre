@@ -167,8 +167,8 @@ impl InlineEditor {
     /// inset (`TEXT_PAD`) under the camera. The editor lays out in screen
     /// pixels, so its caret keeps one width at every zoom, and lands where the
     /// walk's body does.
-    pub fn pad(zoom: ambre_core::ZoomFactor) -> f64 {
-        TEXT_PAD * zoom.get()
+    pub fn pad(zoom: ambre_core::ZoomFactor) -> ambre_core::SurfacePx {
+        super::viewport::ViewportTransform::to_surface(TEXT_PAD, zoom)
     }
 
     /// Record an action to apply at the next paint-time flush.

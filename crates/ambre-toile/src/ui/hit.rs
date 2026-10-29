@@ -136,26 +136,26 @@ pub(crate) fn path_outline_distance(path: &BezPath, local: Point) -> BoardLength
 
 /// A polyline (freehand stroke) hits within `tol` of any of its segments.
 fn polyline_hit(pts: &[Point], local: Point, tol: BoardLength) -> bool {
-    let within = |d: f64| BoardLength::new(d) <= tol;
     match pts {
         [] => false,
-        [only] => within(only.distance(local)),
+        [only] => BoardLength::new(only.distance(local)) <= tol,
         _ => pts
             .windows(2)
-            .any(|w| matches!(w, &[a, b] if within(point_segment_distance(local, a, b)))),
+            .any(|w| matches!(w, &[a, b] if point_segment_distance(local, a, b) <= tol)),
     }
 }
 
-/// Euclidean distance from `p` to the segment `[a, b]`.
-fn point_segment_distance(p: Point, a: Point, b: Point) -> f64 {
+/// Euclidean distance from `p` to the segment `[a, b]`, in the element's
+/// local board units.
+fn point_segment_distance(p: Point, a: Point, b: Point) -> BoardLength {
     let ab = b - a;
     let len_sq = ab.hypot2();
     if len_sq <= f64::EPSILON {
-        return p.distance(a);
+        return BoardLength::new(p.distance(a));
     }
     let t = ((p - a).dot(ab) / len_sq).clamp(0.0, 1.0);
     let proj = a + ab * t;
-    p.distance(proj)
+    BoardLength::new(p.distance(proj))
 }
 
 /// The top-most element hit by `world_pt`: nodes are back-to-front, so the last

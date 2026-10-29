@@ -27,9 +27,15 @@ use ambre_bus::app::toile::{
 use ambre_commands::CommandId;
 use kurbo::{Rect, Vec2};
 
-/// Diagonal offset applied to a menu Duplicate so the copy is visibly distinct
-/// from its source (`toile-clipboard`), matching the `Ctrl/Cmd+D` nudge in the view.
-const DUPLICATE_NUDGE: f64 = 10.0;
+/// Diagonal offset, on each axis, of a duplicate so the copy is visibly
+/// distinct from its source (`toile-clipboard`). The menu Duplicate and the
+/// `Ctrl/Cmd+D` of the view both read it.
+const DUPLICATE_NUDGE: ambre_core::BoardLength = ambre_core::BoardLength::new(10.0);
+
+/// The move of a duplicate from its source: [`DUPLICATE_NUDGE`] on each axis.
+pub(crate) fn duplicate_delta() -> Vec2 {
+    Vec2::new(DUPLICATE_NUDGE.get(), DUPLICATE_NUDGE.get())
+}
 
 // -- Command identities --------------------------------------------------------
 // String-keyed ids (`ambre-commands`), one per menu entry. The identity is the
@@ -411,7 +417,7 @@ pub fn resolve_menu_command(
         DELETE => vec![ToileCommand::DeleteElements { ids: ids() }],
         DUPLICATE => vec![ToileCommand::DuplicateElements {
             ids: ids(),
-            delta: Vec2::new(DUPLICATE_NUDGE, DUPLICATE_NUDGE),
+            delta: duplicate_delta(),
         }],
         GROUP => vec![ToileCommand::GroupElements { ids: ids() }],
         // One ungroup over every selected group node, so one undo item
@@ -949,7 +955,7 @@ mod tests {
         assert!(matches!(
             out.as_slice(),
             [ToileCommand::DuplicateElements { delta, .. }]
-                if delta.x == DUPLICATE_NUDGE && delta.y == DUPLICATE_NUDGE
+                if *delta == duplicate_delta()
         ));
     }
 

@@ -462,10 +462,10 @@ const STICKY_SIZE: Size = Size::new(120.0, 120.0);
 const TEXT_SIZE: Size = Size::new(200.0, 40.0);
 const CLICK_SHAPE_SIZE: Size = Size::new(120.0, 80.0);
 /// Below this drag extent (world units) a shape gesture counts as a click.
-const MIN_DRAG: f64 = 3.0;
+const MIN_DRAG: ambre_core::BoardLength = ambre_core::BoardLength::new(3.0);
 /// Trailing pen nodes closer than this (world units) are the closing
 /// double-click's duplicate press; dropped before the path commits.
-const PEN_DEDUP: f64 = 2.0;
+const PEN_DEDUP: ambre_core::BoardLength = ambre_core::BoardLength::new(2.0);
 
 /// What a pointer / keyboard event produced across all tools. Overlay previews
 /// (marquee, rubber-band, pen path, live stroke) are queried separately via
@@ -784,7 +784,7 @@ impl ToolMachine {
                     current,
                 } => {
                     let mut rect = Rect::from_points(start, current).abs();
-                    if rect.width() < MIN_DRAG || rect.height() < MIN_DRAG {
+                    if rect.width() < MIN_DRAG.get() || rect.height() < MIN_DRAG.get() {
                         rect = Rect::from_origin_size(start, CLICK_SHAPE_SIZE);
                     }
                     ToolOutcome::Command(ToileCommand::CreateElement {
@@ -877,7 +877,7 @@ impl ToolMachine {
         // The finishing double-click lands a duplicate press on the last node;
         // drop trailing near-duplicates so the path is not degenerate.
         while let [.., before, last] = nodes.as_slice()
-            && last.pt.distance(before.pt) < PEN_DEDUP
+            && last.pt.distance(before.pt) < PEN_DEDUP.get()
         {
             nodes.pop();
         }

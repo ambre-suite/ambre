@@ -58,7 +58,7 @@ pub type ImageStore = HashMap<ambre_core::ContentHash, DecodedImage>;
 /// Inner padding, in board units, between an element's border and its body,
 /// and between a caption's plate and its words. The inline editor applies the
 /// same inset, so a body does not move when an edit opens or closes.
-pub(crate) const TEXT_PAD: f64 = 4.0;
+pub(crate) const TEXT_PAD: ambre_core::BoardLength = ambre_core::BoardLength::new(4.0);
 
 /// The board as the walk reads it.
 pub struct BoardView<'v> {
@@ -191,7 +191,7 @@ fn sticky_ink(card: Option<Rgba>) -> Rgba {
 /// bottom-right so the note reads as a physical card (feedback).
 pub(crate) const STICKY_SHADOW: Rgba = Rgba::from_bits(0x0000_0033);
 /// Drop-shadow offset in world units (bottom-right).
-const STICKY_SHADOW_OFFSET: f64 = 4.0;
+const STICKY_SHADOW_OFFSET: ambre_core::BoardLength = ambre_core::BoardLength::new(4.0);
 
 /// The body font size (world units) for a sticky of the given bounds. It scales
 /// with the note so the text "adapts to the size of the note" (feedback). A
@@ -394,7 +394,8 @@ fn paint_label<S: DrawSurface>(
     let Some(world) = label_rect(&c.path) else {
         return;
     };
-    let wrap_w = DocPx::new((world.width() - 2.0 * TEXT_PAD).max(1.0) as f32);
+    let pad = TEXT_PAD.get();
+    let wrap_w = DocPx::new((world.width() - 2.0 * pad).max(1.0) as f32);
     let style = ElementStyle::default();
     let layout = walk.text_cache.get_or_build_font(
         walk.font_cx,
@@ -412,10 +413,7 @@ fn paint_label<S: DrawSurface>(
     let (tw, th) = (layout.width() as f64, layout.height() as f64);
     paint_label_plate(
         surface,
-        Rect::from_center_size(
-            world.center(),
-            Size::new(tw + 2.0 * TEXT_PAD, th + 2.0 * TEXT_PAD),
-        ),
+        Rect::from_center_size(world.center(), Size::new(tw + 2.0 * pad, th + 2.0 * pad)),
         palette,
     );
     let brush = Brush::Solid(palette.cell_text);
@@ -424,8 +422,8 @@ fn paint_label<S: DrawSurface>(
             let PositionedLayoutItem::GlyphRun(run) = item else {
                 continue;
             };
-            let tx = world.x0 + TEXT_PAD + run.offset() as f64;
-            let ty = world.y0 + TEXT_PAD + run.baseline() as f64;
+            let tx = world.x0 + pad + run.offset() as f64;
+            let ty = world.y0 + pad + run.baseline() as f64;
             surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
         }
     }
@@ -542,7 +540,8 @@ fn paint_element<S: DrawSurface>(
         // `style.corner` is 0 (Miro-style rectangle), so `roundrect_path`
         // degenerates to a plain rectangle.
         DisplayGeom::Sticky(_) => {
-            let shadow = bounds + ambre_draw::Vec2::new(STICKY_SHADOW_OFFSET, STICKY_SHADOW_OFFSET);
+            let offset = STICKY_SHADOW_OFFSET.get();
+            let shadow = bounds + ambre_draw::Vec2::new(offset, offset);
             surface.fill_path(
                 &roundrect_path(shadow, f64::from(style.corner.get())),
                 &Brush::Solid(style_color(STICKY_SHADOW, style.opacity)),
@@ -595,7 +594,8 @@ fn paint_text<S: DrawSurface>(
     // Body inset: the same padding the inline editor applies, so the static text
     // and the in-edit text share one origin + wrap width. The body does not jump
     // / re-wrap when entering or leaving edit.
-    let wrap_w = DocPx::new((bounds.width() - 2.0 * TEXT_PAD).max(1.0) as f32);
+    let pad = TEXT_PAD.get();
+    let wrap_w = DocPx::new((bounds.width() - 2.0 * pad).max(1.0) as f32);
     // Text (foreground) colour, (see `resolved_text_ink`): `None` means "use
     // the theme text colour" (only a text element with neither text_color nor fill).
     let color = resolved_text_ink(host, e.style.text_color, fill)
@@ -627,8 +627,8 @@ fn paint_text<S: DrawSurface>(
             let PositionedLayoutItem::GlyphRun(run) = item else {
                 continue;
             };
-            let tx = bounds.x0 + TEXT_PAD + run.offset() as f64;
-            let ty = bounds.y0 + TEXT_PAD + run.baseline() as f64;
+            let tx = bounds.x0 + pad + run.offset() as f64;
+            let ty = bounds.y0 + pad + run.baseline() as f64;
             let base = Affine::translate((tx, ty));
             let glyph_tf = rot_tf.map_or(base, |r| r * base);
             surface.draw_glyphs(&run, &brush, glyph_tf);

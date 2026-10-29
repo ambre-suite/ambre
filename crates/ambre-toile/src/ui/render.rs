@@ -2055,8 +2055,8 @@ mod tests {
         };
         let one = origin(1.0);
         assert_eq!(origin(2.0), one, "the layout does not follow the zoom");
-        assert_eq!(one.x, bounds.x0 + crate::ui::walk::TEXT_PAD);
-        assert!(one.y > bounds.y0 + crate::ui::walk::TEXT_PAD);
+        assert_eq!(one.x, bounds.x0 + crate::ui::walk::TEXT_PAD.get());
+        assert!(one.y > bounds.y0 + crate::ui::walk::TEXT_PAD.get());
     }
 
     /// `TOILE-UI-265`: a rotated note rotates its body and its rules with it.

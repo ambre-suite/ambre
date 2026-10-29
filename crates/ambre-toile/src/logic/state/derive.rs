@@ -84,7 +84,7 @@ impl ToileState {
         // (`TOILE-207`). Its reach widens the frame, so a caption counts.
         let meets = |id: &ConnectorId| {
             wires.get(id).and_then(|w| {
-                let wide = frame.inflate(w.reach, w.reach);
+                let wide = frame.inflate(w.reach.get(), w.reach.get());
                 let hull = w.conn.hull(&self.bounds)?;
                 let path = hull.overlaps(wide).then(|| w.conn.route(&self.bounds))??;
                 outline_meets(&path, wide).then_some(path)

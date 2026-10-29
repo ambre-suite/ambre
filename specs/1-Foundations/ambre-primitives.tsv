@@ -2700,7 +2700,6 @@ ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | Toil
 ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments | push_message(body) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/connectors.rs | crate::logic::state::connectors | ToileState::set_connector_label(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/logic/state/connectors.rs | crate::logic::state::connectors | ToileState::set_connector_label(text) | param | &str	free-text	label, message or user text
-ambre-toile | src/logic/state/connectors.rs | crate::logic::state::connectors | Wire.reach | field | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileState::link_read(bytes) | param | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/derive.rs | crate::logic::state::derive | ToileState::style_read(bytes) | param | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/elements.rs | crate::logic::state::elements | ToileState::delete_from_doc() | ret | bool	generic	predicate or handled-flag result
@@ -2849,7 +2848,6 @@ ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open(text) | para
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_frame_title(title) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::open_label(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::opened_text() | ret | &str	free-text	label, message or user text
-ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::pad() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/edit.rs | crate::ui::edit | InlineEditor::selected_text() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/embed.rs | crate::ui::embed | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
 ambre-toile | src/ui/embed.rs | crate::ui::embed | EmbedFocus::blur() | ret | bool	generic	predicate or handled-flag result
@@ -2866,7 +2864,6 @@ ambre-toile | src/ui/hit.rs | crate::ui::hit | ellipse_contains() | ret | bool	g
 ambre-toile | src/ui/hit.rs | crate::ui::hit | exact_hit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | path_contains() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/hit.rs | crate::ui::hit | path_hit() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/hit.rs | crate::ui::hit | point_segment_distance() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/hit.rs | crate::ui::hit | polyline_hit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/interop.rs | crate::ui::interop | IMPORT_ACCEPT | const | &str	generic	HTML accept attribute text
 ambre-toile | src/ui/interop.rs | crate::ui::interop | SKIPPED_NAMED | const | usize	math	geometry, layout, count or size local to the algorithm
@@ -2874,9 +2871,6 @@ ambre-toile | src/ui/interop.rs | crate::ui::interop | accepts() | ret | bool	ge
 ambre-toile | src/ui/interop.rs | crate::ui::interop | import_message() | ret | String	free-text	label, message or user text
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | Under::grabbable_if(grabbable) | param | bool	newtype-inner	the bool the one constructor of Under reads into its variant
 ambre-toile | src/ui/kinetic.rs | crate::ui::kinetic | coast() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/label.rs | crate::ui::label | ARCLEN_ACCURACY | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_H | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/label.rs | crate::ui::label | LABEL_W | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/link.rs | crate::ui::link | wants_follow() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.any_locked | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.any_unlocked | field | bool	generic	local state flag or value, not a mode selector
@@ -2885,7 +2879,6 @@ ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.framed | field | bool	
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.has_group | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.multi | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/menu.rs | crate::ui::menu | CtxScope.over_selection | field | bool	generic	local state flag or value, not a mode selector
-ambre-toile | src/ui/menu.rs | crate::ui::menu | DUPLICATE_NUDGE | const | f64	math	nudge world units; duplicated in view.rs and menu.rs, values agree (10.0)
 ambre-toile | src/ui/menu.rs | crate::ui::menu | rect_contains_rect() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/menu_bar.rs | crate::ui::menu_bar | TOP_MENUS | const | &[(MenuId,&str)]	free-text	label, message or user text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor.0 | field | Cow<'static,str>	newtype-inner	CanvasCursor inner
@@ -2927,7 +2920,6 @@ ambre-toile | src/ui/render.rs | crate::ui::render | frame_title_label(title) | 
 ambre-toile | src/ui/status.rs | crate::ui::status | bounds_label() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/status.rs | crate::ui::status | count_label() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/status.rs | crate::ui::status | fmt_world() | ret | String	free-text	label, message or user text
-ambre-toile | src/ui/status.rs | crate::ui::status | fmt_world(v) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.bold | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.fill | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.font_family | field | bool	generic	local state flag or value, not a mode selector
@@ -2940,8 +2932,6 @@ ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.stroke_w | field |
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.text_color | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags.underline | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/style.rs | crate::ui::style | MixedFlags::any() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/tool.rs | crate::ui::tool | MIN_DRAG | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/tool.rs | crate::ui::tool | PEN_DEDUP | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/tool.rs | crate::ui::tool | SelectTool::is_dragging() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | SelectTool::pressed_empty_board() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine.pen_dragging | field | bool	local	private state of the tool machine: whether a pen drag is under way; the only bool field
@@ -2952,14 +2942,11 @@ ambre-toile | src/ui/tool.rs | crate::ui::tool | double_click_edit(editable) | p
 ambre-toile | src/ui/tool.rs | crate::ui::tool | drop_missing() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | is_group() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | CLICK_SLOP | const | f64	math	click slop px; duplicated in view.rs and embed.rs, values agree (4.0)
-ambre-toile | src/ui/view.rs | crate::ui::view | DUPLICATE_NUDGE | const | f64	math	nudge world units; duplicated in view.rs and menu.rs, values agree (10.0)
 ambre-toile | src/ui/view.rs | crate::ui::view | EDIT_LOST | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | LIVE_STROKE_TAIL | const | usize	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | NOTHING_TO_ZOOM | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_CONTAINS | const | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | NO_FRAME_HOLDS | const | &str	free-text	label, message or user text
-ambre-toile | src/ui/view.rs | crate::ui::view | NUDGE_LARGE | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/view.rs | crate::ui::view | NUDGE_SMALL | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/view.rs | crate::ui::view | Panel::open_if(open) | param | bool	newtype-inner	the bool the one constructor of Panel reads into its variant
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.announce_next_data | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.data_dirty | field | bool	generic	local state flag or value, not a mode selector
@@ -3021,15 +3008,13 @@ ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::glid
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_by_center(factor) | param | f64	math	relative zoom factor, not an absolute zoom
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ZOOM_STEP | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/walk.rs | crate::ui::walk | ELLIPSE_FOUR_CUBICS_MAX_R | const | f64	math	the widest radius four cubics draw within 0.1 of the ellipse, in the space of the rect ellipse_path fills: the board walk and the screen-space draft both call it, so no one length type fits
 ambre-toile | src/ui/walk.rs | crate::ui::walk | KAPPA | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | LINEAR | static | LazyLock<[f64;256]>	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | STICKY_SHADOW_OFFSET | const | f64	math	geometry, layout, count or size local to the algorithm
-ambre-toile | src/ui/walk.rs | crate::ui::walk | TEXT_PAD | const | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | contrast() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | luminance() | ret | f64	math	geometry, layout, count or size local to the algorithm
 ambre-toile | src/ui/walk.rs | crate::ui::walk | paint_text(text) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	math	geometry, layout, count or size local to the algorithm
+ambre-toile | src/ui/walk.rs | crate::ui::walk | roundrect_path(radius) | param | f64	math	the corner radius, in the space of the kurbo rect it rounds: the board walk passes board units and the link badge passes screen pixels
 ambre-trame | src/chrome/bars.rs | crate::chrome::bars | label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | new_doc_label() | ret | &'static str	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/commands.rs | crate::chrome::commands | status_label() | ret | &'static str	free-text	free text: user content, label, message or display string
