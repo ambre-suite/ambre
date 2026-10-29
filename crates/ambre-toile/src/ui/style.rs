@@ -385,11 +385,10 @@ mod tests {
     /// agreeing pair never clears it.
     #[test]
     fn a_mixed_field_stays_mixed() {
-        let sizes = [12_u8, 12, 16, 16];
-        let mut field = Mix::when(sizes[0] != sizes[1]);
-        assert_eq!(field, Mix::Uniform);
-        field |= Mix::when(sizes[1] != sizes[2]);
-        field |= Mix::when(sizes[2] != sizes[3]);
+        assert_eq!(Mix::Uniform | Mix::Uniform, Mix::Uniform);
+        let mut field = Mix::Uniform;
+        field |= Mix::Mixed;
+        field |= Mix::Uniform;
         assert_eq!(field, Mix::Mixed);
     }
 }

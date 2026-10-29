@@ -6335,6 +6335,68 @@ fn a_remove_takes_every_entry_a_concurrent_add_left() {
     }
 }
 
+/// An undo of a delete puts the id back on its frame's list, and a peer
+/// that took the member out and in again meanwhile left one entry of its
+/// own. The list then names the member twice, and each peer's caches still
+/// equal a rebuild of its own document. One remove then takes both entries.
+#[test]
+fn an_undone_delete_after_a_concurrent_re_add_keeps_the_caches_whole() {
+    let (mut a, mut b, frame, rect) = a_framed_rect_on_two_peers();
+    let deleted = a
+        .handle_command(ToileCommand::DeleteElements {
+            ids: vec![rect.clone()],
+        })
+        .update
+        .expect("a delta");
+    let re_added = b
+        .handle_command(ToileCommand::SetFrameChildren {
+            frame: frame.clone(),
+            add: vec![],
+            remove: vec![rect.clone()],
+        })
+        .update
+        .into_iter()
+        .chain(
+            b.handle_command(ToileCommand::SetFrameChildren {
+                frame: frame.clone(),
+                add: vec![rect.clone()],
+                remove: vec![],
+            })
+            .update,
+        )
+        .collect::<Vec<_>>();
+    for delta in &re_added {
+        a.apply_remote(delta);
+    }
+    b.apply_remote(&deleted);
+    let undone = a
+        .handle_command(ToileCommand::Undo)
+        .update
+        .expect("a delta");
+    b.apply_remote(&undone);
+    for (name, st) in [("undoer", &mut a), ("peer", &mut b)] {
+        assert_eq!(
+            st.membership_of(&frame),
+            vec![rect.clone(), rect.clone()],
+            "{name}"
+        );
+        assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
+    }
+    let removed = b
+        .handle_command(ToileCommand::SetFrameChildren {
+            frame: frame.clone(),
+            add: vec![],
+            remove: vec![rect.clone()],
+        })
+        .update
+        .expect("a delta");
+    a.apply_remote(&removed);
+    for (name, st) in [("undoer", &mut a), ("peer", &mut b)] {
+        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new(), "{name}");
+        assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
+    }
+}
+
 /// Two peers holding one frame and one rect, the rect a member of the frame.
 fn a_framed_rect_on_two_peers() -> (ToileState, ToileState, ElementId, ElementId) {
     let mut a = ToileState::new();
