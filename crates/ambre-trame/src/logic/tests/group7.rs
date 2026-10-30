@@ -492,9 +492,9 @@ fn import_reports_unreadable_records() {
     assert_eq!(read_cell(&mut state, 1, 0), "d");
 }
 
-/// An import stops at the edge of the grid, and says how much it left out
-/// (`TRAME-IO-050`): one record past the last row, one field past the last
-/// column. The records between hold empty fields alone, which write no cell,
+/// An import stops at the edge of the grid and says how much it left out
+/// (`TRAME-IO-050`). Here one record lies past the last row, and one field
+/// past the last column. The records between hold empty fields alone, which write no cell,
 /// so the test stays fast.
 #[test]
 fn an_import_past_the_grid_edge_is_cut_and_said() {

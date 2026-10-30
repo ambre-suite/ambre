@@ -38,47 +38,18 @@ use ambre_commands::{CommandId, Locale};
 use ambre_core::{ChannelId, CssPoint, CssPx, Name, SpaceId, StepDirection, UserId};
 use leptos::prelude::*;
 
-/// What the user reads when the root of a copy could not be reached. Replying
-/// again starts a fresh seek (the Murmure threads spec).
-pub const ROOT_LOST: &str = "This thread cannot open: its first message could not be loaded.";
-
-/// What the user reads when a channel could not open. The cause stays in the
-/// log, where Logic wrote it (`MURMURE-549`).
-pub const CHANNEL_NOT_OPENED: &str = "This channel could not open. Select it again to retry.";
-
-/// What the user reads when a channel could not be created, joined, deleted
-/// or left. Nothing changed on the relay, and the cause stays in the log
-/// (`MURMURE-580`).
-pub const CHANNEL_NOT_CHANGED: &str = "The channel could not be changed. Try again.";
-
-/// What the user reads when a space could not open (`MURMURE-550`).
-pub const SPACE_NOT_OPENED: &str =
-    "A space could not open, so its channels to join are missing for now.";
+pub use crate::notices::{
+    CHANNEL_NOT_CHANGED, CHANNEL_NOT_OPENED, DIRECT_MESSAGE_NOT_OPENED, ROOT_LOST, SPACE_NOT_OPENED,
+};
 
 /// Surface a root the seek could not reach as a toast (the Murmure threads
 /// spec). A channel or a space that could not open is told the same way
-/// (`MURMURE-549`, `MURMURE-550`), and so is a channel change that failed
-/// (`MURMURE-580`). The launcher names no Murmure variant. A no-op for every
-/// other event.
+/// (`MURMURE-549`, `MURMURE-550`). So is a channel change or a direct message
+/// that failed (`MURMURE-580`, `MURMURE-581`). The launcher names no Murmure
+/// variant. A no-op for every other event.
 pub fn notify_event(toasts: &Toasts, ev: &UiEvent) {
-    match ev {
-        UiEvent::Channel {
-            event: MurmureEvent::RootLost { .. },
-            ..
-        } => toasts.warning(ROOT_LOST),
-        UiEvent::Channel {
-            event: MurmureEvent::OpenFailed { .. },
-            ..
-        } => toasts.warning(CHANNEL_NOT_OPENED),
-        UiEvent::Space {
-            event: SpaceEvent::OpenFailed { .. },
-            ..
-        } => toasts.warning(SPACE_NOT_OPENED),
-        UiEvent::Space {
-            event: SpaceEvent::ChannelFailed { .. },
-            ..
-        } => toasts.warning(CHANNEL_NOT_CHANGED),
-        _ => {}
+    if let Some(text) = crate::notices::warning_of(ev) {
+        toasts.warning(text);
     }
 }
 

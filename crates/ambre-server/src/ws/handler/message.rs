@@ -460,18 +460,15 @@ pub(crate) async fn handle_update(
     // the register briefly unavailable. The number is already spent, so a write
     // given up on is a delta the index never names (`SRV-033`).
     tracing::debug!("[Server->Postgres] insert_update doc={doc_id} seq={seq} clock={clock}");
-    let mut attempt = 0;
+    let mut pauses = INDEX_WRITE_BACKOFF.iter();
     let stored = loop {
-        match store_index_row(state, doc_id, &update, seq, &s3_key, &update_wire).await {
-            Err(e) if attempt < INDEX_WRITE_BACKOFF.len() => {
-                tracing::warn!("insert_update refused doc={doc_id} seq={seq}, retrying: {e}");
-                if let Some(pause) = INDEX_WRITE_BACKOFF.get(attempt) {
-                    tokio::time::sleep(*pause).await;
-                }
-                attempt += 1;
-            }
-            other => break other,
-        }
+        let stored = store_index_row(state, doc_id, &update, seq, &s3_key, &update_wire).await;
+        let Err(e) = &stored else { break stored };
+        let Some(pause) = pauses.next() else {
+            break stored;
+        };
+        tracing::warn!("insert_update refused doc={doc_id} seq={seq}, retrying: {e}");
+        tokio::time::sleep(*pause).await;
     };
     let inlined = matches!(stored, Ok(true));
     if let Err(e) = stored {

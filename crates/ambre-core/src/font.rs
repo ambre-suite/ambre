@@ -16,10 +16,14 @@ pub(crate) const PX_PER_PT: f32 = 96.0 / 72.0;
 
 /// A font size in typographic points.
 ///
-/// The value is finite and never negative. Zero is a valid size, and an
-/// application that means "automatic" says so in a type of its own rather
-/// than in a zero. The type serializes as the bare `f32` it wraps, and a
-/// decoded value outside that range is refused.
+/// The value is finite, never negative, and at most [`FontSize::MAX`]. Zero
+/// is a valid size, and an application that means "automatic" says so in a
+/// type of its own rather than in a zero. The type serializes as the bare
+/// `f32` it wraps. A decoded value that is not finite or is negative is
+/// refused, and one past [`FontSize::MAX`] reads as it (`CANVAS-088`).
+///
+/// Each application caps its sizes lower, as its office counterpart does,
+/// with [`FontSize::at_most`] and a cap of its own.
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(try_from = "f32", into = "f32")]
 pub struct FontSize(f32);
@@ -28,17 +32,33 @@ pub struct FontSize(f32);
 impl Eq for FontSize {}
 
 impl FontSize {
-    /// The size of `points` whole points.
+    /// The largest size of any application, 4000 points: the cap of the
+    /// presentation formats, the highest office cap. A peer writes any number
+    /// into a style, and the rasterizer allocates a glyph mask of about the
+    /// size squared. The cap keeps that mask bounded (`CANVAS-088`).
+    pub const MAX: Self = Self(4000.0);
+
+    /// The size of `points` whole points, or [`FontSize::MAX`] past it.
     #[must_use]
     pub const fn from_whole_points(points: u16) -> Self {
-        Self(points as f32)
+        Self((points as f32).min(Self::MAX.0))
     }
 
-    /// The size of `points` points, or `None` when the value is not finite or
-    /// is negative.
+    /// The size of `points` points, [`FontSize::MAX`] past it, or `None` when
+    /// the value is not finite or is negative.
+    ///
+    /// A stored value past the cap reads as the cap rather than as an error,
+    /// so a style an earlier build stored keeps decoding.
     #[must_use]
     pub fn new(points: f32) -> Option<Self> {
-        (points.is_finite() && points >= 0.0).then_some(Self(points))
+        (points.is_finite() && points >= 0.0).then_some(Self(points.min(Self::MAX.0)))
+    }
+
+    /// The size, or `cap` past it: how an application reads a stored,
+    /// received or pasted size past its own cap (`CANVAS-088`).
+    #[must_use]
+    pub const fn at_most(self, cap: Self) -> Self {
+        Self(self.0.min(cap.0))
     }
 
     /// The size in points.
@@ -54,7 +74,6 @@ impl FontSize {
     }
 
     /// The size rounded to whole points, as a picker of whole points lists it.
-    /// The cast saturates, so a size past `u16::MAX` reads as `u16::MAX`.
     #[must_use]
     pub fn whole_points(self) -> u16 {
         self.0.round() as u16
@@ -351,6 +370,28 @@ mod tests {
         assert_eq!(postcard::from_bytes::<FontSize>(&bytes).unwrap(), size);
         let nan = postcard::to_allocvec(&f32::NAN).unwrap();
         assert!(postcard::from_bytes::<FontSize>(&nan).is_err());
+    }
+
+    /// A stored size past the cap reads as the cap (`CANVAS-088`). A peer
+    /// cannot ask for a glyph a million points high, and an earlier style
+    /// still decodes.
+    #[test]
+    fn a_size_past_the_cap_reads_as_the_cap() {
+        let huge = postcard::to_allocvec(&1.0e6_f32).unwrap();
+        assert_eq!(postcard::from_bytes::<FontSize>(&huge), Ok(FontSize::MAX));
+        assert_eq!(FontSize::MAX.points(), 4000.0);
+        assert_eq!(FontSize::new(1.0e6), Some(FontSize::MAX));
+        assert_eq!(FontSize::from_whole_points(u16::MAX), FontSize::MAX);
+        let at_cap = postcard::to_allocvec(&FontSize::MAX).unwrap();
+        assert_eq!(at_cap, postcard::to_allocvec(&4000.0_f32).unwrap());
+        let cap = FontSize::from_whole_points(409);
+        assert_eq!(FontSize::from_whole_points(410).at_most(cap), cap);
+        let under = FontSize::from_whole_points(408);
+        assert_eq!(under.at_most(cap), under);
+        let in_range = postcard::to_allocvec(&7.5_f32).unwrap();
+        let size = postcard::from_bytes::<FontSize>(&in_range).unwrap();
+        assert_eq!(size.points(), 7.5);
+        assert_eq!(postcard::to_allocvec(&size).unwrap(), in_range);
     }
 
     #[test]

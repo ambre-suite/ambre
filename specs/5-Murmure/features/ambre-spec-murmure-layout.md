@@ -43,6 +43,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 | `MURMURE-549` | `FAIL` | Given a channel that could not open, the client MUST tell the user, show the channel list, keep the channel in the sidebar, and open it anew when selected again. | this spec section 3; `MURMURE-166` | `ambre_logic::channels::tests::a_refused_listing_tells_the_view_and_holds_nothing` -- a refused listing tells the view; `::a_document_that_fails_to_open_ends_the_opening` -- so does a document that fails; `ambre_murmure::tests::chrome_relay::a_channel_that_cannot_open_is_told_and_opens_anew` -- one toast without the cause, the pane back to the list, and a new open on the next selection | none | verified |
 | `MURMURE-550` | `FAIL` | Given a space that could not open, the client MUST tell the user, keep its joined channels drawn, and open it anew on the next listing that names it. | this spec section 3; `MURMURE-486` | `ambre_logic::spaces::tests::a_space_with_nothing_readable_fails_to_open` -- the view is told; `ambre_murmure::sidebar::tests::a_space_that_failed_opens_anew_on_the_next_listing` -- its channels stay drawn, and the next listing opens it once; `ambre_murmure::tests::chrome_relay::a_space_that_cannot_open_is_told_and_opens_anew` -- one toast without the cause, then one new open | none | verified |
 | `MURMURE-580` | `FAIL` | Given a channel creation, join, delete or leave that failed, the client MUST tell the user, without the cause. | this spec section 3; `MURMURE-549` | `ambre_murmure::tests::chrome_relay::a_channel_change_that_failed_is_told` -- one toast, and the cause stays in the log | none | verified |
+| `MURMURE-581` | `FAIL` | Given a direct message request that failed, the client MUST tell the user, and the text MUST NOT carry the cause. | this spec section 3; `MURMURE-580` | `ambre_murmure::notices::tests::a_direct_message_that_failed_is_told_without_its_cause` -- one warning, a fixed text with neither the cause nor the member it names | none | verified |
 
 ### 1.3 Go back on a phone
 
@@ -63,7 +64,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 * **Budget.** none of its own: the chrome regions are DOM, and the message list holds the frame
   budget of `ambre-spec-budgets.md section 2`.
 * **Boundary.** none: the width of a window never leaves the client.
-* **Verification.** 22 `verified`, 5 `unimplemented`. The regions, the back control, the rows of the
+* **Verification.** 23 `verified`, 5 `unimplemented`. The regions, the back control, the rows of the
   shell, the sidebar entries and the list of the shown channel are built. The split view is not.
 
 ---

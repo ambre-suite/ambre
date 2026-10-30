@@ -359,6 +359,7 @@ Toile's plane touches. It unblocks Toile's inline rich text and Trame's text col
 
 | Story | Milestone | Touches |
 | :--- | :--- | :--- |
+| `[ ]` A group cycle a peer writes is broken | V1 | a peer can store a group among its own members, or two groups in each other's. Every walk now ends on such a cycle, but a group on it keeps a stale box on the incremental path that a rebuild gives none, the one exception `TOILE-186` names. Every reader of the group tree treats a group on a cycle the same way, and the exception goes (`TOILE-276`, `TOILE-UI-398`) |
 | `[ ]` Paste as plain text in Toile | V1 | the plain-paste chord and a context-menu entry land the plain text as one text element at the pointer, where a paste of text today lands nothing |
 | `[ ]` Snap to the board grid | V1 | a drag, a resize and a nudge quantize to the grid step the board asks for, which is drawn today and magnetic nowhere |
 | `[ ]` Rich text on the board | V1 | a note body carries per-run formatting, on the shared text substrate Prose unblocks. Today it carries one style per element |

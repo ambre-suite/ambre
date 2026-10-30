@@ -1091,7 +1091,8 @@ mod tests {
     }
 
     /// `PROSE-UI-219`: a colour spelled in any form lands in the one spelling
-    /// the document stores. A mark value the registry refuses is dropped.
+    /// the document stores. A mark value the registry refuses is dropped, and
+    /// a size past the cap lands at it.
     #[test]
     fn colours_and_sizes_land_canonical() {
         let html = concat!(
@@ -1116,7 +1117,8 @@ mod tests {
                 (MarkKey::from("fs"), text("12"))
             ]
         );
-        assert!(run(2).is_empty());
+        // A size past the cap lands at the cap (`CANVAS-088`).
+        assert_eq!(run(2), &vec![(MarkKey::from("fs"), text("1638"))]);
     }
 
     fn kinds(blocks: &[ClipBlock]) -> Vec<ClipKind> {

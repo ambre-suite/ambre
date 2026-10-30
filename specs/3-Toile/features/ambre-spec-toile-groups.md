@@ -22,6 +22,9 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-149` | `INV` | An element MUST belong to at most one group or frame. | this spec section 3 | `ambre_toile::logic::structure_tests::an_element_sits_in_one_group_or_frame_at_most` -- a member framed out of its group, then grouped out of its frame, then two members of one frame grouped into a group that takes their place in it, each list read back and the caches equal to a rebuild | none | verified |
 | `TOILE-009` | `INV` | A group's box MUST be the union of its members' boxes. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- the union of two corner rects; `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- the same union again after a translation; `ambre_toile::logic::convergence_tests::a_member_framed_out_of_its_group_shrinks_the_group` -- the union shrinks when a frame takes a member | none | verified |
+| `TOILE-275` | `INV` | The recomputation of the group boxes MUST end, even on a box that never compares equal to itself. | this spec section 3; `TOILE-274` | `ambre_toile::logic::state::caches::peer_geometry_tests::a_group_over_a_nan_member_settles` -- a member a peer moved to NaN, through a delta and a rebuild, then a NaN box forged into the caches: the full and the incremental recomputation each return | none | verified |
+| `TOILE-276` | `INV` | A membership cycle a peer writes MUST NOT stop a move or an alignment of a group in the cycle. | this spec section 3 | `ambre_toile::logic::state::groups::tests::a_group_cycle_a_peer_writes_ends_a_move_and_an_alignment` -- a group in its own list and two groups in each other's, through a delta, so both groups keep a box: the move reaches each leaf once, and the alignment expands both groups and returns | none | verified |
+| `TOILE-UI-398` | `INV` | A click on a member of a membership cycle MUST resolve to one element. | this spec section 3; `TOILE-UI-119` | `ambre_toile::ui::tool::tests::a_click_into_a_group_cycle_ends` -- two groups that name each other as parent: an unscoped click picks the last group of the chain, and a scoped click the member | none | verified |
 | `TOILE-150` | `INV` | A group MUST carry no coordinates of its own. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_group_takes_no_box_from_a_resize_or_a_rotation` -- a resize aimed at a group writes no change, and a rotation leaves no box of its own in the caches. The group seed writes a kind, a rotation, a lock flag and a style register, and no x, y, width or height | none | verified |
 | `TOILE-054` | `INV` | A group left with no member MUST be removed, so the caches stay equal to a rebuild. | this spec section 3; `TOILE-004` | `ambre_toile::logic::structure_tests::a_group_left_with_no_member_is_removed` -- one member deleted and the last framed away: the group gone from the board and the order, and the caches equal to a rebuild | none | verified |
 | `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 3 | `ambre_toile::logic::convergence_tests::a_container_read_walks_no_board` -- a selection read and a camera move resolve the element map zero times, and still name each member's group and frame. `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` holds the cache equal to a rebuild | none | verified |
@@ -73,7 +76,7 @@ status values are normative in `ambre-spec-template.md`.
   group still walks the board, section 6, and no bench measures it.
 * **Boundary.** none of its own: the binding lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). The group box is derived and never persisted.
-* **Verification.** 27 `verified`. What holds is each gesture, and the two refusals a chord over a
+* **Verification.** 30 `verified`. What holds is each gesture, and the two refusals a chord over a
   single element or a non-group answers. A mixed ungroup unbinds its groups in silence. A resize
   aimed at a group writes nothing, and a rotation leaves its box derived, even with a member a peer
   deleted. The binding filter, the nested cases and the one-container rule are driven by hand.
@@ -138,6 +141,14 @@ and writes each leaf's coordinates, then recomputes the group boxes bottom-up (`
 
 **How the UI resolves a click.** Each painted element carries the id of its immediate enclosing group
 (`TOILE-UI-119`), and the UI walks that edge upward (`features/ambre-spec-toile-selection.md`).
+
+**A membership cycle.** No command of ours puts a group inside itself, but a peer can write one. Each
+walk of the group tree therefore stops where it has been. The leaf expansion enters each group once
+(`TOILE-276`), and the UI walk stops at the first group already on its chain (`TOILE-UI-398`). The
+box recomputation runs at most one pass more than the groups it walks (`TOILE-275`).
+
+A cycle keeps its stale box on the incremental path, and that box can differ from a rebuild. This is
+the one exception `TOILE-186` names.
 
 **How the parent is found.** The Logic thread keeps a derived map from each element to the containers
 whose membership list names it, one entry per occurrence. Each write to a membership list updates

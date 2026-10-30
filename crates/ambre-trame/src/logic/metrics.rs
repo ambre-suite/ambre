@@ -45,10 +45,10 @@ impl AxisSizes {
         }
     }
 
-    /// Read a stored size. Any peer writes this map, so a size out of range
-    /// reads clamped and a non-finite one reads as the default (`TRAME-UI-181`):
-    /// the layout walks lines until their sizes cover the screen. `None` when
-    /// the value is no number.
+    /// Read a stored size. Any peer writes this map. A size out of range reads
+    /// clamped, and a non-finite one reads as the default (`TRAME-UI-181`). The
+    /// layout walks lines until their sizes cover the screen. `None` when the
+    /// value is no number.
     fn read(self, value: &LoroValue) -> Option<DocPx> {
         let LoroValue::Double(size) = value else {
             return None;
