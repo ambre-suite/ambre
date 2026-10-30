@@ -637,6 +637,43 @@ fn mid_refuses_a_start_below_one_and_a_negative_length() {
     assert!(refused(&[txt("abc"), num(1.0), num(-1.0)]));
     assert_eq!(mid(&[txt("abc"), num(1.0), num(0.0)]).to_display(), "");
     assert_eq!(mid(&[txt("abc"), num(2.0), num(5.0)]).to_display(), "bc");
+    assert!(refused(&[txt("abc"), num(f64::NAN), num(1.0)]));
+    assert!(refused(&[txt("abc"), num(1.0), num(f64::NAN)]));
+}
+
+/// MID reads a blank count as 0 and a numeric text as its number, as Excel
+/// does (`TRAME-250`).
+#[test]
+fn mid_reads_a_blank_count_as_zero() {
+    assert_eq!(
+        mid(&[txt("abc"), num(1.0), CellValue::Empty]).to_display(),
+        ""
+    );
+    assert!(matches!(
+        mid(&[txt("abc"), CellValue::Empty, num(1.0)]),
+        CellValue::Error(FormulaError::TypeError)
+    ));
+    assert_eq!(mid(&[txt("abc"), txt("2"), num(1.0)]).to_display(), "b");
+    assert!(matches!(
+        mid(&[txt("abc"), txt("x"), num(1.0)]),
+        CellValue::Error(FormulaError::TypeError)
+    ));
+}
+
+/// MID answers an error given as a count unchanged, as Excel does
+/// (`TRAME-251`). It used to answer `#TYPE!` in its place.
+#[test]
+fn mid_passes_an_error_count_through() {
+    let div = CellValue::Error(FormulaError::DivisionByZero);
+    for args in [
+        [txt("abc"), div.clone(), num(1.0)],
+        [txt("abc"), num(1.0), div.clone()],
+    ] {
+        assert!(matches!(
+            mid(&args),
+            CellValue::Error(FormulaError::DivisionByZero)
+        ));
+    }
 }
 
 #[test]

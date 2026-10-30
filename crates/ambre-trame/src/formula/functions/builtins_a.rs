@@ -560,18 +560,17 @@ pub(crate) fn mid(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let s = arg(args, ArgIndex::new(0)).to_display();
-    let number = |i| {
-        flatten_numeric(one(args, ArgIndex::new(i)))
-            .first()
-            .copied()
-            .map(f64::trunc)
+    // Each count reads as REPT reads its own: a blank is 0, a numeric text
+    // its number, and an error passes through.
+    let number = |i| arg(args, ArgIndex::new(i)).as_number().map(f64::trunc);
+    let (start, n) = match (number(1), number(2)) {
+        (Ok(start), Ok(n)) => (start, n),
+        (Err(e), _) | (_, Err(e)) => return CellValue::Error(e),
     };
     // A start below the first char or a negative length is refused, as Excel
-    // refuses it with `#VALUE!`; the floats truncate first, as there.
-    let (Some(start), Some(n)) = (number(1), number(2)) else {
-        return CellValue::Error(FormulaError::TypeError);
-    };
-    if start < 1.0 || n < 0.0 {
+    // refuses it with `#VALUE!`; the floats truncate first, as there. The
+    // negated test refuses a NaN too, before the cast below meets it.
+    if !(start >= 1.0 && n >= 0.0) {
         return CellValue::Error(FormulaError::TypeError);
     }
     // The float saturates as `as` does: a start past the text takes nothing.
