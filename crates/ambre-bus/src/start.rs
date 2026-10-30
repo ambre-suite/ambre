@@ -43,7 +43,17 @@ pub const ANNOUNCEMENT: WorkerPost = WorkerPost(Vec::new());
 #[derive(Debug, Default)]
 pub struct StartGate {
     /// Whether the worker has announced itself.
-    open: bool,
+    worker: Worker,
+}
+
+/// What a [`StartGate`] has heard of its worker.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum Worker {
+    /// No announcement yet: the commands wait.
+    #[default]
+    Silent,
+    /// The worker listens: the commands go through.
+    Announced,
 }
 
 impl StartGate {
@@ -57,7 +67,7 @@ impl StartGate {
     /// yields nothing; any other payload is an event, handed back.
     pub fn read<'a>(&mut self, post: &'a WorkerPost) -> Option<&'a WorkerPost> {
         if *post == ANNOUNCEMENT {
-            self.open = true;
+            self.worker = Worker::Announced;
             return None;
         }
         Some(post)
@@ -66,13 +76,13 @@ impl StartGate {
     /// Whether the worker has announced itself.
     #[must_use]
     pub fn is_open(&self) -> bool {
-        self.open
+        self.worker == Worker::Announced
     }
 
     /// Hands every queued command to `post`, in order, once the gate is
     /// open. Before that, the commands stay in `commands`.
     pub fn drain<T>(&self, commands: &Receiver<T>, mut post: impl FnMut(T)) {
-        if !self.open {
+        if !self.is_open() {
             return;
         }
         while let Ok(command) = commands.try_recv() {

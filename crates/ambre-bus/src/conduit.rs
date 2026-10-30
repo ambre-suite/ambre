@@ -469,7 +469,8 @@ pub struct Backlog<T> {
     to: Sender<T>,
     held: VecDeque<T>,
     marks: Option<Marks>,
-    holding: bool,
+    /// The last request made of the source: it sends until asked to hold.
+    asked: Pressure,
 }
 
 /// The two lengths between which a [`Backlog`] asks its source to stop. The
@@ -560,7 +561,7 @@ impl<T> Backlog<T> {
             to,
             held: VecDeque::new(),
             marks: None,
-            holding: false,
+            asked: Pressure::Release,
         }
     }
 
@@ -578,15 +579,13 @@ impl<T> Backlog<T> {
     pub fn pressure(&mut self) -> Option<Pressure> {
         let marks = self.marks?;
         let len = BacklogLength::new(self.held.len());
-        if !self.holding && len >= marks.high {
-            self.holding = true;
-            Some(Pressure::Hold)
-        } else if self.holding && len <= marks.low {
-            self.holding = false;
-            Some(Pressure::Release)
-        } else {
-            None
-        }
+        let next = match self.asked {
+            Pressure::Release if len >= marks.high => Pressure::Hold,
+            Pressure::Hold if len <= marks.low => Pressure::Release,
+            Pressure::Release | Pressure::Hold => return None,
+        };
+        self.asked = next;
+        Some(next)
     }
 
     /// Queue `value` behind every value held before it, then offer them all.

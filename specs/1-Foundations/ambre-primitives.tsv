@@ -348,7 +348,6 @@ ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals::precis
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep.0 | field | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep::new(places) | param | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals.0 | field | u8	newtype-inner	the refused count an error reports
-ambre-bus | src/conduit.rs | crate::conduit | Backlog.holding | field | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength.0 | field | usize	newtype-inner	the number of values a backlog holds, as a mark names it
@@ -404,7 +403,6 @@ ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inne
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | RequestId.0 | field | u64	newtype-inner	RequestId newtype
-ambre-bus | src/start.rs | crate::start | StartGate.open | field | bool	generic	gate state flag
 ambre-bus | src/start.rs | crate::start | StartGate::is_open() | ret | bool	generic	gate state flag
 ambre-bus | src/start.rs | crate::start | WorkerPost.0 | field | Vec<u8>	newtype-inner	the newtype's own inside: the bytes one postMessage carries
 ambre-bus | src/start.rs | crate::start | WorkerPost::as_bytes() | ret | &[u8]	newtype-inner	the newtype's own accessor, for the decoder or the postMessage buffer
