@@ -14,6 +14,19 @@ use serde::{Deserialize, Serialize};
 pub struct ContentHash(pub String);
 
 impl ContentHash {
+    /// The address `word` spells, or `None` for anything else. An address is
+    /// the lowercase hex spelling of a [`MediaAddress`]: sixty-four characters.
+    /// The transparent serde form stays lenient, because the relay JSON is
+    /// read as it comes; a reader of a document calls this constructor.
+    #[must_use]
+    pub fn parse(word: &str) -> Option<Self> {
+        (word.len() == 2 * MEDIA_ADDRESS_LEN
+            && word
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+        .then(|| Self(word.to_owned()))
+    }
+
     /// The address, as the relay names it.
     pub fn as_str(&self) -> &str {
         &self.0
@@ -234,5 +247,14 @@ mod tests {
         assert_eq!(MediaAddress::parse(&hash), Some(address));
         assert_eq!(MediaAddress::parse(&ContentHash("ab".to_owned())), None);
         assert_eq!(MediaAddress::parse(&ContentHash("zz".repeat(32))), None);
+    }
+
+    #[test]
+    fn a_checked_hash_takes_sixty_four_lowercase_hex_characters_alone() {
+        let hex = "0a".repeat(32);
+        assert_eq!(ContentHash::parse(&hex), Some(ContentHash(hex.clone())));
+        assert_eq!(ContentHash::parse(&hex.to_uppercase()), None);
+        assert_eq!(ContentHash::parse(&hex[1..]), None);
+        assert_eq!(ContentHash::parse(&"g".repeat(64)), None);
     }
 }

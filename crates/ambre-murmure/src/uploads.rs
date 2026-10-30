@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType, RequestId};
+use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType, RequestId};
 use ambre_core::{ByteCount, ExportFilename, KnownMediaType};
 
 use crate::composer::DraftOf;
@@ -206,7 +206,7 @@ impl Uploads {
         content_hash: &ambre_core::ContentHash,
     ) -> Option<Uploaded> {
         let pending = self.pending.remove(&id)?;
-        let Some(media_ref) = MediaRef::parse(content_hash.as_str()) else {
+        let Some(media_ref) = ContentHash::parse(content_hash.as_str()) else {
             return Some(Uploaded::Failed {
                 of: pending.of,
                 name: pending.name,
@@ -351,7 +351,7 @@ mod tests {
     /// A fetched file named `name`.
     fn received(name: &str) -> Attachment {
         Attachment {
-            media_ref: MediaRef::parse(HASH).expect("an address"),
+            media_ref: ContentHash::parse(HASH).expect("an address"),
             name: name.to_owned(),
             media_type: MediaType("application/pdf".to_owned()),
             size: ByteSize(10),

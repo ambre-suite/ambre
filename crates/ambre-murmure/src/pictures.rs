@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{MediaRef, MediaType, Picture};
+use ambre_bus::{ContentHash, MediaType, Picture};
 use ambre_core::{ByteSize, KnownMediaType};
 use ambre_draw::ImageKey;
 
@@ -79,7 +79,7 @@ impl Screens {
 
 /// The pictures of the page, by the file they decode.
 pub struct Pictures {
-    held: HashMap<MediaRef, Held>,
+    held: HashMap<ContentHash, Held>,
     bytes: ByteSize,
     cap: ByteSize,
     /// The latest paint, which orders the pictures by their last one.
@@ -117,7 +117,7 @@ impl Pictures {
 
     /// `media_ref` is drawn by this paint. Returns `true` when it is to be
     /// asked of the Logic thread: never asked, or dropped since.
-    pub fn want(&mut self, media_ref: &MediaRef) -> bool {
+    pub fn want(&mut self, media_ref: &ContentHash) -> bool {
         match self.held.get_mut(media_ref) {
             Some(Held::Shown { painted, .. }) => {
                 *painted = self.paint;
@@ -133,7 +133,7 @@ impl Pictures {
 
     /// The Logic thread's answer for `media_ref`. `None` leaves its chip
     /// alone. Returns `false` for a picture this shelf never asked.
-    pub fn land(&mut self, media_ref: MediaRef, picture: Option<Picture>) -> bool {
+    pub fn land(&mut self, media_ref: ContentHash, picture: Option<Picture>) -> bool {
         if !matches!(self.held.get(&media_ref), Some(Held::Asked)) {
             return false;
         }
@@ -153,7 +153,7 @@ impl Pictures {
     }
 
     /// The decoded picture of `media_ref`, if it is held.
-    pub fn get(&self, media_ref: &MediaRef) -> Option<&Picture> {
+    pub fn get(&self, media_ref: &ContentHash) -> Option<&Picture> {
         match self.held.get(media_ref) {
             Some(Held::Shown { picture, .. }) => Some(picture),
             _ => None,
@@ -161,7 +161,7 @@ impl Pictures {
     }
 
     /// Whether `media_ref` could not be shown.
-    pub fn failed(&self, media_ref: &MediaRef) -> bool {
+    pub fn failed(&self, media_ref: &ContentHash) -> bool {
         matches!(self.held.get(media_ref), Some(Held::Failed))
     }
 
@@ -235,7 +235,7 @@ pub fn frame(picture: &Picture, index: FrameIndex) -> Option<&ambre_bus::Picture
 
 /// The key of frame `index` of `media_ref`: one texture per frame, so a
 /// frame played again is drawn from what the renderer already holds.
-pub fn frame_key(media_ref: &MediaRef, index: FrameIndex) -> ImageKey {
+pub fn frame_key(media_ref: &ContentHash, index: FrameIndex) -> ImageKey {
     let ImageKey(base) = ImageKey::from_address(media_ref.as_str());
     ImageKey(base ^ u64::from(index.get()).rotate_right(16))
 }
@@ -246,8 +246,8 @@ mod tests {
     use ambre_bus::PictureFrame;
     use ambre_core::WholePx;
 
-    fn file(c: char) -> MediaRef {
-        MediaRef::parse(&format!("{c}{}", "0".repeat(63))).expect("a content hash")
+    fn file(c: char) -> ContentHash {
+        ContentHash::parse(&format!("{c}{}", "0".repeat(63))).expect("a content hash")
     }
 
     fn picture(delays: &[u32], bytes: usize) -> Picture {
