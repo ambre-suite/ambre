@@ -2322,7 +2322,10 @@ impl fmt::Display for FindRefusal {
 }
 
 /// Why a conversion produced nothing (`PROSE-IO-010`, `PROSE-IO-047`).
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+///
+/// The reason of a parse failure may quote the foreign file, so `Debug`
+/// prints its length alone.
+#[derive(Clone, PartialEq, Eq, thiserror::Error)]
 pub enum InteropError {
     /// The bytes do not read as the format named.
     #[error("the file could not be read: {0}")]
@@ -2330,6 +2333,18 @@ pub enum InteropError {
     /// The file is larger than a conversion accepts.
     #[error("the file is too large to import ({} bytes)", .0.0)]
     TooLarge(ambre_core::ByteSize),
+}
+
+impl std::fmt::Debug for InteropError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ParseFailed(reason) => f
+                .debug_tuple("ParseFailed")
+                .field(&ambre_core::char_len(reason))
+                .finish(),
+            Self::TooLarge(size) => f.debug_tuple("TooLarge").field(size).finish(),
+        }
+    }
 }
 
 impl ExportFormat {
@@ -2960,6 +2975,19 @@ mod tests {
         assert!(printed.contains("CharCount(10)"), "{printed}");
         assert!(!printed.contains("Q3 layoffs"), "{printed}");
         assert!(refused.to_string().contains("Q3 layoffs"));
+    }
+
+    /// The reason of a parse failure may quote the foreign file, so `Debug`
+    /// prints its length alone.
+    #[test]
+    fn a_parse_failure_prints_the_length_of_its_reason_alone() {
+        let failed = InteropError::ParseFailed("near 'Q3 layoffs'".to_owned());
+        assert_eq!(format!("{failed:?}"), "ParseFailed(CharCount(17))");
+        let large = InteropError::TooLarge(ambre_core::ByteSize(9));
+        assert_eq!(
+            format!("{large:?}"),
+            format!("TooLarge({:?})", ambre_core::ByteSize(9))
+        );
     }
 
     /// A heading number reads as its counters joined by dots, and there is
