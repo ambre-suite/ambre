@@ -492,6 +492,43 @@ fn import_reports_unreadable_records() {
     assert_eq!(read_cell(&mut state, 1, 0), "d");
 }
 
+/// An import stops at the edge of the grid, and says how much it left out
+/// (`TRAME-IO-050`): one record past the last row, one field past the last
+/// column. The records between hold empty fields alone, which write no cell,
+/// so the test stays fast.
+#[test]
+fn an_import_past_the_grid_edge_is_cut_and_said() {
+    let mut data = b"a,b,c\n".to_vec();
+    data.extend(b",\n".repeat(crate::TOTAL_ROWS.to_usize() - 1));
+    data.extend(b"z\n");
+    let mut state = TrameState::new();
+    let out = state.handle_command(TrameCommand::ImportCsv {
+        data: ambre_core::FileBytes::new(data),
+        delimiter: None,
+        header: HeaderRow::Absent,
+        target_sheet_id: Some(SheetId("s0".to_owned())),
+        start_row: Row::new(0),
+        start_col: crate::LAST_COL.prev().expect("a column before the last"),
+    });
+    assert!(
+        out.display.iter().any(|e| matches!(
+            e,
+            TrameEvent::Error { message } if message.ends_with(
+                "1 record(s) and 1 field(s) past its edge were left out"
+            )
+        )),
+        "the cut is reported: {:?}",
+        out.display
+    );
+    assert!(out.display.iter().any(|e| matches!(
+        e,
+        TrameEvent::ImportComplete { rows, cols, .. }
+            if *rows == crate::TOTAL_ROWS && cols.get() == 2
+    )));
+    assert_eq!(state.index.col_len(), crate::TOTAL_COLS);
+    assert_eq!(read_cell(&mut state, 0, crate::LAST_COL.get()), "b");
+}
+
 /// An export with nothing to write says so (`TRAME-IO-041`): an empty sheet
 /// and an unknown one each answer with a notice, never with silence.
 #[test]
