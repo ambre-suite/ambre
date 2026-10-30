@@ -760,7 +760,7 @@ pub async fn create_direct_message(
             "a direct message needs distinct members besides the caller",
         ));
     }
-    if req.entries.len() != req.members.len() + 2 {
+    if Some(req.entries.len()) != req.members.len().checked_add(2) {
         return Err(invalid(
             "one entry per member, plus the creation and the role",
         ));

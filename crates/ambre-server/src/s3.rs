@@ -240,7 +240,7 @@ pub async fn delete_prefix(
     prefix: &S3Prefix,
 ) -> Result<usize, AppError> {
     use aws_sdk_s3::types::{Delete, ObjectIdentifier};
-    let mut deleted = 0;
+    let mut deleted: usize = 0;
     let mut token: Option<String> = None;
     loop {
         let page = s3
@@ -279,7 +279,9 @@ pub async fn delete_prefix(
                     failed.message().unwrap_or("refused")
                 )));
             }
-            deleted += count;
+            // A count of objects held in memory: the sum cannot reach the
+            // bound, and saturating states that it stops there if it did.
+            deleted = deleted.saturating_add(count);
         }
         match page.next_continuation_token() {
             Some(next) if page.is_truncated() == Some(true) => token = Some(next.to_string()),
@@ -352,7 +354,10 @@ pub async fn global_s3_flusher(state: crate::state::AppState) -> ! {
         } else {
             Cycle::Plain
         };
-        cycle = (cycle + 1) % RECONCILE_EVERY;
+        cycle = cycle
+            .checked_add(1)
+            .filter(|next| *next < RECONCILE_EVERY)
+            .unwrap_or(0);
         crate::supervise::contained("flusher cycle", flush_cycle(&state, kind)).await;
     }
 }
@@ -406,7 +411,14 @@ const FLUSH_LOCK_TTL: ambre_core::Seconds = ambre_core::Seconds(60);
 /// the requests in flight. The tombstone lives this long, and the
 /// second sweep of the objects runs once it has passed.
 pub fn late_write_window(presigned_url_ttl: ambre_core::Seconds) -> ambre_core::Seconds {
-    ambre_core::Seconds(presign_lifetime(presigned_url_ttl).as_secs() + FLUSH_LOCK_TTL.0 + 60)
+    // `presign_lifetime` caps the configured TTL, so the sum stays far below
+    // the bound. Saturating keeps a window that never ends if it did not.
+    ambre_core::Seconds(
+        presign_lifetime(presigned_url_ttl)
+            .as_secs()
+            .saturating_add(FLUSH_LOCK_TTL.0)
+            .saturating_add(60),
+    )
 }
 
 /// The current instant: the clock of a token's `iat` and of a delete's sweep.
