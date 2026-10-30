@@ -91,6 +91,8 @@ pub(crate) enum RefusalCause {
     TreeRefusedRow,
     /// A table's width list refused a child container.
     WidthListRefused,
+    /// A paragraph length to write is not a finite number.
+    NonFiniteLength,
 }
 
 impl RefusalCause {
@@ -118,6 +120,7 @@ impl RefusalCause {
             Self::TreeRefusedNoteBlock => "the tree refused a note block",
             Self::TreeRefusedRow => "the tree refused a row",
             Self::WidthListRefused => "the width list refused a container",
+            Self::NonFiniteLength => "a paragraph length is not a finite number",
         }
     }
 }
@@ -1010,21 +1013,31 @@ pub(crate) fn map_read<K: FieldKey>(parent: &Fields<K>, key: K) -> Option<LoroMa
 /// (`PROSE-092`).
 ///
 /// # Errors
-/// The CRDT engine's own refusal of a write.
+/// [`RefusalCause::NonFiniteLength`] when a length is not a finite number,
+/// before any key is written. The CRDT engine's own refusal of a write.
 pub(crate) fn write_paragraph_style(
     node: &Fields<NodeKey>,
     style: &ParagraphStyle,
-) -> Result<(), loro::LoroError> {
-    if let Some(align) = style.align {
-        node.insert(NodeKey::Align, i64::from(align.code()))?;
-    }
-    for (key, value) in [
+) -> Result<(), WriteError> {
+    let lengths = [
         (NodeKey::IndentFirst, style.indent_first),
         (NodeKey::IndentLeft, style.indent_left),
         (NodeKey::IndentRight, style.indent_right),
         (NodeKey::SpaceBefore, style.space_before),
         (NodeKey::SpaceAfter, style.space_after),
-    ] {
+    ];
+    // A reader takes a non-finite length for an absent one, so the store
+    // never receives one.
+    if lengths
+        .iter()
+        .any(|(_, value)| value.is_some_and(|points| !points.is_finite()))
+    {
+        return Err(WriteError::Refused(RefusalCause::NonFiniteLength));
+    }
+    if let Some(align) = style.align {
+        node.insert(NodeKey::Align, i64::from(align.code()))?;
+    }
+    for (key, value) in lengths {
         if let Some(points) = value {
             node.insert(key, f64::from(points.get()))?;
         }
@@ -1038,9 +1051,9 @@ pub(crate) fn write_paragraph_style(
     }
     if let Some(line_height) = style.line_height {
         let Some(map) = map_at(node, NodeKey::LineHeight).map(Fields::<LineHeightKey>::of) else {
-            return Err(loro::LoroError::NotFoundError(
+            return Err(WriteError::Engine(loro::LoroError::NotFoundError(
                 "the line-height register refused a container".into(),
-            ));
+            )));
         };
         map.insert(LineHeightKey::Mode, i64::from(line_height.mode().code()))?;
         map.insert(LineHeightKey::Value, f64::from(line_height.stored_value()))?;
@@ -1630,9 +1643,12 @@ fn read_f32<K: FieldKey>(map: &Fields<K>, key: K) -> Option<f32> {
     read_f64(map, key).map(|n| n as f32)
 }
 
-/// A length in points stored under `key`.
+/// A length in points stored under `key`. A value that is not a finite number
+/// reads as absent, so the default style applies and the document still opens.
 fn read_pt<K: FieldKey>(map: &Fields<K>, key: K) -> Option<Pt> {
-    read_f32(map, key).map(Pt::new)
+    read_f32(map, key)
+        .map(Pt::new)
+        .filter(|points| points.is_finite())
 }
 
 pub(crate) fn read_bool<K: FieldKey>(map: &Fields<K>, key: K) -> Option<bool> {
@@ -1854,6 +1870,55 @@ mod tests {
         );
         assert_eq!(read_paragraph_style(&tree, &root).indent_left, None);
         assert!(node.get(NodeKey::IndentLeft).is_none());
+    }
+
+    /// A stored length that is not a finite number reads as absent, so the
+    /// default style applies and the document opens.
+    #[test]
+    fn a_non_finite_stored_length_reads_as_absent() {
+        let doc = LoroDoc::new();
+        let root = seed(&doc).expect("seeded");
+        let tree = blocks(&doc);
+        let node = node_of(&tree, &root).expect("a live block");
+        node.insert(NodeKey::IndentLeft, f64::NAN).expect("stored");
+        node.insert(NodeKey::SpaceAfter, f64::INFINITY)
+            .expect("stored");
+        node.insert(NodeKey::SpaceBefore, f64::MAX).expect("stored");
+        node.insert(NodeKey::IndentRight, 6.0).expect("stored");
+        let style = read_paragraph_style(&tree, &root);
+        assert_eq!(style.indent_left, None);
+        assert_eq!(style.space_after, None);
+        assert_eq!(style.space_before, None, "past the largest f32");
+        assert_eq!(style.indent_right, Some(Pt::new(6.0)));
+    }
+
+    /// A write refuses a length that is not a finite number, and writes no
+    /// other key of the style.
+    #[test]
+    fn a_non_finite_length_is_refused_before_any_write() {
+        let doc = LoroDoc::new();
+        let root = seed(&doc).expect("seeded");
+        let tree = blocks(&doc);
+        let node = node_of(&tree, &root).expect("a live block");
+        for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let refused = write_paragraph_style(
+                &node,
+                &ParagraphStyle {
+                    align: Some(Align::Center),
+                    space_before: Some(Pt::new(bad)),
+                    ..ParagraphStyle::default()
+                },
+            );
+            assert!(
+                matches!(
+                    refused,
+                    Err(WriteError::Refused(RefusalCause::NonFiniteLength))
+                ),
+                "{bad}"
+            );
+            assert!(node.get(NodeKey::Align).is_none());
+            assert!(node.get(NodeKey::SpaceBefore).is_none());
+        }
     }
 
     #[test]
