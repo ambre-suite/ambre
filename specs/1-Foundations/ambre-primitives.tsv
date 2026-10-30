@@ -1849,7 +1849,7 @@ ambre-prose | src/commands.rs | crate::commands | underline_title() | ret | Stri
 ambre-prose | src/commands.rs | crate::commands | undo_title() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/comment.rs | crate::comment | thread_of_key(key) | param | &str	foreign-api	a mark key as the Loro attribute map yields it, parsed with no copy
 ambre-prose | src/count.rs | crate::count | tally(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/doc.rs | crate::doc | Anchor.value | field | String	free-text	text content / label / parser input
+ambre-prose | src/doc.rs | crate::doc | anchors(parse) | param | impl Fn(&str)->Option<V>	generic	the parse of an anchor mark's stored value into the id or record its root names; a value it refuses names nothing
 ambre-prose | src/doc.rs | crate::doc | BODY_SEPARATOR | const | char	generic	the separator of a body root name, which BodyKey::of writes and parse_body_key reads back
 ambre-prose | src/doc.rs | crate::doc | BODY_TAG | const | &str	generic	the tag a body root name starts with, which BodyKey::of writes and parse_body_key reads back
 ambre-prose | src/doc.rs | crate::doc | Bands::holds() | ret | bool	generic	independent flag or predicate

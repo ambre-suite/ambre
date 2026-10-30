@@ -261,10 +261,8 @@ impl NotePlan {
             notes.insert(*id, (*ordinal, height, block));
         }
         let mut calls: HashMap<TreeID, Vec<(DocOffset, FootnoteId)>> = HashMap::new();
-        for anchor in doc::anchors(document, crate::mark::MarkRoot::Footnote) {
-            let Ok(id) = FootnoteId::parse_str(&anchor.value) else {
-                continue;
-            };
+        for anchor in note::footnote_calls(document) {
+            let id = anchor.value;
             if notes.contains_key(&id) {
                 calls
                     .entry(anchor.block)

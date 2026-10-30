@@ -1674,19 +1674,26 @@ pub(crate) fn flow(tree: &LoroTree) -> Vec<TreeID> {
     order
 }
 
-/// One character carrying an anchor mark: where it sits and the mark's value.
+/// One character carrying an anchor mark: where it sits and the mark's value,
+/// parsed.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Anchor {
+pub(crate) struct Anchor<V> {
     pub block: TreeID,
     /// A count of code points into the block's body.
     pub offset: DocOffset,
-    pub value: String,
+    pub value: V,
 }
 
-/// Every character carrying the mark `root`, in document order: a footnote
-/// call or a cross reference, whose key is its root alone.
+/// Every character carrying the mark `root`, in document order, with its
+/// value as `parse` reads it. The mark is a footnote call or a cross
+/// reference, whose key is its root alone. A value `parse` refuses names
+/// nothing, and its character is left out.
 #[must_use]
-pub(crate) fn anchors(document: &LoroDoc, root: crate::mark::MarkRoot) -> Vec<Anchor> {
+pub(crate) fn anchors<V: Clone>(
+    document: &LoroDoc,
+    root: crate::mark::MarkRoot,
+    parse: impl Fn(&str) -> Option<V>,
+) -> Vec<Anchor<V>> {
     let key = root.as_str();
     let tree = blocks(document);
     let mut out = Vec::new();
@@ -1704,7 +1711,7 @@ pub(crate) fn anchors(document: &LoroDoc, root: crate::mark::MarkRoot) -> Vec<An
                 .as_ref()
                 .and_then(|attributes| attributes.get(key))
                 .and_then(|value| match value {
-                    LoroValue::String(value) => Some(value.to_string()),
+                    LoroValue::String(value) => parse(value),
                     _ => None,
                 });
             if let Some(value) = value {
