@@ -438,7 +438,9 @@ pub enum TrameEvent {
 }
 
 // A cell value, a validation message and a protection note are the author's,
-// and print their length alone. A refusal the engine words prints whole.
+// and print their length alone. An error message may quote a sheet or a name
+// the author typed, and prints its length alone too. A refusal the engine
+// words from positions and counts prints whole.
 impl std::fmt::Debug for TrameEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use ambre_core::char_len;
@@ -498,7 +500,10 @@ impl std::fmt::Debug for TrameEvent {
             ),
             Self::UndoState { undo, redo } => fields!("UndoState", undo, redo),
             Self::SheetList { sheets, active } => fields!("SheetList", sheets, active),
-            Self::Error { message } => fields!("Error", message),
+            Self::Error { message } => f
+                .debug_struct("Error")
+                .field("message", &char_len(message))
+                .finish(),
             Self::EditTargetMoved { session, row, col } => {
                 fields!("EditTargetMoved", session, row, col)
             }
@@ -888,6 +893,12 @@ mod tests {
                 }
             ),
             format!("{:?}", CellFormat::Custom(secret.clone())),
+            format!(
+                "{:?}",
+                TrameEvent::Error {
+                    message: secret.clone(),
+                }
+            ),
         ];
         for line in printed {
             assert!(line.contains("CharCount(10)"), "{line}");
