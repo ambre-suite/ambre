@@ -259,7 +259,7 @@ impl DocState {
     fn ambre_file_event(&self, document_id: DocumentId) -> AppEvent {
         match self.ambre_file_bytes(document_id) {
             Some((filename, data)) => {
-                self.export_complete_event(filename, ambre_core::FileBytes::new(data.into_bytes()))
+                self.export_complete_event(filename, ambre_core::FileBytes::from(data))
             }
             // A document the engine could not read becomes no file
             // (`TOILE-IO-069`). The user is told instead.
