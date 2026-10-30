@@ -26,8 +26,15 @@
 //!     conversions and views of `PEELS`;
 //!   * a parameter, a `let` annotation, a struct literal and `self` type a
 //!     receiver;
-//!   * so do a constructor such as `T::new` or `T::parse`, and a named
-//!     field of a struct of the workspace.
+//!   * so do a constructor such as `T::new` or `T::parse`, and a field of
+//!     a struct of the workspace;
+//!   * a `const`, a `static`, an array, a literal, a std constructor such as
+//!     `Vec::new`, `format!` and `vec!` type a receiver too;
+//!   * so do a method whose return std or a dependency fixes, as
+//!     `to_token_stream` does, and a variant of a foreign `enum` in a pattern;
+//!   * a field of an untyped base holds a newtype only when a workspace
+//!     struct holds one under that field name. A field that a macro writes,
+//!     or a generic field, escapes this rule.
 //!
 //! Each handed unwrap gets one verdict. A callee the workspace defines and
 //! no foreign API names is a refusal. The tuple struct of a newtype is
@@ -96,6 +103,31 @@ const PEELS: &[&str] = &[
     "as_bytes",
     "borrow",
 ];
+
+/// The std types a constructor such as `Vec::new` types a receiver with.
+const STD_TYPES: &[&str] = &[
+    "Vec", "String", "BTreeMap", "BTreeSet", "HashMap", "HashSet", "VecDeque", "PathBuf",
+];
+
+/// The macros whose value has one std type.
+const MACRO_TYPES: &[(&str, &str)] = &[("format", "String"), ("vec", "Vec")];
+
+/// The methods whose return type std or a dependency fixes, with that
+/// type: a receiver they build is no newtype.
+const RETURNS: &[(&str, &str)] = &[
+    ("to_string", "String"),
+    ("to_vec", "Vec"),
+    ("to_string_lossy", "Cow"),
+    ("to_token_stream", "TokenStream"),
+    ("into_token_stream", "TokenStream"),
+    ("unraw", "Ident"),
+    ("get_ident", "Ident"),
+    ("display", "Display"),
+];
+
+/// The methods of `RETURNS` that a trait of std fixes, so a workspace
+/// method of the same name returns the same type.
+const STD_RETURNS: &[&str] = &["to_string", "to_vec"];
 
 /// The accessors a std conversion trait writes. Every type has an `into`,
 /// so the report reads one on a typed receiver alone.
@@ -424,8 +456,13 @@ struct Newtype {
 #[derive(Debug, Default)]
 struct Catalog {
     newtypes: BTreeMap<String, Newtype>,
-    /// The type of each named field of each struct, by struct name.
+    /// The type of each field of each struct, by struct name. A tuple
+    /// field goes by its index.
     fields: BTreeMap<String, BTreeMap<String, String>>,
+    /// Every type a field of each name holds, in any struct.
+    field_types: BTreeMap<String, BTreeSet<String>>,
+    /// The type of each `const` and `static`, by name.
+    consts: BTreeMap<String, String>,
     /// Every struct, enum, union, trait and alias, by name.
     types: BTreeSet<String>,
     /// Every free `fn`, by name.
@@ -568,6 +605,37 @@ fn type_name(ty: &syn::Type) -> Option<String> {
             }
         }
         _ => None,
+    }
+}
+
+/// The expression under a borrow, a paren or a group.
+fn peel(expr: &syn::Expr) -> &syn::Expr {
+    match expr {
+        syn::Expr::Reference(r) => peel(&r.expr),
+        syn::Expr::Paren(p) => peel(&p.expr),
+        syn::Expr::Group(g) => peel(&g.expr),
+        other => other,
+    }
+}
+
+/// The name of a field: its ident, or the index of a tuple field.
+fn member_name(member: &syn::Member) -> String {
+    match member {
+        syn::Member::Named(ident) => ident.to_string(),
+        syn::Member::Unnamed(index) => index.index.to_string(),
+    }
+}
+
+/// The type name of [`type_name`], with `[]` for a slice or an array and
+/// `()` for a tuple: none of them is a newtype.
+fn shape_name(ty: &syn::Type) -> Option<String> {
+    match ty {
+        syn::Type::Reference(r) => shape_name(&r.elem),
+        syn::Type::Paren(p) => shape_name(&p.elem),
+        syn::Type::Group(g) => shape_name(&g.elem),
+        syn::Type::Slice(_) | syn::Type::Array(_) => Some("[]".to_owned()),
+        syn::Type::Tuple(_) => Some("()".to_owned()),
+        other => type_name(other),
     }
 }
 
@@ -782,10 +850,22 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                 let named: BTreeMap<String, String> = s
                     .fields
                     .iter()
-                    .filter_map(|field| {
-                        Some((field.ident.as_ref()?.to_string(), type_name(&field.ty)?))
+                    .enumerate()
+                    .filter_map(|(index, field)| {
+                        let name = field
+                            .ident
+                            .as_ref()
+                            .map_or_else(|| index.to_string(), ToString::to_string);
+                        Some((name, shape_name(&field.ty)?))
                     })
                     .collect();
+                for (field, ty) in &named {
+                    catalog
+                        .field_types
+                        .entry(field.clone())
+                        .or_default()
+                        .insert(ty.clone());
+                }
                 catalog
                     .fields
                     .entry(name.clone())
@@ -824,6 +904,16 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
             }
             syn::Item::Fn(f) => {
                 catalog.fns.insert(f.sig.ident.to_string());
+            }
+            syn::Item::Const(c) => {
+                if let Some(ty) = shape_name(&c.ty) {
+                    catalog.consts.insert(c.ident.to_string(), ty);
+                }
+            }
+            syn::Item::Static(s) => {
+                if let Some(ty) = shape_name(&s.ty) {
+                    catalog.consts.insert(s.ident.to_string(), ty);
+                }
             }
             syn::Item::Impl(i) => {
                 let Some(owner) = type_name(&i.self_ty) else {
@@ -1032,27 +1122,33 @@ impl BodyVisit<'_, '_> {
     /// Binds every name a pattern brings in. A lone name takes what the
     /// annotation or the initialiser says of it; any other name is unknown.
     fn bind_pattern(&mut self, pat: &syn::Pat, init: Option<&syn::Expr>) {
-        let (ident, ty) = match pat {
-            syn::Pat::Ident(p) if p.subpat.is_none() => (Some(&p.ident), None),
+        let (name, ty) = match pat {
+            syn::Pat::Ident(p) if p.subpat.is_none() => (Some(p.ident.to_string()), None),
             syn::Pat::Type(t) => match &*t.pat {
-                syn::Pat::Ident(p) if p.subpat.is_none() => (Some(&p.ident), Some(&*t.ty)),
+                syn::Pat::Ident(p) if p.subpat.is_none() => {
+                    (Some(p.ident.to_string()), Some(&*t.ty))
+                }
                 _ => (None, None),
             },
             _ => (None, None),
         };
-        if let Some(ident) = ident {
+        if let Some(name) = name {
             let ty = match ty {
                 Some(ty) => self.hint(ty),
                 None => init.and_then(|init| self.infer(init)),
             };
             let unwrap = init.and_then(|init| self.unwrap_of(init));
-            self.bind(ident.to_string(), Binding { ty, unwrap });
+            self.bind(name, Binding { ty, unwrap });
             return;
         }
-        let mut names = PatNames::default();
+        let mut names = PatNames {
+            visit: self,
+            within: None,
+            names: Vec::new(),
+        };
         names.visit_pat(pat);
-        for name in names.0 {
-            self.bind(name, Binding::default());
+        for (name, ty) in names.names {
+            self.bind(name, Binding { ty, unwrap: None });
         }
     }
 
@@ -1073,18 +1169,38 @@ impl BodyVisit<'_, '_> {
                 if ident == "self" {
                     return self.owners.last().cloned();
                 }
-                self.lookup(&ident.to_string())?.ty.clone()
+                let name = ident.to_string();
+                match self.lookup(&name) {
+                    Some(binding) => binding.ty.clone(),
+                    None => self.catalog.consts.get(&name).cloned(),
+                }
             }
             syn::Expr::Field(f) => {
                 let owner = self.infer(&f.base)?;
-                let syn::Member::Named(field) = &f.member else {
-                    return None;
-                };
                 self.catalog
                     .fields
                     .get(&owner)?
-                    .get(&field.to_string())
+                    .get(&member_name(&f.member))
                     .cloned()
+            }
+            syn::Expr::Array(_) => Some("[]".to_owned()),
+            syn::Expr::Lit(_) => Some("literal".to_owned()),
+            syn::Expr::Macro(m) => {
+                let name = m.mac.path.segments.last()?.ident.to_string();
+                MACRO_TYPES
+                    .iter()
+                    .find(|(mac, _)| *mac == name)
+                    .map(|(_, ty)| (*ty).to_owned())
+            }
+            syn::Expr::MethodCall(m) if m.method != "clone" && m.method != "to_owned" => {
+                let method = m.method.to_string();
+                let fixed = STD_RETURNS.contains(&method.as_str())
+                    || !self.catalog.methods.contains(&method);
+                RETURNS
+                    .iter()
+                    .find(|(name, _)| *name == method)
+                    .filter(|_| fixed)
+                    .map(|(_, ty)| (*ty).to_owned())
             }
             syn::Expr::Reference(r) => self.infer(&r.expr),
             syn::Expr::Paren(p) => self.infer(&p.expr),
@@ -1118,14 +1234,16 @@ impl BodyVisit<'_, '_> {
                     || ctor.starts_with("from")
                     || ctor.starts_with("try_from")
                     || ctor == "parse"
-                    || ctor == "default";
+                    || ctor == "default"
+                    || ctor == "with_capacity";
                 if !builds {
                     return None;
                 }
                 if owner == "Self" {
                     return self.owners.last().cloned();
                 }
-                self.catalog.types.contains(owner).then(|| owner.clone())
+                (STD_TYPES.contains(&owner.as_str()) || self.catalog.types.contains(owner))
+                    .then(|| owner.clone())
             }
             _ => None,
         }
@@ -1173,6 +1291,22 @@ impl BodyVisit<'_, '_> {
             });
         }
         if CONVERSIONS.contains(&accessor) {
+            return None;
+        }
+        // Take a field of a base the report cannot type. It holds a newtype
+        // only when a workspace struct has a field of that name and type. A
+        // field of a syn or proc-macro2 value holds none.
+        let candidates: Vec<&String> = match peel(receiver) {
+            syn::Expr::Field(f) => {
+                let held = self.catalog.field_types.get(&member_name(&f.member));
+                candidates
+                    .into_iter()
+                    .filter(|name| held.is_some_and(|types| types.contains(*name)))
+                    .collect()
+            }
+            _ => candidates,
+        };
+        if candidates.is_empty() {
             return None;
         }
         let exempt = candidates.iter().filter(|name| self.exempts(name)).count();
@@ -1278,6 +1412,21 @@ impl BodyVisit<'_, '_> {
             || self.catalog.modules.contains(root)
     }
 
+    /// Whether a path is an import from a foreign crate, or starts at one.
+    fn foreign_path(&self, segments: &[String]) -> bool {
+        let Some(first) = segments.first() else {
+            return false;
+        };
+        match self.imports.get(first) {
+            Some(root) => !self.workspace_root(root),
+            None => {
+                segments.len() > 1
+                    && !self.workspace_root(first)
+                    && !self.catalog.types.contains(first)
+            }
+        }
+    }
+
     /// How the report reads the callee of a call through a path.
     fn path_callee(&self, path: &syn::ExprPath) -> Callee {
         if path.qself.is_some() {
@@ -1292,15 +1441,7 @@ impl BodyVisit<'_, '_> {
         let (Some(first), Some(last)) = (segments.first(), segments.last()) else {
             return Callee::Foreign;
         };
-        // An import from a foreign crate, or a path that starts at one.
-        let foreign = match self.imports.get(first) {
-            Some(root) => !self.workspace_root(root),
-            None => {
-                segments.len() > 1
-                    && !self.workspace_root(first)
-                    && !self.catalog.types.contains(first)
-            }
-        };
+        let foreign = self.foreign_path(&segments);
         if last.starts_with(|c: char| c.is_ascii_uppercase()) {
             return if foreign {
                 Callee::Constructor
@@ -1435,14 +1576,37 @@ impl BodyVisit<'_, '_> {
     }
 }
 
-/// Every name a pattern binds.
-#[derive(Default)]
-struct PatNames(Vec<String>);
+/// Every name a pattern binds. A name a variant of a foreign `enum` binds,
+/// as `TokenTree::Ident(ident)` does, holds a foreign value: the variant
+/// path types it.
+struct PatNames<'v, 'c, 'r> {
+    visit: &'v BodyVisit<'c, 'r>,
+    /// The foreign variant the current field belongs to.
+    within: Option<String>,
+    names: Vec<(String, Option<String>)>,
+}
 
-impl<'ast> Visit<'ast> for PatNames {
+impl<'ast> Visit<'ast> for PatNames<'_, '_, '_> {
     fn visit_pat_ident(&mut self, p: &'ast syn::PatIdent) {
-        self.0.push(p.ident.to_string());
+        self.names.push((p.ident.to_string(), self.within.clone()));
         syn::visit::visit_pat_ident(self, p);
+    }
+
+    fn visit_pat_tuple_struct(&mut self, p: &'ast syn::PatTupleStruct) {
+        let segments: Vec<String> = p
+            .path
+            .segments
+            .iter()
+            .map(|s| s.ident.to_string())
+            .collect();
+        let outer = self.within.clone();
+        if self.visit.foreign_path(&segments) {
+            self.within = Some(segments.join("::"));
+        }
+        for elem in &p.elems {
+            self.visit_pat(elem);
+        }
+        self.within = outer;
     }
 }
 
