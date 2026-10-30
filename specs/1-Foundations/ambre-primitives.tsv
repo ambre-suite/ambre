@@ -796,7 +796,6 @@ ambre-core | src/docfile.rs | crate::docfile | DOC_TYPE_AT | const | usize	gener
 ambre-core | src/docfile.rs | crate::docfile | DocFileError::UnknownDocType.found | field | u8	generic	raw unknown doc_type byte, by definition not a DocType
 ambre-core | src/docfile.rs | crate::docfile | HEADER_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | MAGIC_LEN | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | Migration.apply | field | fn(&[u8])->Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | SALT_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SALT_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEALED_AAD_LEN | const | usize	generic	container byte-layout constant
@@ -805,11 +804,6 @@ ambre-core | src/docfile.rs | crate::docfile | SEALED_HEADER_LEN | const | usize
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | VERSION_AT | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | migrate_ambre() | ret | Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | migrate_ambre(bytes) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | migrate_steps() | ret | Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | migrate_steps(bytes) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | parse_header(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | FileSalt.0 | field | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::as_array() | ret | &[u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::from_array(bytes) | param | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
@@ -2336,7 +2330,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | NAME_DOMAIN | const | &[u8]	gen
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownLayout.0 | field | u8	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownVersion.0 | field | u8	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob.0 | field | Vec<u8>	newtype-inner	newtype field, constructor or accessor
-ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::as_bytes() | ret | &[u8]	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::len() | ret | usize	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/pipeline.rs | crate::pipeline | check_layout(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | compress(data) | param | &[u8]	generic	generic byte/text API or codec

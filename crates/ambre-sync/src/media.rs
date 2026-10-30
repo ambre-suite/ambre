@@ -41,7 +41,7 @@ fn open_blob(
     // of the wrapper with no copy. A blob the address refuses is wiped.
     let data = ambre_core::MediaBytes::new(data.into_plaintext());
     if ambre_crypto::commitment::media_address(doc_key, &data) != address {
-        ambre_core::Secret::wipe(data.into_bytes());
+        data.wipe();
         return Err(SyncError::BlobMismatch);
     }
     Ok(data)

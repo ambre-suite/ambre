@@ -837,6 +837,34 @@ impl SealedChannelKey {
         Self(bytes)
     }
 
+    /// The catalogue form of one seal: the id of the space key that sealed
+    /// it, the nonce, then the ciphertext and its tag.
+    pub fn from_parts(
+        key_id: ambre_core::KeyId,
+        nonce: &ambre_core::Nonce,
+        ciphertext: &ambre_core::Ciphertext,
+    ) -> Self {
+        let mut bytes = Vec::new();
+        key_id.push_to(&mut bytes);
+        nonce.push_to(&mut bytes);
+        bytes.extend_from_slice(&ciphertext.0);
+        Self(bytes)
+    }
+
+    /// The id of the space key that sealed it. `None` for bytes too short to
+    /// name a key.
+    pub fn key_id(&self) -> Option<ambre_core::KeyId> {
+        ambre_core::KeyId::split_from(&self.0).map(|(key_id, _)| key_id)
+    }
+
+    /// The parts [`Self::from_parts`] joined. `None` for bytes too short to
+    /// hold a key id and a nonce.
+    pub fn split(&self) -> Option<(ambre_core::KeyId, ambre_core::Nonce, ambre_core::Ciphertext)> {
+        let (key_id, rest) = ambre_core::KeyId::split_from(&self.0)?;
+        let (nonce, ciphertext) = ambre_core::Nonce::split_from(rest)?;
+        Some((key_id, nonce, ambre_core::Ciphertext(ciphertext.to_vec())))
+    }
+
     /// The sealed bytes, as the catalogue stores them.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0

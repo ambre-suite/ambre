@@ -25,6 +25,12 @@ macro_rules! fixed_bytes {
                 let (head, rest) = bytes.split_first_chunk::<{ $len }>()?;
                 Some((Self(*head), rest))
             }
+
+            /// Appends the value to `out`, as [`Self::split_from`] reads it
+            /// back.
+            pub fn push_to(&self, out: &mut Vec<u8>) {
+                out.extend_from_slice(&self.0);
+            }
         }
 
         const _: () = assert!(::core::mem::size_of::<$name>() == $len);
@@ -145,5 +151,17 @@ mod tests {
         assert_eq!((key_id, rest), (KeyId::from_array([3; 16]), &[3; 4][..]));
         assert_eq!(PublicKey::split_from(&[1; 31]), None);
         assert_eq!(Signature::split_from(&[]), None);
+    }
+
+    /// A push appends the bytes a split reads back, after what `out` held.
+    #[test]
+    fn a_push_appends_the_bytes_a_split_reads_back() {
+        let mut out = b"head".to_vec();
+        KeyId::from_array([3; 16]).push_to(&mut out);
+        Nonce([7; 24]).push_to(&mut out);
+        let rest = out.strip_prefix(b"head").unwrap();
+        let (key_id, rest) = KeyId::split_from(rest).unwrap();
+        assert_eq!(key_id, KeyId::from_array([3; 16]));
+        assert_eq!(Nonce::split_from(rest), Some((Nonce([7; 24]), &[][..])));
     }
 }

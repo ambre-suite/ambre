@@ -397,8 +397,8 @@ pub fn write_ambre_plaintext(
 /// * [`DocFileError::UnsupportedVersion`] on any other version.
 /// * [`DocFileError::UnknownDocType`] when the type byte names no app this
 ///   build knows.
-pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
-    let Some((head, payload)) = data.split_first_chunk::<HEADER_LEN>() else {
+pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError> {
+    let Some((head, payload)) = file.as_bytes().split_first_chunk::<HEADER_LEN>() else {
         return Err(DocFileError::TruncatedHeader);
     };
     if !head.starts_with(&AMBRE_MAGIC) {
@@ -447,12 +447,11 @@ pub fn parse_header(data: &[u8]) -> Result<AmbreHeader, DocFileError> {
 /// keeps its [`DocFileError::UnsupportedVersion`]: this build cannot read
 /// forward.
 pub fn read_ambre_plaintext(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError> {
-    let data = file.as_bytes();
-    match parse_header(data) {
+    match parse_header(file) {
         // Older container: migrate forward, then parse the result. The migrated
         // buffer is a fresh allocation, so nothing here touches `file`.
         Err(DocFileError::UnsupportedVersion { found }) if found < AMBRE_VERSION => {
-            parse_header(&migrate_ambre(found, data)?)
+            parse_header(&migrate_ambre(found, file)?)
         }
         other => other,
     }
@@ -620,7 +619,7 @@ pub fn parse_sealed_header(file: &SealedContainer) -> Result<SealedAmbre, DocFil
 struct Migration {
     from: ContainerVersion,
     to: ContainerVersion,
-    apply: fn(&[u8]) -> Result<Vec<u8>, DocFileError>,
+    apply: fn(&PlaintextContainer) -> Result<PlaintextContainer, DocFileError>,
 }
 
 /// The version registry: one row per container version bump, appended
@@ -644,7 +643,10 @@ const MIGRATIONS: &[Migration] = &[];
 /// [`DocFileError::UnsupportedVersion`] when the registry holds no step out of
 /// a version the walk reaches. A step of the registry raises its own error
 /// unchanged.
-pub fn migrate_ambre(from: ContainerVersion, bytes: &[u8]) -> Result<Vec<u8>, DocFileError> {
+pub fn migrate_ambre(
+    from: ContainerVersion,
+    file: &PlaintextContainer,
+) -> Result<PlaintextContainer, DocFileError> {
     // The walk would refuse a sealed version anyway, since every one of them
     // sits above `AMBRE_VERSION`. But it would call it an unknown *plaintext*
     // version, the one message that sends the user to the changelog instead of
@@ -652,7 +654,7 @@ pub fn migrate_ambre(from: ContainerVersion, bytes: &[u8]) -> Result<Vec<u8>, Do
     if from.is_sealed() {
         return Err(DocFileError::SealedFile);
     }
-    migrate_steps(MIGRATIONS, from, AMBRE_VERSION, bytes)
+    migrate_steps(MIGRATIONS, from, AMBRE_VERSION, file)
 }
 
 /// The registry walk, parameterized by the step table: the tests drive it with
@@ -661,13 +663,13 @@ fn migrate_steps(
     steps: &[Migration],
     from: ContainerVersion,
     target: ContainerVersion,
-    bytes: &[u8],
-) -> Result<Vec<u8>, DocFileError> {
+    file: &PlaintextContainer,
+) -> Result<PlaintextContainer, DocFileError> {
     if from > target {
         return Err(DocFileError::UnsupportedVersion { found: from });
     }
     let mut current = from;
-    let mut buf = bytes.to_vec();
+    let mut buf = file.clone();
     while current < target {
         // `to > current` is a requirement, not an expectation: it is what makes
         // the walk terminate, whatever a future registry row looks like.
@@ -755,13 +757,13 @@ mod tests {
         let bytes = sample(DocType::Trame);
         for len in 0..HEADER_LEN {
             assert_eq!(
-                parse_header(&bytes[..len]),
+                parse_header(&plain(&bytes[..len])),
                 Err(DocFileError::TruncatedHeader),
                 "a {len}-byte file must not parse"
             );
         }
         // Exactly HEADER_LEN parses: an empty payload is not a truncation.
-        assert!(parse_header(&bytes[..HEADER_LEN]).is_ok());
+        assert!(parse_header(&plain(&bytes[..HEADER_LEN])).is_ok());
     }
 
     #[test]
@@ -864,7 +866,7 @@ mod tests {
             let before = bytes.clone();
             let _ = read_ambre_plaintext(&plain(&bytes));
             let _ = read_ambre_plaintext_as(DocType::Trame, &plain(&bytes));
-            let _ = migrate_ambre(ContainerVersion(0), &bytes);
+            let _ = migrate_ambre(ContainerVersion(0), &plain(&bytes));
             let _ = classify(&picked(&bytes));
             let _ = parse_sealed_header(&sealed(&bytes));
             assert_eq!(bytes, before, "an error path rewrote its input");
@@ -874,14 +876,14 @@ mod tests {
     #[test]
     fn migrating_from_the_current_version_is_the_identity() {
         let bytes = sample(DocType::Trame);
-        assert_eq!(migrate_ambre(AMBRE_VERSION, &bytes).unwrap(), bytes);
+        assert_eq!(migrate_ambre(AMBRE_VERSION, &plain(&bytes)).unwrap(), bytes);
     }
 
     #[test]
     fn migrating_from_a_newer_version_is_refused() {
         let bytes = sample(DocType::Trame);
         assert_eq!(
-            migrate_ambre(ContainerVersion(AMBRE_VERSION.as_u8() + 1), &bytes),
+            migrate_ambre(ContainerVersion(AMBRE_VERSION.as_u8() + 1), &plain(&bytes)),
             Err(DocFileError::UnsupportedVersion {
                 found: ContainerVersion(AMBRE_VERSION.as_u8() + 1)
             })
@@ -896,21 +898,21 @@ mod tests {
     // the row is the whole change.
 
     /// `0x01` -> `0x02`: rewrite the version byte, leave the payload alone.
-    fn bump_to_2(bytes: &[u8]) -> Result<Vec<u8>, DocFileError> {
-        let mut out = bytes.to_vec();
+    fn bump_to_2(file: &PlaintextContainer) -> Result<PlaintextContainer, DocFileError> {
+        let mut out = file.as_bytes().to_vec();
         *out.get_mut(VERSION_AT)
             .ok_or(DocFileError::TruncatedHeader)? = 2;
-        Ok(out)
+        Ok(PlaintextContainer::new(out))
     }
 
     /// `0x02` -> `0x03`: same shape, plus a payload edit, so the multi-step walk
     /// must chain outputs rather than re-read the original.
-    fn bump_to_3(bytes: &[u8]) -> Result<Vec<u8>, DocFileError> {
-        let mut out = bytes.to_vec();
+    fn bump_to_3(file: &PlaintextContainer) -> Result<PlaintextContainer, DocFileError> {
+        let mut out = file.as_bytes().to_vec();
         *out.get_mut(VERSION_AT)
             .ok_or(DocFileError::TruncatedHeader)? = 3;
         out.extend_from_slice(b"+v3");
-        Ok(out)
+        Ok(PlaintextContainer::new(out))
     }
 
     const SYNTHETIC: &[Migration] = &[
@@ -929,19 +931,29 @@ mod tests {
     #[test]
     fn the_walk_applies_one_step_per_version() {
         let bytes = sample(DocType::Trame);
-        let out = migrate_steps(SYNTHETIC, ContainerVersion(1), ContainerVersion(2), &bytes)
-            .expect("one step");
-        assert_eq!(out[VERSION_AT], 2);
-        assert_eq!(&out[HEADER_LEN..], b"snapshot-bytes");
+        let out = migrate_steps(
+            SYNTHETIC,
+            ContainerVersion(1),
+            ContainerVersion(2),
+            &plain(&bytes),
+        )
+        .expect("one step");
+        assert_eq!(out.as_bytes()[VERSION_AT], 2);
+        assert_eq!(&out.as_bytes()[HEADER_LEN..], b"snapshot-bytes");
     }
 
     #[test]
     fn the_walk_chains_steps_in_order() {
         let bytes = sample(DocType::Trame);
-        let out = migrate_steps(SYNTHETIC, ContainerVersion(1), ContainerVersion(3), &bytes)
-            .expect("two steps");
-        assert_eq!(out[VERSION_AT], 3);
-        assert_eq!(&out[HEADER_LEN..], b"snapshot-bytes+v3");
+        let out = migrate_steps(
+            SYNTHETIC,
+            ContainerVersion(1),
+            ContainerVersion(3),
+            &plain(&bytes),
+        )
+        .expect("two steps");
+        assert_eq!(out.as_bytes()[VERSION_AT], 3);
+        assert_eq!(&out.as_bytes()[HEADER_LEN..], b"snapshot-bytes+v3");
     }
 
     #[test]
@@ -950,7 +962,12 @@ mod tests {
         // No row leaves 3, so a 3 -> 4 target reports the version it got stuck on
         // rather than silently returning a half-migrated file.
         assert_eq!(
-            migrate_steps(SYNTHETIC, ContainerVersion(3), ContainerVersion(4), &bytes),
+            migrate_steps(
+                SYNTHETIC,
+                ContainerVersion(3),
+                ContainerVersion(4),
+                &plain(&bytes)
+            ),
             Err(DocFileError::UnsupportedVersion {
                 found: ContainerVersion(3)
             })
@@ -965,7 +982,7 @@ mod tests {
                 SYNTHETIC,
                 ContainerVersion(1),
                 ContainerVersion(2),
-                &truncated
+                &plain(&truncated)
             ),
             Err(DocFileError::TruncatedHeader)
         );
@@ -1053,7 +1070,7 @@ mod tests {
         // well once it has the passphrase. Asking the user to update their
         // client is the wrong message.
         let bytes = sealed_sample();
-        assert_eq!(parse_header(&bytes), Err(DocFileError::SealedFile));
+        assert_eq!(parse_header(&plain(&bytes)), Err(DocFileError::SealedFile));
         assert_eq!(
             read_ambre_plaintext(&plain(&bytes)),
             Err(DocFileError::SealedFile)
@@ -1096,7 +1113,7 @@ mod tests {
     #[test]
     fn migrating_a_sealed_version_says_it_is_sealed() {
         assert_eq!(
-            migrate_ambre(AMBRE_SEALED_VERSION, &sealed_sample()),
+            migrate_ambre(AMBRE_SEALED_VERSION, &plain(&sealed_sample())),
             Err(DocFileError::SealedFile)
         );
     }
