@@ -384,7 +384,9 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         (ElementKey::Hash, DisplayGeom::Image(hash)) => {
             Some(format!("draws media {:?}", hash.as_str()))
         }
-        (ElementKey::Url, DisplayGeom::Embed(Some(url))) => Some(format!("embeds {url:?}")),
+        (ElementKey::Url, DisplayGeom::Embed(Some(url))) => {
+            Some(format!("embeds {:?}", url.as_str()))
+        }
         (ElementKey::Url, DisplayGeom::Embed(None)) => Some("embeds no safe address".to_owned()),
         (
             ElementKey::DocId | ElementKey::DocType,

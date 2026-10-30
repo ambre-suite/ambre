@@ -576,7 +576,8 @@ impl LinkTarget {
 /// [`WebAddress::parse`] is the only way in, for a typed address and a stored
 /// one alike. Deserialisation goes through it too. A peer's `javascript:` or
 /// `data:` text therefore never becomes a `WebAddress`, and never reaches a
-/// frame (`TOILE-088`, `TOILE-267`). `Debug` prints the bare text.
+/// frame (`TOILE-088`, `TOILE-267`). A user typed the address, so `Debug`
+/// prints its length alone.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct WebAddress(String);
@@ -725,10 +726,9 @@ impl From<WebAddress> for String {
 
 impl std::fmt::Debug for WebAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
+        write!(f, "WebAddress({} chars)", self.0.chars().count())
     }
 }
-
 impl std::fmt::Display for WebAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -1155,8 +1155,9 @@ pub struct ClipboardPayload {
 // =============================================================================
 
 /// Type-specific seed passed to `CreateElement`. The variant must match `kind`
-/// (the handler rejects a mismatch).
-#[derive(Clone, Debug)]
+/// (the handler rejects a mismatch). `Debug` prints the length of a text
+/// body alone.
+#[derive(Clone)]
 pub enum InitContent {
     None,
     Path(BezPath),
@@ -1167,6 +1168,29 @@ pub enum InitContent {
         doc_type: DocType,
     }, // nested Ambre document (`toile-embeds`)
     Text(String),      // initial plain body (sticky / text)
+}
+
+impl fmt::Debug for InitContent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => f.write_str("None"),
+            Self::Path(path) => f.debug_tuple("Path").field(path).finish(),
+            Self::Image(media) => f.debug_tuple("Image").field(media).finish(),
+            Self::Embed(address) => f.debug_tuple("Embed").field(address).finish(),
+            Self::DocEmbed {
+                document_id,
+                doc_type,
+            } => f
+                .debug_struct("DocEmbed")
+                .field("document_id", document_id)
+                .field("doc_type", doc_type)
+                .finish(),
+            Self::Text(text) => f
+                .debug_tuple("Text")
+                .field(&ambre_core::char_len(text))
+                .finish(),
+        }
+    }
 }
 
 ambre_core::define_index! {
@@ -1268,11 +1292,22 @@ pub struct FindResults {
 /// positions; the engine clamps them to the current length. This is the
 /// `TextDelta` the specs defer for element text -- introduced here for notes
 /// only, where the spec demands char-CRDT convergence (`toile-text-editing`).
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+/// `Debug` prints the length of `insert` alone.
+#[derive(Clone, PartialEq, Eq, Default)]
 pub struct TextDelta {
     pub at: ambre_core::CharOffset,
     pub delete: ambre_core::CharCount,
     pub insert: String,
+}
+
+impl fmt::Debug for TextDelta {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TextDelta")
+            .field("at", &self.at)
+            .field("delete", &self.delete)
+            .field("insert", &ambre_core::char_len(&self.insert))
+            .finish()
+    }
 }
 
 impl TextDelta {
@@ -1436,11 +1471,22 @@ pub enum CommentAnchor {
 /// One message of a thread, read from the CRDT (`toile-comments`). The
 /// `author` is the canonical `UserId`, never a `PeerID` (`TOILE-FEAT-014`). The
 /// reader sees the `ts`, and nothing orders by it (`TOILE-FEAT-012`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// `Debug` prints the length of the body alone.
+#[derive(Clone, PartialEq, Eq)]
 pub struct CommentMessage {
     pub author: UserId,
     pub ts: ambre_core::Timestamp,
     pub body: String,
+}
+
+impl fmt::Debug for CommentMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CommentMessage")
+            .field("author", &self.author)
+            .field("ts", &self.ts)
+            .field("body", &ambre_core::char_len(&self.body))
+            .finish()
+    }
 }
 
 /// A whole thread, read on demand (`toile-comments`). Derived on read, never
@@ -1475,14 +1521,27 @@ pub struct CommentPin {
 /// (`TOILE-FEAT-016`). This list therefore reads the whole document, not the
 /// culled viewport. `preview` is the opening message, so a reader recognises
 /// the thread before opening it. The rest of the conversation arrives only when
-/// the reader opens the thread (`TOILE-205`).
-#[derive(Clone, Debug, PartialEq)]
+/// the reader opens the thread (`TOILE-205`). `Debug` prints the length of
+/// the preview alone.
+#[derive(Clone, PartialEq)]
 pub struct CommentSummary {
     pub id: ThreadId,
     pub anchor: CommentAnchor,
     pub resolved: ambre_core::ThreadState,
     pub messages: ThreadMessageCount,
     pub preview: String,
+}
+
+impl fmt::Debug for CommentSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CommentSummary")
+            .field("id", &self.id)
+            .field("anchor", &self.anchor)
+            .field("resolved", &self.resolved)
+            .field("messages", &self.messages)
+            .field("preview", &ambre_core::char_len(&self.preview))
+            .finish()
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -1492,10 +1551,20 @@ pub struct CommentSummary {
 /// One frame the deck panel lists (`toile-presentation`). `name` is the frame's
 /// title, empty until the user names one. The panel then labels an unnamed
 /// frame from its rank, a presentation concern that stays out of the engine.
-#[derive(Clone, Debug, PartialEq)]
+/// `Debug` prints the length of the name alone.
+#[derive(Clone, PartialEq)]
 pub struct DeckFrame {
     pub id: FrameId,
     pub name: String,
+}
+
+impl fmt::Debug for DeckFrame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DeckFrame")
+            .field("id", &self.id)
+            .field("name", &ambre_core::char_len(&self.name))
+            .finish()
+    }
 }
 
 /// The board's frames, split by whether the deck names them
@@ -1851,7 +1920,8 @@ impl LockState {
 }
 
 /// Command from the UI / Logic thread to `ToileState` (in `ambre-toile`).
-#[derive(Clone, Debug)]
+/// `Debug` prints a text a user typed by its length alone.
+#[derive(Clone)]
 pub enum ToileCommand {
     // -- Element lifecycle --
     CreateElement {
@@ -2311,6 +2381,155 @@ pub enum ToileCommand {
         payload: PresencePayload,
         now: ambre_core::PageTime,
     },
+}
+
+// A text a user typed prints its length alone, and every other field its own
+// `Debug`. A log of a command carries none of the board's text.
+impl fmt::Debug for ToileCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        macro_rules! fields {
+            ($name:literal $(, $field:ident)*) => {
+                f.debug_struct($name)$(.field(stringify!($field), $field))*.finish()
+            };
+        }
+        macro_rules! tuple {
+            ($name:literal, $value:expr) => {
+                f.debug_tuple($name).field($value).finish()
+            };
+        }
+        match self {
+            Self::CreateElement {
+                kind,
+                at,
+                size,
+                content,
+                fill,
+                correlate,
+            } => fields!("CreateElement", kind, at, size, content, fill, correlate),
+            Self::MoveElements { ids, delta } => fields!("MoveElements", ids, delta),
+            Self::AlignElements { ids, op } => fields!("AlignElements", ids, op),
+            Self::ResizeElement { id, new } => fields!("ResizeElement", id, new),
+            Self::RotateElement { id, radians } => fields!("RotateElement", id, radians),
+            Self::RequestMedia { hashes } => fields!("RequestMedia", hashes),
+            Self::RestyleElements { ids, style } => fields!("RestyleElements", ids, style),
+            Self::DeleteElements { ids } => fields!("DeleteElements", ids),
+            Self::SetText { id, base, text } => f
+                .debug_struct("SetText")
+                .field("id", id)
+                .field("base", &ambre_core::char_len(base))
+                .field("text", &ambre_core::char_len(text))
+                .finish(),
+            Self::LockElements { ids, lock } => fields!("LockElements", ids, lock),
+            Self::Reorder { node, to } => fields!("Reorder", node, to),
+            Self::GroupElements { ids } => fields!("GroupElements", ids),
+            Self::UngroupElements { groups } => fields!("UngroupElements", groups),
+            Self::SetFrameChildren { frame, add, remove } => {
+                fields!("SetFrameChildren", frame, add, remove)
+            }
+            Self::RemoveFromFrames { ids } => fields!("RemoveFromFrames", ids),
+            Self::RenameFrame { frame, name } => f
+                .debug_struct("RenameFrame")
+                .field("frame", frame)
+                .field("name", &ambre_core::char_len(name))
+                .finish(),
+            Self::SetSlideOrder { order } => fields!("SetSlideOrder", order),
+            Self::NextSlide => f.write_str("NextSlide"),
+            Self::PrevSlide => f.write_str("PrevSlide"),
+            Self::GotoSlide(slide) => tuple!("GotoSlide", slide),
+            Self::EnterPresent { focus } => fields!("EnterPresent", focus),
+            Self::ExitPresent => f.write_str("ExitPresent"),
+            Self::SetPresentBroadcast(broadcast) => tuple!("SetPresentBroadcast", broadcast),
+            Self::FollowPresenter(user) => tuple!("FollowPresenter", user),
+            Self::EditNotes { frame, base, delta } => f
+                .debug_struct("EditNotes")
+                .field("frame", frame)
+                .field("base", &ambre_core::char_len(base))
+                .field("delta", delta)
+                .finish(),
+            Self::SetAutoLayout { frame, layout } => fields!("SetAutoLayout", frame, layout),
+            Self::React { target, reaction } => fields!("React", target, reaction),
+            Self::CreateComment { anchor, body, ts } => f
+                .debug_struct("CreateComment")
+                .field("anchor", anchor)
+                .field("body", &ambre_core::char_len(body))
+                .field("ts", ts)
+                .finish(),
+            Self::ReplyComment { thread, body, ts } => f
+                .debug_struct("ReplyComment")
+                .field("thread", thread)
+                .field("body", &ambre_core::char_len(body))
+                .field("ts", ts)
+                .finish(),
+            Self::EditComment {
+                thread,
+                message,
+                delta,
+            } => fields!("EditComment", thread, message, delta),
+            Self::ResolveThread { thread, state } => fields!("ResolveThread", thread, state),
+            Self::ReadComments { thread } => fields!("ReadComments", thread),
+            Self::ReadDeck => f.write_str("ReadDeck"),
+            Self::BooleanOp { op, ids, sources } => fields!("BooleanOp", op, ids, sources),
+            Self::Undo => f.write_str("Undo"),
+            Self::Redo => f.write_str("Redo"),
+            Self::CreateConnector {
+                from,
+                from_anch,
+                to,
+                to_anch,
+                path_type,
+                arrows,
+            } => fields!(
+                "CreateConnector",
+                from,
+                from_anch,
+                to,
+                to_anch,
+                path_type,
+                arrows
+            ),
+            Self::RetargetConnector {
+                id,
+                endpoint,
+                to,
+                anch,
+            } => fields!("RetargetConnector", id, endpoint, to, anch),
+            Self::DeleteConnector { id } => fields!("DeleteConnector", id),
+            Self::SetLink { id, link } => fields!("SetLink", id, link),
+            Self::RestyleConnector { id, style } => fields!("RestyleConnector", id, style),
+            Self::SetConnectorLabel { id, base, text } => f
+                .debug_struct("SetConnectorLabel")
+                .field("id", id)
+                .field("base", &ambre_core::char_len(base))
+                .field("text", &ambre_core::char_len(text))
+                .finish(),
+            Self::CommitStroke { points, style } => fields!("CommitStroke", points, style),
+            Self::CopyElements { ids } => fields!("CopyElements", ids),
+            Self::PasteElements { payload, at } => fields!("PasteElements", payload, at),
+            Self::DuplicateElements { ids, delta } => fields!("DuplicateElements", ids, delta),
+            Self::Find {
+                query,
+                from,
+                direction,
+            } => fields!("Find", query, from, direction),
+            Self::RequestSelectionStats { ids, kind } => {
+                fields!("RequestSelectionStats", ids, kind)
+            }
+            Self::RequestSelectionData { ids } => fields!("RequestSelectionData", ids),
+            Self::RequestBoardIds => f.write_str("RequestBoardIds"),
+            Self::ImportSvg { bytes, at } => fields!("ImportSvg", bytes, at),
+            Self::ImportImage { bytes, mime, at } => fields!("ImportImage", bytes, mime, at),
+            Self::ImportFigma { bytes, at } => fields!("ImportFigma", bytes, at),
+            Self::ImportMiro { bytes, at } => fields!("ImportMiro", bytes, at),
+            Self::ExportSvg => f.write_str("ExportSvg"),
+            Self::ExportPdf => f.write_str("ExportPdf"),
+            Self::ExportAmbreFile => f.write_str("ExportAmbreFile"),
+            Self::ExportAmbreFileSealed { passphrase } => {
+                fields!("ExportAmbreFileSealed", passphrase)
+            }
+            Self::SetViewport(viewport) => tuple!("SetViewport", viewport),
+            Self::Presence { payload, now } => fields!("Presence", payload, now),
+        }
+    }
 }
 
 impl ToileCommand {
@@ -2806,6 +3025,90 @@ mod tests {
         assert_eq!(encoded, expected, "variant index 3, then the bare bytes");
         assert_eq!(postcard::from_bytes::<ClipValue>(&encoded), Ok(field));
         assert_eq!(format!("{:?}", ClipBytes::new(bytes)), "ClipBytes(4 bytes)");
+    }
+
+    /// Every board type and command that holds a text a user typed prints its
+    /// length in `Debug`, and none of the text.
+    #[test]
+    fn a_typed_text_prints_its_length_alone() {
+        let id = ElementId::mint(ambre_core::PeerId(1), IdCounter::new(2));
+        let secret = "Q3 layoffs".to_owned();
+        let delta = TextDelta {
+            insert: secret.clone(),
+            ..TextDelta::default()
+        };
+        let address = WebAddress::parse("https://a.example").expect("an address");
+        let ts = ambre_core::Timestamp::default();
+        let message = CommentMessage {
+            author: UserId::default(),
+            ts,
+            body: secret.clone(),
+        };
+        let summary = CommentSummary {
+            id: id.clone(),
+            anchor: CommentAnchor::Element(id.clone()),
+            resolved: ambre_core::ThreadState::default(),
+            messages: ThreadMessageCount::new(1),
+            preview: secret.clone(),
+        };
+        let frame = DeckFrame {
+            id: id.clone(),
+            name: secret.clone(),
+        };
+        let commands = [
+            ToileCommand::SetText {
+                id: id.clone(),
+                base: secret.clone(),
+                text: secret.clone(),
+            },
+            ToileCommand::RenameFrame {
+                frame: id.clone(),
+                name: secret.clone(),
+            },
+            ToileCommand::EditNotes {
+                frame: id.clone(),
+                base: secret.clone(),
+                delta: delta.clone(),
+            },
+            ToileCommand::CreateComment {
+                anchor: CommentAnchor::Element(id.clone()),
+                body: secret.clone(),
+                ts,
+            },
+            ToileCommand::ReplyComment {
+                thread: id.clone(),
+                body: secret.clone(),
+                ts,
+            },
+            ToileCommand::SetConnectorLabel {
+                id: ConnectorId::mint(ambre_core::PeerId(1), IdCounter::new(3)),
+                base: secret.clone(),
+                text: secret.clone(),
+            },
+            ToileCommand::CreateElement {
+                kind: ElementKind::Sticky,
+                at: Point::ZERO,
+                size: Size::ZERO,
+                content: InitContent::Text(secret.clone()),
+                fill: None,
+                correlate: None,
+            },
+        ];
+        let printed = [
+            format!("{delta:?}"),
+            format!("{message:?}"),
+            format!("{summary:?}"),
+            format!("{frame:?}"),
+            format!("{:?}", InitContent::Text(secret.clone())),
+        ]
+        .into_iter()
+        .chain(commands.iter().map(|command| format!("{command:?}")));
+        for line in printed {
+            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(!line.contains("Q3 layoffs"), "{line}");
+        }
+        assert_eq!(format!("{address:?}"), "WebAddress(17 chars)");
+        assert_eq!(format!("{:?}", ToileCommand::Undo), "Undo");
     }
 
     /// A stroke sample keeps the twelve bytes of three bare `f32`s, and a
