@@ -1025,7 +1025,6 @@ ambre-crypto | src/hash.rs | crate::hash | ENTRY_DIGEST_DOMAIN | const | &[u8]	g
 ambre-crypto | src/hash.rs | crate::hash | FINGERPRINT_DOMAIN | const | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | FINGERPRINT_LEN | const | usize	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | HASH_LEN | const | usize	generic	generic byte/text API or codec
-ambre-crypto | src/hash.rs | crate::hash | entry_digest(encoded_entry) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix() | ret | [u8;N]	generic	generic byte/text API or codec
 ambre-crypto | src/hash.rs | crate::hash | prefix(digest) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/keys.rs | crate::keys | DocumentKey::as_bytes() | ret | &[u8;32]	newtype-inner	newtype field, constructor or accessor
