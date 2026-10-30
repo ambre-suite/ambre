@@ -26,6 +26,8 @@ impl std::fmt::Debug for Query {
 impl Query {
     /// The words of `query`, or `None` when it holds no word.
     pub fn parse(query: &ambre_core::SearchQuery) -> Option<Self> {
+        // The text leaves the newtype at the foreign word cutter, not at a
+        // workspace helper, so the unwrap report has nothing to refuse.
         let words: Vec<String> = query.as_str().unicode_words().map(fold).collect();
         (!words.is_empty()).then_some(Self { words })
     }
