@@ -505,13 +505,11 @@ impl<'a> FrameTitle<'a> {
 /// A typed title prints as its length alone (`ZK-006`).
 impl std::fmt::Debug for FrameTitle<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Named(title) => f
-                .debug_tuple("Named")
-                .field(&crate::logic::TextLen(title))
-                .finish(),
-            Self::Untitled => f.write_str("Untitled"),
-        }
+        let len = match self {
+            Self::Named(title) => Some(crate::logic::TextLen(title)),
+            Self::Untitled => None,
+        };
+        f.debug_tuple("FrameTitle").field(&len).finish()
     }
 }
 
@@ -726,7 +724,7 @@ mod tests {
         let form = format!("{:?}", frame_title_label("Q3 layoffs"));
         assert!(!form.contains("layoffs"), "{form}");
         assert!(form.contains("<10 chars>"), "{form}");
-        assert_eq!(format!("{:?}", FrameTitle::Untitled), "Untitled");
+        assert_eq!(format!("{:?}", FrameTitle::Untitled), "FrameTitle(None)");
     }
 
     #[test]
