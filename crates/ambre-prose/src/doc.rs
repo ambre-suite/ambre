@@ -1230,7 +1230,9 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
         font_size: read_f32(&defaults, DefaultsKey::FontSizePt)
             .filter(|number| *number > 0.0)
             .and_then(FontSize::new)
-            .unwrap_or(fallback.font_size),
+            .map_or(fallback.font_size, |size| {
+                size.at_most(crate::mark::FONT_SIZE_MAX)
+            }),
         line_height: read_f32(&defaults, DefaultsKey::LineHeight)
             .and_then(LineSpacingMultiple::new)
             .unwrap_or(fallback.line_height),

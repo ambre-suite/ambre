@@ -298,8 +298,9 @@ pub struct CellStyle {
     /// Font family. `None` = the grid default font.
     pub font: Option<FontFamily>,
     /// Font size. `None` = the grid default size. Stored as whole points, the
-    /// steps the size picker offers.
-    #[serde(with = "ambre_core::font::whole_points")]
+    /// steps the size picker offers. A stored size past
+    /// [`CELL_FONT_SIZE_MAX`] reads as it (`CANVAS-088`).
+    #[serde(with = "capped_whole_points")]
     pub size: Option<FontSize>,
     pub format: CellFormat,
     /// Decimal places for the active number format. `None` = the format default.
@@ -307,6 +308,31 @@ pub struct CellStyle {
     /// Per-edge border (style + colour each), resolved per cell by the Logic
     /// thread from the selection-level [`StylePatch::border`] edit.
     pub borders: Borders,
+}
+
+/// The largest font size a cell carries: 409 points, the cap of the
+/// spreadsheet formats (`CANVAS-088`).
+pub const CELL_FONT_SIZE_MAX: FontSize = FontSize::from_whole_points(409);
+
+/// The whole-point layout of [`CellStyle::size`], read back at most
+/// [`CELL_FONT_SIZE_MAX`]. The bytes stay those of `ambre_core::font::whole_points`.
+mod capped_whole_points {
+    use ambre_core::FontSize;
+    use ambre_core::font::whole_points;
+    use serde::{Deserializer, Serializer};
+
+    pub(super) fn serialize<S: Serializer>(
+        size: &Option<FontSize>,
+        out: S,
+    ) -> Result<S::Ok, S::Error> {
+        whole_points::serialize(size, out)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        input: D,
+    ) -> Result<Option<FontSize>, D::Error> {
+        Ok(whole_points::deserialize(input)?.map(|size| size.at_most(super::CELL_FONT_SIZE_MAX)))
+    }
 }
 
 /// A sparse formatting delta emitted by a toolbar control over the current
@@ -347,4 +373,26 @@ pub struct BorderEdit {
     pub style: BorderStyle,
     /// Border colour, packed `0xRRGGBB`. `None` = the default grid-line colour.
     pub color: Option<Rgb>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CELL_FONT_SIZE_MAX, CellStyle, FontSize};
+
+    /// A cell size a peer stored past the cap reads as the cap, and a size
+    /// in range keeps its bytes (`CANVAS-088`).
+    #[test]
+    fn a_cell_size_past_the_cap_reads_as_the_cap() {
+        let sized = |points| CellStyle {
+            size: Some(FontSize::from_whole_points(points)),
+            ..CellStyle::default()
+        };
+        let huge = postcard::to_allocvec(&sized(4000)).expect("encodes");
+        let read = postcard::from_bytes::<CellStyle>(&huge).expect("decodes");
+        assert_eq!(read.size, Some(CELL_FONT_SIZE_MAX));
+        assert_eq!(CELL_FONT_SIZE_MAX.points(), 409.0);
+        let twelve = postcard::to_allocvec(&sized(12)).expect("encodes");
+        let read = postcard::from_bytes::<CellStyle>(&twelve).expect("decodes");
+        assert_eq!(postcard::to_allocvec(&read).expect("encodes"), twelve);
+    }
 }

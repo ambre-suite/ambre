@@ -98,8 +98,9 @@ const COLOR_KEYS: [MarkRoot; 2] = [MarkRoot::Ink, MarkRoot::Highlight];
 
 /// The smallest font size a mark may carry.
 const FONT_SIZE_MIN: FontSize = FontSize::from_whole_points(1);
-/// The largest font size the office formats round-trip.
-const FONT_SIZE_MAX: FontSize = FontSize::MAX;
+/// The largest font size a Prose document carries: 1638 points, the cap of
+/// the word-processing formats (`CANVAS-088`).
+pub const FONT_SIZE_MAX: FontSize = FontSize::from_whole_points(1638);
 
 /// Why a mark value was refused before the document was touched
 /// (`PROSE-FEAT-022`).
@@ -169,6 +170,19 @@ pub fn parse_font_size(raw: &str) -> Result<FontSize, MarkValueError> {
         return Err(bad());
     }
     FontSize::new(points).ok_or_else(bad)
+}
+
+/// Read a size a document already holds. A peer on another build may have
+/// stored a size past [`FONT_SIZE_MAX`], so such a size reads as the cap
+/// (`CANVAS-088`). Anything [`parse_font_size`] refuses for another reason
+/// gives `None`.
+#[must_use]
+pub fn read_font_size(raw: &str) -> Option<FontSize> {
+    let points = raw.parse::<f32>().ok()?;
+    if points.is_finite() && points > FONT_SIZE_MAX.points() {
+        return Some(FONT_SIZE_MAX);
+    }
+    parse_font_size(raw).ok()
 }
 
 /// A mark value in the one spelling the grammar of its key allows. It is the

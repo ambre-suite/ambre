@@ -379,6 +379,10 @@ pub struct FontSizeChoice(Option<FontSize>);
 /// The size behind [`FontSizeChoice::DEFAULT`].
 const DEFAULT_FONT_SIZE: FontSize = FontSize::from_whole_points(12);
 
+/// The largest named size a board carries: 4000 points, the cap of the
+/// presentation formats (`CANVAS-088`).
+pub const TEXT_FONT_SIZE_MAX: FontSize = FontSize::from_whole_points(4000);
+
 impl FontSizeChoice {
     /// The automatic size.
     pub const AUTO: Self = Self(None);
@@ -433,9 +437,9 @@ impl TryFrom<f32> for FontSizeChoice {
     type Error = ambre_core::InvalidFontSize;
 
     /// Zero points read as automatic; a negative or non-finite number is
-    /// refused.
+    /// refused. A size past [`TEXT_FONT_SIZE_MAX`] reads as it (`CANVAS-088`).
     fn try_from(points: f32) -> Result<Self, Self::Error> {
-        let size = FontSize::try_from(points)?;
+        let size = FontSize::try_from(points)?.at_most(TEXT_FONT_SIZE_MAX);
         Ok(Self::fixed(size).unwrap_or(Self::AUTO))
     }
 }
@@ -3349,12 +3353,15 @@ mod tests {
         let huge = postcard::to_allocvec(&1.0e6_f32).expect("encodes");
         assert_eq!(
             postcard::from_bytes::<FontSizeChoice>(&huge),
-            Ok(FontSizeChoice::fixed(FontSize::MAX).expect("a named size"))
+            Ok(FontSizeChoice::fixed(TEXT_FONT_SIZE_MAX).expect("a named size"))
         );
-        assert_eq!(
-            FontSizeChoice::from_whole_points(Some(u16::MAX)).whole_points(),
-            Some(1638)
-        );
+        assert_eq!(TEXT_FONT_SIZE_MAX.points(), 4000.0);
+        let past = postcard::to_allocvec(&4001.0_f32).expect("encodes");
+        let read = postcard::from_bytes::<FontSizeChoice>(&past).expect("decodes");
+        assert_eq!(read.whole_points(), Some(4000));
+        let in_range = postcard::to_allocvec(&7.5_f32).expect("encodes");
+        let read = postcard::from_bytes::<FontSizeChoice>(&in_range).expect("decodes");
+        assert_eq!(postcard::to_allocvec(&read).expect("encodes"), in_range);
     }
 
     /// `TOILE-UI-071`: a register carrying a layout this build does not know is
