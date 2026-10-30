@@ -15,10 +15,16 @@ use ambre_core::SealedRowBytes;
 use crate::{PersistWrite, SealedWrite};
 
 /// The answer one seal waits for.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+///
+/// Only a queue hands one out, so no other crate can forge a ticket that
+/// lands on a write it did not seal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SealTicket(u64);
 
 impl SealTicket {
+    /// The ticket a new queue hands out first.
+    const FIRST: Self = Self(0);
+
     /// The ticket handed out after this one.
     fn following(self) -> Self {
         Self(self.0 + 1)
@@ -26,11 +32,20 @@ impl SealTicket {
 }
 
 /// The writes on their way to the store, in the order Logic made them.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SealQueue {
     /// The ticket the next seal takes: each seal has its own.
     next: SealTicket,
     entries: VecDeque<Entry>,
+}
+
+impl Default for SealQueue {
+    fn default() -> Self {
+        Self {
+            next: SealTicket::FIRST,
+            entries: VecDeque::new(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -157,14 +172,13 @@ mod tests {
         SealedRowBytes::new(bytes.to_vec())
     }
 
-    /// Each seal takes its own ticket, so no answer lands on another write.
+    /// Each seal takes its own ticket, so no answer lands on another write:
+    /// a new queue hands out 0, then 1, then 2.
     #[test]
     fn each_seal_takes_its_own_ticket() {
         let mut queue = SealQueue::default();
-        let first = queue.ticket();
-        let second = queue.ticket();
-        assert_ne!(first, second);
-        assert_eq!(first.following(), second);
+        let tickets = [queue.ticket(), queue.ticket(), queue.ticket()];
+        assert_eq!(tickets, [SealTicket(0), SealTicket(1), SealTicket(2)]);
     }
 
     /// A write behind a seal waits for it, whatever it is. The store receives
