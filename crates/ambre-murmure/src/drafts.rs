@@ -76,6 +76,12 @@ ambre_core::define_generation! {
     pub struct ShelfVersion;
 }
 
+ambre_core::define_tally! {
+    /// How many losses of a draft shelf a reader applied, so its next read
+    /// starts past them.
+    pub struct LossCount;
+}
+
 /// The drafts the device keeps, shared by every region of the page and the
 /// page's relay. A clone is the same shelf.
 #[derive(Clone, Default)]
@@ -203,10 +209,14 @@ impl DraftShelf {
     }
 
     /// The losses after the first `seen`, and how many there are in all.
-    pub fn losses_since(&self, seen: usize) -> (Vec<Loss>, usize) {
+    pub fn losses_since(&self, seen: LossCount) -> (Vec<Loss>, LossCount) {
         let shelf = self.0.borrow();
-        let losses = shelf.losses.get(seen..).unwrap_or_default().to_vec();
-        (losses, shelf.losses.len())
+        let losses = usize::try_from(seen.get())
+            .ok()
+            .and_then(|seen| shelf.losses.get(seen..))
+            .unwrap_or_default()
+            .to_vec();
+        (losses, LossCount::of_len(shelf.losses.len()))
     }
 }
 

@@ -5,7 +5,6 @@
 //! header and the words of each row. Pure, so the host tests hold it. The painter in
 //! `paint` lays the rows out and draws them.
 
-use ambre_core::{ByteOffset, ByteSpan, CharOffset, CharVec, ViewPx};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use ambre_bus::{
@@ -13,6 +12,9 @@ use ambre_bus::{
     MurmureCommand, MurmureEvent, Notice, Reaction, Revision, SegmentId, TextStyle, Timestamp,
     UiEvent, Unreadable, UserId,
 };
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec, ViewPx};
+
+use crate::MessageCount;
 
 ambre_core::define_index! {
     /// A row of a message list, counted from zero at the oldest. A key
@@ -188,8 +190,19 @@ impl MessageList {
     }
 
     /// How many messages the list holds.
-    pub fn len(&self) -> usize {
-        self.segments.iter().map(|s| s.messages.len()).sum()
+    pub fn len(&self) -> MessageCount {
+        MessageCount::of_len(self.segments.iter().map(|s| s.messages.len()).sum())
+    }
+
+    /// The rows the list draws: a row per message and per band. A capacity,
+    /// so a paint allocates once.
+    fn row_capacity(&self) -> ListRowCount {
+        ListRowCount::from_len(
+            self.segments
+                .iter()
+                .map(|s| s.messages.len() + usize::from(s.band.is_some()))
+                .sum(),
+        )
     }
 
     /// Whether the list holds no message.
@@ -220,7 +233,7 @@ impl MessageList {
     /// What names each row, in the order of [`MessageList::rows`]. A key
     /// outlives a load above, where an index does not (`MURMURE-192`).
     pub fn keys(&self) -> ListRowVec<RowKey> {
-        let mut keys = Vec::with_capacity(self.len());
+        let mut keys = Vec::with_capacity(self.row_capacity().to_usize());
         for segment in &self.segments {
             if segment.band.is_some() {
                 keys.push(RowKey::Band(segment.id));
@@ -234,7 +247,7 @@ impl MessageList {
     /// group under a header of its own (`MURMURE-183`). A band is one row,
     /// and the message after it opens a group.
     pub fn rows(&self) -> ListRowVec<Row<'_>> {
-        let mut rows = Vec::with_capacity(self.len());
+        let mut rows = Vec::with_capacity(self.row_capacity().to_usize());
         let mut previous: Option<&MessageView> = None;
         for segment in &self.segments {
             if let Some(band) = &segment.band {
@@ -242,8 +255,9 @@ impl MessageList {
                 previous = None;
             }
             for message in &segment.messages {
-                let header =
+                let opens =
                     message.notice.is_none() && previous.is_none_or(|p| !grouped(p, message));
+                let header = if opens { Header::Opens } else { Header::Joined };
                 rows.push(Row::Message { message, header });
                 previous = Some(message);
             }
@@ -261,13 +275,33 @@ fn grouped(previous: &MessageView, next: &MessageView) -> bool {
         && next.ts.since(previous.ts) <= GROUP_SPAN
 }
 
+ambre_core::define_flag! {
+    /// Whether a message of the list opens its group under a header of its
+    /// own (`MURMURE-183`).
+    pub enum Header {
+        /// It joins the group of the message above, under that header.
+        Joined,
+        /// A header opens its group: who wrote, and when.
+        Opens,
+    }
+
+    /// The ink the body of a row draws in.
+    pub enum BodyInk {
+        /// The body is text a member wrote.
+        Plain,
+        /// The body is no text a member wrote: a deleted message, a notice
+        /// or a band.
+        Muted,
+    }
+}
+
 /// One row of the list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Row<'a> {
     /// A message, and whether a header opens its group.
     Message {
         message: &'a MessageView,
-        header: bool,
+        header: Header,
     },
     /// A segment that could not open.
     Band(&'a Band),
@@ -288,7 +322,9 @@ pub struct BodyMark {
 }
 
 /// The words of a header that opens a group: who wrote, and when.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the name alone: a member chose it.
+#[derive(Clone, PartialEq, Eq)]
 pub struct HeaderWords {
     /// The author's display name.
     pub author: String,
@@ -296,15 +332,27 @@ pub struct HeaderWords {
     pub time: String,
 }
 
+impl std::fmt::Debug for HeaderWords {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HeaderWords")
+            .field("author", &ByteCount::from_len(self.author.len()))
+            .field("time", &self.time)
+            .finish()
+    }
+}
+
 /// What a row shows, in words.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the body alone, and counts the marks and
+/// the files: each is plaintext a member wrote or named.
+#[derive(Clone, PartialEq, Eq)]
 pub struct RowWords {
     /// The header, on a row that opens a group.
     pub header: Option<HeaderWords>,
     /// The body, or what stands in its place.
     pub body: String,
-    /// The body is no text a member wrote: a deleted message or a notice.
-    pub muted: bool,
+    /// Whether the body is text a member wrote, or muted.
+    pub ink: BodyInk,
     /// The style marks of the body, over its bytes as shown (`MURMURE-565`).
     pub marks: Vec<BodyMark>,
     /// How many replies its thread holds, once it holds one. On a reply
@@ -317,6 +365,20 @@ pub struct RowWords {
     /// The files under the body, one chip each, which a click fetches. A
     /// deleted message carries none.
     pub files: Vec<Attachment>,
+}
+
+impl std::fmt::Debug for RowWords {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RowWords")
+            .field("header", &self.header)
+            .field("body", &ByteCount::from_len(self.body.len()))
+            .field("ink", &self.ink)
+            .field("marks", &self.marks.len())
+            .field("replies", &self.replies)
+            .field("reactions", &self.reactions.len())
+            .field("files", &self.files.len())
+            .finish()
+    }
 }
 
 impl<'a> Row<'a> {
@@ -344,23 +406,25 @@ impl<'a> Row<'a> {
                 .map(ambre_core::DisplayName::into_string)
                 .unwrap_or_else(|| UNKNOWN_MEMBER.to_owned())
         };
-        let header = header.then(|| HeaderWords {
+        let header = (header == Header::Opens).then(|| HeaderWords {
             author: name(message.author),
             time: time_of(message.ts),
         });
-        let (body, muted, marks) = match message.notice {
+        let (body, ink, marks) = match message.notice {
             Some(Notice::MemberAdded { member }) => {
                 let body = format!("{} joined the conversation", name(member));
-                (body, true, Vec::new())
+                (body, BodyInk::Muted, Vec::new())
             }
-            None if message.deleted == Deletion::Deleted => (DELETED.to_owned(), true, Vec::new()),
+            None if message.deleted == Deletion::Deleted => {
+                (DELETED.to_owned(), BodyInk::Muted, Vec::new())
+            }
             None => {
                 let (mut body, bytes) = message.shown_at(&name_of);
                 let marks = body_marks(message, &bytes);
                 if message.edited == Revision::Edited {
                     body = format!("{body} {EDITED}");
                 }
-                (body, false, marks)
+                (body, BodyInk::Plain, marks)
             }
         };
         let replies = message
@@ -384,7 +448,7 @@ impl<'a> Row<'a> {
         RowWords {
             header,
             body,
-            muted,
+            ink,
             marks,
             replies,
             reactions,
@@ -454,7 +518,7 @@ fn band_words(band: &Band, time_of: impl Fn(Timestamp) -> String) -> RowWords {
     RowWords {
         header: None,
         body,
-        muted: true,
+        ink: BodyInk::Muted,
         marks: Vec::new(),
         replies: None,
         reactions: Vec::new(),
@@ -509,15 +573,25 @@ pub fn from_bottom(
 /// rest the list on its latest message.
 const FLUSH: ViewPx = ViewPx::new(0.5);
 
+ambre_core::define_flag! {
+    /// Whether a row of the list is on screen.
+    pub enum OnScreen {
+        /// The viewport does not reach it.
+        Hidden,
+        /// The viewport shows it.
+        Shown,
+    }
+}
+
 /// The rows a viewport shows, top first, and where the list rests.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Window {
     /// Each row shown, top first: its index, its top and its height.
     pub rows: Vec<(ListRow, ViewPx, ViewPx)>,
-    /// The oldest row is on screen.
-    pub oldest: bool,
-    /// The latest row is on screen.
-    pub latest: bool,
+    /// Whether the oldest row is on screen.
+    pub oldest: OnScreen,
+    /// Whether the latest row is on screen.
+    pub latest: OnScreen,
     /// The row the list rests on, and its top: the first row on screen.
     /// `None` when the list rests on its latest message.
     pub anchor: Option<(ListRow, ViewPx)>,
@@ -567,8 +641,8 @@ pub fn window(
     }
     rows.retain(|&(_, top, h)| top + h > ViewPx::ZERO && top < height);
     Window {
-        oldest: rows.front().is_some_and(|r| r.0 == ListRow::ZERO),
-        latest: rows.back().is_some_and(|r| r.0.next() == count.as_end()),
+        oldest: OnScreen::from_bool(rows.front().is_some_and(|r| r.0 == ListRow::ZERO)),
+        latest: OnScreen::from_bool(rows.back().is_some_and(|r| r.0.next() == count.as_end())),
         anchor: rows.front().map(|&(i, top, _)| (i, top)),
         rows: rows.into(),
     }
@@ -603,8 +677,8 @@ fn at_bottom(
     let rows: Vec<(ListRow, ViewPx, ViewPx)> =
         shown.iter().map(|&(i, top)| (i, top, tall(i))).collect();
     Window {
-        oldest: rows.first().is_some_and(|r| r.0 == ListRow::ZERO),
-        latest: !rows.is_empty(),
+        oldest: OnScreen::from_bool(rows.first().is_some_and(|r| r.0 == ListRow::ZERO)),
+        latest: OnScreen::from_bool(!rows.is_empty()),
         anchor: None,
         rows,
     }
@@ -841,12 +915,23 @@ pub(crate) mod tests {
     fn headers(list: &MessageList) -> Vec<bool> {
         list.rows()
             .iter()
-            .map(|r| matches!(r, Row::Message { header: true, .. }))
+            .map(|r| {
+                matches!(
+                    r,
+                    Row::Message {
+                        header: Header::Opens,
+                        ..
+                    }
+                )
+            })
             .collect()
     }
 
-    fn words(message: &MessageView, header: bool) -> RowWords {
-        let row = Row::Message { message, header };
+    fn words(message: &MessageView, opens: bool) -> RowWords {
+        let row = Row::Message {
+            message,
+            header: Header::from_bool(opens),
+        };
         row.words(
             |_| ambre_core::DisplayName::new("Ada").ok(),
             |ts| format!("t{}", ts.0),
@@ -884,7 +969,7 @@ pub(crate) mod tests {
             [true, false, true],
             "a band breaks the group"
         );
-        assert_eq!(list.len(), 2);
+        assert_eq!(list.len(), MessageCount::new(2));
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("c"));
 
         let keys = band(Unreadable::KeyNotReceived, 20, Some(30));
@@ -893,7 +978,8 @@ pub(crate) mod tests {
             words.body,
             format!("Messages from t20 to t30: {BAND_KEYS} {BAND_RETRY}")
         );
-        assert!(words.muted && words.header.is_none() && words.replies.is_none());
+        assert_eq!(words.ink, BodyInk::Muted);
+        assert!(words.header.is_none() && words.replies.is_none());
         assert_eq!(
             band_body(&band(Unreadable::Damaged, 20, None)),
             format!("Messages since t20: {BAND_DAMAGED} {BAND_RETRY}")
@@ -952,7 +1038,7 @@ pub(crate) mod tests {
             ],
         );
         assert_eq!(texts(&list), ["a", "b", "c", "d"]);
-        assert_eq!(list.len(), 4);
+        assert_eq!(list.len(), MessageCount::new(4));
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("d"));
         list.absorb(active, vec![message(author, ambre_bus::Timestamp(50), "e")]);
         assert_eq!(texts(&list), ["a", "b", "c", "d", "e"]);
@@ -1020,6 +1106,21 @@ pub(crate) mod tests {
         assert_eq!(headers(&list), [true, false]);
     }
 
+    /// The debug form of a row names the length of its body and of its
+    /// author's name, never a char of either: both are plaintext.
+    #[test]
+    fn a_row_debugs_its_lengths_alone() {
+        let message = message(UserId::new(), ambre_bus::Timestamp(7), "secret body");
+        let row = words(&message, true);
+        let shown = format!("{row:?}");
+        assert!(
+            !shown.contains("secret") && !shown.contains("Ada"),
+            "{shown}"
+        );
+        assert!(shown.contains("body: ByteCount(11)"), "{shown}");
+        assert!(shown.contains("author: ByteCount(3)"), "{shown}");
+    }
+
     /// A deleted message shows a muted line in place of its body
     /// (`MURMURE-185`).
     #[test]
@@ -1028,7 +1129,7 @@ pub(crate) mod tests {
         gone.deleted = ambre_bus::Deletion::Deleted;
         let row = words(&gone, true);
         assert_eq!(row.body, DELETED);
-        assert!(row.muted);
+        assert_eq!(row.ink, BodyInk::Muted);
         assert_eq!(
             row.header,
             Some(HeaderWords {
@@ -1050,7 +1151,7 @@ pub(crate) mod tests {
             false,
         );
         assert_eq!(plain.body, "plain");
-        assert!(!plain.muted);
+        assert_eq!(plain.ink, BodyInk::Plain);
         assert_eq!(plain.header, None);
     }
 
@@ -1064,7 +1165,7 @@ pub(crate) mod tests {
         let mut grouped = message(UserId::new(), ambre_bus::Timestamp(7), "hello");
         let row = Row::Message {
             message: &grouped,
-            header: false,
+            header: Header::Joined,
         };
         assert_eq!(row.announcement(name_of, time_of), "Ada, t7: hello");
         grouped.thread = Some(ThreadHead {
@@ -1074,7 +1175,7 @@ pub(crate) mod tests {
         });
         let row = Row::Message {
             message: &grouped,
-            header: true,
+            header: Header::Opens,
         };
         assert_eq!(
             row.announcement(name_of, time_of),
@@ -1098,10 +1199,10 @@ pub(crate) mod tests {
         });
         let row = words(&notice, false);
         assert_eq!(row.body, "Ada joined the conversation");
-        assert!(row.muted);
+        assert_eq!(row.ink, BodyInk::Muted);
         let unknown = Row::Message {
             message: &notice,
-            header: true,
+            header: Header::Opens,
         }
         .words(|_| None, |_| String::new());
         assert_eq!(
@@ -1144,7 +1245,7 @@ pub(crate) mod tests {
         assert_eq!(words(&copy, false).replies.as_deref(), Some(FROM_THREAD));
         let row = Row::Message {
             message: &copy,
-            header: false,
+            header: Header::Joined,
         };
         let heard = row.announcement(
             |_| ambre_core::DisplayName::new("Ada").ok(),
@@ -1202,7 +1303,10 @@ pub(crate) mod tests {
         ];
         assert_eq!(tops(&rested), expected);
         assert_eq!(rested.anchor, Some((ListRow::new(3), px(-5.0))));
-        assert!(!rested.oldest && !rested.latest);
+        assert_eq!(
+            (rested.oldest, rested.latest),
+            (OnScreen::Hidden, OnScreen::Hidden)
+        );
         let grown = window(
             ListRowCount::new(12),
             px(100.0),
@@ -1225,7 +1329,7 @@ pub(crate) mod tests {
         assert_eq!(rested.anchor, None);
         assert_eq!(tops(&rested).first(), Some(&(5, 0.0)));
         assert_eq!(tops(&rested).last(), Some(&(9, 80.0)));
-        assert!(rested.latest);
+        assert_eq!(rested.latest, OnScreen::Shown);
         let flush = window(
             ListRowCount::new(10),
             px(100.0),
@@ -1257,7 +1361,10 @@ pub(crate) mod tests {
             [(0, 60.0), (1, 80.0)],
             "a short list sits at the bottom"
         );
-        assert!(short.oldest && short.latest);
+        assert_eq!(
+            (short.oldest, short.latest),
+            (OnScreen::Shown, OnScreen::Shown)
+        );
     }
 
     /// The oldest row pulled down past the top rests at the top.
@@ -1271,7 +1378,10 @@ pub(crate) mod tests {
         );
         assert_eq!(rested.anchor, Some((ListRow::new(0), px(0.0))));
         assert_eq!(tops(&rested).last(), Some(&(4, 80.0)));
-        assert!(rested.oldest && !rested.latest);
+        assert_eq!(
+            (rested.oldest, rested.latest),
+            (OnScreen::Shown, OnScreen::Hidden)
+        );
         let short = window(
             ListRowCount::new(4),
             px(100.0),

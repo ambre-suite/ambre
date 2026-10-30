@@ -9,12 +9,29 @@
 use std::collections::HashMap;
 
 use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType, RequestId};
-use ambre_core::{ExportFilename, KnownMediaType};
+use ambre_core::{ByteCount, ExportFilename, KnownMediaType};
 
 use crate::composer::DraftOf;
 
+ambre_core::define_index! {
+    /// The place of a file among the uploaded files of one draft, counted
+    /// from zero in the order they landed.
+    pub struct FileIndex(u32);
+    /// A number of files of a draft.
+    pub struct FileCount;
+    /// The signed gap between two files of a draft.
+    pub struct FileDelta(i64);
+    /// A run of files of a draft.
+    pub struct FileSpan;
+    /// A list indexed by the files of a draft.
+    pub struct FileVec;
+}
+
 /// A file the member dropped or pasted on the composer, as the page read it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the name alone, and the bytes print their
+/// length too: both are plaintext the member chose.
+#[derive(Clone, PartialEq, Eq)]
 pub struct PickedFile {
     pub name: String,
     /// The type the browser named, empty when it named none.
@@ -22,14 +39,28 @@ pub struct PickedFile {
     pub data: ambre_core::MediaBytes,
 }
 
+impl std::fmt::Debug for PickedFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PickedFile")
+            .field("name", &ByteCount::from_len(self.name.len()))
+            .field("media_type", &self.media_type)
+            .field("data", &self.data)
+            .finish()
+    }
+}
+
 /// A size as a reader reads it: "512 B", "2 KB", "3.4 MB".
 pub fn size_label(size: ByteSize) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * KB;
-    match size.0 {
-        bytes if bytes < KB => format!("{bytes} B"),
-        bytes if bytes < MB => format!("{} KB", bytes.div_ceil(KB)),
-        bytes => format!("{:.1} MB", bytes as f64 / MB as f64),
+    const KB: ByteSize = ByteSize(1024);
+    const MB: ByteSize = ByteSize(1024 * 1024);
+    // Kilobytes round up, so the unit follows the rounded size: a size short
+    // of a megabyte by less than a kilobyte reads in megabytes.
+    let kilobytes = size.0.div_ceil(KB.0);
+    let rounded = ByteSize(kilobytes.saturating_mul(KB.0));
+    match size {
+        size if size < KB => format!("{} B", size.0),
+        _ if rounded < MB => format!("{kilobytes} KB"),
+        size => format!("{:.1} MB", size.0 as f64 / MB.0 as f64),
     }
 }
 
@@ -75,7 +106,9 @@ pub fn download_name(file: &Attachment) -> ExportFilename {
 }
 
 /// A file whose upload the relay has not answered yet.
-#[derive(Debug, Clone)]
+///
+/// `Debug` prints the length of the name alone: the member named the file.
+#[derive(Clone)]
 struct Pending {
     of: DraftOf,
     name: String,
@@ -83,8 +116,21 @@ struct Pending {
     size: ByteSize,
 }
 
+impl std::fmt::Debug for Pending {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pending")
+            .field("of", &self.of)
+            .field("name", &ByteCount::from_len(self.name.len()))
+            .field("media_type", &self.media_type)
+            .field("size", &self.size)
+            .finish()
+    }
+}
+
 /// What an answer did to the draft it belonged to.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of a failed file's name alone.
+#[derive(Clone, PartialEq, Eq)]
 pub enum Uploaded {
     /// The file joined the draft.
     Ready(DraftOf),
@@ -93,11 +139,36 @@ pub enum Uploaded {
     Failed { of: DraftOf, name: String },
 }
 
+impl std::fmt::Debug for Uploaded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ready(of) => f.debug_tuple("Ready").field(of).finish(),
+            Self::Failed { of, name } => f
+                .debug_struct("Failed")
+                .field("of", of)
+                .field("name", &ByteCount::from_len(name.len()))
+                .finish(),
+        }
+    }
+}
+
 /// The uploads of every draft, keyed by the request that carries each.
-#[derive(Debug, Default)]
+///
+/// `Debug` counts the files uploaded: each attachment names its file.
+#[derive(Default)]
 pub struct Uploads {
     pending: HashMap<RequestId, Pending>,
     ready: HashMap<DraftOf, Vec<Attachment>>,
+}
+
+impl std::fmt::Debug for Uploads {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ready: usize = self.ready.values().map(Vec::len).sum();
+        f.debug_struct("Uploads")
+            .field("pending", &self.pending)
+            .field("ready", &ready)
+            .finish()
+    }
 }
 
 impl Uploads {
@@ -194,9 +265,9 @@ impl Uploads {
 
     /// Take the file at `index` off the draft `of`. The relay keeps the blob
     /// until a delete of a message carrying it.
-    pub fn remove(&mut self, of: DraftOf, index: usize) {
+    pub fn remove(&mut self, of: DraftOf, index: FileIndex) {
         if let Some(files) = self.ready.get_mut(&of)
-            && index < files.len()
+            && let Some(index) = index.to_index().filter(|&index| index < files.len())
         {
             files.remove(index);
         }
@@ -219,6 +290,19 @@ mod tests {
         DraftOf::Channel(ChannelId::new())
     }
 
+    /// A size reads in the largest unit it reaches once rounded up. So a
+    /// size just short of a megabyte reads "1.0 MB", never "1024 KB".
+    #[test]
+    fn a_size_label_never_reads_1024_kb() {
+        assert_eq!(size_label(ByteSize(512)), "512 B");
+        assert_eq!(size_label(ByteSize(1024)), "1 KB");
+        assert_eq!(size_label(ByteSize(1025)), "2 KB");
+        assert_eq!(size_label(ByteSize(1023 * 1024)), "1023 KB");
+        assert_eq!(size_label(ByteSize(1023 * 1024 + 1)), "1.0 MB");
+        assert_eq!(size_label(ByteSize(1024 * 1024 - 1)), "1.0 MB");
+        assert_eq!(size_label(ByteSize(3_565_158)), "3.4 MB");
+    }
+
     fn begin(uploads: &mut Uploads, id: u64, of: DraftOf, name: &str) -> bool {
         uploads.begin(
             RequestId(id),
@@ -227,6 +311,41 @@ mod tests {
             MediaType("image/png".to_owned()),
             ByteSize(10),
         )
+    }
+
+    /// The debug form of a picked file and of a file still uploading names
+    /// the length of its name, never a char of it.
+    #[test]
+    fn a_file_name_debugs_its_length_alone() {
+        let picked = PickedFile {
+            name: "secret.pdf".to_owned(),
+            media_type: MediaType("application/pdf".to_owned()),
+            data: ambre_core::MediaBytes::new(b"secret".to_vec()),
+        };
+        let shown = format!("{picked:?}");
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains("name: ByteCount(10)"), "{shown}");
+        assert!(shown.contains("MediaBytes(6 bytes)"), "{shown}");
+        let mut uploads = Uploads::default();
+        assert!(begin(&mut uploads, 1, channel(), "secret.pdf"));
+        uploads.restore(channel(), vec![received("secret.txt")]);
+        let shown = format!("{uploads:?}");
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains("name: ByteCount(10)"), "{shown}");
+        assert!(shown.contains("ready: 1"), "{shown}");
+    }
+
+    /// The debug form of a failed upload names the length of the file's
+    /// name, never a char of it.
+    #[test]
+    fn a_failed_upload_debugs_its_name_length_alone() {
+        let failed = Uploaded::Failed {
+            of: channel(),
+            name: "secret.pdf".to_owned(),
+        };
+        let shown = format!("{failed:?}");
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains("name: ByteCount(10)"), "{shown}");
     }
 
     /// A fetched file named `name`.

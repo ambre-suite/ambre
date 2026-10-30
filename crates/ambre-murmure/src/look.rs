@@ -22,11 +22,14 @@ pub(crate) const CODE_FAMILY: ambre_core::FontFamily = ambre_core::FontFamily::M
 pub(crate) const BLOCK_INDENT: ambre_canvas::IndentPx =
     ambre_canvas::IndentPx::new(SPACE_6.get() as u16);
 
-/// The left and right edges of a quote's rule, in the indent.
-const QUOTE_RULE: (f64, f64) = (2.0, 4.0);
+/// The left edge of a quote's rule, in the indent.
+const QUOTE_RULE_LEFT: ambre_core::SurfacePx = ambre_core::SurfacePx::new(2.0);
+
+/// The right edge of a quote's rule, in the indent.
+const QUOTE_RULE_RIGHT: ambre_core::SurfacePx = ambre_core::SurfacePx::new(4.0);
 
 /// The side of a list's dot, centred in the indent.
-const LIST_DOT: f64 = 3.0;
+const LIST_DOT: ambre_core::SurfacePx = ambre_core::SurfacePx::new(3.0);
 
 /// What `style` shapes over the bytes `range`.
 pub(crate) fn shape(style: &TextStyle, range: ByteSpan) -> SpanShape {
@@ -68,7 +71,12 @@ pub(crate) fn margin(
             let top = boxes.iter().map(|(bb, _)| bb.y0).reduce(f64::min);
             let bottom = boxes.iter().map(|(bb, _)| bb.y1).reduce(f64::max);
             let (top, bottom) = top.zip(bottom).unwrap_or_else(|| line(bytes.start));
-            vec![Rect::new(QUOTE_RULE.0, top, QUOTE_RULE.1, bottom)]
+            vec![Rect::new(
+                QUOTE_RULE_LEFT.get(),
+                top,
+                QUOTE_RULE_RIGHT.get(),
+                bottom,
+            )]
         }
         TextStyle::List => {
             let ends = text.get(bytes.clone()).unwrap_or_default();
@@ -81,7 +89,7 @@ pub(crate) fn margin(
                 .map(|at| {
                     let (top, bottom) = line(at);
                     let middle = (top + bottom) / 2.0;
-                    let half = LIST_DOT / 2.0;
+                    let half = LIST_DOT.get() / 2.0;
                     let centre = f64::from(BLOCK_INDENT.get()) / 2.0;
                     Rect::new(centre - half, middle - half, centre + half, middle + half)
                 })

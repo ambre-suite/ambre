@@ -9,7 +9,10 @@ use ambre_bus::{MurmureEvent, Timestamp};
 use ambre_core::{ByteSize, DeltaBytes, FailureCount, Millis, PeerEntryBytes, SegmentId};
 use loro::{ExportMode, LoroDoc};
 
-use super::{ChannelState, Created, Held, live_segments, push_segment_entry, read_messages};
+use super::{
+    ChannelState, CloseAsk, Created, Held, Rotation, live_segments, push_segment_entry,
+    read_messages,
+};
 use crate::delta::{self, Arrival};
 use crate::error::MurmureError;
 use crate::schema::{self, DocumentKind, Root, SegmentKey, SegmentState};
@@ -20,7 +23,8 @@ use crate::session::Session;
 pub const SEGMENT_MESSAGES: MessageCount = MessageCount::new(5000);
 
 ambre_core::define_tally! {
-    /// How many messages a segment holds, or holds before it asks to close.
+    /// How many messages a segment or a list holds, or how many a segment
+    /// holds before it asks to close.
     pub struct MessageCount;
 }
 
@@ -85,19 +89,23 @@ impl ChannelState {
     /// segment `meta` lists but the channel opened without counts too
     /// (`MURMURE-503`).
     pub fn wants_close(&mut self) -> Option<SegmentId> {
-        if self.close_asked || self.closing.is_some() || self.successor.is_some() {
+        if self.close_asked == CloseAsk::Asked || self.closing.is_some() || self.successor.is_some()
+        {
             return None;
         }
         let messages =
             MessageCount::of_len(crate::schema::root_list(&self.active.doc, Root::Messages).len());
-        if !self.key_rotated && messages < self.segment_size && !self.passes_bytes(messages) {
+        if self.key_rotated == Rotation::Settled
+            && messages < self.segment_size
+            && !self.passes_bytes(messages)
+        {
             return None;
         }
         let listed = live_segments(&self.meta.doc, self.channel_id).ok();
         if listed.and_then(|live| live.closing).is_some() {
             return None;
         }
-        self.close_asked = true;
+        self.close_asked = CloseAsk::Asked;
         Some(self.active_id())
     }
 
@@ -128,19 +136,19 @@ impl ChannelState {
     /// The relay refused the close, or never answered: the next send asks
     /// again.
     pub fn close_refused(&mut self) {
-        self.close_asked = false;
+        self.close_asked = CloseAsk::Idle;
     }
 
     /// A rotation retired the channel key: the active segment closes at the
     /// next ask, so its successor opens under the new key (`MURMURE-060`).
     pub fn key_rotated(&mut self) {
-        self.key_rotated = true;
+        self.key_rotated = Rotation::OwesClose;
     }
 
     /// Whether a rotation still owes the close of the active segment.
     #[must_use]
     pub fn owes_rotation_close(&self) -> bool {
-        self.key_rotated
+        self.key_rotated == Rotation::OwesClose
     }
 
     /// Write the relay's answer to a close of `closing` into `meta`: the
@@ -174,8 +182,8 @@ impl ChannelState {
         let (doc, session) = self.meta.session()?;
         record_close(doc, closing, active, now)?;
         let meta = session.export(doc)?;
-        self.close_asked = false;
-        self.key_rotated = false;
+        self.close_asked = CloseAsk::Idle;
+        self.key_rotated = Rotation::Settled;
         if successor == Successor::Fetched {
             return Ok(Closed {
                 meta,
@@ -311,8 +319,8 @@ impl ChannelState {
             held.session = Some(Session::adopt(&held.doc, peer, entry)?);
         }
         self.closing = Some(std::mem::replace(&mut self.active, held));
-        self.close_asked = false;
-        self.key_rotated = false;
+        self.close_asked = CloseAsk::Idle;
+        self.key_rotated = Rotation::Settled;
         self.successor_retry = None;
         Ok(MurmureEvent::Messages { segment, messages })
     }

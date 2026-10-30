@@ -61,6 +61,23 @@ ambre_core::define_flag! {
         /// The document is opened.
         Open,
     }
+
+    /// Whether the active segment of a channel asked to close.
+    enum CloseAsk {
+        /// It did not, or the relay refused: the next send may ask.
+        Idle,
+        /// It asked, and waits for the answer.
+        Asked,
+    }
+
+    /// Whether a key rotation owes the close of the active segment.
+    enum Rotation {
+        /// The active segment was opened under the current key.
+        Settled,
+        /// A rotation retired its key: it closes at the next ask, whatever
+        /// it holds (`MURMURE-060`).
+        OwesClose,
+    }
 }
 
 /// One document the channel holds, with the identifier the Sync worker routes
@@ -250,10 +267,10 @@ pub struct ChannelState {
     /// The snapshot bytes past which the active segment asks to close.
     segment_snapshot_size: ambre_core::ByteSize,
     /// Whether the active segment asked to close and waits for the answer.
-    close_asked: bool,
+    close_asked: CloseAsk,
     /// Whether a rotation retired the key the active segment was opened
     /// under, so it closes whatever it holds.
-    key_rotated: bool,
+    key_rotated: Rotation,
     /// The successor another client created, whose bytes are in `pending`.
     successor: Option<SegmentId>,
     /// The identity issued for that successor, adopted once it is admitted.
@@ -445,8 +462,8 @@ impl ChannelState {
             sequences: HashMap::new(),
             segment_size: SEGMENT_MESSAGES,
             segment_snapshot_size: SEGMENT_SNAPSHOT_SIZE,
-            close_asked: false,
-            key_rotated: false,
+            close_asked: CloseAsk::Idle,
+            key_rotated: Rotation::Settled,
             successor: None,
             successor_session: None,
             successor_retry: None,
@@ -727,7 +744,7 @@ impl ChannelState {
         me: UserId,
     ) -> Result<UnreadCount, MurmureError> {
         self.count_in(segment.document_id(), read, me, |_| true)
-            .map(UnreadCount)
+            .map(|count| UnreadCount(count.get()))
     }
 
     /// The messages [`ChannelState::unread`] counts that mention `me` or the
@@ -776,7 +793,7 @@ impl ChannelState {
             content_of(message)
                 .is_some_and(|content| mention::names(&mention::read(&content, channel), me))
         })
-        .map(MentionCount)
+        .map(|count| MentionCount(count.get()))
     }
 
     /// The messages of a held segment or thread past `read`, written by
@@ -787,11 +804,11 @@ impl ChannelState {
         read: Seq,
         me: UserId,
         counts: impl Fn(&Fields<MessageKey>) -> bool,
-    ) -> Result<u32, MurmureError> {
-        let mut count: u32 = 0;
+    ) -> Result<MessageCount, MurmureError> {
+        let mut count = MessageCount::ZERO;
         self.each_unread(document_id, read, me, |_, message| {
             if counts(message) {
-                count = count.saturating_add(1);
+                count = count.incremented();
             }
         })?;
         Ok(count)
@@ -1463,7 +1480,7 @@ impl ChannelState {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let status = doc.import(sequence::loro_part(payload))?;
+        let status = sequence::import(doc, payload)?;
         if amendments {
             if let Some(order) = order {
                 self.sequences
@@ -1504,8 +1521,10 @@ impl ChannelState {
         snapshot: &SnapshotBytes,
     ) -> Result<(), MurmureError> {
         let fresh = LoroDoc::new();
-        let loro = sequence::loro_part(LoroPayloadRef::Snapshot(snapshot));
-        if fresh.import(loro)?.pending.is_some() {
+        if sequence::import(&fresh, LoroPayloadRef::Snapshot(snapshot))?
+            .pending
+            .is_some()
+        {
             return Ok(());
         }
         if let Some(held) = self.held_mut(document_id) {

@@ -86,7 +86,10 @@ pub fn find_members<'a>(members: &'a [MemberView], query: &str) -> Vec<&'a Membe
 }
 
 /// The members of a space, and when each one was last heard from.
-#[derive(Debug, Default)]
+///
+/// `Debug` counts the members alone: each one carries the name a member
+/// chose.
+#[derive(Default)]
 pub struct Roster {
     /// The relay's member rows: each member and their display name.
     members: Vec<(UserId, ambre_core::DisplayName)>,
@@ -98,6 +101,17 @@ pub struct Roster {
     now: Option<Timestamp>,
     /// This user, online as long as the space is open.
     me: Option<UserId>,
+}
+
+impl std::fmt::Debug for Roster {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Roster")
+            .field("members", &self.members.len())
+            .field("heard", &self.heard)
+            .field("now", &self.now)
+            .field("me", &self.me)
+            .finish()
+    }
 }
 
 impl Roster {
@@ -187,6 +201,17 @@ impl Roster {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The debug form of a roster counts its members, and names none.
+    #[test]
+    fn a_roster_debugs_its_member_count_alone() {
+        let mut roster = Roster::new(None);
+        let name = ambre_core::DisplayName::new("Secretary").expect("a name");
+        roster.set_members([(UserId::new(), name)]);
+        let shown = format!("{roster:?}");
+        assert!(!shown.contains("Secretary"), "{shown}");
+        assert!(shown.contains("members: 1"), "{shown}");
+    }
 
     const T0: Timestamp = Timestamp(1_700_000_000_000);
 

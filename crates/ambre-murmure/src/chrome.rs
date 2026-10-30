@@ -435,28 +435,58 @@ pub struct MurmureRelay {
 
 /// The search box: whether it is open, the query typed, and the last answer
 /// to that query (the Murmure search spec).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the query and counts the channels alone:
+/// a member typed the one, and the other carries message texts.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct SearchBox {
-    /// The box shows in the command bar.
-    pub open: bool,
+    /// Whether the box shows in the command bar.
+    pub open: ambre_chrome::Openness,
     /// The words typed.
     pub query: String,
     /// What the Logic thread answered for `query`, one entry per open channel.
     pub channels: Vec<ChannelMatches>,
 }
 
+impl std::fmt::Debug for SearchBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SearchBox")
+            .field("open", &self.open)
+            .field("query", &ambre_core::ByteCount::from_len(self.query.len()))
+            .field("channels", &self.channels.len())
+            .finish()
+    }
+}
+
+/// The heading of the matches of a channel with no name read yet.
+const UNNAMED_CHANNEL: &str = "Unnamed channel";
+
 /// The matches of one channel, as the result list shows them.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` counts the matches alone: each one carries a message text.
+#[derive(Clone, PartialEq, Eq)]
 pub struct SearchGroup {
     /// The channel a click on a match opens.
     pub channel_id: ChannelId,
-    /// The name the sidebar shows.
-    pub name: String,
+    /// The name the sidebar shows, `None` for a channel with no name read
+    /// yet.
+    pub name: Option<Name>,
     /// Each matching message, where a click opens it, and its text, in
     /// channel order.
     pub matches: Vec<(MessageRef, String)>,
     /// Which part of its history was read, as "2 of 14 segments".
     pub coverage: String,
+}
+
+impl std::fmt::Debug for SearchGroup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SearchGroup")
+            .field("channel_id", &self.channel_id)
+            .field("name", &self.name)
+            .field("matches", &self.matches.len())
+            .field("coverage", &self.coverage)
+            .finish()
+    }
 }
 
 /// "1 segment", or "2 segments": the coverage line counts in segments.
@@ -484,7 +514,10 @@ pub fn coverage(channels: &[ChannelMatches]) -> String {
 /// A system notification the view asks the page to raise (the Murmure
 /// notifications spec). It names the channel and why, never what was
 /// written: the summary it comes from holds no text.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the title alone: it names a channel or a
+/// member.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Notice {
     /// The channel a click opens.
     pub channel_id: ChannelId,
@@ -493,6 +526,16 @@ pub struct Notice {
     pub at: Option<MessageRef>,
     /// What the notification says.
     pub title: String,
+}
+
+impl std::fmt::Debug for Notice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Notice")
+            .field("channel_id", &self.channel_id)
+            .field("at", &self.at)
+            .field("title", &ambre_core::ByteCount::from_len(self.title.len()))
+            .finish()
+    }
 }
 
 impl Default for MurmureRelay {
@@ -671,7 +714,8 @@ impl MurmureRelay {
     /// Open the search box, on the find chord (`MURMURE-213`). An open box
     /// keeps its query.
     pub fn open_search(&self) {
-        self.search.update(|s| s.open = true);
+        self.search
+            .update(|s| s.open = ambre_chrome::Openness::Open);
     }
 
     /// Close the search box, and forget its query and its answer.
@@ -711,9 +755,7 @@ impl MurmureRelay {
                     .filter(|c| !c.matches.is_empty())
                     .map(|c| SearchGroup {
                         channel_id: c.channel_id,
-                        name: sidebar
-                            .with(|side| side.name_of(c.channel_id))
-                            .map_or_else(|| "Unnamed channel".to_owned(), Name::into_string),
+                        name: sidebar.with(|side| side.name_of(c.channel_id)),
                         matches: c
                             .matches
                             .iter()
@@ -1014,7 +1056,7 @@ impl MurmureRelay {
             // to a box closed since, is dropped: typing outruns the answers.
             UiEvent::MessageSearch { query, channels } => {
                 self.search.update(|s| {
-                    if s.open && s.query == query.as_str() {
+                    if s.open == ambre_chrome::Openness::Open && s.query == query.as_str() {
                         s.channels.clone_from(channels);
                     }
                 });
@@ -1482,7 +1524,9 @@ pub fn MessageSearch(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
     let input = NodeRef::<leptos::html::Input>::new();
     // The box takes the caret as it opens, and again on each find chord.
     Effect::new(move |_| {
-        if relay.search.with(|s| s.open)
+        if relay
+            .search
+            .with(|s| s.open == ambre_chrome::Openness::Open)
             && let Some(el) = input.get()
         {
             let _ = el.focus();
@@ -1501,7 +1545,7 @@ pub fn MessageSearch(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
         }
     };
     view! {
-        <Show when=move || relay.search.with(|s| s.open)>
+        <Show when=move || relay.search.with(|s| s.open == ambre_chrome::Openness::Open)>
             <div class="murmure-search" role="search">
                 <input
                     node_ref=input
@@ -1856,7 +1900,7 @@ fn search_group_view(
     view! {
         <section class="murmure-search-group">
             <h3 class="murmure-search-channel">
-                {group.name}
+                {group.name.map_or_else(|| UNNAMED_CHANNEL.to_owned(), Name::into_string)}
                 <span class="murmure-search-segments">{group.coverage}</span>
             </h3>
             <ul>

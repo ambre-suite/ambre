@@ -32,13 +32,49 @@ pub fn previews(media_type: &MediaType) -> bool {
     KnownMediaType::of(media_type).is_some_and(|known| PREVIEWS.contains(&known))
 }
 
+ambre_core::define_generation! {
+    /// The number of a paint of the shelf's pictures, which orders the
+    /// pictures by their last one.
+    struct PaintNumber;
+}
+
+ambre_core::define_index! {
+    /// A frame of a decoded picture, counted from zero in play order.
+    pub struct FrameIndex(u32);
+    /// A number of frames of a picture.
+    pub struct FrameCount;
+    /// The signed gap between two frames of a picture.
+    pub struct FrameDelta(i64);
+    /// A run of frames of a picture.
+    pub struct FrameSpan;
+    /// A list indexed by the frames of a picture.
+    pub struct FrameVec;
+}
+
 enum Held {
     /// Asked of the Logic thread, not answered yet.
     Asked,
     /// Decoded, and the paint that last drew it.
-    Shown { picture: Picture, painted: u64 },
+    Shown {
+        picture: Picture,
+        painted: PaintNumber,
+    },
     /// Neither fetched nor decoded: its chip stands alone.
     Failed,
+}
+
+/// The paint each screen last started: what it drew is on screen.
+#[derive(Default)]
+struct Screens {
+    channel: PaintNumber,
+    thread: PaintNumber,
+}
+
+impl Screens {
+    /// Whether the last paint of a screen is `paint`.
+    fn last_painted(&self, paint: PaintNumber) -> bool {
+        self.channel == paint || self.thread == paint
+    }
 }
 
 /// The pictures of the page, by the file they decode.
@@ -46,10 +82,9 @@ pub struct Pictures {
     held: HashMap<MediaRef, Held>,
     bytes: ByteSize,
     cap: ByteSize,
-    /// The count of paints, which orders the pictures by their last one.
-    paint: u64,
-    /// The paint each screen last started: what it drew is on screen.
-    screens: [u64; 2],
+    /// The latest paint, which orders the pictures by their last one.
+    paint: PaintNumber,
+    screens: Screens,
 }
 
 impl Default for Pictures {
@@ -65,19 +100,18 @@ impl Pictures {
             held: HashMap::new(),
             bytes: ByteSize(0),
             cap,
-            paint: 0,
-            screens: [0; 2],
+            paint: PaintNumber::ZERO,
+            screens: Screens::default(),
         }
     }
 
     /// A new paint of `screen` starts: what it draws is on screen, in place
     /// of what its last paint drew.
     pub fn begin_paint(&mut self, screen: Region) {
-        self.paint += 1;
-        let [channel, thread] = &mut self.screens;
+        self.paint = self.paint.next();
         match screen {
-            Region::Channel => *channel = self.paint,
-            Region::Thread => *thread = self.paint,
+            Region::Channel => self.screens.channel = self.paint,
+            Region::Thread => self.screens.thread = self.paint,
         }
     }
 
@@ -145,7 +179,7 @@ impl Pictures {
                 .held
                 .iter()
                 .filter_map(|(media_ref, held)| match held {
-                    Held::Shown { painted, .. } if !self.screens.contains(painted) => {
+                    Held::Shown { painted, .. } if !self.screens.last_painted(*painted) => {
                         Some((*painted, media_ref))
                     }
                     _ => None,
@@ -176,10 +210,10 @@ pub fn frame_at(
     picture: &Picture,
     now: ambre_core::PageTime,
     motion: Motion,
-) -> (usize, Option<ambre_core::PageTime>) {
+) -> (FrameIndex, Option<ambre_core::PageTime>) {
     let total: u64 = picture.frames.iter().map(|f| f.delay.0).sum();
     if motion == Motion::Reduced || picture.frames.len() < 2 || total == 0 {
-        return (0, None);
+        return (FrameIndex::ZERO, None);
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let at = now.0.max(0.0) as u64 % total;
@@ -188,17 +222,22 @@ pub fn frame_at(
         until += frame.delay.0;
         if at < until {
             let due = ambre_core::Millis(until - at).to_page_millis();
-            return (i, Some(now.after(due)));
+            return (FrameIndex::from_usize(i), Some(now.after(due)));
         }
     }
-    (0, None)
+    (FrameIndex::ZERO, None)
+}
+
+/// The frame `index` of `picture`, `None` past its last.
+pub fn frame(picture: &Picture, index: FrameIndex) -> Option<&ambre_bus::PictureFrame> {
+    picture.frames.get(index.to_index()?)
 }
 
 /// The key of frame `index` of `media_ref`: one texture per frame, so a
 /// frame played again is drawn from what the renderer already holds.
-pub fn frame_key(media_ref: &MediaRef, index: usize) -> ImageKey {
+pub fn frame_key(media_ref: &MediaRef, index: FrameIndex) -> ImageKey {
     let ImageKey(base) = ImageKey::from_address(media_ref.as_str());
-    ImageKey(base ^ (index as u64).rotate_right(16))
+    ImageKey(base ^ u64::from(index.get()).rotate_right(16))
 }
 
 #[cfg(test)]
@@ -231,19 +270,19 @@ mod tests {
         let gif = picture(&[100, 50, 50], 4);
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime(0.0), Motion::Full),
-            (0, Some(ambre_bus::PageTime(100.0)))
+            (FrameIndex::new(0), Some(ambre_bus::PageTime(100.0)))
         );
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime(120.0), Motion::Full),
-            (1, Some(ambre_bus::PageTime(150.0)))
+            (FrameIndex::new(1), Some(ambre_bus::PageTime(150.0)))
         );
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime(199.0), Motion::Full),
-            (2, Some(ambre_bus::PageTime(200.0)))
+            (FrameIndex::new(2), Some(ambre_bus::PageTime(200.0)))
         );
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime(230.0), Motion::Full),
-            (0, Some(ambre_bus::PageTime(300.0))),
+            (FrameIndex::new(0), Some(ambre_bus::PageTime(300.0))),
             "it loops"
         );
     }
@@ -255,11 +294,11 @@ mod tests {
         let gif = picture(&[100, 50], 4);
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime(120.0), Motion::Reduced),
-            (0, None)
+            (FrameIndex::ZERO, None)
         );
         assert_eq!(
             frame_at(&picture(&[0], 4), ambre_bus::PageTime(120.0), Motion::Full),
-            (0, None)
+            (FrameIndex::ZERO, None)
         );
     }
 
@@ -267,9 +306,10 @@ mod tests {
     #[test]
     fn each_frame_has_its_own_key() {
         let (a, b) = (file('a'), file('b'));
-        assert_ne!(frame_key(&a, 0), frame_key(&a, 1));
-        assert_ne!(frame_key(&a, 0), frame_key(&b, 0));
-        assert_eq!(frame_key(&a, 1), frame_key(&a, 1));
+        let (first, second) = (FrameIndex::new(0), FrameIndex::new(1));
+        assert_ne!(frame_key(&a, first), frame_key(&a, second));
+        assert_ne!(frame_key(&a, first), frame_key(&b, first));
+        assert_eq!(frame_key(&a, second), frame_key(&a, second));
     }
 
     /// A picture is asked once, and lands only if it was asked. A failure

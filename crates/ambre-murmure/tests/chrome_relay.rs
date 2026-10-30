@@ -23,11 +23,11 @@ use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId, ViewPoint, ViewPx};
 use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
-    MurmureHandler, MurmureRelay, PageVisibility, SearchBox, coverage,
+    MurmureHandler, MurmureRelay, Notice, PageVisibility, SearchBox, coverage,
 };
 use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
-    NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, key_list,
+    NEXT_ACTIVITY, PALETTE, PREVIOUS_ACTIVITY, PendingEdit, REACT, REPLY, SEARCH, Writer, key_list,
 };
 use ambre_murmure::{MessageRef, MurmurePane, Region};
 use leptos::prelude::*;
@@ -880,7 +880,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
         text: "hello".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
-        notice: false,
+        writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
@@ -950,7 +950,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
         text: "typo".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
-        notice: false,
+        writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
@@ -1019,7 +1019,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         text: "oops".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
-        notice: false,
+        writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
@@ -1166,7 +1166,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
         text: "ship it".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
-        notice: false,
+        writer: Writer::Member,
         deleted: ambre_bus::Deletion::Live,
         pressed: None,
         canvas: ambre_core::CanvasId::CONTENT,
@@ -1307,7 +1307,10 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
         handler.on_key(SEARCH, ambre_chrome::KeyTarget::TextField),
         KeyRoute::Run(actions) if actions.is_empty()
     ));
-    assert!(relay.search.get_untracked().open);
+    assert_eq!(
+        relay.search.get_untracked().open,
+        ambre_chrome::Openness::Open
+    );
     assert!(sent.get_untracked().is_empty(), "opening asks nothing");
 
     let asked = relay.search_for("bud".to_owned());
@@ -1328,10 +1331,25 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     relay.absorb(&found("budget", budget, zeta));
     let groups = relay.search_groups().get_untracked();
     assert_eq!(groups.len(), 1, "a channel with no match shows no group");
-    assert_eq!(groups[0].name, "budget");
+    assert_eq!(
+        groups[0].name.as_ref().map(ambre_core::Name::as_str),
+        Some("budget")
+    );
     let texts: Vec<&str> = groups[0].matches.iter().map(|(_, t)| t.as_str()).collect();
     assert_eq!(texts, ["the budget for May"]);
     assert_eq!(groups[0].coverage, "1 of 2 segments");
+    // The debug forms count the matches and measure the query: no message
+    // text and no typed word shows.
+    for (shown, length) in [
+        (format!("{:?}", groups[0]), "matches: 1"),
+        (
+            format!("{:?}", relay.search.get_untracked()),
+            "query: ByteCount(6)",
+        ),
+    ] {
+        assert!(!shown.contains("May") && !shown.contains("bud"), "{shown}");
+        assert!(shown.contains(length), "{shown}");
+    }
     let channels = relay.search.get_untracked().channels;
     assert_eq!(
         coverage(&channels),
@@ -1423,6 +1441,20 @@ fn a_notice_opens_its_channel_at_its_message() {
     assert_eq!(closed.at, None);
     assert!(relay.open_at(direct, closed.at).is_none());
     assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
+}
+
+/// The debug form of a notice names the length of its title, never the
+/// channel or the member the title names.
+#[wasm_bindgen_test]
+fn a_notice_debugs_its_title_length_alone() {
+    let notice = Notice {
+        channel_id: ChannelId::new(),
+        at: None,
+        title: "New message from Secretary".to_owned(),
+    };
+    let shown = format!("{notice:?}");
+    assert!(!shown.contains("Secretary"), "{shown}");
+    assert!(shown.contains("title: ByteCount(26)"), "{shown}");
 }
 
 /// A click on a notice opens its own channel and asks nothing of another
