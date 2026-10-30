@@ -7,7 +7,7 @@
 //! and nothing bound to a thread, so it crosses by move (`PROSE-UI-113`).
 
 use ambre_bus::app::grid::{Row, RowSpan, RowVec};
-use ambre_bus::app::prose::{DocCount, DocOffset, PageIndex, PageSpan};
+use ambre_bus::app::prose::{DocCount, DocOffset, PageCount, PageIndex, PageSpan};
 use ambre_core::Rgba;
 use std::collections::HashMap;
 use std::fmt;
@@ -164,6 +164,19 @@ ambre_core::define_index! {
     pub struct LocalByteVec;
 }
 
+impl LocalByteCount {
+    /// The same bytes, counted in the run's text.
+    fn in_run(self) -> ByteCount {
+        ByteCount::new(self.0)
+    }
+
+    /// A count of the run's bytes, taken into one segment's text: the bytes
+    /// are the same.
+    fn of_run(count: ByteCount) -> Self {
+        Self(count.get())
+    }
+}
+
 ambre_core::define_index! {
     /// A line of one run, counted across its segments, the first being zero.
     pub struct RunLine(usize);
@@ -199,6 +212,20 @@ ambre_core::define_index! {
     pub struct LocalLineSpan;
     /// A list indexed by line of one segment's layout.
     pub struct LocalLineVec;
+}
+
+impl RunLineCount {
+    /// The same lines, counted in one segment's layout.
+    fn in_segment(self) -> LocalLineCount {
+        LocalLineCount(self.0)
+    }
+}
+
+impl LocalLineCount {
+    /// The same lines, counted among the run's lines.
+    fn in_run(self) -> RunLineCount {
+        RunLineCount(self.0)
+    }
 }
 
 ambre_core::define_index! {
@@ -240,12 +267,12 @@ struct Segment {
 impl Segment {
     /// A byte of the layout's text, in the run's text.
     fn to_run(&self, local: LocalByte) -> ByteOffset {
-        self.start + ByteCount::new(local.count_from(self.local_start).get())
+        self.start + local.count_from(self.local_start).in_run()
     }
 
     /// A byte of the run's text, in the layout's text.
     fn to_local(&self, byte: ByteOffset) -> LocalByte {
-        self.local_start + LocalByteCount::new(byte.count_from(self.start).get())
+        self.local_start + LocalByteCount::of_run(byte.count_from(self.start))
     }
 
     /// The line of the layout's text, `parley` numbering it.
@@ -368,7 +395,7 @@ impl ParleyRunData {
                 break;
             }
             let mut kept = segment.clone();
-            let above = LocalLineCount::new(cut.count_from(segment.first_line).get());
+            let above = cut.count_from(segment.first_line).in_segment();
             kept.lines = kept.lines.min(above);
             segments.push(kept);
         }
@@ -899,7 +926,7 @@ impl ParleyRunData {
                     .is_some_and(|line| middle < line.metrics().block_max_coord)
             })
             .or(kept.last())?;
-        let below = RunLineCount::new(local.count_from(segment.skip).get());
+        let below = local.count_from(segment.skip).in_run();
         self.lines.get(segment.first_line + below).copied()
     }
 
@@ -1092,6 +1119,14 @@ ambre_core::define_index! {
     pub struct WindowPageVec;
 }
 
+impl WindowPageCount {
+    /// A count of the document's pages, taken into the window: the pages
+    /// are the same.
+    fn of_pages(count: PageCount) -> Self {
+        Self::from_len(count.to_usize())
+    }
+}
+
 /// Where a text block sits in the tables of a layout.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct CellAt {
@@ -1276,7 +1311,7 @@ impl ShapedLayout {
 
 /// The place of `page` in a window that starts at `first`, `None` before it.
 fn page_offset(first: PageIndex, page: PageIndex) -> Option<WindowPage> {
-    (page >= first).then(|| WindowPage::from_usize(page.count_from(first).to_usize()))
+    (page >= first).then(|| WindowPageCount::of_pages(page.count_from(first)).as_end())
 }
 
 /// Every block of `blocks`, by its place in the flow.
