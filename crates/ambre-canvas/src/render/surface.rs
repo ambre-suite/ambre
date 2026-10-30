@@ -384,7 +384,7 @@ impl DrawSurface for WgpuSurface<'_> {
 
         let parley_run = run.run();
         let font_data = parley_run.font();
-        let font_size = parley_run.font_size();
+        let font_size = crate::text_cache::LayoutPx::new(parley_run.font_size());
         // swash reads the raw bits. A static face has no coordinate, and an
         // empty Vec does not allocate.
         let coords: Vec<i16> = parley_run
@@ -821,7 +821,7 @@ mod tests {
     #[test]
     fn a_glyph_is_rasterized_at_the_physical_size() {
         assert_eq!(
-            RasterSize::of_layout(14.0, 1.0, ratio(2.0)),
+            RasterSize::of_layout(crate::text_cache::LayoutPx::new(14.0), 1.0, ratio(2.0)),
             RasterSize::new(28.0)
         );
         // A bitmap of 20 x 30 device pixels at density 2.
@@ -871,7 +871,8 @@ mod tests {
     fn a_density_change_asks_for_a_new_raster() {
         use super::super::atlas::{FontId, GlyphKey};
         let key = |density| {
-            let size = RasterSize::of_layout(14.0, 1.0, ratio(density));
+            let size =
+                RasterSize::of_layout(crate::text_cache::LayoutPx::new(14.0), 1.0, ratio(density));
             GlyphKey::new(FontId::of_blob(7), GlyphId::new(42), size)
         };
         assert_ne!(key(1.0), key(2.0));
@@ -885,11 +886,15 @@ mod tests {
     #[test]
     fn a_zoomed_glyph_is_rasterized_at_its_screen_size() {
         assert_eq!(
-            RasterSize::of_layout(14.0, 2.0, DevicePixelRatio::ONE),
+            RasterSize::of_layout(
+                crate::text_cache::LayoutPx::new(14.0),
+                2.0,
+                DevicePixelRatio::ONE
+            ),
             RasterSize::new(28.0)
         );
         assert_eq!(
-            RasterSize::of_layout(14.0, 2.0, ratio(2.0)),
+            RasterSize::of_layout(crate::text_cache::LayoutPx::new(14.0), 2.0, ratio(2.0)),
             RasterSize::new(56.0)
         );
 

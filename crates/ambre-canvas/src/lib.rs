@@ -93,7 +93,8 @@ pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, LayerRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};
 pub use text_cache::{
-    IndentPx, Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_family_name,
+    IndentPx, LayoutPx, Slant, SpanShape, TextCache, TextLength, Weight, WordBreak,
+    registered_family_name,
 };
 pub use text_input::{Composition, ContentKind, Embedding, TYPING_ATTR, TextInput, Typing};
 pub use theme::{Palette, Theme, ThemeControl};

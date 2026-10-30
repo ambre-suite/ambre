@@ -596,9 +596,7 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build_l
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build_spans(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::hit_rate() | ret | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::lazy_fonts_requested() | ret | usize	math	count of font loads, read by tests and diagnostics
-ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(indents) | param | &[(ByteSpan,f32)]	math	local geometry / pixel arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(width) | param | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | paragraphs(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape() | ret | bool	generic	predicate result
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape(text) | param | &str	free-text	text, label or message
@@ -3054,11 +3052,10 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize.0 | field
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::get() | ret | f32	newtype-inner	the raster size unwrapped for Swash, which takes the float, and for the atlas key
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::texel_scale() | ret | f32	math	device pixels per atlas texel, a bare ratio of the size to the raster cap
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::new(device_px) | param | f32	newtype-inner	the constructor of the glyph raster size, in device pixels
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(font_size) | param | f32	newtype-inner	the constructor of the glyph raster size: the font size parley's glyph run returns, in the units of its layout
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(scale) | param | f64	newtype-inner	the constructor of the glyph raster size: the scale of the drawing transform, a bare ratio
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextLength::layout_units() | ret | f32	foreign-api	a text length unwrapped for parley, which lays out in the f32 of its caller's units
-ambre-canvas | src/text_cache.rs | crate::text_cache | <DocPx as TextLength>::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
-ambre-canvas | src/text_cache.rs | crate::text_cache | <ViewPx as TextLength>::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
+ambre-canvas | src/text_cache.rs | crate::text_cache | LayoutPx.0 | field | f32	newtype-inner	the inside of the layout length newtype, in the f32 units parley lays out in
+ambre-canvas | src/text_cache.rs | crate::text_cache | LayoutPx::get() | ret | f32	newtype-inner	the layout length unwrapped for the parley call, the cache key or the raster size
+ambre-canvas | src/text_cache.rs | crate::text_cache | LayoutPx::new(units) | param | f32	newtype-inner	the constructor of the layout length, from the f32 parley hands back
 ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::get() | ret | u8	newtype-inner	HeadingLevel field, constructor or accessor
@@ -3496,7 +3493,6 @@ ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<ambre
 ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx.0 | field | u16	newtype-inner	the inside of the indent newtype, in whole units of the width its text breaks to
 ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::get() | ret | u16	newtype-inner	the indent unwrapped, for a view that lays out in f64
 ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::new(units) | param | u16	newtype-inner	the constructor of the indent newtype
-ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::layout_units() | ret | f32	math	the indent in the f32 units parley lays out in
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount.0 | field | f64	newtype-inner	the inside of the wheel amount, a count of the delta's unit
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::new(units) | param | f64	newtype-inner	the constructor of the wheel amount, from the DOM delta
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f64	math	the CSS length of one unit, the factor the amount scales by
