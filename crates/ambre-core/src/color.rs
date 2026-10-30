@@ -159,9 +159,10 @@ impl Opacity {
     }
 
     /// The opacity nearest `value`: a value past either end reads as that
-    /// end, and a NaN reads as transparent.
+    /// end, and a NaN reads as transparent. A `const` item names an opacity
+    /// through it.
     #[must_use]
-    pub fn clamped(value: f32) -> Self {
+    pub const fn clamped(value: f32) -> Self {
         if value.is_nan() {
             Self::TRANSPARENT
         } else {
@@ -293,5 +294,18 @@ mod tests {
         );
         let past: Result<Opacity, _> = serde_json::from_str("2.0");
         assert!(past.is_err(), "a decoded opacity past 1 is refused");
+    }
+
+    /// A `const` opacity holds the range a run-time one holds.
+    #[test]
+    fn a_const_opacity_lies_between_zero_and_one() {
+        const PAST: Opacity = Opacity::clamped(3.0);
+        const BELOW: Opacity = Opacity::clamped(-0.5);
+        const NOT_A_NUMBER: Opacity = Opacity::clamped(f32::NAN);
+        const FAINT: Opacity = Opacity::clamped(0.3);
+        assert_eq!(PAST, Opacity::OPAQUE);
+        assert_eq!(BELOW, Opacity::TRANSPARENT);
+        assert_eq!(NOT_A_NUMBER, Opacity::TRANSPARENT);
+        assert_eq!(FAINT, Opacity::new(0.3).expect("in range"));
     }
 }
