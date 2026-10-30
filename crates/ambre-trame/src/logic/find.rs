@@ -15,13 +15,15 @@ use ambre_bus::app::find::{FindText, MatchCount, MatchIndex};
 
 pub use ambre_bus::app::trame::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
-/// The query folded by `case`, the form every comparison takes. The find text
-/// is never empty: an empty field sends no query, so it never reaches a scan.
+/// The query folded by `case`, the form every comparison takes: lowercased for
+/// an insensitive match, verbatim otherwise. The find text is never empty: an
+/// empty field sends no query, so it never reaches a scan.
 fn fold_needle(query: &FindText, case: CaseMatch) -> FoldedNeedle {
-    FoldedNeedle {
-        text: fold(query.as_str(), case),
-        case,
-    }
+    let text = match case {
+        CaseMatch::Sensitive => query.as_str().to_owned(),
+        CaseMatch::Insensitive => query.as_str().chars().flat_map(fold_char).collect(),
+    };
+    FoldedNeedle { text, case }
 }
 
 /// The text a replace writes in place of each match, as the user typed it.
@@ -349,15 +351,6 @@ impl TrameState {
             }
         }
         count
-    }
-}
-
-/// Case-fold `s` for comparison: lowercased for an insensitive match, verbatim
-/// otherwise.
-fn fold(s: &str, case: CaseMatch) -> String {
-    match case {
-        CaseMatch::Sensitive => s.to_string(),
-        CaseMatch::Insensitive => s.chars().flat_map(fold_char).collect(),
     }
 }
 

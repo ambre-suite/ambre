@@ -544,6 +544,13 @@ impl ChannelCapacity {
     pub const fn get(self) -> usize {
         self.0
     }
+
+    /// The backlog length of `factor` full channels of this capacity,
+    /// saturating at `usize::MAX`.
+    #[must_use]
+    pub const fn backlog(self, factor: usize) -> BacklogLength {
+        BacklogLength(self.0.saturating_mul(factor))
+    }
 }
 
 /// What a [`Backlog`] asks of the source that feeds it (`SYNC-059`).
