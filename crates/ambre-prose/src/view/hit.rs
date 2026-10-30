@@ -90,7 +90,7 @@ fn cell_hit(table: &TableShape, x: DocPx, y: DocPx) -> Option<(BlockId, RunOffse
         (x >= frame.x0 && x < frame.x1 && y >= frame.y0 && y < frame.y1).then_some((cell, frame))
     })?;
     let y = y - frame.text_y;
-    let mut chosen = cell.blocks.first()?;
+    let mut chosen = cell.blocks.iter().next()?;
     for held in &cell.blocks {
         if y >= held.1 {
             chosen = held;

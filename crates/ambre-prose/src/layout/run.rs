@@ -1218,8 +1218,8 @@ impl ShapedLayout {
     #[must_use]
     pub fn cell_run(&self, block: &TreeID) -> Option<(&CellShape, &ShapedRun)> {
         let at = self.cells.get(block)?;
-        let cell = self.tables.get(&at.table)?.cells.get(at.cell.to_usize())?;
-        let (_, _, run) = cell.blocks.get(at.block.to_usize())?;
+        let cell = self.tables.get(&at.table)?.cells.get(at.cell)?;
+        let (_, _, run) = cell.blocks.get(at.block)?;
         Some((cell, run))
     }
 
@@ -1352,7 +1352,7 @@ where
 pub struct TableShape {
     /// The top of each row from the table's top, and the bottom of the last.
     pub row_tops: RowVec<DocPx>,
-    pub cells: Vec<CellShape>,
+    pub cells: ShapeCellVec<CellShape>,
 }
 
 impl TableShape {
@@ -1374,7 +1374,7 @@ pub struct CellShape {
     pub rows: RowSpan,
     /// The text blocks the cell holds, each with its top from the top of the
     /// padded box, before the vertical alignment moves them.
-    pub blocks: Vec<(TreeID, DocPx, ShapedRun)>,
+    pub blocks: CellBlockVec<(TreeID, DocPx, ShapedRun)>,
     /// The height of that text, padding excluded: what the alignment places.
     pub content_height: DocPx,
     pub style: CellStyle,
