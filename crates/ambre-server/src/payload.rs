@@ -35,7 +35,7 @@ impl Payload {
 
     /// A message to a client, encoded for the socket.
     pub fn server_msg(msg: &WsServerMsg) -> Self {
-        Self(ambre_protocol::ws::encode_server_msg(msg).into_bytes())
+        Self::from(ambre_protocol::ws::encode_server_msg(msg))
     }
 
     /// `value` sealed in its stored encoding, as the relay keeps a delta.
@@ -149,6 +149,13 @@ impl Payload {
     pub fn pending_seq(&self) -> Option<ambre_core::Seq> {
         let entry: serde_json::Value = serde_json::from_slice(&self.0).ok()?;
         entry.get("seq")?.as_u64().map(ambre_core::Seq)
+    }
+}
+
+/// A frame the protocol encoded moves into a payload with no copy.
+impl From<WireFrame> for Payload {
+    fn from(frame: WireFrame) -> Self {
+        Self(frame.into_bytes())
     }
 }
 

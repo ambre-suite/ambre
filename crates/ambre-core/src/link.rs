@@ -23,6 +23,13 @@ impl LinkUrl {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The size of the target, in UTF-8 bytes, for the cap a writer holds
+    /// it to.
+    #[must_use]
+    pub fn size(&self) -> crate::ByteSize {
+        crate::ByteSize::of_len(self.0.len())
+    }
 }
 
 impl From<&str> for LinkUrl {

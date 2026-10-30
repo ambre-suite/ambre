@@ -95,7 +95,7 @@ impl std::fmt::Debug for ClipboardCell {
         f.debug_struct("ClipboardCell")
             .field("dr", &self.dr)
             .field("dc", &self.dc)
-            .field("raw", &ambre_core::char_len(&self.raw))
+            .field("raw", &ambre_core::RedactedChars::of(&self.raw))
             .field("bold", &self.bold)
             .field("italic", &self.italic)
             .field("style", &self.style)

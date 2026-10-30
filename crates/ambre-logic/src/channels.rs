@@ -665,8 +665,8 @@ impl LogicState {
             return false;
         };
         let now = Counts {
-            unread: UnreadCount(counters.content.get()),
-            mentions: MentionCount(counters.mentions.get()),
+            unread: UnreadCount::of_updates(counters.content),
+            mentions: MentionCount::of_updates(counters.mentions),
         };
         let before = closed.counted.insert(document_id, now).unwrap_or_default();
         // The summaries counted a message since the last count: that is
@@ -2066,7 +2066,7 @@ impl LogicState {
     /// engine reads the segments it holds, and nothing reaches the Sync
     /// worker: the query never leaves the client, and no segment loads.
     pub(crate) fn search_messages(&self, query: ambre_core::SearchQuery) {
-        let mut channels: Vec<ChannelMatches> = match Query::parse(query.as_str()) {
+        let mut channels: Vec<ChannelMatches> = match Query::parse(&query) {
             Some(parsed) => self
                 .channels
                 .values()

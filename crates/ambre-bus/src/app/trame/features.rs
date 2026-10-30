@@ -132,17 +132,17 @@ pub enum CondFormatKind {
 // An operand the author typed prints its length alone.
 impl std::fmt::Debug for CondFormatKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ambre_core::char_len;
+        use ambre_core::RedactedChars;
         let operand = |name: &str, f: &mut std::fmt::Formatter<'_>, text: &str| {
-            f.debug_tuple(name).field(&char_len(text)).finish()
+            f.debug_tuple(name).field(&RedactedChars::of(text)).finish()
         };
         match self {
             Self::GreaterThan(text) => operand("GreaterThan", f, text),
             Self::LessThan(text) => operand("LessThan", f, text),
             Self::Between { low, high } => f
                 .debug_struct("Between")
-                .field("low", &char_len(low))
-                .field("high", &char_len(high))
+                .field("low", &RedactedChars::of(low))
+                .field("high", &RedactedChars::of(high))
                 .finish(),
             Self::Equal(text) => operand("Equal", f, text),
             Self::Contains(text) => operand("Contains", f, text),
@@ -284,11 +284,16 @@ pub enum ValidationKind {
 // A list entry and a pattern the author typed print their length alone.
 impl std::fmt::Debug for ValidationKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ambre_core::char_len;
+        use ambre_core::RedactedChars;
         match self {
             Self::List(values) => f
                 .debug_tuple("List")
-                .field(&values.iter().map(|text| char_len(text)).collect::<Vec<_>>())
+                .field(
+                    &values
+                        .iter()
+                        .map(|text| RedactedChars::of(text))
+                        .collect::<Vec<_>>(),
+                )
                 .finish(),
             Self::ListRange { sheet, range } => f
                 .debug_struct("ListRange")
@@ -311,7 +316,10 @@ impl std::fmt::Debug for ValidationKind {
                 .field("min", min)
                 .field("max", max)
                 .finish(),
-            Self::Regex(pattern) => f.debug_tuple("Regex").field(&char_len(pattern)).finish(),
+            Self::Regex(pattern) => f
+                .debug_tuple("Regex")
+                .field(&RedactedChars::of(pattern))
+                .finish(),
             Self::Formula(source) => f.debug_tuple("Formula").field(source).finish(),
         }
     }

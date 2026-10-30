@@ -167,7 +167,7 @@ fn gate_through<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logic::model::ElementKind;
+    use crate::logic::model::{ElementId, ElementKind};
     use crate::logic::state::{BoardKey, ElementKey, Fields, Root, ToileState, entry, root_map};
     use loro::LoroText;
 
@@ -264,7 +264,7 @@ mod tests {
         let mut ids: Vec<&String> = entries.keys().collect();
         ids.sort();
         for id in ids {
-            let Some(map) = entry::<ElementKey>(&root, id) else {
+            let Some(map) = entry::<ElementKey>(doc, &ElementId(id.clone())) else {
                 continue;
             };
             let Some(LoroValue::String(body)) = map.value(ElementKey::Body) else {

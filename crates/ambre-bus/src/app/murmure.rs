@@ -71,6 +71,13 @@ impl MentionCount {
     /// No mention.
     pub const ZERO: Self = Self(0);
 
+    /// The mentions a document's activity counted: each update that named
+    /// the reader, or every member, is one mention.
+    #[must_use]
+    pub const fn of_updates(updates: ambre_core::activity::MentionUpdates) -> Self {
+        Self(updates.get())
+    }
+
     /// The two counts together, held at the top rather than wrapping.
     #[must_use]
     pub const fn plus(self, other: Self) -> Self {
@@ -151,6 +158,13 @@ impl UnreadCount {
     /// Nothing unread.
     pub const ZERO: Self = Self(0);
 
+    /// The unread messages a document's activity counted: each content
+    /// update is one message.
+    #[must_use]
+    pub const fn of_updates(updates: ambre_core::activity::ContentUpdates) -> Self {
+        Self(updates.get())
+    }
+
     /// The two counts together, held at the top rather than wrapping.
     #[must_use]
     pub const fn plus(self, other: Self) -> Self {
@@ -228,7 +242,7 @@ pub struct MessageDraft {
 impl std::fmt::Debug for MessageDraft {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MessageDraft")
-            .field("text", &ambre_core::char_len(&self.text))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
             .field("mentions", &self.mentions)
             .field("styles", &self.styles)
             .finish()
@@ -288,7 +302,7 @@ impl std::fmt::Debug for Attachment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Attachment")
             .field("media_ref", &self.media_ref)
-            .field("name", &ambre_core::char_len(&self.name))
+            .field("name", &ambre_core::RedactedChars::of(&self.name))
             .field("media_type", &self.media_type)
             .field("size", &self.size)
             .finish()
@@ -580,7 +594,7 @@ impl std::fmt::Debug for MessageView {
             .field("id", &self.id)
             .field("author", &self.author)
             .field("ts", &self.ts)
-            .field("text", &ambre_core::char_len(&self.text))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
             .field("mentions", &self.mentions)
             .field("styles", &self.styles)
             .field("attachments", &self.attachments)
@@ -1218,7 +1232,7 @@ mod tests {
             format!("{view:?}"),
             format!("{edit:?}"),
         ] {
-            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(line.contains("10 chars"), "{line}");
             assert!(!line.contains(secret), "{line}");
         }
     }

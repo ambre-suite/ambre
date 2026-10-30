@@ -20,7 +20,7 @@ use crate::ui::label::LABEL_W;
 use super::codec::{
     bin_of, connector_label_or_seed, encode_anchor, map_str, read_connector, write_connector,
 };
-use super::names::{ConnectorKey, FieldValues, Fields, Root, entry, root_map};
+use super::names::{ConnectorKey, FieldValues, Fields, Root, entry};
 use super::{ToileState, write_edits};
 
 /// One arrow as the cull reads it: its ends, and how far its paint reaches
@@ -187,7 +187,7 @@ impl ToileState {
     }
 
     pub(super) fn connector_map(&self, id: &ConnectorId) -> Option<Fields<ConnectorKey>> {
-        entry(&root_map(&self.doc, Root::Connectors), id.as_str())
+        entry::<ConnectorKey>(&self.doc, id)
     }
 
     /// Every connector of the board whose endpoint the board no longer holds

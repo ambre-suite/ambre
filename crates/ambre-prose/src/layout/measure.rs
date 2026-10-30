@@ -444,7 +444,7 @@ impl Measurer {
             .iter()
             .map(|offset| {
                 let byte = char_to_byte(text, offset.as_char());
-                BlockLine::from_usize(run.data().line_at_byte(byte).to_usize())
+                run.data().line_at_byte(byte).in_block()
             })
             .collect();
         (run_metrics(run.data()), lines, run)
