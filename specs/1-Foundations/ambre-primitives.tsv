@@ -1,6 +1,7 @@
 # The primitive gate (ai/ambre-rust-style.md, ambre-spec-testing.md section 2).
 # One line per site that keeps a bare primitive. Add a line by hand only; a reviewer reads it (ARCH-035).
 key	category	note
+ambre-app | src/host/cell.rs | crate::host::cell | Bound.listeners | field | Vec<Listener>	foreign-api	the DOM event name each closure was added under, which removeEventListener takes as &str
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.restored | field | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/cell.rs | crate::host::cell | Cells.content_held | field | bool	generic	named flag
 ambre-app | src/host/cell.rs | crate::host::cell | Cells::route() | ret | Option<bool>	generic	consumed answer
@@ -43,8 +44,8 @@ ambre-app | src/host/murmure.rs | crate::host::murmure | LocalTime::format() | r
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field | HashMap<DraftKey,u64>	math	write counter per draft key
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | u64	math	write counter
 ambre-app | src/host/murmure.rs | crate::host::murmure | page_reads(warn) | param | Rc<dyn Fn(&str)>	free-text	warning text callback
-ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clip_published() | ret | Rc<std::cell::Cell<bool>>	trait	trait
-ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::handle_input() | ret | bool	trait	trait
+ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell, as PipeHost::clip_published declares it
+ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::handle_input() | ret | bool	generic	consumed answer, as PipeHost::handle_input declares it
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	generic	fact flag of the probe timeline, selects no mode
@@ -102,11 +103,11 @@ ambre-app | src/shell/mod.rs | crate::shell | mount_shell(presenter_notes) | par
 ambre-app | src/signin.rs | crate::signin | PENDING_STATE_KEY | const | &str	free-text	single session-storage key literal
 ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	free-text	path prefix literal
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
-ambre-app | src/signin.rs | crate::signin | follow_address(navigate) | param | impl FnOnce(&str)	trait	navigate closure signature
+ambre-app | src/signin.rs | crate::signin | follow_address(navigate) | param | impl FnOnce(&str)	foreign-api	the address the closure hands Location::set_href, which takes &str
 ambre-app | src/signin.rs | crate::signin | is_followable() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_return_path() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_return_path(path) | param | &str	generic	path parser
-ambre-app | src/signin.rs | crate::signin | leave_session(reload) | param | impl FnOnce(&str)	trait	reload closure signature
+ambre-app | src/signin.rs | crate::signin | leave_session(reload) | param | impl FnOnce(&str)	foreign-api	the address the closure hands Location::replace, which takes &str
 ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
 ambre-bus | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	serde mirror of ambre-core ActivityAnchor; to_sealed applies the bound
@@ -703,8 +704,8 @@ ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | imp
 ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-commands | src/keybinding.rs | crate::keybinding | Key::char(c) | param | char	free-text	the printable character a chord names, which KeyChar::new types and lowercases here
-ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary(c) | param | char	newtype-inner	enum/newtype own accessor or constructor
-ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary_shift(c) | param | char	newtype-inner	enum/newtype own accessor or constructor
+ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary(c) | param | char	free-text	the printable character a Primary chord names, handed to Key::char
+ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary_shift(c) | param | char	free-text	the printable character a Primary+Shift chord names, handed to Key::char
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.0 | field | u8	newtype-inner	the private bit set of the three named members, built only from the named constants
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::contains() | ret | bool	generic	whether the set holds a named member, a predicate answer
@@ -776,9 +777,9 @@ ambre-core | src/color.rs | crate::color | Opacity::lerp(t) | param | f64	math	i
 ambre-core | src/color.rs | crate::color | Opacity::new(value) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/color.rs | crate::color | Opacity::scaled(factor) | param | f32	math	a fade factor the opacity is multiplied by
 ambre-core | src/crdt.rs | crate::crdt | CommitOrigin::as_str() | ret | &'static str	newtype-inner	the spelling of a typed commit origin, for the Loro call that sets or excludes it
-ambre-core | src/crdt.rs | crate::crdt | ContainerFamily::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed container family, which the application joins to an id
-ambre-core | src/crdt.rs | crate::crdt | ContainerName::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed root name, for the call that opens the container
-ambre-core | src/crdt.rs | crate::crdt | FieldKey::as_str() | ret | &'static str	newtype-inner	the stored spelling of a typed map key, for the call into the map
+ambre-core | src/crdt.rs | crate::crdt | ContainerFamily::as_str() | ret | &'static str	foreign-api	the stored spelling of a typed container family, which the application joins to an id for the Loro call that takes &str
+ambre-core | src/crdt.rs | crate::crdt | ContainerName::as_str() | ret | &'static str	foreign-api	the stored spelling of a typed root name, which the Loro call that opens the container takes as &str
+ambre-core | src/crdt.rs | crate::crdt | FieldKey::as_str() | ret | &'static str	foreign-api	the stored spelling of a typed map key, which the Loro map call takes as &str
 ambre-core | src/doc_type.rs | crate::doc_type | <DocType as FromStr>::from_str(word) | param | &str	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/doc_type.rs | crate::doc_type | <DocType as TryFrom<String>>::try_from(word) | param | String	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/doc_type.rs | crate::doc_type | DocType::as_str() | ret | &'static str	newtype-inner	DocType codec
@@ -857,7 +858,7 @@ ambre-core | src/font.rs | crate::font | FontSize::new(points) | param | f32	new
 ambre-core | src/font.rs | crate::font | FontSize::points() | ret | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::whole_points() | ret | u16	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | InvalidFontSize.0 | field | f32	newtype-inner	FontSize field, constructor or accessor
-ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	newtype-inner	the one points-to-pixels ratio, private to ambre-core; only Pt::to_doc_px, DocPx::to_pt and FontSize::to_px read it
+ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	math	the one points-to-pixels ratio, private to ambre-core; only Pt::to_doc_px, DocPx::to_pt and FontSize::to_px read it
 ambre-core | src/font.rs | crate::font | <FontWeight as TryFrom<u16>>::try_from(value) | param | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/font.rs | crate::font | FontFamily::Other.0 | field | String	newtype-inner	FontFamily constructor or accessor
 ambre-core | src/font.rs | crate::font | FontFamily::from_label(label) | param | &str	generic	the codec of an enum that carries data: a font family name as the store or the picker writes it; any name reads, an unknown one as Other
@@ -967,9 +968,9 @@ ambre-core | src/serde_enums.rs | crate::serde_enums::channel_document_kind | de
 ambre-core | src/serde_enums.rs | crate::serde_enums::doc_type | deserialize::WORDS | const | &[&str]	generic	serde deserializer: the words of a closed set
 ambre-core | src/serde_enums.rs | crate::serde_enums::role | deserialize::WORDS | const | &[&str]	generic	serde deserializer: the words of a closed set
 ambre-core | src/serde_enums.rs | crate::serde_enums::space_flag | is_personal() | ret | bool	generic	predicate result: the serde skip test of a DocumentScope flag
-ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text() | ret | Result<Self,String>	trait	signature fixed by the trait
-ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text(text) | param | &str	trait	signature fixed by the trait
-ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::to_text() | ret | String	trait	signature fixed by the trait
+ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text() | ret | Result<Self,String>	generic	an error that echoes the refused text
+ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text(text) | param | &str	newtype-inner	KeyId's own hex spelling, read back
+ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::to_text() | ret | String	newtype-inner	KeyId's own hex spelling
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::from_text() | ret | Result<Self,String>	generic	generic text-id serde helper
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::from_text(text) | param | &str	generic	generic text-id serde helper
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::to_text() | ret | String	generic	generic text-id serde helper
@@ -1549,8 +1550,8 @@ ambre-primitives | src/scan.rs | crate::scan | RawKey.item | field | String	gene
 ambre-primitives | src/scan.rs | crate::scan | RawKey.tail | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Scan.errors | field | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/scan.rs | crate::scan | SiteKey.0 | field | String	newtype-inner	the inside of SiteKey or LineNo, or its constructor
-ambre-primitives | src/scan.rs | crate::scan | SiteKey::FIELDS | const | usize	newtype-inner	the inside of SiteKey or LineNo, or its constructor
-ambre-primitives | src/scan.rs | crate::scan | SiteKey::SEPARATOR | const | &'static str	newtype-inner	the inside of SiteKey or LineNo, or its constructor
+ambre-primitives | src/scan.rs | crate::scan | SiteKey::FIELDS | const | usize	generic	the number of fields SiteKey::parse splits a key into
+ambre-primitives | src/scan.rs | crate::scan | SiteKey::SEPARATOR | const | &'static str	generic	the text a key splits on, which no normalised field can hold
 ambre-primitives | src/scan.rs | crate::scan | SiteKey::parse(text) | param | &str	newtype-inner	the inside of SiteKey or LineNo, or its constructor
 ambre-primitives | src/scan.rs | crate::scan | SiteKind::as_str() | ret | &'static str	newtype-inner	the word of a closed enum, as the allowlist file writes it
 ambre-primitives | src/scan.rs | crate::scan | TEST_MACROS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
@@ -2231,7 +2232,7 @@ ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(subject) | param | &str	foreign-api	claims of the identity provider, read as text
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name | field | String	free-text	the row's name text, echoed whole: a legacy row may hold a name OrgName refuses (SRV-233)
 ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_public_meta() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	trait	impl of the private DrainSink trait
+ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	free-text	retryable error text, as the private DrainSink::store declares it
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
 ambre-server | src/s3.rs | crate::s3 | delete_prefix() | ret | Result<usize,AppError>	math	deleted count
 ambre-server | src/s3.rs | crate::s3 | global_s3_flusher::RECONCILE_EVERY | const | u32	math	a local limit or period, passed to SQL or a loop
@@ -2254,9 +2255,9 @@ ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | HUB_PRIVATE_CHANNE
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/redis_keys.rs | crate::redis_keys | DocumentStateKeys::texts() | ret | [&str;8]	foreign-api	the key texts a DEL, EXISTS or EVAL of the store takes
-ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() | ret | &'static str	newtype-inner	the key text of the dirty set
-ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	newtype-inner	the key text of PendingKey
-ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	newtype-inner	the key text of PendingKey
+ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() | ret | &'static str	foreign-api	the key text of the dirty set, which a Redis command takes as &str
+ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	generic	the key text of PendingKey, beside its document and read back by PendingKey::parse
+ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	foreign-api	the key text of PendingKey, which a Redis command takes as &str
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) | param | &str	foreign-api	a dirty-set member or scanned key the store hands back as text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::BAD_PASS | const | &str	free-text	message text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::CORRUPT | const | &str	free-text	message text
@@ -2330,7 +2331,10 @@ ambre-sync | src/light.rs | crate::light | resumes() | ret | bool	generic	yes/no
 ambre-sync | src/membership_log.rs | crate::membership_log | Held.present | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log.anchored | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::allows() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::allows(self_join) | param | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | Log::creates() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
+ambre-sync | src/membership_log.rs | crate::membership_log | Log::walk(self_join) | param | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
+ambre-sync | src/membership_log.rs | crate::membership_log | LogRule.self_join | field | SelfJoinRule	generic	a predicate rule over one entry, whose bool answers a question
 ambre-sync | src/membership_log.rs | crate::membership_log | SelfJoinRule | alias | fn(&MembershipEntry)->bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | no_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/membership_log.rs | crate::membership_log | public_channel_self_join() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -3084,7 +3088,7 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::get() | 
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::new(device_px) | param | f32	newtype-inner	the constructor of the glyph raster size, in device pixels
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(font_size) | param | f32	newtype-inner	the constructor of the glyph raster size: the font size parley's glyph run returns, in the units of its layout
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(scale) | param | f64	newtype-inner	the constructor of the glyph raster size: the scale of the drawing transform, a bare ratio
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextLength::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
+ambre-canvas | src/text_cache.rs | crate::text_cache | TextLength::layout_units() | ret | f32	foreign-api	a text length unwrapped for parley, which lays out in the f32 of its caller's units
 ambre-canvas | src/text_cache.rs | crate::text_cache | <DocPx as TextLength>::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
 ambre-canvas | src/text_cache.rs | crate::text_cache | <ViewPx as TextLength>::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
 ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
@@ -3166,7 +3170,7 @@ ambre-bus | src/app/find.rs | crate::app::find | MatchIndex::ordinal() | ret | u
 ambre-bus | src/app/find.rs | crate::app::find | FindText.0 | field | String	newtype-inner	the find text the newtype wraps, never empty
 ambre-bus | src/app/find.rs | crate::app::find | FindText::new(text) | param | String	newtype-inner	the text the constructor validates
 ambre-bus | src/app/find.rs | crate::app::find | FindText::as_str() | ret | &str	newtype-inner	the find text the newtype wraps
-ambre-bus | src/app/find.rs | crate::app::find | FindQuery<O>::new(text) | param | String	newtype-inner	the text FindText validates
+ambre-bus | src/app/find.rs | crate::app::find | FindQuery<O>::new(text) | param | String	free-text	the text a person typed, which FindText validates
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,SheetName>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-core | src/envelope.rs | crate::envelope | ChainHash.0 | field | [u8;32]	newtype-inner	ChainHash newtype
 ambre-crypto | src/hash.rs | crate::hash | DEV_SEED_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to the hasher
@@ -3211,7 +3215,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | BandState::on_if(shown) | par
 ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang.0 | field | String	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang::as_str() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang::new(text) | param | impl Into<String>	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang::stored() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
+ambre-bus | src/app/prose.rs | crate::app::prose | CodeLang::stored() | ret | &str	generic	the stored spelling of an optional tag, empty for plain, read back by CodeLang::new
 ambre-bus | src/app/prose.rs | crate::app::prose | DroppedElement::label() | ret | &'static str	free-text	the closed set's display label
 ambre-bus | src/app/prose.rs | crate::app::prose | FindRefusal::label() | ret | &'static str	free-text	the closed set's display label
 ambre-bus | src/app/prose.rs | crate::app::prose | FirstPage::has_own() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
