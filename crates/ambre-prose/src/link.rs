@@ -88,6 +88,16 @@ impl OpenableScheme {
     }
 }
 
+/// The longest link target a paste keeps and a copy or an export writes, in
+/// bytes (`PROSE-UI-234`, `PROSE-IO-069`).
+pub(crate) const HREF_MAX: ambre_core::ByteSize = ambre_core::ByteSize(2048);
+
+/// Whether a link's target fits [`HREF_MAX`]. A writer writes a longer one as
+/// its text alone.
+pub(crate) fn within_href_max(url: &ambre_core::LinkUrl) -> bool {
+    url.size() <= HREF_MAX
+}
+
 /// Whether a link's target may be handed to the host (`PROSE-UI-186`).
 ///
 /// Nothing rules on a target when a peer writes it, so a hostile one may

@@ -23,6 +23,7 @@ use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
 use crate::doc::{self, StoredLevel};
 use crate::events::{BlockId, ProseEvent, ProseOutcome, block_id, tree_id};
+use crate::link::HREF_MAX;
 use crate::mark::{self, FORMATTING_KEYS, MarkRoot};
 use ambre_bus::app::prose::{BlockType, MarkKey};
 
@@ -153,8 +154,7 @@ impl ClipValue {
     }
 }
 
-/// The longest link and family name a paste keeps, in bytes.
-const HREF_MAX: ambre_core::ByteSize = ambre_core::ByteSize(2048);
+/// The longest family name a paste keeps, in bytes.
 const FAMILY_MAX: ambre_core::ByteSize = ambre_core::ByteSize(64);
 
 /// The value a paste writes under `root`, from either half of the clipboard
