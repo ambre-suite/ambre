@@ -32,7 +32,7 @@ use ambre_canvas::{
 };
 use ambre_chrome::commands::{ClipboardWrite, Modifiers};
 use ambre_core::{CssPoint, CssPx, ViewPoint, ViewPx};
-use ambre_draw::{DrawSurface, ParleyBrush, Rect};
+use ambre_draw::{Consumed, DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
 use ambre_prose::input::{ProseInput, ProseKey};
@@ -221,7 +221,7 @@ impl ProseView {
         if !self.fatal && !self.outbox.is_busy() {
             let (outbox, document_id) = (&mut self.outbox, self.document_id);
             let mut send = |command| send_edit(outbox, document_id, command);
-            self.dirty |= self.state.replay(&mut send);
+            self.dirty |= self.state.replay(&mut send).is_yes();
             self.busy_pub.publish(self.outbox.load());
         }
         if self.shown != Some(self.state.word_count) {
@@ -331,7 +331,8 @@ impl ProseView {
         let mut send = |command| send_edit(outbox, document_id, command);
         self.dirty |= self
             .state
-            .handle_input(&ProseInput::SlashPick(index), &mut send);
+            .handle_input(&ProseInput::SlashPick(index), &mut send)
+            .is_yes();
         self.busy_pub.publish(self.outbox.load());
     }
 
@@ -526,7 +527,7 @@ impl ProseView {
         self.dirty = true;
     }
 
-    pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+    pub fn handle_input(&mut self, ev: &InputEvent) -> Consumed {
         // A press in the page gives the keyboard focus to the pipe, so the
         // next keystroke reaches the document (`ambre-spec-text-input.md`,
         // section 3). The canvas cannot take it, and the pipe takes no click.
@@ -537,7 +538,7 @@ impl ProseView {
         // drains (`BUS-016`). Consuming the event is what makes the refusal
         // visible, as on the board and the grid.
         if self.outbox.is_busy() {
-            return true;
+            return Consumed::Yes;
         }
         match ev {
             InputEvent::Wheel { delta, .. } => {
@@ -553,7 +554,7 @@ impl ProseView {
                 self.publish_hover();
                 self.publish_toolbar();
                 self.dirty = true;
-                true
+                Consumed::Yes
             }
             _ => {
                 if let InputEvent::PointerMove { at } = ev {
@@ -568,7 +569,7 @@ impl ProseView {
                     }
                 }
                 let Some(input) = self.translate(ev) else {
-                    return false;
+                    return Consumed::No;
                 };
                 let start = super::probe::now();
                 let (outbox, document_id) = (&mut self.outbox, self.document_id);
@@ -579,7 +580,9 @@ impl ProseView {
                 };
                 let consumed = self.state.handle_input(&input, &mut send);
                 // A key or typed text starts the three keystroke measures.
-                if consumed && matches!(input, ProseInput::Key { .. } | ProseInput::Text(_)) {
+                if consumed.is_yes()
+                    && matches!(input, ProseInput::Key { .. } | ProseInput::Text(_))
+                {
                     let dispatch = if sent { Dispatch::Sent } else { Dispatch::Kept };
                     let echoed =
                         self.probe
@@ -593,7 +596,7 @@ impl ProseView {
                 }
                 self.busy_pub.publish(self.outbox.load());
                 self.publish_toolbar();
-                self.dirty |= consumed;
+                self.dirty |= consumed.is_yes();
                 consumed
             }
         }
@@ -630,16 +633,16 @@ impl ProseView {
     }
 
     /// One input the host builds itself rather than translates.
-    fn feed(&mut self, input: &ProseInput) -> bool {
+    fn feed(&mut self, input: &ProseInput) -> Consumed {
         if self.fatal || self.outbox.is_busy() {
-            return false;
+            return Consumed::No;
         }
         let (outbox, document_id) = (&mut self.outbox, self.document_id);
         let mut send = |command| send_edit(outbox, document_id, command);
         let consumed = self.state.handle_input(input, &mut send);
         self.busy_pub.publish(self.outbox.load());
         self.publish_toolbar();
-        self.dirty |= consumed;
+        self.dirty |= consumed.is_yes();
         consumed
     }
 
@@ -651,7 +654,7 @@ impl ProseView {
         if self.state.selection().is_none() {
             return ambre_bus::CopyOutcome::Nothing;
         }
-        if self.feed(&ProseInput::Copy(write)) {
+        if self.feed(&ProseInput::Copy(write)).is_yes() {
             ambre_bus::CopyOutcome::Deferred
         } else {
             ambre_bus::CopyOutcome::Nothing
@@ -667,7 +670,7 @@ impl ProseView {
     pub fn paste_clipboard(&mut self, blob: ambre_bus::ClipboardBlob, source: PasteSource) {
         let input = self.state.paste_input(blob, source);
         let start = super::probe::now();
-        if self.feed(&input) {
+        if self.feed(&input).is_yes() {
             let echoed = self.probe.handled(
                 start,
                 super::probe::now(),
@@ -685,9 +688,9 @@ impl ProseView {
         phase: super::TouchPhase,
         at: ViewPoint,
         now: ambre_core::PageTime,
-    ) -> bool {
+    ) -> Consumed {
         if self.fatal {
-            return false;
+            return Consumed::No;
         }
         match phase {
             super::TouchPhase::Down => self.state.touch_start(at, now),
@@ -701,22 +704,24 @@ impl ProseView {
             }
             super::TouchPhase::Cancel => self.state.touch_cancel(),
             super::TouchPhase::Up => {
+                // The finger is the view's, so the click a tap replays
+                // answers nothing of its own.
                 if let Some(at) = self.state.touch_end(now) {
-                    self.feed(&ProseInput::Press {
+                    let _ = self.feed(&ProseInput::Press {
                         at,
                         mods: Modifiers::NONE,
                         now,
                     });
-                    self.feed(&ProseInput::Release);
+                    let _ = self.feed(&ProseInput::Release);
                 }
             }
         }
-        true
+        Consumed::Yes
     }
 
     /// Text dropped on the canvas: one insertion at the drop point
     /// (`PROSE-UI-204`).
-    pub fn drop_text(&mut self, at: ViewPoint, text: String) -> bool {
+    pub fn drop_text(&mut self, at: ViewPoint, text: String) -> Consumed {
         self.feed(&ProseInput::Drop { at, text })
     }
 
@@ -875,11 +880,14 @@ mod tests {
             mods: Modifiers::NONE,
         };
         view.dirty = false;
-        assert!(view.handle_input(&wheel), "the refusal consumes the event");
+        assert!(
+            view.handle_input(&wheel).is_yes(),
+            "the refusal consumes the event"
+        );
         assert!(!view.dirty, "the busy page scrolled");
         queue.try_iter().for_each(drop);
         assert!(matches!(view.outbox.flush(), SendOutcome::Sent));
-        assert!(view.handle_input(&wheel));
+        assert!(view.handle_input(&wheel).is_yes());
         assert!(view.dirty, "the drained page takes input again");
     }
 

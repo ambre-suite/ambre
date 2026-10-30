@@ -2,7 +2,7 @@
 //! Logic thread's answers fed back (`features/ambre-spec-prose-text-editing.md`,
 //! `features/ambre-spec-prose-selection.md`).
 
-use crate::layout::run::{Affinity, RunOffset};
+use crate::layout::run::{Affinity, RunCount, RunOffset};
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocOffset;
 use ambre_bus::app::prose::DocSpan;
@@ -58,7 +58,7 @@ impl Rig {
             SendResult::Sent
         });
         self.take_sent(sent);
-        consumed
+        consumed.is_yes()
     }
 
     fn take_sent(&mut self, sent: Vec<ProseCommand>) {
@@ -103,7 +103,7 @@ impl Rig {
                 }
             }
             let mut sent = Vec::new();
-            self.ui.replay(&mut |command| {
+            let _ = self.ui.replay(&mut |command| {
                 sent.push(command);
                 SendResult::Sent
             });
@@ -191,7 +191,8 @@ fn a_dropped_insertion_leaves_no_echo() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
     rig.ui.set_caret((block, DocOffset::new(5)));
-    rig.ui
+    let _ = rig
+        .ui
         .handle_input(&ProseInput::Text("x".to_owned()), &mut |_| {
             SendResult::Dropped
         });
@@ -704,10 +705,13 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
         mods: ambre_commands::Modifiers::NONE,
         now: ambre_core::PageTime(0.0),
     };
-    assert!(ui.handle_input(&press, &mut |command| {
-        sent.push(command);
-        SendResult::Sent
-    }));
+    assert!(
+        ui.handle_input(&press, &mut |command| {
+            sent.push(command);
+            SendResult::Sent
+        })
+        .is_yes()
+    );
     // The structural command is followed by the sync that holds the input.
     assert!(matches!(
         sent.pop(),
@@ -751,7 +755,7 @@ fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
         },
         &mut |_| SendResult::Sent,
     );
-    assert!(!consumed);
+    assert!(!consumed.is_yes());
     assert_eq!(
         ui.cursor.map(|c| (c.block_id, c.offset)),
         Some((block, DocOffset::new(3)))
@@ -879,9 +883,9 @@ fn home_and_end_honour_the_wrapped_line() {
             .0
     };
     rig.ui
-        .set_caret((block, DocOffset::new(second_line.get() + 2)));
+        .set_caret((block, (second_line + RunCount::new(2)).as_doc()));
     rig.key(ProseKey::End, false, false);
-    let end = RunOffset::new(rig.caret().offset.get());
+    let end = RunOffset::from_doc(rig.caret().offset);
     assert!(end < run_len);
     assert_eq!(
         rig.ui.caret_affinity,
@@ -894,7 +898,7 @@ fn home_and_end_honour_the_wrapped_line() {
         crate::layout::run::RunLine::new(1)
     );
     rig.key(ProseKey::Home, false, false);
-    let start = RunOffset::new(rig.caret().offset.get());
+    let start = RunOffset::from_doc(rig.caret().offset);
     assert!(start > RunOffset::ZERO && start <= second_line);
     let run = rig.ui.run_of(block).expect("a run");
     assert_eq!(
@@ -1028,7 +1032,7 @@ fn select_all_spans_the_document_and_keeps_the_window() {
     let scroll = rig.ui.viewport.scroll_y;
     rig.key(ProseKey::SelectAll, false, true);
     let len = rig.ui.run_of(last).expect("a run").len();
-    let len = DocOffset::new(len.get());
+    let len = len.as_end().as_doc();
     assert_eq!(
         rig.ui.selection(),
         Some(((first, DocOffset::ZERO), (last, len)))
@@ -2106,7 +2110,8 @@ fn a_refused_copy_deletes_nothing() {
     let mut rig = Rig::new(&["hello world"]);
     rig.ui.select_all();
     let mut sent = Vec::new();
-    rig.ui
+    let _ = rig
+        .ui
         .handle_input(&ProseInput::Copy(ClipboardWrite::Cut), &mut |command| {
             sent.push(command);
             SendResult::Dropped

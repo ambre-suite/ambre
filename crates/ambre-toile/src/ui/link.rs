@@ -218,8 +218,9 @@ mod tests {
         );
     }
 
-    /// A click resolves to the top-most linked element under it, and an
-    /// unlinked one over a linked one hides nothing: the walk skips it.
+    /// `TOILE-UI-404`: a click resolves to the top-most linked element under
+    /// it, and an unlinked one over a linked one hides nothing: the walk skips
+    /// it.
     #[test]
     fn the_click_finds_the_top_most_linked_element() {
         let url = LinkTarget::Url("https://example.org/".into());
@@ -264,8 +265,8 @@ mod tests {
         );
     }
 
-    /// The badge sits just outside the element's top-right corner and keeps its
-    /// screen size.
+    /// `TOILE-UI-405`: the badge sits just outside the element's top-right
+    /// corner and keeps its screen size.
     #[test]
     fn the_badge_sits_outside_the_top_right_corner() {
         let b = badge_rect(Rect::new(10.0, 20.0, 110.0, 120.0));

@@ -41,6 +41,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-055` | `FRAME` | Converting a file MUST NOT write to the document: it MUST return a batch the state layer applies. | this spec section 3 | type-level -- the decoder takes bytes and returns a batch, and holds no handle on the document | none | verified |
 | `TOILE-IO-009` | `FAIL` | A picture past the dimension bound MUST abort the import atomically. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::oversized_image_aborts_atomically` | none | verified |
 | `TOILE-IO-056` | `FAIL` | Bytes that do not decode MUST abort the import atomically. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::garbage_bytes_fail_to_decode` -- the refusal; `ambre_toile::logic::state::import::tests::a_broken_file_fails_without_touching_the_board` -- the untouched board | none | verified |
+| `TOILE-IO-102` | `POST` | A thumbnail of a picture smaller than the bound MUST keep the picture's own size. | this spec section 3 | `ambre_toile::logic::interop::raster::tests::a_small_picture_is_not_inflated` -- an 8 by 4 picture decodes to an 8 by 4 thumbnail | none | verified |
 
 ### 1.3 Wait for the upload, then land the import
 
@@ -65,6 +66,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-066` | `POST` | A cache over capacity MUST drop the least recently used resolved slot. | this spec section 3 | `ambre_toile::logic::interop::media::tests::lru_evicts_least_recently_used_ready_entry` -- it touches one of two ready slots and watches the other leave | none | verified |
 | `TOILE-IO-067` | `POST` | A cache MUST have room for one blob however it was sized: a capacity of zero MUST be raised to one. | this spec section 3 | `ambre_toile::logic::interop::media::tests::capacity_zero_coerced_to_one` | none | verified |
 | `TOILE-IO-007` | `FRAME` | Eviction MUST NOT take a slot whose download is in flight. | this spec section 3 | `ambre_toile::logic::interop::media::tests::loading_entries_are_never_evicted` -- it fills a cache of one with two in-flight slots and reads both back | none | verified |
+| `TOILE-IO-103` | `FAIL` | Given a picture address the board does not carry, a request MUST answer nothing. | this spec section 3 | `ambre_toile::logic::state::export::media_request_tests::an_unknown_address_is_answered_with_nothing` -- the request answers no display event | none | verified |
+| `TOILE-IO-105` | `POST` | A picture already asked for and still pending MUST NOT be asked for again on a later frame. | this spec section 4 | `ambre_toile::ui::render::tests::a_pending_request_is_not_repeated` -- a hash in the pending set yields no request, and the same list with nothing pending asks for it | none | verified |
 
 * **Budget.** the first paint of a picture under 15 ms and no refetch on a revisit, two rows of
   `ambre-spec-budgets.md section 1`. The first is the budget the thumbnail exists to meet, and
@@ -73,9 +76,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** this document owns Toile's only outbound flow of user content: media blobs, sealed
   by the Sync thread before they leave (`TOILE-IO-013`). No board geometry and no pixel leaves in
   plaintext.
-* **Verification.** 28 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and a
-  failed upload takes the import with it. An undo takes the entry back, and no placeholder becomes a
-  key. A decoded picture stays out of the document. The thumbnail shown during a download is not
+* **Verification.** 31 `verified`, 1 `unimplemented`. The upload half holds: the address dedups, and
+  a failed upload takes the import with it. An undo takes the entry back, and no placeholder becomes
+  a key. A decoded picture stays out of the document. The thumbnail shown during a download is not
   built (`TOILE-IO-035`), because nothing downloads yet.
 
 ---

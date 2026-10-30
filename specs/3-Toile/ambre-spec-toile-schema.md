@@ -115,7 +115,7 @@ code uses.
 | `comments/{id}/messages/{n}/body` | Text | -- | the message body | none: char-CRDT | comments | built |
 | `tags` | Map | `tag_id` | `{label, color}` | the tag entry | elements | design |
 | `timer` | Map | `ends_at`, `running` | `i64`, `bool` | the key | reactions | design |
-| `vote_session` | Map | `open`, `budget` | `bool`, `u8` | the key | reactions | design |
+| `vote_session` | Map | `open`, `cap` | `bool`, `u8` | the key | reactions | design |
 
 **The element map, field by field.** `Kinds` names the element types that carry the field. A frame is
 an ordinary element and carries the whole geometry block. A **group carries no coordinates at all**,

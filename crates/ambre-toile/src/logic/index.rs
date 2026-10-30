@@ -228,8 +228,8 @@ mod tests {
         assert_eq!(hit, vec![ElementId("e0".to_owned())], "the leaf moved");
     }
 
-    /// A leaf with corners that are not numbers still leaves the index on its
-    /// removal, through the one walk kept for it.
+    /// `TOILE-220`: a leaf with corners that are not numbers still leaves the
+    /// index on its removal, through the one walk kept for it.
     #[test]
     fn a_leaf_that_is_not_a_number_still_leaves() {
         let mut idx = SpatialIndex::default();

@@ -345,7 +345,8 @@ mod tests {
         assert_eq!(err, PdfExportError::Empty);
     }
 
-    /// A page count of N produces N pages; the multi-page path stays balanced
+    /// `TOILE-IO-038`: the bytes of a multi-page export are a PDF document. A
+    /// page count of N produces N pages; the multi-page path stays balanced
     /// (clip push/pop per page) and serializes.
     #[test]
     fn multiple_pages_serialize() {

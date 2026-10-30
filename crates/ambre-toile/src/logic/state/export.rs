@@ -387,8 +387,9 @@ mod tests {
         assert_eq!(st.doc.state_vv(), before);
     }
 
-    /// A board with nothing on it has no page to draw. The caller turns the
-    /// refusal into a message rather than handing the user an empty file.
+    /// `TOILE-IO-048`: a board with nothing on it has no page to draw. The
+    /// caller turns the refusal into a message rather than handing the user an
+    /// empty file.
     #[cfg(feature = "pdf")]
     #[test]
     fn an_empty_board_has_no_pdf_to_export() {
@@ -485,7 +486,7 @@ mod media_request_tests {
         assert_eq!(answer.2, 4 * 2 * 4);
     }
 
-    /// The board answers an address it does not carry with nothing. The element
+    /// `TOILE-IO-103`: the board answers an address it does not carry with nothing. The element
     /// then keeps the placeholder it was already painting, instead of leaving
     /// the view to wait on a reply that never comes.
     #[test]

@@ -2694,10 +2694,11 @@ impl fmt::Debug for ToileError {
             Self::RemoteImportFailed => f.write_str("RemoteImportFailed"),
             Self::BooleanNeedsTwo => f.write_str("BooleanNeedsTwo"),
             Self::BooleanEmpty => f.write_str("BooleanEmpty"),
-            Self::WriteFailed(reason) => f
-                .debug_tuple("WriteFailed")
-                .field(&ambre_core::char_len(reason))
-                .finish(),
+            Self::WriteFailed(reason) => write!(
+                f,
+                "WriteFailed({} chars)",
+                ambre_core::char_len(reason).get()
+            ),
             Self::IdsExhausted => f.write_str("IdsExhausted"),
         }
     }
@@ -2969,10 +2970,14 @@ impl fmt::Debug for ToileEvent {
                 .field("imported", imported)
                 .field("skipped", skipped)
                 .finish(),
-            Self::ImportFailed(reason) => tuple!("ImportFailed", &char_len(reason)),
+            Self::ImportFailed(reason) => {
+                write!(f, "ImportFailed({} chars)", char_len(reason).get())
+            }
             Self::DocumentRefused(reason) => tuple!("DocumentRefused", reason),
             Self::UndecodableRecords => f.write_str("UndecodableRecords"),
-            Self::ExportFailed(reason) => tuple!("ExportFailed", &char_len(reason)),
+            Self::ExportFailed(reason) => {
+                write!(f, "ExportFailed({} chars)", char_len(reason).get())
+            }
             Self::ExportComplete {
                 filename,
                 data,
@@ -3301,9 +3306,6 @@ mod tests {
                     notes: secret.clone(),
                 }
             ),
-            format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
-            format!("{:?}", ToileEvent::ExportFailed(secret.clone())),
-            format!("{:?}", ToileError::WriteFailed(secret.clone())),
             format!("{:?}", DisplayGeom::Sticky(secret.clone())),
             format!("{:?}", DisplayGeom::Text(secret.clone())),
             format!("{:?}", DisplayGeom::Frame(secret.clone())),
@@ -3328,6 +3330,19 @@ mod tests {
             assert!(!line.contains("Q3 layoffs"), "{line}");
         }
         assert_eq!(format!("{address:?}"), "WebAddress(17 chars)");
+        // A failure reason prints as `Variant(N chars)`.
+        assert_eq!(
+            format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
+            "ImportFailed(10 chars)"
+        );
+        assert_eq!(
+            format!("{:?}", ToileEvent::ExportFailed(secret.clone())),
+            "ExportFailed(10 chars)"
+        );
+        assert_eq!(
+            format!("{:?}", ToileError::WriteFailed(secret.clone())),
+            "WriteFailed(10 chars)"
+        );
         assert_eq!(format!("{:?}", ToileCommand::Undo), "Undo");
     }
 

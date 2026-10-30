@@ -134,7 +134,7 @@ impl Cells {
     /// the pipe back from the cell that held it. A key, a character or a
     /// composition goes to the cell that holds it, and answers whether the
     /// cell consumed it. `None` leaves the event to the content view.
-    pub(super) fn route(&self, ev: &InputEvent) -> Option<bool> {
+    pub(super) fn route(&self, ev: &InputEvent) -> Option<Consumed> {
         match ev {
             InputEvent::PointerDown { .. } => {
                 self.release();
@@ -241,11 +241,11 @@ impl Bound {
                     let Some(view) = view.upgrade() else { return };
                     // A finger pans the cell's view rather than pointing.
                     if let Some((phase, at)) = touch_of(&event) {
-                        if view.borrow_mut().touch(
-                            phase,
-                            at,
-                            ambre_bus::PageTime(event.time_stamp()),
-                        ) {
+                        if view
+                            .borrow_mut()
+                            .touch(phase, at, ambre_bus::PageTime(event.time_stamp()))
+                            .is_yes()
+                        {
                             event.prevent_default();
                         }
                         claim.note(&view.borrow());
@@ -254,7 +254,7 @@ impl Bound {
                     let Some(input) = input_of(&event) else {
                         return;
                     };
-                    if view.borrow_mut().handle_input(&input) {
+                    if view.borrow_mut().handle_input(&input).is_yes() {
                         event.prevent_default();
                         // A key the cell took is not the page's: the document
                         // listener would hand it to the content view as well.
@@ -846,7 +846,7 @@ mod tests {
                 at: pointer(299.0, f64::from(bottom - 1.0)),
             },
         ] {
-            view.handle_input(&input);
+            let _ = view.handle_input(&input);
         }
         let AppView::Murmure(v) = &mut *view else {
             unreachable!()
@@ -895,7 +895,7 @@ mod tests {
                 AppView::Murmure(v) => field_of(v, 200.0),
                 _ => unreachable!(),
             };
-            content.handle_input(&InputEvent::PointerDown {
+            let _ = content.handle_input(&InputEvent::PointerDown {
                 at: pointer(cx, cy),
                 button: ambre_canvas::PointerButton::Primary,
                 mods: Modifiers::NONE,
@@ -931,7 +931,11 @@ mod tests {
         assert!(cells.typist().is_some(), "the cell's field took the keys");
         cells.settle(&mut content);
         assert!(!content.takes_text(), "the content's field let them go");
-        assert_eq!(cells.route(&typed), Some(true), "the cell takes the text");
+        assert_eq!(
+            cells.route(&typed),
+            Some(Consumed::Yes),
+            "the cell takes the text"
+        );
         let key = InputEvent::Key {
             key: Key::Char(KeyChar::A),
             mods: Modifiers::NONE,

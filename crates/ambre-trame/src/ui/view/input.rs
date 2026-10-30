@@ -5,11 +5,12 @@ use super::*;
 use ambre_canvas::PointerButton;
 use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers, SelectionMode};
 use ambre_core::{ViewPoint, ViewPx};
+use ambre_draw::Consumed;
 use ambre_draw::kinetic::Release;
 
 impl TrameView {
     /// Input routing while NOT editing a cell.
-    pub(crate) fn handle_input_nav(&mut self, ev: &InputEvent) -> bool {
+    pub(crate) fn handle_input_nav(&mut self, ev: &InputEvent) -> Consumed {
         match ev {
             // A content click focuses the pipe and (re)selects the clicked cell,
             // so typing or IME can start there (spec: canvas click ->
@@ -36,7 +37,7 @@ impl TrameView {
                     self.select_cell(at);
                     self.filter_open.publish();
                 }
-                true
+                Consumed::Yes
             }
             InputEvent::PointerDown {
                 at,
@@ -51,21 +52,21 @@ impl TrameView {
                 let block = self.state.fill_source_block(bounds);
                 self.fill_drag = Some((src, block));
                 self.set_cursor(GridCursor::Crosshair);
-                true
+                Consumed::Yes
             }
             // Dragging the handle grows the destination rectangle, locked to the
             // dominant axis (a fill handle never fills two directions at once).
             InputEvent::PointerMove { at } if self.fill_drag.is_some() => {
                 self.drag_point = Some(*at);
                 self.follow_drag();
-                true
+                Consumed::Yes
             }
             // Release: emit the fill, grow the selection over the filled range,
             // and clear the drag/preview.
             InputEvent::PointerUp { mods, .. } if self.fill_drag.is_some() => {
                 self.drag_point = None;
                 self.end_fill_drag(*mods);
-                true
+                Consumed::Yes
             }
             // A press on a header strip (`trame-headers`) acts by zone. The body does
             // a whole-column/row select (Shift extends, drag sweeps); the corner does
@@ -78,7 +79,7 @@ impl TrameView {
                 mods,
             } if self.fill_drag.is_none() && self.state.header_hit(*at).is_some() => {
                 let Some(hit) = self.state.header_hit(*at) else {
-                    return false;
+                    return Consumed::No;
                 };
                 self.text_input.focus();
                 match hit {
@@ -103,7 +104,7 @@ impl TrameView {
                     HeaderHit::ColInsert(c) => self.insert_col_at(c),
                     HeaderHit::RowInsert(r) => self.insert_row_at(r),
                 }
-                true
+                Consumed::Yes
             }
             // A header drag sweeps the whole-axis band to the column/row under the
             // cursor (even below/right of the header strip).
@@ -121,17 +122,17 @@ impl TrameView {
                     }
                     _ => {}
                 }
-                true
+                Consumed::Yes
             }
             InputEvent::PointerUp { .. } if self.axis_drag.is_some() => {
                 self.axis_drag = None;
-                true
+                Consumed::Yes
             }
             // Dragging a grabbed header moves the live insertion guide to the
             // boundary under the cursor (Excel-style reorder preview).
             InputEvent::PointerMove { at } if self.reorder_drag.is_some() => {
                 let Some(grabbed) = self.reorder_drag else {
-                    return false;
+                    return Consumed::No;
                 };
                 let slot = match grabbed {
                     AxisPos::Col(_) => self.state.col_drop_slot(at.x).map(AxisPos::Col),
@@ -143,23 +144,23 @@ impl TrameView {
                     self.state.reorder_preview = Some(slot);
                     self.edit_dirty = true;
                 }
-                true
+                Consumed::Yes
             }
             // Release drops the grabbed column/row at the previewed slot, emitting
             // a `MoveColumn` / `MoveRow` unless it lands back on its origin.
             InputEvent::PointerUp { .. } if self.reorder_drag.is_some() => {
                 self.end_reorder_drag();
-                true
+                Consumed::Yes
             }
             // Dragging a header boundary moves the live guide line (`trame-resize`);
             // the release emits the resize and clears the preview.
             InputEvent::PointerMove { at } if self.resize_drag.is_some() => {
                 self.update_resize_preview(*at);
-                true
+                Consumed::Yes
             }
             InputEvent::PointerUp { .. } if self.resize_drag.is_some() => {
                 self.end_resize_drag();
-                true
+                Consumed::Yes
             }
             // Double-click on a header boundary auto-fits the column/row to its
             // cached content (`trame-resize`).
@@ -174,7 +175,7 @@ impl TrameView {
                     Some(HeaderHit::RowBorder(r)) => self.auto_fit_row(r),
                     _ => {}
                 }
-                true
+                Consumed::Yes
             }
             InputEvent::PointerDown {
                 at,
@@ -193,19 +194,19 @@ impl TrameView {
                         self.selecting_drag = true;
                     }
                 }
-                true
+                Consumed::Yes
             }
             // Drag with the button held grows the live selection rectangle to the
             // cell under the cursor (mouse range selection).
             InputEvent::PointerMove { at } if self.selecting_drag => {
                 self.drag_point = Some(*at);
                 self.follow_drag();
-                true
+                Consumed::Yes
             }
             InputEvent::PointerUp { .. } if self.selecting_drag => {
                 self.selecting_drag = false;
                 self.drag_point = None;
-                true
+                Consumed::Yes
             }
             // Bare hover (no button held) advertises the affordance under the cursor
             // (`trame-resize`, `trame-autofill`). A header boundary shows the
@@ -246,7 +247,7 @@ impl TrameView {
                     self.state.hover_header = hover;
                     self.edit_dirty = true;
                 }
-                false
+                Consumed::No
             }
             // A right-click on a header selects the whole column/row (or all, on
             // the corner) before the DOM context menu opens. It also flags the
@@ -259,7 +260,7 @@ impl TrameView {
                 ..
             } if self.state.header_hit(*at).is_some() => {
                 let Some(hit) = self.state.header_hit(*at) else {
-                    return false;
+                    return Consumed::No;
                 };
                 self.text_input.focus();
                 use crate::ui::grid::CtxScope;
@@ -282,7 +283,7 @@ impl TrameView {
                     HeaderHit::RowBorder(_) | HeaderHit::RowInsert(_) => CtxScope::Row,
                 };
                 self.set_ctx_scope(scope);
-                false
+                Consumed::No
             }
             // A right-click selects the cell under the cursor before the DOM
             // context menu opens on it (standard spreadsheet behaviour). We don't
@@ -302,7 +303,7 @@ impl TrameView {
                     self.select_cell(at);
                 }
                 self.set_ctx_scope(crate::ui::grid::CtxScope::Cell);
-                false
+                Consumed::No
             }
             // Double-click opens an editor on the clicked cell's current text.
             InputEvent::DoubleClick { at } => {
@@ -312,7 +313,7 @@ impl TrameView {
                     let seed = self.cell_seed(at);
                     self.begin_edit(seed);
                 }
-                true
+                Consumed::Yes
             }
             // First printable text (latin or IME commit) opens an edit replacing
             // the cell, then applies the text.
@@ -322,7 +323,7 @@ impl TrameView {
                     ed.insert(text);
                 }
                 self.edit_dirty = true;
-                true
+                Consumed::Yes
             }
             InputEvent::CompositionUpdate { text } => {
                 self.begin_edit(String::new());
@@ -330,7 +331,7 @@ impl TrameView {
                     ed.set_compose(text);
                 }
                 self.edit_dirty = true;
-                true
+                Consumed::Yes
             }
             InputEvent::CompositionEnd { text } => {
                 self.begin_edit(String::new());
@@ -338,7 +339,7 @@ impl TrameView {
                     ed.insert(text);
                 }
                 self.edit_dirty = true;
-                true
+                Consumed::Yes
             }
             InputEvent::Key { key, mods } => {
                 // `primary` is Ctrl, or Cmd on macOS: the jump modifier.
@@ -408,18 +409,18 @@ impl TrameView {
                     Key::Escape if self.state.clipboard_anchor.take().is_some() => {
                         self.cut_pending = false;
                         self.edit_dirty = true;
-                        true
+                        Consumed::Yes
                     }
                     // Shift+Delete is Cut: don't consume it, so the browser fires
                     // the native `cut` clipboard event the host services (`trame-clipboard`).
-                    Key::Delete if mods.shift() => false,
+                    Key::Delete if mods.shift() => Consumed::No,
                     // Delete / Backspace clear the active cell.
                     Key::Delete | Key::Backspace => self.clear_active_cell(),
                     // F2 opens an editor on the cell's current text.
                     Key::F(FunctionKey::F2) => {
                         let seed = self.cell_seed(self.state.active_cell());
                         self.begin_edit(seed);
-                        true
+                        Consumed::Yes
                     }
                     // Debug HUD text toggle, moved behind Alt so plain letters type.
                     Key::Char(KeyChar::T) if mods.alt() => {
@@ -428,16 +429,16 @@ impl TrameView {
                             TextPass::WithText => TextPass::Shapes,
                         };
                         self.needs_full = true;
-                        true
+                        Consumed::Yes
                     }
                     // Let plain printable keys fall through (no preventDefault) so
                     // the focused textarea receives them and emits an `input` ->
                     // `Text`. Command chords (Ctrl/Cmd+X) likewise fall through to
                     // the chrome keymap.
-                    _ => false,
+                    _ => Consumed::No,
                 }
             }
-            _ => false,
+            _ => Consumed::No,
         }
     }
 
@@ -449,14 +450,14 @@ impl TrameView {
         &mut self,
         delta: ambre_canvas::WheelDelta,
         mods: Modifiers,
-    ) -> bool {
+    ) -> Consumed {
         // Leave Ctrl+wheel to the browser (pinch-zoom gesture); not ours yet.
         if mods.primary() {
-            return false;
+            return Consumed::No;
         }
         let outcome = self.scroll.wheel(&mut self.state, delta, self.clock.now());
         self.note_scroll(outcome);
-        true
+        Consumed::Yes
     }
 
     /// Queue the viewport request a pan owes. Returns the outcome unchanged.
@@ -534,7 +535,9 @@ impl TrameView {
                     mods: Modifiers::NONE,
                 },
             ] {
-                self.handle_input(&ev);
+                // The tap already took the finger, so the click it replays
+                // answers nothing of its own.
+                let _ = self.handle_input(&ev);
             }
         }
     }
@@ -548,7 +551,12 @@ impl TrameView {
     /// Move the active cell by `dr` rows and `dc` columns; returns `true`
     /// (consumed). With `extend` (Shift held) the selection range grows
     /// instead of collapsing.
-    pub(crate) fn nav_move(&mut self, dr: RowDelta, dc: ColDelta, extend: SelectionMode) -> bool {
+    pub(crate) fn nav_move(
+        &mut self,
+        dr: RowDelta,
+        dc: ColDelta,
+        extend: SelectionMode,
+    ) -> Consumed {
         let mv = self.state.move_cursor(dr, dc, extend);
         self.apply_cursor_move(mv)
     }
@@ -556,7 +564,7 @@ impl TrameView {
     /// Jump the active cell to absolute `at` (Home / End / Ctrl+Home /
     /// Ctrl+End); returns `true` (consumed). With `extend` the range grows to
     /// the target (Shift+End, Shift+Ctrl+End...).
-    pub(crate) fn nav_goto(&mut self, at: CellPos, extend: SelectionMode) -> bool {
+    pub(crate) fn nav_goto(&mut self, at: CellPos, extend: SelectionMode) -> Consumed {
         let mv = self.state.move_to(at, extend);
         self.apply_cursor_move(mv)
     }
@@ -601,7 +609,7 @@ impl TrameView {
     /// Shared by relative ([`nav_move`](Self::nav_move)) and absolute
     /// ([`nav_goto`](Self::nav_goto)) navigation. A `None` move (clamped at an
     /// edge / no change) is a no-op but still reports the key as consumed.
-    pub(crate) fn apply_cursor_move(&mut self, mv: Option<CursorMove>) -> bool {
+    pub(crate) fn apply_cursor_move(&mut self, mv: Option<CursorMove>) -> Consumed {
         self.viewport_changed = true;
         if let Some(mv) = mv {
             if let Err(SendError::Refused) = self.send_command_lossless(mv.active) {
@@ -613,14 +621,14 @@ impl TrameView {
             self.park_input_on(self.state.active_cell());
             self.announce_active();
         }
-        true
+        Consumed::Yes
     }
 
     /// Clear every selected cell's content (Delete / Backspace in navigation
     /// mode). Forwards one `SetCellsBatch` of empty texts, then empties the
     /// local cache. A refused send leaves the cache as it was (`BUS-018`).
     /// Returns `true` (consumed).
-    pub(crate) fn clear_active_cell(&mut self) -> bool {
+    pub(crate) fn clear_active_cell(&mut self) -> Consumed {
         let cells = self.state.selection.selected_cells();
         // One batch command so the whole clear is a single undo item.
         let batch = cells.iter().map(|&at| (at, String::new())).collect();
@@ -629,14 +637,14 @@ impl TrameView {
             .is_err()
         {
             tracing::error!("Trame: the cell clear was dropped, the cells keep their text");
-            return true;
+            return Consumed::Yes;
         }
         for &at in &cells {
             self.state.set_cell_text(at, String::new());
         }
         self.needs_full = true;
         self.announce_active();
-        true
+        Consumed::Yes
     }
 
     /// Set `cursor` on `#ambre-canvas` (`trame-resize`, `trame-autofill`);

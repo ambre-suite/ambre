@@ -12,6 +12,7 @@
 // `kinetic` is the one kinetic scroll the applications share: pure arithmetic
 // over timed pointer positions, beside the drawing primitives they share.
 // `wheel` is the wheel delta with its unit, which every view reads as pixels.
+// `consumed` is the answer every input handler gives: whether it took the event.
 // `hit` is the trait each view's content hit-test implements, and `walk` the
 // trait each application's document walk implements.
 //
@@ -27,6 +28,9 @@ pub mod kinetic;
 
 pub mod wheel;
 pub use wheel::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
+
+pub mod consumed;
+pub use consumed::Consumed;
 
 pub mod hit;
 pub use hit::HitTest;
@@ -82,11 +86,11 @@ pub struct ImageSource<'a> {
 pub struct ImageKey(pub u64);
 
 impl ImageKey {
-    /// Fold the leading bytes of a content address (a hex digest, typically)
-    /// into a key. Two different addresses collide only if their first bytes do.
-    pub fn from_address(address: &str) -> Self {
+    /// Fold the leading bytes of a content address, its hex digest, into a
+    /// key. Two different addresses collide only if their first bytes do.
+    pub fn from_address(address: &ambre_core::ContentHash) -> Self {
         let mut acc = 0u64;
-        for b in address.as_bytes().iter().take(16) {
+        for b in address.as_str().as_bytes().iter().take(16) {
             acc = acc.rotate_left(8) ^ u64::from(*b);
         }
         Self(acc)

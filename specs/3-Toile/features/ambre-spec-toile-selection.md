@@ -54,7 +54,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-UI-031` | `POST` | A marquee MUST take every element it covers. | this spec section 2 | `ambre_toile::ui::hit::tests::marquee_selects_covered_elements` | none | verified |
+| `TOILE-UI-031` | `POST` | A marquee MUST take every element it covers. | this spec section 2 | `ambre_toile::ui::hit::tests::marquee_selects_covered_elements`; `ambre_toile::ui::view::view_tests::a_marquee_takes_what_it_covers` -- a marquee drawn through the board view selects the note it covers and not the other | none | verified |
 | `TOILE-UI-235` | `POST` | A marquee MUST replace the selection on release, not while it is dragged. | this spec section 3 | `ambre_toile::ui::tool::tests::drag_empty_makes_a_marquee_then_selects` | none | verified |
 | `TOILE-UI-236` | `POST` | A marquee MUST return the same target a click on the same element would return. | this spec section 2; section 4 | `ambre_toile::ui::tool::tests::marquee_resolves_a_member_to_its_group` -- a marquee over a member resolves to the top-most group, the target a click returns | none | verified |
 | `TOILE-UI-237` | `POST` | A rotated element MUST be judged by the shape the user sees, not by the upright box around it. | this spec section 2 | `ambre_toile::ui::hit::tests::marquee_judges_a_rotated_element_by_its_rotated_box` -- a marquee over the unrotated tip of a rotated long rect misses, and one over the rotated shape takes it | none | verified |
