@@ -1,5 +1,5 @@
 use super::*;
-use crate::error::{Part, SyncError};
+use crate::error::SyncError;
 use crate::http::Reported;
 use crate::sharing::GlooHttp;
 use serde::Serialize;
@@ -34,8 +34,7 @@ fn open_blob(
     content_hash: &ambre_core::ContentHash,
     doc_key: &DocumentKey,
 ) -> Result<ambre_core::MediaBytes, SyncError> {
-    let address =
-        MediaAddress::parse(content_hash).ok_or(SyncError::Malformed(Part::MediaAddress))?;
+    let address = MediaAddress::of_hash(content_hash);
     let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)?;
     // The media file keeps its bytes in the clear by role, so they move out
     // of the wrapper with no copy. A blob the address refuses is wiped.
