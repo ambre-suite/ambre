@@ -15,13 +15,21 @@ use ambre_core::SealedRowBytes;
 use crate::{PersistWrite, SealedWrite};
 
 /// The answer one seal waits for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct SealTicket(u64);
+
+impl SealTicket {
+    /// The ticket handed out after this one.
+    fn following(self) -> Self {
+        Self(self.0 + 1)
+    }
+}
 
 /// The writes on their way to the store, in the order Logic made them.
 #[derive(Debug, Default)]
 pub struct SealQueue {
-    next: u64,
+    /// The ticket the next seal takes: each seal has its own.
+    next: SealTicket,
     entries: VecDeque<Entry>,
 }
 
@@ -91,8 +99,8 @@ impl SealQueue {
     }
 
     fn ticket(&mut self) -> SealTicket {
-        let ticket = SealTicket(self.next);
-        self.next += 1;
+        let ticket = self.next;
+        self.next = ticket.following();
         ticket
     }
 
@@ -147,6 +155,16 @@ mod tests {
 
     fn sealed(bytes: &[u8]) -> SealedRowBytes {
         SealedRowBytes::new(bytes.to_vec())
+    }
+
+    /// Each seal takes its own ticket, so no answer lands on another write.
+    #[test]
+    fn each_seal_takes_its_own_ticket() {
+        let mut queue = SealQueue::default();
+        let first = queue.ticket();
+        let second = queue.ticket();
+        assert_ne!(first, second);
+        assert_eq!(first.following(), second);
     }
 
     /// A write behind a seal waits for it, whatever it is. The store receives

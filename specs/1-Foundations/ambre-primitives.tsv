@@ -1203,7 +1203,6 @@ ambre-logic | src/replay.rs | crate::replay | LogicState::replaying() | ret | bo
 ambre-logic | src/replay.rs | crate::replay | REPLAY_SLICE_BYTES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/residency.rs | crate::residency | LogicState::edits_paused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::reopen_evicted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/seal_queue.rs | crate::seal_queue | SealQueue.next | field | u64	newtype-inner	newtype field, constructor or accessor
 ambre-logic | src/seal_queue.rs | crate::seal_queue | SealTicket.0 | field | u64	newtype-inner	newtype field, constructor or accessor
 ambre-logic | src/segments.rs | crate::segments | LogicState::amendments_link_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_close_failed(message) | param | &str	free-text	free text: message, label, name or report
