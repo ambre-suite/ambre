@@ -15,6 +15,31 @@ use crate::note;
 
 use super::ProseState;
 
+/// An anchor the engine mints into a carrier character: a footnote call or a
+/// cross reference.
+pub(super) enum OwnedAnchor<'a> {
+    Footnote(&'a FootnoteId),
+    CrossRef(&'a crate::xref::CrossRefMark),
+}
+
+impl OwnedAnchor<'_> {
+    /// The root the anchor's mark is stored under.
+    fn root(&self) -> MarkRoot {
+        match self {
+            Self::Footnote(_) => MarkRoot::Footnote,
+            Self::CrossRef(_) => MarkRoot::CrossRef,
+        }
+    }
+
+    /// The value the mark stores, which the anchor readers parse back.
+    fn stored(&self) -> String {
+        match self {
+            Self::Footnote(id) => id.to_hyphenated(),
+            Self::CrossRef(record) => record.as_str().to_owned(),
+        }
+    }
+}
+
 impl ProseState {
     /// A note holding `text`, and one call to it at `pos` in `block`
     /// (`PROSE-FEAT-099`).
@@ -46,7 +71,7 @@ impl ProseState {
         if let Err(e) = self.write_note(&id, text) {
             return Self::err_write(e);
         }
-        if let Err(e) = Self::write_carrier(&body, at, MarkRoot::Footnote, &id.to_hyphenated()) {
+        if let Err(e) = Self::write_carrier(&body, at, &OwnedAnchor::Footnote(&id)) {
             return Self::err_write(e);
         }
         self.commit_notes()
@@ -115,18 +140,17 @@ impl ProseState {
             .map_err(doc::WriteError::from)
     }
 
-    /// One carrier character at `at`, marked `key` = `value`. The mark never
-    /// expands, so typing beside it stays plain text.
+    /// One carrier character at `at`, marked with `anchor` under its root.
+    /// The mark never expands, so typing beside it stays plain text.
     pub(super) fn write_carrier(
         body: &LoroText,
         at: DocOffset,
-        key: MarkRoot,
-        value: &str,
+        anchor: &OwnedAnchor<'_>,
     ) -> Result<(), doc::WriteError> {
         let at = at.to_usize();
         let mut buffer = [0_u8; 4];
         body.insert(at, doc::CARRIER.encode_utf8(&mut buffer))?;
-        body.mark(at..at + 1, key.as_str(), value)
+        body.mark(at..at + 1, anchor.root().as_str(), anchor.stored())
             .map_err(doc::WriteError::from)
     }
 
@@ -235,7 +259,8 @@ mod tests {
         let id = add(&mut state, ids[0], DocOffset::new(5), "A note.");
         let body = doc::get_block_text(state.document(), &crate::events::tree_id(ids[0]));
         let upper = id.to_hyphenated().to_uppercase();
-        ProseState::write_carrier(&body, DocOffset::new(0), MarkRoot::Footnote, &upper)
+        body.insert(0, "\u{fffc}").expect("the carrier lands");
+        body.mark(0..1, MarkRoot::Footnote.as_str(), upper)
             .expect("the call lands");
         assert_eq!(note::footnote_calls(state.document()).len(), 2);
         state.handle_command(ProseCommand::DeleteFootnote { footnote_id: id });

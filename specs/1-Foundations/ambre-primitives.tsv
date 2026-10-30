@@ -2091,7 +2091,7 @@ ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | re
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::insert_footnote(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_carrier(value) | param | &str	free-text	an owned anchor value the engine mints, a footnote Uuid or a cross reference record in hex; validate_value never sees an owned anchor, is_owned_anchor refuses it on the style path
+ambre-prose | src/logic/notes.rs | crate::logic::notes | OwnedAnchor::stored() | ret | String	generic	the codec of an enum that carries data: the value an owned anchor's mark stores, a footnote Uuid or a cross reference record in hex, which the anchor readers parse back
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::write_note(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/notes.rs | crate::logic::notes | write_note_block(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/presence.rs | crate::logic::presence | ProseState::is_live() | ret | bool	generic	independent flag or predicate
