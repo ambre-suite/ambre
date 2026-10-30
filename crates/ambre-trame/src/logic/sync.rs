@@ -376,6 +376,19 @@ impl TrameState {
         }
     }
 
+    /// Record that a cell key or a line element could not be read, as a
+    /// crafted peer's non-canonical key cannot (`SCHEMA-003`).
+    pub(super) fn note_unreadable_key(&self) {
+        self.undecodable.set(true);
+    }
+
+    /// Record an index build that skipped a line element (`SCHEMA-003`).
+    pub(super) fn note_index_read(&self, index: &SheetIndex) {
+        if index.read() == crate::model::LineRead::Skipped {
+            self.note_unreadable_key();
+        }
+    }
+
     /// Drain the flag into the one event that carries it to the user, or nothing
     /// when every register read cleanly (`SCHEMA-003`).
     ///

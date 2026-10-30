@@ -324,6 +324,70 @@ fn an_import_with_a_spent_sheet_counter_writes_nothing() {
     assert_eq!(read_cell(&mut state, 0, 0), "", "the edit before is undone");
 }
 
+/// A workbook whose cell map holds `key`, a key no build writes, opened.
+fn open_with_cell_key(key: &str) -> Vec<TrameEvent> {
+    let source = TrameState::new();
+    source
+        .doc
+        .get_map(SheetContainer::of(SheetRoot::Cells, &crate::logic::default_sheet()).as_str())
+        .insert(key, "shadow")
+        .expect("a crafted key");
+    source.doc.commit();
+    let mut opened = TrameState::new();
+    opened
+        .import_snapshot(&source.export_snapshot())
+        .expect("the workbook still opens")
+}
+
+/// A cell key in a spelling no build writes is refused, and the refusal is
+/// said. A crafted peer's short, signed or upper-case uid never reads in
+/// silence (`TRAME-248`).
+#[test]
+fn a_cell_key_in_a_non_canonical_spelling_is_refused_and_said() {
+    let canonical = "00000000000000ab_00000002";
+    for key in [
+        "ab_2:ab_3".to_owned(),
+        format!("+{canonical}:{canonical}"),
+        format!("{}:{canonical}", canonical.to_uppercase()),
+    ] {
+        let events = open_with_cell_key(&key);
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, TrameEvent::UndecodableRecords)),
+            "{key}"
+        );
+    }
+}
+
+/// A line element in a spelling no build writes is skipped, and said.
+#[test]
+fn a_line_element_in_a_non_canonical_spelling_is_refused_and_said() {
+    let source = TrameState::new();
+    source
+        .doc
+        .get_movable_list(
+            SheetContainer::of(SheetRoot::Rows, &crate::logic::default_sheet()).as_str(),
+        )
+        .push("ab_2")
+        .expect("a crafted line");
+    source.doc.commit();
+    let mut opened = TrameState::new();
+    let events = opened
+        .import_snapshot(&source.export_snapshot())
+        .expect("the workbook still opens");
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, TrameEvent::UndecodableRecords))
+    );
+    assert_eq!(
+        opened.index.row_len(),
+        RowCount::ZERO,
+        "the line is skipped"
+    );
+}
+
 /// A file with no record writes nothing: no sheet, no delta, no undo item.
 /// The undo that follows takes back the edit before it (`TRAME-IO-028`).
 #[test]

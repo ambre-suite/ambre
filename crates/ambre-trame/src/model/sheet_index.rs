@@ -44,7 +44,19 @@ impl Uid {
 
     /// Parse one `"{peer:016x}_{counter:08x}"` half. `None` on any malformed
     /// input (defensive against a corrupt or foreign entry).
+    ///
+    /// Only the canonical spelling [`to_key_part`](Self::to_key_part) writes
+    /// reads back. A short, signed or upper-case spelling would name the same
+    /// uid under a second key. A crafted peer could shadow a cell with it, so
+    /// it is refused.
     pub fn parse(s: &str) -> Option<Self> {
+        Self::parse_hex(s).filter(|uid| uid.to_key_part() == s)
+    }
+
+    /// Parse the compact `"{peer:x}_{counter:x}"` a stored formula writes,
+    /// with no padding. The formula parser recognises the token first, and a
+    /// stored formula keeps the bytes it was written with.
+    pub fn parse_hex(s: &str) -> Option<Self> {
         let (peer, ctr) = s.split_once('_')?;
         Some(Uid {
             peer: ambre_core::PeerId(u64::from_str_radix(peer, 16).ok()?),
@@ -104,6 +116,17 @@ pub struct SheetIndex {
     col_by_pos: ColVec<Uid>,
     row_to_pos: HashMap<Uid, Row>,
     col_to_pos: HashMap<Uid, Col>,
+    read: LineRead,
+}
+
+ambre_core::define_flag! {
+    /// Whether building an index skipped a line element it could not read.
+    pub enum LineRead {
+        /// Every element held a uid this build reads.
+        Clean,
+        /// At least one element held no readable uid, and was skipped.
+        Skipped,
+    }
 }
 
 impl SheetIndex {
@@ -111,8 +134,10 @@ impl SheetIndex {
     /// (N_used = materialized rows + columns, never the 100k virtual grid). Reads
     /// each element's uid *value* in list order (`trame-engine`).
     pub fn build(rows: &LoroMovableList, cols: &LoroMovableList) -> Self {
-        let row_by_pos: RowVec<Uid> = collect_ids(rows).into();
-        let col_by_pos: ColVec<Uid> = collect_ids(cols).into();
+        let (rows, rows_read) = collect_ids(rows);
+        let (cols, cols_read) = collect_ids(cols);
+        let row_by_pos: RowVec<Uid> = rows.into();
+        let col_by_pos: ColVec<Uid> = cols.into();
         let row_to_pos = row_by_pos
             .iter_enumerated()
             .map(|(p, id)| (*id, p))
@@ -126,7 +151,14 @@ impl SheetIndex {
             col_by_pos,
             row_to_pos,
             col_to_pos,
+            read: rows_read.max(cols_read),
         }
+    }
+
+    /// Whether the build skipped a line element it could not read
+    /// (`SCHEMA-003`).
+    pub fn read(&self) -> LineRead {
+        self.read
     }
 
     /// Number of materialized rows / columns (the used-range high-water mark).
@@ -280,23 +312,28 @@ impl SheetIndex {
 /// `"{peer:016x}_{counter:08x}"` string. A missing or malformed value
 /// would be a corruption, logged and skipped. It must not desync the dense
 /// list, so we never push a gap.
-fn collect_ids(list: &LoroMovableList) -> Vec<Uid> {
+fn collect_ids(list: &LoroMovableList) -> (Vec<Uid>, LineRead) {
     let LoroValue::List(items) = list.get_value() else {
-        return Vec::new();
+        return (Vec::new(), LineRead::Clean);
     };
     let mut ids = Vec::with_capacity(items.len());
+    let mut read = LineRead::Clean;
     for (pos, item) in items.iter().enumerate() {
         match item {
             LoroValue::String(s) => match Uid::parse(s) {
                 Some(uid) => ids.push(uid),
-                None => tracing::error!("[SheetIndex] unparsable uid value {s:?} at pos {pos}"),
+                None => {
+                    tracing::error!("[SheetIndex] unparsable uid value at pos {pos}");
+                    read = LineRead::Skipped;
+                }
             },
-            other => {
-                tracing::error!("[SheetIndex] non-string list element {other:?} at pos {pos}")
+            _ => {
+                tracing::error!("[SheetIndex] non-string list element at pos {pos}");
+                read = LineRead::Skipped;
             }
         }
     }
-    ids
+    (ids, read)
 }
 
 #[cfg(test)]
@@ -438,6 +475,32 @@ mod tests {
                 .unwrap()
                 .0,
             original_first
+        );
+    }
+
+    /// A uid reads back only from the spelling `to_key_part` writes. Each other
+    /// spelling of the same uid is refused: a second key for one uid could
+    /// shadow a cell.
+    #[test]
+    fn a_uid_reads_back_from_its_canonical_spelling_alone() {
+        let uid = Uid {
+            peer: ambre_core::PeerId(0xab),
+            counter: ambre_core::IdCounter::new(2),
+        };
+        assert_eq!(Uid::parse("00000000000000ab_00000002"), Some(uid));
+        for form in [
+            "ab_2",
+            "+00000000000000ab_00000002",
+            "00000000000000AB_00000002",
+            "00000000000000ab_+0000002",
+            "000000000000000ab_00000002",
+        ] {
+            assert_eq!(Uid::parse(form), None, "{form}");
+        }
+        assert_eq!(
+            Uid::parse_hex("ab_2"),
+            Some(uid),
+            "a stored formula's spelling"
         );
     }
 

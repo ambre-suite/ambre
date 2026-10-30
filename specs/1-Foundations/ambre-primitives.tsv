@@ -3280,7 +3280,8 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 |
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	newtype-inner	the stored cell key CellKey holds, which the Loro call into the map reads
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	generic	the key part a list element stores, read back into a uid: the codec of a struct of two fields
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	generic	the key part a list element or a cell key stores, read back into a uid from its canonical spelling alone: the codec of a struct of two fields
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse_hex(s) | param | &str	generic	the compact uid a stored formula writes, read back into a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	generic	the key part a list element stores for a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.text | field | &'a str	free-text	free text: user content, label, message or display string

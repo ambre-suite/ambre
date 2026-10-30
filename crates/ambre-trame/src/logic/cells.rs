@@ -282,6 +282,7 @@ impl TrameState {
             .doc
             .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
         self.index = SheetIndex::build(&rows, &cols);
+        self.note_index_read(&self.index);
     }
 
     /// Build the per-sheet position<->uid index map the formula engine needs to
