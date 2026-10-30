@@ -524,7 +524,7 @@ fn paint_element<S: DrawSurface>(
                     // The media address already identifies these pixels, so the
                     // back end recognises the texture it uploaded on an earlier
                     // frame without hashing the buffer again.
-                    key: ImageKey::from_address(hash.as_str()),
+                    key: ImageKey::from_address(hash),
                     pixels: &img.pixels,
                     size: img.size,
                 },
