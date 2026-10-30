@@ -55,32 +55,55 @@ pub enum ImportRef {
     Group(ImportGroupSlot),
 }
 
-ambre_core::define_index! {
-    /// The rank of a `CreateElement` in [`ImportBatch::commands`]. It means
-    /// nothing outside that batch.
-    pub struct ImportElementSlot(u32);
-    /// A number of element creates in one import batch.
-    pub struct ImportElementSlotCount;
-    /// The signed gap between two element slots.
-    pub struct ImportElementSlotDelta(i64);
-    /// A run of element slots.
-    pub struct ImportElementSlotSpan;
-    /// A list indexed by element slot.
-    pub struct ImportElementSlotVec;
+/// The rank of a `CreateElement` in [`ImportBatch::commands`]. It means
+/// nothing outside that batch, and no arithmetic applies to it. The importer
+/// takes the next rank from the batch's length, and the resolver reads the
+/// create at that rank.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImportElementSlot(u32);
+
+impl ImportElementSlot {
+    /// The first create of a batch.
+    pub const ZERO: Self = Self(0);
+
+    /// The create at `rank`.
+    pub const fn new(rank: u32) -> Self {
+        Self(rank)
+    }
+
+    /// The rank of the create a batch of `len` creates appends next. It
+    /// saturates at `u32::MAX`, which the element limit keeps a batch far
+    /// below.
+    pub fn from_usize(len: usize) -> Self {
+        Self(u32::try_from(len).unwrap_or(u32::MAX))
+    }
+
+    /// The rank as an index into [`ImportBatch::commands`].
+    pub fn to_usize(self) -> usize {
+        usize::try_from(self.0).unwrap_or(usize::MAX)
+    }
 }
 
-ambre_core::define_index! {
-    /// The rank of a group in [`ImportBatch::groups`]. It means nothing
-    /// outside that batch.
-    pub struct ImportGroupSlot(u32);
-    /// A number of groups in one import batch.
-    pub struct ImportGroupSlotCount;
-    /// The signed gap between two group slots.
-    pub struct ImportGroupSlotDelta(i64);
-    /// A run of group slots.
-    pub struct ImportGroupSlotSpan;
-    /// A list indexed by group slot.
-    pub struct ImportGroupSlotVec;
+/// The rank of a group in [`ImportBatch::groups`]. It means nothing outside
+/// that batch, and no arithmetic applies to it, as for [`ImportElementSlot`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImportGroupSlot(u32);
+
+impl ImportGroupSlot {
+    /// The first group of a batch.
+    pub const ZERO: Self = Self(0);
+
+    /// The rank of the group a batch of `len` groups appends next. It
+    /// saturates at `u32::MAX`, which the element limit keeps a batch far
+    /// below.
+    pub fn from_usize(len: usize) -> Self {
+        Self(u32::try_from(len).unwrap_or(u32::MAX))
+    }
+
+    /// The rank as an index into [`ImportBatch::groups`].
+    pub fn to_usize(self) -> usize {
+        usize::try_from(self.0).unwrap_or(usize::MAX)
+    }
 }
 
 /// A `<g>` (or a Figma/Miro group) to rebuild via `GroupElements` after the
