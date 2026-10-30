@@ -46,13 +46,23 @@ pub enum Mutability {
     Immutable,
 }
 
+/// Whether a view shows a held document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Pinning {
+    /// No view shows it, so it may leave.
+    #[default]
+    Free,
+    /// A view shows it, so it never leaves (`RESID-003`).
+    Pinned,
+}
+
 /// What the policy knows of one held document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Held {
     /// The bytes the document costs in this tier.
     pub bytes: ByteSize,
     /// A view shows it, so it never leaves (`RESID-003`).
-    pub pinned: bool,
+    pub pinned: Pinning,
     /// Its application marks it immutable, so it leaves first (`RESID-007`).
     pub immutable: Mutability,
     /// It carries a change the relay has not acknowledged, so it stays
@@ -119,7 +129,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
     pub fn pin(&mut self, key: K) {
         let tick = self.next_tick();
         if let Some(held) = self.held.get_mut(&key) {
-            held.pinned = true;
+            held.pinned = Pinning::Pinned;
             held.viewed = tick;
         }
     }
@@ -129,7 +139,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
     pub fn unpin(&mut self, key: K) {
         let tick = self.next_tick();
         if let Some(held) = self.held.get_mut(&key) {
-            held.pinned = false;
+            held.pinned = Pinning::Free;
             held.viewed = tick;
         }
     }
@@ -196,7 +206,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
         let mut candidates: Vec<(&K, &Held)> = self
             .held
             .iter()
-            .filter(|(_, held)| !held.pinned && held.unsent == Delivery::Sent)
+            .filter(|(_, held)| held.pinned == Pinning::Free && held.unsent == Delivery::Sent)
             .collect();
         // Every tick is drawn once, so two documents never tie and the order
         // never depends on the map's.

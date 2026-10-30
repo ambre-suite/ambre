@@ -934,7 +934,6 @@ ambre-core | src/payload.rs | crate::payload | LoroPayload::as_bytes() | ret | &
 ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | ret | &'a[u8]	generic	Loro import bytes: a delta or a snapshot alike, for the engine that imports either
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
-ambre-core | src/residency.rs | crate::residency | Held.pinned | field | bool	generic	a residency fact, whether the user pinned the document; it selects no mode and no caller writes it as a literal
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch
 ambre-core | src/residency.rs | crate::residency | ViewTick.0 | field | u64	newtype-inner	ViewTick newtype
 ambre-core | src/role.rs | crate::role | <Role as FromStr>::from_str(s) | param | &str	newtype-inner	the wire word the enum's own fallible constructor reads
