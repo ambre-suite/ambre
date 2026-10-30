@@ -104,7 +104,16 @@ const UNCOUNTED: [&str; 31] = [
 struct Depth {
     /// The counted elements open, never more than [`DEPTH_MAX`] of them.
     open: RefCell<Vec<LocalName>>,
-    exceeded: Cell<bool>,
+    /// Whether an element opened past [`DEPTH_MAX`].
+    reach: Cell<Reach>,
+}
+
+/// Whether the elements of a paste stay within [`DEPTH_MAX`] of nesting.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Reach {
+    #[default]
+    Within,
+    Exceeded,
 }
 
 impl TokenSink for Depth {
@@ -130,7 +139,7 @@ impl TokenSink for Depth {
                 let closed = tag.self_closing && foreign;
                 if raw.is_none() && !closed && !UNCOUNTED.contains(&name) {
                     if open.len() >= DEPTH_MAX {
-                        self.exceeded.set(true);
+                        self.reach.set(Reach::Exceeded);
                     } else {
                         open.push(tag.name.clone());
                     }
@@ -155,7 +164,7 @@ fn too_deep(html: &str) -> bool {
     input.push_back(StrTendril::from_slice(html));
     let _ = tokenizer.feed(&input);
     tokenizer.end();
-    tokenizer.sink.exceeded.get()
+    tokenizer.sink.reach.get() == Reach::Exceeded
 }
 
 enum Step {
@@ -188,18 +197,38 @@ enum Flow {
 /// A block element the walk is inside.
 struct Open {
     kind: ClipKind,
-    keep_empty: bool,
+    /// What its close does when it holds no text.
+    empty: EmptyBlock,
     /// Whether a block was written inside it, so its own close adds none.
-    touched: bool,
+    touched: Touched,
+}
+
+/// Whether a block was written inside an open element.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Touched {
+    Untouched,
+    Written,
+}
+
+/// What an element opened that its close undoes, beside its marks.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Opened {
+    /// Nothing but marks.
+    #[default]
+    Inline,
+    /// A list.
+    List,
+    /// A block.
+    Block,
+    /// A preformatted block.
+    Pre,
 }
 
 /// What leaving an element undoes.
 #[derive(Default)]
 struct Frame {
     restore: Vec<(MarkRoot, Option<MarkValue>)>,
-    block: bool,
-    list: bool,
-    pre: bool,
+    opened: Opened,
 }
 
 #[derive(Default)]
@@ -358,7 +387,7 @@ impl Reader {
                 } else {
                     ClipKind::Bullet
                 });
-                frame.list = true;
+                frame.opened = Opened::List;
             }
             "input" => {
                 if attr(attrs, "type").is_some_and(|t| t.eq_ignore_ascii_case("checkbox"))
@@ -388,13 +417,17 @@ impl Reader {
                 self.flush(EmptyBlock::Drop);
                 self.open.push(Open {
                     kind,
-                    keep_empty: KEPT_EMPTY.contains(&tag),
-                    touched: false,
+                    empty: if KEPT_EMPTY.contains(&tag) {
+                        EmptyBlock::Keep
+                    } else {
+                        EmptyBlock::Drop
+                    },
+                    touched: Touched::Untouched,
                 });
-                frame.block = true;
+                frame.opened = Opened::Block;
                 if tag == "pre" {
                     self.pre += 1;
-                    frame.pre = true;
+                    frame.opened = Opened::Pre;
                 }
             }
             _ => {}
@@ -434,22 +467,25 @@ impl Reader {
             }
             self.rebuild();
         }
-        if frame.list {
+        if frame.opened == Opened::List {
             self.lists.pop();
         }
-        if frame.pre {
+        if frame.opened == Opened::Pre {
             self.pre = self.pre.saturating_sub(1);
         }
-        if frame.block {
-            let keep = if self.open.last().is_some_and(|o| o.keep_empty && !o.touched) {
-                EmptyBlock::Keep
-            } else {
-                EmptyBlock::Drop
+        if matches!(frame.opened, Opened::Block | Opened::Pre) {
+            let keep = match self.open.last() {
+                Some(open) if open.touched == Touched::Untouched => open.empty,
+                _ => EmptyBlock::Drop,
             };
             let wrote = self.flush(keep);
-            let touched = self.open.pop().is_some_and(|o| o.touched) || wrote;
+            let touched = self
+                .open
+                .pop()
+                .is_some_and(|o| o.touched == Touched::Written)
+                || wrote;
             if touched && let Some(parent) = self.open.last_mut() {
-                parent.touched = true;
+                parent.touched = Touched::Written;
             }
         }
     }
@@ -532,7 +568,7 @@ impl Reader {
             runs,
         });
         if let Some(open) = self.open.last_mut() {
-            open.touched = true;
+            open.touched = Touched::Written;
         }
         true
     }

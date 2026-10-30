@@ -1903,7 +1903,6 @@ ambre-prose | src/input.rs | crate::input | ProseUiState::type_text(text) | para
 ambre-prose | src/input.rs | crate::input | ProseUiState::waiting() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | QUEUED_INPUTS | const | usize	local	the most inputs the queue holds, compared with the length of that queue alone
 ambre-prose | src/input.rs | crate::input | Sent::Text.1 | field | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Frame::List.ordered | field | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Code.lang | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Code.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.bold | field | u32	local	how many strong spans the private reader is inside, its name says which
@@ -2000,13 +1999,7 @@ ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentage
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | DEPTH_MAX | const | usize	local	the most counted elements a paste may hold open, compared with the length of that stack alone
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Depth.exceeded | field | Cell<bool>	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.block | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.list | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Frame.pre | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | KEPT_EMPTY | const | [&str;11]	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Open.keep_empty | field | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Open.touched | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.pre | field | usize	local	how many preformatted elements the private reader is inside
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(style) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(tag) | param | &str	free-text	text content / label / parser input
@@ -2101,7 +2094,6 @@ ambre-prose | src/logic/marks.rs | crate::logic::marks | ProseState::resolved_ru
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_MARKS | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | RUN_TEXT | const | &str	foreign-api	a key of Loro's own rich-text delta
 ambre-prose | src/logic/marks.rs | crate::logic::marks | refused_as(value) | param | Option<&str>	free-text	the raw value validate_value refused, echoed in the refusal; a refused value is by definition no MarkValue
-ambre-prose | src/logic/mod.rs | crate::logic | ProseState.owe_greeting | field | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::adopt_session() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/mod.rs | crate::logic | ProseState::names_a_band() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/notes.rs | crate::logic::notes | ProseState::edit_footnote(text) | param | &str	free-text	text content / label / parser input
@@ -2128,7 +2120,6 @@ ambre-prose | src/mark.rs | crate::mark | is_registered() | ret | bool	generic	p
 ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LEVELS]	newtype-inner	newtype inner field
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	local	the length of the constant array of heading levels, which sizes the private counters
 ambre-prose | src/probe.rs | crate::probe | FrameNumber.0 | field | u64	newtype-inner	how many animation frames began before a moment, held at the top
-ambre-prose | src/probe.rs | crate::probe | Undrawn.needs_layout | field | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	the samples of one probe series, in milliseconds or frames, that the host hands in
 ambre-prose | src/redact.rs | crate::redact | Redacted.0 | field | &'a str	newtype-inner	document content that Debug prints the length of alone
@@ -2145,7 +2136,6 @@ ambre-prose | src/ui.rs | crate::ui | DraftBuffer::push_str(text) | param | &str
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of(laid) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::touches() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.changed | field | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Option<(String,ShapedRun)>	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | SendResult::accepted() | ret | bool	generic	independent flag or predicate

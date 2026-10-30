@@ -95,7 +95,17 @@ struct Undrawn {
     start: ambre_core::PageTime,
     /// Its effect waits on a layout: a split, a paste, anything the draft
     /// cannot hold. It is drawn by the first frame after the layout.
-    needs_layout: bool,
+    needs_layout: Drawing,
+}
+
+ambre_core::define_flag! {
+    /// Whether an input's effect waits on a layout to be drawn.
+    enum Drawing {
+        /// The next frame draws it.
+        Ready,
+        /// A layout must arrive first.
+        AwaitsLayout,
+    }
 }
 
 /// The keystrokes in flight, from their input to their frame.
@@ -154,7 +164,7 @@ impl KeyProbe {
             .extend(fresh.iter().map(|&seq| (seq, start, self.frame)));
         self.undrawn.push(Undrawn {
             start,
-            needs_layout: dispatch == Dispatch::Sent && fresh.is_empty(),
+            needs_layout: Drawing::from_bool(dispatch == Dispatch::Sent && fresh.is_empty()),
         });
         if fresh.is_empty() {
             return Vec::new();
@@ -196,7 +206,7 @@ impl KeyProbe {
         });
         if answer == Answer::Layout {
             for input in &mut self.undrawn {
-                input.needs_layout = false;
+                input.needs_layout = Drawing::Ready;
             }
         }
         measures
@@ -207,7 +217,7 @@ impl KeyProbe {
     pub fn painted(&mut self, now: ambre_core::PageTime) -> Vec<Measure> {
         let mut measures = Vec::new();
         self.undrawn.retain(|input| {
-            if input.needs_layout {
+            if input.needs_layout == Drawing::AwaitsLayout {
                 return true;
             }
             measures.push(Measure {

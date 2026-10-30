@@ -384,6 +384,14 @@ ambre_core::define_flag! {
         /// The sync follows a structural command, and the input waits.
         Holds,
     }
+
+    /// Whether the document changed since the view last ticked.
+    enum Changed {
+        /// No change arrived.
+        Unchanged,
+        /// A change arrived, and a recount is owed.
+        Changed,
+    }
 }
 
 /// The UI thread's whole state for one open Prose document.
@@ -522,7 +530,7 @@ pub struct ProseUiState {
     /// caret and sends nothing until the composition ends (`PROSE-UI-142`).
     pub(crate) composing: String,
     /// A change arrived since the last tick.
-    changed: bool,
+    changed: Changed,
     /// When the text was last seen changing, while a recount is owed.
     quiet_since: Option<ambre_core::PageTime>,
     /// The number of the last change this view did not draw and applied.
@@ -729,7 +737,7 @@ impl ProseUiState {
                     self.splitting = None;
                 }
             }
-            ProseEvent::DocUpdated { .. } => self.changed = true,
+            ProseEvent::DocUpdated { .. } => self.changed = Changed::Changed,
             ProseEvent::CellEntered { block, .. } => self.place_caret(*block, DocOffset::ZERO),
             ProseEvent::WordCountUpdated { count } => self.word_count = *count,
             ProseEvent::SelectionMarks {
@@ -943,7 +951,7 @@ impl ProseUiState {
     /// one recount, [`RECOUNT_DELAY`] after the last of them. The caller
     /// sends the command it gets back.
     pub fn tick(&mut self, now: ambre_core::PageTime) -> Option<ProseCommand> {
-        if std::mem::take(&mut self.changed) {
+        if std::mem::take(&mut self.changed) == Changed::Changed {
             self.quiet_since = Some(now);
             return None;
         }

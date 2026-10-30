@@ -64,8 +64,9 @@ pub fn read(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
 
 /// A block that holds other blocks while the reader is inside it.
 enum Frame {
+    /// A list, with the style each of its items takes.
     List {
-        ordered: bool,
+        style: IrListStyle,
     },
     Item {
         style: IrListStyle,
@@ -209,16 +210,17 @@ impl Reader {
             Tag::List(start) => {
                 self.flush();
                 self.frames.push(Frame::List {
-                    ordered: start.is_some(),
+                    style: match start {
+                        Some(_) => IrListStyle::Ordered(IrOrderedStyle::Decimal),
+                        None => IrListStyle::Bullet,
+                    },
                 });
             }
             Tag::Item => {
                 self.flush();
-                let ordered = matches!(self.frames.last(), Some(Frame::List { ordered: true }));
-                let style = if ordered {
-                    IrListStyle::Ordered(IrOrderedStyle::Decimal)
-                } else {
-                    IrListStyle::Bullet
+                let style = match self.frames.last() {
+                    Some(Frame::List { style }) => *style,
+                    _ => IrListStyle::Bullet,
                 };
                 self.frames.push(Frame::Item {
                     style,

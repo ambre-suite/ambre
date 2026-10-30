@@ -102,6 +102,16 @@ pub const WINDOW_PAGES: PageCount = PageCount::new(8);
 /// (`PROSE-UI-212`).
 pub const WINDOW_MARGIN: PageCount = PageCount::new(4);
 
+ambre_core::define_flag! {
+    /// Whether this session owes a newcomer its presence.
+    enum Greeting {
+        /// Every session met has heard from this one.
+        Given,
+        /// A session joined that has not heard from this one yet.
+        Owed,
+    }
+}
+
 /// What a layout handed to the view was computed from. Two layouts of one
 /// basis are the same picture.
 #[derive(Debug, PartialEq)]
@@ -162,7 +172,7 @@ pub struct ProseState {
     /// This session's last presence sample, re-sent to a newcomer.
     last_frame: Option<ambre_core::EphemeralBytes>,
     /// Whether a newcomer has not heard from this session yet.
-    owe_greeting: bool,
+    owe_greeting: Greeting,
     /// The paginator, built on the first layout asked for. It is the one place
     /// the document is measured, for the screen and for export alike
     /// (`PROSE-064`). It lives here so measuring runs where the document does
@@ -316,7 +326,7 @@ impl ProseState {
             presence: HashMap::new(),
             live: std::collections::HashSet::new(),
             last_frame: None,
-            owe_greeting: false,
+            owe_greeting: Greeting::Given,
             paginator: None,
             faces: Vec::new(),
             handed: None,
