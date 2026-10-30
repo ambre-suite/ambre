@@ -445,7 +445,7 @@ fn a_column_is_never_narrower_than_its_minimum() {
 fn a_peer_size_out_of_range_reads_clamped_or_default() {
     let mut peer = TrameState::new();
     let sheet_id = peer.active_sheet.clone();
-    for line in 0..4 {
+    for line in 0..6 {
         peer.handle_command(TrameCommand::ResizeCol {
             version: ambre_bus::ViewportVersion(1),
             sheet_id: sheet_id.clone(),
@@ -464,7 +464,8 @@ fn a_peer_size_out_of_range_reads_clamped_or_default() {
         .import_snapshot(&peer.export_snapshot())
         .expect("a snapshot this build wrote");
     peer.flush_delta();
-    let hostile = [-1e30, f64::NAN, f64::INFINITY, 1e30];
+    // Past the `f32` range, 1e300 stays a finite `f64` and reads as a bound.
+    let hostile = [-1e30, f64::NAN, f64::INFINITY, 1e30, -1e300, 1e300];
     for root in [SheetRoot::ColWidths, SheetRoot::RowHeights] {
         let map = peer
             .doc
@@ -482,14 +483,30 @@ fn a_peer_size_out_of_range_reads_clamped_or_default() {
     peer.doc.commit();
     let delta = peer.flush_delta().expect("the crafted sizes");
     local.apply_remote(&delta);
-    let (widths, heights) = metrics(&mut local, 4);
+    let (widths, heights) = metrics(&mut local, 6);
     assert_eq!(
         widths,
-        [MIN_COL_WIDTH, COL_WIDTH, COL_WIDTH, MAX_COL_WIDTH].map(|w| w.get())
+        [
+            MIN_COL_WIDTH,
+            COL_WIDTH,
+            COL_WIDTH,
+            MAX_COL_WIDTH,
+            MIN_COL_WIDTH,
+            MAX_COL_WIDTH
+        ]
+        .map(|w| w.get())
     );
     assert_eq!(
         heights,
-        [MIN_ROW_HEIGHT, ROW_HEIGHT, ROW_HEIGHT, MAX_ROW_HEIGHT].map(|h| h.get())
+        [
+            MIN_ROW_HEIGHT,
+            ROW_HEIGHT,
+            ROW_HEIGHT,
+            MAX_ROW_HEIGHT,
+            MIN_ROW_HEIGHT,
+            MAX_ROW_HEIGHT
+        ]
+        .map(|h| h.get())
     );
 }
 

@@ -76,6 +76,14 @@ impl TrameState {
                 TOTAL_COLS.get()
             ),
         });
+        // A start past the edge cuts every field: nothing is left to write,
+        // so the document stays untouched, as for an empty file
+        // (`TRAME-IO-028`).
+        if cut_notice.is_some() && records.iter().all(Vec::is_empty) {
+            return TrameOutcome::display_only(
+                unreadable_notice.into_iter().chain(cut_notice).collect(),
+            );
+        }
 
         // Resolve the target sheet: an existing id is reused, anything else
         // (including `None`) creates a fresh "CSV Import" sheet. The id is

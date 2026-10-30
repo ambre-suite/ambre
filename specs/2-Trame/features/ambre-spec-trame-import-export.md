@@ -44,7 +44,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-IO-038` | `FRAME` | An empty field MUST write nothing: an import MUST NOT clear the cell that field covers. | this spec section 3; section 6 | `ambre_trame::logic::tests::group12::an_empty_field_keeps_the_cell_under_it` | none | verified |
 | `TRAME-IO-003` | `FAIL` | A malformed or hostile CSV MUST NOT panic. | this spec section 3 | `ambre_trame::logic::tests::group6::csv_import_malformed_never_panics` -- it feeds nine adversarial shapes through six parameter combinations each; `::csv_import_random_bytes_never_panics` -- four hundred pseudo-random buffers; cargo-fuzz -- `fuzz/fuzz_targets/trame_file.rs`, run by the CI `fuzz` job | none | verified |
 | `TRAME-IO-039` | `FAIL` | An import MUST report the records it could not read; it MUST NOT drop them in silence. | this spec section 3; section 6 | `ambre_trame::logic::tests::group7::import_reports_unreadable_records` | none | verified |
-| `TRAME-IO-050` | `FAIL` | An import MUST write no field past the last row or the last column of the grid. It MUST report the records and fields it left out. | this spec section 3 | `ambre_trame::logic::tests::group7::an_import_past_the_grid_edge_is_cut_and_said` -- one record past the last row, one field past the last column | none | verified |
+| `TRAME-IO-050` | `FAIL` | An import MUST write no field past the last row or the last column of the grid. It MUST report the records and fields it left out. An import that keeps no field MUST leave the document untouched. | this spec section 3 | `ambre_trame::logic::tests::group7::an_import_past_the_grid_edge_is_cut_and_said` -- one record past the last row, one field past the last column; `::an_import_starting_past_the_grid_edge_writes_nothing` -- a start past the last row, then past the last column | none | verified |
 | `TRAME-IO-040` | `FAIL` | An import the command queue cannot carry MUST tell the user the file did not land. | this spec section 4; section 6 | `ambre_belt::trame::tests::an_import_the_full_queue_refuses_says_so` -- browser tier: a CSV picked while the paused Logic worker leaves the queue full raises the warning | none | verified |
 
 ### 1.3 Hand a sheet back as CSV
@@ -149,7 +149,8 @@ event above holds no report, which `TRAME-IO-012` needs and the shared vocabular
 2. read every record, keeping ragged rows, then drop the first when a header is declared;
 3. return with nothing written when no record survives (`TRAME-IO-028`);
 4. cut the records past the last row and the fields past the last column, counted from the start
-   cell, and report the cut (`TRAME-IO-050`);
+   cell, and report the cut. Return with nothing written when the cut keeps no field
+   (`TRAME-IO-050`);
 5. open one undo group (`TRAME-IO-025`);
 6. reuse the named sheet, or mint one and make it active;
 7. materialize every target cell, list a minted sheet only then, inside the group, and write the

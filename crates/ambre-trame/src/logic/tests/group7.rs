@@ -529,6 +529,38 @@ fn an_import_past_the_grid_edge_is_cut_and_said() {
     assert_eq!(read_cell(&mut state, 0, crate::LAST_COL.get()), "b");
 }
 
+/// An import that starts past the edge of the grid cuts every field. It
+/// leaves the document untouched and says so (`TRAME-IO-050`).
+#[test]
+fn an_import_starting_past_the_grid_edge_writes_nothing() {
+    let mut state = TrameState::new();
+    state.flush_delta();
+    let sheets = state.all_sheet_ids().len();
+    for (start_row, start_col) in [
+        (crate::TOTAL_ROWS.as_end(), Col::new(0)),
+        (Row::new(0), crate::TOTAL_COLS.as_end()),
+    ] {
+        let out = state.handle_command(TrameCommand::ImportCsv {
+            data: ambre_core::FileBytes::new(b"a,b\n".to_vec()),
+            delimiter: None,
+            header: HeaderRow::Absent,
+            target_sheet_id: None,
+            start_row,
+            start_col,
+        });
+        assert!(out.update.is_none(), "{:?}", out.display);
+        assert!(
+            matches!(
+                out.display.as_slice(),
+                [TrameEvent::Error { message }] if message.contains("past its edge")
+            ),
+            "{:?}",
+            out.display
+        );
+        assert_eq!(state.all_sheet_ids().len(), sheets);
+    }
+}
+
 /// An export with nothing to write says so (`TRAME-IO-041`): an empty sheet
 /// and an unknown one each answer with a notice, never with silence.
 #[test]

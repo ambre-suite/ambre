@@ -53,7 +53,13 @@ impl AxisSizes {
         let LoroValue::Double(size) = value else {
             return None;
         };
-        Some(self.clamp(DocPx::new(*size as f32)))
+        // Clamp before the cast: a finite `f64` past the `f32` range would
+        // cast to an infinity and read as the default, not as the bound.
+        if !size.is_finite() {
+            return Some(self.default);
+        }
+        let size = size.clamp(f64::from(self.min.get()), f64::from(self.max.get()));
+        Some(DocPx::new(size as f32))
     }
 }
 
