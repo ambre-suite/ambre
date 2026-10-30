@@ -183,6 +183,13 @@
      closed on each form it cannot follow. Review holds a deliberate evasion by a
      committer (`ARCH-047`): a macro trick, a lever outside the forms checked, a proc macro.
 
+  The gate reads signatures, so a body can still unwrap a newtype early. `ambre-primitives unwrap`
+  reports each unwrap that a workspace call receives. An unwrap is an accessor of the newtype, a
+  public `.0` or a `to_string` that prints the content. The newtype's own impl and module are
+  exempt. The report reads no type, so a callee name that std also defines is ambiguous, never
+  refused. The report exits 0. With `--strict`, it fails on a refusal that no line of
+  `specs/1-Foundations/ambre-unwrap.tsv` names.
+
   Test code is what `cfg(test)`, a `cfg(all(test, ..))` or a test macro marks. A module named
   `*_tests` with no test `cfg`, and code behind a feature such as `test-helpers`, are scanned.
 

@@ -23,12 +23,18 @@
 //!     own environment (`ARCH-033`);
 //!   * `files` runs the seventh check alone, so a red allowlist hides no
 //!     file the walk misses;
-//!   * `--prune` removes the lines that name no site, and nothing else.
+//!   * `--prune` removes the lines that name no site, and nothing else;
+//!   * `unwrap` reports each workspace newtype unwrapped before a workspace
+//!     call, rather than at the foreign call that takes the primitive
+//!     (`unwrap.rs`). It exits 0 in report mode. `--strict` fails on a
+//!     refusal no line of the unwrap allowlist names, and on a line that
+//!     names none. `--ambiguous` prints the ambiguous sites too.
 
 mod allowlist;
 mod depinfo;
 mod scan;
 mod secrets;
+mod unwrap;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -40,23 +46,57 @@ use scan::Scan;
 /// files the gates of the corpus read.
 const ALLOWLIST: &str = "specs/1-Foundations/ambre-primitives.tsv";
 
+/// The unwrap allowlist, beside the primitive one.
+const UNWRAP_ALLOWLIST: &str = "specs/1-Foundations/ambre-unwrap.tsv";
+
 /// What one run does.
 enum Mode {
     Check,
     Files,
     Prune,
+    Unwrap(Strictness, Shown),
 }
 
+/// Whether the unwrap report fails on a refusal.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Strictness {
+    Report,
+    Strict,
+}
+
+/// Which sites the unwrap report prints.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Shown {
+    Refusals,
+    WithAmbiguous,
+}
+
+const USAGE: &str = "usage: ambre-primitives [check | files | --prune | unwrap [--strict] \
+                     [--ambiguous]]";
+
 fn main() -> ExitCode {
-    let mode = match std::env::args().nth(1).as_deref() {
-        None | Some("check") => Mode::Check,
-        Some("files") => Mode::Files,
-        Some("--prune") => Mode::Prune,
-        Some(other) => {
-            eprintln!(
-                "primitives: unknown argument {other:?} -- usage: ambre-primitives [check | files \
-                 | --prune]"
-            );
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mode = match args.first().map(String::as_str) {
+        None | Some("check") if args.len() <= 1 => Mode::Check,
+        Some("files") if args.len() == 1 => Mode::Files,
+        Some("--prune") if args.len() == 1 => Mode::Prune,
+        Some("unwrap") => {
+            let mut strictness = Strictness::Report;
+            let mut shown = Shown::Refusals;
+            for flag in args.iter().skip(1) {
+                match flag.as_str() {
+                    "--strict" => strictness = Strictness::Strict,
+                    "--ambiguous" => shown = Shown::WithAmbiguous,
+                    other => {
+                        eprintln!("primitives: unknown argument {other:?} -- {USAGE}");
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
+            Mode::Unwrap(strictness, shown)
+        }
+        _ => {
+            eprintln!("primitives: unknown arguments {args:?} -- {USAGE}");
             return ExitCode::FAILURE;
         }
     };
@@ -72,6 +112,9 @@ fn main() -> ExitCode {
     }
     let unread = match mode {
         Mode::Prune => Vec::new(),
+        Mode::Unwrap(strictness, shown) => {
+            return unwraps(&scan, &disk, &root, strictness, shown);
+        }
         Mode::Check | Mode::Files => files(&scan, &disk, &root),
     };
     if let Mode::Files = mode {
@@ -96,8 +139,76 @@ fn main() -> ExitCode {
         }
     };
     match mode {
-        Mode::Check | Mode::Files => check(&list, &scan, &unread),
+        Mode::Check | Mode::Files | Mode::Unwrap(..) => check(&list, &scan, &unread),
         Mode::Prune => prune(&list, &scan.sites, &path),
+    }
+}
+
+/// The unwrap report: each refusal, then the counts. In strict mode, a
+/// refusal no line names fails, and so does a line that names none.
+fn unwraps(
+    scan: &Scan,
+    disk: &scan::Disk,
+    root: &Path,
+    strictness: Strictness,
+    shown: Shown,
+) -> ExitCode {
+    let report = unwrap::report(disk, scan);
+    for error in &report.errors {
+        eprintln!("primitives: {error}");
+    }
+    for refusal in &report.refusals {
+        println!("{refusal}");
+    }
+    if shown == Shown::WithAmbiguous {
+        for site in &report.ambiguous {
+            println!("ambiguous: {site}");
+        }
+    }
+    println!(
+        "unwrap: {} refusals, {} ambiguous ({} by the callee, {} by the receiver), {} at a \
+         foreign call, {} sites scanned, {} newtypes",
+        report.refusals.len(),
+        report.ambiguous.len(),
+        report.ambiguous_callees(),
+        report.ambiguous_receivers(),
+        report.foreign,
+        report.sites,
+        report.newtypes
+    );
+    let Ok(text) = std::fs::read_to_string(root.join(UNWRAP_ALLOWLIST)) else {
+        eprintln!("primitives: cannot read {UNWRAP_ALLOWLIST}");
+        return ExitCode::FAILURE;
+    };
+    let listed = match unwrap::parse_allowlist(&text) {
+        Ok(listed) => listed,
+        Err(errors) => {
+            for error in errors {
+                eprintln!("primitives: {UNWRAP_ALLOWLIST}: {error}");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
+    let keys: std::collections::BTreeSet<String> =
+        report.refusals.iter().map(unwrap::Finding::key).collect();
+    let unlisted = keys.iter().filter(|key| !listed.contains_key(*key)).count();
+    let stale: Vec<(&String, &allowlist::LineNo)> = listed
+        .iter()
+        .filter(|(key, _)| !keys.contains(*key))
+        .collect();
+    for (key, line) in &stale {
+        eprintln!("primitives: {UNWRAP_ALLOWLIST}:{line} names no refusal\n  {key}");
+    }
+    println!(
+        "unwrap: {unlisted} refusal keys no line of {UNWRAP_ALLOWLIST} names, {} lines that name \
+         none",
+        stale.len()
+    );
+    let clean = report.errors.is_empty() && unlisted == 0 && stale.is_empty();
+    if strictness == Strictness::Report || clean {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 

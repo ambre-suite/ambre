@@ -1,0 +1,3 @@
+# The unwrap report (ai/ambre-rust-style.md, the newtype rule): `ambre-primitives unwrap --strict`.
+# One line per site that hands a newtype's primitive to workspace code, with the true reason it may. Add a line by hand only; a reviewer reads it.
+key	reason
