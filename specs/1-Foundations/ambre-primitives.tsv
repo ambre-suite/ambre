@@ -1914,15 +1914,12 @@ ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | rea
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | same_marks() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::close() | ret | String	generic	the codec of an enum that carries data: the markdown delimiter that closes a span, a link's target included, which a markdown parser reads back
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::open() | ret | &'static str	generic	the codec of an enum that carries data: the markdown delimiter that opens a span, which a markdown parser reads back
+ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Indent.0 | field | String	newtype-inner	the spaces a nested block's lines start with, one run per list marker above it
+ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Indent::under(marker) | param | &str	free-text	the list marker an item's line starts with, read for its width alone
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer.out | field | String	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::block(indent) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::blocks(indent) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::cell() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::inline() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::item(indent) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::line(indent) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::line(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Writer::table(indent) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | code_span() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | code_span(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | escape() | ret | String	free-text	text content / label / parser input

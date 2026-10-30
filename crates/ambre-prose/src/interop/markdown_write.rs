@@ -39,7 +39,7 @@ pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport)
             .warnings
             .unsupported(UnsupportedFeature::HeaderAndFooter);
     }
-    writer.blocks(&ir.blocks, "");
+    writer.blocks(&ir.blocks, &Indent::default());
     if writer.flavor == MarkdownFlavor::Gfm {
         for note in &ir.footnotes {
             writer.separate();
@@ -63,6 +63,18 @@ struct ListRun {
     ordinal: ListOrdinal,
 }
 
+/// The spaces every line of a nested block starts with: the width of each
+/// list marker it sits under.
+#[derive(Default)]
+struct Indent(String);
+
+impl Indent {
+    /// The indent of the blocks of an item whose line starts with `marker`.
+    fn under(&self, marker: &str) -> Self {
+        Self(format!("{}{}", self.0, " ".repeat(marker.chars().count())))
+    }
+}
+
 impl Writer {
     /// A blank line before the next block, unless nothing is written yet.
     fn separate(&mut self) {
@@ -75,7 +87,7 @@ impl Writer {
     }
 
     /// Write sibling blocks, each line prefixed with `indent`.
-    fn blocks(&mut self, blocks: &[IrBlock], indent: &str) {
+    fn blocks(&mut self, blocks: &[IrBlock], indent: &Indent) {
         let mut run = ListRun {
             previous: None,
             ordinal: ListOrdinal::FIRST,
@@ -97,7 +109,7 @@ impl Writer {
         }
     }
 
-    fn block(&mut self, block: &IrBlock, indent: &str) {
+    fn block(&mut self, block: &IrBlock, indent: &Indent) {
         match block {
             IrBlock::Paragraph { styled, runs } => {
                 if *styled == OwnStyle::Styled {
@@ -158,7 +170,7 @@ impl Writer {
         style: IrListStyle,
         runs: &[IrRun],
         children: &[IrBlock],
-        indent: &str,
+        indent: &Indent,
     ) {
         let joins = matches!(
             (run.previous, style),
@@ -192,7 +204,7 @@ impl Writer {
         };
         let text = self.inline(runs);
         self.line(indent, &format!("{marker}{text}"));
-        let inner = format!("{indent}{}", " ".repeat(marker.chars().count()));
+        let inner = indent.under(&marker);
         let mut child_run = ListRun {
             previous: None,
             ordinal: ListOrdinal::FIRST,
@@ -218,7 +230,7 @@ impl Writer {
         }
     }
 
-    fn table(&mut self, rows: &[IrTableRow], indent: &str) {
+    fn table(&mut self, rows: &[IrTableRow], indent: &Indent) {
         for cell in rows.iter().flat_map(|row| &row.cells) {
             if cell.styled == OwnStyle::Styled {
                 self.warnings
@@ -292,12 +304,12 @@ impl Writer {
         parts.join(" ")
     }
 
-    fn line(&mut self, indent: &str, text: &str) {
+    fn line(&mut self, indent: &Indent, text: &str) {
         if text.is_empty() {
             self.out.push('\n');
             return;
         }
-        self.out.push_str(indent);
+        self.out.push_str(&indent.0);
         self.out.push_str(text);
         self.out.push('\n');
     }
