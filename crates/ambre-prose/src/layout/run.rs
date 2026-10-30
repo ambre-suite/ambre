@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use ambre_core::{ByteCount, ByteDelta, ByteOffset, ByteSpan, DocPoint, DocPx, FootnoteId};
+use ambre_core::{
+    ByteCount, ByteDelta, ByteOffset, ByteSpan, CharCount, DocPoint, DocPx, FootnoteId,
+};
 use ambre_draw::{BoundingBox, Layout, ParleyBrush};
 use loro::TreeID;
 use parley::{Affinity as ParleyAffinity, Cursor, Selection};
@@ -63,6 +65,13 @@ impl RunCount {
     pub const fn as_doc(self) -> DocCount {
         DocCount::new(self.get())
     }
+
+    /// The same number of code points as a run counts them, for a text the
+    /// run holds whole.
+    #[must_use]
+    pub const fn from_chars(count: CharCount) -> Self {
+        Self::new(count.get())
+    }
 }
 
 ambre_core::define_index! {
@@ -103,14 +112,6 @@ ambre_core::define_index! {
     pub struct CellBlockSpan;
     /// A list indexed by text block of one cell.
     pub struct CellBlockVec;
-}
-
-impl RunCount {
-    /// The code points `text` holds, as a run counts them.
-    #[must_use]
-    pub fn of(text: &str) -> Self {
-        Self::from_len(text.chars().count())
-    }
 }
 
 /// The side of a wrap point a caret stands on. One offset at a soft wrap
