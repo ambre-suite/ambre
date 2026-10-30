@@ -1363,6 +1363,17 @@ mod tests {
         )
     }
 
+    /// A shaped run is document text, so its `Debug` prints counts and
+    /// never the text.
+    #[test]
+    fn a_shaped_run_prints_counts_and_never_its_text() {
+        let mut measurer = shipped_measurer();
+        let (_, run) = measurer.measure_run("confidential", &style(), DocPx::new(400.0));
+        let printed = format!("{run:?} {:?}", run.data());
+        assert!(!printed.contains("confidential"), "{printed}");
+        assert!(printed.contains("chars: RunCount(12)"), "{printed}");
+    }
+
     #[test]
     fn a_point_resolves_to_the_offset_the_caret_box_puts_there() {
         let mut measurer = shipped_measurer();

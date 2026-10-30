@@ -390,7 +390,10 @@ ambre_core::define_flag! {
 ///
 /// Every field is either handed over by the Logic thread or local to this
 /// thread. None of them is document content (`PROSE-UI-001`).
-#[derive(Clone, Debug, Default)]
+///
+/// Many fields carry copies of the document's text. So `Debug` prints a
+/// length or a count for each of those, and the text of none.
+#[derive(Clone, Default)]
 pub struct ProseUiState {
     // Handed over by the Logic thread.
     /// The version of the last layout this view adopted. An older one is
@@ -535,6 +538,40 @@ pub struct ProseUiState {
     pub(crate) syncs: VecDeque<SyncHold>,
     /// The input held meanwhile, replayed in order once it is answered.
     pub(crate) queued: VecDeque<crate::input::ProseInput>,
+}
+
+impl std::fmt::Debug for ProseUiState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProseUiState")
+            .field("layout_version", &self.layout_version)
+            .field("remote_cursors", &self.remote_cursors.len())
+            .field("tocs", &self.tocs.len())
+            .field("find_matches", &self.find_matches.len())
+            .field("find_current", &self.find_current)
+            .field("footnotes", &self.footnotes.len())
+            .field("comments", &self.comments.len())
+            .field("suggestions", &self.suggestions.len())
+            .field("edit_mode", &self.edit_mode)
+            .field("links", &self.links.len())
+            .field("cross_refs", &self.cross_refs.len())
+            .field("reveal_page", &self.reveal_page)
+            .field("blocks", &self.shaped.blocks.len())
+            .field("pending_export", &self.pending_export.is_some())
+            .field("viewport", &self.viewport)
+            .field("cursor", &self.cursor)
+            .field("caret_affinity", &self.caret_affinity)
+            .field("draft", &self.draft)
+            .field("composing", &crate::redact::Redacted(&self.composing))
+            .field("compose_shape", &self.compose_shape.is_some())
+            .field("slash", &self.slash.is_some())
+            .field("seen", &self.seen)
+            .field("sent_seen", &self.sent_seen)
+            .field("popped", &self.popped)
+            .field("inflight", &self.inflight.len())
+            .field("syncs", &self.syncs)
+            .field("queued", &self.queued.len())
+            .finish_non_exhaustive()
+    }
 }
 
 /// What a send to the Logic thread did.
@@ -962,6 +999,30 @@ pub fn status_figures(count: &WordCount) -> StatusFigures {
 
 #[cfg(test)]
 mod tests {
+    /// The view's state carries the document's text in many fields, and its
+    /// `Debug` prints none of it.
+    #[test]
+    fn the_view_state_prints_lengths_and_counts_alone() {
+        use crate::events::BlockInit;
+        let (mut state, _) = crate::view::tests::laid_out(1, 3);
+        crate::view::tests::append(&mut state, BlockInit::Paragraph, "unseen");
+        let mut ui = super::ProseUiState::default();
+        let _ = ui.apply_layout(state.shaped_layout());
+        ui.composing = "composed".into();
+        let block = state.root_blocks()[0];
+        ui.draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "drafted",
+            &block,
+            ambre_bus::app::prose::DocOffset::ZERO,
+        );
+        let printed = format!("{ui:?}");
+        for secret in ["word", "unseen", "composed", "drafted"] {
+            assert!(!printed.contains(secret), "{secret} in {printed}");
+        }
+        assert!(printed.contains("<8 bytes>"), "{printed}");
+    }
+
     #[test]
     fn a_draft_insertion_prints_its_text_by_length_alone() {
         let change = super::Change::Insert("typed".into());
