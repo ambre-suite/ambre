@@ -148,6 +148,31 @@ define_payload! {
     PickedContainer
 }
 
+impl MediaBytes {
+    /// Wipes the bytes now: a media file its reader refuses and drops
+    /// (`ARCH-046`).
+    pub fn wipe(self) {
+        crate::Secret::wipe(self.0);
+    }
+}
+
+impl PickedContainer {
+    /// The same bytes as a plaintext container. The caller names the lineage
+    /// after [`crate::classify`]; every plaintext reader validates the bytes
+    /// again.
+    #[must_use]
+    pub fn into_plaintext(self) -> PlaintextContainer {
+        PlaintextContainer(self.0)
+    }
+
+    /// The same bytes as a sealed container. The caller names the lineage
+    /// after [`crate::classify`]; the sealed parser validates the bytes again.
+    #[must_use]
+    pub fn into_sealed(self) -> SealedContainer {
+        SealedContainer(self.0)
+    }
+}
+
 define_payload! {
     /// A whole passphrase-sealed `.ambre` container, header included, as it
     /// sits on the user's disk (`DOCFILE-010`). Only the Sync worker opens it,

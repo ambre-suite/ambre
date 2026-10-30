@@ -638,9 +638,15 @@ impl std::fmt::Debug for FetchedBlob {
 pub struct SealedBlob(Vec<u8>);
 
 impl SealedBlob {
-    /// The sealed bytes, as the upload sends them.
+    /// The sealed bytes, for a test that reads them back.
+    #[cfg(test)]
     pub(crate) fn as_bytes(&self) -> &[u8] {
         &self.0
+    }
+
+    /// The body of the upload that sends it.
+    pub(crate) fn to_body(&self) -> crate::http::HttpBody {
+        crate::http::HttpBody::new(self.0.clone())
     }
 
     /// The sealed bytes, moved out, for the role that stores them: a

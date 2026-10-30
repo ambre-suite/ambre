@@ -42,13 +42,6 @@ define_key_hex! {
     SigningKeyHex
 }
 
-impl SigningKeyHex {
-    /// The hex spelling of `key`.
-    pub fn of(key: &crate::PublicKey) -> Self {
-        Self::encode(key)
-    }
-}
-
 define_key_hex! {
     /// The hex spelling of an X25519 public key: the one a document key is
     /// wrapped to.

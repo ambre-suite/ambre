@@ -711,14 +711,12 @@ fn read_ambre_file(
             ambre_core::classify(&picked),
             Ok(ambre_core::ContainerKind::Sealed(_))
         ) {
-            on_sealed.run(ambre_core::SealedContainer::new(picked.into_bytes()));
+            on_sealed.run(picked.into_sealed());
             return;
         }
         // The per-frame relay holds the store's seal, and resumes from here
         // (`RESID-025`).
-        opened.set(Some(OpenedFile(ambre_core::PlaintextContainer::new(
-            picked.into_bytes(),
-        ))));
+        opened.set(Some(OpenedFile(picked.into_plaintext())));
     });
 }
 

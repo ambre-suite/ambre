@@ -524,7 +524,7 @@ impl SyncState {
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self
                 .author_pub_key()
-                .map(|key| ambre_core::SigningKeyHex::of(&key))
+                .map(|key| key.to_key_hex())
                 .unwrap_or_default();
             wasm_bindgen_futures::spawn_local(async move {
                 let members_url = crate::http::ApiRoot::of(url_scheme, &api_base)
@@ -1507,7 +1507,7 @@ impl SyncState {
         use crate::error::SyncError;
         let signing_key = self.signing_key.as_ref().ok_or(SyncError::SessionLocked)?;
         let pub_key = self.author_pub_key().ok_or(SyncError::SessionLocked)?;
-        let author_pubkey = ambre_core::SigningKeyHex::of(&pub_key);
+        let author_pubkey = pub_key.to_key_hex();
         let doc_state = self.documents.get(&document_id).ok_or(SyncError::NotOpen)?;
         let public_data = SnapshotPublicData {
             document_id,
