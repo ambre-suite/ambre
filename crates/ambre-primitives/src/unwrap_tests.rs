@@ -1,11 +1,14 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use syn::visit::Visit;
+
 use super::{
-    Finding, HEADER, Outcome, Report, Row, Strictness, Tally, judge, parse_allowlist, report,
+    CatalogVisit, Finding, HEADER, Outcome, Raw, Report, Row, Strictness, Tally, judge,
+    parse_allowlist, report,
 };
 use crate::allowlist::LineNo;
-use crate::scan::{Tree, lexical, scan};
+use crate::scan::{META, Tree, lexical, scan};
 
 /// A source tree held in memory, so a test states every file it reads.
 struct Memory(BTreeMap<PathBuf, String>);
@@ -794,4 +797,115 @@ fn std_and_foreign_values_type_their_receiver() {
     let report = run(&lib);
     assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
     assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+}
+
+#[test]
+fn an_impl_into_std_or_workspace_parameter_is_no_boundary() {
+    let lib = format!(
+        "{NAME}use loro::LoroValue;\n\
+         pub struct Intent;\n\
+         impl Intent {{\n\
+         pub fn publish(&self, text: impl Into<String>) {{}}\n\
+         pub fn local(&self, name: impl Into<Name>) {{}}\n\
+         pub fn put(&self, value: impl Into<LoroValue>) {{}}\n\
+         }}\n\
+         pub fn save(name: &Name, intent: &Intent) {{\n\
+         intent.publish(name.as_str());\n\
+         intent.local(name.as_str());\n\
+         intent.put(name.as_str());\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert_eq!(
+        shapes(&report.refusals),
+        ["Name::as_str -> .publish", "Name::as_str -> .local"]
+    );
+    assert_eq!(report.foreign, Tally::new(1));
+}
+
+#[test]
+fn as_ref_on_a_field_of_an_untyped_base_is_still_read() {
+    let lib = "pub mod blob {\n\
+        pub struct Payload(Vec<u8>);\n\
+        impl AsRef<[u8]> for Payload { fn as_ref(&self) -> &[u8] { &self.0 } }\n\
+    }\n\
+    pub struct Envelope { payload: blob::Payload }\n\
+    pub fn keep(bytes: &[u8]) {}\n\
+    pub fn save() { let env = make(); keep(env.payload.as_ref()); }\n";
+    let report = run(lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(shapes(&report.ambiguous), ["Payload::as_ref -> keep"]);
+}
+
+#[test]
+fn a_name_inside_an_err_variant_is_no_error() {
+    let lib = format!(
+        "{SHOWN}pub enum AppError {{ Conflict(Name) }}\n\
+         pub fn save() {{\n\
+         if let Err(AppError::Conflict(id)) = make() {{ store(id.as_str()); }}\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(shapes(&report.ambiguous), ["Name::as_str -> store"]);
+}
+
+#[test]
+fn a_renamed_dependency_reaches_its_package() {
+    let tool = "pub struct Visit;\n\
+        impl Visit { pub fn bind(&mut self, text: &str) {} }\n";
+    let lib = format!("{NAME}pub fn save(name: &Name) {{ make().bind(name.as_str()); }}\n");
+    let manifest = "[dependencies]\nhelper = { package = \"tool\", path = \"../tool\" }\n";
+    let report = run_crates(&[("demo", manifest, &lib), ("tool", "", tool)]);
+    assert_eq!(shapes(&report.ambiguous), ["Name::as_str -> .bind"]);
+}
+
+#[test]
+fn a_foreign_fn_a_use_imports_shadows_a_workspace_fn() {
+    let lib = format!(
+        "{NAME}pub mod parse {{ pub fn from_str() -> super::Name {{ make() }} }}\n\
+         use serde_json::from_str;\n\
+         pub fn save() {{ store(from_str().as_str()); }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(shapes(&report.ambiguous), ["Name::as_str -> store"]);
+}
+
+#[test]
+fn a_one_newtype_fn_that_returns_another_type_is_no_named_conversion() {
+    let lib = format!(
+        "{DELTAS}pub fn keep(n: i64) -> String {{ String::new() }}\n\
+         pub struct Term(i64);\n\
+         impl Term {{\n\
+         pub fn label(delta: RowDelta) -> String {{ keep(delta.get()) }}\n\
+         }}\n"
+    );
+    assert_eq!(shapes(&run(&lib).refusals), ["RowDelta::get -> keep"]);
+}
+
+#[test]
+fn a_macro_body_catalogues_no_item_a_metavariable_names() {
+    let lib = "macro_rules! items {\n\
+        ($name:ident, $alias:ident) => {\n\
+            pub enum $name {}\n\
+            pub type $alias = u8;\n\
+            pub fn $name() {}\n\
+            pub enum Written {}\n\
+        };\n\
+    }\n";
+    let file = syn::parse_file(lib).unwrap();
+    let mut raw = Raw::default();
+    let mut visit = CatalogVisit {
+        krate: "demo".to_owned(),
+        module: vec!["crate".to_owned()],
+        imports: BTreeMap::new(),
+        raw: &mut raw,
+    };
+    for item in &file.items {
+        visit.visit_item(item);
+    }
+    let types: Vec<&String> = raw.catalog.types.iter().collect();
+    assert_eq!(types, ["Written"]);
+    assert!(raw.catalog.fns.0.keys().all(|name| !name.starts_with(META)));
 }

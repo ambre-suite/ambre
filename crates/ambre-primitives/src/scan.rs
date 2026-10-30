@@ -2030,10 +2030,10 @@ impl Scan {
 
 /// What a manifest says of its dependencies.
 #[derive(Debug, Default)]
-struct Manifest {
+pub(crate) struct Manifest {
     /// The package of each dependency, in every table whose name ends with
     /// `dependencies`, and in every `[...dependencies.name]` table.
-    packages: BTreeSet<String>,
+    pub(crate) packages: BTreeSet<String>,
     /// Each dependency whose key differs from its `package`: the key as a
     /// path writes it, then the package.
     renamed: BTreeMap<String, String>,
@@ -2048,7 +2048,7 @@ fn package_of(line: &str) -> Option<String> {
 }
 
 /// Reads the dependencies of a manifest, a renamed one under its package.
-fn dependencies(manifest: &str) -> Manifest {
+pub(crate) fn dependencies(manifest: &str) -> Manifest {
     let mut found = Manifest::default();
     let mut table = String::new();
     // The key of a `[...dependencies.name]` table, whose `package` line may

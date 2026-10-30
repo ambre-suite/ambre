@@ -68,8 +68,8 @@ use syn::visit::Visit;
 
 use crate::allowlist::LineNo;
 use crate::scan::{
-    META, PRIMITIVES, Scan, Source, Tree, fragments_of, item_attrs, macro_types, rule_bodies,
-    test_only,
+    META, PRIMITIVES, Scan, Source, Tree, dependencies, fragments_of, item_attrs, macro_types,
+    rule_bodies, test_only,
 };
 
 /// The allowlist header: a key, the number of sites it allows, then the
@@ -511,7 +511,7 @@ struct Catalog {
     /// none.
     returns: BTreeMap<String, Option<Ret>>,
     /// The parameters of each `Owner::method` typed `impl Into<T>`. Each
-    /// holds its index, `self` left out, and the name of `T`.
+    /// holds its index, `self` left out, and the crate `T` comes from.
     boundaries: BTreeMap<String, Vec<(usize, String)>>,
     /// The crates each crate reaches through its dependencies, itself
     /// included. A crate absent here reaches every crate.
@@ -606,8 +606,9 @@ impl Ret {
 }
 
 /// The index of each parameter, `self` left out, typed `impl Into<T>`,
-/// with the name of `T`.
-fn into_params(sig: &syn::Signature) -> Vec<(usize, String)> {
+/// with the crate `T` comes from. A path names that crate, or else a `use`
+/// of the file does. A `T` with no crate to name, as `String`, is left out.
+fn into_params(sig: &syn::Signature, imports: &BTreeMap<String, String>) -> Vec<(usize, String)> {
     sig.inputs
         .iter()
         .filter_map(|input| match input {
@@ -627,7 +628,17 @@ fn into_params(sig: &syn::Signature) -> Vec<(usize, String)> {
                 if last.ident != "Into" {
                     return None;
                 }
-                Some((index, type_name(first_argument(last)?)?))
+                let syn::Type::Path(target) = first_argument(last)? else {
+                    return None;
+                };
+                let segments = &target.path.segments;
+                let first = segments.first()?.ident.to_string();
+                let root = if segments.len() > 1 || target.path.leading_colon.is_some() {
+                    first
+                } else {
+                    imports.get(&first)?.clone()
+                };
+                Some((index, root))
             })
         })
         .collect()
@@ -961,6 +972,9 @@ fn returns_inner(ret: &[&TokenTree], fragments: &BTreeMap<String, String>) -> bo
 struct CatalogVisit<'r> {
     krate: String,
     module: Vec<String>,
+    /// The first segment of the path each `use` of the file imports, by
+    /// the name it brings in.
+    imports: BTreeMap<String, String>,
     raw: &'r mut Raw,
 }
 
@@ -1036,6 +1050,18 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                         field.ident.is_none() && !matches!(field.vis, syn::Visibility::Inherited);
                 }
             }
+            // A name a transcriber writes as a metavariable names no item.
+            syn::Item::Enum(syn::ItemEnum { ident, .. })
+            | syn::Item::Union(syn::ItemUnion { ident, .. })
+            | syn::Item::Type(syn::ItemType { ident, .. })
+            | syn::Item::Trait(syn::ItemTrait { ident, .. })
+            | syn::Item::Fn(syn::ItemFn {
+                sig: syn::Signature { ident, .. },
+                ..
+            })
+            | syn::Item::Const(syn::ItemConst { ident, .. })
+            | syn::Item::Static(syn::ItemStatic { ident, .. })
+                if ident.to_string().starts_with(META) => {}
             syn::Item::Enum(e) => {
                 catalog.declare(e.ident.to_string(), &self.krate);
             }
@@ -1084,7 +1110,7 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                     {
                         let key = format!("{owner}::{}", f.sig.ident);
                         catalog.returned(key.clone(), Ret::of(&f.sig.output, Some(&owner)));
-                        let into = into_params(&f.sig);
+                        let into = into_params(&f.sig, &self.imports);
                         if i.trait_.is_none() && !into.is_empty() {
                             catalog.boundaries.insert(key, into);
                         }
@@ -1482,7 +1508,11 @@ impl BodyVisit<'_, '_> {
                     .map(|s| s.ident.to_string())
                     .collect();
                 match segments.as_slice() {
-                    [name] if self.lookup(name).is_none() => self.catalog.ret(name),
+                    // A `use` of a foreign `fn`, as `serde_json::from_str`,
+                    // shadows a workspace `fn` of the same name.
+                    [name] if self.lookup(name).is_none() && !self.foreign_path(&segments) => {
+                        self.catalog.ret(name)
+                    }
                     [.., owner, name] if owner.starts_with(|c: char| c.is_ascii_uppercase()) => {
                         let owner = match owner.as_str() {
                             "Self" => self.owners.last()?,
@@ -1566,7 +1596,9 @@ impl BodyVisit<'_, '_> {
                 receiver: Receiver::Known,
             });
         }
-        if CONVERSIONS.contains(&accessor) {
+        // A field keeps the check below: a struct of the workspace may hold
+        // a newtype with its own `as_ref` there.
+        if CONVERSIONS.contains(&accessor) && !matches!(peel(receiver), syn::Expr::Field(_)) {
             return None;
         }
         // Take a field of a base the report cannot type. It holds a newtype
@@ -1907,10 +1939,21 @@ impl<'ast> Visit<'ast> for PatNames<'_, '_, '_> {
             .iter()
             .map(|s| s.ident.to_string())
             .collect();
-        let outer = self.within.clone();
+        // `Err(e)` binds an error, but `Err(AppError::Conflict(id))` binds
+        // what the variant holds: only a direct name is the error.
         if segments == ["Err"] {
-            self.within = Some(ERROR.to_owned());
-        } else if self.visit.foreign_path(&segments) {
+            for elem in &p.elems {
+                match elem {
+                    syn::Pat::Ident(i) if i.subpat.is_none() => self
+                        .names
+                        .push((i.ident.to_string(), Some(ERROR.to_owned()))),
+                    other => self.visit_pat(other),
+                }
+            }
+            return;
+        }
+        let outer = self.within.clone();
+        if self.visit.foreign_path(&segments) {
             self.within = Some(segments.join("::"));
         }
         for elem in &p.elems {
@@ -2159,7 +2202,10 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
             .map(|params| {
                 params
                     .iter()
-                    .filter(|(_, target)| !self.catalog.types.contains(target))
+                    .filter(|(_, root)| {
+                        !self.workspace_root(root)
+                            && !["std", "core", "alloc"].contains(&root.as_str())
+                    })
                     .map(|(index, _)| *index)
                     .collect()
             })
@@ -2217,7 +2263,7 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
 
 /// The crates each crate reaches through the dependencies its manifest
 /// names, itself included. A method of a crate it does not reach cannot be
-/// the callee. A crate whose manifest, or a dependency's, does not parse
+/// the callee. A crate whose manifest, or a dependency's, cannot be read
 /// is left out, so it reaches every crate.
 fn reach(tree: &impl Tree, files: &[(&Source, syn::File)]) -> BTreeMap<String, BTreeSet<String>> {
     let mut direct: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
@@ -2231,8 +2277,7 @@ fn reach(tree: &impl Tree, files: &[(&Source, syn::File)]) -> BTreeMap<String, B
             .ancestors()
             .nth(depth)
             .and_then(|dir| tree.read(&dir.join("Cargo.toml")))
-            .and_then(|text| text.parse::<toml::Table>().ok())
-            .map(|manifest| dependencies(&manifest));
+            .map(|manifest| dependencies(&manifest).packages);
         direct.insert(source.krate.clone(), deps);
     }
     let mut reach = BTreeMap::new();
@@ -2259,23 +2304,6 @@ fn reach(tree: &impl Tree, files: &[(&Source, syn::File)]) -> BTreeMap<String, B
     reach
 }
 
-/// The dependency names of a manifest, its target tables included.
-fn dependencies(manifest: &toml::Table) -> BTreeSet<String> {
-    let keys = |table: Option<&toml::Value>| -> Vec<String> {
-        table
-            .and_then(toml::Value::as_table)
-            .map(|deps| deps.keys().cloned().collect())
-            .unwrap_or_default()
-    };
-    let mut names: BTreeSet<String> = keys(manifest.get("dependencies")).into_iter().collect();
-    if let Some(targets) = manifest.get("target").and_then(toml::Value::as_table) {
-        for target in targets.values() {
-            names.extend(keys(target.get("dependencies")));
-        }
-    }
-    names
-}
-
 /// The report over every file the scan read outside test code.
 pub fn report(tree: &impl Tree, scan: &Scan) -> Report {
     let mut report = Report::default();
@@ -2296,9 +2324,12 @@ pub fn report(tree: &impl Tree, scan: &Scan) -> Report {
         raw.catalog
             .modules
             .extend(source.module.split("::").map(str::to_owned));
+        let mut uses = BTreeMap::new();
+        imports(&file.items, &mut uses);
         let mut visit = CatalogVisit {
             krate: source.krate.clone(),
             module: source.module.split("::").map(str::to_owned).collect(),
+            imports: uses,
             raw: &mut raw,
         };
         for item in &file.items {
