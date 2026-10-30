@@ -316,7 +316,7 @@ mod tests {
     use ambre_canvas::theme::LIGHT;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
-    /// An intent's debug form prints a body's length, none of it.
+    /// `TOILE-289`: an intent's debug form prints a body's length, none of it.
     #[test]
     fn an_intent_debug_form_prints_no_body() {
         let thread = ElementId("t".to_owned());
@@ -391,8 +391,8 @@ mod tests {
         assert_eq!(hit_pin(&pins, &w2s, outside), None);
     }
 
-    /// Two overlapping pins: the click reaches the one painted last, so the pick
-    /// matches what the user sees on top.
+    /// `TOILE-UI-411`: two overlapping pins: the click reaches the one painted
+    /// last, so the pick matches what the user sees on top.
     #[test]
     fn overlapping_pins_pick_the_topmost() {
         let w2s = Affine::IDENTITY;
@@ -431,7 +431,7 @@ mod tests {
         );
     }
 
-    /// Every pin of the frame paints a disc and its badge glyphs.
+    /// `TOILE-UI-024`: every pin of the frame paints a disc and its badge glyphs.
     #[test]
     fn every_pin_paints_a_marker_and_a_badge() {
         let mut font_cx = FontContext::new();
@@ -503,8 +503,8 @@ mod tests {
         );
     }
 
-    /// The panel's filter is the only thing that hides a thread from the list,
-    /// and it hides nothing by default.
+    /// `TOILE-UI-412`: the panel's filter is the only thing that hides a
+    /// thread from the list, and it hides nothing by default.
     #[test]
     fn the_filter_keeps_what_it_names() {
         let (open, resolved) = (ThreadState::Open, ThreadState::Resolved);

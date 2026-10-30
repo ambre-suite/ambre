@@ -35,8 +35,10 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-047` | `CONC` | A caption on a connector MUST converge character by character, like a note body. | this spec section 3 | `ambre_toile::logic::convergence_tests::concurrent_captions_converge` -- it holds two peers editing opposite ends of one caption and reads both surviving the merge | none | verified |
 | `TOILE-263` | `CONC` | Leaving a caption editor MUST keep a peer's edit to the same caption that arrived while it was open. | this spec section 3; `TOILE-047` | `ambre_toile::logic::convergence_tests::an_open_caption_editor_keeps_a_peers_edit` -- a peer's edit lands between the open and the close, and both writers' words survive on both replicas; structural -- the close sends the caption the editor opened on as the base (`ambre_toile::ui::edit::InlineEditor::opened_text`) | none | verified |
 | `TOILE-UI-346` | `OBS` | A caption MUST be painted on the arrow it belongs to, over a plate, so it stays readable where it crosses the line. | this spec section 4 | `ambre_toile::ui::render::tests::a_caption_plate_is_painted_over_the_element_bodies` -- one plate in the board colour, after the card it crosses | none | verified |
-| `TOILE-UI-351` | `OBS` | A selected arrow MUST be shown by tracing the arrow itself and putting one handle on each end, rather than by a selection box: a rectangle around a diagonal says nothing about which end a drag would move. | this spec section 4 | `ambre_toile::ui::render::tests::a_selected_arrow_gets_two_handles_and_no_box` -- the two handles and the absent box; `ambre_toile::ui::render::tests::a_vanished_arrow_paints_nothing` -- the stale case | none | verified |
+| `TOILE-UI-351` | `OBS` | A selected arrow MUST be shown by tracing the arrow itself and putting one handle on each end, rather than by a selection box: a rectangle around a diagonal says nothing about which end a drag would move. | this spec section 4 | `ambre_toile::ui::render::tests::a_selected_arrow_gets_two_handles_and_no_box` -- the two handles and the absent box; `ambre_toile::ui::render::tests::a_vanished_arrow_paints_nothing` -- the stale case; `ambre_toile::ui::arrow::tests::the_handles_sit_at_the_two_ends` -- the handles sit at the two ends of a bent routed path | none | verified |
 | `TOILE-232` | `INV` | A caption MUST store what it says and never where it sits: its place on the arrow is recomputed on read, like the arrow's own geometry (`TOILE-006`). | this spec section 3 | `ambre_toile::ui::label::tests::a_straight_arrow_anchors_at_its_midpoint` -- the straight case; `ambre_toile::ui::label::tests::an_elbow_anchors_half_way_along_the_run` -- the elbow; structural -- the format holds one text and no position (`ambre-spec-toile-schema.md section 3`) | none | verified |
+| `TOILE-282` | `INV` | A stored free anchor MUST read back as written, each fraction outside 0 to 1 or not a number reading as the middle. | this spec section 3 | `ambre_toile::logic::state::codec::tests::a_free_anchor_reads_back_and_a_fraction_off_the_side_reads_as_the_middle` -- the encoded word and its decode, then 1.5 and NaN decoding to the middle | none | verified |
+| `TOILE-UI-400` | `OBS` | An arrow with no routed path MUST NOT place a caption. | this spec section 4 | `ambre_toile::ui::label::tests::an_empty_path_anchors_nothing` -- an empty path answers no anchor | none | verified |
 
 ### 1.2 Drag an arrow from one shape to another
 
@@ -60,6 +62,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-172` | `POST` | Re-aiming an arrow at an element nobody holds MUST announce it as dangling. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_to_missing_element_reports_dangling` -- it reads the event and the empty paint | none | verified |
 | `TOILE-173` | `FRAME` | Re-aiming MUST NOT touch the path kind, the end caps, or the connector's place in the paint order. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_re_aim_moves_only_the_named_end` | none | verified |
 | `TOILE-174` | `FAIL` | Given an arrow the board does not hold, re-aiming MUST answer an error and MUST leave the document unchanged (`TOILE-036`). | this spec section 3 | `ambre_toile::logic::convergence_tests::re_aiming_an_unknown_arrow_changes_nothing` -- the error, no delta, and the same version vector | none | verified |
+| `TOILE-285` | `POST` | Re-aiming an arrow at an element the board holds MUST NOT announce the arrow as dangling. | this spec section 3 | `ambre_toile::logic::convergence_tests::retarget_rebinds_endpoint_without_dangling` -- no dangling event, and the arrow still in the paint | none | verified |
 
 ### 1.4 Caption an arrow
 
@@ -72,6 +75,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-371` | `POST` | An arrow with no caption MUST NOT claim the space one would occupy. | this spec section 4 | `ambre_toile::ui::label::tests::a_click_on_the_caption_picks_the_arrow` -- the same point over an uncaptioned arrow, which answers none | none | verified |
 | `TOILE-UI-348` | `FRAME` | Captioning MUST NOT touch what the arrow joins, how it runs, its caps, or its place in the paint order: a caption is a word on an arrow, not a change to it. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_caption_changes_nothing_else_on_the_arrow` | none | verified |
 | `TOILE-233` | `FAIL` | Given an arrow the board does not hold, captioning MUST answer an error and MUST leave the document unchanged (`TOILE-036`). | this spec section 3 | `ambre_toile::logic::convergence_tests::captioning_a_missing_arrow_is_refused` -- it reads the error and the absent delta | none | verified |
+| `TOILE-284` | `POST` | A caption written on an arrow MUST reach the arrow's node in the next viewport. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_caption_reaches_the_viewport` -- the caption read off the connector node of the derived viewport | none | verified |
 
 ### 1.5 Select an arrow
 
@@ -80,7 +84,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-350` | `POST` | A click on an arrow with nothing else under the pointer MUST select it. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_click_on_a_bare_arrow_selects_it`; `ambre_toile::ui::view::view_tests::an_arrow_and_an_element_are_never_selected_together` -- a prior element selection does not stop it | none | verified |
 | `TOILE-UI-359` | `POST` | A click that lands on an element MUST NOT take the arrow under it: what the user sees on top is what the click takes. | this spec section 4 | `ambre_toile::ui::view::view_tests::a_click_on_an_element_over_an_arrow_takes_the_element` | none | verified |
 | `TOILE-UI-352` | `POST` | Dragging an endpoint handle onto a shape MUST re-aim that end at it, on the side the pointer aimed at. | this spec section 4 | `ambre_toile::ui::view::view_tests::an_endpoint_dragged_onto_a_shape_re_aims_that_end`; `ambre_toile::ui::arrow::tests::a_press_grabs_the_nearer_end` | none | verified |
-| `TOILE-UI-372` | `POST` | Releasing an endpoint handle over empty board MUST leave the arrow as it was. | this spec section 4 | `ambre_toile::ui::view::view_tests::an_endpoint_released_over_empty_board_leaves_the_arrow` | none | verified |
+| `TOILE-UI-372` | `POST` | Releasing an endpoint handle over empty board MUST leave the arrow as it was. | this spec section 4 | `ambre_toile::ui::view::view_tests::an_endpoint_released_over_empty_board_leaves_the_arrow`; `ambre_toile::ui::arrow::tests::a_release_over_empty_board_re_aims_nothing` -- a release away from every element answers no re-aim | none | verified |
 | `TOILE-UI-353` | `POST` | With an arrow selected, delete MUST delete the arrow. | this spec section 4 | `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order` -- the delete entry the arrow answers | none | verified |
 | `TOILE-UI-373` | `POST` | With an arrow selected, each of the four z-order entries MUST reorder it. | this spec section 4 | `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order` -- the four entries it reads back | none | verified |
 | `TOILE-UI-374` | `FRAME` | Every board entry other than delete and the four z-order entries MUST do nothing to a selected arrow. | this spec section 4 | `ambre_toile::ui::arrow::tests::an_arrow_answers_delete_and_the_z_order` -- the silence on grouping and copying | none | verified |
@@ -94,16 +98,22 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-175` | `FRAME` | A delete MUST NOT touch a connector neither of whose ends it removes. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_an_endpoint_makes_the_connector_dangle` -- it deletes an unrelated element first and reads the connector surviving it | none | verified |
 | `TOILE-176` | `POST` | A delete MUST take the connector out of the paint order as well as out of the map: an entry MUST NOT name a connector that is gone. | this spec section 3 | `ambre_toile::logic::convergence_tests::delete_drops_owned_connectors` -- it reads an order holding one element node and nothing else | none | verified |
 
+### 1.7 Restyle an arrow
+
+| ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
+|---|---|---|---|---|---|---|
+| `TOILE-283` | `FAIL` | Given an arrow the board does not hold, a restyle MUST answer an error and write nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::restyling_a_missing_arrow_is_refused` -- the `NoSuchConnector` error and the absent delta | none | verified |
+
 * **Budget.** the routing pass is inside the visible-set derivation, budgeted by the visible-set row
   of `ambre-spec-budgets.md section 1`. The cull tests each arrow's hull against the frame, then
   routes only the arrows whose hull meets it (`TOILE-045`).
 * **Boundary.** none of its own: a connector lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`).
-* **Verification.** 45 `verified`, 1 `unimplemented`. The view tests drive the draw,
-  the re-aim, the caption editor and the arrow selection end to end. Two tests found defects, now
-  fixed: a create took an endpoint the board lacks, and a click on an arrow kept the element
-  selection. The browser tier reads the notice of a stranded arrow on both peers
-  (`TOILE-044`). Four shapes have no sender (`TOILE-167`).
+* **Verification.** 50 `verified`, 1 `unimplemented`. The view tests drive the draw, the re-aim, the
+  caption editor and the arrow selection end to end. Two tests found defects, now fixed: a create
+  took an endpoint the board lacks, and a click on an arrow kept the element selection. The browser
+  tier reads the notice of a stranded arrow on both peers (`TOILE-044`). Four shapes have no sender
+  (`TOILE-167`).
 
 ---
 

@@ -24,6 +24,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-062` | `INV` | A link MUST be its own register on the element, not part of its style. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_link_is_set_and_cleared` -- it writes and clears a register the format holds as its own field beside `style` (`ambre-spec-toile-schema.md section 3`); `::setting_a_link_touches_nothing_else` -- the other direction | none | verified |
 | `TOILE-109` | `INV` | A link MUST outlive its target: deleting the frame a link points at MUST NOT clear the link. | this spec section 3 | `ambre_toile::logic::convergence_tests::deleting_the_target_frame_leaves_the_link` -- it deletes the frame and reads the register back off the painted element | none | verified |
 | `TOILE-110` | `IO` | The board MUST NOT fetch an address an element carries. | this spec section 4; `ambre-spec-zero-knowledge.md` | structural -- the absence is the proof: `ambre-toile` declares no HTTP client and no `fetch` binding, its follow path returns a `ShellNav` value rather than performing anything, and the one place an address is touched hands it to `window.open`. The ban is a capability an audit holds, and no test can observe a request that is never made | none | verified |
+| `TOILE-UI-405` | `OBS` | The link badge MUST sit outside its element's top-right corner, at one screen size. | this spec section 4 | `ambre_toile::ui::link::tests::the_badge_sits_outside_the_top_right_corner` -- the badge box lies right of and above the element's screen box, at the badge size on both sides | none | verified |
+| `TOILE-UI-406` | `OBS` | An element MUST paint a link badge exactly when it carries a link. | this spec section 4 | `ambre_toile::ui::render::tests::a_linked_element_gets_a_badge` -- one badge fill for a linked element beside an unlinked one | none | verified |
 
 ### 1.2 Set or clear a link
 
@@ -31,6 +33,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-066` | `POST` | Setting or clearing a link MUST be one undo item. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_link_is_set_and_cleared` -- it asserts one delta per write, and the handler makes one `doc.commit()`, which is what one undo item is (`features/ambre-spec-toile-undo.md`); `ambre_toile::logic::convergence_tests::each_link_write_is_one_undo_item` | none | verified |
 | `TOILE-111` | `FRAME` | Setting or clearing a link MUST write the link register alone: the element's style, geometry and lock MUST NOT change. | this spec section 3 | `ambre_toile::logic::convergence_tests::setting_a_link_touches_nothing_else` -- it reads the painted element before and after and compares its bounds, its fill, its stroke and its lock | none | verified |
+| `TOILE-288` | `FAIL` | Given an element the board does not hold, setting a link MUST answer an error and write nothing. | this spec section 3 | `ambre_toile::logic::convergence_tests::linking_a_missing_element_is_refused` -- no update, and a `NoSuchElement` error in the display events | none | verified |
 
 ### 1.3 Follow a link
 
@@ -43,6 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-063` | `FRAME` | Following a link MUST NOT write to the document. | this spec section 3 | structural -- the types are the proof: following resolves to a `LinkAction`, whose three arms are a camera request, an address and a document reference. The one board command it can produce is `RequestSelectionStats`, which the engine answers without a commit | none | verified |
 | `TOILE-115` | `FRAME` | Following a link MUST NOT enter the undo history: a `Ctrl+Z` after a jump MUST revert the last edit, not the jump. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_jump_is_not_an_undo_item` -- the Logic half; `ambre_toile::ui::view::view_tests::an_undo_after_a_jump_reverts_the_edit_and_not_the_jump` -- the view half | none | verified |
 | `TOILE-064` | `FAIL` | Following a link to a frame the board no longer holds MUST do nothing, and MUST NOT report an error. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_jump_to_a_frame_nobody_holds_does_nothing_and_says_nothing` | none | verified |
+| `TOILE-UI-404` | `POST` | A follow MUST reach a linked element under the pointer, even where an unlinked element lies over it. | this spec section 4 | `ambre_toile::ui::link::tests::the_click_finds_the_top_most_linked_element` -- an unlinked box over a linked one resolves to the linked one, and a point off both to nothing | none | verified |
 
 * **Budget.** none of its own once built: setting a link is one register write, under the
   transform-command row of `ambre-spec-budgets.md section 1`. A jump to a frame is a camera change,
@@ -50,7 +54,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** the one board feature that names an outbound path: the view hands a web address to
   the shell, which opens it in a sandboxed tab. The board never fetches it, and the address is
   document data, sealed like the rest (`TOILE-065`).
-* **Verification.** 12 `verified`. Host tests read the register off the painted element and drive
+* **Verification.** 16 `verified`. Host tests read the register off the painted element and drive
   the view through each follow. Browser tests hold the shell's two outbound opens. The fetch ban is
   an audit, because the view hands a value out rather than acting on it (`TOILE-110`).
 

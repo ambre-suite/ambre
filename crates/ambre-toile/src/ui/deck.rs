@@ -128,7 +128,7 @@ mod tests {
     use super::*;
     use ambre_bus::app::toile::ElementId;
 
-    /// A rename's debug form prints the name's length, none of it.
+    /// `TOILE-289`: a rename's debug form prints the name's length, none of it.
     #[test]
     fn a_rename_debug_form_prints_no_name() {
         let form = format!(

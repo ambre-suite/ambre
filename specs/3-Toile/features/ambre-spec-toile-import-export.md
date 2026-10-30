@@ -26,6 +26,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-IO-068` | `INV` | A conversion MUST run on the user's own machine, never reaching the network. | README pillar "E2EE"; this spec section 5 | structural -- no interop module names a network client, and the one blob that leaves rides `ToileRequest::UploadMedia`, which Sync encrypts before it goes | none | verified |
 | `TOILE-IO-010` | `IO` | An `.ambre` export and import round trip MUST preserve the document state and its whole history. | this spec section 3; `ambre-spec-docfile.md section 3` | `ambre_toile::logic::state::docfile::tests::a_round_trip_keeps_the_history_whole`; `ambre_toile::logic::state::docfile::tests::round_trip_preserves_the_document_state`; `ambre_toile::logic::state::docfile::tests::the_header_names_toile_and_the_document` | none | verified |
 | `TOILE-IO-069` | `IO` | A board the export could not read MUST NOT become a file: a valid header over an empty payload MUST NOT be written. | this spec section 3 | type-level -- the container writer answers `Option<Vec<u8>>` and the header is written inside the branch a read snapshot reaches, so no payload-less file can be constructed. The registry turns the empty answer into the export-failure event, on the plain path and the sealed one alike | none | verified |
+| `TOILE-IO-104` | `INV` | A reader MUST keep the SVG and PDF exports: they write nothing, so the role gate MUST NOT withhold them. | this spec section 3; `ambre-spec-architecture.md section 4`; `TRAME-IO-034` | `ambre_toile::ui::menu_bar::tests::exports_are_not_mutating` -- it pins both commands as non-mutating, the flag the role gate reads | none | verified |
 
 ### 1.2 Bring a file onto the board
 
@@ -114,10 +115,10 @@ status values are normative in `ambre-spec-template.md`.
   the pixels an import produces reach the relay as ciphertext alone
   (`features/ambre-spec-toile-media.md section 1`, `TOILE-IO-013`). The showcase bundle is the one
   deliberate exit from the zero-knowledge boundary, and `TOILE-IO-096` makes it say so.
-* **Verification.** 41 `verified`, 12 `unimplemented`. What holds carries a test of its own: the
-  drop point, the reader's structure, the writer's own and the report. So do the sliced apply on a populated
-  board and the refusal of the two foreign formats. The browser tier drives the glue underneath: a
-  drop, a picked file and a download.
+* **Verification.** 42 `verified`, 12 `unimplemented`. What holds carries a test of its own: the
+  drop point, the reader's structure, the writer's own and the report. So do the sliced apply on a
+  populated board and the refusal of the two foreign formats. The browser tier drives the glue
+  underneath: a drop, a picked file and a download.
 ---
 
 ## 2. WHAT EACH USER SEES
