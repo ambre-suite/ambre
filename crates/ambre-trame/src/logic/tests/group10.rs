@@ -218,6 +218,31 @@ fn a_paste_is_one_undo_item() {
     }
 }
 
+/// A paste that carries a style onto a cell short of a line says so, even
+/// when the value it pastes is empty (`TRAME-243`).
+#[test]
+fn a_pasted_style_short_of_a_line_says_so() {
+    let mut state = TrameState::new();
+    set(&mut state, 0, 0, "a");
+    state.uid_counter = None;
+    let payload = crate::ClipboardPayload {
+        src_row: Row::new(0),
+        src_col: Col::new(0),
+        rows: RowCount::ONE,
+        cols: ColCount::ONE,
+        cells: vec![crate::ClipboardCell {
+            bold: ambre_bus::Weight::Bold,
+            ..Default::default()
+        }],
+    };
+    let out = state.handle_command(TrameCommand::PasteRange {
+        target_row: Row::new(3),
+        target_col: Col::new(0),
+        payload,
+    });
+    assert!(says_ids_exhausted(&out), "the refused style says so");
+}
+
 /// A blank cell of the copied range leaves the cell it lands on as it was
 /// (`TRAME-UI-062`).
 #[test]

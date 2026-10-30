@@ -4095,6 +4095,7 @@
   {"edge": "verified-by", "from": "TRAME-243", "to": "ambre_trame::logic::tests::group10::a_merged_tile_short_of_a_line_says_so"},
   {"edge": "verified-by", "from": "TRAME-243", "to": "::a_carried_style_short_of_a_line_says_so"},
   {"edge": "verified-by", "from": "TRAME-243", "to": "::an_empty_fill_onto_a_cell_short_of_a_line_says_nothing"},
+  {"edge": "verified-by", "from": "TRAME-243", "to": "::a_pasted_style_short_of_a_line_says_so"},
   {"edge": "cites-document", "from": "TRAME-248", "section": "2", "to": "ambre-spec-trame-schema.md"},
   {"edge": "cites-document", "from": "TRAME-248", "to": "1-Foundations/ambre-spec-schema-version.md"},
   {"edge": "cites-rule", "from": "TRAME-248", "to": "SCHEMA-003"},
