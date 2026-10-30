@@ -26,9 +26,10 @@
 //!   * `--prune` removes the lines that name no site, and nothing else;
 //!   * `unwrap` reports each workspace newtype unwrapped before a workspace
 //!     call, rather than at the foreign call that takes the primitive
-//!     (`unwrap.rs`). It exits 0 in report mode. `--strict` fails on a
-//!     refusal no line of the unwrap allowlist names, and on a line that
-//!     names none. `--ambiguous` prints the ambiguous sites too.
+//!     (`unwrap.rs`). Report mode fails only on an unwrap allowlist that
+//!     is missing or does not parse. `--strict` also fails on a refusal no
+//!     line names, and on a line whose count differs from its sites.
+//!     `--ambiguous` prints the ambiguous sites too.
 
 mod allowlist;
 mod depinfo;
@@ -41,6 +42,7 @@ use std::process::ExitCode;
 
 use allowlist::{Allowlist, Category, Defect, HEADER};
 use scan::Scan;
+use unwrap::Strictness;
 
 /// The allowlist, relative to the workspace root. It sits beside the other
 /// files the gates of the corpus read.
@@ -55,13 +57,6 @@ enum Mode {
     Files,
     Prune,
     Unwrap(Strictness, Shown),
-}
-
-/// Whether the unwrap report fails on a refusal.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Strictness {
-    Report,
-    Strict,
 }
 
 /// Which sites the unwrap report prints.
@@ -144,8 +139,9 @@ fn main() -> ExitCode {
     }
 }
 
-/// The unwrap report: each refusal, then the counts. In strict mode, a
-/// refusal no line names fails, and so does a line that names none.
+/// The unwrap report: each refusal, then the counts. A missing or
+/// malformed allowlist fails in both modes. In strict mode, a refusal no
+/// line names fails, and so does a line whose count differs from its sites.
 fn unwraps(
     scan: &Scan,
     disk: &scan::Disk,
@@ -176,12 +172,9 @@ fn unwraps(
         report.sites,
         report.newtypes
     );
-    let Ok(text) = std::fs::read_to_string(root.join(UNWRAP_ALLOWLIST)) else {
-        eprintln!("primitives: cannot read {UNWRAP_ALLOWLIST}");
-        return ExitCode::FAILURE;
-    };
-    let listed = match unwrap::parse_allowlist(&text) {
-        Ok(listed) => listed,
+    let text = std::fs::read_to_string(root.join(UNWRAP_ALLOWLIST)).ok();
+    let judgement = match unwrap::judge(&report, text.as_deref(), strictness) {
+        Ok(judgement) => judgement,
         Err(errors) => {
             for error in errors {
                 eprintln!("primitives: {UNWRAP_ALLOWLIST}: {error}");
@@ -189,26 +182,17 @@ fn unwraps(
             return ExitCode::FAILURE;
         }
     };
-    let keys: std::collections::BTreeSet<String> =
-        report.refusals.iter().map(unwrap::Finding::key).collect();
-    let unlisted = keys.iter().filter(|key| !listed.contains_key(*key)).count();
-    let stale: Vec<(&String, &allowlist::LineNo)> = listed
-        .iter()
-        .filter(|(key, _)| !keys.contains(*key))
-        .collect();
-    for (key, line) in &stale {
-        eprintln!("primitives: {UNWRAP_ALLOWLIST}:{line} names no refusal\n  {key}");
+    for problem in &judgement.problems {
+        eprintln!("primitives: {UNWRAP_ALLOWLIST}: {problem}");
     }
     println!(
-        "unwrap: {unlisted} refusal keys no line of {UNWRAP_ALLOWLIST} names, {} lines that name \
-         none",
-        stale.len()
+        "unwrap: {} refusal keys no line of {UNWRAP_ALLOWLIST} names, {} lines over their count, \
+         {} stale lines",
+        judgement.unlisted, judgement.over, judgement.stale
     );
-    let clean = report.errors.is_empty() && unlisted == 0 && stale.is_empty();
-    if strictness == Strictness::Report || clean {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
+    match judgement.outcome {
+        unwrap::Outcome::Pass => ExitCode::SUCCESS,
+        unwrap::Outcome::Fail => ExitCode::FAILURE,
     }
 }
 

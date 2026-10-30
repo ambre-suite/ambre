@@ -4,33 +4,41 @@
 //! a body: `store(name.as_str())` hands bare text to a workspace `fn`, and
 //! no type guards it there. The rule unwraps a newtype only at the foreign
 //! call that takes the primitive, or inside the newtype's own impl and
-//! module (`ai/ambre-rust-style.md`).
+//! module (`ai/ambre-rust-style.md`). An impl of a conversion trait whose
+//! type argument is the newtype counts as its own.
 //!
 //! The report reads syn trees, with no type information. What it tracks:
 //!
-//!   * a newtype is a struct with one field, `PhantomData` aside, over a
-//!     primitive, a `String`, a `Vec<u8>`, a `[u8]` or a `[u8; N]`, or a
-//!     type a `define_*!` or `fixed_bytes!` macro writes;
+//!   * a newtype is a struct with one field over a primitive, a byte
+//!     vector, a byte slice or a byte array. `PhantomData` is no field;
+//!   * a type a `define_*!` or `fixed_bytes!` macro writes is a newtype too;
 //!   * an accessor is a method of the newtype that takes `self` alone and
-//!     returns such a type, a borrow of it included. `len` and the `is_*`
-//!     and `has_*` predicates are left out. `to_string` is one when the
-//!     `Display` of the newtype reads a field. `.0` is one on a public tuple
-//!     field;
-//!   * an unwrap is handed when it is an argument of a call, directly or
-//!     through `&`, a paren, `.clone()`, `.to_owned()`, `.into()`,
-//!     `.to_string()`, `.to_vec()` or a `let` binding, or the receiver of a
-//!     method;
-//!   * a receiver is typed by a parameter, a `let` annotation, a struct
-//!     literal, a constructor `T::new`/`T::from*`/`T::parse`, `self`, and a
-//!     named field of a struct of the workspace.
+//!     returns the primitive or a borrow of it;
+//!   * `len` and the `is_*` and `has_*` predicates are no accessors;
+//!   * `to_string` is an accessor when the `Display` of the newtype reads a
+//!     field. `.0` is one on a tuple field that is not private;
+//!   * a hand-written `AsRef` or `Borrow` of a primitive adds its method;
+//!   * `impl From<T> for String`, or any other primitive, makes `t.into()`
+//!     and `String::from(t)` unwraps of `T`;
+//!   * an unwrap is handed when a call takes it as an argument, or a
+//!     method takes it as its receiver;
+//!   * the unwrap travels through `&`, a paren, a `let` binding and the
+//!     conversions and views of `PEELS`;
+//!   * a parameter, a `let` annotation, a struct literal and `self` type a
+//!     receiver;
+//!   * so do a constructor such as `T::new` or `T::parse`, and a named
+//!     field of a struct of the workspace.
 //!
 //! Each handed unwrap gets one verdict. A callee the workspace defines and
-//! no foreign API names is a refusal. A method name both define is
-//! ambiguous, and so is a shared accessor (`as_str`, `get`...) on a receiver
-//! the report cannot type. Neither ambiguity is refused. The report does not
-//! read a macro argument, a closure that returns the unwrap, a struct
-//! literal field, or a return value: the primitive gate holds the last two
-//! at the signature.
+//! no foreign API names is a refusal. The tuple struct of a newtype is
+//! such a callee, as `T::new` is. A method name both define is ambiguous.
+//! On a receiver the report cannot type, an accessor that std shares or
+//! many newtypes share is ambiguous too.
+//!
+//! The report does not read a macro argument, a closure that returns the
+//! unwrap, a struct literal field or a return value. The primitive gate
+//! holds the last two at the signature. Nor does it read an `into` on a
+//! receiver it cannot type, or a newtype a generic `AsRef` bound takes.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -45,8 +53,9 @@ use crate::scan::{
     PRIMITIVES, Scan, Source, Tree, fragments_of, item_attrs, macro_types, test_only,
 };
 
-/// The allowlist header: a key, then the reason the site keeps its unwrap.
-pub const HEADER: &str = "key\treason";
+/// The allowlist header: a key, the number of sites it allows, then the
+/// reason those sites keep their unwrap.
+pub const HEADER: &str = "key\tcount\treason";
 
 /// The accessor names a std type defines too. On a receiver the report
 /// cannot type, the call may read a `String`, a `Cell` or a `Mutex`.
@@ -72,10 +81,28 @@ const SHARED_ACCESSORS: &[&str] = &[
     "name",
     "root",
     "value",
+    "borrow",
 ];
 
-/// The conversions an unwrap travels through unchanged.
-const PEELS: &[&str] = &["clone", "to_owned", "into", "to_string", "to_vec"];
+/// The conversions and views an unwrap travels through unchanged.
+const PEELS: &[&str] = &[
+    "clone",
+    "to_owned",
+    "into",
+    "to_string",
+    "to_vec",
+    "as_ref",
+    "as_str",
+    "as_bytes",
+    "borrow",
+];
+
+/// The accessors a std conversion trait writes. Every type has an `into`,
+/// so the report reads one on a typed receiver alone.
+const CONVERSIONS: &[&str] = &["into"];
+
+/// The most candidates a site names one by one; more print as `*`.
+const FEW: usize = 3;
 
 /// The method names std and the dependencies define. A workspace method of
 /// the same name makes a call on an untyped receiver ambiguous.
@@ -214,9 +241,9 @@ const FOREIGN_METHODS: &[&str] = &[
     "zip",
 ];
 
-/// The method names of a primitive's arithmetic, of Loro, of the S3 and
-/// HTTP builders and of the drawing crates, which a workspace method may
-/// share.
+/// The method names a workspace method may share with a dependency. These
+/// come from a primitive's arithmetic, Loro, the S3 and HTTP builders and
+/// the drawing crates.
 const DEPENDENCY_METHODS: &[&str] = &[
     "body",
     "bucket",
@@ -244,6 +271,7 @@ const DEPENDENCY_METHODS: &[&str] = &[
     "stroke",
     "translate",
     "unmark",
+    "unsigned_abs",
     "wrapping_add",
     "wrapping_sub",
 ];
@@ -305,7 +333,7 @@ impl fmt::Display for Finding {
 }
 
 /// A number of sites the report counts.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Tally(usize);
 
 impl Tally {
@@ -387,6 +415,9 @@ struct Newtype {
     accessors: BTreeSet<String>,
     /// Whether `.0` reaches the value outside its module.
     tuple: bool,
+    /// Each primitive a std conversion trait turns the newtype into, as
+    /// `impl From<Name> for String` does.
+    conversions: BTreeSet<String>,
 }
 
 /// What the workspace declares, read once before any body.
@@ -443,9 +474,32 @@ struct Impl {
     owner: String,
     /// The last segment of the trait, `None` for an inherent impl.
     of_trait: Option<String>,
+    /// The first type argument of the trait: `T` in `From<T>`.
+    argument: Option<Argument>,
+    /// The name of the implementing type when it is a primitive, as in
+    /// `impl From<Name> for String`.
+    inner: Option<String>,
     methods: Vec<Method>,
     /// A `Display` whose `fmt` reads a field of `self`.
     shows_content: bool,
+}
+
+/// The first type argument of a trait, as the catalog reads it.
+enum Argument {
+    /// A primitive, a borrow or a slice of one: `str` in `AsRef<str>`. The
+    /// name is `None` for a slice or an array.
+    Inner(Option<String>),
+    /// Any other type, by name: `Name` in `From<Name>`.
+    Named(String),
+}
+
+impl Argument {
+    fn of(ty: &syn::Type) -> Option<Self> {
+        if inner_like(ty) {
+            return Some(Self::Inner(type_name(ty)));
+        }
+        type_name(ty).map(Self::Named)
+    }
 }
 
 /// What the first pass gathers before the newtypes are known.
@@ -775,11 +829,13 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                 let Some(owner) = type_name(&i.self_ty) else {
                     return;
                 };
-                let of_trait = i
+                let last = i
                     .trait_
                     .as_ref()
-                    .and_then(|(_, path, _)| path.segments.last())
-                    .map(|last| last.ident.to_string());
+                    .and_then(|(_, path, _)| path.segments.last());
+                let of_trait = last.map(|last| last.ident.to_string());
+                let argument = last.and_then(first_argument).and_then(Argument::of);
+                let inner = inner_like(&i.self_ty).then(|| owner.clone());
                 let mut shows_content = false;
                 let methods = i
                     .items
@@ -798,6 +854,8 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                 self.raw.impls.push(Impl {
                     owner,
                     of_trait,
+                    argument,
+                    inner,
                     methods,
                     shows_content,
                 });
@@ -860,9 +918,32 @@ impl Raw {
                     catalog.trait_methods.insert(method.name.clone());
                 }
             }
+            // `impl From<Name> for String`: `name.into()` unwraps `Name`.
+            if imp.of_trait.as_deref() == Some("From")
+                && let (Some(inner), Some(Argument::Named(source))) = (&imp.inner, &imp.argument)
+                && let Some(newtype) = catalog.newtypes.get_mut(source)
+            {
+                newtype.conversions.insert(inner.clone());
+                newtype.accessors.insert("into".to_owned());
+            }
             let Some(newtype) = catalog.newtypes.get_mut(&imp.owner) else {
                 continue;
             };
+            match (imp.of_trait.as_deref(), &imp.argument) {
+                (Some("Into"), Some(Argument::Inner(target))) => {
+                    newtype.conversions.extend(target.clone());
+                    newtype.accessors.insert("into".to_owned());
+                }
+                (Some("AsRef" | "Borrow"), Some(Argument::Inner(_))) => {
+                    newtype.accessors.extend(
+                        imp.methods
+                            .iter()
+                            .filter(|method| method.self_only)
+                            .map(|method| method.name.clone()),
+                    );
+                }
+                _ => {}
+            }
             if imp.of_trait.is_none() {
                 newtype.accessors.extend(
                     imp.methods
@@ -923,6 +1004,9 @@ struct BodyVisit<'c, 'r> {
     scope: Vec<String>,
     /// The owner of each enclosing impl, the innermost last.
     owners: Vec<String>,
+    /// For each enclosing impl, the newtypes it may unwrap: its owner and
+    /// the type a conversion trait names.
+    exempt: Vec<BTreeSet<String>>,
     env: Vec<BTreeMap<String, Binding>>,
     /// The first segment of the path each `use` of the file imports, by
     /// the name it brings in.
@@ -1047,18 +1131,19 @@ impl BodyVisit<'_, '_> {
         }
     }
 
-    /// Whether the current module declares one of the newtypes.
-    fn at_home(&self, names: &[&String]) -> bool {
+    /// Whether the site may unwrap the newtype: the current module declares
+    /// it, or an enclosing impl owns or converts it.
+    fn exempts(&self, name: &str) -> bool {
         let here = Home {
             krate: self.krate.clone(),
             module: self.module(),
         };
-        names.iter().any(|name| {
-            self.catalog
-                .newtypes
-                .get(*name)
-                .is_some_and(|newtype| newtype.homes.contains(&here))
-        })
+        let home = self
+            .catalog
+            .newtypes
+            .get(name)
+            .is_some_and(|newtype| newtype.homes.contains(&here));
+        home || self.exempt.iter().any(|names| names.contains(name))
     }
 
     /// The unwrap an accessor call on `receiver` makes, if any.
@@ -1078,7 +1163,7 @@ impl BodyVisit<'_, '_> {
         }
         if let Some(ty) = self.infer(receiver) {
             let name = candidates.into_iter().find(|name| **name == ty)?;
-            if self.at_home(&[name]) {
+            if self.exempts(name) {
                 return None;
             }
             return Some(Unwrap {
@@ -1087,15 +1172,22 @@ impl BodyVisit<'_, '_> {
                 receiver: Receiver::Known,
             });
         }
-        if self.at_home(&candidates) {
+        if CONVERSIONS.contains(&accessor) {
+            return None;
+        }
+        let exempt = candidates.iter().filter(|name| self.exempts(name)).count();
+        if exempt == candidates.len() {
             return None;
         }
         let newtype = match candidates.as_slice() {
             [one] => (*one).clone(),
-            few if few.len() <= 3 => few.iter().map(|n| n.as_str()).collect::<Vec<_>>().join("|"),
+            few if few.len() <= FEW => few.iter().map(|n| n.as_str()).collect::<Vec<_>>().join("|"),
             _ => "*".to_owned(),
         };
-        let receiver = if SHARED_ACCESSORS.contains(&accessor) {
+        // An exempt candidate, a std name or a name many newtypes share
+        // leaves the receiver open.
+        let shared = SHARED_ACCESSORS.contains(&accessor) || foreign_method(accessor);
+        let receiver = if exempt > 0 || candidates.len() > FEW || shared {
             Receiver::Unknown
         } else {
             Receiver::Known
@@ -1114,12 +1206,41 @@ impl BodyVisit<'_, '_> {
         }
         let ty = self.infer(&field.base)?;
         let (name, newtype) = self.catalog.newtypes.get_key_value(&ty)?;
-        if !newtype.tuple || self.at_home(&[name]) {
+        if !newtype.tuple || self.exempts(name) {
             return None;
         }
         Some(Unwrap {
             newtype: name.clone(),
             accessor: "0".to_owned(),
+            receiver: Receiver::Known,
+        })
+    }
+
+    /// The `String::from(name)` of a newtype that converts into the
+    /// primitive the path names.
+    fn conversion(&self, call: &syn::ExprCall) -> Option<Unwrap> {
+        let syn::Expr::Path(path) = &*call.func else {
+            return None;
+        };
+        let mut segments = path.path.segments.iter().rev();
+        let (Some(from), Some(target)) = (segments.next(), segments.next()) else {
+            return None;
+        };
+        let mut args = call.args.iter();
+        let (Some(arg), None) = (args.next(), args.next()) else {
+            return None;
+        };
+        if from.ident != "from" {
+            return None;
+        }
+        let ty = self.infer(arg)?;
+        let (name, newtype) = self.catalog.newtypes.get_key_value(&ty)?;
+        if !newtype.conversions.contains(&target.ident.to_string()) || self.exempts(name) {
+            return None;
+        }
+        Some(Unwrap {
+            newtype: name.clone(),
+            accessor: "from".to_owned(),
             receiver: Receiver::Known,
         })
     }
@@ -1141,6 +1262,7 @@ impl BodyVisit<'_, '_> {
                 self.attribute(&m.receiver, &method)
             }
             syn::Expr::Field(f) => self.tuple_field(f),
+            syn::Expr::Call(c) => self.conversion(c),
             syn::Expr::Path(p) if p.qself.is_none() => {
                 let ident = p.path.get_ident()?;
                 self.lookup(&ident.to_string())?.unwrap.clone()
@@ -1170,19 +1292,24 @@ impl BodyVisit<'_, '_> {
         let (Some(first), Some(last)) = (segments.first(), segments.last()) else {
             return Callee::Foreign;
         };
-        if last.starts_with(|c: char| c.is_ascii_uppercase()) {
-            return Callee::Constructor;
-        }
         // An import from a foreign crate, or a path that starts at one.
-        match self.imports.get(first) {
-            Some(root) if !self.workspace_root(root) => return Callee::Foreign,
-            None if segments.len() > 1
-                && !self.workspace_root(first)
-                && !self.catalog.types.contains(first) =>
-            {
-                return Callee::Foreign;
+        let foreign = match self.imports.get(first) {
+            Some(root) => !self.workspace_root(root),
+            None => {
+                segments.len() > 1
+                    && !self.workspace_root(first)
+                    && !self.catalog.types.contains(first)
             }
-            _ => {}
+        };
+        if last.starts_with(|c: char| c.is_ascii_uppercase()) {
+            return if foreign {
+                Callee::Constructor
+            } else {
+                self.constructor(&segments)
+            };
+        }
+        if foreign {
+            return Callee::Foreign;
         }
         let owner = segments
             .len()
@@ -1198,6 +1325,28 @@ impl BodyVisit<'_, '_> {
                 Callee::Workspace
             }
             None => Callee::Foreign,
+        }
+    }
+
+    /// How the report reads a call through a capitalised path. The tuple
+    /// struct of a workspace newtype builds it as `T::new` does, so it is
+    /// a workspace callee. A variant, or any other tuple struct, calls
+    /// nothing.
+    fn constructor(&self, segments: &[String]) -> Callee {
+        let variant = segments
+            .len()
+            .checked_sub(2)
+            .and_then(|at| segments.get(at))
+            .is_some_and(|owner| owner.starts_with(|c: char| c.is_ascii_uppercase()));
+        let name = match segments.last() {
+            Some(last) if last == "Self" => self.owners.last(),
+            last => last,
+        };
+        match name {
+            Some(name) if !variant && self.catalog.newtypes.contains_key(name) => {
+                self.type_callee(name)
+            }
+            _ => Callee::Constructor,
         }
     }
 
@@ -1364,18 +1513,20 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
         let Some(owner) = type_name(&i.self_ty) else {
             return;
         };
-        let newtypes = &self.catalog.newtypes;
-        let converts = i.trait_.as_ref().is_some_and(|(_, path, _)| {
-            path.segments
-                .last()
-                .and_then(first_argument)
-                .and_then(type_name)
-                .is_some_and(|ty| newtypes.contains_key(&ty))
-        });
-        // The own impl of a newtype, and a conversion of it, unwrap freely.
-        if newtypes.contains_key(&owner) || converts {
-            return;
-        }
+        // The own impl of a newtype, and a conversion of it, unwrap that
+        // newtype freely, and no other.
+        let converted = i
+            .trait_
+            .as_ref()
+            .and_then(|(_, path, _)| path.segments.last())
+            .and_then(first_argument)
+            .and_then(type_name);
+        let exempt: BTreeSet<String> = [Some(owner.clone()), converted]
+            .into_iter()
+            .flatten()
+            .filter(|name| self.catalog.newtypes.contains_key(name))
+            .collect();
+        self.exempt.push(exempt);
         self.owners.push(owner.clone());
         self.scope.push(owner);
         for item in &i.items {
@@ -1383,6 +1534,7 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
         }
         self.scope.pop();
         self.owners.pop();
+        self.exempt.pop();
     }
 
     fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
@@ -1452,6 +1604,9 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
     }
 
     fn visit_expr_call(&mut self, c: &'ast syn::ExprCall) {
+        if self.conversion(c).is_some() {
+            self.report.sites = self.report.sites.incremented();
+        }
         if let syn::Expr::Path(path) = &*c.func {
             let callee = self.path_callee(path);
             let shown: Vec<String> = path
@@ -1572,6 +1727,7 @@ pub fn report(tree: &impl Tree, scan: &Scan) -> Report {
             module: source.module.split("::").map(str::to_owned).collect(),
             scope: Vec::new(),
             owners: Vec::new(),
+            exempt: Vec::new(),
             env: vec![BTreeMap::new()],
             imports: found,
             report: &mut report,
@@ -1585,9 +1741,17 @@ pub fn report(tree: &impl Tree, scan: &Scan) -> Report {
     report
 }
 
-/// The allowlist: each key, with the line that names it.
-pub fn parse_allowlist(text: &str) -> Result<BTreeMap<String, LineNo>, Vec<String>> {
-    let mut keys = BTreeMap::new();
+/// One line of the unwrap allowlist.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Row {
+    pub line: LineNo,
+    /// The sites the line allows under its key.
+    pub count: Tally,
+}
+
+/// The allowlist: each key, with its line and its count.
+pub fn parse_allowlist(text: &str) -> Result<BTreeMap<String, Row>, Vec<String>> {
+    let mut rows = BTreeMap::new();
     let mut errors = Vec::new();
     let mut header = false;
     for (index, line) in text.lines().enumerate() {
@@ -1602,22 +1766,129 @@ pub fn parse_allowlist(text: &str) -> Result<BTreeMap<String, LineNo>, Vec<Strin
             header = true;
             continue;
         }
-        let Some((key, reason)) = line.split_once('\t') else {
-            errors.push(format!("line {number}: a key, a tab, then the reason"));
+        let mut fields = line.splitn(3, '\t');
+        let (Some(key), Some(count), Some(reason)) = (fields.next(), fields.next(), fields.next())
+        else {
+            errors.push(format!(
+                "line {number}: a key, a tab, a count, a tab, then the reason"
+            ));
             continue;
+        };
+        let count = match count.parse::<usize>() {
+            Ok(count) if count > 0 => Tally::new(count),
+            _ => {
+                errors.push(format!(
+                    "line {number}: the count is a whole number above 0"
+                ));
+                continue;
+            }
         };
         if reason.trim().is_empty() {
             errors.push(format!("line {number}: the reason is empty"));
         }
-        if keys.insert(key.to_owned(), number).is_some() {
+        let row = Row {
+            line: number,
+            count,
+        };
+        if rows.insert(key.to_owned(), row).is_some() {
             errors.push(format!("line {number}: the key is named twice"));
         }
     }
+    if !header {
+        errors.push(format!("the header {HEADER:?} is missing"));
+    }
     if errors.is_empty() {
-        Ok(keys)
+        Ok(rows)
     } else {
         Err(errors)
     }
+}
+
+/// Whether the unwrap report fails on a refusal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Strictness {
+    /// Print the refusals, and fail on an allowlist that does not parse.
+    Report,
+    /// Fail on any refusal or line the allowlist and the report disagree on.
+    Strict,
+}
+
+/// How a run of the report ends.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    Pass,
+    Fail,
+}
+
+/// What the allowlist says of one report.
+#[derive(Debug)]
+pub struct Judgement {
+    pub outcome: Outcome,
+    /// The refusal keys no line names.
+    pub unlisted: Tally,
+    /// The lines whose key has more sites than the count allows.
+    pub over: Tally,
+    /// The lines whose key has fewer sites than the count, none included.
+    pub stale: Tally,
+    /// One message per line that is over or stale.
+    pub problems: Vec<String>,
+}
+
+/// Compares the report with the allowlist text, `None` when the file is
+/// missing. A missing or malformed allowlist is an error in both modes;
+/// each message of the error names one defect.
+pub fn judge(
+    report: &Report,
+    allowlist: Option<&str>,
+    strictness: Strictness,
+) -> Result<Judgement, Vec<String>> {
+    let Some(text) = allowlist else {
+        return Err(vec!["cannot read it".to_owned()]);
+    };
+    let rows = parse_allowlist(text)?;
+    let mut sites: BTreeMap<String, Tally> = BTreeMap::new();
+    for refusal in &report.refusals {
+        let tally = sites.entry(refusal.key()).or_default();
+        *tally = tally.incremented();
+    }
+    let mut judgement = Judgement {
+        outcome: Outcome::Pass,
+        unlisted: Tally::default(),
+        over: Tally::default(),
+        stale: Tally::default(),
+        problems: Vec::new(),
+    };
+    for (key, found) in &sites {
+        match rows.get(key) {
+            None => judgement.unlisted = judgement.unlisted.incremented(),
+            Some(row) if *found > row.count => {
+                judgement.over = judgement.over.incremented();
+                judgement.problems.push(format!(
+                    "line {} allows {} sites, the report finds {found}\n  {key}",
+                    row.line, row.count
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+    for (key, row) in &rows {
+        let found = sites.get(key).copied().unwrap_or_default();
+        if found < row.count {
+            judgement.stale = judgement.stale.incremented();
+            judgement.problems.push(format!(
+                "line {} allows {} sites, the report finds {found}\n  {key}",
+                row.line, row.count
+            ));
+        }
+    }
+    let clean = report.errors.is_empty()
+        && judgement.unlisted == Tally::default()
+        && judgement.over == Tally::default()
+        && judgement.stale == Tally::default();
+    if strictness == Strictness::Strict && !clean {
+        judgement.outcome = Outcome::Fail;
+    }
+    Ok(judgement)
 }
 
 #[cfg(test)]

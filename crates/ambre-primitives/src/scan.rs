@@ -292,8 +292,8 @@ pub struct Scan {
     pub sources: Vec<Source>,
 }
 
-/// One file the walk reads outside test code: its crate, its path in the
-/// crate, the module it holds and the path the tree reads it at.
+/// One file the walk reads outside test code. It names the crate, the path
+/// in the crate, the module and the path the tree reads it at.
 #[derive(Clone, Debug)]
 pub struct Source {
     pub krate: String,
