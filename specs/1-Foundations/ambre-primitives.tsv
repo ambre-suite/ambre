@@ -4,7 +4,6 @@ key	category	note
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.listeners | field | Vec<Listener>	foreign-api	the DOM event name each closure was added under, which removeEventListener takes as &str
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.restored | field | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/cell.rs | crate::host::cell | Cells.content_held | field | bool	generic	named flag
-ambre-app | src/host/cell.rs | crate::host::cell | Cells::route() | ret | Option<bool>	generic	consumed answer
 ambre-app | src/host/cell.rs | crate::host::cell | INPUTS | const | [&str;6]	foreign-api	DOM event names from the browser's fixed vocabulary, which addEventListener takes as &str
 ambre-app | src/host/cell.rs | crate::host::cell | Listener | alias | (&'static str,Closure<dyn FnMut(web_sys::Event)>)	foreign-api	the DOM event name a closure is added under, which add- and removeEventListener take as &str
 ambre-app | src/host/cell.rs | crate::host::cell | present() | ret | bool	generic	predicate result
@@ -13,22 +12,16 @@ ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.web_frames_empty 
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::captures_pointer() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drags_text() | ret | bool	generic	predicate result
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drop_text() | ret | bool	generic	consumed answer
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drop_text(text) | param | String	free-text	dropped text
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::render_fatal(message) | param | &str	free-text	message
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::sync_children() | ret | bool	generic	predicate result
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::touch() | ret | bool	generic	consumed answer
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children() | ret | bool	generic	a fact, selects no mode: whether the board must recomposite
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children(pump) | param | impl FnMut(&mut C)->bool	generic	a fact, selects no mode: whether the pumped child changed on its own
 ambre-app | src/host/frame.rs | crate::host::frame | send_faces() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::captures_pointer() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::drags_text() | ret | bool	generic	predicate result
-ambre-app | src/host/mod.rs | crate::host | AppView::drop_text() | ret | bool	generic	consumed answer
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text(text) | param | String	free-text	dropped text
-ambre-app | src/host/mod.rs | crate::host | AppView::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/mod.rs | crate::host | AppView::takes_text() | ret | bool	generic	predicate result
-ambre-app | src/host/mod.rs | crate::host | AppView::touch() | ret | bool	generic	consumed answer
 ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(published) | param | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/mod.rs | crate::host | base64_decode() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | base64_decode(s) | param | &str	generic	generic codec/parser/bytes API
@@ -45,20 +38,14 @@ ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field 
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | u64	math	write counter
 ambre-app | src/host/murmure.rs | crate::host::murmure | page_reads(warn) | param | Rc<dyn Fn(&str)>	free-text	warning text callback
 ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell, as PipeHost::clip_published declares it
-ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::handle_input() | ret | bool	generic	consumed answer, as PipeHost::handle_input declares it
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
-ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	generic	fact flag of the probe timeline, selects no mode
 ambre-app | src/host/probe.rs | crate::host::probe | mark(name) | param | &str	free-text	metric name
 ambre-app | src/host/probe.rs | crate::host::probe | mark_count(name) | param | &str	free-text	metric name
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.dirty | field | bool	generic	dirty flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.fatal | field | bool	generic	state flag
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text() | ret | bool	generic	consumed answer
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text(text) | param | String	free-text	dropped text
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::feed() | ret | bool	generic	predicate result
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::signal_fatal(message) | param | &str	free-text	message
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch() | ret | bool	generic	consumed answer
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
 ambre-app | src/landing.rs | crate::landing | SignInMode::from_dev_flag(dev) | param | bool	newtype-inner	newtype inner, accessor or constructor
@@ -1783,25 +1770,11 @@ ambre-prose | src/input.rs | crate::input | ProseInput::Drop.text | field | Stri
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.html | field | Option<String>	free-text	the HTML half of the clipboard, as another application wrote it; Debug prints its length alone
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.text | field | String	free-text	the plain-text half of the clipboard; Debug prints its length alone
 ambre-prose | src/input.rs | crate::input | ProseInput::Text.0 | field | String	free-text	committed text, as the user typed, dictated or pasted it; Debug prints its length alone
-ambre-prose | src/input.rs | crate::input | ProseUiState::act() | ret | bool	generic	whether the view consumed the input; one it leaves goes to the host
-ambre-prose | src/input.rs | crate::input | ProseUiState::copy() | ret | bool	generic	whether the view consumed the copy or cut key
-ambre-prose | src/input.rs | crate::input | ProseUiState::delete() | ret | bool	generic	consumed answer
-ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text() | ret | bool	generic	whether the view consumed the drop; one off the text changes nothing
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(text) | param | &str	free-text	the text the user dropped, which takes the paste path
-ambre-prose | src/input.rs | crate::input | ProseUiState::handle_input() | ret | bool	generic	whether the view consumed the input; a key it leaves goes to the host
-ambre-prose | src/input.rs | crate::input | ProseUiState::key() | ret | bool	generic	whether the view consumed the key; one it leaves goes to the host
-ambre-prose | src/input.rs | crate::input | ProseUiState::menu_key() | ret | Option<bool>	generic	whether the open slash menu consumed the key; None leaves it to the editor
-ambre-prose | src/input.rs | crate::input | ProseUiState::paste() | ret | bool	generic	whether the view consumed the paste
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste(html) | param | Option<&str>	free-text	the HTML half of the clipboard, sent on as a command unread
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste(text) | param | &str	free-text	the plain-text half of the clipboard, sent on as a command
-ambre-prose | src/input.rs | crate::input | ProseUiState::pick() | ret | bool	generic	whether the view consumed the key that confirmed a slash menu item
-ambre-prose | src/input.rs | crate::input | ProseUiState::press() | ret | bool	generic	whether the view consumed a press on the canvas
-ambre-prose | src/input.rs | crate::input | ProseUiState::replay() | ret | bool	generic	whether the view consumed any of the inputs it held behind a structural command
-ambre-prose | src/input.rs | crate::input | ProseUiState::split() | ret | bool	generic	whether the view consumed the Enter key that splits the paragraph
 ambre-prose | src/input.rs | crate::input | ProseUiState::take_selection() | ret | bool	generic	whether the caller may go on: no selection, or its deletion reached the channel
-ambre-prose | src/input.rs | crate::input | ProseUiState::type_into_menu() | ret | bool	generic	whether the view consumed the typed text
 ambre-prose | src/input.rs | crate::input | ProseUiState::type_into_menu(text) | param | &str	free-text	text the user typed, which the slash menu watches on its way in
-ambre-prose | src/input.rs | crate::input | ProseUiState::type_text() | ret | bool	generic	whether the view consumed the typed text
 ambre-prose | src/input.rs | crate::input | ProseUiState::type_text(text) | param | &str	free-text	text the user typed at the caret, sent as one insertion
 ambre-prose | src/input.rs | crate::input | ProseUiState::waiting() | ret | bool	generic	whether a structural command is still unanswered, so input is held
 ambre-prose | src/input.rs | crate::input | QUEUED_INPUTS | const | usize	local	the most inputs the queue holds, compared with the length of that queue alone

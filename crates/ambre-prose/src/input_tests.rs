@@ -58,7 +58,7 @@ impl Rig {
             SendResult::Sent
         });
         self.take_sent(sent);
-        consumed
+        consumed.is_yes()
     }
 
     fn take_sent(&mut self, sent: Vec<ProseCommand>) {
@@ -103,7 +103,7 @@ impl Rig {
                 }
             }
             let mut sent = Vec::new();
-            self.ui.replay(&mut |command| {
+            let _ = self.ui.replay(&mut |command| {
                 sent.push(command);
                 SendResult::Sent
             });
@@ -191,7 +191,8 @@ fn a_dropped_insertion_leaves_no_echo() {
     let mut rig = Rig::new(&["hello"]);
     let block = rig.blocks()[0];
     rig.ui.set_caret((block, DocOffset::new(5)));
-    rig.ui
+    let _ = rig
+        .ui
         .handle_input(&ProseInput::Text("x".to_owned()), &mut |_| {
             SendResult::Dropped
         });
@@ -704,10 +705,13 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
         mods: ambre_commands::Modifiers::NONE,
         now: ambre_core::PageTime(0.0),
     };
-    assert!(ui.handle_input(&press, &mut |command| {
-        sent.push(command);
-        SendResult::Sent
-    }));
+    assert!(
+        ui.handle_input(&press, &mut |command| {
+            sent.push(command);
+            SendResult::Sent
+        })
+        .is_yes()
+    );
     // The structural command is followed by the sync that holds the input.
     assert!(matches!(
         sent.pop(),
@@ -751,7 +755,7 @@ fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
         },
         &mut |_| SendResult::Sent,
     );
-    assert!(!consumed);
+    assert!(!consumed.is_yes());
     assert_eq!(
         ui.cursor.map(|c| (c.block_id, c.offset)),
         Some((block, DocOffset::new(3)))
@@ -2106,7 +2110,8 @@ fn a_refused_copy_deletes_nothing() {
     let mut rig = Rig::new(&["hello world"]);
     rig.ui.select_all();
     let mut sent = Vec::new();
-    rig.ui
+    let _ = rig
+        .ui
         .handle_input(&ProseInput::Copy(ClipboardWrite::Cut), &mut |command| {
             sent.push(command);
             SendResult::Dropped
