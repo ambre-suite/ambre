@@ -28,9 +28,7 @@ impl ToileState {
         from: Option<&ElementId>,
         direction: StepDirection,
     ) -> ToileOutcome {
-        let hits = query.map_or_else(Vec::new, |query| {
-            self.find_hits(query.text.as_str(), query.options)
-        });
+        let hits = query.map_or_else(Vec::new, |query| self.find_hits(query));
         let focus = next_focus(&hits, from, direction);
         ToileOutcome::display_only(vec![ToileEvent::FindResults(FindResults { hits, focus })])
     }
@@ -39,13 +37,13 @@ impl ToileState {
     /// `layers` walk comes first, then any element absent from `layers`,
     /// appended in `ElementId` order (the well-formedness fallback). A
     /// concurrently dropped `layers` entry therefore never hides a hit.
-    fn find_hits(&self, query: &str, options: FindOptions) -> Vec<ElementId> {
+    fn find_hits(&self, query: &FindQuery) -> Vec<ElementId> {
         let mut hits = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for node in &self.layers {
             if let NodeId::Element(id) = node
                 && seen.insert(id.clone())
-                && self.element_matches(id, query, options)
+                && self.element_matches(id, query)
             {
                 hits.push(id.clone());
             }
@@ -55,7 +53,7 @@ impl ToileState {
             .bounds
             .keys()
             .filter(|id| !seen.contains(*id))
-            .filter(|id| self.element_matches(id, query, options))
+            .filter(|id| self.element_matches(id, query))
             .cloned()
             .collect();
         orphans.sort();
@@ -65,7 +63,7 @@ impl ToileState {
 
     /// Whether the element's searchable text (sticky / text body, frame title)
     /// matches `query` under the given options. Non-text elements never match.
-    fn element_matches(&self, id: &ElementId, query: &str, options: FindOptions) -> bool {
+    fn element_matches(&self, id: &ElementId, query: &FindQuery) -> bool {
         let Some(em) = self.element_map(id) else {
             return false;
         };
@@ -78,7 +76,7 @@ impl ToileState {
         } else {
             return false;
         };
-        text_matches(&body, query, options)
+        text_matches(&body, query)
     }
 }
 
@@ -105,9 +103,14 @@ fn next_focus(
     }
 }
 
-/// Substring test honoring the case and the word options. Case folding is a
-/// plain lowercase on both sides (adequate for the Latin-script MVP).
-fn text_matches(haystack: &str, needle: &str, options: FindOptions) -> bool {
+/// Substring test of the query text, honoring its case and word options. Case
+/// folding is a plain lowercase on both sides (adequate for the Latin-script
+/// MVP).
+fn text_matches(haystack: &str, query: &FindQuery) -> bool {
+    let options = query.options;
+    // The matcher below runs on raw or case-folded text alike, so the newtype
+    // ends here.
+    let needle = query.text.as_str();
     if needle.is_empty() {
         return false;
     }

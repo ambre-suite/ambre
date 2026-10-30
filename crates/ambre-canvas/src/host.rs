@@ -49,10 +49,9 @@ pub struct GpuState {
 impl GpuState {
     /// Fit the surface and the offscreens to `size`, in device pixels.
     pub fn configure(&mut self, size: SurfaceSize) {
-        let DeviceSize { width, height, .. } = size.physical();
         self.surface.configure(
             &self.device,
-            &surface_config(self.surface_format, width.get(), height.get()),
+            &surface_config(self.surface_format, size.physical()),
         );
         self.quad_renderer.resize_offscreens(&self.device, size);
         self.size = size;
@@ -61,25 +60,20 @@ impl GpuState {
     /// Reconfigure a lost or outdated swapchain at the current size. The
     /// offscreens survive, so no repaint is owed.
     pub fn reconfigure_surface(&self) {
-        let DeviceSize { width, height, .. } = self.size.physical();
         self.surface.configure(
             &self.device,
-            &surface_config(self.surface_format, width.get(), height.get()),
+            &surface_config(self.surface_format, self.size.physical()),
         );
     }
 }
 
-/// The swapchain configuration for a buffer of `width` x `height` pixels.
-fn surface_config(
-    format: wgpu::TextureFormat,
-    width: u32,
-    height: u32,
-) -> wgpu::SurfaceConfiguration {
+/// The swapchain configuration for a buffer of `size` device pixels.
+fn surface_config(format: wgpu::TextureFormat, size: DeviceSize) -> wgpu::SurfaceConfiguration {
     wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format,
-        width,
-        height,
+        width: size.width.get(),
+        height: size.height.get(),
         present_mode: wgpu::PresentMode::AutoNoVsync,
         desired_maximum_frame_latency: 2,
         alpha_mode: wgpu::CompositeAlphaMode::Auto,
@@ -274,7 +268,7 @@ async fn create_gpu_state(
         return None;
     };
 
-    surface.configure(&device, &surface_config(format, width.get(), height.get()));
+    surface.configure(&device, &surface_config(format, size.physical()));
 
     let mut quad_renderer = QuadRenderer::new(&device, format);
     // Size the ping-pong offscreens to the initial canvas. ResizeObserver

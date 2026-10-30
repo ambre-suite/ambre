@@ -17,7 +17,7 @@ macro_rules! cell_text {
         impl std::fmt::Debug for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 f.debug_tuple(stringify!($name))
-                    .field(&ambre_core::char_len(&self.0))
+                    .field(&ambre_core::RedactedChars::of(&self.0))
                     .finish()
             }
         }

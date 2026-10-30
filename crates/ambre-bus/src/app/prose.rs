@@ -1093,7 +1093,7 @@ impl fmt::Debug for FootnoteEntry {
         f.debug_struct("FootnoteEntry")
             .field("footnote_id", &self.footnote_id)
             .field("ordinal", &self.ordinal)
-            .field("text", &ambre_core::char_len(&self.text))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
             .finish()
     }
 }
@@ -1119,7 +1119,7 @@ impl fmt::Debug for CommentReply {
             .field("author", &self.author)
             .field("user_id", &self.user_id)
             .field("created_at", &self.created_at)
-            .field("text", &ambre_core::char_len(&self.text))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
             .finish()
     }
 }
@@ -1271,7 +1271,7 @@ impl fmt::Debug for CrossRefKind {
             Self::HeadingNumber => f.write_str("HeadingNumber"),
             Self::CustomText(text) => f
                 .debug_tuple("CustomText")
-                .field(&ambre_core::char_len(text))
+                .field(&ambre_core::RedactedChars::of(text))
                 .finish(),
         }
     }
@@ -1296,7 +1296,10 @@ impl fmt::Debug for ResolvedCrossRef {
             .field("block_id", &self.block_id)
             .field("offset", &self.offset)
             .field("target", &self.target)
-            .field("shown", &self.shown.as_deref().map(ambre_core::char_len))
+            .field(
+                "shown",
+                &self.shown.as_deref().map(ambre_core::RedactedChars::of),
+            )
             .finish()
     }
 }
@@ -1355,7 +1358,7 @@ impl fmt::Debug for TocEntry {
         f.debug_struct("TocEntry")
             .field("block_id", &self.block_id)
             .field("level", &self.level)
-            .field("text", &ambre_core::char_len(&self.text))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
             .field("heading_number", &self.heading_number)
             .field("page", &self.page)
             .finish()
@@ -1859,7 +1862,7 @@ impl fmt::Debug for ProseCommand {
             ($name:literal $(, $field:ident)* ; $text:ident $(, $tail:ident)*) => {
                 f.debug_struct($name)
                     $(.field(stringify!($field), $field))*
-                    .field(stringify!($text), &ambre_core::char_len($text))
+                    .field(stringify!($text), &ambre_core::RedactedChars::of($text))
                     $(.field(stringify!($tail), $tail))*
                     .finish()
             };
@@ -1979,8 +1982,8 @@ impl fmt::Debug for ProseCommand {
             } => f
                 .debug_struct("Paste")
                 .field("at", at)
-                .field("text", &ambre_core::char_len(text))
-                .field("html", &html.as_deref().map(ambre_core::char_len))
+                .field("text", &ambre_core::RedactedChars::of(text))
+                .field("html", &html.as_deref().map(ambre_core::RedactedChars::of))
                 .field("payload", payload)
                 .finish(),
             Self::FormatSelection {
@@ -2340,7 +2343,7 @@ impl std::fmt::Debug for InteropError {
         match self {
             Self::ParseFailed(reason) => f
                 .debug_tuple("ParseFailed")
-                .field(&ambre_core::char_len(reason))
+                .field(&ambre_core::RedactedChars::of(reason))
                 .finish(),
             Self::TooLarge(size) => f.debug_tuple("TooLarge").field(size).finish(),
         }
@@ -2660,8 +2663,8 @@ impl fmt::Debug for ProseEvent {
                 payload,
             } => f
                 .debug_struct("Clipboard")
-                .field("text", &ambre_core::char_len(text))
-                .field("html", &ambre_core::char_len(html))
+                .field("text", &ambre_core::RedactedChars::of(text))
+                .field("html", &ambre_core::RedactedChars::of(html))
                 .field("payload", payload)
                 .finish(),
             Self::MergeConflictDetected { cell_id } => fields!("MergeConflictDetected", cell_id),
@@ -2926,7 +2929,7 @@ impl fmt::Debug for ProseRefusal {
             Self::BadMarkValue { key, value } => f
                 .debug_struct("BadMarkValue")
                 .field("key", key)
-                .field("value", &ambre_core::char_len(value))
+                .field("value", &ambre_core::RedactedChars::of(value))
                 .finish(),
             Self::RemoteImportFailed => f.write_str("RemoteImportFailed"),
             Self::OutsideTheGrid => f.write_str("OutsideTheGrid"),
@@ -2972,7 +2975,7 @@ mod tests {
             value: "Q3 layoffs".to_owned(),
         };
         let printed = format!("{refused:?}");
-        assert!(printed.contains("CharCount(10)"), "{printed}");
+        assert!(printed.contains("10 chars"), "{printed}");
         assert!(!printed.contains("Q3 layoffs"), "{printed}");
         assert!(refused.to_string().contains("Q3 layoffs"));
     }
@@ -2982,7 +2985,7 @@ mod tests {
     #[test]
     fn a_parse_failure_prints_the_length_of_its_reason_alone() {
         let failed = InteropError::ParseFailed("near 'Q3 layoffs'".to_owned());
-        assert_eq!(format!("{failed:?}"), "ParseFailed(CharCount(17))");
+        assert_eq!(format!("{failed:?}"), "ParseFailed(17 chars)");
         let large = InteropError::TooLarge(ambre_core::ByteSize(9));
         assert_eq!(
             format!("{large:?}"),
@@ -3202,7 +3205,7 @@ mod tests {
             ),
         ];
         for line in printed {
-            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(line.contains("10 chars"), "{line}");
             assert!(!line.contains("Q3 layoffs"), "{line}");
         }
     }

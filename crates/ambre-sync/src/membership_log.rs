@@ -96,7 +96,7 @@ struct Held {
 /// that does not encode, which no decoded entry is.
 pub(crate) fn digest(entry: &MembershipEntry) -> Option<EntryDigest> {
     let encoded = entry.encode().ok()?;
-    Some(ambre_crypto::hash::entry_digest(encoded.as_bytes()))
+    Some(ambre_crypto::hash::entry_digest(&encoded))
 }
 
 /// The place and the previous digest the next entry of a log takes.

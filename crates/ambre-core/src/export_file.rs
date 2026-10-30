@@ -74,7 +74,7 @@ pub struct ExportFilename(String);
 impl std::fmt::Debug for ExportFilename {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("ExportFilename")
-            .field(&crate::char_len(&self.0))
+            .field(&crate::RedactedChars::of(&self.0))
             .finish()
     }
 }
@@ -266,6 +266,20 @@ impl FileBytes {
     #[must_use]
     pub fn size(&self) -> ByteSize {
         ByteSize::of_len(self.len())
+    }
+}
+
+/// A plaintext `.ambre` export saves the whole container, header included.
+impl From<crate::PlaintextContainer> for FileBytes {
+    fn from(container: crate::PlaintextContainer) -> Self {
+        Self::new(container.into_bytes())
+    }
+}
+
+/// A sealed `.ambre` export saves the whole sealed container.
+impl From<crate::SealedContainer> for FileBytes {
+    fn from(container: crate::SealedContainer) -> Self {
+        Self::new(container.into_bytes())
     }
 }
 
@@ -507,6 +521,6 @@ mod tests {
     #[test]
     fn a_file_name_prints_its_length_alone() {
         let name = ExportFilename::new("Q3 layoffs.pdf").expect("a valid name");
-        assert_eq!(format!("{name:?}"), "ExportFilename(CharCount(14))");
+        assert_eq!(format!("{name:?}"), "ExportFilename(14 chars)");
     }
 }

@@ -41,6 +41,12 @@ impl StoredMarkValue {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The value read as a link target, spelled as stored and never checked.
+    #[must_use]
+    pub fn to_link(&self) -> ambre_core::LinkUrl {
+        ambre_core::LinkUrl::new(self.0.clone())
+    }
 }
 
 impl std::fmt::Debug for StoredMarkValue {

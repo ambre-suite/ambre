@@ -544,6 +544,13 @@ impl ChannelCapacity {
     pub const fn get(self) -> usize {
         self.0
     }
+
+    /// The backlog length of `factor` full channels of this capacity,
+    /// saturating at `usize::MAX`.
+    #[must_use]
+    pub const fn backlog(self, factor: usize) -> BacklogLength {
+        BacklogLength(self.0.saturating_mul(factor))
+    }
 }
 
 /// What a [`Backlog`] asks of the source that feeds it (`SYNC-059`).
@@ -740,6 +747,22 @@ mod tests {
         assert_eq!(ChannelCapacity::new(0).get(), 1);
         let (tx, _rx) = local(ChannelCapacity::new(0));
         assert_eq!(tx.try_send(1), Ok(()));
+    }
+
+    #[test]
+    fn a_backlog_counts_full_channels_and_holds_at_the_top() {
+        assert_eq!(
+            ChannelCapacity::new(1024).backlog(4),
+            BacklogLength::new(4096)
+        );
+        assert_eq!(
+            ChannelCapacity::new(1024).backlog(1),
+            BacklogLength::new(1024)
+        );
+        assert_eq!(
+            ChannelCapacity::new(usize::MAX).backlog(2),
+            BacklogLength::new(usize::MAX)
+        );
     }
 
     /// A pair of marks whose low one does not sit below the high one would

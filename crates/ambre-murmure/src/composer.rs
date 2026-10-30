@@ -38,7 +38,7 @@ use ambre_core::{
     ByteCount, ByteOffset, CharSpan, DocPoint, HistoryStep, ViewPoint, ViewPx, ViewSize,
     ZoomFactor, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
 };
-use ambre_draw::{Color, DrawSurface, FontContext, Point, Rect};
+use ambre_draw::{Color, Consumed, DrawSurface, FontContext, Point, Rect};
 
 use crate::Region;
 use crate::commands::PendingEdit;
@@ -139,7 +139,7 @@ fn body_style(color: Color) -> TextEditorStyle {
         weight: ambre_core::FontWeight::REGULAR,
         italic: ambre_core::Slant::Upright,
         family: FAMILY,
-        base_size: ambre_core::DocPx::new(FONT_BODY.get()),
+        base_size: FONT_BODY.unzoomed(ZoomFactor::ONE),
         color,
         underline: ambre_core::Underline::Plain,
         strikethrough: ambre_core::Strikethrough::Plain,
@@ -888,12 +888,12 @@ impl Composer {
     /// An open `@` list takes its own keys first (`MURMURE-554`). Answers
     /// whether the composer took the key. `Ctrl` here is the primary
     /// accelerator, the command key on macOS (`UI-THREAD-028`).
-    pub fn key(&mut self, of: DraftOf, key: Key, mods: Modifiers) -> bool {
+    pub fn key(&mut self, of: DraftOf, key: Key, mods: Modifiers) -> Consumed {
         if self.composing == Composing::Preview {
-            return false;
+            return Consumed::No;
         }
-        if mods == Modifiers::NONE && self.list_key(of, key) {
-            return true;
+        if mods == Modifiers::NONE && self.list_key(of, key).is_yes() {
+            return Consumed::Yes;
         }
         let (primary, alt, shift) = (mods.primary(), mods.alt(), mods.shift());
         // A chord puts its style on the selection once the keys before it
@@ -902,7 +902,7 @@ impl Composer {
             && let Some(style) = markers::chord_style(key)
         {
             self.toggle(of, style);
-            return true;
+            return Consumed::Yes;
         }
         let word = ambre_canvas::Stride::word_if(primary || alt);
         let intent = match key {
@@ -913,19 +913,19 @@ impl Composer {
             }
             Key::Enter if alt && matches!(of, DraftOf::Thread(..)) => {
                 self.toggle_also(of);
-                return true;
+                return Consumed::Yes;
             }
             Key::Enter => {
                 self.send = Some(of);
-                return true;
+                return Consumed::Yes;
             }
             Key::Escape if self.editing(of) => {
                 self.end_edit(of);
-                return true;
+                return Consumed::Yes;
             }
             Key::Escape => {
                 self.blur();
-                return true;
+                return Consumed::Yes;
             }
             Key::Char(KeyChar::Z | KeyChar::Y) if primary => {
                 let step = if shift || key == Key::Char(KeyChar::Y) {
@@ -937,7 +937,7 @@ impl Composer {
                 self.editor(of);
                 self.history(of).asked.push(step);
                 self.saying = Some((of, Say::Draft));
-                return true;
+                return Consumed::Yes;
             }
             Key::Char(KeyChar::A) if primary => EditIntent::SelectAll,
             Key::Backspace => EditIntent::Backspace,
@@ -962,7 +962,7 @@ impl Composer {
             Key::End => EditIntent::LineEnd {
                 select: ambre_canvas::Extend::select_if(shift),
             },
-            _ => return false,
+            _ => return Consumed::No,
         };
         let edits = matches!(
             intent,
@@ -995,19 +995,19 @@ impl Composer {
             _ => history.seal(),
         }
         self.editor(of).push(intent);
-        true
+        Consumed::Yes
     }
 
     /// A key while the `@` list of the draft `of` shows an entry. Up and Down
     /// move the choice round the list, Enter and Tab pick it, and Escape
     /// closes the list until its query ends (`MURMURE-554`).
-    fn list_key(&mut self, of: DraftOf, key: Key) -> bool {
+    fn list_key(&mut self, of: DraftOf, key: Key) -> Consumed {
         let Some(asking) = self
             .asking
             .as_mut()
             .filter(|asking| asking.of == of && !asking.offers.is_empty())
         else {
-            return false;
+            return Consumed::No;
         };
         let len = asking.offers.len();
         match key {
@@ -1021,9 +1021,9 @@ impl Composer {
                 self.dismissed = Some((of, asking.at));
                 self.asking = None;
             }
-            _ => return false,
+            _ => return Consumed::No,
         }
-        true
+        Consumed::Yes
     }
 
     /// Pick the entry `index` of the `@` list of the draft `of`: the next
@@ -1340,18 +1340,18 @@ impl Composer {
 
     /// A pointer moved: a drag from the field extends the selection.
     /// Answers whether the composer held a drag.
-    pub fn drag_to(&mut self, of: DraftOf, at: ViewPoint) -> bool {
+    pub fn drag_to(&mut self, of: DraftOf, at: ViewPoint) -> Consumed {
         if self.drag == Drag::Idle {
-            return false;
+            return Consumed::No;
         }
         let at = self.in_field(at);
         self.editor(of).point_drag(at);
-        true
+        Consumed::Yes
     }
 
     /// The button lifted. Answers whether the composer held a drag.
-    pub fn release(&mut self) -> bool {
-        std::mem::take(&mut self.drag) == Drag::Selecting
+    pub fn release(&mut self) -> Consumed {
+        Consumed::yes_if(std::mem::take(&mut self.drag) == Drag::Selecting)
     }
 
     /// A double click in the field selects the word under it.

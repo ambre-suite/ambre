@@ -35,7 +35,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | `TOILE-UI-086` | `OBS` | The presenter panel MUST show the active slide's rank, the deck's length and that slide's notes. | this spec section 4 | `ambre_toile::ui::presenter::tests::counter_label_is_one_based`; `ambre_toile::ui::presenter::tests::counter_label_empty_deck`; `ambre_toile::tests::chrome_ui::presenter_panel_counter_is_one_based`; `ambre_toile::tests::chrome_ui::presenter_panel_hidden_when_closed` | none | verified |
 | `TOILE-UI-089` | `OBS` | The panel MUST show the follow affordance exactly when the presenter signal names a peer. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_follow_button_hidden_without_presenter` -- the signal naming no peer; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` -- the signal naming one (both mount the panel with that signal set by hand, so they hold the component and never the relay that feeds it, which is `TOILE-UI-315`) | none | verified |
 | `TOILE-UI-315` | `OBS` | The presenter signal MUST name a peer only while that peer is broadcasting a slide. | this spec section 4 | `ambre_toile::logic::convergence_tests::stopping_a_broadcast_sends_a_sample_naming_no_slide` -- the sample a presenter sends when it stops, and the silence of a viewer that was not broadcasting; `ambre_toile::tests::chrome_ui::the_presenter_is_named_only_while_it_broadcasts` -- the relay names the peer on a sample carrying a slide, and nobody once its sample carries none or it leaves the live set | none | verified |
-| `TOILE-UI-316` | `OBS` | The notes area MUST show a peer's edit to the note on screen. | this spec section 4 | `ambre_toile::logic::convergence_tests::a_peers_note_edit_reaches_the_slide_on_screen` -- the event a remote splice raises, and the silence of a remote change that leaves the note alone; `ambre_toile::tests::chrome_effects::a_peer_note_write_keeps_the_caret` -- the area shows the write, the caret shifted past the peer's prefix | none | verified |
+| `TOILE-UI-316` | `OBS` | The notes area MUST show a peer's edit to the note on screen. | this spec section 4 | `ambre_toile::logic::convergence_tests::a_peers_note_edit_reaches_the_slide_on_screen` -- the event a remote splice raises, and the silence of a remote change that leaves the note alone; `ambre_toile::tests::chrome_effects::a_peer_note_write_keeps_the_caret` -- the area shows the write, the caret shifted past the peer's prefix; `ambre_toile::ui::presenter::tests::a_caret_keeps_its_place_under_a_peer_write` -- the caret shifts past a peer's prefix, holds under a suffix, and counts UTF-16 units | none | verified |
 | `TOILE-UI-083` | `OBS` | Presentation mode MUST hide every editing surface. | this spec section 4 | `ambre_toile::ui::render::tests::overlay_paints_no_editing_surface_while_presenting` -- a selection and a find hit that draw nothing while the mode holds; `ambre_toile::ui::view::view_tests::a_presentation_takes_no_edit` -- a click, a delete, an undo chord and a double click send nothing; `ambre_toile::ui::view::view_tests::a_presentation_closes_the_open_editor` -- the open editor closes and keeps its text; `ambre_toile::tests::chrome_ui::the_editing_chrome_leaves_while_the_board_presents` -- the editing chrome leaves the DOM and comes back | none | verified |
 | `TOILE-UI-085` | `OBS` | An element the next slide drops MUST fade out over the whole transition. | this spec section 4 | `ambre_toile::ui::present::tests::the_covering_cull_holds_both_ends_of_the_glide` -- the cull a transition asks for covers the camera it starts on and the one it lands on, so neither slide's elements leave the visible set while the fade runs | none | verified |
 
@@ -54,9 +54,10 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-FEAT-081` | `POST` | Moving to a slide MUST emit one event carrying the new index, both slides' snapshots, the camera target, the deck length, and the target frame with its notes. | this spec section 3 | type-level -- `SlideChange` carries exactly those seven fields, and `slide_change` fills every one of them on each move | none | verified |
+| `TOILE-FEAT-081` | `POST` | Moving to a slide MUST emit one event carrying the new index, both slides' snapshots, the camera target, the deck length, and the target frame with its notes. | this spec section 3 | type-level -- `SlideChange` carries exactly those seven fields, and `slide_change` fills every one of them on each move; `ambre_toile::logic::convergence_tests::slide_change_carries_snapshots_and_fit_rect` -- a step reads back the new index, both frame snapshots and the target frame's box; `ambre_toile::logic::convergence_tests::slide_change_carries_count_frame_and_notes` -- the deck length, the target frame and its notes, and empty notes on a slide with none | none | verified |
 | `TOILE-FEAT-082` | `POST` | Moving to a slide by hand MUST clear any follow, so the viewer takes control. | this spec section 3 | `ambre_toile::logic::convergence_tests::manual_nav_breaks_follow` | none | verified |
 | `TOILE-FEAT-083` | `FRAME` | Moving to a slide MUST NOT write to the document. | this spec section 3 | `ambre_toile::logic::convergence_tests::playback_is_not_synced` | none | verified |
+| `TOILE-FEAT-110` | `POST` | A slide's snapshot MUST hold the frame's declared members with their box, rotation, opacity and fill. | this spec section 3 | `ambre_toile::logic::convergence_tests::frame_snapshot_captures_declared_children_props` -- the members in declared order, and one member's box, rotation, opacity and fill read back | none | verified |
 
 ### 1.4 Follow a presenter
 
@@ -94,6 +95,8 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | `TOILE-UI-317` | `POST` | The camera MUST hold the previous slide at the start of a transition, and move between the two ends only. | this spec section 4 | `ambre_toile::ui::present::tests::start_frame_holds_source_camera_and_content`; `ambre_toile::ui::present::tests::midpoint_tweens_between_endpoints` | none | verified |
 | `TOILE-FEAT-028` | `POST` | A transition MUST last the time the deck's own configuration carries. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_transition_lasts_what_the_deck_configures` -- the configured length riding the slide event, and the default a register holding anything else reads as | none | verified |
 | `TOILE-UI-318` | `FRAME` | Drawing a transition frame MUST NOT write to the document. | this spec section 4 | structural -- `ui::present::Transition` holds two snapshots and a clock, and its `advance` has no document handle and no command sink, so a played frame cannot be written back | none | verified |
+| `TOILE-FEAT-108` | `POST` | The easing curve MUST rise from 0 at 0 to 1 at 1, never decreasing between them. | this spec section 3 | `ambre_toile::logic::animate::tests::ease_in_out_cubic_curve` -- both ends, and 101 samples read in order | none | verified |
+| `TOILE-FEAT-109` | `POST` | A transition MUST clamp its phase into 0 to 1, a clock that is not a number reading as the start. | this spec section 3 | `ambre_toile::logic::animate::tests::a_phase_stays_in_the_unit_interval_and_is_never_nan` -- NaN, below and above the interval, and a NaN clock leaving the source box | none | verified |
 
 ### 1.8 Enter and leave the presentation
 
@@ -103,6 +106,7 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 | `TOILE-UI-319` | `POST` | Every panel control MUST resolve to the local command it names. | this spec section 4 | `ambre_toile::tests::chrome_ui::presenter_nav_buttons_fire_intents`; `ambre_toile::tests::chrome_ui::presenter_broadcast_button_fires_toggle`; `ambre_toile::tests::chrome_ui::presenter_follow_button_fires_with_peer` | none | verified |
 | `TOILE-FEAT-094` | `POST` | Leaving presentation mode MUST stop this viewer's broadcast. | this spec section 3 | `ambre_toile::logic::convergence_tests::leaving_the_presentation_stops_the_broadcast` -- after the exit the viewer is not broadcasting, says so, and its presence sample names no slide | none | verified |
 | `TOILE-FEAT-095` | `FRAME` | Entering or leaving presentation mode MUST NOT write to the document. | this spec section 3 | `ambre_toile::logic::convergence_tests::present_mode_toggle_is_local`; `ambre_toile::logic::convergence_tests::present_broadcast_toggle_is_local` | none | verified |
+| `TOILE-FEAT-111` | `POST` | Entering presentation mode MUST start from an empty source snapshot, so the first slide fades in. | this spec section 3 | `ambre_toile::logic::convergence_tests::enter_present_starts_from_empty_snapshot` -- the slide event on entry carries an empty source and the first frame's snapshot | none | verified |
 
 * **Budget.** the transition frame under 4 ms at 500 elements, the slide-transition row of
   `ambre-spec-budgets.md section 1`. A transition frame is a full repaint and a fresh cull. It costs a frame
@@ -110,10 +114,10 @@ carries a presenter's position (`features/ambre-spec-toile-presence.md section 3
 * **Boundary.** one outbound flow, and only while the presenter broadcasts: the slide index rides a
   presence sample, which `ZK-005` seals with the `DocumentKey`. The deck and the notes are
   document data like any other, sealed by `ZK-001`.
-* **Verification.** 45 `verified`, 0 `failing`, 0 `untested`. What holds is the
-  machinery, the best-covered subject of the application: convergence, playback, follow, the solver
-  endpoints, the camera and both panels. The presenter relay and the board locked while it presents
-  hold too. What is loose is behaviour no row rules on yet, listed in section 6.
+* **Verification.** 49 `verified`. What holds is the machinery, the best-covered subject of the
+  application: convergence, playback, follow, the solver endpoints, the camera and both panels. The
+  presenter relay and the board locked while it presents hold too. What is loose is behaviour no row
+  rules on yet, listed in section 6.
 
 ---
 

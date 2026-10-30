@@ -63,7 +63,7 @@ pub fn authenticate_account(
     let signing_pubkey = claims
         .spk
         .as_ref()
-        .map(|spk| ambre_core::PublicKey::from_hex(spk.as_str()))
+        .map(ambre_core::SigningKeyHex::decode)
         .transpose()
         .map_err(|_| AppError::Unauthorized)?;
     Ok(AccountSession {
@@ -144,7 +144,7 @@ pub async fn issue_session(
         sub: user_id,
         spk: signing_pubkey
             .as_ref()
-            .map(|key| ambre_core::SigningKeyHex(key.to_hex())),
+            .map(ambre_core::PublicKey::to_key_hex),
         iat: now,
         exp: now.plus(access_ttl),
     };

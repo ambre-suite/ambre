@@ -434,9 +434,10 @@ impl HttpBody {
         &self.0
     }
 
-    /// The bytes, moved out.
-    pub(crate) fn into_bytes(self) -> Vec<u8> {
-        self.0
+    /// The answer of a download, as a blob some writer sealed: neither
+    /// verified nor opened yet.
+    pub(crate) fn into_fetched(self) -> crate::pipeline::FetchedBlob {
+        crate::pipeline::FetchedBlob::new(self.0)
     }
 }
 
@@ -1057,7 +1058,7 @@ pub(crate) async fn put_sealed_via(
     blob: &crate::pipeline::SealedBlob,
 ) -> Result<(), HttpError> {
     let request = Outgoing {
-        body: Some((ContentType::Octets, HttpBody::new(blob.as_bytes().to_vec()))),
+        body: Some((ContentType::Octets, blob.to_body())),
         ..Outgoing::new(Method::Put, url.into())
     };
     let resp = exchange(transport, &request).await?;
@@ -1106,7 +1107,7 @@ pub(crate) async fn fetch_bytes(
     let request = Outgoing::new(Method::Get, url.into());
     let resp = exchange(&Fetch, &request).await?;
     expect_ok(&request, &resp)?;
-    Ok(crate::pipeline::FetchedBlob::new(resp.body.into_bytes()))
+    Ok(resp.body.into_fetched())
 }
 
 /// Account-setup payload. Zero-Knowledge invariant (N4): the passphrase NEVER

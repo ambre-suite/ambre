@@ -22,6 +22,11 @@ use crate::{
 
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
+/// The query a member searching for `text` sends.
+fn parse_query(text: &str) -> Option<Query> {
+    Query::parse(&ambre_core::SearchQuery::new(text.to_owned()).expect("not blank"))
+}
+
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {
         text: text.to_owned(),
@@ -981,7 +986,7 @@ fn a_search_reads_the_held_segments_and_lists_the_rest() {
     for text in ["budget review", "lunch"] {
         state.send(&draft(text), UserId::new(), NOW).expect("send");
     }
-    let query = Query::parse("BUDG ete").expect("two words");
+    let query = parse_query("BUDG ete").expect("two words");
     let found = |state: &ChannelState| {
         let answer = state.search(&query);
         let matches: Vec<(SegmentId, String)> = answer
@@ -1009,7 +1014,7 @@ fn a_search_reads_the_held_segments_and_lists_the_rest() {
         [stored.final_id, stored.closing_id, stored.active_id]
     );
     assert_eq!(matches, [(stored.final_id, "the Été budget".to_owned())]);
-    let budget = Query::parse("budget").expect("a word");
+    let budget = parse_query("budget").expect("a word");
     let segments: Vec<SegmentId> = state
         .search(&budget)
         .matches

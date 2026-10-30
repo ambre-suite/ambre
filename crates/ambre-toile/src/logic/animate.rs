@@ -405,16 +405,8 @@ mod tests {
         assert_eq!(out[0].opacity.get(), 0.5);
     }
 
-    #[test]
-    fn by_id_finds_declared_child() {
-        let e = snap("child", rect(0.0, 0.0, 1.0, 1.0), 0.0, 1.0, None);
-        let f = FrameSnapshot {
-            elements: vec![e.clone()],
-        };
-        assert_eq!(f.by_id(&ElementId("child".to_owned())), Some(&e));
-        assert_eq!(f.by_id(&ElementId("absent".to_owned())), None);
-    }
-
+    /// `TOILE-FEAT-108`: the easing curve rises from 0 at 0 to 1 at 1, and never
+    /// decreases between them.
     #[test]
     fn ease_in_out_cubic_curve() {
         let ease = |t: f64| ease_in_out_cubic(at(t)).get();
@@ -433,7 +425,7 @@ mod tests {
         assert_eq!(ease(2.0), 1.0);
     }
 
-    /// A phase stays in `0.0 ..= 1.0`, and a NaN clock reads as the source,
+    /// `TOILE-FEAT-109`: a phase stays in `0.0 ..= 1.0`, and a NaN clock reads as the source,
     /// so no interpolation it weights turns NaN.
     #[test]
     fn a_phase_stays_in_the_unit_interval_and_is_never_nan() {

@@ -50,7 +50,7 @@ use crate::logic::model::{ElementId, ThreadId};
 use ambre_bus::app::toile::ThreadMessageCount;
 
 use super::ToileState;
-use super::names::{FieldValues, Fields, MessageKey, Root, ThreadKey, entry, root_map};
+use super::names::{FieldValues, Fields, MessageKey, Root, ThreadKey, entry};
 
 /// How many characters of the opening message the board-wide list carries. The
 /// panel shows a row per thread, and a row is a line: the rest of the
@@ -358,7 +358,7 @@ impl ToileState {
 
     /// The thread's map container, or `None` when no thread carries `id`.
     fn thread_map(&self, id: &ThreadId) -> Option<Fields<ThreadKey>> {
-        entry(&root_map(&self.doc, Root::Comments), id.as_str())
+        entry::<ThreadKey>(&self.doc, id)
     }
 
     /// The thread's message list container.

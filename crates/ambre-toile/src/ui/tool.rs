@@ -1573,9 +1573,11 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 300.0, 300.0);
         let disp = viewport(vec![frame_elem("f", bounds, "Agenda")]);
         let cam = cam();
-        let band =
-            super::super::render::frame_title_box(world_rect_to_screen(bounds, &cam), "Agenda")
-                .expect("a named frame has a title band");
+        let band = super::super::render::frame_title_box(
+            world_rect_to_screen(bounds, &cam),
+            super::super::render::FrameTitle::Named("Agenda"),
+        )
+        .expect("a named frame has a title band");
         let screen = band.center();
         let world = cam.screen_to_world() * screen;
         // The press point is above the frame, so the board holds nothing there.
@@ -1756,6 +1758,8 @@ mod tests {
         );
     }
 
+    /// `TOILE-UI-407`: resizing a rotated element holds the corner opposite
+    /// the dragged handle fixed in world space.
     #[test]
     fn resize_rotated_pins_the_opposite_corner_in_world_space() {
         use std::f64::consts::FRAC_PI_6;
@@ -1777,6 +1781,8 @@ mod tests {
         );
     }
 
+    /// `TOILE-UI-270`: a move, a resize and a rotate in flight each override the
+    /// geometry they will commit.
     #[test]
     fn gesture_overrides_track_resize_move_and_rotate() {
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);

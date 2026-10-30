@@ -71,6 +71,13 @@ impl MentionCount {
     /// No mention.
     pub const ZERO: Self = Self(0);
 
+    /// The mentions a document's activity counted: each update that named
+    /// the reader, or every member, is one mention.
+    #[must_use]
+    pub const fn of_updates(updates: ambre_core::activity::MentionUpdates) -> Self {
+        Self(updates.get())
+    }
+
     /// The two counts together, held at the top rather than wrapping.
     #[must_use]
     pub const fn plus(self, other: Self) -> Self {
@@ -151,6 +158,13 @@ impl UnreadCount {
     /// Nothing unread.
     pub const ZERO: Self = Self(0);
 
+    /// The unread messages a document's activity counted: each content
+    /// update is one message.
+    #[must_use]
+    pub const fn of_updates(updates: ambre_core::activity::ContentUpdates) -> Self {
+        Self(updates.get())
+    }
+
     /// The two counts together, held at the top rather than wrapping.
     #[must_use]
     pub const fn plus(self, other: Self) -> Self {
@@ -228,7 +242,7 @@ pub struct MessageDraft {
 impl std::fmt::Debug for MessageDraft {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MessageDraft")
-            .field("text", &ambre_core::char_len(&self.text))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
             .field("mentions", &self.mentions)
             .field("styles", &self.styles)
             .finish()
@@ -288,7 +302,7 @@ impl std::fmt::Debug for Attachment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Attachment")
             .field("media_ref", &self.media_ref)
-            .field("name", &ambre_core::char_len(&self.name))
+            .field("name", &ambre_core::RedactedChars::of(&self.name))
             .field("media_type", &self.media_type)
             .field("size", &self.size)
             .finish()
@@ -580,7 +594,7 @@ impl std::fmt::Debug for MessageView {
             .field("id", &self.id)
             .field("author", &self.author)
             .field("ts", &self.ts)
-            .field("text", &ambre_core::char_len(&self.text))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
             .field("mentions", &self.mentions)
             .field("styles", &self.styles)
             .field("attachments", &self.attachments)
@@ -815,6 +829,34 @@ impl SealedChannelKey {
     /// Wrap the sealed bytes the Sync worker produced.
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
         Self(bytes)
+    }
+
+    /// The catalogue form of one seal: the id of the space key that sealed
+    /// it, the nonce, then the ciphertext and its tag.
+    pub fn from_parts(
+        key_id: ambre_core::KeyId,
+        nonce: &ambre_core::Nonce,
+        ciphertext: &ambre_core::Ciphertext,
+    ) -> Self {
+        let mut bytes = Vec::new();
+        key_id.push_to(&mut bytes);
+        nonce.push_to(&mut bytes);
+        bytes.extend_from_slice(&ciphertext.0);
+        Self(bytes)
+    }
+
+    /// The id of the space key that sealed it. `None` for bytes too short to
+    /// name a key.
+    pub fn key_id(&self) -> Option<ambre_core::KeyId> {
+        ambre_core::KeyId::split_from(&self.0).map(|(key_id, _)| key_id)
+    }
+
+    /// The parts [`Self::from_parts`] joined. `None` for bytes too short to
+    /// hold a key id and a nonce.
+    pub fn split(&self) -> Option<(ambre_core::KeyId, ambre_core::Nonce, ambre_core::Ciphertext)> {
+        let (key_id, rest) = ambre_core::KeyId::split_from(&self.0)?;
+        let (nonce, ciphertext) = ambre_core::Nonce::split_from(rest)?;
+        Some((key_id, nonce, ambre_core::Ciphertext(ciphertext.to_vec())))
     }
 
     /// The sealed bytes, as the catalogue stores them.
@@ -1096,8 +1138,25 @@ pub enum SpaceEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::{MurmureCommand, Topic};
-    use ambre_core::SegmentId;
+    use super::{MurmureCommand, SealedChannelKey, Topic};
+    use ambre_core::{Ciphertext, KeyId, Nonce, SegmentId};
+
+    /// A split gives back the parts a join wrote. Bytes too short to hold a
+    /// key id and a nonce give nothing.
+    #[test]
+    fn a_sealed_channel_key_splits_into_the_parts_it_joined() {
+        let (key_id, nonce) = (KeyId::from_array([3; 16]), Nonce([7; 24]));
+        let ciphertext = Ciphertext(b"sealed".to_vec());
+        let sealed = SealedChannelKey::from_parts(key_id, &nonce, &ciphertext);
+        assert_eq!(sealed.key_id(), Some(key_id));
+        assert_eq!(sealed.split(), Some((key_id, nonce, ciphertext)));
+        let empty = SealedChannelKey::from_parts(key_id, &nonce, &Ciphertext(Vec::new()));
+        assert_eq!(empty.split(), Some((key_id, nonce, Ciphertext(Vec::new()))));
+        let short = SealedChannelKey::from_bytes(vec![3; 39]);
+        assert_eq!(short.key_id(), Some(key_id));
+        assert_eq!(short.split(), None);
+        assert_eq!(SealedChannelKey::from_bytes(vec![3; 15]).key_id(), None);
+    }
 
     /// A retry fetches again what the channel already holds: it writes no
     /// document, so a read-only member sends it too.
@@ -1173,7 +1232,7 @@ mod tests {
             format!("{view:?}"),
             format!("{edit:?}"),
         ] {
-            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(line.contains("10 chars"), "{line}");
             assert!(!line.contains(secret), "{line}");
         }
     }

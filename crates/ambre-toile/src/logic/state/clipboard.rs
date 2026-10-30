@@ -257,7 +257,7 @@ mod tests {
     use crate::logic::model::{ElementKind, ShapeKind};
     use crate::logic::state::ToileState;
 
-    /// A pasted payload is read through the schema of the map it lands in. A
+    /// `TOILE-281`: a pasted payload is read through the schema of the map it lands in. A
     /// field the schema does not name is skipped as the clipboard bytes are
     /// read. A paste never writes a key the board does not read.
     #[test]

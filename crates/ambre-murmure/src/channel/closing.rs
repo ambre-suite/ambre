@@ -28,6 +28,20 @@ ambre_core::define_tally! {
     pub struct MessageCount;
 }
 
+impl MessageCount {
+    /// The count as the bus names the messages past a reader's cursor.
+    #[must_use]
+    pub const fn unread(self) -> ambre_bus::UnreadCount {
+        ambre_bus::UnreadCount(self.get())
+    }
+
+    /// The count as the bus names the messages that mention a reader.
+    #[must_use]
+    pub const fn mentions(self) -> ambre_bus::MentionCount {
+        ambre_bus::MentionCount(self.get())
+    }
+}
+
 /// The snapshot bytes past which an active segment asks to close, whatever
 /// its message count: the 2 MB bound of the same row (`MURMURE-481`).
 pub const SEGMENT_SNAPSHOT_SIZE: ByteSize = ByteSize(2 * 1024 * 1024);

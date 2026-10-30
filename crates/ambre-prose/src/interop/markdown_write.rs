@@ -356,8 +356,13 @@ impl Writer {
     fn delimiters(&self, run: &IrRun) -> Vec<Delimiter> {
         let mut wanted = Vec::new();
         // A peer writes a target straight into the document, so one that
-        // could run code is exported as its text alone (`PROSE-IO-067`).
-        if let Some(url) = run.link.as_ref().filter(|url| crate::link::openable(url)) {
+        // could run code is exported as its text alone (`PROSE-IO-067`). So
+        // is one longer than a copy writes (`PROSE-IO-069`).
+        if let Some(url) = run
+            .link
+            .as_ref()
+            .filter(|url| crate::link::openable(url) && crate::link::within_href_max(url.size()))
+        {
             wanted.push(Delimiter::Link(url.clone()));
         }
         if run.bold == Weight::Bold {
@@ -545,6 +550,27 @@ mod tests {
         ])]);
         let (text, _) = write(&doc, MarkdownFlavor::Gfm);
         assert_eq!(text, "run data [mail](mailto:a@example.org)\n");
+    }
+
+    /// `PROSE-IO-069`: a target longer than a copy writes is exported as its
+    /// text alone, and one at the cap as a link.
+    #[test]
+    fn a_link_longer_than_a_copy_writes_exports_as_its_text() {
+        let base = "https://example.org/";
+        let max = crate::link::HREF_MAX.as_len();
+        let edge = format!("{base}{}", "a".repeat(max - base.len()));
+        let long = format!("{edge}a");
+        let link = |url: &str, text: &str| IrRun {
+            link: Some(url.into()),
+            ..IrRun::plain(text)
+        };
+        let doc = ir(vec![para(vec![
+            link(&long, "long"),
+            IrRun::plain(" "),
+            link(&edge, "edge"),
+        ])]);
+        let (text, _) = write(&doc, MarkdownFlavor::Gfm);
+        assert_eq!(text, format!("long [edge]({edge})\n"));
     }
 
     /// `PROSE-IO-068`: a target the gate lets through still cannot end the

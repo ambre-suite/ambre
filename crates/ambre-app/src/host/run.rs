@@ -235,6 +235,7 @@ where
                     if host_c
                         .borrow_mut()
                         .touch(phase, at, ambre_bus::PageTime(now))
+                        .is_yes()
                     {
                         event.prevent_default();
                     }
@@ -283,7 +284,7 @@ where
                 };
                 let is_down = matches!(ev, InputEvent::PointerDown { .. });
                 let consumed = host_c.borrow_mut().handle_input(&ev);
-                if consumed {
+                if consumed.is_yes() {
                     event.prevent_default();
                 }
                 // A drag keeps its moves past the canvas edge, so the page can
@@ -291,7 +292,7 @@ where
                 // text leaves its press to the browser, and is captured too.
                 if is_down {
                     let host = host_c.borrow();
-                    if (consumed || host.drags_text())
+                    if (consumed.is_yes() || host.drags_text())
                         && host.captures_pointer()
                         && let Some(target) = event
                             .current_target()
@@ -329,7 +330,11 @@ where
             if text.is_empty() {
                 return;
             }
-            if host_c.borrow_mut().drop_text(offset_of(&event), text) {
+            if host_c
+                .borrow_mut()
+                .drop_text(offset_of(&event), text)
+                .is_yes()
+            {
                 event.prevent_default();
             }
         });
@@ -352,7 +357,7 @@ where
                 let ev = InputEvent::DoubleClick {
                     at: offset_of(&event),
                 };
-                if host_c.borrow_mut().handle_input(&ev) {
+                if host_c.borrow_mut().handle_input(&ev).is_yes() {
                     event.prevent_default();
                 }
             });
@@ -384,7 +389,7 @@ where
                     ),
                 };
                 let consumed = host_c.borrow_mut().handle_input(&ev);
-                if consumed {
+                if consumed.is_yes() {
                     event.prevent_default();
                 }
             });

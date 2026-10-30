@@ -10,6 +10,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::{ExchangePublicKey, PublicKey, PublicKeyError};
+
 macro_rules! define_key_hex {
     ($(#[$meta:meta])* $name:ident) => {
         $(#[$meta])*
@@ -52,6 +54,28 @@ define_key_hex! {
     /// The hex spelling of an Ed25519 signature, as a snapshot report carries
     /// it (`AUTHOR-023`).
     SignatureHex
+}
+
+impl SigningKeyHex {
+    /// The signing key this text spells.
+    ///
+    /// # Errors
+    ///
+    /// Each refusal of [`PublicKey::from_hex`].
+    pub fn decode(&self) -> Result<PublicKey, PublicKeyError> {
+        PublicKey::from_hex(&self.0)
+    }
+}
+
+impl ExchangeKeyHex {
+    /// The exchange key this text spells.
+    ///
+    /// # Errors
+    ///
+    /// Each refusal of [`ExchangePublicKey::from_hex`].
+    pub fn decode(&self) -> Result<ExchangePublicKey, PublicKeyError> {
+        ExchangePublicKey::from_hex(&self.0)
+    }
 }
 
 #[cfg(test)]

@@ -99,6 +99,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-IO-061` | `FRAME` | A Markdown export MUST NOT emit a table, a to-do item or a footnote the chosen flavour has no syntax for. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::commonmark_writes_no_table_todo_or_footnote` | none | verified |
 | `PROSE-IO-067` | `FRAME` | A Markdown export MUST NOT write a link whose target `PROSE-UI-186` holds back from the host: the run exports as its text alone. | this spec section 3; `PROSE-UI-186` | `ambre_prose::interop::markdown_write::tests::a_link_that_could_run_code_exports_as_its_text` -- a `javascript:` and a `data:` link export as text, a `mailto:` link as a link | none | verified |
 | `PROSE-IO-068` | `FRAME` | A Markdown export MUST NOT write a link target that ends its destination, its paragraph or its block: a space, a control character, an angle bracket and a backslash are percent-encoded. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::a_link_target_cannot_break_out_of_its_destination` -- targets carrying a blank line and a link, a blank line and a heading, a paren, angle brackets, a trailing backslash, a tab and a delete | none | verified |
+| `PROSE-IO-069` | `FRAME` | A Markdown export MUST NOT write a link target longer than the HTML half of a copy writes: the run exports as its text alone. | this spec section 3; `PROSE-UI-235` | `ambre_prose::interop::markdown_write::tests::a_link_longer_than_a_copy_writes_exports_as_its_text` -- a target one byte past the cap exports as text, a target at the cap as a link | none | verified |
 
 ### 1.8 Import an HTML file
 
@@ -121,7 +122,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 35 `verified`, 16 `unimplemented`. The native file and the Markdown pair are
+* **Verification.** 36 `verified`, 16 `unimplemented`. The native file and the Markdown pair are
   built. The Word and HTML pairs are not, and no conversion runs in slices yet. The browser tier
   holds the download and the open from the home screen.
 
@@ -582,6 +583,7 @@ a warning at the drop site, never a silent omission (`PROSE-IO-018`, `PROSE-IO-0
 
 A peer writes a link's target straight into the document, unchecked. The writer keeps a link only
 when the host may open its target, and exports any other as its text alone (`PROSE-IO-067`). A
+target longer than a copy writes is exported as its text alone too (`PROSE-IO-069`). A
 target it keeps is percent-encoded where Markdown would read it as syntax, so it cannot end its
 destination, its paragraph or its block (`PROSE-IO-068`).
 

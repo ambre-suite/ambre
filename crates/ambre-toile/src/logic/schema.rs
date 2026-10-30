@@ -167,7 +167,7 @@ fn gate_through<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logic::model::ElementKind;
+    use crate::logic::model::{ElementId, ElementKind};
     use crate::logic::state::{BoardKey, ElementKey, Fields, Root, ToileState, entry, root_map};
     use loro::LoroText;
 
@@ -264,7 +264,7 @@ mod tests {
         let mut ids: Vec<&String> = entries.keys().collect();
         ids.sort();
         for id in ids {
-            let Some(map) = entry::<ElementKey>(&root, id) else {
+            let Some(map) = entry::<ElementKey>(doc, &ElementId(id.clone())) else {
                 continue;
             };
             let Some(LoroValue::String(body)) = map.value(ElementKey::Body) else {
@@ -389,13 +389,5 @@ mod tests {
             gate(&vec![0xFF, 0x00, 0xFF].into()).expect_err("refused"),
             SchemaError::PayloadRejected
         ));
-    }
-
-    #[test]
-    fn bytes_the_engine_will_not_read_are_told_apart_from_a_version_refusal() {
-        assert_eq!(
-            gate(&b"not a loro snapshot".to_vec().into()).expect_err("rejected"),
-            SchemaError::PayloadRejected
-        );
     }
 }

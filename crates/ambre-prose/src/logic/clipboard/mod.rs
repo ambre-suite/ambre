@@ -153,8 +153,7 @@ impl ClipValue {
     }
 }
 
-/// The longest link and family name a paste keeps, in bytes.
-const HREF_MAX: ambre_core::ByteSize = ambre_core::ByteSize(2048);
+/// The longest family name a paste keeps, in bytes.
 const FAMILY_MAX: ambre_core::ByteSize = ambre_core::ByteSize(64);
 
 /// The value a paste writes under `root`, from either half of the clipboard
@@ -181,7 +180,7 @@ fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
 /// that runs.
 fn safe_link(href: &str) -> bool {
     let lower = href.get(..8).unwrap_or(href).to_ascii_lowercase();
-    ambre_core::ByteSize::of_len(href.len()) <= HREF_MAX
+    crate::link::within_href_max(ambre_core::ByteSize::of_len(href.len()))
         && ["http://", "https://", "mailto:"]
             .iter()
             .any(|scheme| lower.starts_with(scheme))
@@ -480,6 +479,7 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockInit, ProseCommand};
+    use crate::link::HREF_MAX;
     use crate::view::tests::append;
     use ambre_bus::app::prose::OrderedStyle;
     use ambre_bus::app::prose::{DocOffset, DocSpan};

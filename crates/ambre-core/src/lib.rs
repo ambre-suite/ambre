@@ -154,8 +154,8 @@ pub use name::{
 pub use object_key::ObjectKey;
 pub use payload::{
     ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic, LoroPayload,
-    LoroPayloadRef, MediaBytes, PickedContainer, PlaintextContainer, RgbaPixels, SealedContainer,
-    SealedPreviousKey, SealedRowBytes, SnapshotBytes, ThumbnailPng,
+    LoroPayloadRef, MediaBytes, PickedContainer, PickedFile, PlaintextContainer, RgbaPixels,
+    SealedContainer, SealedPreviousKey, SealedRowBytes, SnapshotBytes, ThumbnailPng,
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};
@@ -181,7 +181,7 @@ pub use status::{
 pub use tally::{CellCount, ElementCount};
 pub use text_offset::{
     ByteCount, ByteDelta, ByteOffset, ByteSpan, ByteVec, CharCount, CharDelta, CharOffset,
-    CharSpan, CharVec, Utf16Count, Utf16Delta, Utf16Offset, Utf16Span, Utf16Vec,
+    CharSpan, CharVec, RedactedChars, Utf16Count, Utf16Delta, Utf16Offset, Utf16Span, Utf16Vec,
     byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte, char_to_utf16,
     utf16_to_char,
 };

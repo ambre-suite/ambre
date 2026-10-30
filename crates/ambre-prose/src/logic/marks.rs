@@ -350,7 +350,7 @@ impl MarkFold {
         }
         let this = marks
             .get(MarkRoot::Link.as_str())
-            .map(|url| ambre_core::LinkUrl::new(url.as_str().to_owned()));
+            .map(StoredMarkValue::to_link);
         self.link = match self.link.take() {
             None => Some(this),
             Some(held) if held == this => Some(held),

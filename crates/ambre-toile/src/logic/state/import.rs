@@ -20,8 +20,9 @@ use crate::logic::command::{
     ToileRequest,
 };
 use crate::logic::interop::{
-    ContentHash, ImportBatch, ImportConnector, ImportError, ImportGroup, ImportRef, ImportReport,
-    Limits, MediaBlob, import_raster, import_svg, place_batch_at,
+    ContentHash, ImportBatch, ImportConnector, ImportElementSlot, ImportError, ImportGroup,
+    ImportGroupSlot, ImportRef, ImportReport, Limits, MediaBlob, import_raster, import_svg,
+    place_batch_at,
 };
 use crate::logic::model::{ElementId, ElementStyle};
 
@@ -72,10 +73,27 @@ ambre_core::define_tally! {
     pub struct PendingImportCount;
 }
 
-/// How many units one slice of an import applies (`TOILE-IO-028`). The
-/// `import` bench reads the cost of a slice against the keystroke pass row of
-/// `ambre-spec-budgets.md`.
-pub(super) const IMPORT_SLICE: ImportUnitCount = ImportUnitCount::new(64);
+/// How many units one slice of an import applies (`TOILE-IO-028`). A slice
+/// size is a bound, not a tally: nothing counts it up. A running import only
+/// adds it to the units it has applied.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ImportSlice(ImportUnitCount);
+
+impl ImportSlice {
+    /// The units applied once one more slice runs after `done` of them.
+    fn end_after(self, done: ImportUnitCount) -> ImportUnitCount {
+        done.plus(self.units())
+    }
+
+    /// The units one slice applies.
+    pub(super) const fn units(self) -> ImportUnitCount {
+        self.0
+    }
+}
+
+/// The slice a running import applies per call. The `import` bench reads its
+/// cost against the keystroke pass row of `ambre-spec-budgets.md`.
+pub(super) const IMPORT_SLICE: ImportSlice = ImportSlice(ImportUnitCount::new(64));
 
 /// How much of a running import one call applies.
 #[derive(Clone, Copy)]
@@ -131,6 +149,42 @@ impl ImportJob {
             .plus(ImportUnitCount::of_len(self.groups.len()))
             .plus(ImportUnitCount::of_len(self.connectors.len()))
     }
+
+    /// Where the next unit falls: its phase, and its rank in that phase. A
+    /// rank is what the earlier phases leave of `done`, so the subtraction
+    /// runs here alone, on the lengths of the phase vectors.
+    fn step(&self) -> ImportStep {
+        let done = usize::try_from(self.done.get()).unwrap_or(usize::MAX);
+        let creates = usize::try_from(self.creates.get()).unwrap_or(usize::MAX);
+        let Some(rank) = done.checked_sub(creates) else {
+            return ImportStep::Create(ImportElementSlot::from_usize(done));
+        };
+        if rank < self.styles.len() {
+            return ImportStep::Style(ImportElementSlot::from_usize(rank));
+        }
+        let rank = rank - self.styles.len();
+        if rank < self.groups.len() {
+            return ImportStep::Group(ImportGroupSlot::from_usize(rank));
+        }
+        self.connectors
+            .get(rank - self.groups.len())
+            .cloned()
+            .map_or(ImportStep::Past, ImportStep::Connector)
+    }
+}
+
+/// The phase of one import unit, with what that phase needs to apply it.
+enum ImportStep {
+    /// The create at this slot.
+    Create(ImportElementSlot),
+    /// The style of the element at this slot.
+    Style(ImportElementSlot),
+    /// The group at this rank.
+    Group(ImportGroupSlot),
+    /// This connector.
+    Connector(ImportConnector),
+    /// No unit: the job is past its last connector.
+    Past,
 }
 
 impl ToileState {
@@ -140,7 +194,7 @@ impl ToileState {
         bytes: &ambre_core::FileBytes,
         at: Point,
     ) -> ToileOutcome {
-        self.begin_import(import_svg(bytes.as_bytes(), &Limits::default()), at)
+        self.begin_import(import_svg(bytes, &Limits::default()), at)
     }
 
     /// Convert a dropped raster image and apply it (`toile-import-export`). The mime
@@ -151,7 +205,7 @@ impl ToileState {
         bytes: &ambre_core::FileBytes,
         at: Point,
     ) -> ToileOutcome {
-        self.begin_import(import_raster(bytes.as_bytes(), &Limits::default()), at)
+        self.begin_import(import_raster(bytes, &Limits::default()), at)
     }
 
     /// Route a converted batch. A parse / limit failure aborts with `ImportFailed`
@@ -282,7 +336,7 @@ impl ToileState {
             return Vec::new();
         };
         let end = match pace {
-            ImportPace::Slice => job.done.plus(IMPORT_SLICE).min(job.total()),
+            ImportPace::Slice => IMPORT_SLICE.end_after(job.done).min(job.total()),
             ImportPace::Whole => job.total(),
         };
         while job.done < end {
@@ -396,44 +450,54 @@ impl ToileState {
     /// connector referencing it is skipped. A trusted converter should never
     /// emit one.
     fn apply_unit(&mut self, job: &mut ImportJob) {
-        let done = job.done;
-        if done < job.creates {
-            let unit = done;
-            let created = match job.commands.next() {
-                Some(ToileCommand::CreateElement {
-                    kind,
-                    at,
-                    size,
-                    content,
-                    fill,
-                    ..
-                }) => self
-                    .create_element_inner(kind, at, size, content, fill)
-                    .map_err(|e| format!("element slot {unit}: {e}")),
-                // The batch contract is creates-only; anything else is a
-                // converter bug. Drop it rather than corrupt slot indices.
-                _ => Err(format!("import slot {unit}: non-create command dropped")),
-            };
-            match created {
-                Ok(id) => job.slot_ids.push(Some(id)),
-                Err(reason) => {
-                    job.report.skip(reason);
-                    job.slot_ids.push(None);
+        match job.step() {
+            ImportStep::Create(slot) => self.apply_import_create(job, slot),
+            ImportStep::Style(slot) => {
+                let unit = slot.to_usize();
+                if let (Some(Some(id)), Some(Some(style))) =
+                    (job.slot_ids.get(unit), job.styles.get(unit))
+                {
+                    self.restyle_inner(std::slice::from_ref(id), style);
                 }
             }
-            return;
+            ImportStep::Group(rank) => self.apply_import_group(job, rank),
+            ImportStep::Connector(conn) => self.apply_import_connector(job, &conn),
+            // `done` stops at the last connector, so a unit past them is no unit.
+            ImportStep::Past => {}
         }
-        // Past the creates, the unit indexes the batch's phase vectors.
-        let mut unit = usize::try_from(done.minus(job.creates).get()).unwrap_or(usize::MAX);
-        if unit < job.styles.len() {
-            if let (Some(Some(id)), Some(Some(style))) =
-                (job.slot_ids.get(unit), job.styles.get(unit))
-            {
-                self.restyle_inner(std::slice::from_ref(id), style);
+    }
+
+    /// Apply the create at `slot`, the next one the job's iterator holds.
+    fn apply_import_create(&mut self, job: &mut ImportJob, slot: ImportElementSlot) {
+        let unit = slot.to_usize();
+        let created = match job.commands.next() {
+            Some(ToileCommand::CreateElement {
+                kind,
+                at,
+                size,
+                content,
+                fill,
+                ..
+            }) => self
+                .create_element_inner(kind, at, size, content, fill)
+                .map_err(|e| format!("element slot {unit}: {e}")),
+            // The batch contract is creates-only; anything else is a
+            // converter bug. Drop it rather than corrupt slot indices.
+            _ => Err(format!("import slot {unit}: non-create command dropped")),
+        };
+        match created {
+            Ok(id) => job.slot_ids.push(Some(id)),
+            Err(reason) => {
+                job.report.skip(reason);
+                job.slot_ids.push(None);
             }
-            return;
         }
-        unit -= job.styles.len();
+    }
+
+    /// Build the group at `rank`, innermost first, so a `Group(i)` member
+    /// always resolves to a group already built.
+    fn apply_import_group(&mut self, job: &mut ImportJob, rank: ImportGroupSlot) {
+        let unit = rank.to_usize();
         if let Some(group) = job.groups.get(unit) {
             let members: Vec<ElementId> = group
                 .members
@@ -460,13 +524,11 @@ impl ToileState {
                 self.recompute_groups();
             }
             job.group_ids.push(built);
-            return;
         }
-        unit -= job.groups.len();
-        // `done` stops at the last connector, so a unit past them is no unit.
-        let Some(conn) = job.connectors.get(unit) else {
-            return;
-        };
+    }
+
+    /// Draw `conn`, its two ends resolved through the slots and groups built.
+    fn apply_import_connector(&mut self, job: &mut ImportJob, conn: &ImportConnector) {
         let (Some(from), Some(to)) = (
             self.resolve_ref(conn.from, &job.slot_ids, &job.group_ids),
             self.resolve_ref(conn.to, &job.slot_ids, &job.group_ids),
@@ -778,7 +840,7 @@ mod tests {
     fn a_placeholder_token_never_becomes_a_key() {
         let mut st = ToileState::new();
         let decoded = crate::logic::interop::import_raster(
-            &solid_png(4, 4),
+            &ambre_core::FileBytes::new(solid_png(4, 4)),
             &crate::logic::interop::Limits::default(),
         )
         .expect("a picture");
@@ -1123,7 +1185,7 @@ mod tests {
     const LARGE: usize = SLICE * 3 + 7;
 
     /// [`IMPORT_SLICE`](super::IMPORT_SLICE) as a loop bound.
-    const SLICE: usize = super::IMPORT_SLICE.get() as usize;
+    const SLICE: usize = super::IMPORT_SLICE.units().get() as usize;
 
     fn large_import() -> ToileCommand {
         let mut svg = String::from(r#"<svg xmlns="http://www.w3.org/2000/svg">"#);
@@ -1148,7 +1210,7 @@ mod tests {
         assert!(!has_report(&first), "the import is not over");
         assert_eq!(
             st.element_count(),
-            ElementCount::new(super::IMPORT_SLICE.get())
+            ElementCount::new(super::IMPORT_SLICE.units().get())
         );
         assert!(st.has_pending_work());
         let mut resumes = 0;
@@ -1180,7 +1242,7 @@ mod tests {
         assert!(out.update.is_none());
         assert_eq!(
             st.element_count(),
-            ElementCount::new(super::IMPORT_SLICE.get())
+            ElementCount::new(super::IMPORT_SLICE.units().get())
         );
         assert!(st.has_pending_work());
     }

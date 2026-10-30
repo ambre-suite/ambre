@@ -528,7 +528,7 @@ pub fn frame_bands<'a>(
             return None;
         };
         let shown = frame_title_label(title);
-        let band = frame_title_box(world_rect_to_screen(e.bounds, cam), shown.label())?;
+        let band = frame_title_box(world_rect_to_screen(e.bounds, cam), shown)?;
         Some((e, band, shown))
     })
 }
@@ -541,8 +541,8 @@ pub fn frame_bands<'a>(
 /// estimate of the glyphs. The exact advance is known only once the text is
 /// shaped, and the hit target has to exist without a font at all
 /// (`TOILE-254`).
-pub fn frame_title_box(screen: Rect, title: &str) -> Option<Rect> {
-    let title = title.trim();
+pub fn frame_title_box(screen: Rect, title: FrameTitle<'_>) -> Option<Rect> {
+    let title = title.label().trim();
     if title.is_empty() {
         return None;
     }
@@ -652,8 +652,9 @@ mod tests {
         ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0))
     }
 
-    /// The direct cubics draw the shape kurbo's arcs drew: the same box and,
-    /// to a thousandth, the same area, at every radius a card takes.
+    /// `TOILE-UI-420`: the direct cubics draw the shape kurbo's arcs drew. They
+    /// hold the same box and, to a thousandth, the same area, at every radius
+    /// a card takes.
     #[test]
     fn a_rounded_card_keeps_the_shape_of_its_arcs() {
         use kurbo::Shape;
@@ -673,8 +674,9 @@ mod tests {
         }
     }
 
-    /// The four direct cubics draw the ellipse kurbo's arcs drew. The box holds
-    /// within 0.1 and the area to a thousandth, on both sides of the switch.
+    /// `TOILE-UI-420`: the four direct cubics draw the ellipse kurbo's arcs
+    /// drew. The box holds within 0.1 and the area to a thousandth, on both
+    /// sides of the switch.
     #[test]
     fn an_ellipse_keeps_the_shape_of_its_arcs() {
         use kurbo::Shape;
@@ -697,7 +699,8 @@ mod tests {
     #[test]
     fn a_named_frame_reserves_a_title_band_above_itself() {
         let screen = Rect::new(100.0, 200.0, 400.0, 500.0);
-        let band = frame_title_box(screen, "Agenda").expect("a named frame has a band");
+        let band =
+            frame_title_box(screen, FrameTitle::Named("Agenda")).expect("a named frame has a band");
         assert!(
             band.y1 <= screen.y0,
             "the title covers the frame: {band:?} over {screen:?}"
@@ -706,7 +709,8 @@ mod tests {
         assert_eq!(band.height(), f64::from(FRAME_TITLE_HEIGHT.get()));
         // A longer title reserves a wider band, which is what the click target
         // is measured against.
-        let wider = frame_title_box(screen, "Agenda and next steps").expect("a band");
+        let wider =
+            frame_title_box(screen, FrameTitle::Named("Agenda and next steps")).expect("a band");
         assert!(wider.width() > band.width());
     }
 
@@ -723,7 +727,8 @@ mod tests {
         assert!(!shown.is_empty(), "the band would have nothing to show");
     }
 
-    /// A frame title's debug form prints the title's length, none of it.
+    /// `TOILE-289`: a frame title's debug form prints the title's length, none of
+    /// it.
     #[test]
     fn a_frame_title_debug_form_prints_no_title() {
         let form = format!("{:?}", frame_title_label("Q3 layoffs"));
@@ -1133,7 +1138,7 @@ mod tests {
         assert_eq!(asked, vec![hh('2')]);
     }
 
-    /// A picture already asked for is not asked for again. That stops a
+    /// `TOILE-IO-105`: a picture already asked for is not asked for again. That stops a
     /// request going out on every frame that fails to paint it. That includes
     /// an address the document cannot resolve and never answers.
     #[test]
@@ -1569,8 +1574,8 @@ mod tests {
         );
     }
 
-    /// A linked element gets a badge outside its top-right corner; an unlinked
-    /// one gets none (`toile-links`).
+    /// `TOILE-UI-406`: a linked element gets a badge outside its top-right
+    /// corner; an unlinked one gets none (`toile-links`).
     #[test]
     fn a_linked_element_gets_a_badge() {
         let bounds = Rect::new(0.0, 0.0, 50.0, 50.0);
@@ -1814,37 +1819,6 @@ mod tests {
             .filter(|o| matches!(o, DrawOp::FillRect { .. }))
             .count();
         assert_eq!(handle_fills, 5);
-    }
-
-    #[test]
-    fn rotated_sticky_body_rotates_its_glyphs() {
-        use std::f64::consts::FRAC_PI_4;
-        let vp = DisplayViewport {
-            version: ambre_bus::ViewportVersion(0),
-            grid_unit: grid::BASE_GRID,
-            pins: Vec::new(),
-            reactions: Default::default(),
-            viewport: Default::default(),
-            nodes: vec![rotated_elem(
-                "s",
-                DisplayGeom::Sticky("hi".into()),
-                Rect::new(0.0, 0.0, 120.0, 120.0),
-                FRAC_PI_4,
-            )],
-        };
-        let surface = paint(&vp);
-        // Font-availability agnostic. If the headless host shapes no glyphs this
-        // holds vacuously; when it does, every run carries the element rotation
-        // rather than a pure translation.
-        for op in surface.ops() {
-            if let DrawOp::Glyphs { transform, .. } = op {
-                let c = transform.as_coeffs();
-                assert!(
-                    c[1].abs() > 1e-6,
-                    "a rotated sticky must rotate its glyph runs"
-                );
-            }
-        }
     }
 
     /// A context holding the shipped Noto Sans face alone, read from the tree.

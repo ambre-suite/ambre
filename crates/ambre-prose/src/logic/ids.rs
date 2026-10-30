@@ -23,7 +23,10 @@ impl IdSequence {
 
     /// The place after this one, `None` past [`Self::LAST`].
     fn next(self) -> Option<Self> {
-        (self.0 < Self::LAST.0).then(|| Self(self.0 + 1))
+        self.0
+            .checked_add(1)
+            .filter(|place| *place <= Self::LAST.0)
+            .map(Self)
     }
 }
 
@@ -33,7 +36,7 @@ pub(super) enum IdSource {
     /// A fresh v7 id per call: the live path.
     Random,
     /// The pinned peer and the next place of its sequence, packed into a
-    /// version 8 id. `None` once the sequence ran out. Interior mutability,
+    /// version 8 id. `None` once the last place is minted. Interior mutability,
     /// because the writers that mint read the state through `&self`.
     Seeded {
         peer: ambre_core::PeerId,
@@ -51,19 +54,28 @@ impl IdSource {
     }
 
     /// The next id, of whichever annotation kind the caller names. Every kind
-    /// draws from the one sequence, so no two annotations share an id. Past
-    /// the end of the sequence the source mints a fresh v7 id. A pinned
-    /// document then loses its repeatable bytes, and keeps unique ids.
+    /// draws from the one sequence, so no two annotations share an id.
+    ///
+    /// # Panics
+    ///
+    /// A pinned source panics on the mint after its 2^62 places. Past them,
+    /// an id either repeats or comes from a random source, and `FIXTURE-035`
+    /// refuses both. Only a host-side generator pins a source, so the panic
+    /// never reaches a live document.
+    #[expect(
+        clippy::expect_used,
+        reason = "FIXTURE-035: a pinned sequence never repeats an id nor falls back to a random one"
+    )]
     pub(super) fn mint<T: From<Uuid>>(&self) -> T {
         let uuid = match self {
             Self::Random => Uuid::new(),
-            Self::Seeded { peer, next } => match next.get() {
-                Some(place) => {
-                    next.set(place.next());
-                    pack(*peer, place)
-                }
-                None => Uuid::new(),
-            },
+            Self::Seeded { peer, next } => {
+                let place = next
+                    .get()
+                    .expect("a pinned peer mints at most 2^62 ids, and none twice (FIXTURE-035)");
+                next.set(place.next());
+                pack(*peer, place)
+            }
         };
         T::from(uuid)
     }
@@ -98,7 +110,7 @@ mod tests {
         }
     }
 
-    /// The end of a sequence mints no id it minted before. A wrapping `u64`
+    /// The last place of a sequence mints an id of its own. A wrapping `u64`
     /// counter came back to zero there. Its two top bits also fell under the
     /// variant mask, so place 2^62 packed to the id of place zero.
     #[test]
@@ -109,12 +121,22 @@ mod tests {
             peer,
             next: Cell::new(Some(IdSequence::LAST)),
         };
-        let tail: Vec<Uuid> = (0..3).map(|_| end.mint()).collect();
-        assert!(!tail.contains(&start));
-        for (i, id) in tail.iter().enumerate() {
-            assert!(!tail.iter().skip(i + 1).any(|other| other == id));
-        }
+        let last: Uuid = end.mint();
+        assert_ne!(last, start);
         assert_eq!(IdSequence::LAST.next(), None);
+    }
+
+    /// Past its last place, a pinned source panics. It neither wraps to an id
+    /// it minted, nor saturates on the last one, nor mints a random one.
+    #[test]
+    #[should_panic(expected = "a pinned peer mints at most 2^62 ids")]
+    fn a_seeded_source_panics_past_the_end_of_its_sequence() {
+        let end = IdSource::Seeded {
+            peer: ambre_core::PeerId(0x5EED),
+            next: Cell::new(Some(IdSequence::LAST)),
+        };
+        let _last: Uuid = end.mint();
+        let _past: Uuid = end.mint();
     }
 
     /// The packed id reads as a version 8 id of the RFC variant.

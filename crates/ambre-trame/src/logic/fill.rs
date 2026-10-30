@@ -10,8 +10,8 @@
 
 use super::*;
 use crate::formula::shift::shift_formula;
-use ambre_bus::FillMode;
 use ambre_bus::app::trame::CellNumber;
+use ambre_bus::{ColDelta, FillMode, RowDelta};
 
 /// A cell's or a tile's place in its fill line's series, counted from the
 /// source origin. Signed: a fill runs either way.
@@ -24,6 +24,16 @@ impl Term {
         let len = i64::try_from(items.len()).ok().filter(|&n| n > 0)?;
         let at = usize::try_from(self.0.rem_euclid(len)).ok()?;
         items.get(at)
+    }
+
+    /// The term of a row, `delta` rows from the source origin.
+    fn of_row(delta: RowDelta) -> Self {
+        Self(delta.get())
+    }
+
+    /// The term of a column, `delta` columns from the source origin.
+    fn of_col(delta: ColDelta) -> Self {
+        Self(delta.get())
     }
 }
 
@@ -293,7 +303,7 @@ impl TrameState {
                     continue; // inside the source block -- left untouched.
                 }
                 // Signed: fill may go up or down.
-                let term = Term((row - origin).get());
+                let term = Term::of_row(row - origin);
                 let k = term.0.rem_euclid(sources.len().max(1) as i64) as u32;
                 let from = CellPos::new(origin + RowCount::new(k), col);
                 self.fill_one(CellPos::new(row, col), from, term, &sources, series);
@@ -315,7 +325,7 @@ impl TrameState {
                 if src.cols().contains(col) {
                     continue;
                 }
-                let term = Term((col - origin).get());
+                let term = Term::of_col(col - origin);
                 let k = term.0.rem_euclid(sources.len().max(1) as i64) as u32;
                 let from = CellPos::new(row, origin + ColCount::new(k));
                 self.fill_one(CellPos::new(row, col), from, term, &sources, series);

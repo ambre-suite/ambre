@@ -62,7 +62,7 @@ impl LightSubscription {
             ..Self::new(
                 doc.doc_key,
                 doc.doc_type,
-                Seq(applied.0.min(doc.last_seq.0)),
+                applied.min(doc.last_seq),
                 doc.last_seq,
             )
         }
