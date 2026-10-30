@@ -71,6 +71,13 @@ impl MentionCount {
     /// No mention.
     pub const ZERO: Self = Self(0);
 
+    /// The mentions a document's activity counted: each update that named
+    /// the reader, or every member, is one mention.
+    #[must_use]
+    pub const fn of_updates(updates: ambre_core::activity::MentionUpdates) -> Self {
+        Self(updates.get())
+    }
+
     /// The two counts together, held at the top rather than wrapping.
     #[must_use]
     pub const fn plus(self, other: Self) -> Self {
@@ -150,6 +157,13 @@ pub struct UnreadCount(pub u32);
 impl UnreadCount {
     /// Nothing unread.
     pub const ZERO: Self = Self(0);
+
+    /// The unread messages a document's activity counted: each content
+    /// update is one message.
+    #[must_use]
+    pub const fn of_updates(updates: ambre_core::activity::ContentUpdates) -> Self {
+        Self(updates.get())
+    }
 
     /// The two counts together, held at the top rather than wrapping.
     #[must_use]
