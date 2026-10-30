@@ -63,7 +63,7 @@ pub fn authenticate_account(
     let signing_pubkey = claims
         .spk
         .as_ref()
-        .map(|spk| ambre_core::PublicKey::from_hex(spk.as_str()))
+        .map(ambre_core::SigningKeyHex::decode)
         .transpose()
         .map_err(|_| AppError::Unauthorized)?;
     Ok(AccountSession {

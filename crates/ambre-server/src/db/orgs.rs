@@ -193,7 +193,7 @@ pub struct OrganizationRow {
     pub id: ambre_core::OrgId,
     pub name: String,
     #[sqlx(try_from = "PgKey")]
-    pub org_pubkey: ambre_core::PublicKey,
+    pub org_pubkey: ambre_core::ExchangePublicKey,
     #[sqlx(flatten)]
     pub shamir: ShamirParams,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -220,7 +220,7 @@ pub struct OrgMemberRow {
 pub async fn create_organization(
     pool: &PgPool,
     name: &OrgName,
-    org_pubkey: &ambre_core::PublicKey,
+    org_pubkey: &ambre_core::ExchangePublicKey,
     shamir: ShamirParams,
     owner_id: &ambre_core::UserId,
 ) -> Result<OrganizationRow, AppError> {

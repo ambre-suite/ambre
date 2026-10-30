@@ -170,10 +170,8 @@ pub async fn create_org(
 
     // A key that is not 32 bytes of hex is refused here, not stored to fail
     // later in a client.
-    let org_pubkey = ambre_core::PublicKey::from_hex(req.org_pubkey.as_str()).map_err(|e| {
-        AppError::Conflict {
-            detail: format!("invalid org_pubkey: {e}"),
-        }
+    let org_pubkey = req.org_pubkey.decode().map_err(|e| AppError::Conflict {
+        detail: format!("invalid org_pubkey: {e}"),
     })?;
 
     let org = db::create_organization(&state.db, &name, &org_pubkey, req.shamir, &owner_id).await?;
@@ -567,7 +565,7 @@ mod tests {
         let org = db::OrganizationRow {
             id: ambre_core::OrgId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             name: "Test Org".into(),
-            org_pubkey: ambre_core::PublicKey::from_array([0u8; 32]),
+            org_pubkey: ambre_core::ExchangePublicKey::from_array([0u8; 32]),
             shamir: split(3, 5),
             created_at: chrono::Utc::now(),
         };
