@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-UI-036` | `IO` | A size a user set MUST still be there after a reload. | this spec section 3 | `ambre_trame::logic::tests::group7::resize_survives_snapshot_roundtrip` -- a width exported and reimported, the height sharing the same write path | none | verified |
 | `TRAME-UI-037` | `INV` | A size MUST stay with its own column: inserting, deleting or moving a column MUST NOT transfer it to another. | this spec section 3 | `ambre_trame::logic::tests::group11::a_line_keeps_its_size_and_its_hidden_mark_when_it_moves` -- a width through an insert, a move and a delete | none | verified |
-| `TRAME-UI-181` | `INV` | A size a peer wrote MUST read inside the size range of its axis. A size that is no finite number MUST read as the default size. | this spec section 2, row 7 | `ambre_trame::logic::tests::group11::a_peer_size_out_of_range_reads_clamped_or_default` -- a width and a height below the range, above it, infinite and not a number, through a remote delta | none | verified |
+| `TRAME-UI-181` | `INV` | A size a peer wrote MUST read inside the size range of its axis. A size that is no finite number MUST read as the default size. A drag guide MUST stay inside the same range. | this spec section 2, row 7; section 3 | `ambre_trame::logic::tests::group11::a_peer_size_out_of_range_reads_clamped_or_default` -- a width and a height below the range, above it, infinite and not a number, through a remote delta; `ambre_trame::ui::view::view_tests::a_drag_past_the_largest_size_holds_the_guide_there` -- a column and a row dragged far past the largest size, at zoom 1 and 2 | none | verified |
 | `TRAME-UI-038` | `CONC` | When two users size one column at the same moment, every peer MUST end on one size. | this spec section 2, row 1 | `ambre_trame::logic::tests::group7::concurrent_resize_of_same_col_converges_lww` | none | verified |
 
 ### 1.2 Drag a boundary
@@ -78,8 +78,8 @@ status values are normative in `ambre-spec-template.md`.
 
 A column with no entry takes the default width. A column reset to the default drops its entry
 rather than storing the default (`ambre-spec-trame-schema.md section 4`, "absence is a value").
-A width spans 24 px to 4096 px, and a height spans 12 px to 2048 px. A local resize clamps into
-that range. A peer can write any `f64`, so the Logic thread clamps each stored size on read, and a
+A width spans 24 px to 4096 px, and a height spans 12 px to 2048 px. A local resize and its drag
+guide clamp into that range. A peer can write any `f64`, so the Logic thread clamps each stored size on read, and a
 size that is no finite number reads as the default (`TRAME-UI-181`). The layout walks lines until
 their sizes cover the screen, so a negative size would make the walk cover every line.
 
