@@ -737,6 +737,19 @@ mod tests {
             mentions: Vec::new(),
             styles: Vec::new(),
         };
+        let send = MessageAction::Send(LogicCommand::Channel {
+            channel_id: target.channel,
+            command: MurmureCommand::EditMessage {
+                at: target.at,
+                message: target.message,
+                draft: ambre_bus::MessageDraft {
+                    text: target.text.clone(),
+                    mentions: Vec::new(),
+                    styles: Vec::new(),
+                },
+                now: Timestamp::default(),
+            },
+        });
         let shown = [
             (format!("{target:?}"), "text: ByteCount(12)"),
             (format!("{edit:?}"), "text: ByteCount(12)"),
@@ -744,6 +757,7 @@ mod tests {
                 format!("{:?}", MessageAction::Copy(target.text.clone())),
                 "Copy(ByteCount(12))",
             ),
+            (format!("{send:?}"), "text: CharCount(12)"),
         ];
         for (shown, length) in shown {
             assert!(!shown.contains("secret"), "{shown}");

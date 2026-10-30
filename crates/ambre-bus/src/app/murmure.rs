@@ -213,8 +213,9 @@ pub struct StyleMark {
 ///
 /// The engine writes each mention as a `mention` mark over its range, and
 /// the summary lists what the marks name (`MURMURE-101`). Each style is a
-/// mark of its own (`MURMURE-562`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// mark of its own (`MURMURE-562`). `Debug` prints the length of the body
+/// alone, so a log of a send, an edit or a reply carries none of it.
+#[derive(Clone, PartialEq, Eq)]
 pub struct MessageDraft {
     /// The body, as the author typed it.
     pub text: String,
@@ -224,6 +225,15 @@ pub struct MessageDraft {
     pub styles: Vec<StyleMark>,
 }
 
+impl std::fmt::Debug for MessageDraft {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MessageDraft")
+            .field("text", &ambre_core::char_len(&self.text))
+            .field("mentions", &self.mentions)
+            .field("styles", &self.styles)
+            .finish()
+    }
+}
 /// One emoji a member reacts with, as the view picked it. The engine
 /// refuses a value that is not one emoji, and this type keeps the value
 /// apart from free text. A table compiled into the client borrows its text,
@@ -283,13 +293,25 @@ impl MediaRef {
 pub use ambre_core::{ByteSize, MediaType};
 
 /// A file a message carries: its address, never its bytes (`MURMURE-017`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// `Debug` prints the length of the file's name alone.
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Attachment {
     pub media_ref: MediaRef,
     /// The file's name, as its author's file system gave it.
     pub name: String,
     pub media_type: MediaType,
     pub size: ByteSize,
+}
+
+impl std::fmt::Debug for Attachment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Attachment")
+            .field("media_ref", &self.media_ref)
+            .field("name", &ambre_core::char_len(&self.name))
+            .field("media_type", &self.media_type)
+            .field("size", &self.size)
+            .finish()
+    }
 }
 
 /// An image a message carries, decoded off the render thread at the size
@@ -535,8 +557,9 @@ ambre_core::define_flag! {
     }
 }
 
-/// One message as the view draws it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One message as the view draws it. `Debug` prints the length of the body
+/// alone, so a log of a message list or of a search carries none of it.
+#[derive(Clone, PartialEq, Eq)]
 pub struct MessageView {
     /// The identity the author's peer minted (`MURMURE-002`).
     pub id: MessageId,
@@ -568,6 +591,26 @@ pub struct MessageView {
     /// The thread a reply also sent to the channel came from, `None` for
     /// any other message (`MURMURE-109`).
     pub also_in_thread: Option<DocumentId>,
+}
+
+impl std::fmt::Debug for MessageView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MessageView")
+            .field("id", &self.id)
+            .field("author", &self.author)
+            .field("ts", &self.ts)
+            .field("text", &ambre_core::char_len(&self.text))
+            .field("mentions", &self.mentions)
+            .field("styles", &self.styles)
+            .field("attachments", &self.attachments)
+            .field("reactions", &self.reactions)
+            .field("notice", &self.notice)
+            .field("edited", &self.edited)
+            .field("deleted", &self.deleted)
+            .field("thread", &self.thread)
+            .field("also_in_thread", &self.also_in_thread)
+            .finish()
+    }
 }
 
 ambre_core::define_tally! {
@@ -809,10 +852,17 @@ impl std::fmt::Debug for SealedChannelKey {
 /// The topic of a channel: a line of text under its name.
 ///
 /// Never empty: a channel with no topic holds no topic at all, so the
-/// catalogue stores an absent key rather than an empty string.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// catalogue stores an absent key rather than an empty string. A member typed
+/// it, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Topic(String);
+
+impl std::fmt::Debug for Topic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Topic({} chars)", self.0.chars().count())
+    }
+}
 
 impl Topic {
     /// The topic `text` states, or `None` for an empty text.
@@ -1090,5 +1140,60 @@ mod tests {
         assert_eq!(postcard::from_bytes::<Topic>(&bytes), Ok(figures));
         let empty = postcard::to_allocvec("").expect("encode");
         assert!(postcard::from_bytes::<Topic>(&empty).is_err());
+    }
+
+    /// A topic, a draft, a file's name and a message body print their length
+    /// in `Debug`. A log of an edit or of a search carries none of the text.
+    #[test]
+    fn a_text_of_a_conversation_prints_its_length_alone() {
+        use super::{
+            Attachment, ByteSize, Deletion, MediaRef, MediaType, MessageAt, MessageDraft,
+            MessageView, Revision,
+        };
+        use ambre_core::{MessageId, Timestamp, UserId};
+        let secret = "Q3 layoffs";
+        let topic = Topic::new(secret).expect("a topic");
+        assert_eq!(format!("{topic:?}"), "Topic(10 chars)");
+        let draft = MessageDraft {
+            text: secret.to_owned(),
+            mentions: Vec::new(),
+            styles: Vec::new(),
+        };
+        let attachment = Attachment {
+            media_ref: MediaRef::parse(&"a".repeat(64)).expect("an address"),
+            name: secret.to_owned(),
+            media_type: MediaType("text/plain".to_owned()),
+            size: ByteSize(1),
+        };
+        let view = MessageView {
+            id: MessageId::new(),
+            author: UserId::default(),
+            ts: Timestamp::default(),
+            text: secret.to_owned(),
+            mentions: Vec::new(),
+            styles: Vec::new(),
+            attachments: vec![attachment.clone()],
+            reactions: Vec::new(),
+            notice: None,
+            edited: Revision::Original,
+            deleted: Deletion::Live,
+            thread: None,
+            also_in_thread: None,
+        };
+        let edit = MurmureCommand::EditMessage {
+            at: MessageAt::Segment(SegmentId::from_bytes([7; 16])),
+            message: MessageId::new(),
+            draft: draft.clone(),
+            now: Timestamp::default(),
+        };
+        for line in [
+            format!("{draft:?}"),
+            format!("{attachment:?}"),
+            format!("{view:?}"),
+            format!("{edit:?}"),
+        ] {
+            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(!line.contains(secret), "{line}");
+        }
     }
 }
