@@ -6125,7 +6125,6 @@
   {"edge": "verified-by", "from": "TOILE-UI-131", "to": "ambre_toile::ui::menu::tests::group_and_locked_flags"},
   {"edge": "cites-section", "from": "TOILE-UI-366", "section": "2", "to": "3-Toile/features/ambre-spec-toile-menus.md"},
   {"edge": "verified-by", "from": "TOILE-UI-366", "to": "ambre_toile::ui::menu::tests::group_and_locked_flags"},
-  {"edge": "verified-by", "from": "TOILE-UI-366", "to": "LockMix::Both"},
   {"edge": "verified-by", "from": "TOILE-UI-366", "to": "ambre_toile::ui::menu::tests::a_lock_mix_keeps_both_states_once_read"},
   {"edge": "verified-by", "from": "TOILE-UI-366", "to": "ambre_toile::ui::menu::tests::single_unlocked_element_scope"},
   {"edge": "cites-section", "from": "TOILE-UI-132", "section": "2", "to": "3-Toile/features/ambre-spec-toile-menus.md"},
