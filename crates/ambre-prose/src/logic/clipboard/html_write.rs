@@ -23,21 +23,41 @@ const ELEMENTS: [(MarkRoot, &str); 7] = [
     (MarkRoot::Code, "code"),
 ];
 
-/// The list element a block sits in, spelled as its opening tag.
-fn list_open(kind: &ClipKind) -> Option<String> {
-    match kind {
-        ClipKind::Bullet | ClipKind::Todo(_) => Some("<ul>".to_owned()),
-        ClipKind::Ordered(style) => Some(
-            match style {
-                OrderedStyle::LowerAlpha => "<ol type=\"a\">",
-                OrderedStyle::UpperAlpha => "<ol type=\"A\">",
-                OrderedStyle::LowerRoman => "<ol type=\"i\">",
-                OrderedStyle::UpperRoman => "<ol type=\"I\">",
-                OrderedStyle::Decimal => "<ol>",
-            }
-            .to_owned(),
-        ),
-        _ => None,
+/// The list element a block sits in.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ListElement {
+    Unordered,
+    Ordered(OrderedStyle),
+}
+
+impl ListElement {
+    /// The element `kind` sits in, `None` for a block outside a list.
+    fn of(kind: &ClipKind) -> Option<Self> {
+        match kind {
+            ClipKind::Bullet | ClipKind::Todo(_) => Some(Self::Unordered),
+            ClipKind::Ordered(style) => Some(Self::Ordered(*style)),
+            _ => None,
+        }
+    }
+
+    /// The opening tag.
+    fn open(self) -> &'static str {
+        match self {
+            Self::Unordered => "<ul>",
+            Self::Ordered(OrderedStyle::LowerAlpha) => "<ol type=\"a\">",
+            Self::Ordered(OrderedStyle::UpperAlpha) => "<ol type=\"A\">",
+            Self::Ordered(OrderedStyle::LowerRoman) => "<ol type=\"i\">",
+            Self::Ordered(OrderedStyle::UpperRoman) => "<ol type=\"I\">",
+            Self::Ordered(OrderedStyle::Decimal) => "<ol>",
+        }
+    }
+
+    /// The closing tag.
+    fn close(self) -> &'static str {
+        match self {
+            Self::Unordered => "</ul>",
+            Self::Ordered(_) => "</ol>",
+        }
     }
 }
 
@@ -45,13 +65,15 @@ fn list_open(kind: &ClipKind) -> Option<String> {
 /// share one list element.
 pub(super) fn write(blocks: &[ClipBlock]) -> String {
     let mut html = String::from("<meta charset=\"utf-8\">");
-    let mut list: Option<String> = None;
+    let mut list: Option<ListElement> = None;
     for block in blocks {
-        let wanted = list_open(&block.kind);
+        let wanted = ListElement::of(&block.kind);
         if wanted != list {
-            close_list(&mut html, list.as_deref());
-            if let Some(open) = &wanted {
-                html.push_str(open);
+            if let Some(open) = list {
+                html.push_str(open.close());
+            }
+            if let Some(wanted) = wanted {
+                html.push_str(wanted.open());
             }
             list = wanted;
         }
@@ -83,16 +105,10 @@ pub(super) fn write(blocks: &[ClipBlock]) -> String {
             }
         }
     }
-    close_list(&mut html, list.as_deref());
-    html
-}
-
-fn close_list(html: &mut String, open: Option<&str>) {
-    match open {
-        Some(tag) if tag.starts_with("<ol") => html.push_str("</ol>"),
-        Some(_) => html.push_str("</ul>"),
-        None => {}
+    if let Some(open) = list {
+        html.push_str(open.close());
     }
+    html
 }
 
 fn element(html: &mut String, tag: &str, block: &[ClipRun]) {

@@ -15,8 +15,8 @@ pub mod markdown_read;
 pub mod markdown_write;
 
 use ambre_bus::app::prose::{
-    ConversionFormat, ConversionReport, ConversionWarning, DroppedElement, FootnoteOrdinal,
-    LiftedBlock, UnsupportedFeature, WarningCount,
+    CodeLang, ConversionFormat, ConversionReport, ConversionWarning, DroppedElement,
+    FootnoteOrdinal, LiftedBlock, UnsupportedFeature, WarningCount,
 };
 
 use ambre_core::{Slant, Strikethrough, Underline, Weight};
@@ -142,7 +142,7 @@ pub enum IrBlock {
         rows: Vec<IrTableRow>,
     },
     CodeBlock {
-        lang: Option<String>,
+        lang: Option<CodeLang>,
         text: String,
     },
     Image {
@@ -155,7 +155,7 @@ pub enum IrBlock {
 
 impl std::fmt::Debug for IrBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use crate::redact::{Redacted, optional};
+        use crate::redact::Redacted;
         match self {
             Self::Paragraph { styled, runs } => f
                 .debug_struct("Paragraph")
@@ -184,7 +184,7 @@ impl std::fmt::Debug for IrBlock {
                 .finish(),
             Self::CodeBlock { lang, text } => f
                 .debug_struct("CodeBlock")
-                .field("lang", &optional(lang.as_ref()))
+                .field("lang", lang)
                 .field("text", &Redacted(text))
                 .finish(),
             Self::Image { alt } => f

@@ -149,9 +149,7 @@ fn place(ops: &mut Vec<ImportOp>, block: &IrBlock, chain: &[Parent], warnings: &
             push(ops, parent, BlockInit::Heading { level }, runs);
         }
         IrBlock::CodeBlock { lang, text } => {
-            let init = BlockInit::CodeBlock {
-                lang: lang.clone().and_then(ambre_bus::app::prose::CodeLang::new),
-            };
+            let init = BlockInit::CodeBlock { lang: lang.clone() };
             push(ops, parent, init, &[IrRun::plain(text.clone())]);
         }
         IrBlock::HRule => {
@@ -438,9 +436,7 @@ impl ProseState {
                 children: self.walk_children(tree, Some(id), notes),
             },
             BlockType::CodeBlock => IrBlock::CodeBlock {
-                lang: self
-                    .code_lang_of(&crate::events::block_id(id))
-                    .map(|lang| lang.as_str().to_owned()),
+                lang: self.code_lang_of(&crate::events::block_id(id)),
                 text: self.body_of(&id).map(|b| b.to_string()).unwrap_or_default(),
             },
             BlockType::Table => {

@@ -62,7 +62,7 @@ pub(crate) mod tests {
     fn a_block_of_the_form_prints_its_text_by_length_alone() {
         use crate::interop::IrBlock;
         let code = IrBlock::CodeBlock {
-            lang: Some("rust".into()),
+            lang: ambre_bus::app::prose::CodeLang::new("rust"),
             text: "let secret = 1;".into(),
         };
         assert!(hides(&code, "let secret = 1;"));

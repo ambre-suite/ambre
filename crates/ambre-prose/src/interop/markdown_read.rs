@@ -8,7 +8,7 @@
 //! large, fails as a typed error and yields no form at all (`PROSE-IO-010`).
 
 use ambre_bus::app::prose::{
-    ConversionFormat, ConversionReport, DroppedElement, HeadingLevel, InteropError,
+    CodeLang, ConversionFormat, ConversionReport, DroppedElement, HeadingLevel, InteropError,
 };
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
@@ -93,7 +93,10 @@ enum Leaf {
     Paragraph,
     Heading(HeadingLevel),
     Cell,
-    Code { lang: Option<String>, text: String },
+    Code {
+        lang: Option<CodeLang>,
+        text: String,
+    },
 }
 
 struct Reader {
@@ -195,11 +198,9 @@ impl Reader {
             Tag::CodeBlock(kind) => {
                 self.flush();
                 let lang = match kind {
-                    CodeBlockKind::Fenced(info) => info
-                        .split_whitespace()
-                        .next()
-                        .map(str::to_owned)
-                        .filter(|lang| !lang.is_empty()),
+                    CodeBlockKind::Fenced(info) => {
+                        info.split_whitespace().next().and_then(CodeLang::new)
+                    }
                     CodeBlockKind::Indented => None,
                 };
                 self.leaf = Some(Leaf::Code {
@@ -512,7 +513,7 @@ mod tests {
                     IrRun::plain("."),
                 ]),
                 IrBlock::CodeBlock {
-                    lang: Some("rust".to_owned()),
+                    lang: CodeLang::new("rust"),
                     text: "let a = 1;".to_owned()
                 },
             ]

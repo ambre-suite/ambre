@@ -1903,7 +1903,6 @@ ambre-prose | src/input.rs | crate::input | ProseUiState::type_text(text) | para
 ambre-prose | src/input.rs | crate::input | ProseUiState::waiting() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/input.rs | crate::input | QUEUED_INPUTS | const | usize	local	the most inputs the queue holds, compared with the length of that queue alone
 ambre-prose | src/input.rs | crate::input | Sent::Text.1 | field | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Code.lang | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Leaf::Code.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.bold | field | u32	local	how many strong spans the private reader is inside, its name says which
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.image | field | u32	local	how many images the private reader is inside, its name says which
@@ -1933,14 +1932,12 @@ ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | e
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | fence_for() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | fence_for(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | link_target() | ret | String	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | link_target(url) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run() | ret | usize	local	the longest run of one character in a text, which the private fence writer outruns
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run(c) | param | char	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | ordinal_prefix() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | ordinal_prefix(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | write() | ret | (String,ConversionReport)	free-text	text content / label / parser input
-ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::CodeBlock.lang | field | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::CodeBlock.text | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/mod.rs | crate::interop | IrBlock::Image.alt | field | String	free-text	text content / label / parser input
 ambre-prose | src/interop/mod.rs | crate::interop | IrMeta.title | field | Option<String>	free-text	text content / label / parser input
@@ -2030,14 +2027,13 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep(html) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ELEMENTS | const | [(MarkRoot,&str);7]	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | close_list(html) | param | &mut String	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | close_list(open) | param | Option<&str>	free-text	text content / label / parser input
+ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::close() | ret | &'static str	generic	the closing tag of a list element, spelled from the enum that carries its style
+ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::open() | ret | &'static str	generic	the opening tag of a list element, spelled from the enum that carries its style
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(html) | param | &mut String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(tag) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | escape() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | escape(text) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | has() | ret | bool	generic	predicate result
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | list_open() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | runs(html) | param | &mut String	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | value() | ret | Option<&str>	free-text	a mark value as a clipboard run carries it; the payload may come from another build or app, so no grammar is assumed and it is only escaped
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | write() | ret | String	free-text	text content / label / parser input

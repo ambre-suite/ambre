@@ -120,7 +120,7 @@ impl Writer {
             }
             IrBlock::CodeBlock { lang, text } => {
                 let fence = fence_for(text);
-                let info = lang.as_deref().unwrap_or("");
+                let info = ambre_bus::app::prose::CodeLang::stored(lang.as_ref());
                 self.line(indent, &format!("{fence}{info}"));
                 for line in text.split('\n') {
                     self.line(indent, line);
@@ -400,7 +400,7 @@ impl Delimiter {
 
     fn close(&self) -> String {
         match self {
-            Self::Link(url) => format!("]({})", link_target(url.as_str())),
+            Self::Link(url) => format!("]({})", link_target(url)),
             Self::Bold => "**".to_owned(),
             Self::Italic => "*".to_owned(),
             Self::Strike => "~~".to_owned(),
@@ -409,7 +409,8 @@ impl Delimiter {
 }
 
 /// A link destination, in angle brackets when it holds a space or a paren.
-fn link_target(url: &str) -> String {
+fn link_target(url: &ambre_core::LinkUrl) -> String {
+    let url = url.as_str();
     if url.contains([' ', '(', ')', '<', '>']) {
         let inner = url.replace('<', "%3C").replace('>', "%3E");
         format!("<{inner}>")
@@ -557,7 +558,7 @@ mod tests {
             },
             para(vec![bold, both, IrRun::plain(" and "), link]),
             IrBlock::CodeBlock {
-                lang: Some("rust".to_owned()),
+                lang: ambre_bus::app::prose::CodeLang::new("rust"),
                 text: "fn main() {}".to_owned(),
             },
         ]);
