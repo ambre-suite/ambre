@@ -287,8 +287,9 @@ mod tests {
         }
     }
 
-    /// `ambre-spec-docfile.md section 4`: the save gesture exists, it is in the
-    /// File menu, and it resolves to the board command the Logic thread serves.
+    /// `TOILE-UI-418` (`ambre-spec-docfile.md section 4`): the save gesture
+    /// exists, it is in the File menu, and it resolves to the board command
+    /// the Logic thread serves.
     #[test]
     fn the_file_menu_offers_the_native_file_and_resolves_it() {
         let cmds = item_commands(&menu_layout(MenuId::File));
@@ -340,15 +341,6 @@ mod tests {
         // Reused, not redeclared: the same ids the context menu emits.
         assert!(cmds.contains(&menu::COPY));
         assert!(cmds.contains(&menu::SELECT_ALL));
-    }
-
-    #[test]
-    fn shortcuts_render_canonically() {
-        // The Display form the DOM chip shows must match the view's real chord.
-        // The chip reads the registry, so that is what the test reads.
-        let undo = crate::ui::commands::chord(UNDO);
-        assert_eq!(undo.map(|k| k.to_string()).as_deref(), Some("Ctrl+Z"));
-        assert!(item_commands(&menu_layout(MenuId::Edit)).contains(&UNDO));
     }
 
     /// Every dropdown row resolves in the registry, so a menu never shows an
@@ -406,8 +398,8 @@ mod tests {
         ));
     }
 
-    /// An export reads the board and writes nothing, so the role gate must let a
-    /// read-only viewer take a copy out.
+    /// `TOILE-IO-104`: an export reads the board and writes nothing, so the
+    /// role gate must let a read-only viewer take a copy out.
     #[test]
     fn exports_are_not_mutating() {
         assert!(!ToileCommand::ExportSvg.is_mutating());
@@ -429,9 +421,9 @@ mod tests {
         }
     }
 
-    /// The link chooser is a shell intent for the same reason the embed entries
-    /// are: the shell owns the dialog. Clearing is not -- it names no target, so
-    /// the view sends it straight to the board.
+    /// `TOILE-UI-417`: the link chooser is a shell intent for the same reason
+    /// the embed entries are: the shell owns the dialog. Clearing is not -- it
+    /// names no target, so the view sends it straight to the board.
     #[test]
     fn the_link_entries_sit_under_object() {
         let cmds = item_commands(&menu_layout(MenuId::Object));

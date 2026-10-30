@@ -162,8 +162,8 @@ mod tests {
         }
     }
 
-    /// The handles sit at the two ends of the routed path, whatever runs
-    /// between them.
+    /// `TOILE-UI-351`: the handles sit at the two ends of the routed path,
+    /// whatever runs between them.
     #[test]
     fn the_handles_sit_at_the_two_ends() {
         let mut p = BezPath::new();
@@ -258,8 +258,8 @@ mod tests {
         assert!(arrow_command_for(COPY, &c).is_empty());
     }
 
-    /// A re-aim released over empty board sends nothing: an arrow re-aimed at
-    /// nothing is an arrow the user just broke.
+    /// `TOILE-UI-372`: a re-aim released over empty board sends nothing: an
+    /// arrow re-aimed at nothing is an arrow the user just broke.
     #[test]
     fn a_release_over_empty_board_re_aims_nothing() {
         let display = viewport(vec![arrow("c", line((0.0, 0.0), (100.0, 0.0)))]);

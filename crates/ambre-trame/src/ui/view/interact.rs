@@ -7,6 +7,7 @@ use crate::{LAST_COL, LAST_ROW};
 use ambre_canvas::PointerButton;
 use ambre_commands::{Key, KeyChar};
 use ambre_core::{DocPoint, DocPx, ViewPoint};
+use ambre_draw::Consumed;
 
 /// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
 /// when the drop leaves it in place. `LoroMovableList::mov` takes the index
@@ -476,7 +477,9 @@ impl TrameView {
         if self.is_editing() {
             // In-cell edit: a typed payload is meaningless inside a text field;
             // route the text through the same insertion path as typing.
-            self.handle_input(&InputEvent::Text { text: blob.text });
+            // The paste event already settled its default, so the answer
+            // decides nothing.
+            let _ = self.handle_input(&InputEvent::Text { text: blob.text });
             return;
         }
         // The kept copy serves on this tab's token, whatever the asynchronous
@@ -632,7 +635,7 @@ impl TrameView {
     }
 
     /// Input routing while editing a cell.
-    pub(crate) fn handle_input_editing(&mut self, ev: &InputEvent) -> bool {
+    pub(crate) fn handle_input_editing(&mut self, ev: &InputEvent) -> Consumed {
         match ev {
             InputEvent::Text { text } => {
                 // Queue the insertion; the shared editor applies it at the paint
@@ -641,21 +644,21 @@ impl TrameView {
                     ed.insert(text);
                 }
                 self.reset_blink();
-                true
+                Consumed::Yes
             }
             InputEvent::CompositionUpdate { text } => {
                 if let Some(ed) = self.editor.as_mut() {
                     ed.set_compose(text);
                 }
                 self.reset_blink();
-                true
+                Consumed::Yes
             }
             InputEvent::CompositionEnd { text } => {
                 if let Some(ed) = self.editor.as_mut() {
                     ed.commit_compose(text);
                 }
                 self.reset_blink();
-                true
+                Consumed::Yes
             }
             // A press inside the edited cell starts a mouse text selection; a
             // press outside commits and reselects the clicked cell.
@@ -672,7 +675,7 @@ impl TrameView {
                     }
                     self.editor_text_drag = true;
                     self.reset_blink();
-                    return true;
+                    return Consumed::Yes;
                 }
                 // Press outside: commit (deferred to the paint flush) and let the
                 // click select the cell under it.
@@ -682,7 +685,7 @@ impl TrameView {
                 if let Some(at) = self.state.cell_at(*at) {
                     self.select_cell(at);
                 }
-                true
+                Consumed::Yes
             }
             // Drag inside the edited cell extends the text selection.
             InputEvent::PointerMove { at } if self.editor_text_drag => {
@@ -692,11 +695,11 @@ impl TrameView {
                     ed.point_drag(local);
                 }
                 self.reset_blink();
-                true
+                Consumed::Yes
             }
             InputEvent::PointerUp { .. } if self.editor_text_drag => {
                 self.editor_text_drag = false;
-                true
+                Consumed::Yes
             }
             // Double-click inside the edited cell selects the word under it.
             InputEvent::DoubleClick { at } if self.pointer_in_editor(*at) => {
@@ -706,7 +709,7 @@ impl TrameView {
                     ed.word_at(local);
                 }
                 self.reset_blink();
-                true
+                Consumed::Yes
             }
             // A right-click commits and selects the cell under the cursor, so the
             // DOM context menu opens on it. We don't preventDefault (the
@@ -722,7 +725,7 @@ impl TrameView {
                 if let Some(at) = self.state.cell_at(*at) {
                     self.select_cell(at);
                 }
-                false
+                Consumed::No
             }
             InputEvent::Key { key, mods } => {
                 // Ctrl/Cmd+Enter fills the whole selection with the typed value;
@@ -735,16 +738,16 @@ impl TrameView {
                         // the blink tick).
                         self.pending_commit = Some(PendingCommit::Fill);
                         self.edit_dirty = true;
-                        return true;
+                        return Consumed::Yes;
                     }
                     if *key == Key::Char(KeyChar::A) {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.select_all();
                         }
                         self.reset_blink();
-                        return true;
+                        return Consumed::Yes;
                     }
-                    return false;
+                    return Consumed::No;
                 }
                 match *key {
                     // Alt+Enter inserts a newline (multi-line cell); a bare Enter
@@ -754,7 +757,7 @@ impl TrameView {
                             ed.newline();
                         }
                         self.reset_blink();
-                        true
+                        Consumed::Yes
                     }
                     // Enter / Tab commit and move (spreadsheet). The commit is
                     // deferred to the paint flush so the queued edits are applied
@@ -763,24 +766,24 @@ impl TrameView {
                         self.pending_commit =
                             Some(PendingCommit::Nav(RowDelta::new(1), ColDelta::ZERO));
                         self.edit_dirty = true;
-                        true
+                        Consumed::Yes
                     }
                     Key::Tab => {
                         self.pending_commit =
                             Some(PendingCommit::Nav(RowDelta::ZERO, ColDelta::new(1)));
                         self.edit_dirty = true;
-                        true
+                        Consumed::Yes
                     }
                     Key::Escape => {
                         self.cancel_edit();
-                        true
+                        Consumed::Yes
                     }
                     Key::Backspace => {
                         if let Some(ed) = self.editor.as_mut() {
                             ed.backspace();
                         }
                         self.reset_blink();
-                        true
+                        Consumed::Yes
                     }
                     // Delete removes the selection, else the char after the caret.
                     // Shift+Delete is "cut": let it fall through so the browser
@@ -790,7 +793,7 @@ impl TrameView {
                             ed.delete_forward();
                         }
                         self.reset_blink();
-                        true
+                        Consumed::Yes
                     }
                     // Shift extends the selection; a bare arrow collapses it.
                     Key::ArrowLeft => {
@@ -802,7 +805,7 @@ impl TrameView {
                             }
                         }
                         self.reset_blink();
-                        true
+                        Consumed::Yes
                     }
                     Key::ArrowRight => {
                         if let Some(ed) = self.editor.as_mut() {
@@ -813,7 +816,7 @@ impl TrameView {
                             }
                         }
                         self.reset_blink();
-                        true
+                        Consumed::Yes
                     }
                     Key::Home => {
                         if let Some(ed) = self.editor.as_mut() {
@@ -824,7 +827,7 @@ impl TrameView {
                             }
                         }
                         self.reset_blink();
-                        true
+                        Consumed::Yes
                     }
                     Key::End => {
                         if let Some(ed) = self.editor.as_mut() {
@@ -835,7 +838,7 @@ impl TrameView {
                             }
                         }
                         self.reset_blink();
-                        true
+                        Consumed::Yes
                     }
                     // Up/Down move the caret between lines inside the edit (a
                     // multi-line cell); Shift extends the selection. Cell nav by
@@ -849,7 +852,7 @@ impl TrameView {
                             }
                         }
                         self.reset_blink();
-                        true
+                        Consumed::Yes
                     }
                     Key::ArrowDown => {
                         if let Some(ed) = self.editor.as_mut() {
@@ -860,13 +863,13 @@ impl TrameView {
                             }
                         }
                         self.reset_blink();
-                        true
+                        Consumed::Yes
                     }
                     // Printable keys fall through to the textarea -> `Text`.
-                    _ => false,
+                    _ => Consumed::No,
                 }
             }
-            _ => false,
+            _ => Consumed::No,
         }
     }
 }

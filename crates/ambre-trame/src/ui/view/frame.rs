@@ -598,13 +598,13 @@ impl TrameView {
         self.state.zoom
     }
 
-    pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+    pub fn handle_input(&mut self, ev: &InputEvent) -> ambre_draw::Consumed {
         // The outbox holds a command the Logic thread has not taken, so the grid
         // stops accepting input until the queue drains (`BUS-016`). Consuming
         // the event is what makes the refusal visible: a key that fell through
         // to the browser would scroll the page under a frozen grid.
         if self.is_busy() {
-            return true;
+            return ambre_draw::Consumed::Yes;
         }
         // Wheel / two-finger touchpad scroll pans the viewport in any mode and
         // never disturbs the cursor or an open editor.

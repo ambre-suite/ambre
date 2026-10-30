@@ -994,16 +994,17 @@ pub(crate) fn seal_channel_key(
         space_key,
         Some(&meta_anchor),
     )?;
-    let mut sealed = space_key.id().as_array().to_vec();
-    sealed.extend_from_slice(&nonce.0);
-    sealed.extend_from_slice(&ciphertext.0);
-    Ok(SealedChannelKey::from_bytes(sealed))
+    Ok(SealedChannelKey::from_parts(
+        space_key.id(),
+        &nonce,
+        &ciphertext,
+    ))
 }
 
 /// The id of the space key a catalogue entry was sealed under. `None` for
 /// bytes too short to name one.
 pub(crate) fn sealed_under(sealed: &SealedChannelKey) -> Option<KeyId> {
-    KeyId::split_from(sealed.as_bytes()).map(|(key_id, _)| key_id)
+    sealed.key_id()
 }
 
 /// Unseal a channel key the catalogue holds, with the anchor sealed beside it.
@@ -1014,15 +1015,14 @@ pub(crate) fn unseal_channel_key(
     sealed: &SealedChannelKey,
     keys: &crate::chain::Keyring,
 ) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), SyncError> {
-    let short = SyncError::Malformed(Part::SealedChannelKey);
-    let (key_id, rest) = KeyId::split_from(sealed.as_bytes()).ok_or(short)?;
+    let (key_id, nonce, ciphertext) = sealed
+        .split()
+        .ok_or(SyncError::Malformed(Part::SealedChannelKey))?;
     let space_key = keys.find(key_id).ok_or(SyncError::KeyOutOfReach)?;
     let space_key = &space_key;
-    let (nonce, ciphertext) =
-        ambre_core::Nonce::split_from(rest).ok_or(SyncError::Malformed(Part::SealedChannelKey))?;
     let (key, anchor) = ambre_crypto::aead::open_anchored_key(
         &nonce,
-        &ambre_core::Ciphertext(ciphertext.to_vec()),
+        &ciphertext,
         &channel_key_aad(channel_id),
         space_key,
     )?;

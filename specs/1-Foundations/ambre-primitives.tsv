@@ -4,7 +4,6 @@ key	category	note
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.listeners | field | Vec<Listener>	foreign-api	the DOM event name each closure was added under, which removeEventListener takes as &str
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.restored | field | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/cell.rs | crate::host::cell | Cells.content_held | field | bool	generic	named flag
-ambre-app | src/host/cell.rs | crate::host::cell | Cells::route() | ret | Option<bool>	generic	consumed answer
 ambre-app | src/host/cell.rs | crate::host::cell | INPUTS | const | [&str;6]	foreign-api	DOM event names from the browser's fixed vocabulary, which addEventListener takes as &str
 ambre-app | src/host/cell.rs | crate::host::cell | Listener | alias | (&'static str,Closure<dyn FnMut(web_sys::Event)>)	foreign-api	the DOM event name a closure is added under, which add- and removeEventListener take as &str
 ambre-app | src/host/cell.rs | crate::host::cell | present() | ret | bool	generic	predicate result
@@ -13,22 +12,16 @@ ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.web_frames_empty 
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::captures_pointer() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drags_text() | ret | bool	generic	predicate result
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drop_text() | ret | bool	generic	consumed answer
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::drop_text(text) | param | String	free-text	dropped text
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::render_fatal(message) | param | &str	free-text	message
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::sync_children() | ret | bool	generic	predicate result
-ambre-app | src/host/frame.rs | crate::host::frame | FrameHost::touch() | ret | bool	generic	consumed answer
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children() | ret | bool	generic	a fact, selects no mode: whether the board must recomposite
 ambre-app | src/host/frame.rs | crate::host::frame | reconcile_children(pump) | param | impl FnMut(&mut C)->bool	generic	a fact, selects no mode: whether the pumped child changed on its own
 ambre-app | src/host/frame.rs | crate::host::frame | send_faces() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::captures_pointer() | ret | bool	generic	predicate result
 ambre-app | src/host/mod.rs | crate::host | AppView::drags_text() | ret | bool	generic	predicate result
-ambre-app | src/host/mod.rs | crate::host | AppView::drop_text() | ret | bool	generic	consumed answer
 ambre-app | src/host/mod.rs | crate::host | AppView::drop_text(text) | param | String	free-text	dropped text
-ambre-app | src/host/mod.rs | crate::host | AppView::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/mod.rs | crate::host | AppView::takes_text() | ret | bool	generic	predicate result
-ambre-app | src/host/mod.rs | crate::host | AppView::touch() | ret | bool	generic	consumed answer
 ambre-app | src/host/mod.rs | crate::host | async_write_clipboard(published) | param | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/mod.rs | crate::host | base64_decode() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
 ambre-app | src/host/mod.rs | crate::host | base64_decode(s) | param | &str	generic	generic codec/parser/bytes API
@@ -45,20 +38,14 @@ ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.latest | field 
 ambre-app | src/host/murmure.rs | crate::host::murmure | Sealing.next | field | u64	math	write counter
 ambre-app | src/host/murmure.rs | crate::host::murmure | page_reads(warn) | param | Rc<dyn Fn(&str)>	free-text	warning text callback
 ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell, as PipeHost::clip_published declares it
-ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::handle_input() | ret | bool	generic	consumed answer, as PipeHost::handle_input declares it
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
-ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	generic	fact flag of the probe timeline, selects no mode
 ambre-app | src/host/probe.rs | crate::host::probe | mark(name) | param | &str	free-text	metric name
 ambre-app | src/host/probe.rs | crate::host::probe | mark_count(name) | param | &str	free-text	metric name
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.dirty | field | bool	generic	dirty flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.fatal | field | bool	generic	state flag
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text() | ret | bool	generic	consumed answer
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::drop_text(text) | param | String	free-text	dropped text
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::feed() | ret | bool	generic	predicate result
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView::signal_fatal(message) | param | &str	free-text	message
-ambre-app | src/host/prose.rs | crate::host::prose | ProseView::touch() | ret | bool	generic	consumed answer
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | PERMISSIONS | const | &str	free-text	iframe permissions literal
 ambre-app | src/host/web_embed.rs | crate::host::web_embed | SANDBOX | const | &str	free-text	iframe sandbox literal
 ambre-app | src/landing.rs | crate::landing | SignInMode::from_dev_flag(dev) | param | bool	newtype-inner	newtype inner, accessor or constructor
@@ -779,7 +766,6 @@ ambre-core | src/docfile.rs | crate::docfile | DOC_TYPE_AT | const | usize	gener
 ambre-core | src/docfile.rs | crate::docfile | DocFileError::UnknownDocType.found | field | u8	generic	raw unknown doc_type byte, by definition not a DocType
 ambre-core | src/docfile.rs | crate::docfile | HEADER_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | MAGIC_LEN | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | Migration.apply | field | fn(&[u8])->Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | SALT_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SALT_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEALED_AAD_LEN | const | usize	generic	container byte-layout constant
@@ -788,11 +774,6 @@ ambre-core | src/docfile.rs | crate::docfile | SEALED_HEADER_LEN | const | usize
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | VERSION_AT | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | migrate_ambre() | ret | Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | migrate_ambre(bytes) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | migrate_steps() | ret | Result<Vec<u8>,DocFileError>	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | migrate_steps(bytes) | param | &[u8]	generic	byte codec over a whole file
-ambre-core | src/docfile.rs | crate::docfile | parse_header(data) | param | &[u8]	generic	byte codec over a whole file
 ambre-core | src/docfile.rs | crate::docfile | FileSalt.0 | field | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::as_array() | ret | &[u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/docfile.rs | crate::docfile | FileSalt::from_array(bytes) | param | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
@@ -1045,13 +1026,14 @@ ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param 
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | sign_message(message) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | verify_message(message) | param | &[u8]	generic	generic byte/text API or codec
+ambre-draw | src/consumed.rs | crate::consumed | Consumed::is_yes() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-draw | src/consumed.rs | crate::consumed | Consumed::yes_if(taken) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::moving() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::pressed() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.held | field | bool	generic	local state flag or value, not a mode selector
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.panned | field | bool	generic	local state flag or value, not a mode selector
 ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_BLEND | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | ImageKey.0 | field | u64	newtype-inner	ImageKey inner
-ambre-draw | src/lib.rs | crate | ImageKey::from_address(address) | param | &str	newtype-inner	ImageKey constructor
 ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	the enum's own family name, the one the shaper's font database matches a face by
 ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static str	free-text	the same-origin font path the face fetch reads, a property of the script and no spelling of it, as BASE_FONTS holds the base ones
 ambre-draw | src/text.rs | crate::text | LazyFont::bit() | ret | u8	newtype-inner	ScriptSet bit
@@ -1269,15 +1251,11 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::close_with(found) 
 ambre-murmure | src/composer.rs | crate::composer | Composer::compose(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::cut() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::draft() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::drag_to() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::editing() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::focused() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::has_files() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::key() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::list_key() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::on_also() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::paint(typing) | param | Option<&str>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::release() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::restore() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::selected() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::show_chords() | ret | bool	generic	state flag/predicate
@@ -1466,11 +1444,9 @@ ambre-murmure | src/uploads.rs | crate::uploads | size_label() | ret | String	fr
 ambre-murmure | src/view.rs | crate::view | AT_FRACTION | const | f32	math	a ratio: where in the viewport a named message rests, a fraction of the list height
 ambre-murmure | src/view.rs | crate::view | MurmureView::clipboard() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | MurmureView::close_thread() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::composer_input() | ret | Option<bool>	generic	None leaves an event to the list; Some answers whether the composer prevents its default, the bool handle_input returns
 ambre-murmure | src/view.rs | crate::view | MurmureView::copy() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | MurmureView::drags_text() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::finger_down() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::handle_input() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::in_composer() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::mark_shown_read() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::on_jump() | ret | bool	generic	state flag/predicate
@@ -1769,25 +1745,11 @@ ambre-prose | src/input.rs | crate::input | ProseInput::Drop.text | field | Stri
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.html | field | Option<String>	free-text	the HTML half of the clipboard, as another application wrote it; Debug prints its length alone
 ambre-prose | src/input.rs | crate::input | ProseInput::Paste.text | field | String	free-text	the plain-text half of the clipboard; Debug prints its length alone
 ambre-prose | src/input.rs | crate::input | ProseInput::Text.0 | field | String	free-text	committed text, as the user typed, dictated or pasted it; Debug prints its length alone
-ambre-prose | src/input.rs | crate::input | ProseUiState::act() | ret | bool	generic	whether the view consumed the input; one it leaves goes to the host
-ambre-prose | src/input.rs | crate::input | ProseUiState::copy() | ret | bool	generic	whether the view consumed the copy or cut key
-ambre-prose | src/input.rs | crate::input | ProseUiState::delete() | ret | bool	generic	consumed answer
-ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text() | ret | bool	generic	whether the view consumed the drop; one off the text changes nothing
 ambre-prose | src/input.rs | crate::input | ProseUiState::drop_text(text) | param | &str	free-text	the text the user dropped, which takes the paste path
-ambre-prose | src/input.rs | crate::input | ProseUiState::handle_input() | ret | bool	generic	whether the view consumed the input; a key it leaves goes to the host
-ambre-prose | src/input.rs | crate::input | ProseUiState::key() | ret | bool	generic	whether the view consumed the key; one it leaves goes to the host
-ambre-prose | src/input.rs | crate::input | ProseUiState::menu_key() | ret | Option<bool>	generic	whether the open slash menu consumed the key; None leaves it to the editor
-ambre-prose | src/input.rs | crate::input | ProseUiState::paste() | ret | bool	generic	whether the view consumed the paste
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste(html) | param | Option<&str>	free-text	the HTML half of the clipboard, sent on as a command unread
 ambre-prose | src/input.rs | crate::input | ProseUiState::paste(text) | param | &str	free-text	the plain-text half of the clipboard, sent on as a command
-ambre-prose | src/input.rs | crate::input | ProseUiState::pick() | ret | bool	generic	whether the view consumed the key that confirmed a slash menu item
-ambre-prose | src/input.rs | crate::input | ProseUiState::press() | ret | bool	generic	whether the view consumed a press on the canvas
-ambre-prose | src/input.rs | crate::input | ProseUiState::replay() | ret | bool	generic	whether the view consumed any of the inputs it held behind a structural command
-ambre-prose | src/input.rs | crate::input | ProseUiState::split() | ret | bool	generic	whether the view consumed the Enter key that splits the paragraph
 ambre-prose | src/input.rs | crate::input | ProseUiState::take_selection() | ret | bool	generic	whether the caller may go on: no selection, or its deletion reached the channel
-ambre-prose | src/input.rs | crate::input | ProseUiState::type_into_menu() | ret | bool	generic	whether the view consumed the typed text
 ambre-prose | src/input.rs | crate::input | ProseUiState::type_into_menu(text) | param | &str	free-text	text the user typed, which the slash menu watches on its way in
-ambre-prose | src/input.rs | crate::input | ProseUiState::type_text() | ret | bool	generic	whether the view consumed the typed text
 ambre-prose | src/input.rs | crate::input | ProseUiState::type_text(text) | param | &str	free-text	text the user typed at the caret, sent as one insertion
 ambre-prose | src/input.rs | crate::input | ProseUiState::waiting() | ret | bool	generic	whether a structural command is still unanswered, so input is held
 ambre-prose | src/input.rs | crate::input | QUEUED_INPUTS | const | usize	local	the most inputs the queue holds, compared with the length of that queue alone
@@ -2317,7 +2279,6 @@ ambre-sync | src/pipeline.rs | crate::pipeline | NAME_DOMAIN | const | &[u8]	gen
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownLayout.0 | field | u8	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | PipelineError::UnknownVersion.0 | field | u8	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob.0 | field | Vec<u8>	newtype-inner	newtype field, constructor or accessor
-ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::as_bytes() | ret | &[u8]	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/pipeline.rs | crate::pipeline | SealedBlob::len() | ret | usize	newtype-inner	newtype field, constructor or accessor
 ambre-sync | src/pipeline.rs | crate::pipeline | check_layout(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/pipeline.rs | crate::pipeline | compress(data) | param | &[u8]	generic	generic byte/text API or codec
@@ -2391,6 +2352,7 @@ ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaC
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::pixels() | ret | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve(pixels) | param | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
+ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCacheCapacity::is_exceeded_by() | ret | bool	generic	predicate result: whether a held tally is past the bound
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ExportElement.text | field | Option<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportElementSlot.0 | field | u32	newtype-inner	the rank of a create in one import batch, with no arithmetic on it
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportElementSlot::from_usize(len) | param | usize	foreign-api	the length Vec::len hands back, the rank of the next create
@@ -2647,18 +2609,8 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.space_down | field | 
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView.viewport_changed | field | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::blur_embed() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::drag_arrow_handle() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_input() | ret | Option<bool>	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::edit_key() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::follow_link_under() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::grab_arrow_handle() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_double_click() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_input() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_key_up() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_down() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_move() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_pointer_up() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::handle_wheel() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::is_busy() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::is_text_editable() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_connector_label(base) | param | &str	free-text	label, message or user text
@@ -2666,17 +2618,12 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_connector_labe
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_element_text(base) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_element_text(text) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::patch_frame_title(title) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::present_input() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::release_arrow_handle() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::route_to_child() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::screen_in_focused_embed() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::send_edit() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::send_lossy() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::signal_fatal(message) | param | &str	free-text	label, message or user text
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_cancel() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_down() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_move() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::touch_up() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session(fatal) | param | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	the padding fraction a fit scales the bounds by, as 1 + pad
@@ -2967,19 +2914,11 @@ ambre-trame | src/ui/renderer/edit.rs | crate::ui::renderer::edit | draw_edit(ca
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	foreign-api	the alpha of the dirty-cell veil, which peniko's Color::with_alpha alone reads
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MDI_FILTER_PATH | const | &str	foreign-api	the SVG path data of the MDI filter icon, which kurbo::BezPath::from_svg alone reads
-ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::handle_input() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoom() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::apply_cursor_move() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::clear_active_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_input_nav() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_wheel() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_goto() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_move() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::axis_sel_contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::copy_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::cut_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::grid_paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::handle_input_editing() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::is_editing() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::active_cell_ref() | ret | String	free-text	free text: user content, label, message or display string
@@ -3536,6 +3475,8 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::bind(name) 
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::constructor(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::exempts() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::exempts(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::foreign_path() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::foreign_path(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::hint() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::infer() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::lookup(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3546,8 +3487,10 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::type_callee
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::workspace_root() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | BodyVisit<'_,'_>::workspace_root(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | CONVERSIONS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.consts | field | BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.crates | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.declared_methods | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.field_types | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.fields | field | BTreeMap<String,BTreeMap<String,String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.fns | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Catalog.foreign_names | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3578,6 +3521,7 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | Impl.shows_content | field | 
 ambre-primitives | src/unwrap.rs | crate::unwrap | Invocation.family | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Invocation.types | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Judgement.problems | field | Vec<String>	free-text	error messages printed to the terminal
+ambre-primitives | src/unwrap.rs | crate::unwrap | MACRO_TYPES | const | &[(&str,&str)]	generic	a word list the scanner matches Rust tokens against, with the type each word names
 ambre-primitives | src/unwrap.rs | crate::unwrap | Method.name | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Method.returns_bool | field | bool	generic	a fact of a signature or an impl the report reads, which selects no mode
 ambre-primitives | src/unwrap.rs | crate::unwrap | Method.returns_inner | field | bool	generic	a fact of a signature or an impl the report reads, which selects no mode
@@ -3588,11 +3532,15 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | Newtype.accessors | field | B
 ambre-primitives | src/unwrap.rs | crate::unwrap | Newtype.conversions | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Newtype.tuple | field | bool	generic	a fact of a signature or an impl the report reads, which selects no mode
 ambre-primitives | src/unwrap.rs | crate::unwrap | PEELS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
-ambre-primitives | src/unwrap.rs | crate::unwrap | PatNames.0 | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | PatNames.names | field | Vec<(String,Option<String>)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | PatNames.within | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | RETURNS | const | &[(&str,&str)]	generic	a word list the scanner matches Rust tokens against, with the type each word names
 ambre-primitives | src/unwrap.rs | crate::unwrap | Raw.macros | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Raw.traits | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | Report.errors | field | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/unwrap.rs | crate::unwrap | SHARED_ACCESSORS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/unwrap.rs | crate::unwrap | STD_RETURNS | const | &[&str]	generic	a word list the scanner matches Rust tokens against
+ambre-primitives | src/unwrap.rs | crate::unwrap | STD_TYPES | const | &[&str]	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/unwrap.rs | crate::unwrap | Tally.0 | field | usize	newtype-inner	the inside of Tally, or its constructor
 ambre-primitives | src/unwrap.rs | crate::unwrap | Tally::new(n) | param | usize	newtype-inner	the inside of Tally, or its constructor
 ambre-primitives | src/unwrap.rs | crate::unwrap | Unwrap.accessor | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -3614,12 +3562,14 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | judge() | ret | Result<Judgem
 ambre-primitives | src/unwrap.rs | crate::unwrap | judge(allowlist) | param | Option<&str>	generic	the text of the unwrap allowlist file the report reads
 ambre-primitives | src/unwrap.rs | crate::unwrap | macro_methods() | ret | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | macro_methods(methods) | param | &mut BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | member_name() | ret | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | names_len() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | parse_allowlist() | ret | Result<BTreeMap<String,Row>,Vec<String>>	generic	the keys of the unwrap allowlist, and the error messages of its parse
 ambre-primitives | src/unwrap.rs | crate::unwrap | parse_allowlist(text) | param | &str	generic	the text of the unwrap allowlist file the report reads
 ambre-primitives | src/unwrap.rs | crate::unwrap | reads_field() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | returns_inner() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | returns_inner(fragments) | param | &BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | shape_name() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | type_name() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | writes_newtypes() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | writes_newtypes(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name

@@ -144,7 +144,7 @@ pub async fn issue_session(
         sub: user_id,
         spk: signing_pubkey
             .as_ref()
-            .map(|key| ambre_core::SigningKeyHex(key.to_hex())),
+            .map(ambre_core::PublicKey::to_key_hex),
         iat: now,
         exp: now.plus(access_ttl),
     };

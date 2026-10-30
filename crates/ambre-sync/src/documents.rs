@@ -89,7 +89,7 @@ impl SyncState {
         name: &ambre_core::Name,
     ) -> Result<ambre_core::SealedName, pipeline::PipelineError> {
         let sealed = pipeline::seal_object(
-            &ambre_core::SecretBytes::new(name.as_str().as_bytes().to_vec()),
+            &name.to_plaintext(),
             &pipeline::name_aad(document_id),
             doc_key,
             signing_key,
