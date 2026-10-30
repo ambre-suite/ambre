@@ -7,7 +7,7 @@
 //! The list is written with the message and never changes after, so two
 //! peers never race on it.
 
-use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType};
+use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType};
 use loro::{Container, LoroList, LoroMap, ValueOrContainer};
 
 use crate::error::MurmureError;
@@ -68,7 +68,7 @@ pub(crate) fn read(message: &Fields<MessageKey>) -> Vec<Attachment> {
 /// One attachment, `None` when a field is absent or unreadable.
 fn read_entry(entry: &Fields<AttachmentKey>) -> Option<Attachment> {
     Some(Attachment {
-        media_ref: MediaRef::parse(&schema::string(entry, AttachmentKey::Media)?)?,
+        media_ref: ContentHash::parse(&schema::string(entry, AttachmentKey::Media)?)?,
         name: schema::string(entry, AttachmentKey::Name)?,
         media_type: MediaType(schema::string(entry, AttachmentKey::Type)?),
         size: ByteSize(schema::unsigned(entry, AttachmentKey::Size)?),

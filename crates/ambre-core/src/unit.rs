@@ -18,7 +18,7 @@
 //! | [`ImageSize`] | the whole pixels of a decoded image | a picture preview |
 //! | [`ViewSpeed`] | view pixels per millisecond | a flick, a glide |
 //! | [`BoardLength`] | a board world unit, before the zoom | a frame's padding, a hit reach |
-//! | [`StrokeCoord`] | a board world unit, as the `f32` a stroke stores | a freehand sample |
+//! | [`StoredBoardLength`] | a board world unit, as the `f32` an element stores | a freehand sample, a stroke width |
 //!
 //! No type converts into another through `From`. Each conversion is a named
 //! method that takes the factor it needs. [`DocPx::zoomed`] takes the zoom,
@@ -245,14 +245,17 @@ define_length! {
 }
 
 define_length! {
-    /// A coordinate of a freehand sample on a board, in world units, held in
-    /// the `f32` a stroke stores so a sample stays twelve bytes.
-    /// [`StrokeCoord::widened`] reads it as the [`BoardLength`] the board
-    /// computes in.
-    StrokeCoord(f32)
+    /// A board length in world units, held in the `f32` that an element
+    /// stores. A freehand sample keeps its coordinates in it, so a sample
+    /// stays twelve bytes. A style keeps its stroke width and its corner
+    /// radius in it. The camera scales it with the shape, and a screen length
+    /// meets it only through the camera. No rule bounds it.
+    /// [`StoredBoardLength::widened`] reads it as the [`BoardLength`] the
+    /// board computes in.
+    StoredBoardLength(f32)
 }
 
-impl StrokeCoord {
+impl StoredBoardLength {
     /// The coordinate in the `f64` a board is measured in. Every `f32` has an
     /// exact `f64`, so nothing is lost.
     #[must_use]

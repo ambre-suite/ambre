@@ -92,11 +92,12 @@ impl ProseState {
         }
     }
 
-    /// The content hash a live image block addresses.
+    /// The content hash a live image block addresses. A peer wrote it, so a
+    /// text that spells no address reads as none.
     pub(super) fn image_hash(&self, id: &TreeID) -> Option<ambre_core::ContentHash> {
         let attrs = self.attrs_of(id)?;
         match attrs.value(doc::AttrKey::ContentHash)? {
-            loro::LoroValue::String(s) => Some(ambre_core::ContentHash(s.to_string())),
+            loro::LoroValue::String(s) => ambre_core::ContentHash::parse(&s),
             _ => None,
         }
     }
