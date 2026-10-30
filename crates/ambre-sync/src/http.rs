@@ -2688,11 +2688,11 @@ mod tests {
         };
         let expected = ["content_hash", "size_bytes"];
         let ask = UploadUrlRequest {
-            content_hash: ambre_core::ContentHash("ab".repeat(32)),
+            content_hash: ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash"),
             size: ambre_core::ByteSize(64),
         };
         let confirm = ConfirmUploadRequest {
-            content_hash: ambre_core::ContentHash("ab".repeat(32)),
+            content_hash: ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash"),
             size: ambre_core::ByteSize(64),
         };
         assert_eq!(

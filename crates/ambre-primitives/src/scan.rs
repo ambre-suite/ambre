@@ -27,7 +27,7 @@ use crate::allowlist::LineNo;
 
 /// The types the rule names: a bare one of these needs a newtype or a reason
 /// (`ai/ambre-rust-style.md`).
-const PRIMITIVES: &[&str] = &[
+pub(crate) const PRIMITIVES: &[&str] = &[
     "String", "str", "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
     "isize", "f32", "f64", "bool", "char", "Uuid",
 ];
@@ -287,6 +287,20 @@ pub struct Scan {
     /// code (`ARCH-036`).
     places: BTreeMap<SiteKey, Place>,
     declared: Declared,
+    /// Every file the walk reads outside test code, once each, in the
+    /// order it reads them. The unwrap report reads them again.
+    pub sources: Vec<Source>,
+}
+
+/// One file the walk reads outside test code. It names the crate, the path
+/// in the crate, the module and the path the tree reads it at.
+#[derive(Clone, Debug)]
+pub struct Source {
+    pub krate: String,
+    pub file: String,
+    /// The module path, as `crate::a::b`.
+    pub module: String,
+    pub path: PathBuf,
 }
 
 /// Where one site sits: what a `newtype-inner` or a `trait` line claims of
@@ -2589,7 +2603,7 @@ fn wrapped(ty: &syn::Type) -> Option<&syn::Type> {
 /// The types a `define_*!` invocation writes: each name after a `struct`,
 /// or, with no `struct`, each top-level word in `UpperCamelCase`. A macro
 /// that writes an `enum` writes no newtype.
-fn macro_types(mac: &syn::Macro) -> Vec<String> {
+pub(crate) fn macro_types(mac: &syn::Macro) -> Vec<String> {
     let words = mac
         .parse_body_with(|input: syn::parse::ParseStream<'_>| {
             input.step(|cursor| {
@@ -2879,6 +2893,7 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             .ok()
             .map(|inside| inside.to_string_lossy().replace('\\', "/"));
         let root_file = next.module.len() == 1;
+        let module = next.module.join("::");
         let mut visit = FileVisit::new(&name, relative, &path, next.module, &next.placement);
         visit.uses(&file);
         visit.visit_file(&file);
@@ -2891,6 +2906,12 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
         }
         let file_name = relative.to_string_lossy().replace('\\', "/");
         let shown = format!("crates/{name}/{file_name}");
+        result.sources.push(Source {
+            krate: name.clone(),
+            file: file_name.clone(),
+            module,
+            path: path.clone(),
+        });
         result.errors.append(&mut macro_mods(&shown, &file));
         if root_file && !FEATURE_ROOTS.contains(&(name.as_str(), file_name.as_str())) {
             result.errors.append(&mut features(&shown, &file));
@@ -3388,7 +3409,7 @@ fn data_items(items: &[syn::Item], migrate: Migrate, found: &mut Vec<DataRead>) 
 }
 
 /// The outer attributes of an item.
-fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
+pub(crate) fn item_attrs(item: &syn::Item) -> &[syn::Attribute] {
     match item {
         syn::Item::Const(i) => &i.attrs,
         syn::Item::Enum(i) => &i.attrs,
@@ -3913,7 +3934,7 @@ fn rule_bodies(tokens: TokenStream) -> Vec<TokenStream> {
 
 /// The fragment each metavariable of a matcher declares: `$v:vis` maps
 /// `v` to `vis`.
-fn fragments_of(matcher: TokenStream, fragments: &mut BTreeMap<String, String>) {
+pub(crate) fn fragments_of(matcher: TokenStream, fragments: &mut BTreeMap<String, String>) {
     let tokens: Vec<TokenTree> = matcher.into_iter().collect();
     for (i, token) in tokens.iter().enumerate() {
         match token {

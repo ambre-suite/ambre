@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType, RequestId};
+use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType, RequestId};
 use ambre_core::{ByteCount, ExportFilename, KnownMediaType};
 
 use crate::composer::DraftOf;
@@ -197,23 +197,12 @@ impl Uploads {
         true
     }
 
-    /// The relay stored the file of `id` under `content_hash`. An address
-    /// this build cannot read fails the upload. `None` for a request this
-    /// model never held.
-    pub fn uploaded(
-        &mut self,
-        id: RequestId,
-        content_hash: &ambre_core::ContentHash,
-    ) -> Option<Uploaded> {
+    /// The relay stored the file of `id` under `content_hash`, which its
+    /// reader already checked. `None` for a request this model never held.
+    pub fn uploaded(&mut self, id: RequestId, content_hash: &ContentHash) -> Option<Uploaded> {
         let pending = self.pending.remove(&id)?;
-        let Some(media_ref) = MediaRef::parse(content_hash.as_str()) else {
-            return Some(Uploaded::Failed {
-                of: pending.of,
-                name: pending.name,
-            });
-        };
         self.ready.entry(pending.of).or_default().push(Attachment {
-            media_ref,
+            media_ref: content_hash.clone(),
             name: pending.name,
             media_type: pending.media_type,
             size: pending.size,
@@ -351,7 +340,7 @@ mod tests {
     /// A fetched file named `name`.
     fn received(name: &str) -> Attachment {
         Attachment {
-            media_ref: MediaRef::parse(HASH).expect("an address"),
+            media_ref: ContentHash::parse(HASH).expect("an address"),
             name: name.to_owned(),
             media_type: MediaType("application/pdf".to_owned()),
             size: ByteSize(10),
@@ -391,7 +380,7 @@ mod tests {
         assert!(uploads.busy(of));
         assert!(uploads.ready(of).is_empty());
         assert_eq!(
-            uploads.uploaded(RequestId(1), &HASH.into()),
+            uploads.uploaded(RequestId(1), &ContentHash::parse(HASH).expect("an address")),
             Some(Uploaded::Ready(of))
         );
         assert!(!uploads.busy(of));
@@ -415,10 +404,7 @@ mod tests {
             })
         };
         assert_eq!(uploads.failed(RequestId(1)), failed("a.png"));
-        assert_eq!(
-            uploads.uploaded(RequestId(2), &"not-hex".into()),
-            failed("b.png")
-        );
+        assert_eq!(uploads.failed(RequestId(2)), failed("b.png"));
         assert!(!uploads.busy(of));
         assert!(uploads.ready(of).is_empty());
         assert_eq!(uploads.failed(RequestId(3)), None);

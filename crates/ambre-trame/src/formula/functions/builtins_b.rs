@@ -471,7 +471,7 @@ pub(crate) fn year(args: &[CellValue]) -> CellValue {
 }
 
 pub(crate) fn month(args: &[CellValue]) -> CellValue {
-    date_part(args, |date| date.month.get())
+    date_part(args, |date| i64::from(date.month.get()))
 }
 
 pub(crate) fn day(args: &[CellValue]) -> CellValue {
