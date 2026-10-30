@@ -1910,7 +1910,7 @@ ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Rea
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader.strike | field | u32	local	how many struck spans the private reader is inside, its name says which
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::dropping() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | Reader::text(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | read(bytes) | param | &[u8]	math	count, size or local index
+ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | read(bytes) | param | &[u8]	foreign-api	the bytes of an imported file, handed whole to the one from_utf8 call this function makes; FileBytes waits on the fuzz target
 ambre-prose | src/interop/markdown_read.rs | crate::interop::markdown_read | same_marks() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::close() | ret | String	generic	the codec of an enum that carries data: the markdown delimiter that closes a span, a link's target included, which a markdown parser reads back
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | Delimiter::open() | ret | &'static str	generic	the codec of an enum that carries data: the markdown delimiter that opens a span, which a markdown parser reads back

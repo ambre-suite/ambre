@@ -316,7 +316,8 @@ impl ParleyRunData {
         resume: Option<Resume>,
     ) -> Option<Self> {
         let start = previous.line_start(cut)?;
-        let mut segments = RunSegmentVec::new();
+        let mut segments =
+            RunSegmentVec::from(Vec::with_capacity(previous.segments.len().to_usize() + 2));
         for segment in &previous.segments {
             if segment.first_line >= cut {
                 break;

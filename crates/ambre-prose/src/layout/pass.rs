@@ -793,11 +793,12 @@ fn table_metrics(
     }
     for (cell, height) in cells.iter().zip(&heights) {
         if cell.rows.len() > RowCount::ONE {
-            let spanned: DocPx = cell
-                .rows
-                .into_iter()
-                .filter_map(|row| row_heights.get(row).copied())
-                .sum();
+            // A span the grid does not hold whole sums to nothing, as the
+            // slice read gave before the rows were typed.
+            let spanned: DocPx = row_heights
+                .as_slice()
+                .get(cell.rows.to_usize_range())
+                .map_or(DocPx::ZERO, |rows| rows.iter().copied().sum());
             if let Some(last) = cell.rows.last().and_then(|row| row_heights.get_mut(row)) {
                 *last += (*height - spanned).max(DocPx::ZERO);
             }
