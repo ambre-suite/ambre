@@ -345,7 +345,7 @@ impl Measurer {
     /// (`CANVAS-006`). The layout measured before it arrived is stale, and
     /// the next reflow recomputes in full (`PROSE-111`).
     pub fn register_faces(&mut self, bytes: ambre_core::FontBytes) {
-        fonts::register_faces(&mut self.font_cx, bytes.into_bytes());
+        fonts::register_faces(&mut self.font_cx, bytes);
     }
 
     /// Whether a face has arrived for a script a past run was missing.

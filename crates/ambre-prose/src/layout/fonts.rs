@@ -40,12 +40,14 @@ pub fn missing_scripts(font_cx: &mut FontContext, text: &str) -> ScriptSet {
     missing
 }
 
-/// Load a face into `font_cx`, from the bytes of a font file.
+/// Load the faces of the font file `face` into `font_cx`.
 ///
 /// Registration lives here with the two lookups above, so this module stays
 /// the one place that touches a collection at all (`PROSE-107`).
-pub fn register_faces(font_cx: &mut FontContext, bytes: Vec<u8>) {
-    font_cx.collection.register_fonts(bytes.into(), None);
+pub fn register_faces(font_cx: &mut FontContext, face: ambre_core::FontBytes) {
+    font_cx
+        .collection
+        .register_fonts(face.into_bytes().into(), None);
 }
 
 /// Whether `font_cx` now covers any script of `missing`.

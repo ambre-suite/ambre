@@ -1322,7 +1322,7 @@ mod tests {
     fn shape(ui: &mut ProseUiState) {
         let mut font_cx = parley::FontContext::new();
         for bytes in crate::layout::fonts::shipped_faces() {
-            crate::layout::fonts::register_faces(&mut font_cx, bytes.into_bytes());
+            crate::layout::fonts::register_faces(&mut font_cx, bytes);
         }
         let mut layout_cx = parley::LayoutContext::new();
         ui.shape_draft(&mut font_cx, &mut layout_cx);

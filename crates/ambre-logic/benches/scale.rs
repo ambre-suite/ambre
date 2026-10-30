@@ -275,7 +275,7 @@ fn bench_prose_paragraph_shape(c: &mut Criterion) {
     for face in ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"] {
         let bytes =
             std::fs::read(format!("{FACES}{face}")).unwrap_or_else(|e| panic!("{face}: {e}"));
-        fonts::register_faces(&mut font_cx, bytes);
+        fonts::register_faces(&mut font_cx, ambre_core::FontBytes::new(bytes));
     }
     let mut layout_cx = parley::LayoutContext::new();
     let style = measure::EffectiveStyle::from_parts(
