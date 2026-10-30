@@ -3,7 +3,7 @@
 // scroll, folded into whole-cell pans of the viewport.
 
 use ambre_canvas::WheelDelta;
-use ambre_core::{CssPx, CssVector, SurfacePx, ViewPoint};
+use ambre_core::{CssVector, SurfacePx, ViewPoint};
 use ambre_draw::kinetic::{EdgeScroll, EdgeSpeed, Kinetic, Release, ScrollStep};
 
 use super::ScrollOutcome;
@@ -37,7 +37,7 @@ impl GridScroll {
         now: ambre_core::PageTime,
     ) -> ScrollOutcome {
         // A line step is one zoomed cell, so it scales with the grid zoom.
-        let px = |v: SurfacePx| CssPx::new(v.get() as f32);
+        let px = |v: SurfacePx| v.view_length().css_length();
         let line = CssVector::new(px(grid.scaled(COL_WIDTH)), px(grid.scaled(ROW_HEIGHT)));
         let page = CssVector::new(px(grid.canvas_width), px(grid.canvas_height));
         // The shared model applies the step one for one, and lets a trackpad

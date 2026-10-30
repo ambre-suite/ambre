@@ -2,7 +2,7 @@
 //! Logic thread's answers fed back (`features/ambre-spec-prose-text-editing.md`,
 //! `features/ambre-spec-prose-selection.md`).
 
-use crate::layout::run::{Affinity, RunOffset};
+use crate::layout::run::{Affinity, RunCount, RunOffset};
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocOffset;
 use ambre_bus::app::prose::DocSpan;
@@ -879,9 +879,9 @@ fn home_and_end_honour_the_wrapped_line() {
             .0
     };
     rig.ui
-        .set_caret((block, DocOffset::new(second_line.get() + 2)));
+        .set_caret((block, (second_line + RunCount::new(2)).as_doc()));
     rig.key(ProseKey::End, false, false);
-    let end = RunOffset::new(rig.caret().offset.get());
+    let end = RunOffset::from_doc(rig.caret().offset);
     assert!(end < run_len);
     assert_eq!(
         rig.ui.caret_affinity,
@@ -894,7 +894,7 @@ fn home_and_end_honour_the_wrapped_line() {
         crate::layout::run::RunLine::new(1)
     );
     rig.key(ProseKey::Home, false, false);
-    let start = RunOffset::new(rig.caret().offset.get());
+    let start = RunOffset::from_doc(rig.caret().offset);
     assert!(start > RunOffset::ZERO && start <= second_line);
     let run = rig.ui.run_of(block).expect("a run");
     assert_eq!(
@@ -1028,7 +1028,7 @@ fn select_all_spans_the_document_and_keeps_the_window() {
     let scroll = rig.ui.viewport.scroll_y;
     rig.key(ProseKey::SelectAll, false, true);
     let len = rig.ui.run_of(last).expect("a run").len();
-    let len = DocOffset::new(len.get());
+    let len = len.as_end().as_doc();
     assert_eq!(
         rig.ui.selection(),
         Some(((first, DocOffset::ZERO), (last, len)))

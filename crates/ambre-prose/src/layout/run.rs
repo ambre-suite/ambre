@@ -7,7 +7,7 @@
 //! and nothing bound to a thread, so it crosses by move (`PROSE-UI-113`).
 
 use ambre_bus::app::grid::{Row, RowSpan, RowVec};
-use ambre_bus::app::prose::{PageIndex, PageSpan};
+use ambre_bus::app::prose::{DocCount, DocOffset, PageIndex, PageSpan};
 use ambre_core::Rgba;
 use std::collections::HashMap;
 use std::fmt;
@@ -36,6 +36,33 @@ ambre_core::define_index! {
     pub struct RunSpan;
     /// A list indexed by code-point offset in one run.
     pub struct RunVec;
+}
+
+impl RunOffset {
+    /// The document offset of the same code point, where the run counts the
+    /// text the document counts. That holds while no draft is pending, for a
+    /// provisional run that holds the draft, and for an offset the Logic
+    /// thread answered. `ProseUiState::to_doc` is the bridge otherwise.
+    #[must_use]
+    pub const fn as_doc(self) -> DocOffset {
+        DocOffset::new(self.get())
+    }
+
+    /// The run offset of the same code point, under the condition that
+    /// [`Self::as_doc`] states.
+    #[must_use]
+    pub const fn from_doc(offset: DocOffset) -> Self {
+        Self::new(offset.get())
+    }
+}
+
+impl RunCount {
+    /// The same number of code points as the document counts them, under the
+    /// condition that [`RunOffset::as_doc`] states.
+    #[must_use]
+    pub const fn as_doc(self) -> DocCount {
+        DocCount::new(self.get())
+    }
 }
 
 ambre_core::define_index! {
