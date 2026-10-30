@@ -501,9 +501,7 @@ impl TrameState {
             .sheet_order_ids()
             .into_iter()
             .map(|id| {
-                let name = names
-                    .remove(&id)
-                    .unwrap_or_else(|| SheetName::stored(id.to_string()));
+                let name = names.remove(&id).unwrap_or_else(|| id.bare_name());
                 SheetTab { id, name }
             })
             .collect();
