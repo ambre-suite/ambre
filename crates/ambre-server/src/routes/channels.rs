@@ -751,6 +751,12 @@ pub async fn create_direct_message(
     Json(req): Json<CreateDirectMessageRequest>,
 ) -> Result<axum::Json<DirectMessageJson>, AppError> {
     let invalid = |detail: &str| AppError::BadRequest(detail.into());
+    // Each member costs one lookup and one signature check, so the budget
+    // holds before the first of them (`SRV-240`). It counts the caller, whom
+    // `members` leaves out.
+    if req.members.len() >= ambre_protocol::membership::DIRECT_MESSAGE_MAX_MEMBERS {
+        return Err(invalid("a direct message past its member budget"));
+    }
     if req.meta_id.document_id() == req.segment_id.document_id() {
         return Err(invalid("meta and segment are one document"));
     }
@@ -3022,6 +3028,33 @@ mod tests {
         assert_eq!(a.channel_id, b.channel_id);
         assert!(a.created != b.created, "exactly one created it");
         assert_eq!(direct_messages(&state).await, 1);
+    }
+
+    /// `SRV-240`: a direct message past its budget is refused before any
+    /// lookup. Its members are unknown users, so a lookup would answer
+    /// `NotFound`. One member fewer is the largest direct message, created.
+    #[sqlx::test]
+    #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
+    async fn a_direct_message_past_its_budget_is_refused_before_any_lookup(pool: sqlx::PgPool) {
+        let state = crate::test_helpers::test_app_state(pool).await;
+        let alice = user(&state, "alice@test.dev").await;
+        let max = ambre_protocol::membership::DIRECT_MESSAGE_MAX_MEMBERS;
+
+        let strangers: Vec<UserId> = (0..max).map(|_| UserId::new()).collect();
+        assert!(matches!(
+            open_direct(&state, alice, direct_request(alice, &strangers)).await,
+            Err(AppError::BadRequest(_))
+        ));
+        assert_eq!(direct_messages(&state).await, 0);
+
+        let mut others = Vec::new();
+        for i in 1..max {
+            others.push(user(&state, &format!("member{i}@test.dev")).await);
+        }
+        let answer = open_direct(&state, alice, direct_request(alice, &others))
+            .await
+            .expect("the largest direct message");
+        assert_eq!(answer.created, Creation::Created);
     }
 
     /// `SRV-175`: a log that leaves the creator an owner, or a request that
