@@ -19,10 +19,17 @@ crate::token::define_token! {
 }
 
 /// A text refused as a defined name: empty, or not a letter or underscore
-/// followed by letters, digits and underscores.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+/// followed by letters, digits and underscores. `Debug` prints the length
+/// alone; `Display` quotes the text, for the author who typed it.
+#[derive(Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{0:?} is not a name: a letter or underscore, then letters, digits and underscores")]
 pub struct InvalidDefinedName(pub String);
+
+impl std::fmt::Debug for InvalidDefinedName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "InvalidDefinedName({} chars)", self.0.chars().count())
+    }
+}
 
 /// The name of a workbook named range, as a formula writes it (`TOTAL`), case
 /// kept (`trame-named-ranges`). It is an ASCII letter or underscore, then ASCII
@@ -263,7 +270,7 @@ pub enum SelectionKind {
 }
 
 /// Commands sent from the UI Thread to the Trame logic for an open document.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum TrameCommand {
     /// Request cell data for a viewport region.
     ///
@@ -965,6 +972,278 @@ pub enum TrameCommand {
     RemoveProtection { sheet_id: SheetId, range: CellRect },
 }
 
+// A text a user typed prints its length alone, and every other field its own
+// `Debug`. A log of a command carries none of the sheet's text.
+impl std::fmt::Debug for TrameCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ambre_core::char_len;
+        macro_rules! fields {
+            ($name:literal $(, $field:ident)*) => {
+                f.debug_struct($name)$(.field(stringify!($field), $field))*.finish()
+            };
+        }
+        match self {
+            Self::ScrollViewport {
+                version,
+                row_start,
+                row_end,
+                col_start,
+                col_end,
+            } => fields!(
+                "ScrollViewport",
+                version,
+                row_start,
+                row_end,
+                col_start,
+                col_end
+            ),
+            Self::SetActiveCell {
+                row,
+                col,
+                anchor_row,
+                anchor_col,
+                extra,
+                kind,
+            } => fields!(
+                "SetActiveCell",
+                row,
+                col,
+                anchor_row,
+                anchor_col,
+                extra,
+                kind
+            ),
+            Self::SetCellText { row, col, text } => f
+                .debug_struct("SetCellText")
+                .field("row", row)
+                .field("col", col)
+                .field("text", &char_len(text))
+                .finish(),
+            Self::BeginCellEdit { session, row, col } => {
+                fields!("BeginCellEdit", session, row, col)
+            }
+            Self::CommitCellEdit { session, text } => f
+                .debug_struct("CommitCellEdit")
+                .field("session", session)
+                .field("text", &char_len(text))
+                .finish(),
+            Self::EndCellEdit { session } => fields!("EndCellEdit", session),
+            Self::SetCellsBatch { cells } => f
+                .debug_struct("SetCellsBatch")
+                .field(
+                    "cells",
+                    &cells
+                        .iter()
+                        .map(|(pos, text)| (pos, char_len(text)))
+                        .collect::<Vec<_>>(),
+                )
+                .finish(),
+            Self::CommitEdit => f.write_str("CommitEdit"),
+            Self::SetCellStyle { patch } => fields!("SetCellStyle", patch),
+            Self::InsertRow { at } => fields!("InsertRow", at),
+            Self::DeleteRow { at } => fields!("DeleteRow", at),
+            Self::InsertColumn { at } => fields!("InsertColumn", at),
+            Self::DeleteColumn { at } => fields!("DeleteColumn", at),
+            Self::MoveRow { from, to } => fields!("MoveRow", from, to),
+            Self::MoveColumn { from, to } => fields!("MoveColumn", from, to),
+            Self::MergeCells { rect } => fields!("MergeCells", rect),
+            Self::UnmergeCells { row, col } => fields!("UnmergeCells", row, col),
+            Self::ResizeCol {
+                version,
+                sheet_id,
+                col,
+                width,
+            } => fields!("ResizeCol", version, sheet_id, col, width),
+            Self::ResizeRow {
+                version,
+                sheet_id,
+                row,
+                height,
+            } => fields!("ResizeRow", version, sheet_id, row, height),
+            Self::InsertRowAbove => f.write_str("InsertRowAbove"),
+            Self::InsertRowBelow => f.write_str("InsertRowBelow"),
+            Self::InsertColLeft => f.write_str("InsertColLeft"),
+            Self::InsertColRight => f.write_str("InsertColRight"),
+            Self::DeleteSelectedRows => f.write_str("DeleteSelectedRows"),
+            Self::DeleteSelectedCols => f.write_str("DeleteSelectedCols"),
+            Self::MergeSelection => f.write_str("MergeSelection"),
+            Self::UnmergeActive => f.write_str("UnmergeActive"),
+            Self::SortSelectionAsc => f.write_str("SortSelectionAsc"),
+            Self::SortSelectionDesc => f.write_str("SortSelectionDesc"),
+            Self::SortSheetAsc => f.write_str("SortSheetAsc"),
+            Self::SortSheetDesc => f.write_str("SortSheetDesc"),
+            Self::SortSelectionMulti { sort_keys, header } => {
+                fields!("SortSelectionMulti", sort_keys, header)
+            }
+            Self::RequestActiveColumnValues => f.write_str("RequestActiveColumnValues"),
+            Self::RequestSelectionStats => f.write_str("RequestSelectionStats"),
+            Self::RequestSortRange => f.write_str("RequestSortRange"),
+            Self::RequestColumnContent { col } => fields!("RequestColumnContent", col),
+            Self::CopyRange => f.write_str("CopyRange"),
+            Self::ApplyFilterToActiveColumn { kind } => {
+                fields!("ApplyFilterToActiveColumn", kind)
+            }
+            Self::ClearActiveFilter => f.write_str("ClearActiveFilter"),
+            Self::PasteRange {
+                target_row,
+                target_col,
+                payload,
+            } => fields!("PasteRange", target_row, target_col, payload),
+            Self::PasteText { text } => f
+                .debug_struct("PasteText")
+                .field("text", &char_len(text))
+                .finish(),
+            Self::PasteClipboardAtActive { payload } => {
+                fields!("PasteClipboardAtActive", payload)
+            }
+            Self::FillRange {
+                sheet_id,
+                src,
+                dest,
+                mode,
+            } => fields!("FillRange", sheet_id, src, dest, mode),
+            Self::FindNext { query } => fields!("FindNext", query),
+            Self::ReplaceAll { query, replacement } => f
+                .debug_struct("ReplaceAll")
+                .field("query", query)
+                .field("replacement", &char_len(replacement))
+                .finish(),
+            Self::ReplaceOne { query, replacement } => f
+                .debug_struct("ReplaceOne")
+                .field("query", query)
+                .field("replacement", &char_len(replacement))
+                .finish(),
+            Self::Undo => f.write_str("Undo"),
+            Self::Redo => f.write_str("Redo"),
+            Self::DefineName { name, reference } => f
+                .debug_struct("DefineName")
+                .field("name", name)
+                .field("reference", &char_len(reference))
+                .finish(),
+            Self::DeleteName { name } => fields!("DeleteName", name),
+            Self::ActivateSheet { sheet_id } => fields!("ActivateSheet", sheet_id),
+            Self::CreateSheet { name } => fields!("CreateSheet", name),
+            Self::RenameSheet { sheet_id, name } => fields!("RenameSheet", sheet_id, name),
+            Self::MoveSheet { sheet_id, to_index } => fields!("MoveSheet", sheet_id, to_index),
+            Self::SortRange {
+                sheet_id,
+                rect,
+                sort_col,
+                order,
+                header,
+            } => fields!("SortRange", sheet_id, rect, sort_col, order, header),
+            Self::DeleteSheet { sheet_id } => fields!("DeleteSheet", sheet_id),
+            Self::ApplyFilter {
+                sheet_id,
+                col,
+                kind,
+            } => fields!("ApplyFilter", sheet_id, col, kind),
+            Self::ClearFilter { sheet_id } => fields!("ClearFilter", sheet_id),
+            Self::ImportCsv {
+                data,
+                delimiter,
+                header,
+                target_sheet_id,
+                start_row,
+                start_col,
+            } => fields!(
+                "ImportCsv",
+                data,
+                delimiter,
+                header,
+                target_sheet_id,
+                start_row,
+                start_col
+            ),
+            Self::ExportActiveSheetCsv => f.write_str("ExportActiveSheetCsv"),
+            Self::ExportCsv {
+                sheet_id,
+                delimiter,
+                range,
+            } => fields!("ExportCsv", sheet_id, delimiter, range),
+            Self::ExportAmbreFile => f.write_str("ExportAmbreFile"),
+            Self::ExportAmbreFileSealed { passphrase } => {
+                fields!("ExportAmbreFileSealed", passphrase)
+            }
+            Self::SaveFilterView {
+                name,
+                sheet_id,
+                filter_col,
+                kind,
+            } => f
+                .debug_struct("SaveFilterView")
+                .field("name", &char_len(name))
+                .field("sheet_id", sheet_id)
+                .field("filter_col", filter_col)
+                .field("kind", kind)
+                .finish(),
+            Self::ActivateFilterView { view_id } => fields!("ActivateFilterView", view_id),
+            Self::SortRangeMulti {
+                sheet_id,
+                rect,
+                sort_keys,
+                header,
+            } => fields!("SortRangeMulti", sheet_id, rect, sort_keys, header),
+            Self::AddCondFormat {
+                sheet_id,
+                range,
+                rule,
+                style,
+                priority,
+            } => fields!("AddCondFormat", sheet_id, range, rule, style, priority),
+            Self::UpdateCondFormat {
+                sheet_id,
+                id,
+                range,
+                rule,
+                style,
+                priority,
+            } => fields!(
+                "UpdateCondFormat",
+                sheet_id,
+                id,
+                range,
+                rule,
+                style,
+                priority
+            ),
+            Self::RemoveCondFormat { sheet_id, id } => fields!("RemoveCondFormat", sheet_id, id),
+            Self::AddValidation {
+                sheet_id,
+                range,
+                kind,
+                on_invalid,
+                message,
+            } => f
+                .debug_struct("AddValidation")
+                .field("sheet_id", sheet_id)
+                .field("range", range)
+                .field("kind", kind)
+                .field("on_invalid", on_invalid)
+                .field("message", &char_len(message))
+                .finish(),
+            Self::RemoveValidation { sheet_id, range } => {
+                fields!("RemoveValidation", sheet_id, range)
+            }
+            Self::SetProtection {
+                sheet_id,
+                range,
+                allowed_user_ids,
+                description,
+            } => f
+                .debug_struct("SetProtection")
+                .field("sheet_id", sheet_id)
+                .field("range", range)
+                .field("allowed_user_ids", allowed_user_ids)
+                .field("description", &char_len(description))
+                .finish(),
+            Self::RemoveProtection { sheet_id, range } => {
+                fields!("RemoveProtection", sheet_id, range)
+            }
+        }
+    }
+}
+
 impl TrameCommand {
     /// Whether this command can change the sheet's shared CRDT state (`architecture`).
     ///
@@ -1011,6 +1290,9 @@ mod tests {
         assert_eq!(format!("{:?}", sheet.key()), "SheetNameKey(7 chars)");
         let name = DefinedName::new("TOTAL").unwrap();
         assert_eq!(format!("{name:?}"), "DefinedName(5 chars)");
+        let refused = DefinedName::new("Q3 layoffs").unwrap_err();
+        assert_eq!(format!("{refused:?}"), "InvalidDefinedName(10 chars)");
+        assert!(refused.to_string().contains("Q3 layoffs"));
     }
 
     /// The Excel rule: 1 to 31 characters, none of `: \ / ? * [ ]`, and no

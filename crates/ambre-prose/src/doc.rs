@@ -91,6 +91,8 @@ pub(crate) enum RefusalCause {
     TreeRefusedRow,
     /// A table's width list refused a child container.
     WidthListRefused,
+    /// A paragraph length to write is not a finite number.
+    NonFiniteLength,
 }
 
 impl RefusalCause {
@@ -118,6 +120,7 @@ impl RefusalCause {
             Self::TreeRefusedNoteBlock => "the tree refused a note block",
             Self::TreeRefusedRow => "the tree refused a row",
             Self::WidthListRefused => "the width list refused a container",
+            Self::NonFiniteLength => "a paragraph length is not a finite number",
         }
     }
 }
@@ -159,6 +162,9 @@ impl From<WriteError> for ambre_bus::app::prose::ProseRefusal {
     fn from(error: WriteError) -> Self {
         match error {
             WriteError::NoIdentity => Self::NoIdentity,
+            // The author's input, not the engine, is at fault: the refusal
+            // says so in the author's terms.
+            WriteError::Refused(RefusalCause::NonFiniteLength) => Self::NonFiniteLength,
             WriteError::Engine(_) | WriteError::TextUpdate(_) | WriteError::Refused(_) => {
                 Self::WriteFailed(error.to_string())
             }
@@ -776,20 +782,24 @@ pub(crate) fn col_widths_read(tree: &LoroTree, table: &TreeID) -> Option<LoroMov
         .and_then(|container| container.into_movable_list().ok())
 }
 
-/// A table's column widths, in points, in column order.
+/// A table's column widths, in points, in column order. A stored width that
+/// is not a finite number reads as absent, and takes the default width.
 #[must_use]
 pub(crate) fn col_widths(tree: &LoroTree, table: &TreeID) -> Vec<Pt> {
     let Some(list) = col_widths_read(tree, table) else {
         return Vec::new();
     };
     (0..list.len())
-        .map(
-            |index| match list.get(index).and_then(|v| v.into_value().ok()) {
-                Some(LoroValue::Double(n)) => Pt::new(n as f32),
-                Some(LoroValue::I64(n)) => Pt::new(n as f32),
-                _ => DEFAULT_COLUMN_WIDTH,
-            },
-        )
+        .map(|index| {
+            let stored = match list.get(index).and_then(|v| v.into_value().ok()) {
+                Some(LoroValue::Double(n)) => Some(Pt::new(n as f32)),
+                Some(LoroValue::I64(n)) => Some(Pt::new(n as f32)),
+                _ => None,
+            };
+            stored
+                .filter(|width| width.is_finite())
+                .unwrap_or(DEFAULT_COLUMN_WIDTH)
+        })
         .collect()
 }
 
@@ -1010,21 +1020,33 @@ pub(crate) fn map_read<K: FieldKey>(parent: &Fields<K>, key: K) -> Option<LoroMa
 /// (`PROSE-092`).
 ///
 /// # Errors
-/// The CRDT engine's own refusal of a write.
+/// [`RefusalCause::NonFiniteLength`] when a length is not a finite number,
+/// before any key is written. The CRDT engine's own refusal of a write.
 pub(crate) fn write_paragraph_style(
     node: &Fields<NodeKey>,
     style: &ParagraphStyle,
-) -> Result<(), loro::LoroError> {
-    if let Some(align) = style.align {
-        node.insert(NodeKey::Align, i64::from(align.code()))?;
-    }
-    for (key, value) in [
+) -> Result<(), WriteError> {
+    let lengths = [
         (NodeKey::IndentFirst, style.indent_first),
         (NodeKey::IndentLeft, style.indent_left),
         (NodeKey::IndentRight, style.indent_right),
         (NodeKey::SpaceBefore, style.space_before),
         (NodeKey::SpaceAfter, style.space_after),
-    ] {
+    ];
+    // A reader takes a non-finite length for an absent one, so the store
+    // never receives one.
+    let line_height = style.line_height.map(LineHeight::stored_value);
+    if lengths
+        .iter()
+        .any(|(_, value)| value.is_some_and(|points| !points.is_finite()))
+        || line_height.is_some_and(|value| !value.is_finite())
+    {
+        return Err(WriteError::Refused(RefusalCause::NonFiniteLength));
+    }
+    if let Some(align) = style.align {
+        node.insert(NodeKey::Align, i64::from(align.code()))?;
+    }
+    for (key, value) in lengths {
         if let Some(points) = value {
             node.insert(key, f64::from(points.get()))?;
         }
@@ -1038,9 +1060,9 @@ pub(crate) fn write_paragraph_style(
     }
     if let Some(line_height) = style.line_height {
         let Some(map) = map_at(node, NodeKey::LineHeight).map(Fields::<LineHeightKey>::of) else {
-            return Err(loro::LoroError::NotFoundError(
+            return Err(WriteError::Engine(loro::LoroError::NotFoundError(
                 "the line-height register refused a container".into(),
-            ));
+            )));
         };
         map.insert(LineHeightKey::Mode, i64::from(line_height.mode().code()))?;
         map.insert(LineHeightKey::Value, f64::from(line_height.stored_value()))?;
@@ -1230,7 +1252,9 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
         font_size: read_f32(&defaults, DefaultsKey::FontSizePt)
             .filter(|number| *number > 0.0)
             .and_then(FontSize::new)
-            .unwrap_or(fallback.font_size),
+            .map_or(fallback.font_size, |size| {
+                size.at_most(crate::mark::FONT_SIZE_MAX)
+            }),
         line_height: read_f32(&defaults, DefaultsKey::LineHeight)
             .and_then(LineSpacingMultiple::new)
             .unwrap_or(fallback.line_height),
@@ -1630,9 +1654,12 @@ fn read_f32<K: FieldKey>(map: &Fields<K>, key: K) -> Option<f32> {
     read_f64(map, key).map(|n| n as f32)
 }
 
-/// A length in points stored under `key`.
+/// A length in points stored under `key`. A value that is not a finite number
+/// reads as absent, so the default style applies and the document still opens.
 fn read_pt<K: FieldKey>(map: &Fields<K>, key: K) -> Option<Pt> {
-    read_f32(map, key).map(Pt::new)
+    read_f32(map, key)
+        .map(Pt::new)
+        .filter(|points| points.is_finite())
 }
 
 pub(crate) fn read_bool<K: FieldKey>(map: &Fields<K>, key: K) -> Option<bool> {
@@ -1780,6 +1807,21 @@ mod tests {
         assert_eq!(format.margin_left, Mm::new(5.0));
     }
 
+    /// A default size a peer stored past the cap reads as the cap
+    /// (`CANVAS-088`).
+    #[test]
+    fn a_default_size_past_the_cap_reads_as_the_cap() {
+        let doc = LoroDoc::new();
+        seed(&doc);
+        let defaults = map_at(&meta(&doc), MetaKey::Defaults)
+            .map(Fields::<DefaultsKey>::of)
+            .expect("seed writes the defaults register");
+        defaults
+            .insert(DefaultsKey::FontSizePt, 1.0e6)
+            .expect("the register takes a double");
+        assert_eq!(read_defaults(&doc).font_size, crate::mark::FONT_SIZE_MAX);
+    }
+
     #[test]
     fn a_body_key_re_reads_as_the_pair_it_joins() {
         let id = TreeID::new(0xDEAD_BEEF_0BAD_F00D, 42);
@@ -1854,6 +1896,140 @@ mod tests {
         );
         assert_eq!(read_paragraph_style(&tree, &root).indent_left, None);
         assert!(node.get(NodeKey::IndentLeft).is_none());
+    }
+
+    /// A stored length that is not a finite number reads as absent, so the
+    /// default style applies and the document opens.
+    #[test]
+    fn a_non_finite_stored_length_reads_as_absent() {
+        let doc = LoroDoc::new();
+        let root = seed(&doc).expect("seeded");
+        let tree = blocks(&doc);
+        let node = node_of(&tree, &root).expect("a live block");
+        node.insert(NodeKey::IndentLeft, f64::NAN).expect("stored");
+        node.insert(NodeKey::SpaceAfter, f64::INFINITY)
+            .expect("stored");
+        node.insert(NodeKey::SpaceBefore, f64::MAX).expect("stored");
+        node.insert(NodeKey::IndentRight, 6.0).expect("stored");
+        let style = read_paragraph_style(&tree, &root);
+        assert_eq!(style.indent_left, None);
+        assert_eq!(style.space_after, None);
+        assert_eq!(style.space_before, None, "past the largest f32");
+        assert_eq!(style.indent_right, Some(Pt::new(6.0)));
+    }
+
+    /// A write refuses a length that is not a finite number, and writes no
+    /// other key of the style.
+    #[test]
+    fn a_non_finite_length_is_refused_before_any_write() {
+        let doc = LoroDoc::new();
+        let root = seed(&doc).expect("seeded");
+        let tree = blocks(&doc);
+        let node = node_of(&tree, &root).expect("a live block");
+        for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let refused = write_paragraph_style(
+                &node,
+                &ParagraphStyle {
+                    align: Some(Align::Center),
+                    space_before: Some(Pt::new(bad)),
+                    ..ParagraphStyle::default()
+                },
+            );
+            assert!(
+                matches!(
+                    refused,
+                    Err(WriteError::Refused(RefusalCause::NonFiniteLength))
+                ),
+                "{bad}"
+            );
+            assert!(node.get(NodeKey::Align).is_none());
+            assert!(node.get(NodeKey::SpaceBefore).is_none());
+            let refused = write_paragraph_style(
+                &node,
+                &ParagraphStyle {
+                    align: Some(Align::Center),
+                    line_height: Some(LineHeight::Exact(Pt::new(bad))),
+                    ..ParagraphStyle::default()
+                },
+            );
+            assert!(
+                matches!(
+                    refused,
+                    Err(WriteError::Refused(RefusalCause::NonFiniteLength))
+                ),
+                "line height {bad}"
+            );
+            assert!(node.get(NodeKey::Align).is_none());
+            assert!(node.get(NodeKey::LineHeight).is_none());
+        }
+        // The author is told the input is refused, not that the engine failed.
+        let refusal = ambre_bus::app::prose::ProseRefusal::from(WriteError::Refused(
+            RefusalCause::NonFiniteLength,
+        ));
+        assert_eq!(
+            refusal,
+            ambre_bus::app::prose::ProseRefusal::NonFiniteLength
+        );
+        assert!(!refusal.to_string().contains("engine"), "{refusal}");
+    }
+
+    /// A stored line height that is not a finite number reads as no setting,
+    /// so the layout never receives one.
+    #[test]
+    fn a_non_finite_stored_line_height_reads_as_absent() {
+        let doc = LoroDoc::new();
+        let root = seed(&doc).expect("seeded");
+        let tree = blocks(&doc);
+        let node = node_of(&tree, &root).expect("a live block");
+        for mode in [LineHeight::Exact, LineHeight::AtLeast] {
+            write_paragraph_style(
+                &node,
+                &ParagraphStyle {
+                    line_height: Some(mode(Pt::new(12.0))),
+                    ..ParagraphStyle::default()
+                },
+            )
+            .expect("the write lands");
+            assert_eq!(
+                read_paragraph_style(&tree, &root).line_height,
+                Some(mode(Pt::new(12.0)))
+            );
+            let map = map_at(&node, NodeKey::LineHeight)
+                .map(Fields::<LineHeightKey>::of)
+                .expect("the register");
+            for bad in [f64::NAN, f64::INFINITY, f64::MAX] {
+                map.insert(LineHeightKey::Value, bad).expect("stored");
+                assert_eq!(
+                    read_paragraph_style(&tree, &root).line_height,
+                    None,
+                    "{bad}"
+                );
+            }
+        }
+    }
+
+    /// A stored column width that is not a finite number reads as absent, and
+    /// the column takes the default width.
+    #[test]
+    fn a_non_finite_stored_column_width_reads_as_the_default() {
+        let doc = LoroDoc::new();
+        let root = seed(&doc).expect("seeded");
+        let tree = blocks(&doc);
+        let node = node_of(&tree, &root).expect("a live block");
+        let attrs = attrs_at(&node).expect("the attribute map");
+        let widths = movable_list_at(&attrs, AttrKey::ColWidths).expect("the width list");
+        for stored in [f64::NAN, f64::INFINITY, f64::MAX, 72.0] {
+            widths.push(stored).expect("stored");
+        }
+        assert_eq!(
+            col_widths(&tree, &root),
+            [
+                DEFAULT_COLUMN_WIDTH,
+                DEFAULT_COLUMN_WIDTH,
+                DEFAULT_COLUMN_WIDTH,
+                Pt::new(72.0)
+            ]
+        );
     }
 
     #[test]

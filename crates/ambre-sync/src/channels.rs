@@ -575,10 +575,13 @@ impl SyncState {
         ids: (MetaId, SegmentId),
         members: Vec<DirectMember>,
     ) {
-        let prepared = self
-            .event_tx
-            .clone()
-            .ok_or(SyncError::NoRelay)
+        // The cap counts the creator, whom `members` leaves out. It holds
+        // before any request leaves (`SYNC-180`).
+        let within_budget = members.len() < ambre_protocol::membership::DIRECT_MESSAGE_MAX_MEMBERS;
+        let prepared = within_budget
+            .then_some(())
+            .ok_or(SyncError::TooManyMembers)
+            .and_then(|()| self.event_tx.clone().ok_or(SyncError::NoRelay))
             .and_then(|tx| {
                 let exchange_key = self.exchange_key.clone().ok_or(SyncError::SessionLocked)?;
                 let author = self.author().ok_or(SyncError::SessionLocked)?;
@@ -1105,7 +1108,7 @@ pub(crate) fn direct_message_request(
         .collect();
     let mut next = membership_log::LogHead::EMPTY;
     let mut root = None;
-    let mut entries = Vec::with_capacity(others.len() + 2);
+    let mut entries = Vec::with_capacity(others.len().saturating_add(2));
     for (member, act, role) in ambre_protocol::ownerless_log(author.user_id, &others) {
         let draft = membership_log::Draft {
             document,
@@ -2050,6 +2053,30 @@ pub(crate) mod tests {
         let other = crate::sharing::own_exchange_key(&exchange_key(3));
         assert!(check_pinned(&bob, &ambre_core::ExchangeKeyHex::encode(other)).is_err());
         assert!(check_pinned(&bob, &ambre_core::ExchangeKeyHex("not hex".to_owned())).is_err());
+    }
+
+    /// `SYNC-180`: a direct message past its budget fails before any request
+    /// leaves. One member fewer passes the cap and fails only for the relay
+    /// this state lacks.
+    #[test]
+    fn a_direct_message_past_its_budget_is_refused_before_any_request() {
+        let max = ambre_protocol::membership::DIRECT_MESSAGE_MAX_MEMBERS;
+        let failure = |others: usize| {
+            let (sink, rx) = LogicSink::channel();
+            let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+            let members = (0..others).map(|_| member_of(&exchange_key(2))).collect();
+            state.handle_create_direct_message(
+                ChannelId::new(),
+                (MetaId::new(), SegmentId::new()),
+                members,
+            );
+            match rx.try_iter().collect::<Vec<_>>().as_slice() {
+                [LogicEvent::ChannelRequestFailed { message, .. }] => message.clone(),
+                other => panic!("one failure expected, got {other:?}"),
+            }
+        };
+        assert_eq!(failure(max - 1), SyncError::NoRelay.to_string());
+        assert_eq!(failure(max), SyncError::TooManyMembers.to_string());
     }
 
     #[test]

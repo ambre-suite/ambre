@@ -21,6 +21,11 @@ pub const ENTRY_DOMAIN: &[u8] = b"ambre-membership-entry-v1";
 /// The length of an Ed25519 signature.
 pub const ENTRY_SIGNATURE_LEN: usize = 64;
 
+/// The most members a direct message holds, its creator included
+/// (`ambre-spec-budgets.md` section 6). Each member costs the relay one
+/// lookup and one signature check, so the cap bounds one request.
+pub const DIRECT_MESSAGE_MAX_MEMBERS: usize = 50;
+
 /// What one entry records.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MembershipAct {

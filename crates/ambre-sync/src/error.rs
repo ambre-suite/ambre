@@ -47,6 +47,12 @@ pub(crate) enum SyncError {
     /// An entry this client signed has no digest: it does not encode.
     #[error("an entry of the log does not encode")]
     NoDigest,
+    /// A direct message names more members than its budget (`SYNC-180`).
+    #[error(
+        "a direct message holds at most {} members, its creator included",
+        ambre_protocol::membership::DIRECT_MESSAGE_MAX_MEMBERS
+    )]
+    TooManyMembers,
     /// A member of a direct message comes with no signing key.
     #[error("a member has no signing key")]
     MemberUnsigned,

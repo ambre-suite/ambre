@@ -567,14 +567,27 @@ impl ToileState {
     }
 
     /// Append `id`'s subtree leaves (non-group descendants) to `out`. A plain
-    /// element contributes itself; a group recurses into its children.
+    /// element contributes itself; a group recurses into its children. A peer
+    /// can write a group into its own subtree, so each group is entered once
+    /// (`TOILE-276`).
     pub(super) fn collect_leaves(&self, id: &ElementId, out: &mut HashSet<ElementId>) {
-        if self.is_group(id) {
-            for c in self.children_of(id) {
-                self.collect_leaves(&c, out);
-            }
-        } else {
+        self.collect_leaves_once(id, out, &mut HashSet::new());
+    }
+
+    /// [`collect_leaves`](Self::collect_leaves), skipping a group already in
+    /// `entered`.
+    fn collect_leaves_once(
+        &self,
+        id: &ElementId,
+        out: &mut HashSet<ElementId>,
+        entered: &mut HashSet<ElementId>,
+    ) {
+        if !self.is_group(id) {
             out.insert(id.clone());
+        } else if entered.insert(id.clone()) {
+            for c in self.children_of(id) {
+                self.collect_leaves_once(&c, out, entered);
+            }
         }
     }
 
@@ -660,8 +673,12 @@ impl ToileState {
             }
             v
         };
+        // A chain of n groups settles in n + 1 passes. The cap ends the loop
+        // when a box never compares equal to itself, as a NaN box does
+        // (`TOILE-275`).
         let mut changed = true;
-        while changed {
+        let mut passes = 0..=groups.len();
+        while changed && passes.next().is_some() {
             changed = false;
             for (g, kids) in &groups {
                 let mut union: Option<Rect> = None;
@@ -743,6 +760,57 @@ mod tests {
                 .position(|n| n == &NodeId::Element(id.clone()))
         };
         assert!(at(&f) < at(&r), "the child paints below its frame");
+    }
+
+    /// Bind `ids` into a group and name it.
+    fn group(st: &mut ToileState, ids: Vec<ElementId>) -> ElementId {
+        st.handle_command(ToileCommand::GroupElements { ids: ids.clone() });
+        let first = ids.first().expect("a group binds members");
+        st.enclosing_group(first).expect("the binding made a group")
+    }
+
+    /// `TOILE-276`: a peer writes a group into its own list, and two groups
+    /// into each other's. The delta reaches the incremental path, so both
+    /// groups keep a box and the alignment expands them. A move and an
+    /// alignment of either group end, and the move reaches each leaf once.
+    #[test]
+    fn a_group_cycle_a_peer_writes_ends_a_move_and_an_alignment() {
+        let mut peer = ToileState::new();
+        let rect = ElementKind::Shape(ShapeKind::Rect);
+        let leaves: Vec<ElementId> = (0..4).map(|_| create(&mut peer, rect)).collect();
+        let g1 = group(&mut peer, leaves.iter().take(2).cloned().collect());
+        let g2 = group(&mut peer, leaves.iter().skip(2).cloned().collect());
+        let mut st = ToileState::new();
+        st.apply_remote_snapshot(&peer.export_snapshot());
+        let base = peer.doc.oplog_vv();
+        for (holder, member) in [(&g1, &g1), (&g1, &g2), (&g2, &g1)] {
+            let list = peer.children_list(holder).expect("a group holds a list");
+            list.push(member.as_str()).expect("a raw member");
+        }
+        peer.doc.commit();
+        let delta = peer
+            .doc
+            .export(loro::ExportMode::updates(&base))
+            .expect("a delta");
+        st.apply_remote(&ambre_core::DeltaBytes::new(delta));
+        assert!(
+            st.bounds.contains_key(&g1) && st.bounds.contains_key(&g2),
+            "both groups keep a box, so the alignment reaches them"
+        );
+
+        let before: Vec<_> = leaves.iter().map(|l| st.bounds.get(l).copied()).collect();
+        st.handle_command(ToileCommand::MoveElements {
+            ids: vec![g1.clone()],
+            delta: kurbo::Vec2::new(5.0, 0.0),
+        });
+        for (leaf, was) in leaves.iter().zip(before) {
+            let moved = was.map(|r| r.x0 + 5.0);
+            assert_eq!(st.bounds.get(leaf).map(|r| r.x0), moved, "moved once");
+        }
+        st.handle_command(ToileCommand::AlignElements {
+            ids: vec![g1, g2],
+            op: crate::logic::align::AlignOp::Left,
+        });
     }
 }
 

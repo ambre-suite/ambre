@@ -707,8 +707,8 @@ pub(crate) fn weekday(args: &[CellValue]) -> CellValue {
 }
 
 /// Number of days in the month of `date`.
-pub(crate) fn days_in_month(date: CivilDate) -> DayCount {
-    let first = CivilDate {
+pub(crate) fn days_in_month(date: DateParts) -> DayCount {
+    let first = DateParts {
         day: DayOfMonth::new(1),
         ..date
     };
@@ -716,14 +716,14 @@ pub(crate) fn days_in_month(date: CivilDate) -> DayCount {
 }
 
 /// The last day of the month of `date`.
-fn last_day(date: CivilDate) -> DayOfMonth {
+fn last_day(date: DateParts) -> DayOfMonth {
     DayOfMonth::new(days_in_month(date).get())
 }
 
 /// Shift the month of `date` by `months`, normalizing into a valid month. The
 /// day is kept as it stands.
-pub(crate) fn shift_month(date: CivilDate, months: MonthCount) -> CivilDate {
-    CivilDate::of_months(
+pub(crate) fn shift_month(date: DateParts, months: MonthCount) -> DateParts {
+    DateParts::of_months(
         date.year,
         MonthCount::new(date.month.get() - 1).plus(months),
         date.day,
@@ -743,9 +743,9 @@ pub(crate) fn edate(args: &[CellValue]) -> CellValue {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
-    let shifted = shift_month(DaySerial::new(serial).civil(), MonthCount::new(months));
+    let shifted = shift_month(DaySerial::new(serial).parts(), MonthCount::new(months));
     let day = shifted.day.min(last_day(shifted));
-    CellValue::Number(CivilDate { day, ..shifted }.serial().get() as f64)
+    CellValue::Number(DateParts { day, ..shifted }.serial().get() as f64)
 }
 
 /// EOMONTH(start, months) -- last day of the month `months` away.
@@ -760,7 +760,7 @@ pub(crate) fn eomonth(args: &[CellValue]) -> CellValue {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
-    let shifted = shift_month(DaySerial::new(serial).civil(), MonthCount::new(months));
+    let shifted = shift_month(DaySerial::new(serial).parts(), MonthCount::new(months));
     let day = last_day(shifted);
-    CellValue::Number(CivilDate { day, ..shifted }.serial().get() as f64)
+    CellValue::Number(DateParts { day, ..shifted }.serial().get() as f64)
 }

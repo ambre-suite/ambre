@@ -1,9 +1,9 @@
 // ambre-bus/src/app/trame/calendar.rs The spreadsheet calendar: the two
-// serials a date travels as, and the civil date between them.
+// serials a date travels as, and the date parts between them.
 //
 // A formula reads a date as a number of days from the spreadsheet epoch,
 // 1899-12-30. A whole-day count is a `DaySerial`; a date with its time of day
-// in the fraction is a `DateSerial`. `CivilDate` names the year, the month and
+// in the fraction is a `DateSerial`. `DateParts` names the year, the month and
 // the day, so no call can pass them in the wrong order.
 //
 // The calendar lives on the bus: a validation rule carries its date bounds
@@ -35,8 +35,8 @@ impl DaySerial {
     }
 
     /// The proleptic-Gregorian date of this day. The inverse of
-    /// [`CivilDate::serial`], after Howard Hinnant's `civil_from_days`.
-    pub const fn civil(self) -> CivilDate {
+    /// [`DateParts::serial`], after Howard Hinnant's `civil_from_days`.
+    pub const fn parts(self) -> DateParts {
         let z = self.0 - UNIX_EPOCH_SERIAL + 719_468;
         let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
         let doe = z - era * 146_097;
@@ -46,7 +46,7 @@ impl DaySerial {
         let mp = (5 * doy + 2) / 153;
         let day = doy - (153 * mp + 2) / 5 + 1;
         let month = if mp < 10 { mp + 3 } else { mp - 9 };
-        CivilDate {
+        DateParts {
             year: Year(if month <= 2 { y + 1 } else { y }),
             month: Month(month),
             day: DayOfMonth(day),
@@ -93,7 +93,7 @@ pub struct Month(i64);
 impl Month {
     /// The month numbered `month`, `None` outside 1 to 12. A count of months
     /// past either end of a year is a [`MonthCount`], which
-    /// [`CivilDate::of_months`] reads.
+    /// [`DateParts::of_months`] reads.
     pub const fn new(month: i64) -> Option<Self> {
         if matches!(month, 1..=12) {
             Some(Self(month))
@@ -133,7 +133,7 @@ impl MonthCount {
 
 /// A day of a month, counted from 1 on the first.
 ///
-/// It may run past either end of its month. [`CivilDate::serial`] counts it
+/// It may run past either end of its month. [`DateParts::serial`] counts it
 /// on from the first, so day 0 is the last day of the month before, as `DATE`
 /// reads it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -185,18 +185,20 @@ impl DateSerial {
     }
 }
 
-/// A proleptic-Gregorian date by its year, its month and its day.
+/// The year, the month and the day of a proleptic-Gregorian date, before the
+/// day is checked against its month.
 ///
 /// The month always runs from 1 to 12. The day may run past either end of
-/// its month, and [`CivilDate::serial`] counts it on from the first.
+/// its month, and [`DateParts::serial`] counts it on from the first. So a
+/// value need not name a valid date: the Prose `CivilDate` does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CivilDate {
+pub struct DateParts {
     pub year: Year,
     pub month: Month,
     pub day: DayOfMonth,
 }
 
-impl CivilDate {
+impl DateParts {
     /// The date `months` months after January of `year`, on `day`. The count
     /// runs past either end of the year and carries into it, as `DATE` and
     /// `EDATE` read a month out of range. Twelve months after January 2024
@@ -231,8 +233,8 @@ impl CivilDate {
 mod tests {
     use super::*;
 
-    const fn date(year: i64, month: i64, day: i64) -> CivilDate {
-        CivilDate::of_months(Year(year), MonthCount(month - 1), DayOfMonth(day))
+    const fn date(year: i64, month: i64, day: i64) -> DateParts {
+        DateParts::of_months(Year(year), MonthCount(month - 1), DayOfMonth(day))
     }
 
     #[test]
@@ -246,7 +248,7 @@ mod tests {
     fn a_serial_reads_back_the_date_it_came_from() {
         for days in -800_000..800_000 {
             let serial = DaySerial::new(days);
-            assert_eq!(serial.civil().serial(), serial, "{days}");
+            assert_eq!(serial.parts().serial(), serial, "{days}");
         }
     }
 
@@ -265,9 +267,9 @@ mod tests {
         }
         assert_eq!(Month::new(12).map(Month::get), Some(12));
         let carried =
-            CivilDate::of_months(Year::new(2024), MonthCount::new(12), DayOfMonth::new(5));
+            DateParts::of_months(Year::new(2024), MonthCount::new(12), DayOfMonth::new(5));
         assert_eq!((carried.year.get(), carried.month.get()), (2025, 1));
-        let back = CivilDate::of_months(Year::new(2024), MonthCount::new(-1), DayOfMonth::new(5));
+        let back = DateParts::of_months(Year::new(2024), MonthCount::new(-1), DayOfMonth::new(5));
         assert_eq!((back.year.get(), back.month.get()), (2023, 12));
         assert_eq!(
             date(2024, 3, 1)

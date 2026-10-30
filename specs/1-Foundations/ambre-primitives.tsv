@@ -206,6 +206,7 @@ ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number(v
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | read_font_size(raw) | param | &str	free-text	text content / label / parser input
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
@@ -473,6 +474,7 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | ATLAS_SIZE | const |
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.bearing_left | field | i32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.bearing_top | field | i32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.pixel_height | field | u32	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.texel_scale | field | f32	math	device pixels per atlas texel, a bare ratio the quad multiplies by
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.pixel_width | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.uv_max | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.uv_min | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
@@ -1235,8 +1237,6 @@ ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelSt
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::is_thread() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::note_thread_session() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/channel/threading.rs | crate::channel::threading | ChannelState::thread_failed() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
-ambre-murmure | src/chrome.rs | crate::chrome | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | ChannelHeader(has_members) | param | Signal<bool>	generic	a fact the header reads: whether the channel shown is a public channel of a space, which shows the control of the member list
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.hint | field | &'static str	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | GroupWords.title | field | &'static str	free-text	text, label or user content
@@ -1248,8 +1248,6 @@ ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::in_channel() | ret
 ambre-murmure | src/chrome.rs | crate::chrome | MurmureRelay::search_for(query) | param | String	free-text	the text of the search box as the DOM hands it, blank included; a SearchQuery parses from it inside
 ambre-murmure | src/chrome.rs | crate::chrome | Notice.title | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | PageVisibility::visible_if(visible) | param | bool	newtype-inner	the bool the one constructor of PageVisibility reads into its variant
-ambre-murmure | src/chrome.rs | crate::chrome | ROOT_LOST | const | &str	free-text	UI text/label const
-ambre-murmure | src/chrome.rs | crate::chrome | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
 ambre-murmure | src/chrome.rs | crate::chrome | UNNAMED_CHANNEL | const | &str	free-text	the heading a person reads over the search matches of a channel with no name read yet
 ambre-murmure | src/chrome.rs | crate::chrome | SearchBox.query | field | String	free-text	text, label or user content
 ambre-murmure | src/chrome.rs | crate::chrome | SearchGroup.coverage | field | String	free-text	text, label or user content
@@ -1407,6 +1405,12 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | offers(query) | para
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at() | ret | Option<(ByteOffset,&str)>	free-text	text, label or user content
 ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | param | &str	free-text	the draft text an @ query is read from; the caret and the @ are ByteOffset
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | OfferVec<String>	free-text	text, label or user content
+ambre-murmure | src/notices.rs | crate::notices | CHANNEL_NOT_CHANGED | const | &str	free-text	UI text/label const
+ambre-murmure | src/notices.rs | crate::notices | CHANNEL_NOT_OPENED | const | &str	free-text	UI text/label const
+ambre-murmure | src/notices.rs | crate::notices | DIRECT_MESSAGE_NOT_OPENED | const | &str	free-text	UI text/label const
+ambre-murmure | src/notices.rs | crate::notices | ROOT_LOST | const | &str	free-text	UI text/label const
+ambre-murmure | src/notices.rs | crate::notices | SPACE_NOT_OPENED | const | &str	free-text	UI text/label const
+ambre-murmure | src/notices.rs | crate::notices | warning_of() | ret | Option<&'static str>	free-text	the fixed UI text of a warning toast
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | PLACEHOLDER_ASPECT | const | f32	math	a ratio: the width-to-height aspect of a picture not decoded yet
 ambre-murmure | src/paint.rs | crate::paint | chip_boxes(labels) | param | &[String]	free-text	text, label or user content
@@ -2059,6 +2063,7 @@ ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState::visible
 ambre-prose | src/xref.rs | crate::xref | decode(value) | param | &str	foreign-api	a cross-reference mark's value as the Loro attribute map yields it, a hex record decoded into its target and kind
 ambre-prose | src/xref.rs | crate::xref | resolve() | ret | Option<String>	free-text	the text a cross-reference shows: a page, a section number or a label
 ambre-protocol | src/key_link.rs | crate::key_link | MAX_SEALED_KEY_LEN | const | usize	generic	domain-separation tag or length constant
+ambre-protocol | src/membership.rs | crate::membership | DIRECT_MESSAGE_MAX_MEMBERS | const | usize	generic	member count cap of a direct message, its creator included
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_SIGNATURE_LEN | const | usize	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | MembershipEntry::well_formed() | ret | bool	generic	predicate
@@ -3062,6 +3067,7 @@ ambre-canvas | src/density.rs | crate::density | DevicePx::new(value) | param | 
 ambre-canvas | src/density.rs | crate::density | DevicePx::unsigned_abs() | ret | u32	newtype-inner	the magnitude of a shift, in the unsigned texel coordinate wgpu takes
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize.0 | field | f32	newtype-inner	the inside of the glyph raster size, in device pixels
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::get() | ret | f32	newtype-inner	the raster size unwrapped for Swash, which takes the float, and for the atlas key
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::texel_scale() | ret | f32	math	device pixels per atlas texel, a bare ratio of the size to the raster cap
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::new(device_px) | param | f32	newtype-inner	the constructor of the glyph raster size, in device pixels
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(font_size) | param | f32	newtype-inner	the constructor of the glyph raster size: the font size parley's glyph run returns, in the units of its layout
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(scale) | param | f64	newtype-inner	the constructor of the glyph raster size: the scale of the drawing transform, a bare ratio
@@ -3117,7 +3123,7 @@ ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount::get() | ret | i64	newtype-inner	a count of months from January, past either end of the year
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount::new(months) | param | i64	newtype-inner	a count of months from January, past either end of the year
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | UNIX_EPOCH_SERIAL | const | i64	math	calendar arithmetic: a count of days
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(CivilDate)->i64	math	calendar arithmetic (y/m/d), local
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(DateParts)->i64	math	calendar arithmetic (y/m/d), local
 ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	free-text	the search text the user typed, folded by the case it is compared under
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor

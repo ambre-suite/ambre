@@ -1088,3 +1088,35 @@ fn style_beyond_the_cap_is_refused_and_not_drawn() {
         "the toolbar reports what the document holds"
     );
 }
+
+/// A style command whose size lies outside 1 to 409 points is refused whole:
+/// nothing is written, and the user is told (`TRAME-260`). The cap itself
+/// is kept.
+#[test]
+fn a_cell_size_outside_the_range_is_refused_at_the_command() {
+    let mut state = TrameState::new();
+    state.handle_command(TrameCommand::SetActiveCell {
+        row: Row::new(0),
+        col: Col::new(0),
+        anchor_row: Row::new(0),
+        anchor_col: Col::new(0),
+        extra: vec![],
+        kind: crate::SelectionKind::Cells,
+    });
+    let sized = |points: f32| TrameCommand::SetCellStyle {
+        patch: crate::StylePatch {
+            size: Some(ambre_core::FontSize::new(points)),
+            ..Default::default()
+        },
+    };
+    for points in [410.0, 4000.0, 0.5] {
+        let evts = state.handle_command(sized(points));
+        assert!(evts.update.is_none(), "{points}: nothing is written");
+        assert!(
+            matches!(evts.display.as_slice(), [TrameEvent::Error { .. }]),
+            "{points}"
+        );
+    }
+    let evts = state.handle_command(sized(409.0));
+    assert!(evts.update.is_some(), "the cap is kept");
+}

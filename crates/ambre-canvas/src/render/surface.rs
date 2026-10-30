@@ -60,16 +60,17 @@ struct GlyphBox {
     height: ViewPx,
 }
 
-/// A glyph bitmap's logical box. The bitmap has one texel per device pixel.
-/// So each length is divided by the density and the glyph covers the same
-/// logical area on every screen.
+/// A glyph bitmap's logical box. A texel covers `texel_scale` device pixels,
+/// one below the raster cap (`CANVAS-087`). So each length is scaled by it and
+/// divided by the density, and the glyph covers the same logical area on
+/// every screen.
 fn glyph_box(slot: &AtlasSlot, density: DevicePixelRatio) -> GlyphBox {
-    let density = density.get() as f32;
+    let per_texel = slot.texel_scale / density.get() as f32;
     GlyphBox {
-        left_bearing: ViewPx::new(slot.bearing_left as f32 / density),
-        top_bearing: ViewPx::new(slot.bearing_top as f32 / density),
-        width: ViewPx::new(slot.pixel_width as f32 / density),
-        height: ViewPx::new(slot.pixel_height as f32 / density),
+        left_bearing: ViewPx::new(slot.bearing_left as f32 * per_texel),
+        top_bearing: ViewPx::new(slot.bearing_top as f32 * per_texel),
+        width: ViewPx::new(slot.pixel_width as f32 * per_texel),
+        height: ViewPx::new(slot.pixel_height as f32 * per_texel),
     }
 }
 
@@ -810,6 +811,7 @@ mod tests {
             bearing_left: left,
             bearing_top: top,
             atlas: AtlasKind::Mask,
+            texel_scale: 1.0,
         }
     }
 
@@ -839,6 +841,25 @@ mod tests {
                 top_bearing: ViewPx::new(24.0),
                 width: ViewPx::new(20.0),
                 height: ViewPx::new(30.0),
+            }
+        );
+    }
+
+    /// A glyph made at the raster cap is drawn over the box of the size
+    /// asked: each texel covers its scale in device pixels (`CANVAS-087`).
+    #[test]
+    fn a_glyph_made_at_the_cap_is_drawn_at_the_size_asked() {
+        let capped = AtlasSlot {
+            texel_scale: 3.0,
+            ..slot(2, 24, 20, 30)
+        };
+        assert_eq!(
+            glyph_box(&capped, ratio(2.0)),
+            GlyphBox {
+                left_bearing: ViewPx::new(3.0),
+                top_bearing: ViewPx::new(36.0),
+                width: ViewPx::new(30.0),
+                height: ViewPx::new(45.0),
             }
         );
     }

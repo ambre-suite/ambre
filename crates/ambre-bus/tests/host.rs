@@ -150,6 +150,12 @@ fn a_line_height_multiple_is_finite_and_above_zero() {
             None
         );
     }
+    for mode in [LineHeightMode::Exact, LineHeightMode::AtLeast] {
+        for refused in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert_eq!(LineHeight::from_stored(mode, refused), None, "{refused}");
+        }
+        assert!(LineHeight::from_stored(mode, 12.0).is_some());
+    }
     let read = LineHeight::from_stored(LineHeightMode::Multiple, 1.5);
     assert_eq!(
         read,

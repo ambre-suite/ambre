@@ -76,6 +76,17 @@ impl TrameState {
         if patch == StylePatch::default() {
             return TrameOutcome::display_only(vec![]);
         }
+        // A size outside the cell range is refused whole, as a spreadsheet
+        // refuses a typed one (`CANVAS-088`).
+        if let Some(Some(size)) = patch.size
+            && !(ambre_bus::app::trame::CELL_FONT_SIZE_MIN
+                ..=ambre_bus::app::trame::CELL_FONT_SIZE_MAX)
+                .contains(&size)
+        {
+            return TrameOutcome::display_only(vec![TrameEvent::Error {
+                message: "a cell font size lies between 1 and 409 points".to_owned(),
+            }]);
+        }
         // Bounding box for the border perimeter, and the deduplicated cell set for
         // the writes (`TRAME-UI-129`): every rectangle the user selected.
         let bounds = self.selection_bounds();

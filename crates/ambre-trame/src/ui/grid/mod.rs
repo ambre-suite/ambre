@@ -37,7 +37,9 @@ pub const HEADER_HEIGHT: SurfacePx = SurfacePx::new(24.0);
 /// Width of the row-number strip at zoom 1.
 pub const HEADER_WIDTH: SurfacePx = SurfacePx::new(50.0);
 
-pub use crate::{COL_WIDTH, MIN_COL_WIDTH, MIN_ROW_HEIGHT, ROW_HEIGHT};
+pub use crate::{
+    COL_WIDTH, MAX_COL_WIDTH, MAX_ROW_HEIGHT, MIN_COL_WIDTH, MIN_ROW_HEIGHT, ROW_HEIGHT,
+};
 
 /// Half-width (logical px) of the grab band straddling a header boundary that
 /// arms a resize drag (`trame-resize`). A press within +/- this of a column's right

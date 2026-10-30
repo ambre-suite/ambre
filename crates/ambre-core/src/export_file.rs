@@ -65,8 +65,18 @@ pub enum ExportFilenameError {
 /// `..`, and holds no path separator, no control character and no deceptive
 /// character (`DOCFILE-019`). It holds at most [`MAX_SIZE`](Self::MAX_SIZE) bytes
 /// (`DOCFILE-020`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ExportFilename(String);
+
+// A name comes from the document's title, which is the author's: a log carries
+// its length alone.
+impl std::fmt::Debug for ExportFilename {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ExportFilename")
+            .field(&crate::char_len(&self.0))
+            .finish()
+    }
+}
 
 impl ExportFilename {
     /// The most bytes a name holds, extension included: the limit of most
@@ -489,5 +499,13 @@ mod tests {
         let bytes = FileBytes::new(b"secret".to_vec());
         assert_eq!(format!("{bytes:?}"), "FileBytes(6 bytes)");
         assert_eq!(bytes.size(), ByteSize(6));
+    }
+
+    /// A name holds the document's title: its `Debug` form prints the length
+    /// alone.
+    #[test]
+    fn a_file_name_prints_its_length_alone() {
+        let name = ExportFilename::new("Q3 layoffs.pdf").expect("a valid name");
+        assert_eq!(format!("{name:?}"), "ExportFilename(CharCount(14))");
     }
 }

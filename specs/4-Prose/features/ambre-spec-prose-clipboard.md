@@ -37,6 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-UI-040` | `POST` | The copied payload MUST be built from the whole selection, never trimmed to what is on screen. | this spec section 3 | `ambre_prose::logic::clipboard::tests::a_copy_covers_the_whole_selection_and_writes_nothing` | none | verified |
 | `PROSE-UI-108` | `POST` | The payload MUST carry a plain-text mirror of the selection, readable by an application that knows nothing of Ambre. | this spec section 3 | `ambre_prose::logic::clipboard::tests::a_copy_covers_the_whole_selection_and_writes_nothing` | none | verified |
 | `PROSE-UI-222` | `POST` | A copy MUST also write an HTML half that keeps the block types, the lists, the links and the marks, with every character of the text escaped. | this spec section 3 | `ambre_prose::logic::clipboard::tests::the_html_half_alone_pastes_what_the_rich_half_does` | none | verified |
+| `PROSE-UI-235` | `FRAME` | The HTML half of a copy MUST NOT write a link target or a family name that fails the check an HTML paste makes of it, nor a colour or a size outside the canonical spelling of its typed mark: the run keeps its text, unmarked by that value. | this spec section 3; `PROSE-UI-234` | `ambre_prose::logic::clipboard::tests::a_peer_mark_value_reaches_the_html_half_only_when_safe` -- a peer writes a `javascript:` link, an overlong `https` link, an overlong family name, colours carrying a declaration and markup, and a size carrying a declaration straight into the document, and the half holds the text with no `href`, `url(` or `style`; `::a_peer_mark_value_is_written_canonical` -- a valid peer colour and size are written canonical | none | verified |
 | `PROSE-UI-109` | `FRAME` | A copy MUST NOT write to the document, and MUST NOT move or shrink the selection it read. | derived | `ambre_prose::logic::clipboard::tests::a_copy_covers_the_whole_selection_and_writes_nothing` | none | verified |
 
 ### 1.3 Cut
@@ -65,7 +66,7 @@ status values are normative in `ambre-spec-template.md`.
   It carries the user's own selection, already plaintext on their machine; nothing is encrypted,
   nothing is sent, and the host performs the write (`PROSE-UI-041`). The browser's own handling is
   outside Ambre's control, and gates the mirror (`ambre-spec-clipboard.md`).
-* **Verification.** 22 `verified`, 2 `unimplemented`. The Logic rows are host tests over a real
+* **Verification.** 23 `verified`, 2 `unimplemented`. The Logic rows are host tests over a real
   document, a round trip included; the view rows drive the input queue with a recording sender.
   `PROSE-UI-041`, `PROSE-UI-105` and `PROSE-UI-106` are held by where the types live.
 
@@ -157,6 +158,10 @@ text layer reads as one paragraph per visual line, as its plain text does.
 **Writing HTML.** The copy writes one element per block, groups consecutive list items into one
 list, and escapes every text and attribute value (`PROSE-UI-222`). An empty paragraph at the
 paste point takes the first block's type, as Word and Google Docs do (`PROSE-UI-223`).
+
+A peer writes a mark value straight into the document, unchecked, so the copy checks it again.
+A link and a family name pass the check a paste makes of them. A colour or a size is written in
+its canonical spelling. A value that fails leaves its text unmarked (`PROSE-UI-235`).
 
 All three leave as commands, so the document is written by the Logic thread and the view keeps no
 model of what was pasted (`PROSE-UI-013`). Opening a Word or Markdown *file* is a document

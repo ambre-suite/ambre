@@ -34,6 +34,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-051` | `INV` | A font MUST be fetched from the same origin. | this spec section 3; `UI-THREAD-004` | `ambre_canvas::fonts::tests::every_face_is_fetched_from_the_page_origin` -- every base and lazy face path, refused a scheme or a host | none | verified |
 | `CANVAS-019` | `OBS` | A layout mixing text and colour emoji MUST paint both: a colour glyph through the colour atlas, a mask glyph through the alpha atlas. | this spec section 2 | `ambre_canvas::render::atlas::tests::an_emoji_rasterizes_to_colour_and_a_letter_to_a_mask` -- the raster; `ambre_canvas::render::surface::tests::a_mask_glyph_and_a_colour_glyph_land_in_their_own_batch` -- the batch each one is drawn through | none | verified |
 | `CANVAS-020` | `INV` | The colour atlas MUST NOT be allocated at full size before the first colour glyph appears. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_canvas::render::atlas::tests::the_color_atlas_is_grown_only_for_a_color_glyph` -- no request without a colour glyph, one with the first | none | verified |
+| `CANVAS-087` | `INV` | A glyph past the raster cap MUST be rasterized at the cap and drawn scaled up to the size asked, so its bitmap stays bounded and the text stays visible. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_canvas::render::atlas::tests::a_glyph_past_the_raster_cap_is_made_at_the_cap_and_drawn_scaled` -- one pixel past the side and a million share the bitmap made at the cap and carry their ratio, infinity and NaN give no glyph, and Swash is never asked past the cap; `ambre_canvas::render::surface::tests::a_glyph_made_at_the_cap_is_drawn_at_the_size_asked` -- the quad takes the ratio | none | verified |
+| `CANVAS-088` | `INV` | A stored, received or pasted font size past the cap of its application MUST read as that cap, never as a decode error. | this spec section 2; `PROSE-FEAT-022` | `ambre_core::font::tests::a_size_past_the_cap_reads_as_the_cap` -- a million points decode as the ceiling of every application, and an in-range size keeps its bytes; `ambre_prose::style::tests::a_stored_size_past_the_prose_cap_reads_as_the_cap` -- a Prose mark, and a command still refused; `ambre_prose::logic::clipboard::html_read::tests::colours_and_sizes_land_canonical` -- a Prose paste; `ambre_prose::logic::clipboard::tests::a_crafted_payload_writes_only_the_marks_a_typed_mark_may` -- a Prose own-bytes paste; `ambre_prose::doc::tests::a_default_size_past_the_cap_reads_as_the_cap` -- a Prose default; `ambre_bus::app::trame::style::tests::a_cell_size_past_the_cap_reads_as_the_cap` -- a Trame cell style; `ambre_bus::app::toile::tests::a_size_choice_past_the_cap_reads_as_the_cap` -- a Toile text size | none | verified |
 | `CANVAS-007` | `INV` | Every decoded image MUST pass through one bounded cache, whichever application decoded it. | this spec section 2; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `One media cache` Story (`ambre-roadmap.md` E8). Toile holds a `MediaCache` in its own Logic module, and Murmure a shelf of its own in the view | unimplemented |
 | `CANVAS-023` | `INV` | An icon MUST stay a vector buffer: it MUST NOT be rasterized into a bitmap atlas. | this spec section 2 | not built | unbuilt -- lands with the `The icon pipeline` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `CANVAS-024` | `INV` | An icon MUST be tessellated at build time, never on the frame path. | this spec section 2 | not built | unbuilt -- lands with the `The icon pipeline` Story (`ambre-roadmap.md` E6) | unimplemented |
@@ -68,7 +70,7 @@ keep the allocation where it is.
 * **Boundary.** the font fetch is the one network path this layer opens, same-origin by
   `CANVAS-018` and the single exception `UI-THREAD-004` names to the UI thread's ban. This layer
   holds no key and reaches no relay.
-* **Verification.** 18 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven on
+* **Verification.** 20 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven on
   the host past their capacity, and what survives is compared with what it drew before. The font
   fetch and its origin are read from the paths, and a source gate refuses an embedded face. The send
   of a late face runs in the browser tier, through the function the boot send calls.
@@ -137,7 +139,12 @@ of ours.
    A hit costs nothing; a miss shapes (`CANVAS-022`).
 2. every string the cache shapes is offered to the lazy loader. It fetches a face the first time it
    sees a codepoint the base faces cannot cover (`CANVAS-006`).
-3. Swash rasterizes each glyph, keyed on the font blob id, the glyph id and the size.
+3. Swash rasterizes each glyph, keyed on the font blob id, the glyph id and the size. A peer
+   writes the size, so each application reads a size past its cap as the cap (`CANVAS-088`).
+   The caps are those of the office counterparts: 1638 points for Prose, 409 for Trame and
+   4000 for Toile (`PROSE-FEAT-313`, `TRAME-259`, `TOILE-UI-399`). `FontSize` itself holds at
+   most the highest of the three. A zoom can still multiply that size. So the atlas rasterizes
+   past half its side at that cap, and the quad draws the bitmap scaled up (`CANVAS-087`).
 4. the glyph lands in one of two atlases, and its slot records which (`CANVAS-019`).
 
 | Atlas | Format | Size | Holds | Allocation |

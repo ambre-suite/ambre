@@ -222,7 +222,8 @@ whole, deleted whole, and never edited in place (`PROSE-FEAT-163`).
 * **Every page has one body height.** Every page loses the taller of the regular bands and the
   first page's own, so a tall first-page header costs room on every other page.
 * **The date is drawn in UTC.** Every reader resolves one date, and a stamp written near midnight
-  shows the UTC day. Month names exist for seven languages; any other draws the calendar form.
+  shows the UTC day. The stamp reads as a civil date, a valid year, month and day. Month names
+  exist for seven languages; any other draws the calendar form.
 * **A field in a hidden side is not refused.** `PROSE-FEAT-067` refuses a field in the first
   page's own block while the setting is off, because nothing would draw it. A side whose own
   setting is off is invisible for the same reason. `PROSE-FEAT-165` writes the mark there

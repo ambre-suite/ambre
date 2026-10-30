@@ -154,7 +154,9 @@ impl Lifecycle {
                 Next::Open
             }
             Some(due) => Next::Wait {
-                delay: Millis(due.0 - now.0),
+                // The arm above took `now >= due`, so the difference is
+                // positive; saturating states the floor at zero.
+                delay: Millis(due.0.saturating_sub(now.0)),
             },
         }
     }

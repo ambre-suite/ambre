@@ -8,10 +8,11 @@
 use std::fmt::Write as _;
 
 use ambre_bus::app::prose::{HeadingLevel, OrderedStyle};
+use ambre_core::Rgba;
 use html5ever::{LocalName, local_name};
 
-use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
-use crate::mark::MarkRoot;
+use super::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_family, safe_link};
+use crate::mark::{self, MarkRoot};
 
 /// The flag marks, in the order their elements nest, each with its element.
 const ELEMENTS: [(MarkRoot, &str); 7] = [
@@ -135,6 +136,11 @@ fn value(run: &ClipRun, key: MarkRoot) -> Option<&str> {
     })
 }
 
+/// The colour under `key`, `None` for one the grammar refuses.
+fn color(run: &ClipRun, key: MarkRoot) -> Option<Rgba> {
+    mark::parse_color(value(run, key)?).ok()
+}
+
 fn has(run: &ClipRun, key: MarkRoot) -> bool {
     run.marks.iter().any(|(k, _)| k.as_str() == key.as_str())
 }
@@ -147,7 +153,9 @@ fn runs(html: &mut String, block: &[ClipRun]) {
             continue;
         }
         let mut closing = Vec::new();
-        if let Some(href) = value(run, MarkRoot::Link) {
+        // A peer writes a mark value straight into the document, unchecked.
+        // A target a paste would refuse keeps its text alone (`PROSE-UI-235`).
+        if let Some(href) = value(run, MarkRoot::Link).filter(|href| safe_link(href)) {
             let _ = write!(html, "<a href=\"{}\">", escape(href));
             closing.push("a");
         }
@@ -157,17 +165,24 @@ fn runs(html: &mut String, block: &[ClipRun]) {
                 closing.push(tag);
             }
         }
+        // A colour and a size are written in their canonical spelling, never
+        // as stored, so a peer's value cannot carry a declaration of its own.
         let mut style = String::new();
-        if let Some(color) = value(run, MarkRoot::Ink) {
-            let _ = write!(style, "color:{color};");
+        if let Some(color) = color(run, MarkRoot::Ink) {
+            let _ = write!(style, "color:{};", mark::canonical_color(color));
         }
-        if let Some(color) = value(run, MarkRoot::Highlight) {
-            let _ = write!(style, "background-color:{color};");
+        if let Some(color) = color(run, MarkRoot::Highlight) {
+            let _ = write!(style, "background-color:{};", mark::canonical_color(color));
         }
-        if let Some(size) = value(run, MarkRoot::FontSize) {
+        if let Some(size) = value(run, MarkRoot::FontSize)
+            .and_then(|size| mark::parse_font_size(size).ok())
+            .and_then(|size| mark::canonical_number(size.points()))
+        {
             let _ = write!(style, "font-size:{size}pt;");
         }
-        if let Some(family) = value(run, MarkRoot::FontFamily) {
+        // A family passes the paste's own check, then loses what would close
+        // the quoted name.
+        if let Some(family) = value(run, MarkRoot::FontFamily).filter(|name| safe_family(name)) {
             let family: String = family
                 .chars()
                 .filter(|c| !matches!(c, '\'' | '"' | ';' | '<' | '>' | '\\'))

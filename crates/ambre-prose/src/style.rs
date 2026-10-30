@@ -119,7 +119,7 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
             resolved.bold = Weight::Bold;
             let level = context.heading_level.unwrap_or(HeadingLevel::H1);
             resolved.font_size = FontSize::new(defaults.font_size.points() * heading_scale(level))
-                .unwrap_or(defaults.font_size);
+                .map_or(defaults.font_size, |size| size.at_most(mark::FONT_SIZE_MAX));
         }
         BlockType::CodeBlock => {
             resolved.code_inline = InlineCode::Code;
@@ -169,7 +169,7 @@ pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -
     if let Some(raw) = get(MarkRoot::Highlight) {
         resolved.background = mark::parse_color(raw).ok();
     }
-    if let Some(points) = get(MarkRoot::FontSize).and_then(|raw| mark::parse_font_size(raw).ok()) {
+    if let Some(points) = get(MarkRoot::FontSize).and_then(mark::read_font_size) {
         resolved.font_size = points;
     }
     if let Some(family) = get(MarkRoot::FontFamily).filter(|family| !family.is_empty()) {
@@ -248,6 +248,26 @@ mod tests {
         // The mark, above both.
         let marked = resolve(&marks(&[("fs", "30")]), heading(1), &defaults);
         assert_eq!(marked.font_size, FontSize::from_whole_points(30));
+    }
+
+    /// A stored size past the Prose cap reads as the cap, and a heading over
+    /// a default at the cap stays at it (`CANVAS-088`).
+    #[test]
+    fn a_stored_size_past_the_prose_cap_reads_as_the_cap() {
+        let defaults = DocDefaults::default();
+        let huge = resolve(&marks(&[("fs", "1000000")]), body(), &defaults);
+        assert_eq!(huge.font_size, mark::FONT_SIZE_MAX);
+        assert_eq!(mark::FONT_SIZE_MAX.points(), 1638.0);
+        assert!(
+            mark::parse_font_size("1639").is_err(),
+            "a command is refused"
+        );
+        let capped = DocDefaults {
+            font_size: mark::FONT_SIZE_MAX,
+            ..DocDefaults::default()
+        };
+        let titled = resolve(&MarkSet::new(), heading(1), &capped);
+        assert_eq!(titled.font_size, mark::FONT_SIZE_MAX);
     }
 
     /// A property no level carries resolves to a decided absence, and the
