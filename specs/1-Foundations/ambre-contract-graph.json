@@ -7275,7 +7275,7 @@
   {"edge": "cites-section", "from": "PROSE-UI-222", "section": "3", "to": "4-Prose/features/ambre-spec-prose-clipboard.md"},
   {"edge": "verified-by", "from": "PROSE-UI-222", "to": "ambre_prose::logic::clipboard::tests::the_html_half_alone_pastes_what_the_rich_half_does"},
   {"edge": "cites-section", "from": "PROSE-UI-235", "section": "3", "to": "4-Prose/features/ambre-spec-prose-clipboard.md"},
-  {"edge": "cites-rule", "from": "PROSE-UI-235", "to": "PROSE-UI-186"},
+  {"edge": "cites-rule", "from": "PROSE-UI-235", "to": "PROSE-UI-234"},
   {"edge": "verified-by", "from": "PROSE-UI-235", "to": "ambre_prose::logic::clipboard::tests::a_peer_mark_value_reaches_the_html_half_only_when_safe"},
   {"edge": "verified-by", "from": "PROSE-UI-235", "to": "::a_peer_mark_value_is_written_canonical"},
   {"edge": "verified-by", "from": "PROSE-UI-109", "to": "ambre_prose::logic::clipboard::tests::a_copy_covers_the_whole_selection_and_writes_nothing"},

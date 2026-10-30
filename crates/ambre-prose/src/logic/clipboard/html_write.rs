@@ -11,7 +11,7 @@ use ambre_bus::app::prose::{HeadingLevel, OrderedStyle};
 use ambre_core::Rgba;
 use html5ever::{LocalName, local_name};
 
-use super::{ClipBlock, ClipKind, ClipRun, ClipValue};
+use super::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_link};
 use crate::mark::{self, MarkRoot};
 
 /// The flag marks, in the order their elements nest, each with its element.
@@ -154,12 +154,9 @@ fn runs(html: &mut String, block: &[ClipRun]) {
         }
         let mut closing = Vec::new();
         // A peer writes a mark value straight into the document, unchecked.
-        // A target that could run code keeps its text alone (`PROSE-UI-235`).
-        if let Some(href) = value(run, MarkRoot::Link)
-            .map(|href| ambre_core::LinkUrl::new(href.to_owned()))
-            .filter(crate::link::openable)
-        {
-            let _ = write!(html, "<a href=\"{}\">", escape(href.as_str()));
+        // A target a paste would refuse keeps its text alone (`PROSE-UI-235`).
+        if let Some(href) = value(run, MarkRoot::Link).filter(|href| safe_link(href)) {
+            let _ = write!(html, "<a href=\"{}\">", escape(href));
             closing.push("a");
         }
         for (key, tag) in ELEMENTS {

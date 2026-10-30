@@ -872,15 +872,17 @@ mod tests {
     }
 
     /// `PROSE-UI-235`: a peer writes mark values straight into the document,
-    /// unchecked. The HTML half writes no target that could run code and no
+    /// unchecked. The HTML half writes no target a paste would refuse, and no
     /// colour or size outside its canonical spelling; the text stays.
     #[test]
     fn a_peer_mark_value_reaches_the_html_half_only_when_safe() {
         let (mut state, _) = document();
         let block = append(&mut state, BlockInit::Paragraph, "link ink mark size");
         let body = crate::doc::get_block_text(&state.doc, &crate::events::tree_id(block));
+        let long = format!("https://example.org/{}", "a".repeat(HREF_MAX.as_len()));
         for (range, key, value) in [
             (0..4, "a", "javascript:alert(1)"),
+            (5..8, "a", long.as_str()),
             (5..8, "fg", "red;background:url(https://evil/beacon)"),
             (9..13, "bg", "#00ff00\"><img src=x>"),
             (14..18, "fs", "12pt;background:url(https://evil/beacon)"),
