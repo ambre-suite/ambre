@@ -136,4 +136,4 @@ its state, in `crates/ambre-murmure/src/chrome.rs`.
 
 * **No index is built.** A search reads only the segments the client holds.
 * **tantivy is not measured.** It is richer than `fst` and `roaring`, and its WASM build is
-  fragile. A prototype decides before the index format is frozen.
+  fragile. A spike decides before the index format is frozen.
