@@ -21,7 +21,8 @@ use crate::logic::text_merge::merge_edits;
 
 use super::codec::has_type;
 use super::codec::{
-    bin_of, body_text_or_seed, content_matches, expanded_aabb, locked, stored_rect, stroke_aabb,
+    bin_of, body_text_or_seed, content_matches, expanded_aabb, locked, store_corner, store_size,
+    stored_rect, stroke_aabb,
 };
 use super::names::{ElementKey, Fields, Root};
 use super::{ToileState, write_edits};
@@ -87,10 +88,8 @@ impl ToileState {
             return Err(ToileError::NoSuchElement(id));
         };
         let _ = em.insert(ElementKey::Type, kind.type_tag());
-        let _ = em.insert(ElementKey::X, at.x);
-        let _ = em.insert(ElementKey::Y, at.y);
-        let _ = em.insert(ElementKey::W, size.width);
-        let _ = em.insert(ElementKey::H, size.height);
+        store_corner(&em, at);
+        store_size(&em, size);
         let _ = em.insert(ElementKey::Rot, 0.0);
         let _ = em.insert(ElementKey::Locked, false);
         // Seed a per-kind default style (sticky = yellow card, others = white),
@@ -257,9 +256,7 @@ impl ToileState {
             if locked(&em) {
                 continue; // locked blocks edit locally (advisory)
             }
-            let at = stored_rect(&em).origin() + delta;
-            let _ = em.insert(ElementKey::X, at.x);
-            let _ = em.insert(ElementKey::Y, at.y);
+            store_corner(&em, stored_rect(&em).origin() + delta);
             self.update_bounds(id, &em);
             touched = true;
         }
@@ -315,9 +312,7 @@ impl ToileState {
                 if locked(&em) {
                     continue; // a locked leaf inside a moving group stays put
                 }
-                let at = stored_rect(&em).origin() + delta;
-                let _ = em.insert(ElementKey::X, at.x);
-                let _ = em.insert(ElementKey::Y, at.y);
+                store_corner(&em, stored_rect(&em).origin() + delta);
                 self.update_bounds(leaf, &em);
                 touched = true;
             }
@@ -340,10 +335,8 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         }
         let r = new.abs();
-        let _ = em.insert(ElementKey::X, r.x0);
-        let _ = em.insert(ElementKey::Y, r.y0);
-        let _ = em.insert(ElementKey::W, r.width());
-        let _ = em.insert(ElementKey::H, r.height());
+        store_corner(&em, r.origin());
+        store_size(&em, r.size());
         self.update_bounds(id, &em);
         self.recompute_groups();
         self.doc.commit();
@@ -612,10 +605,8 @@ impl ToileState {
             return self.err_no_element(&id);
         };
         let _ = em.insert(ElementKey::Type, ElementKind::Drawing.type_tag());
-        let _ = em.insert(ElementKey::X, rect.x0);
-        let _ = em.insert(ElementKey::Y, rect.y0);
-        let _ = em.insert(ElementKey::W, rect.width());
-        let _ = em.insert(ElementKey::H, rect.height());
+        store_corner(&em, rect.origin());
+        store_size(&em, rect.size());
         let _ = em.insert(ElementKey::Rot, 0.0);
         let _ = em.insert(ElementKey::Locked, false);
         let _ = em.insert(

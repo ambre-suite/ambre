@@ -7,7 +7,7 @@
 
 use ambre_core::BoardLength;
 use ambre_core::crdt::FieldKey;
-use kurbo::{Affine, BezPath, Point, Rect, Vec2};
+use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use loro::{Container, LoroText, LoroValue, ValueOrContainer};
 
 use crate::logic::command::{ClipBytes, ClipValue, InitContent, MediaRef};
@@ -118,9 +118,13 @@ pub(super) fn write_clip_fields<'a, K: FieldKey>(
     for (k, v) in fields {
         match v {
             ClipValue::F64(d) => {
+                // A pasted box is held inside the world bound, as every
+                // other write of one is (`TOILE-274`).
+                let bounded = |v| on_board(BoardLength::new(v)).get();
                 let d = match ElementKey::parse(k.as_str()) {
-                    Some(ElementKey::X) => d + offset.x,
-                    Some(ElementKey::Y) => d + offset.y,
+                    Some(ElementKey::X) => bounded(d + offset.x),
+                    Some(ElementKey::Y) => bounded(d + offset.y),
+                    Some(ElementKey::W | ElementKey::H) => bounded(*d),
                     _ => *d,
                 };
                 let _ = m.insert(k, d);
@@ -214,6 +218,21 @@ pub(super) fn rotation_of(em: &Fields<ElementKey>) -> ambre_core::Radians {
     turn(ambre_core::Radians::new(
         f64_of(em, ElementKey::Rot).unwrap_or(0.0),
     ))
+}
+
+/// Write the corner of an element's box. Each coordinate is held inside the
+/// bound the readers apply, so a value read back is the value written
+/// (`TOILE-274`).
+pub(super) fn store_corner(em: &Fields<ElementKey>, at: Point) {
+    let _ = em.insert(ElementKey::X, on_board(BoardLength::new(at.x)).get());
+    let _ = em.insert(ElementKey::Y, on_board(BoardLength::new(at.y)).get());
+}
+
+/// Write the size of an element's box, each side held inside the same bound
+/// as [`store_corner`].
+pub(super) fn store_size(em: &Fields<ElementKey>, size: Size) {
+    let _ = em.insert(ElementKey::W, on_board(BoardLength::new(size.width)).get());
+    let _ = em.insert(ElementKey::H, on_board(BoardLength::new(size.height)).get());
 }
 
 /// One coordinate or size of a stored box, as the geometry reads it. A peer

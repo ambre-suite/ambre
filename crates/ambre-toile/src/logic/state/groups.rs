@@ -770,21 +770,33 @@ mod tests {
     }
 
     /// `TOILE-276`: a peer writes a group into its own list, and two groups
-    /// into each other's. A move and an alignment of either group end, and the
-    /// move reaches every leaf of the cycle once.
+    /// into each other's. The delta reaches the incremental path, so both
+    /// groups keep a box and the alignment expands them. A move and an
+    /// alignment of either group end, and the move reaches each leaf once.
     #[test]
     fn a_group_cycle_a_peer_writes_ends_a_move_and_an_alignment() {
-        let mut st = ToileState::new();
+        let mut peer = ToileState::new();
         let rect = ElementKind::Shape(ShapeKind::Rect);
-        let leaves: Vec<ElementId> = (0..4).map(|_| create(&mut st, rect)).collect();
-        let g1 = group(&mut st, leaves.iter().take(2).cloned().collect());
-        let g2 = group(&mut st, leaves.iter().skip(2).cloned().collect());
+        let leaves: Vec<ElementId> = (0..4).map(|_| create(&mut peer, rect)).collect();
+        let g1 = group(&mut peer, leaves.iter().take(2).cloned().collect());
+        let g2 = group(&mut peer, leaves.iter().skip(2).cloned().collect());
+        let mut st = ToileState::new();
+        st.apply_remote_snapshot(&peer.export_snapshot());
+        let base = peer.doc.oplog_vv();
         for (holder, member) in [(&g1, &g1), (&g1, &g2), (&g2, &g1)] {
-            let list = st.children_list(holder).expect("a group holds a list");
+            let list = peer.children_list(holder).expect("a group holds a list");
             list.push(member.as_str()).expect("a raw member");
         }
-        st.doc.commit();
-        st.rebuild_caches();
+        peer.doc.commit();
+        let delta = peer
+            .doc
+            .export(loro::ExportMode::updates(&base))
+            .expect("a delta");
+        st.apply_remote(&ambre_core::DeltaBytes::new(delta));
+        assert!(
+            st.bounds.contains_key(&g1) && st.bounds.contains_key(&g2),
+            "both groups keep a box, so the alignment reaches them"
+        );
 
         let before: Vec<_> = leaves.iter().map(|l| st.bounds.get(l).copied()).collect();
         st.handle_command(ToileCommand::MoveElements {

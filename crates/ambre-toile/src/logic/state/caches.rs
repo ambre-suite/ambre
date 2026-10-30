@@ -500,6 +500,28 @@ mod peer_geometry_tests {
         assert!(victim.bounds.get(hit).is_some_and(|r| r.is_finite()));
     }
 
+    /// `TOILE-274`: a drag past the world bound stores the bound, so the box
+    /// read back is the box written, and a nudge after it loses nothing.
+    #[test]
+    fn a_drag_past_the_world_bound_holds_at_the_bound() {
+        let mut st = ToileState::new();
+        let id = create(&mut st);
+        let mut nudge = |st: &mut ToileState, dx: f64| {
+            st.handle_command(ToileCommand::MoveElements {
+                ids: vec![id.clone()],
+                delta: kurbo::Vec2::new(dx, 0.0),
+            });
+            let em = st.element_map(&id).expect("the board holds it");
+            let stored = super::super::codec::f64_of(&em, ElementKey::X);
+            let read = st.bounds.get(&id).map(|r| r.x0);
+            assert_eq!(stored, read, "the box read is the box written");
+            read
+        };
+        assert_eq!(nudge(&mut st, 1_200_000.0), Some(1_000_000.0));
+        assert_eq!(nudge(&mut st, 5.0), Some(1_000_000.0), "held at the bound");
+        assert_eq!(nudge(&mut st, -5.0), Some(999_995.0), "nothing lost");
+    }
+
     /// `TOILE-275`: a group whose member a peer moved to NaN settles, on the
     /// delta and on a rebuild. A NaN box forged straight into the caches, which
     /// never compares equal to itself, still ends the fixpoint.
