@@ -1807,13 +1807,13 @@ ambre-prose | src/doc.rs | crate::doc | is_hidden() | ret | bool	generic	whether
 ambre-prose | src/doc.rs | crate::doc | is_note() | ret | bool	generic	whether a block holds a footnote's text rather than body text
 ambre-prose | src/doc.rs | crate::doc | nesting_allows() | ret | bool	generic	whether the nesting table lets a block type sit under a parent
 ambre-prose | src/doc.rs | crate::doc | parse_body_key(key) | param | &str	foreign-api	a root container name as Loro reports it
-ambre-prose | src/doc.rs | crate::doc | read_bool() | ret | Option<bool>	generic	a boolean register as the store holds it; each caller types what it reads
+ambre-prose | src/doc.rs | crate::doc | read_bool() | ret | Option<bool>	generic	a boolean register as the store holds it, None when absent or not a bool; a caller reads Some(true) as on, or wraps the value in its flag
 ambre-prose | src/doc.rs | crate::doc | read_f32() | ret | Option<f32>	generic	a number register as the store holds it, narrowed; each caller types what it reads
 ambre-prose | src/doc.rs | crate::doc | read_f64() | ret | Option<f64>	generic	a number register as the store holds it; each caller types what it reads
 ambre-prose | src/doc.rs | crate::doc | read_i64() | ret | Option<i64>	generic	an integer register as the store holds it; each caller types what it reads
 ambre-prose | src/doc.rs | crate::doc | read_string() | ret | Option<String>	generic	a string register as the store holds it; each caller parses or keeps what it reads
 ambre-prose | src/doc.rs | crate::doc | read_title() | ret | String	free-text	the document title the user typed, empty when none was set
-ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic	whether the page format was written; false leaves the register as it was
+ambre-prose | src/doc.rs | crate::doc | write_page_format() | ret | bool	generic	whether all three page keys were written; false on a contradicting orientation, a missing register, or a refused write, which keeps any key written before it
 ambre-prose | src/input.rs | crate::input | ProseInput::Compose.0 | field | String	free-text	the input method's text in progress, as the user types it; Debug prints its length alone
 ambre-prose | src/input.rs | crate::input | ProseInput::ComposeEnd.0 | field | String	free-text	the text the input method committed, as the user typed it; Debug prints its length alone
 ambre-prose | src/input.rs | crate::input | ProseInput::Drop.text | field | String	free-text	the text the user dropped on the page; Debug prints its length alone
@@ -1870,7 +1870,7 @@ ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | f
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | fence_for(text) | param | &str	free-text	the text of a code block, scanned for its longest backtick run
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | link_target() | ret | String	free-text	a link destination as Markdown writes it, in angle brackets when it must be
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run() | ret | usize	local	the longest run of one character in a text, which the private fence writer outruns
-ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run(c) | param | char	free-text	the delimiter character whose longest run is counted, a backtick or a tilde
+ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run(c) | param | char	generic	the delimiter whose longest run is counted; both callers pass a backtick
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | longest_run(text) | param | &str	free-text	text to be fenced or spanned, scanned for its longest delimiter run
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | ordinal_prefix() | ret | bool	generic	whether a line opens with an ordered list marker, which must be escaped
 ambre-prose | src/interop/markdown_write.rs | crate::interop::markdown_write | ordinal_prefix(text) | param | &str	free-text	a paragraph's Markdown, whose opening may read as an ordered list marker
@@ -1931,7 +1931,7 @@ ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	whethe
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	generic	the carrier a band field occupies in a band's text, doc::CARRIER
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	whether every live parentage is one the nesting table declares, read after a merge
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | CssProperty::of(name) | param | &str	free-text	a property name as a pasted style spells it; the match returns a CssProperty
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | CssProperty::of(name) | param | &str	newtype-inner	a property name as a pasted style spells it; the constructor of the enum returns a CssProperty
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | DEPTH_MAX | const | usize	local	the most counted elements a paste may hold open, compared with the length of that stack alone
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations.0 | field | Vec<(CssProperty,&'a str)>	newtype-inner	each property of a pasted style with its value as the paste spells it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::hidden() | ret | bool	generic	whether a pasted style hides its element, which the reader then skips
@@ -1947,7 +1947,7 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	free-text	a font-family list of a pasted style; its first usable name becomes a MarkValue
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	free-text	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through DocPx
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	whether a pasted colour reads as the page's body ink, so it sets no mark
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	free-text	the type attribute of a pasted ordered list; the match returns an OrderedStyle
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	foreign-api	the type attribute of a pasted ordered list as html5ever yields it; the match returns an OrderedStyle
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	the HTML a paste carries
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | set(raw) | param | &str	free-text	a candidate mark value read off pasted HTML; pasted turns it into a MarkValue or drops it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	whether the pasted HTML holds more counted elements open than DEPTH_MAX
@@ -1956,7 +1956,6 @@ ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::close() | ret | &'static str	generic	the closing tag of a list element, spelled from the enum that carries its style
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::open() | ret | &'static str	generic	the opening tag of a list element, spelled from the enum that carries its style
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(html) | param | &mut String	free-text	the HTML fragment a copy writes, one element appended
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | element(tag) | param | &str	generic	the name of the block element a copy writes, spelled by the writer itself
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | escape() | ret | String	free-text	copied text or an attribute value with its markup characters escaped
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | escape(text) | param | &str	free-text	copied text or an attribute value, before its markup characters are escaped
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | has() | ret | bool	generic	whether a copied run carries a mark under a key
@@ -2026,7 +2025,7 @@ ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | ProseState:
 ambre-prose | src/logic/suggestions.rs | crate::logic::suggestions | passes_while_suggesting() | ret | bool	generic	whether suggestion mode lets a command through as it is
 ambre-prose | src/logic/sweep.rs | crate::logic::sweep | ProseState::session_runs() | ret | bool	generic	whether the session behind a peer is this one or still open on this document
 ambre-prose | src/logic/tables.rs | crate::logic::tables | holds_text() | ret | bool	generic	whether any text block under a table block holds a character
-ambre-prose | src/logic/tables.rs | crate::logic::tables | usable() | ret | bool	generic	whether a width or a padding is one the table format holds: finite and not negative
+ambre-prose | src/logic/tables.rs | crate::logic::tables | usable() | ret | bool	generic	whether a width or a padding is one the table format holds: finite, above zero for a column width, zero or more otherwise
 ambre-prose | src/logic/text.rs | crate::logic::text | MarkedRun.text | field | String	free-text	the text of one run of body text; Debug prints its length alone
 ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::insert_text(text) | param | &str	free-text	one committed run of text the user typed, inserted at one position
 ambre-prose | src/logic/text.rs | crate::logic::text | ProseState::text_of() | ret | Option<String>	free-text	the text a live block carries, for a test and the view's own reads
@@ -2097,7 +2096,7 @@ ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.query | fi
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState::visible() | ret | bool	generic	whether the slash menu is open, which it is while it has an anchor
 ambre-prose | src/view/slash.rs | crate::view::slash | filter(query) | param | &str	free-text	what the user typed after the slash, matched against each item's label
 ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState::visible() | ret | bool	generic	whether the floating toolbar is shown, which it is while it has an anchor
-ambre-prose | src/xref.rs | crate::xref | decode(value) | param | &str	free-text	a cross-reference mark's stored value, naming its target and its kind
+ambre-prose | src/xref.rs | crate::xref | decode(value) | param | &str	foreign-api	a cross-reference mark's value as the Loro attribute map yields it, a hex record decoded into its target and kind
 ambre-prose | src/xref.rs | crate::xref | resolve() | ret | Option<String>	free-text	the text a cross-reference shows: a page, a section number or a label
 ambre-protocol | src/key_link.rs | crate::key_link | MAX_SEALED_KEY_LEN | const | usize	generic	domain-separation tag or length constant
 ambre-protocol | src/membership.rs | crate::membership | ENTRY_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
