@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3777 rows: 3221 shipped, of which 9 loose. 556 unbuilt.**
+**3780 rows: 3224 shipped, of which 9 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 917 | 444 | 823 | 611 | 417 | 3212 |
+| `verified` | 917 | 447 | 823 | 611 | 417 | 3215 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 7 |  |  |  |  | 7 |
@@ -100,9 +100,9 @@
 | `ambre-spec-trame-resize.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-trame-selection.md` | 11 | 10 | 10 |  | 1 |
-| `ambre-spec-trame-shared-filter.md` | 35 | 32 | 32 |  | 3 |
+| `ambre-spec-trame-shared-filter.md` | 37 | 34 | 34 |  | 3 |
 | `ambre-spec-trame-sheets.md` | 23 | 23 | 23 |  |  |
-| `ambre-spec-trame-sort.md` | 24 | 24 | 24 |  |  |
+| `ambre-spec-trame-sort.md` | 25 | 25 | 25 |  |  |
 | `ambre-spec-trame-status-bar.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-trame-undo.md` | 6 | 2 | 2 |  | 4 |
 | `ambre-spec-toile-schema.md` | 11 | 11 | 11 |  |  |
@@ -339,9 +339,9 @@
 | `ambre-spec-trame-rows-and-columns.md` | TRAME-080..091,170..177 |
 | `ambre-spec-trame-schema.md` | TRAME-003,010,016,025,221..222,242 |
 | `ambre-spec-trame-selection.md` | TRAME-UI-019,030..035,129..132 |
-| `ambre-spec-trame-shared-filter.md` | TRAME-FEAT-002..009,014..016,025..027,029..046; TRAME-UI-008,154,173 |
+| `ambre-spec-trame-shared-filter.md` | TRAME-256..257; TRAME-FEAT-002..009,014..016,025..027,029..046; TRAME-UI-008,154,173 |
 | `ambre-spec-trame-sheets.md` | TRAME-022,070..079,159..165,232,234..236,241 |
-| `ambre-spec-trame-sort.md` | TRAME-004,111..115,178..185; TRAME-FEAT-010..013; TRAME-UI-101..102,150..153 |
+| `ambre-spec-trame-sort.md` | TRAME-004,111..115,178..185,255; TRAME-FEAT-010..013; TRAME-UI-101..102,150..153 |
 | `ambre-spec-trame-status-bar.md` | TRAME-UI-103..110,135..136,172,178..179 |
 | `ambre-spec-trame-undo.md` | TRAME-017,123..124,151,153..154 |
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060 |

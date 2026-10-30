@@ -440,6 +440,42 @@ fn filter_values_are_ordered_as_the_column_reads() {
     assert_eq!(values, &vec!["9", "10", "100", "a", "b"]);
 }
 
+/// Texts that differ only in case list once each, beside each other, in one
+/// order whatever the column order (`TRAME-257`).
+#[test]
+fn filter_values_list_each_case_once_and_together() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["a", "B", "A", "a", "b"]);
+    let out = state.handle_command(TrameCommand::RequestActiveColumnValues);
+    let [TrameEvent::ColumnValues { values, .. }] = &out.display[..] else {
+        panic!("expected ColumnValues")
+    };
+    assert_eq!(values, &vec!["A", "a", "B", "b"]);
+}
+
+/// A condition compares text whatever its case, as Excel does: equality, the
+/// order and the substring tests alike (`TRAME-256`).
+#[test]
+fn a_condition_compares_text_whatever_its_case() {
+    use super::super::condition_pass;
+    use crate::formula::types::CellValue;
+    let txt = CellValue::Text("Hello".to_owned());
+    assert!(condition_pass(FilterOp::Eq, &txt, "HELLO"));
+    assert!(!condition_pass(FilterOp::Ne, &txt, "hello"));
+    assert!(condition_pass(
+        FilterOp::Lt,
+        &CellValue::Text("a".to_owned()),
+        "B"
+    ));
+    assert!(condition_pass(FilterOp::Gte, &txt, "hello"));
+    assert!(condition_pass(FilterOp::Lte, &txt, "hello"));
+    assert!(condition_pass(FilterOp::Contains, &txt, "ELL"));
+    assert!(!condition_pass(FilterOp::NotContains, &txt, "ELL"));
+    assert!(condition_pass(FilterOp::StartsWith, &txt, "hE"));
+    let sigma = CellValue::Text("\u{3A3}\u{3C2}".to_owned());
+    assert!(condition_pass(FilterOp::Eq, &sigma, "\u{3C3}\u{3C3}"));
+}
+
 /// Unit-test every `condition_pass` operator and both the numeric and the
 /// text comparison paths (full branch coverage of the predicate).
 #[test]

@@ -25,7 +25,7 @@
 | `trame-resize` | A user drags the boundary of a column header and the column takes the new width, for everyone. | implemented | 10 |  |
 | `trame-rows-and-columns` | A user inserts a row above the one they are on, deletes the three they selected, or drags a column to another position. | implemented | 20 |  |
 | `trame-sheets` | A workbook is several sheets, shown as tabs along the bottom edge. | implemented | 23 |  |
-| `trame-sort` | A user orders a block of rows by one column, or by several in priority order. | implemented | 24 |  |
+| `trame-sort` | A user orders a block of rows by one column, or by several in priority order. | implemented | 25 |  |
 | `trame-status-bar` | A user selects a block of cells and reads its total without writing a formula. | implemented | 13 |  |
 | `trame-cell-editing` | A user types into a cell. | partial | 41 |  |
 | `trame-cell-merges` | A user joins a rectangle of cells into one block. | partial | 38 |  |
@@ -38,7 +38,7 @@
 | `trame-number-formats` | A user picks Percent. | partial | 14 |  |
 | `trame-pdf-export` | Trame's half of the shared PDF export (`ambre-spec-pdf-export.md`): the persisted page setup, and the pagination that cuts a grid into pages. | partial | 4 |  |
 | `trame-selection` | A user points at a cell, sweeps a rectangle, adds a second one with a modifier, or takes a whole column from its header. | partial | 11 |  |
-| `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 35 |  |
+| `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 37 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 12 implemented, 13 partial, 0 design-only. 494 contract rows, 0 loose.**
+**25 features: 12 implemented, 13 partial, 0 design-only. 497 contract rows, 0 loose.**

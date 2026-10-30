@@ -31,7 +31,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-FEAT-010` | `POST` | A sort MUST order rows by their **evaluated** value. | this spec section 3 | `ambre_trame::logic::tests::group3::sort_range_ascending_moves_whole_rows`; `ambre_trame::logic::tests::group4::sort_range_sum_block_is_stable_under_internal_sort` -- their key column holds literals a parse turns into numbers | none | verified |
 | `TRAME-179` | `FRAME` | A sort MUST NOT move the header row, when one is declared. | this spec section 3 | `ambre_trame::logic::tests::group3::sort_range_descending_keeps_header`; `ambre_trame::logic::tests::group4::sort_range_multi_pins_header_row` -- both read the header back in place | none | verified |
 | `TRAME-FEAT-011` | `POST` | A multi-column sort MUST be lexicographic over its keys, each key applying its own direction. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_multi_lexicographic_with_per_key_direction` -- over a tie the second key breaks in the other direction | none | verified |
-| `TRAME-180` | `POST` | Two rows whose keys all compare equal MUST keep the order they had. | this spec section 3 | `ambre_trame::logic::tests::group13::equal_keys_keep_their_order` -- ascending and descending | none | verified |
+| `TRAME-180` | `POST` | Two rows whose keys all compare equal MUST keep the order they had. | this spec section 3 | `ambre_trame::logic::tests::group13::equal_keys_keep_their_order` -- ascending and descending; `::a_sort_orders_text_whatever_its_case` -- two texts that differ in case alone | none | verified |
+| `TRAME-255` | `POST` | A sort MUST order two texts whatever their case. | this spec section 3 | `ambre_trame::logic::tests::group13::a_sort_orders_text_whatever_its_case` -- two texts that differ in case alone keep their order; `ambre_trame::logic::helpers::tests::comparator_is_a_total_order_with_nan` -- over texts that differ in case | none | verified |
 | `TRAME-FEAT-012` | `FRAME` | A sort that changes no row order MUST NOT emit a CRDT delta. | this spec section 3 | `ambre_trame::logic::tests::group4::sort_range_multi_already_sorted_emits_no_delta`; `::sort_range_noops` -- both assert the outcome carries no update | none | verified |
 | `TRAME-111` | `POST` | Two values of different types MUST order by the type rank, never interleaved. | this spec section 3 | `ambre_trame::logic::tests::group13::mixed_types_order_by_rank` | none | verified |
 | `TRAME-112` | `POST` | A descending sort MUST reverse the whole comparison, so an empty cell orders first. | this spec section 5 | `ambre_trame::logic::tests::group13::a_descending_sort_puts_the_blank_first` | none | verified |
@@ -65,7 +66,7 @@ status values are normative in `ambre-spec-template.md`.
   row of `ambre-spec-budgets.md section 1`.
 * **Boundary.** none of its own: a sort emits moves into the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 24 `verified`. What holds is the permutation, in the shape the user cares about:
+* **Verification.** 25 `verified`. What holds is the permutation, in the shape the user cares about:
   whole rows travel, the header stays, an already-ordered range writes nothing. A row outside the
   range stays put, and a refusal carries no acknowledgement. The comparator is held whole: the type
   rank, the blank, the stability and a NaN. The dialog is held in a browser: its bounds, its close
@@ -127,10 +128,13 @@ pub enum SortOrder { #[default] Ascending, Descending }
 | 3 | an error |
 | 4 | an empty cell |
 
-Two values of one type compare naturally: numbers numerically, text by code point, `false` before
-`true`. Two errors, and two empty cells, compare equal, so a stable sort leaves them in place
-(`TRAME-180`). A number that is not a number ranks with the errors, so the comparator stays a total
-order whatever a cell holds (`TRAME-181`). No source builds one today. A function or an operator
+Two values of one type compare naturally: numbers numerically, `false` before `true`. Text
+compares whatever its case, through the fold the formula operators read, as Excel sorts it
+(`TRAME-255`). Two errors, two empty cells, and two texts that differ in case alone compare
+equal, so a stable sort leaves them in place (`TRAME-180`).
+
+A number that is not a number ranks with the errors, so the comparator stays a total order
+whatever a cell holds (`TRAME-181`). No source builds one today. A function or an operator
 whose result is not finite answers `#NUM!` (`TRAME-244`). Text that spells one stays text
 (`TRAME-245`).
 

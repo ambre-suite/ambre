@@ -77,7 +77,7 @@ impl TrameState {
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
         let col_pos = self.index.col_pos(&col_uid).unwrap_or(col);
-        let mut cells: Vec<CellValue> = RowSpan::from_count(Row::ZERO, self.index.row_len())
+        let cells: Vec<CellValue> = RowSpan::from_count(Row::ZERO, self.index.row_len())
             .into_iter()
             // Skip rows already hidden by an active filter (distinct *visible*
             // values, matching Google Sheets).
@@ -93,10 +93,19 @@ impl TrameState {
             })
             .collect();
         // Ordered as the column reads, numbers numerically, by the comparator
-        // a sort uses (`TRAME-FEAT-041`); a stable sort keeps equal texts
-        // together for the dedup.
-        cells.sort_by(compare_cell_values);
-        let mut values: Vec<String> = cells.iter().map(CellValue::to_display).collect();
+        // a sort uses (`TRAME-FEAT-041`). That comparator ties texts that
+        // differ only in case, and their display text breaks the tie. Each
+        // spelling lands next to its twin for the dedup, in one order
+        // whatever the column order (`TRAME-257`).
+        let mut keyed: Vec<(CellValue, String)> = cells
+            .into_iter()
+            .map(|value| {
+                let text = value.to_display();
+                (value, text)
+            })
+            .collect();
+        keyed.sort_by(|(a, at), (b, bt)| compare_cell_values(a, b).then_with(|| at.cmp(bt)));
+        let mut values: Vec<String> = keyed.into_iter().map(|(_, text)| text).collect();
         values.dedup();
         TrameOutcome::display_only(vec![TrameEvent::ColumnValues { col, values }])
     }
