@@ -728,6 +728,13 @@ impl From<WebAddress> for String {
     }
 }
 
+/// The link target of a web page, once its address passed the address gate.
+impl From<WebAddress> for ambre_core::LinkUrl {
+    fn from(address: WebAddress) -> Self {
+        Self::new(address.0)
+    }
+}
+
 impl std::fmt::Debug for WebAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "WebAddress({} chars)", self.0.chars().count())

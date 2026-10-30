@@ -235,7 +235,7 @@ fn paint_peer<S: DrawSurface>(
     if let Some(cursor) = p.cursor {
         let screen = *w2s * cursor;
         let label = peer_label(user_id, p.name.as_ref());
-        paint_cursor(surface, screen, label.as_str(), color, font_cx, text_cache);
+        paint_cursor(surface, screen, &label, color, font_cx, text_cache);
     }
 }
 
@@ -298,7 +298,7 @@ pub fn peer_label(user_id: &UserId, name: Option<&DisplayName>) -> DisplayName {
 fn paint_cursor<S: DrawSurface>(
     surface: &mut S,
     at: Point,
-    label: &str,
+    label: &DisplayName,
     color: &Color,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
@@ -318,7 +318,7 @@ fn paint_cursor<S: DrawSurface>(
     // the label reads is `peer_label`; it decides nothing (`PRESENCE-004`).
     let layout = text_cache.get_or_build(
         font_cx,
-        label,
+        label.as_str(),
         LABEL_FONT_SIZE,
         ambre_core::ViewPx::new(200.0),
         Alignment::Start,

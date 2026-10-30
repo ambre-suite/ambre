@@ -2610,7 +2610,6 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor() |
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(fallback) | param | &str	generic	CSS cursor text
 ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_TRAIL_MAX | const | usize	local	the most samples a laser trail keeps, read once to bound it
 ambre-toile | src/ui/presence.rs | crate::ui::presence | PeerCursors::is_empty() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/presence.rs | crate::ui::presence | paint_cursor(label) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | PresenterIntent::EditNotes.base | field | String	free-text	the speaker note a splice was measured against
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(after) | param | &str	free-text	label, message or user text
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | caret_through(before) | param | &str	free-text	label, message or user text
