@@ -269,6 +269,20 @@ impl FileBytes {
     }
 }
 
+/// A plaintext `.ambre` export saves the whole container, header included.
+impl From<crate::PlaintextContainer> for FileBytes {
+    fn from(container: crate::PlaintextContainer) -> Self {
+        Self::new(container.into_bytes())
+    }
+}
+
+/// A sealed `.ambre` export saves the whole sealed container.
+impl From<crate::SealedContainer> for FileBytes {
+    fn from(container: crate::SealedContainer) -> Self {
+        Self::new(container.into_bytes())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

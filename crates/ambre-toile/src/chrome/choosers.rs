@@ -247,9 +247,7 @@ fn set_web_link(
 ) {
     match WebAddress::parse(&typed.get_untracked()) {
         Ok(url) => {
-            edit.set(Some(LinkEdit(Some(LinkTarget::Url(
-                ambre_core::LinkUrl::new(url.into_string()),
-            )))));
+            edit.set(Some(LinkEdit(Some(LinkTarget::Url(url.into())))));
             open.set(Openness::Closed);
         }
         Err(e) => error.set(Some(e)),

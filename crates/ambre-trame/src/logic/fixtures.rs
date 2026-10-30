@@ -287,7 +287,7 @@ impl FixtureGen for TrameFixture {
 
     fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
-        let mut state = TrameState::with_peer(ambre_core::PeerId(seed.get()));
+        let mut state = TrameState::with_peer(seed.peer());
         match self {
             Self::GridLiterals => build_grid_literals(&mut state),
             Self::FormulaDag => build_formula_dag(&mut state),
@@ -551,7 +551,7 @@ impl FixtureGen for TrameBenchFixture {
 
     fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
-        let mut state = TrameState::with_peer(ambre_core::PeerId(seed.get()));
+        let mut state = TrameState::with_peer(seed.peer());
         match self {
             Self::DenseGrid100k => build_literal_grid(&mut state, 12_500, 8),
             Self::FormulaGrid100k => build_formula_grid(&mut state),
