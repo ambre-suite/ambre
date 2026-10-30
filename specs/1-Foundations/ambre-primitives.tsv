@@ -1943,7 +1943,7 @@ ambre-prose | src/interop/mod.rs | crate::interop | IrRun::plain(text) | param |
 ambre-prose | src/interop/mod.rs | crate::interop | report_message() | ret | Option<String>	free-text	text content / label / parser input
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | coverage_grew() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | missing_scripts(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/layout/fonts.rs | crate::layout::fonts | register_faces(bytes) | param | Vec<u8>	math	count, size or local index
+ambre-prose | src/layout/fonts.rs | crate::layout::fonts | register_faces(bytes) | param | Vec<u8>	foreign-api	the bytes of one font file, handed whole to the one fontdb registration call this function makes
 ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	a ratio of the content height, read only as the factor of DocPx * f32; a ratio is no length
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan::is_marked() | ret | bool	generic	predicate result: whether a span carries a mark the shaper reads
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::coverage_grew() | ret | bool	generic	independent flag or predicate
