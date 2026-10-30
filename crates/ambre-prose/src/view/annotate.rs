@@ -61,8 +61,9 @@ pub struct PanelThread {
     pub y: ViewPx,
 }
 
-/// What the comment panel or the suggestion popover asks the view to do.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What the comment panel or the suggestion popover asks the view to do. A
+/// reply's text is the user's, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq, Eq)]
 pub enum AnnotationIntent {
     /// Bring a thread's anchor into view.
     Focus {
@@ -81,6 +82,34 @@ pub enum AnnotationIntent {
     Reject {
         suggestion_id: SuggestionId,
     },
+}
+
+impl std::fmt::Debug for AnnotationIntent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Focus { comment_id } => f
+                .debug_struct("Focus")
+                .field("comment_id", comment_id)
+                .finish(),
+            Self::Reply { comment_id, text } => f
+                .debug_struct("Reply")
+                .field("comment_id", comment_id)
+                .field("text", &crate::redact::Redacted(text))
+                .finish(),
+            Self::Resolve { comment_id } => f
+                .debug_struct("Resolve")
+                .field("comment_id", comment_id)
+                .finish(),
+            Self::Accept { suggestion_id } => f
+                .debug_struct("Accept")
+                .field("suggestion_id", suggestion_id)
+                .finish(),
+            Self::Reject { suggestion_id } => f
+                .debug_struct("Reject")
+                .field("suggestion_id", suggestion_id)
+                .finish(),
+        }
+    }
 }
 
 /// How a peer took a thread out of the panel while its reply field held a

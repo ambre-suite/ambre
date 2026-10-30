@@ -104,7 +104,16 @@ const UNCOUNTED: [&str; 31] = [
 struct Depth {
     /// The counted elements open, never more than [`DEPTH_MAX`] of them.
     open: RefCell<Vec<LocalName>>,
-    exceeded: Cell<bool>,
+    /// Whether an element opened past [`DEPTH_MAX`].
+    reach: Cell<Reach>,
+}
+
+/// Whether the elements of a paste stay within [`DEPTH_MAX`] of nesting.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Reach {
+    #[default]
+    Within,
+    Exceeded,
 }
 
 impl TokenSink for Depth {
@@ -130,7 +139,7 @@ impl TokenSink for Depth {
                 let closed = tag.self_closing && foreign;
                 if raw.is_none() && !closed && !UNCOUNTED.contains(&name) {
                     if open.len() >= DEPTH_MAX {
-                        self.exceeded.set(true);
+                        self.reach.set(Reach::Exceeded);
                     } else {
                         open.push(tag.name.clone());
                     }
@@ -155,7 +164,7 @@ fn too_deep(html: &str) -> bool {
     input.push_back(StrTendril::from_slice(html));
     let _ = tokenizer.feed(&input);
     tokenizer.end();
-    tokenizer.sink.exceeded.get()
+    tokenizer.sink.reach.get() == Reach::Exceeded
 }
 
 enum Step {
@@ -188,18 +197,38 @@ enum Flow {
 /// A block element the walk is inside.
 struct Open {
     kind: ClipKind,
-    keep_empty: bool,
+    /// What its close does when it holds no text.
+    empty: EmptyBlock,
     /// Whether a block was written inside it, so its own close adds none.
-    touched: bool,
+    touched: Touched,
+}
+
+/// Whether a block was written inside an open element.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Touched {
+    Untouched,
+    Written,
+}
+
+/// What an element opened that its close undoes, beside its marks.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+enum Opened {
+    /// Nothing but marks.
+    #[default]
+    Inline,
+    /// A list.
+    List,
+    /// A block.
+    Block,
+    /// A preformatted block.
+    Pre,
 }
 
 /// What leaving an element undoes.
 #[derive(Default)]
 struct Frame {
     restore: Vec<(MarkRoot, Option<MarkValue>)>,
-    block: bool,
-    list: bool,
-    pre: bool,
+    opened: Opened,
 }
 
 #[derive(Default)]
@@ -358,7 +387,7 @@ impl Reader {
                 } else {
                     ClipKind::Bullet
                 });
-                frame.list = true;
+                frame.opened = Opened::List;
             }
             "input" => {
                 if attr(attrs, "type").is_some_and(|t| t.eq_ignore_ascii_case("checkbox"))
@@ -388,13 +417,17 @@ impl Reader {
                 self.flush(EmptyBlock::Drop);
                 self.open.push(Open {
                     kind,
-                    keep_empty: KEPT_EMPTY.contains(&tag),
-                    touched: false,
+                    empty: if KEPT_EMPTY.contains(&tag) {
+                        EmptyBlock::Keep
+                    } else {
+                        EmptyBlock::Drop
+                    },
+                    touched: Touched::Untouched,
                 });
-                frame.block = true;
+                frame.opened = Opened::Block;
                 if tag == "pre" {
                     self.pre += 1;
-                    frame.pre = true;
+                    frame.opened = Opened::Pre;
                 }
             }
             _ => {}
@@ -408,17 +441,10 @@ impl Reader {
         if origin == StyleOrigin::Author {
             changes.extend(style_marks(style));
         }
-        for (key, value) in changes {
-            let value = match value {
-                Some(raw) => match super::pasted(key, Some(&raw)) {
-                    Some(canonical) => Some(canonical),
-                    None => continue,
-                },
-                None => None,
-            };
-            let previous = match value {
-                Some(value) => self.marks.insert(key.key(), value),
-                None => self.marks.remove(key.as_str()),
+        for change in changes {
+            let (key, previous) = match change {
+                Change::Set(key, value) => (key, self.marks.insert(key.key(), value)),
+                Change::Clear(key) => (key, self.marks.remove(key.as_str())),
             };
             frame.restore.push((key, previous));
         }
@@ -441,22 +467,25 @@ impl Reader {
             }
             self.rebuild();
         }
-        if frame.list {
+        if frame.opened == Opened::List {
             self.lists.pop();
         }
-        if frame.pre {
+        if frame.opened == Opened::Pre {
             self.pre = self.pre.saturating_sub(1);
         }
-        if frame.block {
-            let keep = if self.open.last().is_some_and(|o| o.keep_empty && !o.touched) {
-                EmptyBlock::Keep
-            } else {
-                EmptyBlock::Drop
+        if matches!(frame.opened, Opened::Block | Opened::Pre) {
+            let keep = match self.open.last() {
+                Some(open) if open.touched == Touched::Untouched => open.empty,
+                _ => EmptyBlock::Drop,
             };
             let wrote = self.flush(keep);
-            let touched = self.open.pop().is_some_and(|o| o.touched) || wrote;
+            let touched = self
+                .open
+                .pop()
+                .is_some_and(|o| o.touched == Touched::Written)
+                || wrote;
             if touched && let Some(parent) = self.open.last_mut() {
-                parent.touched = true;
+                parent.touched = Touched::Written;
             }
         }
     }
@@ -539,7 +568,7 @@ impl Reader {
             runs,
         });
         if let Some(open) = self.open.last_mut() {
-            open.touched = true;
+            open.touched = Touched::Written;
         }
         true
     }
@@ -575,28 +604,41 @@ fn ordered_style(kind: Option<&str>) -> OrderedStyle {
     }
 }
 
-type Change = (MarkRoot, Option<String>);
+/// What an element or a declaration does to one mark.
+enum Change {
+    /// Set the mark to a value the paste keeps.
+    Set(MarkRoot, MarkValue),
+    /// Clear the mark.
+    Clear(MarkRoot),
+}
 
-fn on(key: MarkRoot) -> Change {
-    (key, Some(String::new()))
+/// The change that sets `key` to `raw`, or `None` for a value the paste
+/// does not keep (`PROSE-UI-220`).
+fn set(key: MarkRoot, raw: &str) -> Option<Change> {
+    super::pasted(key, Some(raw)).map(|value| Change::Set(key, value))
+}
+
+/// The change that turns on the mark whose presence is the formatting.
+fn on(key: MarkRoot) -> Option<Change> {
+    set(key, "")
 }
 
 /// The marks an element's name stands for.
 fn tag_marks(tag: &str, attrs: &[Attribute], flow: Flow) -> Vec<Change> {
-    match tag {
-        "b" | "strong" => vec![on(MarkRoot::Bold)],
-        "i" | "em" | "cite" | "dfn" | "var" => vec![on(MarkRoot::Italic)],
-        "u" | "ins" => vec![on(MarkRoot::Underline)],
-        "s" | "strike" | "del" => vec![on(MarkRoot::Strike)],
-        "sup" => vec![on(MarkRoot::Superscript)],
-        "sub" => vec![on(MarkRoot::Subscript)],
-        "code" | "kbd" | "samp" | "tt" if flow == Flow::Normal => vec![on(MarkRoot::Code)],
+    let change = match tag {
+        "b" | "strong" => on(MarkRoot::Bold),
+        "i" | "em" | "cite" | "dfn" | "var" => on(MarkRoot::Italic),
+        "u" | "ins" => on(MarkRoot::Underline),
+        "s" | "strike" | "del" => on(MarkRoot::Strike),
+        "sup" => on(MarkRoot::Superscript),
+        "sub" => on(MarkRoot::Subscript),
+        "code" | "kbd" | "samp" | "tt" if flow == Flow::Normal => on(MarkRoot::Code),
         "a" => attr(attrs, "href")
             .map(str::trim)
-            .map(|href| vec![(MarkRoot::Link, Some(href.to_owned()))])
-            .unwrap_or_default(),
-        _ => Vec::new(),
-    }
+            .and_then(|href| set(MarkRoot::Link, href)),
+        _ => None,
+    };
+    change.into_iter().collect()
 }
 
 /// The marks a style attribute's declarations stand for. Black ink and a
@@ -614,66 +656,72 @@ fn style_marks(style: &str) -> Vec<Change> {
                     weight => weight.parse::<u16>().ok().map(|w| w >= 600),
                 };
                 if let Some(bold) = bold {
-                    changes.push(if bold {
+                    changes.extend(if bold {
                         on(MarkRoot::Bold)
                     } else {
-                        (MarkRoot::Bold, None)
+                        Some(Change::Clear(MarkRoot::Bold))
                     });
                 }
             }
             "font-style" => match lower.as_str() {
-                "italic" | "oblique" => changes.push(on(MarkRoot::Italic)),
-                "normal" => changes.push((MarkRoot::Italic, None)),
+                "italic" | "oblique" => changes.extend(on(MarkRoot::Italic)),
+                "normal" => changes.push(Change::Clear(MarkRoot::Italic)),
                 _ => {}
             },
             "text-decoration" | "text-decoration-line" => {
                 if lower.contains("none") {
-                    changes.extend([(MarkRoot::Underline, None), (MarkRoot::Strike, None)]);
+                    changes.extend([
+                        Change::Clear(MarkRoot::Underline),
+                        Change::Clear(MarkRoot::Strike),
+                    ]);
                 }
                 if lower.contains("underline") {
-                    changes.push(on(MarkRoot::Underline));
+                    changes.extend(on(MarkRoot::Underline));
                 }
                 if lower.contains("line-through") {
-                    changes.push(on(MarkRoot::Strike));
+                    changes.extend(on(MarkRoot::Strike));
                 }
             }
             "vertical-align" => match lower.as_str() {
-                "super" => changes.push(on(MarkRoot::Superscript)),
-                "sub" => changes.push(on(MarkRoot::Subscript)),
-                "baseline" => {
-                    changes.extend([(MarkRoot::Superscript, None), (MarkRoot::Subscript, None)])
-                }
+                "super" => changes.extend(on(MarkRoot::Superscript)),
+                "sub" => changes.extend(on(MarkRoot::Subscript)),
+                "baseline" => changes.extend([
+                    Change::Clear(MarkRoot::Superscript),
+                    Change::Clear(MarkRoot::Subscript),
+                ]),
                 _ => {}
             },
             "color" => {
                 if let Some(color) = css_color(&lower) {
-                    changes.push((
-                        MarkRoot::Ink,
-                        (!ink(color)).then(|| mark::canonical_color(color)),
-                    ));
+                    changes.extend(if ink(color) {
+                        Some(Change::Clear(MarkRoot::Ink))
+                    } else {
+                        set(MarkRoot::Ink, &mark::canonical_color(color))
+                    });
                 }
             }
             "background-color" | "background" => {
                 if lower == "transparent" {
-                    changes.push((MarkRoot::Highlight, None));
+                    changes.push(Change::Clear(MarkRoot::Highlight));
                 } else if let Some(color) = css_color(&lower) {
                     let white = color == Rgba::from_bits(0xffff_ffff);
-                    changes.push((
-                        MarkRoot::Highlight,
-                        (!white).then(|| mark::canonical_color(color)),
-                    ));
+                    changes.extend(if white {
+                        Some(Change::Clear(MarkRoot::Highlight))
+                    } else {
+                        set(MarkRoot::Highlight, &mark::canonical_color(color))
+                    });
                 }
             }
             "font-size" => {
                 if let Some(points) =
                     font_size(&lower).and_then(|size| mark::canonical_number(size.points()))
                 {
-                    changes.push((MarkRoot::FontSize, Some(points)));
+                    changes.extend(set(MarkRoot::FontSize, &points));
                 }
             }
             "font-family" => {
                 if let Some(family) = font_family(value) {
-                    changes.push((MarkRoot::FontFamily, Some(family)));
+                    changes.extend(set(MarkRoot::FontFamily, &family));
                 }
             }
             _ => {}

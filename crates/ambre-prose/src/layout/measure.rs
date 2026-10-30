@@ -10,7 +10,9 @@ use parley::{
     LayoutContext, LineHeight, StyleProperty,
 };
 
-use ambre_bus::app::prose::{Align, DocOffset, LineHeight as StoredLineHeight, ParagraphStyle};
+use ambre_bus::app::prose::{
+    Align, DocOffset, KeepTogether, KeepWithNext, LineHeight as StoredLineHeight, ParagraphStyle,
+};
 use ambre_core::{ByteDelta, ByteOffset, ByteSpan, DocPx, Pt, Weight, char_to_byte};
 
 use ambre_draw::{BundledFamily, ParleyBrush, ScriptSet};
@@ -19,14 +21,15 @@ use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 use crate::doc;
 use crate::layout::fonts;
 use crate::layout::run::{
-    LocalLineCount, ParleyRunData, Resume, RunLine, RunLineCount, RunLineSpan, ShapedRun,
+    LocalLineCount, ParleyRunData, Resume, RunLine, RunLineCount, RunLineSpan, RunSegmentCount,
+    ShapedRun,
 };
 
 /// How many shaped stretches a run may hold before an edit shapes it whole
 /// again (`PROSE-128`). Typing at the end of a paragraph adds one per line,
 /// and an edit inside it at most two. Each holds a layout alive, so the cap
 /// bounds the memory a run keeps.
-const MAX_SEGMENTS: usize = 16;
+const MAX_SEGMENTS: RunSegmentCount = RunSegmentCount::new(16);
 
 /// A byte range of a block's text and the inline marks the shaper reads on
 /// it. A mark either changes the glyphs (`PROSE-UI-207`) or draws a line
@@ -35,10 +38,21 @@ const MAX_SEGMENTS: usize = 16;
 pub struct MarkedSpan {
     pub start: ByteOffset,
     pub end: ByteOffset,
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strike: bool,
+    pub bold: Weight,
+    pub italic: ambre_core::Slant,
+    pub underline: ambre_core::Underline,
+    pub strike: ambre_core::Strikethrough,
+}
+
+impl MarkedSpan {
+    /// Whether the span carries any mark the shaper reads.
+    #[must_use]
+    pub fn is_marked(&self) -> bool {
+        self.bold.as_bool()
+            || self.italic.as_bool()
+            || self.underline.as_bool()
+            || self.strike.as_bool()
+    }
 }
 
 /// The text of a block and the spans of it that carry bold or italic, in
@@ -62,13 +76,13 @@ pub fn marked_text(text: &LoroText) -> (String, Vec<MarkedSpan>) {
         let span = MarkedSpan {
             start: ByteOffset::from_usize(out.len()),
             end: ByteOffset::from_usize(out.len() + insert.len()),
-            bold: on("b"),
-            italic: on("i"),
-            underline: on("u"),
-            strike: on("s"),
+            bold: Weight::from_bool(on("b")),
+            italic: ambre_core::Slant::from_bool(on("i")),
+            underline: ambre_core::Underline::from_bool(on("u")),
+            strike: ambre_core::Strikethrough::from_bool(on("s")),
         };
         out.push_str(&insert);
-        if span.bold || span.italic || span.underline || span.strike {
+        if span.is_marked() {
             spans.push(span);
         }
     }
@@ -100,8 +114,8 @@ pub struct EffectiveStyle {
     pub indent_right: DocPx,
     pub space_before: DocPx,
     pub space_after: DocPx,
-    pub keep_together: bool,
-    pub keep_with_next: bool,
+    pub keep_together: KeepTogether,
+    pub keep_with_next: KeepWithNext,
 }
 
 impl EffectiveStyle {
@@ -141,8 +155,8 @@ impl EffectiveStyle {
             indent_right: paragraph.indent_right.unwrap_or(Pt::ZERO).to_doc_px(),
             space_before: paragraph.space_before.unwrap_or(Pt::ZERO).to_doc_px(),
             space_after: paragraph.space_after.unwrap_or(Pt::ZERO).to_doc_px(),
-            keep_together: paragraph.keep_together.unwrap_or_default().as_bool(),
-            keep_with_next: paragraph.keep_with_next.unwrap_or_default().as_bool(),
+            keep_together: paragraph.keep_together.unwrap_or_default(),
+            keep_with_next: paragraph.keep_with_next.unwrap_or_default(),
         }
     }
 
@@ -255,9 +269,14 @@ impl TextMetrics {
 pub(crate) fn shipped_measurer() -> Measurer {
     let mut measurer = Measurer::new();
     for bytes in fonts::shipped_faces() {
-        measurer.register_faces(bytes.into_bytes());
+        measurer.register_faces(bytes);
     }
     measurer
+}
+
+ambre_core::define_tally! {
+    /// How many runs a measurer shaped.
+    pub struct ShapedCount;
 }
 
 /// The shaper, and the two contexts parley reuses between blocks.
@@ -269,7 +288,7 @@ pub struct Measurer {
     layout_cx: LayoutContext<ParleyBrush>,
     /// How many runs have been shaped. It is what makes a reflow that
     /// re-shapes an untouched block observable (`PROSE-083`).
-    shaped: u64,
+    shaped: ShapedCount,
     /// The scripts met since the last full run that no loaded face covers
     /// (`PROSE-110`). A layout carries it so a consumer can tell a settled
     /// measurement from one still waiting for a face.
@@ -293,14 +312,14 @@ impl Measurer {
         Self {
             font_cx: ambre_draw::sealed_font_context(),
             layout_cx: LayoutContext::new(),
-            shaped: 0,
+            shaped: ShapedCount::ZERO,
             missing: ScriptSet::new(),
         }
     }
 
     /// How many runs this measurer has shaped since it was built.
     #[must_use]
-    pub fn shaped(&self) -> u64 {
+    pub fn shaped(&self) -> ShapedCount {
         self.shaped
     }
 
@@ -325,8 +344,8 @@ impl Measurer {
     /// The path a lazily fetched script face takes to the paginator
     /// (`CANVAS-006`). The layout measured before it arrived is stale, and
     /// the next reflow recomputes in full (`PROSE-111`).
-    pub fn register_faces(&mut self, bytes: Vec<u8>) {
-        fonts::register_faces(&mut self.font_cx, bytes);
+    pub fn register_faces(&mut self, bytes: ambre_core::FontBytes) {
+        fonts::register_faces(&mut self.font_cx, bytes.into_bytes());
     }
 
     /// Whether a face has arrived for a script a past run was missing.
@@ -351,7 +370,7 @@ impl Measurer {
         style: &EffectiveStyle,
         width: DocPx,
     ) -> Layout<ParleyBrush> {
-        self.shaped = self.shaped.saturating_add(1);
+        self.shaped = self.shaped.incremented();
         let absent = fonts::missing_scripts(&mut self.font_cx, text);
         self.missing.extend(absent);
         shape_paragraph(
@@ -448,7 +467,7 @@ impl Measurer {
                 shape_paragraph(font_cx, layout_cx, (part, spans), style, width)
             },
         )?;
-        self.shaped = self.shaped.saturating_add(1);
+        self.shaped = self.shaped.incremented();
         Some(ShapedRun::from_data(data))
     }
 
@@ -734,16 +753,16 @@ fn build(
     }
     for span in marks {
         let range = ByteSpan::new(span.start, span.end).to_usize_range();
-        if span.bold {
+        if span.bold == Weight::Bold {
             builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
         }
-        if span.italic {
+        if span.italic == ambre_core::Slant::Italic {
             builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
         }
-        if span.underline {
+        if span.underline == ambre_core::Underline::Underlined {
             builder.push(StyleProperty::Underline(true), range.clone());
         }
-        if span.strike {
+        if span.strike == ambre_core::Strikethrough::Struck {
             builder.push(StyleProperty::Strikethrough(true), range);
         }
     }
@@ -913,7 +932,7 @@ mod tests {
             vec![MarkedSpan {
                 start: ByteOffset::new(20),
                 end: ByteOffset::from_usize(text.len() / 2),
-                bold: true,
+                bold: Weight::Bold,
                 ..MarkedSpan::default()
             }]
         };
@@ -961,8 +980,8 @@ mod tests {
             );
             let (whole_metrics, _, whole) =
                 measurer.measure_with_lines((&text, &marks), &style, DocPx::new(width), &[], None);
-            assert_eq!(measurer.shaped(), before + 2);
-            if next.data().segment_count() > 1 {
+            assert_eq!(measurer.shaped(), before.plus(ShapedCount::new(2)));
+            if next.data().segment_count() > RunSegmentCount::ONE {
                 partial += 1;
             }
             assert_eq!(metrics, whole_metrics, "heights after an edit at {at}");
@@ -989,7 +1008,7 @@ mod tests {
             vec![MarkedSpan {
                 start: ByteOffset::from_usize(text.len() - 200),
                 end: ByteOffset::from_usize(text.len() - 100),
-                bold: true,
+                bold: Weight::Bold,
                 ..MarkedSpan::default()
             }]
         };
@@ -1049,7 +1068,7 @@ mod tests {
         let marks = [MarkedSpan {
             start: ByteOffset::from_usize(edited.len() - 300),
             end: ByteOffset::from_usize(edited.len() - 10),
-            bold: true,
+            bold: Weight::Bold,
             ..MarkedSpan::default()
         }];
         let (_, _, windowed) = measurer.measure_with_lines(
@@ -1075,10 +1094,10 @@ mod tests {
         let longer = format!("{text}x");
         let (_, _, wider) =
             measurer.measure_with_lines((&longer, &[]), &style, DocPx::new(320.0), &[], Some(&run));
-        assert_eq!(wider.data().segment_count(), 1);
+        assert_eq!(wider.data().segment_count(), RunSegmentCount::ONE);
         let (_, _, same) =
             measurer.measure_with_lines((&longer, &[]), &style, DocPx::new(300.0), &[], Some(&run));
-        assert_eq!(same.data().segment_count(), 2);
+        assert_eq!(same.data().segment_count(), RunSegmentCount::new(2));
     }
 
     #[test]

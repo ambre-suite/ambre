@@ -95,7 +95,7 @@ fn paragraph_shape() {
     let mut measurer = Measurer::new();
     let mut font_cx = FontContext::new();
     for bytes in faces() {
-        measurer.register_faces(bytes.clone());
+        measurer.register_faces(ambre_core::FontBytes::new(bytes.clone()));
         register_faces(&mut font_cx, bytes);
     }
     let mut layout_cx = LayoutContext::new();
@@ -123,7 +123,7 @@ fn paragraph_shape() {
                 &style,
                 DocPx::new(COLUMN_PX),
             );
-            if run.data().segment_count() == 1 {
+            if run.data().segment_count() == ambre_prose::layout::run::RunSegmentCount::ONE {
                 found = Some((laid, typed));
                 break 'search;
             }

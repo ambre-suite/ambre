@@ -10,17 +10,46 @@
 //! Nothing here writes. The resolution runs once per run per layout, which is
 //! the row the budget pays for (`ambre-spec-budgets.md section 1`).
 
-use ambre_core::{FontSize, Rgba};
+use ambre_core::{FontSize, Rgba, Slant, Strikethrough, Underline, Weight};
 use std::collections::BTreeMap;
 
 use crate::doc::DocDefaults;
 use crate::events::{BlockType, HeadingLevel};
 use ambre_bus::app::prose::MarkKey;
 
-use crate::mark::{self, MarkRoot};
+use crate::mark::{self, InlineCode, MarkRoot, Script};
 
 /// The marks one run carries, key to stored value.
-pub type MarkSet = BTreeMap<MarkKey, String>;
+pub type MarkSet = BTreeMap<MarkKey, StoredMarkValue>;
+
+/// A mark value as the document holds it, never checked. A peer on another
+/// build may have written any text, and [`resolve`] parses each one it reads
+/// and drops what fails. A value may be a link or a family the user typed, so
+/// `Debug` prints its length alone.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct StoredMarkValue(String);
+
+impl StoredMarkValue {
+    /// The value `text` the document holds.
+    #[must_use]
+    pub fn new(text: impl Into<String>) -> Self {
+        Self(text.into())
+    }
+
+    /// The value as stored, for the parse that reads it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for StoredMarkValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("StoredMarkValue")
+            .field(&crate::redact::Redacted(&self.0))
+            .finish()
+    }
+}
 
 /// The block a run sits in, which is the level between the mark and the
 /// document defaults.
@@ -33,17 +62,17 @@ pub struct BlockContext {
 
 /// The result of the cascade for one run of text.
 ///
-/// Every field is decided: a `bool` is on or off, and the two colours are a
+/// Every field is decided: a flag is on or off, and the two colours are a
 /// decided presence or a decided absence (`PROSE-FEAT-177`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedStyle {
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strikethrough: bool,
-    pub superscript: bool,
-    pub subscript: bool,
-    pub code_inline: bool,
+    pub bold: Weight,
+    pub italic: Slant,
+    pub underline: Underline,
+    pub strikethrough: Strikethrough,
+    /// Raised, lowered or neither: never both (`PROSE-FEAT-174`).
+    pub script: Script,
+    pub code_inline: InlineCode,
     pub color: Option<Rgba>,
     pub background: Option<Rgba>,
     pub font_size: FontSize,
@@ -73,13 +102,12 @@ const MONOSPACE: ambre_core::FontFamily = ambre_core::FontFamily::Mono;
 /// rather than in the caller. The cascade is the one reader of the block type.
 fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyle {
     let mut resolved = ResolvedStyle {
-        bold: false,
-        italic: false,
-        underline: false,
-        strikethrough: false,
-        superscript: false,
-        subscript: false,
-        code_inline: false,
+        bold: Weight::Regular,
+        italic: Slant::Upright,
+        underline: Underline::Plain,
+        strikethrough: Strikethrough::Plain,
+        script: Script::Baseline,
+        code_inline: InlineCode::Prose,
         color: None,
         background: None,
         font_size: defaults.font_size,
@@ -88,13 +116,13 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
     };
     match context.block_type {
         BlockType::Heading => {
-            resolved.bold = true;
+            resolved.bold = Weight::Bold;
             let level = context.heading_level.unwrap_or(HeadingLevel::H1);
             resolved.font_size = FontSize::new(defaults.font_size.points() * heading_scale(level))
                 .unwrap_or(defaults.font_size);
         }
         BlockType::CodeBlock => {
-            resolved.code_inline = true;
+            resolved.code_inline = InlineCode::Code;
             resolved.font_family = Some(MONOSPACE);
         }
         _ => {}
@@ -113,17 +141,28 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
 pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -> ResolvedStyle {
     let mut resolved = block_defaults(context, defaults);
     let has = |root: MarkRoot| marks.contains_key(root.as_str());
-    let get = |root: MarkRoot| marks.get(root.as_str());
-    resolved.bold |= has(MarkRoot::Bold);
-    resolved.italic |= has(MarkRoot::Italic);
-    resolved.underline = has(MarkRoot::Underline);
-    resolved.strikethrough = has(MarkRoot::Strike);
-    resolved.code_inline |= has(MarkRoot::Code);
+    let get = |root: MarkRoot| marks.get(root.as_str()).map(StoredMarkValue::as_str);
+    if has(MarkRoot::Bold) {
+        resolved.bold = Weight::Bold;
+    }
+    if has(MarkRoot::Italic) {
+        resolved.italic = Slant::Italic;
+    }
+    resolved.underline = Underline::from_bool(has(MarkRoot::Underline));
+    resolved.strikethrough = Strikethrough::from_bool(has(MarkRoot::Strike));
+    if has(MarkRoot::Code) {
+        resolved.code_inline = InlineCode::Code;
+    }
     // Both marks are storable on one range, and neither write clears the other
     // (`PROSE-FEAT-173`). The raised one wins, by a priority fixed here rather
     // than by which mark arrived last (`PROSE-FEAT-174`).
-    resolved.superscript = has(MarkRoot::Superscript);
-    resolved.subscript = has(MarkRoot::Subscript) && !resolved.superscript;
+    resolved.script = if has(MarkRoot::Superscript) {
+        Script::Raised
+    } else if has(MarkRoot::Subscript) {
+        Script::Lowered
+    } else {
+        Script::Baseline
+    };
     if let Some(raw) = get(MarkRoot::Ink) {
         resolved.color = mark::parse_color(raw).ok();
     }
@@ -138,8 +177,7 @@ pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -
     }
     resolved.link = get(MarkRoot::Link)
         .filter(|url| !url.is_empty())
-        .cloned()
-        .map(ambre_core::LinkUrl::new);
+        .map(|url| ambre_core::LinkUrl::new(url.to_owned()));
     resolved
 }
 
@@ -147,10 +185,19 @@ pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_stored_mark_value_prints_its_length_alone() {
+        let value = StoredMarkValue::new("https://private.example/page");
+        assert!(crate::redact::tests::hides(
+            &value,
+            "https://private.example/page"
+        ));
+    }
+
     fn marks(pairs: &[(&str, &str)]) -> MarkSet {
         pairs
             .iter()
-            .map(|(key, value)| (MarkKey::from(*key), (*value).to_owned()))
+            .map(|(key, value)| (MarkKey::from(*key), StoredMarkValue::new(*value)))
             .collect()
     }
 
@@ -187,11 +234,15 @@ mod tests {
         // The defaults alone.
         let plain = resolve(&MarkSet::new(), body(), &defaults);
         assert_eq!(plain.font_size, defaults.font_size);
-        assert!(!plain.bold);
+        assert_eq!(plain.bold, Weight::Regular);
 
         // The block type, above the defaults.
         let titled = resolve(&MarkSet::new(), heading(1), &defaults);
-        assert!(titled.bold, "a heading is drawn bold by its type");
+        assert_eq!(
+            titled.bold,
+            Weight::Bold,
+            "a heading is drawn bold by its type"
+        );
         assert!(titled.font_size > defaults.font_size);
 
         // The mark, above both.
@@ -218,12 +269,10 @@ mod tests {
     fn raised_beats_lowered_by_a_fixed_priority() {
         let defaults = DocDefaults::default();
         let both = resolve(&marks(&[("sup", ""), ("sub", "")]), body(), &defaults);
-        assert!(both.superscript);
-        assert!(!both.subscript);
+        assert_eq!(both.script, Script::Raised);
         // Lowered alone still resolves as lowered.
         let lowered = resolve(&marks(&[("sub", "")]), body(), &defaults);
-        assert!(lowered.subscript);
-        assert!(!lowered.superscript);
+        assert_eq!(lowered.script, Script::Lowered);
     }
 
     /// Two spellings of one opaque colour resolve to one value

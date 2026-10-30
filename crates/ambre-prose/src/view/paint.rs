@@ -23,8 +23,8 @@ use crate::view::caret::Spot;
 use crate::view::hit::{Fragment, cell_frame};
 pub use crate::view::walk::PagePalette;
 use crate::view::walk::{
-    BlockPaint, CellPaint, Insertion, PageItem, PagePaint, PageView, PageWalk, Placed, draw_shape,
-    to_rect,
+    BlockPaint, CellPaint, HighlightCount, Insertion, PageItem, PagePaint, PageView, PageWalk,
+    Placed, draw_shape, to_rect,
 };
 
 /// How far the shadow falls from the sheet.
@@ -276,12 +276,10 @@ impl ProseUiState {
         };
         let mut walk = PageWalk {
             runs: &mut self.runs,
-            highlights_walked: 0,
+            highlights_walked: HighlightCount::ZERO,
         };
         walk.walk(&view, region, surface);
-        self.highlights_walked = self
-            .highlights_walked
-            .saturating_add(walk.highlights_walked);
+        self.highlights_walked = self.highlights_walked.plus(walk.highlights_walked);
 
         for block in &frame.blocks {
             self.page_frame = camera * Affine::translate((0.0, block.top.get()));
@@ -772,7 +770,7 @@ mod tests {
     };
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
-    use crate::view::cache::{RunCache, RunKey};
+    use crate::view::cache::{BuildCount, RunCache, RunKey};
     use crate::view::tests::{append, down, laid_out};
     use crate::view::{Highlight, HighlightKind};
 
@@ -859,10 +857,10 @@ mod tests {
         let mut ui = ProseUiState::default();
         ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
-        assert_eq!(ui.runs.built(), 0);
+        assert_eq!(ui.runs.built(), BuildCount::ZERO);
         let first_paint = paint(&mut ui);
         let built = ui.runs.built();
-        assert!(built >= 6);
+        assert!(built >= BuildCount::new(6));
         let second_paint = paint(&mut ui);
         assert_eq!(ui.runs.built(), built);
         // A paint reads the layout and changes nothing: two paints agree.
@@ -882,7 +880,7 @@ mod tests {
             ui.scroll_by(down(800.0));
         }
         paint(&mut ui);
-        assert!(ui.runs.built() > super::super::cache::RUN_CACHE_RUNS as u64);
+        assert!(ui.runs.built().get() > super::super::cache::RUN_CACHE_RUNS.get());
         assert!(ui.runs.len() <= super::super::cache::RUN_CACHE_RUNS);
     }
 
@@ -1118,7 +1116,10 @@ mod tests {
         paint(&mut ui);
         let built = ui.column.built_pages(&ui.viewport).expect("a page");
         let drawn: usize = built.into_iter().map(|page| ui.blocks_on(page).len()).sum();
-        assert_eq!(ui.highlights_walked, drawn as u64);
+        assert_eq!(
+            ui.highlights_walked,
+            crate::view::walk::HighlightCount::of_len(drawn)
+        );
         assert!(drawn < ids.len());
     }
 
@@ -1271,7 +1272,7 @@ mod tests {
         let (x0, y0) = first_text_at(&paint(&mut ui));
         let table = |ui: &ProseUiState| {
             ui.shaped.tables.values().next().map_or(DocPx::ZERO, |t| {
-                t.row_tops.last().copied().unwrap_or(DocPx::ZERO)
+                t.row_tops.iter().last().copied().unwrap_or(DocPx::ZERO)
             })
         };
         let height0 = table(&ui);
@@ -1423,7 +1424,7 @@ mod tests {
         let block = block_id(first_block_of(&state, cell));
         let mut ui = view_of(&mut state);
         let laid = ui.shaped.tables[&table].clone();
-        let row = laid.row_tops[1] - laid.row_tops[0];
+        let row = laid.row_tops.as_slice()[1] - laid.row_tops.as_slice()[0];
 
         ui.draft.push_str(
             ambre_bus::app::prose::TextAck(1),
@@ -1463,7 +1464,7 @@ mod tests {
             .iter()
             .find_map(|piece| piece.table.clone())
             .expect("the table is drawn");
-        let tall = grown.row_tops[1] - grown.row_tops[0];
+        let tall = grown.row_tops.as_slice()[1] - grown.row_tops.as_slice()[0];
         assert!(tall > row + run.data().height() / 2.0, "the row grows");
     }
 
@@ -1571,7 +1572,7 @@ mod tests {
                 .expect("the paragraph is shaped again");
             let (start, end) = (at as usize, at as usize + 3);
             run.data().marks().iter().any(|span| {
-                span.bold
+                span.bold == ambre_core::Weight::Bold
                     && span.start <= ByteOffset::from_usize(start)
                     && span.end >= ByteOffset::from_usize(end)
             })
@@ -2132,7 +2133,7 @@ mod tests {
             let mut walked = RecordingSurface::new();
             PageWalk {
                 runs: &mut runs,
-                highlights_walked: 0,
+                highlights_walked: crate::view::walk::HighlightCount::ZERO,
             }
             .walk(&view, region, &mut walked);
             proptest::prop_assert!(walked.count(glyphs) > 0);

@@ -15,6 +15,8 @@
 //! walk, every heading. [`compute_heading_number`] answers for one heading and
 //! stops there, so neither form turns a numbering pass into a walk per heading.
 
+use std::ops::ControlFlow;
+
 use loro::{LoroTree, TreeID};
 
 use crate::doc;
@@ -71,7 +73,7 @@ pub fn heading_numbers(tree: &LoroTree) -> Vec<(TreeID, HeadingNumber)> {
         {
             out.push((*id, number));
         }
-        false
+        ControlFlow::Continue(())
     });
     out
 }
@@ -88,14 +90,14 @@ pub fn compute_heading_number(tree: &LoroTree, heading_id: &TreeID) -> Option<He
     let mut found = None;
     walk(tree, &mut |tree, id| {
         let Some(stored) = doc::heading_level_of(tree, id) else {
-            return false;
+            return ControlFlow::Continue(());
         };
         let number = counters.bump(stored.clamped());
         if id == heading_id {
             found = number;
-            return true;
+            return ControlFlow::Break(());
         }
-        false
+        ControlFlow::Continue(())
     });
     found
 }
@@ -148,38 +150,42 @@ pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<ListOrdinal>
 /// answer is the tree's own parent chain, so it cannot disagree with the shape
 /// the peers converged on.
 #[must_use]
-pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> u32 {
-    let mut depth = 0_u32;
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> ListDepth {
+    let mut depth = ListDepth::ZERO;
     let mut here = *item_id;
     while let Some(loro::TreeParentId::Node(parent)) = tree.parent(here) {
         if doc::block_type_of(tree, &parent) != Some(crate::events::BlockType::ListItem) {
             break;
         }
-        depth = depth.saturating_add(1);
+        depth = depth.incremented();
         here = parent;
     }
     depth
 }
 
+ambre_core::define_tally! {
+    /// How many list items an item nests inside: zero for a top item.
+    pub struct ListDepth;
+}
+
 /// Visit every live block in document order, depth first and parents before
-/// children, until `visit` answers `true`.
+/// children, until `visit` answers `Break`.
 ///
 /// The same order the layout pass walks in, and the order the tree itself
 /// holds, so no reader sorts anything.
-fn walk(tree: &LoroTree, visit: &mut impl FnMut(&LoroTree, &TreeID) -> bool) {
+fn walk(tree: &LoroTree, visit: &mut impl FnMut(&LoroTree, &TreeID) -> ControlFlow<()>) {
     fn descend(
         tree: &LoroTree,
         parent: Option<TreeID>,
-        visit: &mut impl FnMut(&LoroTree, &TreeID) -> bool,
-    ) -> bool {
+        visit: &mut impl FnMut(&LoroTree, &TreeID) -> ControlFlow<()>,
+    ) -> ControlFlow<()> {
         for id in doc::children_of(tree, parent) {
-            if visit(tree, &id) || descend(tree, Some(id), visit) {
-                return true;
-            }
+            visit(tree, &id)?;
+            descend(tree, Some(id), visit)?;
         }
-        false
+        ControlFlow::Continue(())
     }
-    descend(tree, None, visit);
+    let _ = descend(tree, None, visit);
 }
 
 #[cfg(test)]
@@ -426,8 +432,14 @@ mod tests {
         state.handle_command(ProseCommand::IndentList { block_id: second });
 
         let tree = doc::blocks(state.document());
-        assert_eq!(list_depth(&tree, &crate::events::tree_id(first)), 0);
-        assert_eq!(list_depth(&tree, &crate::events::tree_id(second)), 1);
+        assert_eq!(
+            list_depth(&tree, &crate::events::tree_id(first)),
+            ListDepth::ZERO
+        );
+        assert_eq!(
+            list_depth(&tree, &crate::events::tree_id(second)),
+            ListDepth::new(1)
+        );
         // The nested item opens a run of its own under its new parent.
         assert_eq!(ordinal(&state, &second), Some(1));
     }

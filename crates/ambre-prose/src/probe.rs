@@ -95,7 +95,17 @@ struct Undrawn {
     start: ambre_core::PageTime,
     /// Its effect waits on a layout: a split, a paste, anything the draft
     /// cannot hold. It is drawn by the first frame after the layout.
-    needs_layout: bool,
+    needs_layout: Drawing,
+}
+
+ambre_core::define_flag! {
+    /// Whether an input's effect waits on a layout to be drawn.
+    enum Drawing {
+        /// The next frame draws it.
+        Ready,
+        /// A layout must arrive first.
+        AwaitsLayout,
+    }
 }
 
 /// The keystrokes in flight, from their input to their frame.
@@ -103,9 +113,13 @@ struct Undrawn {
 pub struct KeyProbe {
     /// Draft entries awaiting their confirmation, with their input time and
     /// the frame count at that input.
-    unconfirmed: Vec<(ambre_bus::app::prose::TextAck, ambre_core::PageTime, u64)>,
+    unconfirmed: Vec<(
+        ambre_bus::app::prose::TextAck,
+        ambre_core::PageTime,
+        FrameNumber,
+    )>,
     /// The animation frames begun so far.
-    frame: u64,
+    frame: FrameNumber,
     /// The frame counts of the confirmations since the last take.
     counts: Vec<FrameCount>,
     /// The highest acknowledgement number seen in the draft.
@@ -117,7 +131,7 @@ impl KeyProbe {
     /// An animation frame began. Called once per frame, before its answers
     /// are applied, whether or not it paints.
     pub fn frame(&mut self) {
-        self.frame += 1;
+        self.frame = self.frame.next();
     }
 
     /// The frame counts of the confirmations since the last call.
@@ -150,7 +164,7 @@ impl KeyProbe {
             .extend(fresh.iter().map(|&seq| (seq, start, self.frame)));
         self.undrawn.push(Undrawn {
             start,
-            needs_layout: dispatch == Dispatch::Sent && fresh.is_empty(),
+            needs_layout: Drawing::from_bool(dispatch == Dispatch::Sent && fresh.is_empty()),
         });
         if fresh.is_empty() {
             return Vec::new();
@@ -172,7 +186,7 @@ impl KeyProbe {
     ) -> Vec<Measure> {
         let pending: Vec<ambre_bus::app::prose::TextAck> = draft
             .entries()
-            .filter(|&(_, confirmed)| !confirmed)
+            .filter(|&(_, confirmed)| confirmed == crate::ui::Confirmation::Pending)
             .map(|(seq, _)| seq)
             .collect();
         let mut measures = Vec::new();
@@ -182,9 +196,7 @@ impl KeyProbe {
             if pending.contains(&seq) {
                 return true;
             }
-            counts.push(FrameCount::new(
-                u32::try_from(frame - at).unwrap_or(u32::MAX),
-            ));
+            counts.push(frame.since(at));
             measures.push(Measure {
                 name: ProbeName::Confirm,
                 start,
@@ -194,7 +206,7 @@ impl KeyProbe {
         });
         if answer == Answer::Layout {
             for input in &mut self.undrawn {
-                input.needs_layout = false;
+                input.needs_layout = Drawing::Ready;
             }
         }
         measures
@@ -205,7 +217,7 @@ impl KeyProbe {
     pub fn painted(&mut self, now: ambre_core::PageTime) -> Vec<Measure> {
         let mut measures = Vec::new();
         self.undrawn.retain(|input| {
-            if input.needs_layout {
+            if input.needs_layout == Drawing::AwaitsLayout {
                 return true;
             }
             measures.push(Measure {
@@ -222,6 +234,25 @@ impl KeyProbe {
 ambre_core::define_tally! {
     /// The animation frames a confirmation waited for.
     pub struct FrameCount;
+}
+
+/// How many animation frames began before a moment, counted by the probe.
+/// It only grows, and holds at the top rather than wrap.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct FrameNumber(u64);
+
+impl FrameNumber {
+    /// The number once one more frame began.
+    fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+
+    /// The frames begun from `earlier` to this number, zero when `earlier`
+    /// is not before it, held at the top of a tally.
+    fn since(self, earlier: Self) -> FrameCount {
+        let frames = self.0.saturating_sub(earlier.0);
+        FrameCount::new(u32::try_from(frames).unwrap_or(u32::MAX))
+    }
 }
 
 /// The median and the 95th percentile of a set of samples.
@@ -469,6 +500,23 @@ mod tests {
         probe.answered(ambre_core::PageTime(33.0), &draft, Answer::Other);
         assert_eq!(probe.take_counts(), [FrameCount::new(2)]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");
+    }
+
+    /// The frame number holds at its top. A bare `+= 1` panicked there under
+    /// overflow checks, and a panic kills the worker.
+    #[test]
+    fn a_frame_begun_at_the_top_of_the_count_holds_there() {
+        let mut probe = KeyProbe {
+            frame: FrameNumber(u64::MAX),
+            ..KeyProbe::default()
+        };
+        probe.frame();
+        assert_eq!(probe.frame, FrameNumber(u64::MAX));
+        assert_eq!(FrameNumber(1).since(FrameNumber(3)), FrameCount::ZERO);
+        assert_eq!(
+            FrameNumber(u64::MAX).since(FrameNumber(0)),
+            FrameCount::new(u32::MAX)
+        );
     }
 
     #[test]

@@ -83,7 +83,7 @@ impl ProseState {
     /// The answer owed to a session that joined since this one last spoke:
     /// it has not heard of this one yet. Taken once per newcomer.
     pub fn take_greeting(&mut self) -> Option<ambre_core::EphemeralBytes> {
-        if !std::mem::take(&mut self.owe_greeting) {
+        if std::mem::take(&mut self.owe_greeting) == super::Greeting::Given {
             return None;
         }
         self.announce()
@@ -118,7 +118,7 @@ impl ProseState {
         };
         // A session this one has not met has not heard of it either.
         if self.live.insert(from_user_id) {
-            self.owe_greeting = true;
+            self.owe_greeting = super::Greeting::Owed;
         }
         let Some(position) = self.resolve(&frame) else {
             // Dropped, not raised: the peer keeps the caret it last had until a

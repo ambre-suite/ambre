@@ -24,6 +24,16 @@ pub enum RulerHandle {
     IndentRight,
 }
 
+ambre_core::define_flag! {
+    /// Whether the ruler shows its handles.
+    pub enum RulerHandles {
+        /// The handles are hidden.
+        Hidden,
+        /// The handles show the caret block's indents.
+        Visible,
+    }
+}
+
 /// What the ruler shows, rebuilt on every frame from the caret and the column.
 ///
 /// The positions are in pixels of the view, from the canvas's corner. The
@@ -31,9 +41,9 @@ pub enum RulerHandle {
 /// the canvas origin, and moves a pointer back by the same origin.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct RulerState {
-    /// `false` hides the handles: no caret, or a caret in a block the page
-    /// column does not measure.
-    pub visible: bool,
+    /// Hidden with no caret, or with a caret in a block the page column
+    /// does not measure.
+    pub visible: RulerHandles,
     /// Where the page's content column starts on the canvas.
     pub page_left: ViewPx,
     /// How wide the content column is on the canvas.
@@ -157,7 +167,7 @@ impl ProseUiState {
         let layout = &self.shaped.layout;
         let zoom = self.viewport.zoom;
         let mut ruler = RulerState {
-            visible: false,
+            visible: RulerHandles::Hidden,
             page_left: self.column.left(&self.viewport) + layout.margin_left.zoomed(zoom),
             content_width: layout.content_width.zoomed(zoom),
             point_width: Pt::new(1.0).to_doc_px().zoomed(zoom),
@@ -173,7 +183,7 @@ impl ProseUiState {
             .and_then(|id| self.shaped.blocks.get(&id))
             .and_then(|run| run.data().style().cloned());
         if let Some(style) = style {
-            ruler.visible = true;
+            ruler.visible = RulerHandles::Visible;
             // A hanging indent is laid out as none (`PROSE-FEAT-310`).
             ruler.indent_first = style.indent_first.max(DocPx::ZERO).to_pt();
             ruler.indent_left = style.indent_left.to_pt();
@@ -189,7 +199,7 @@ impl ProseUiState {
     #[must_use]
     pub fn ruler_release(&self, release: RulerRelease) -> Option<ProseCommand> {
         let ruler = self.ruler();
-        if !ruler.visible || !release.points.is_finite() {
+        if ruler.visible == RulerHandles::Hidden || !release.points.is_finite() {
             return None;
         }
         let block_id = self.cursor.as_ref()?.block_id;
@@ -213,7 +223,7 @@ impl ProseUiState {
 
 #[cfg(test)]
 mod tests {
-    use super::{RulerDrag, RulerHandle, RulerRelease, RulerState};
+    use super::{RulerDrag, RulerHandle, RulerHandles, RulerRelease, RulerState};
     use crate::events::{BlockInit, CursorPosition, ParagraphStyle, ProseCommand};
     use crate::logic::ProseState;
     use crate::ui::ProseUiState;
@@ -259,17 +269,17 @@ mod tests {
     #[test]
     fn the_handles_show_the_caret_blocks_laid_out_indents() {
         let (_, mut ui, [plain, quoted]) = indented();
-        assert!(!ui.ruler().visible);
+        assert_eq!(ui.ruler().visible, RulerHandles::Hidden);
         caret_in(&mut ui, quoted);
         let ruler = ui.ruler();
-        assert!(ruler.visible);
+        assert_eq!(ruler.visible, RulerHandles::Visible);
         assert!((ruler.indent_first.get() - 24.0).abs() < 1e-3);
         assert!((ruler.indent_left.get() - 36.0).abs() < 1e-3);
         assert!((ruler.indent_right.get() - 18.0).abs() < 1e-3);
         // A block with no stored indent shows the zero it is laid out with.
         caret_in(&mut ui, plain);
         let ruler = ui.ruler();
-        assert!(ruler.visible);
+        assert_eq!(ruler.visible, RulerHandles::Visible);
         assert_eq!(
             (ruler.indent_first, ruler.indent_left, ruler.indent_right),
             (Pt::ZERO, Pt::ZERO, Pt::ZERO)

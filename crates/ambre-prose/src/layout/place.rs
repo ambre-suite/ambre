@@ -5,7 +5,9 @@
 //! (`PROSE-078`). A constraint it cannot meet is resolved by moving forward,
 //! and the constraint order of section 2 decides which one gives way.
 
-use ambre_bus::app::prose::{BlockType, FootnoteOrdinal, PageCount, PageIndex, PageSpan};
+use ambre_bus::app::prose::{
+    BlockType, FootnoteOrdinal, KeepTogether, KeepWithNext, PageCount, PageIndex, PageSpan,
+};
 use ambre_core::{DocPx, FootnoteId};
 use std::sync::Arc;
 
@@ -59,8 +61,8 @@ pub struct MeasuredBlock {
     pub height: DocPx,
     pub space_before: DocPx,
     pub space_after: DocPx,
-    pub keep_together: bool,
-    pub keep_with_next: bool,
+    pub keep_together: KeepTogether,
+    pub keep_with_next: KeepWithNext,
     /// The line tops a split may be taken at (`PROSE-071`). Empty for a block
     /// that has no line structure, which is a block that cannot split.
     pub metrics: Option<TextMetrics>,
@@ -147,7 +149,6 @@ pub struct BlockLayout {
     pub height: DocPx,
     pub page_start: PageIndex,
     pub y_in_page: DocPx,
-    pub is_split: bool,
     /// Index of the first line carried by each page after `page_start`.
     pub split_points: Vec<BlockLine>,
     /// The height of each fragment after `page_start`, one per split point. A
@@ -162,6 +163,12 @@ pub struct BlockLayout {
 }
 
 impl BlockLayout {
+    /// Whether the block is cut across pages: it carries a split point.
+    #[must_use]
+    pub fn is_split(&self) -> bool {
+        !self.split_points.is_empty()
+    }
+
     /// The pages this block has a fragment on, `page_start` included.
     #[must_use]
     pub fn page_span(&self) -> PageSpan {
@@ -391,8 +398,8 @@ fn place_one(
     // move with it.
     let whole = block.height + Cursor::new(DocPx::ZERO).foot_cost(block.notes.iter());
     let whole_page_holds_it = whole <= cursor.body_height;
-    if (whole_page_holds_it || block.keep_together || !block.splittable()) && !cursor.at_page_top()
-    {
+    let together = block.keep_together == KeepTogether::Together;
+    if (whole_page_holds_it || together || !block.splittable()) && !cursor.at_page_top() {
         cursor.open_new_page();
         // On a fresh page it is placed whether or not it fits: the page it
         // would move to is no larger (`PROSE-017`).
@@ -431,7 +438,7 @@ fn moves_to_keep_with_successor(
     if cursor.at_page_top() {
         return false;
     }
-    if !(block.keep_with_next || block.block_type == BlockType::Heading) {
+    if !(block.keep_with_next == KeepWithNext::WithNext || block.block_type == BlockType::Heading) {
         return false;
     }
     let Some(next) = successor else {
@@ -457,7 +464,6 @@ fn emit_whole(block: &MeasuredBlock, cursor: &mut Cursor, placed: &mut Vec<Block
         height: block.height,
         page_start: cursor.page,
         y_in_page: y,
-        is_split: false,
         split_points: Vec::new(),
         continuation_heights: Vec::new(),
         notes,
@@ -502,7 +508,6 @@ fn split(block: &MeasuredBlock, cursor: &mut Cursor, placed: &mut Vec<BlockLayou
         height: first_height,
         page_start,
         y_in_page: first_y,
-        is_split: !split_points.is_empty(),
         split_points,
         continuation_heights,
         notes,
@@ -591,7 +596,6 @@ fn zero_height_at(block: &MeasuredBlock, cursor: &Cursor) -> BlockLayout {
         height: DocPx::ZERO,
         page_start: cursor.page,
         y_in_page: cursor.y,
-        is_split: false,
         split_points: Vec::new(),
         continuation_heights: Vec::new(),
         notes: Vec::new(),
@@ -629,8 +633,8 @@ mod tests {
             height: DocPx::new(lines as f32 * LINE),
             space_before: DocPx::new(0.0),
             space_after: DocPx::new(0.0),
-            keep_together: false,
-            keep_with_next: false,
+            keep_together: KeepTogether::Splittable,
+            keep_with_next: KeepWithNext::Free,
             metrics: Some(metrics(lines)),
             notes: Vec::new(),
             run: None,
@@ -645,8 +649,8 @@ mod tests {
             height: DocPx::new(height_px),
             space_before: DocPx::new(0.0),
             space_after: DocPx::new(0.0),
-            keep_together: false,
-            keep_with_next: false,
+            keep_together: KeepTogether::Splittable,
+            keep_with_next: KeepWithNext::Free,
             metrics: None,
             notes: Vec::new(),
             run: None,
@@ -724,7 +728,7 @@ mod tests {
         // (`PROSE-075`).
         let placement = place(&[text(1, 4), text(2, 8)], DocPx::new(BODY));
         let second = &placement.blocks[1];
-        assert!(!second.is_split);
+        assert!(!second.is_split());
         assert_eq!(second.page_start, crate::events::PageIndex::new(1));
         assert_eq!(second.y_in_page, DocPx::new(0.0));
     }
@@ -733,7 +737,7 @@ mod tests {
     fn a_block_taller_than_a_page_splits_and_its_continuation_starts_at_the_top() {
         let placement = place(&[text(1, 25)], DocPx::new(BODY));
         let block = &placement.blocks[0];
-        assert!(block.is_split);
+        assert!(block.is_split());
         assert_eq!(block.page_start, crate::events::PageIndex::new(0));
         assert_eq!(placement.page_count, crate::events::PageCount::new(3));
         assert_eq!(block.split_points.len(), block.continuation_heights.len());
@@ -752,7 +756,7 @@ mod tests {
             let filler = text(1, room_lines);
             let placement = place(&[filler, text(2, 11)], DocPx::new(BODY));
             let block = &placement.blocks[1];
-            if !block.is_split {
+            if !block.is_split() {
                 continue;
             }
             let first = block.split_points[0].lines_before();
@@ -776,7 +780,7 @@ mod tests {
         // splits rather than losing a line (`PROSE-072` relaxed).
         let placement = place(&[text(1, 9), text(2, 3)], DocPx::new(BODY));
         let block = &placement.blocks[1];
-        assert!(block.is_split || block.page_start == crate::events::PageIndex::new(1));
+        assert!(block.is_split() || block.page_start == crate::events::PageIndex::new(1));
         nothing_overflows(&placement, BODY);
     }
 
@@ -810,7 +814,7 @@ mod tests {
     fn a_heading_is_never_cut_however_tall_it_is() {
         let tall = of_type(1, BlockType::Heading, BODY * 3.0);
         let placement = place(&[tall], DocPx::new(BODY));
-        assert!(!placement.blocks[0].is_split);
+        assert!(!placement.blocks[0].is_split());
         assert!(placement.blocks[0].split_points.is_empty());
     }
 
@@ -818,7 +822,7 @@ mod tests {
     fn an_image_is_never_cut_and_moves_to_a_page_of_its_own() {
         let blocks = [text(1, 5), of_type(2, BlockType::Image, 8.0 * LINE)];
         let placement = place(&blocks, DocPx::new(BODY));
-        assert!(!placement.blocks[1].is_split);
+        assert!(!placement.blocks[1].is_split());
         assert_eq!(
             placement.blocks[1].page_start,
             crate::events::PageIndex::new(1)
@@ -828,9 +832,9 @@ mod tests {
     #[test]
     fn a_block_kept_together_moves_whole_where_a_page_can_hold_it() {
         let mut kept = text(2, 8);
-        kept.keep_together = true;
+        kept.keep_together = KeepTogether::Together;
         let placement = place(&[text(1, 5), kept], DocPx::new(BODY));
-        assert!(!placement.blocks[1].is_split);
+        assert!(!placement.blocks[1].is_split());
         assert_eq!(
             placement.blocks[1].page_start,
             crate::events::PageIndex::new(1)
@@ -840,9 +844,9 @@ mod tests {
     #[test]
     fn a_block_kept_together_and_taller_than_a_page_splits_all_the_same() {
         let mut kept = text(1, 30);
-        kept.keep_together = true;
+        kept.keep_together = KeepTogether::Together;
         let placement = place(&[kept], DocPx::new(BODY));
-        assert!(placement.blocks[0].is_split);
+        assert!(placement.blocks[0].is_split());
         nothing_overflows(&placement, BODY);
     }
 
@@ -938,8 +942,8 @@ mod properties {
 
     use super::tests::{nothing_overflows, of_type, text};
     use super::{
-        BlockLayout, BlockLine, BlockLineCount, BlockType, Cursor, MIN_LINES_AT_BREAK,
-        MeasuredBlock, PageCount, PageIndex, cursor_after, place, place_tail,
+        BlockLayout, BlockLine, BlockLineCount, BlockType, Cursor, KeepTogether, KeepWithNext,
+        MIN_LINES_AT_BREAK, MeasuredBlock, PageCount, PageIndex, cursor_after, place, place_tail,
     };
 
     /// One block of any shape placement has to take.
@@ -954,8 +958,8 @@ mod properties {
             }),
             (1u32..40, any::<bool>(), any::<bool>()).prop_map(move |(lines, together, with)| {
                 let mut block = text(n, lines);
-                block.keep_together = together;
-                block.keep_with_next = with;
+                block.keep_together = KeepTogether::from_bool(together);
+                block.keep_with_next = KeepWithNext::from_bool(with);
                 block
             }),
             (0.0f32..700.0).prop_map(move |h| of_type(n, BlockType::Image, h)),
@@ -1009,7 +1013,6 @@ mod properties {
             let placement = place(&blocks, DocPx::new(body));
             for block in &placement.blocks {
                 prop_assert_eq!(block.split_points.len(), block.continuation_heights.len());
-                prop_assert_eq!(block.is_split, !block.split_points.is_empty());
                 for pair in block.split_points.windows(2) {
                     let [first, second] = pair else { continue };
                     prop_assert!(second > first);
@@ -1026,7 +1029,7 @@ mod properties {
             let placement = place(&blocks, DocPx::new(body));
             for block in &placement.blocks {
                 if matches!(block.block_type, BlockType::Heading | BlockType::Image) {
-                    prop_assert!(!block.is_split);
+                    prop_assert!(!block.is_split());
                 }
             }
         }
@@ -1087,7 +1090,7 @@ mod properties {
             let document = vec![text(1, filler.max(1)), text(2, lines)];
             let placement = place(&document, DocPx::new(body));
             let block = &placement.blocks[1];
-            if !block.is_split {
+            if !block.is_split() {
                 return Ok(());
             }
             let mut previous = BlockLine::ZERO;

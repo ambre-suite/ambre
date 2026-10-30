@@ -6,6 +6,7 @@
 //! that paints (`PROSE-UI-006`, `PROSE-UI-114`). A run holds no GPU handle
 //! and nothing bound to a thread, so it crosses by move (`PROSE-UI-113`).
 
+use ambre_bus::app::grid::{Row, RowSpan, RowVec};
 use ambre_bus::app::prose::{PageIndex, PageSpan};
 use ambre_core::Rgba;
 use std::collections::HashMap;
@@ -155,6 +156,19 @@ ambre_core::define_index! {
     pub struct LocalLineVec;
 }
 
+ambre_core::define_index! {
+    /// A segment of one run, the first being zero.
+    pub struct RunSegment(usize);
+    /// A number of segments of one run.
+    pub struct RunSegmentCount;
+    /// The signed gap between two segments of one run.
+    pub struct RunSegmentDelta(isize);
+    /// A stretch of segments of one run.
+    pub struct RunSegmentSpan;
+    /// A list indexed by segment of one run.
+    pub struct RunSegmentVec;
+}
+
 /// One stretch of a run's lines, shaped on its own (`PROSE-128`).
 ///
 /// A run shaped whole is one segment. An edit re-shapes a window from the
@@ -216,7 +230,7 @@ pub(crate) struct Resume {
 /// the shift that moves its segment's coordinates to the run's.
 #[derive(Clone, Copy, Debug)]
 struct LineAt {
-    segment: usize,
+    segment: RunSegment,
     local: LocalLine,
     top: DocPx,
     shift: DocPx,
@@ -226,7 +240,7 @@ struct LineAt {
 /// hit-test.
 pub struct ParleyRunData {
     /// The shaped stretches of the text, in order. Never empty.
-    segments: Vec<Segment>,
+    segments: RunSegmentVec<Segment>,
     /// Every line of the run, in order, across the segments.
     lines: RunLineVec<LineAt>,
     /// The height every line takes, summed as the shaper sums it.
@@ -263,14 +277,14 @@ impl ParleyRunData {
         char_starts.push(ByteCount::from_len(text.len()).as_end());
         let lines = LocalLineCount::from_len(layout.len());
         let mut data = Self {
-            segments: vec![Segment {
+            segments: RunSegmentVec::from(vec![Segment {
                 layout: Arc::new(layout),
                 start: ByteOffset::ZERO,
                 local_start: LocalByte::ZERO,
                 skip: LocalLine::ZERO,
                 lines,
                 first_line: RunLine::ZERO,
-            }],
+            }]),
             lines: RunLineVec::new(),
             height: DocPx::ZERO,
             char_starts,
@@ -302,7 +316,8 @@ impl ParleyRunData {
         resume: Option<Resume>,
     ) -> Option<Self> {
         let start = previous.line_start(cut)?;
-        let mut segments: Vec<Segment> = Vec::with_capacity(previous.segments.len() + 2);
+        let mut segments =
+            RunSegmentVec::from(Vec::with_capacity(previous.segments.len().to_usize() + 2));
         for segment in &previous.segments {
             if segment.first_line >= cut {
                 break;
@@ -323,7 +338,8 @@ impl ParleyRunData {
         });
         if let Some(resume) = resume {
             let at = previous.lines.get(resume.line)?;
-            for (index, segment) in previous.segments.iter().enumerate().skip(at.segment) {
+            let later = previous.segments.iter_enumerated();
+            for (index, segment) in later.filter(|(index, _)| *index >= at.segment) {
                 let mut kept = segment.clone();
                 if index == at.segment {
                     if at.local < segment.skip {
@@ -367,7 +383,7 @@ impl ParleyRunData {
     /// How many shaped stretches the run holds: one for a run shaped whole,
     /// or shaped again from its first line to its end.
     #[must_use]
-    pub fn segment_count(&self) -> usize {
+    pub fn segment_count(&self) -> RunSegmentCount {
         self.segments.len()
     }
 
@@ -396,7 +412,10 @@ impl ParleyRunData {
         let mut lines = RunLineVec::new();
         let mut top = DocPx::ZERO;
         let mut y = 0.0_f64;
-        for (index, segment) in self.segments.iter_mut().enumerate() {
+        for index in self.segments.positions() {
+            let Some(segment) = self.segments.get_mut(index) else {
+                continue;
+            };
             segment.first_line = lines.len().as_end();
             let mut local_y: f64 = segment
                 .layout
@@ -581,7 +600,7 @@ impl ParleyRunData {
         }
         let (from, to) = (self.byte_of(span.start), self.byte_of(span.end));
         let mut boxes = Vec::new();
-        for (index, segment) in self.segments.iter().enumerate() {
+        for (index, segment) in self.segments.iter_enumerated() {
             let segment_end = self.segment_end(index);
             let local_from = from.max(segment.start);
             let local_to = to.min(segment_end);
@@ -783,20 +802,26 @@ impl ParleyRunData {
     /// The segment a caret falls in, and the caret there. A byte where one
     /// segment ends and the next starts is the end of the first upstream,
     /// and the start of the second downstream.
-    fn cursor(&self, offset: RunOffset, affinity: Affinity) -> (usize, Cursor) {
+    fn cursor(&self, offset: RunOffset, affinity: Affinity) -> (RunSegment, Cursor) {
         let upstream = affinity == Affinity::Upstream;
         let byte = self.byte_of(offset);
-        let mut index = self
+        let after = self
             .segments
-            .partition_point(|segment| segment.start <= byte)
-            .saturating_sub(1);
-        if upstream && index > 0 && self.segments.get(index).is_some_and(|s| s.start == byte) {
-            index -= 1;
+            .as_slice()
+            .partition_point(|segment| segment.start <= byte);
+        let mut index = RunSegment::from_usize(after.saturating_sub(1));
+        let starts_here = self.segments.get(index).is_some_and(|s| s.start == byte);
+        if let Some(before) = index.prev().filter(|_| upstream && starts_here) {
+            index = before;
         }
         // `segments` is never empty, so the first one always answers. The
         // default caret only stands in for a run built without one.
-        let Some(segment) = self.segments.get(index).or_else(|| self.segments.first()) else {
-            return (0, Cursor::default());
+        let Some(segment) = self
+            .segments
+            .get(index)
+            .or_else(|| self.segments.get(RunSegment::ZERO))
+        else {
+            return (RunSegment::ZERO, Cursor::default());
         };
         let local = segment.to_local(byte);
         (
@@ -807,9 +832,9 @@ impl ParleyRunData {
 
     /// The byte segment `index` stops at: where the next one starts, or the
     /// end of the text.
-    fn segment_end(&self, index: usize) -> ByteOffset {
+    fn segment_end(&self, index: RunSegment) -> ByteOffset {
         self.segments
-            .get(index + 1)
+            .get(index.next())
             .map_or(ByteCount::from_len(self.text.len()).as_end(), |next| {
                 next.start
             })
@@ -817,7 +842,7 @@ impl ParleyRunData {
 
     /// The run's line that a box of segment `index` sits on. The middle of
     /// the box picks it, among the lines the run keeps of that segment.
-    fn line_under(&self, index: usize, rect: &BoundingBox) -> Option<LineAt> {
+    fn line_under(&self, index: RunSegment, rect: &BoundingBox) -> Option<LineAt> {
         let segment = self.segments.get(index)?;
         let middle = ((rect.y0 + rect.y1) / 2.0) as f32;
         let kept = LocalLineSpan::from_count(segment.skip, segment.lines.max(LocalLineCount::ONE));
@@ -1006,7 +1031,20 @@ pub struct ShapedLayout {
     ends: Option<TextEnds>,
     /// The blocks each page of the window shows, by their place in the flow.
     /// A frame reads its pages and never the whole document (`PROSE-UI-007`).
-    page_blocks: Vec<Vec<FlowIndex>>,
+    page_blocks: WindowPageVec<Vec<FlowIndex>>,
+}
+
+ambre_core::define_index! {
+    /// A page of the window a layout carries, its first page being zero.
+    pub struct WindowPage(usize);
+    /// A number of pages of the window.
+    pub struct WindowPageCount;
+    /// The signed gap between two pages of the window.
+    pub struct WindowPageDelta(isize);
+    /// A stretch of pages of the window.
+    pub struct WindowPageSpan;
+    /// A list indexed by page of the window.
+    pub struct WindowPageVec;
 }
 
 /// Where a text block sits in the tables of a layout.
@@ -1109,7 +1147,8 @@ impl ShapedLayout {
     #[must_use]
     pub fn with_window(mut self, window: Window) -> Self {
         let first = window.pages.start;
-        let mut page_blocks = vec![Vec::new(); window.pages.len().to_usize()];
+        let mut page_blocks: WindowPageVec<Vec<FlowIndex>> =
+            vec![Vec::new(); window.pages.len().to_usize()].into();
         for (local, block) in self.layout.blocks.iter().enumerate() {
             for page in block.page_span() {
                 let at = page_offset(first, page);
@@ -1191,8 +1230,8 @@ impl ShapedLayout {
 }
 
 /// The place of `page` in a window that starts at `first`, `None` before it.
-fn page_offset(first: PageIndex, page: PageIndex) -> Option<usize> {
-    (page >= first).then(|| page.count_from(first).to_usize())
+fn page_offset(first: PageIndex, page: PageIndex) -> Option<WindowPage> {
+    (page >= first).then(|| WindowPage::from_usize(page.count_from(first).to_usize()))
 }
 
 /// Every block of `blocks`, by its place in the flow.
@@ -1232,8 +1271,16 @@ where
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct TableShape {
     /// The top of each row from the table's top, and the bottom of the last.
-    pub row_tops: Vec<DocPx>,
+    pub row_tops: RowVec<DocPx>,
     pub cells: Vec<CellShape>,
+}
+
+impl TableShape {
+    /// The top of `row` from the table's top. The row past the last one
+    /// answers the bottom of the table, and a row past that `None`.
+    pub(crate) fn row_top(&self, row: Row) -> Option<DocPx> {
+        self.row_tops.get(row).copied()
+    }
 }
 
 /// One cell drawn, or one merged region drawn as a single cell.
@@ -1243,8 +1290,8 @@ pub struct CellShape {
     pub cell: TreeID,
     pub x: DocPx,
     pub width: DocPx,
-    /// The rows the cell spans, the last one excluded.
-    pub rows: std::ops::Range<usize>,
+    /// The rows the cell spans.
+    pub rows: RowSpan,
     /// The text blocks the cell holds, each with its top from the top of the
     /// padded box, before the vertical alignment moves them.
     pub blocks: Vec<(TreeID, DocPx, ShapedRun)>,
@@ -1315,6 +1362,17 @@ mod tests {
             &ParagraphStyle::default(),
             ambre_core::Weight::Regular,
         )
+    }
+
+    /// A shaped run is document text, so its `Debug` prints counts and
+    /// never the text.
+    #[test]
+    fn a_shaped_run_prints_counts_and_never_its_text() {
+        let mut measurer = shipped_measurer();
+        let (_, run) = measurer.measure_run("confidential", &style(), DocPx::new(400.0));
+        let printed = format!("{run:?} {:?}", run.data());
+        assert!(!printed.contains("confidential"), "{printed}");
+        assert!(printed.contains("chars: RunCount(12)"), "{printed}");
     }
 
     #[test]

@@ -10,14 +10,15 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::{
-    BlockType, DocOffset, FootnoteOrdinal, PageCount, PageIndex, PageNumber, ParagraphStyle,
+    BlockType, DocOffset, FootnoteOrdinal, KeepTogether, KeepWithNext, PageCount, PageIndex,
+    PageNumber, ParagraphStyle,
 };
 use ambre_core::{DocPx, FootnoteId, Pt};
 use ambre_draw::ScriptSet;
 use loro::{LoroDoc, LoroTree, LoroValue, TreeID};
 
 use crate::doc;
-use crate::events::grid::{CellPos, Col, Row};
+use crate::events::grid::{CellPos, Col, ColCount, Row, RowCount, RowSpan, RowVec};
 use crate::layout::geometry::PageBox;
 use crate::layout::measure::{BlockLine, BlockLineCount, EffectiveStyle, Measurer, TextMetrics};
 use crate::layout::place::{self, BlockLayout, FootnoteLayout, MeasuredBlock, NoteCall, Placement};
@@ -143,6 +144,29 @@ pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc) -> PageLayout {
 /// The room between a note's number and its text, in pixels.
 pub const NOTE_GAP: DocPx = DocPx::new(4.0);
 
+/// One reachable note: its id, its ordinal, its text and the marked spans
+/// of it (`PROSE-UI-207`).
+///
+/// The text is document content, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq)]
+pub(crate) struct NoteKey {
+    id: FootnoteId,
+    ordinal: FootnoteOrdinal,
+    text: String,
+    marks: Vec<crate::layout::measure::MarkedSpan>,
+}
+
+impl std::fmt::Debug for NoteKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NoteKey")
+            .field("id", &self.id)
+            .field("ordinal", &self.ordinal)
+            .field("text", &crate::redact::Redacted(&self.text))
+            .field("marks", &self.marks)
+            .finish()
+    }
+}
+
 /// Every footnote numbered and measured, before any block is placed
 /// (`PROSE-117`).
 ///
@@ -151,15 +175,6 @@ pub const NOTE_GAP: DocPx = DocPx::new(4.0);
 /// (`PROSE-099`). A note's text is shaped alone, as the run of its block, with
 /// its number beside it. An offset in the run is an offset in the block, so
 /// the caret reads a note like any other text (`PROSE-UI-187`).
-/// One reachable note: its id, its ordinal, its text and the marked spans
-/// of it (`PROSE-UI-207`).
-pub(crate) type NoteKey = (
-    FootnoteId,
-    FootnoteOrdinal,
-    String,
-    Vec<crate::layout::measure::MarkedSpan>,
-);
-
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct NotePlan {
     /// What the plan was read from: each reachable note, its ordinal, its
@@ -192,7 +207,12 @@ impl NotePlan {
                 let (text, marks) = note::body(document, &id)
                     .map(|body| crate::layout::measure::marked_text(&body))
                     .unwrap_or_default();
-                (id, ordinal, text, marks)
+                NoteKey {
+                    id,
+                    ordinal,
+                    text,
+                    marks,
+                }
             })
             .collect()
     }
@@ -214,7 +234,13 @@ impl NotePlan {
         let mut numbers = HashMap::with_capacity(key.len());
         let mut texts = Vec::with_capacity(key.len());
         let mut notes = HashMap::with_capacity(key.len());
-        for (id, ordinal, text, marks) in &key {
+        for NoteKey {
+            id,
+            ordinal,
+            text,
+            marks,
+        } in &key
+        {
             let Some(block) = note::block(document, id) else {
                 continue;
             };
@@ -235,10 +261,8 @@ impl NotePlan {
             notes.insert(*id, (*ordinal, height, block));
         }
         let mut calls: HashMap<TreeID, Vec<(DocOffset, FootnoteId)>> = HashMap::new();
-        for anchor in doc::anchors(document, crate::mark::MarkRoot::Footnote) {
-            let Ok(id) = FootnoteId::parse_str(&anchor.value) else {
-                continue;
-            };
+        for anchor in note::footnote_calls(document) {
+            let id = anchor.value;
             if notes.contains_key(&id) {
                 calls
                     .entry(anchor.block)
@@ -404,8 +428,8 @@ pub(crate) fn measure_band(
             height: DocPx::ZERO,
             space_before: DocPx::ZERO,
             space_after: DocPx::ZERO,
-            keep_together: false,
-            keep_with_next: false,
+            keep_together: KeepTogether::Splittable,
+            keep_with_next: KeepWithNext::Free,
             metrics: None,
             notes: Vec::new(),
             run: None,
@@ -701,7 +725,11 @@ fn table_metrics(
         return (empty, TableShape::default());
     };
     let cols = grid.cells.iter().map(Vec::len).max().unwrap_or(0);
-    let widths = column_widths(&doc::col_widths(tree, table), cols, content_width);
+    let widths = column_widths(
+        &doc::col_widths(tree, table),
+        ColCount::from_len(cols),
+        content_width,
+    );
     let mut col_x = Vec::with_capacity(cols + 1);
     col_x.push(DocPx::ZERO);
     for width in &widths {
@@ -745,7 +773,7 @@ fn table_metrics(
                 cell: *cell,
                 x,
                 width,
-                rows: row..last.row.next().to_usize(),
+                rows: RowSpan::new(at.row, last.row.next()),
                 blocks,
                 content_height: top,
                 style,
@@ -755,25 +783,28 @@ fn table_metrics(
 
     // Single-row cells first, then each region takes what it lacks from the
     // last row it spans.
-    let mut row_heights = vec![DocPx::ZERO; grid.rows.len()];
+    let mut row_heights: RowVec<DocPx> = vec![DocPx::ZERO; grid.rows.len()].into();
     for (cell, height) in cells.iter().zip(&heights) {
-        if cell.rows.len() == 1
+        if cell.rows.len() == RowCount::ONE
             && let Some(slot) = row_heights.get_mut(cell.rows.start)
         {
             *slot = slot.max(*height);
         }
     }
     for (cell, height) in cells.iter().zip(&heights) {
-        if cell.rows.len() > 1 {
+        if cell.rows.len() > RowCount::ONE {
+            // A span the grid does not hold whole sums to nothing, as the
+            // slice read gave before the rows were typed.
             let spanned: DocPx = row_heights
-                .get(cell.rows.clone())
-                .map_or(DocPx::ZERO, |r| r.iter().copied().sum());
-            if let Some(last) = row_heights.get_mut(cell.rows.end - 1) {
+                .as_slice()
+                .get(cell.rows.to_usize_range())
+                .map_or(DocPx::ZERO, |rows| rows.iter().copied().sum());
+            if let Some(last) = cell.rows.last().and_then(|row| row_heights.get_mut(row)) {
                 *last += (*height - spanned).max(DocPx::ZERO);
             }
         }
     }
-    let mut row_tops = vec![DocPx::ZERO];
+    let mut row_tops = RowVec::from(vec![DocPx::ZERO]);
     let mut height = DocPx::ZERO;
     for row_height in &row_heights {
         height += *row_height;
@@ -781,8 +812,8 @@ fn table_metrics(
     }
     let metrics = TextMetrics {
         text_height: height,
-        line_count: BlockLineCount::from_len(row_heights.len()),
-        line_tops: row_tops.clone(),
+        line_count: BlockLineCount::from_len(row_heights.len().to_usize()),
+        line_tops: row_tops.as_slice().to_vec(),
     };
     (metrics, TableShape { row_tops, cells })
 }
@@ -790,20 +821,20 @@ fn table_metrics(
 /// Each column's width in pixels. The stored widths are points, one per
 /// column. A list that does not match the grid, or holds an unusable width,
 /// gives every column an equal share.
-pub(crate) fn column_widths(stored: &[Pt], cols: usize, content_width: DocPx) -> Vec<DocPx> {
-    let usable = stored.len() == cols
+pub(crate) fn column_widths(stored: &[Pt], cols: ColCount, content_width: DocPx) -> Vec<DocPx> {
+    let usable = ColCount::from_len(stored.len()) == cols
         && stored
             .iter()
             .all(|width| width.is_finite() && *width > Pt::ZERO);
     if usable {
         stored.iter().map(|width| width.to_doc_px()).collect()
     } else {
-        let share = if cols == 0 {
+        let share = if cols.is_zero() {
             content_width
         } else {
-            content_width / cols as f32
+            content_width / cols.get() as f32
         };
-        vec![share; cols]
+        vec![share; cols.to_usize()]
     }
 }
 
@@ -894,6 +925,17 @@ fn string_at(attrs: &doc::Fields<doc::AttrKey>, key: doc::AttrKey) -> Option<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_note_key_prints_its_text_by_length_alone() {
+        let key = NoteKey {
+            id: FootnoteId::new(),
+            ordinal: FootnoteOrdinal::FIRST,
+            text: "private note".into(),
+            marks: Vec::new(),
+        };
+        assert!(crate::redact::tests::hides(&key, "private note"));
+    }
 
     /// A document with one block per type the caller names, all at the root.
     fn document_of(types: &[BlockType]) -> (LoroDoc, Vec<TreeID>) {

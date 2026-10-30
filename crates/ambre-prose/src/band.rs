@@ -128,28 +128,111 @@ fn field_value(
 /// in `1 ..= 31`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CivilDate {
-    year: i64,
-    month: u32,
-    day: u32,
+    year: Year,
+    month: Month,
+    day: Day,
 }
 
 impl CivilDate {
     /// The year of the common era.
     #[must_use]
-    pub const fn year(self) -> i64 {
+    pub const fn year(self) -> Year {
         self.year
     }
 
     /// The month, from one.
     #[must_use]
-    pub const fn month(self) -> u32 {
+    pub const fn month(self) -> Month {
         self.month
     }
 
     /// The day of the month, from one.
     #[must_use]
-    pub const fn day(self) -> u32 {
+    pub const fn day(self) -> Day {
         self.day
+    }
+}
+
+/// A year of the common era, before or after year zero.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Year(i64);
+
+impl Year {
+    /// The year `value` of the common era.
+    #[must_use]
+    pub const fn new(value: i64) -> Self {
+        Self(value)
+    }
+
+    /// The year as a number, for the text a date prints.
+    #[must_use]
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
+/// A month of the year, January being one. No other value builds one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Month(u8);
+
+impl Month {
+    /// The month `value`, `None` outside `1 ..= 12`.
+    #[must_use]
+    pub fn new(value: u32) -> Option<Self> {
+        u8::try_from(value)
+            .ok()
+            .filter(|month| (1..=12).contains(month))
+            .map(Self)
+    }
+
+    /// The month as a number from one, for the text a date prints.
+    #[must_use]
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+
+    /// The place of the month in a list of twelve names, January at zero.
+    fn index(self) -> usize {
+        usize::from(self.0).saturating_sub(1)
+    }
+}
+
+/// A day of the month, the first being one. No value past 31 builds one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Day(u8);
+
+impl Day {
+    /// The day `value`, `None` outside `1 ..= 31`.
+    #[must_use]
+    pub fn new(value: u32) -> Option<Self> {
+        u8::try_from(value)
+            .ok()
+            .filter(|day| (1..=31).contains(day))
+            .map(Self)
+    }
+
+    /// The day as a number from one, for the text a date prints.
+    #[must_use]
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for Year {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl std::fmt::Display for Month {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl std::fmt::Display for Day {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -181,10 +264,15 @@ pub fn civil_date(at: Timestamp) -> CivilDate {
         shifted_month - 9
     };
     let year = year_of_era + era * 400 + i64::from(month <= 2);
+    // The algorithm gives a month in 1 ..= 12 and a day in 1 ..= 31. The
+    // fallbacks stand in for a value it never answers.
     CivilDate {
-        year,
-        month: u32::try_from(month).unwrap_or(1),
-        day: u32::try_from(day).unwrap_or(1),
+        year: Year::new(year),
+        month: u32::try_from(month)
+            .ok()
+            .and_then(Month::new)
+            .unwrap_or(Month(1)),
+        day: u32::try_from(day).ok().and_then(Day::new).unwrap_or(Day(1)),
     }
 }
 
@@ -306,10 +394,7 @@ pub fn format_date(at: Timestamp, format: DateFieldFormat, lang: Option<&LangTag
         return iso;
     };
     let primary = lang.primary();
-    let name = names
-        .get(usize::try_from(month).unwrap_or(1).saturating_sub(1))
-        .copied()
-        .unwrap_or("");
+    let name = names.get(month.index()).copied().unwrap_or("");
     match (format, primary.as_str()) {
         (DateFieldFormat::Short, "en") => format!("{month}/{day}/{year}"),
         (DateFieldFormat::Short, "de") => format!("{day:02}.{month:02}.{year}"),
@@ -332,7 +417,23 @@ mod tests {
 
     fn ymd(at: Timestamp) -> (i64, u32, u32) {
         let date = civil_date(at);
-        (date.year(), date.month(), date.day())
+        (
+            date.year().get(),
+            u32::from(date.month().get()),
+            u32::from(date.day().get()),
+        )
+    }
+
+    /// A month past twelve, or a day past 31, builds no date part.
+    #[test]
+    fn a_month_or_a_day_out_of_the_calendar_is_refused() {
+        assert_eq!(Month::new(0), None);
+        assert_eq!(Month::new(13), None);
+        assert_eq!(Month::new(12).map(Month::get), Some(12));
+        assert_eq!(Day::new(0), None);
+        assert_eq!(Day::new(32), None);
+        assert_eq!(Day::new(256), None);
+        assert_eq!(Day::new(31).map(Day::get), Some(31));
     }
 
     /// The stored marks are document bytes: each field keeps the pair it

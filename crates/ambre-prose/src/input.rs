@@ -13,7 +13,7 @@ use ambre_core::{StepDirection, ViewPoint, ViewPx};
 
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
 use crate::layout::run::Affinity;
-use crate::ui::{ProseUiState, SendResult};
+use crate::ui::{BlockWait, ProseUiState, SendResult, SyncHold};
 use crate::view::caret::{Direction, SelectUnit, Spot};
 
 /// Two presses closer than this in time, and in place, count as one gesture.
@@ -78,7 +78,10 @@ impl ProseKey {
 
 /// One input, as the host hands it over. Points are pixels of the view, from
 /// the canvas's corner.
-#[derive(Clone, Debug, PartialEq)]
+///
+/// The text an input carries is the user's, so `Debug` prints its length
+/// alone.
+#[derive(Clone, PartialEq)]
 pub enum ProseInput {
     Key {
         key: ProseKey,
@@ -122,6 +125,43 @@ pub enum ProseInput {
         html: Option<String>,
         rich: Option<ambre_core::ClipboardBytes>,
     },
+}
+
+impl std::fmt::Debug for ProseInput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::redact::{Redacted, optional};
+        match self {
+            Self::Key { key, mods } => f
+                .debug_struct("Key")
+                .field("key", key)
+                .field("mods", mods)
+                .finish(),
+            Self::Text(text) => f.debug_tuple("Text").field(&Redacted(text)).finish(),
+            Self::Press { at, mods, now } => f
+                .debug_struct("Press")
+                .field("at", at)
+                .field("mods", mods)
+                .field("now", now)
+                .finish(),
+            Self::Drag { at } => f.debug_struct("Drag").field("at", at).finish(),
+            Self::Release => f.write_str("Release"),
+            Self::Drop { at, text } => f
+                .debug_struct("Drop")
+                .field("at", at)
+                .field("text", &Redacted(text))
+                .finish(),
+            Self::SlashPick(choice) => f.debug_tuple("SlashPick").field(choice).finish(),
+            Self::Compose(text) => f.debug_tuple("Compose").field(&Redacted(text)).finish(),
+            Self::ComposeEnd(text) => f.debug_tuple("ComposeEnd").field(&Redacted(text)).finish(),
+            Self::Copy(write) => f.debug_tuple("Copy").field(write).finish(),
+            Self::Paste { text, html, rich } => f
+                .debug_struct("Paste")
+                .field("text", &Redacted(text))
+                .field("html", &optional(html.as_ref()))
+                .field("rich", rich)
+                .finish(),
+        }
+    }
 }
 
 /// A command sent, as the view keeps track of it.
@@ -175,7 +215,30 @@ impl Sent {
 pub(crate) struct Press {
     at: ViewPoint,
     pressed_at: ambre_core::PageTime,
-    count: u8,
+    clicks: Clicks,
+}
+
+/// Where a press stands in a run of presses in one place. A fourth press
+/// starts the run again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Clicks {
+    /// A press alone: it places the caret.
+    Single,
+    /// The second press: it selects a word.
+    Double,
+    /// The third press: it selects a paragraph.
+    Triple,
+}
+
+impl Clicks {
+    /// The press after this one in the same run.
+    fn next(self) -> Self {
+        match self {
+            Self::Single => Self::Double,
+            Self::Double => Self::Triple,
+            Self::Triple => Self::Single,
+        }
+    }
 }
 
 impl ProseUiState {
@@ -220,7 +283,7 @@ impl ProseUiState {
         };
         self.sent_seen = sent_seen;
         if synced {
-            self.syncs.push_back(false);
+            self.syncs.push_back(SyncHold::Passes);
         }
         let mut barrier = false;
         for note in sent {
@@ -243,7 +306,7 @@ impl ProseUiState {
         }
         if barrier && send(ProseCommand::Sync { seen: self.seen }).accepted() {
             self.sent_seen = self.seen;
-            self.syncs.push_back(true);
+            self.syncs.push_back(SyncHold::Holds);
         }
         consumed
     }
@@ -286,7 +349,7 @@ impl ProseUiState {
 
     /// Whether a structural command is still unanswered.
     fn waiting(&self) -> bool {
-        self.syncs.iter().any(|holds| *holds)
+        self.syncs.contains(&SyncHold::Holds)
     }
 
     /// Act on the input held while a structural command was unanswered, in
@@ -301,7 +364,7 @@ impl ProseUiState {
             && send(ProseCommand::Sync { seen: self.seen }).accepted()
         {
             self.sent_seen = self.seen;
-            self.syncs.push_back(false);
+            self.syncs.push_back(SyncHold::Passes);
         }
         let mut consumed = false;
         while !self.waiting() {
@@ -830,27 +893,27 @@ impl ProseUiState {
                 style_id: None,
             };
             if send(command).accepted() {
-                self.awaiting_block = true;
+                self.awaiting_block = BlockWait::Awaiting;
             }
             return true;
         }
         let Some(spot) = self.place_at(at) else {
             return false;
         };
-        let count = match self.last_press {
+        let clicks = match self.last_press {
             Some(last)
                 if now - last.pressed_at <= MULTI_PRESS_WINDOW
                     && (at.x - last.at.x).abs() <= MULTI_PRESS
                     && (at.y - last.at.y).abs() <= MULTI_PRESS =>
             {
-                last.count % 3 + 1
+                last.clicks.next()
             }
-            _ => 1,
+            _ => Clicks::Single,
         };
         self.last_press = Some(Press {
             at,
             pressed_at: now,
-            count,
+            clicks,
         });
         // A caret in a header or a footer shows on the page it was placed
         // on, since every page draws the band (`PROSE-UI-033`).
@@ -861,18 +924,18 @@ impl ProseUiState {
             .cursor
             .as_ref()
             .map_or(spot, |c| c.anchor.unwrap_or((c.block_id, c.offset)));
-        match count {
-            1 if mode == SelectionMode::Extend && self.joins(anchor, spot) => {
+        match clicks {
+            Clicks::Single if mode == SelectionMode::Extend && self.joins(anchor, spot) => {
                 self.start_drag(anchor);
                 self.update_drag(at);
             }
-            1 => {
+            Clicks::Single => {
                 // A plain press collapses the selection (`PROSE-UI-154`).
                 self.set_caret(spot);
                 self.start_drag(spot);
             }
-            2 => self.select_around(spot, SelectUnit::Word),
-            _ => self.select_around(spot, SelectUnit::Paragraph),
+            Clicks::Double => self.select_around(spot, SelectUnit::Word),
+            Clicks::Triple => self.select_around(spot, SelectUnit::Paragraph),
         }
         true
     }
@@ -880,7 +943,7 @@ impl ProseUiState {
     /// A layout was taken: a caret a press asked a block for goes to the
     /// first one now (`PROSE-UI-072`).
     pub(crate) fn settle_awaited_block(&mut self) {
-        if !self.awaiting_block {
+        if self.awaiting_block == BlockWait::Idle {
             return;
         }
         let first = self
@@ -889,7 +952,7 @@ impl ProseUiState {
             .find(|(_, block)| self.shaped.blocks.contains_key(&block.block_id))
             .map(|(_, block)| crate::events::block_id(block.block_id));
         if let Some(block) = first {
-            self.awaiting_block = false;
+            self.awaiting_block = BlockWait::Idle;
             self.set_caret((block, DocOffset::ZERO));
         }
     }

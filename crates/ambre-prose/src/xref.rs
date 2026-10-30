@@ -109,16 +109,16 @@ pub fn resolve(
 /// `layout`.
 #[must_use]
 pub fn resolve_all(document: &LoroDoc, layout: Option<&PageLayout>) -> Vec<ResolvedCrossRef> {
-    doc::anchors(document, crate::mark::MarkRoot::CrossRef)
+    doc::anchors(document, crate::mark::MarkRoot::CrossRef, decode)
         .into_iter()
-        .filter_map(|anchor| {
-            let (target, kind) = decode(&anchor.value)?;
-            Some(ResolvedCrossRef {
+        .map(|anchor| {
+            let (target, kind) = anchor.value;
+            ResolvedCrossRef {
                 block_id: block_id(anchor.block),
                 offset: anchor.offset,
                 target: block_id(target),
                 shown: resolve(document, layout, &target, &kind),
-            })
+            }
         })
         .collect()
 }

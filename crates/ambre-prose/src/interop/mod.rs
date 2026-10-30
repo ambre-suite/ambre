@@ -15,11 +15,73 @@ pub mod markdown_read;
 pub mod markdown_write;
 
 use ambre_bus::app::prose::{
-    ConversionFormat, ConversionReport, ConversionWarning, DroppedElement, FootnoteOrdinal,
-    LiftedBlock, UnsupportedFeature, WarningCount,
+    CodeLang, ConversionFormat, ConversionReport, ConversionWarning, DroppedElement,
+    FootnoteOrdinal, LiftedBlock, UnsupportedFeature, WarningCount,
 };
 
+use ambre_core::{Slant, Strikethrough, Underline, Weight};
+
 use crate::doc::StoredLevel;
+use crate::mark::{InlineCode, Subscript, Superscript};
+
+ambre_core::define_flag! {
+    /// Whether a paragraph, a cell or a run carries a look of its own that
+    /// a format may not keep.
+    pub enum OwnStyle {
+        /// It carries no look of its own.
+        Plain,
+        /// It carries a look of its own.
+        Styled,
+    }
+
+    /// Whether a table merges two or more cells into one.
+    pub enum Merging {
+        /// Every cell stands alone.
+        Unmerged,
+        /// Two or more cells are one.
+        Merged,
+    }
+
+    /// Whether a document is laid out on pages.
+    pub enum Paging {
+        /// The text flows with no page format.
+        Flow,
+        /// The document has a page format.
+        Paged,
+    }
+
+    /// Whether a document draws a header or a footer.
+    pub enum Banding {
+        /// Neither band is on.
+        Bare,
+        /// A header or a footer is on.
+        Banded,
+    }
+
+    /// Whether a run lies under a comment's anchor.
+    pub enum Commenting {
+        /// No comment anchors on the run.
+        Uncommented,
+        /// A comment anchors on the run.
+        Commented,
+    }
+
+    /// Whether a run is a suggested insertion or deletion.
+    pub enum Suggesting {
+        /// The run is settled text.
+        Settled,
+        /// The run is a suggestion awaiting a decision.
+        Suggested,
+    }
+
+    /// Whether a run is a cross reference.
+    pub enum Referencing {
+        /// The run is text.
+        Text,
+        /// The run shows a cross reference.
+        Reference,
+    }
+}
 
 /// A document in flight between a format and the block tree. Held for the
 /// length of one conversion and never serialized.
@@ -31,24 +93,37 @@ pub struct ProseIr {
     pub footnotes: Vec<IrFootnote>,
 }
 
-/// What the document carries beside its blocks.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// What the document carries beside its blocks. The title is content, so
+/// `Debug` prints its length alone.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct IrMeta {
     pub title: Option<String>,
     /// The document has a page format. Every Prose document has one, and a
     /// format without pages reports it (`PROSE-IO-018`).
-    pub paged: bool,
+    pub paged: Paging,
     /// The document has a header or a footer.
-    pub bands: bool,
+    pub bands: Banding,
 }
 
-/// One block. Depth is the nesting, never a number.
-#[derive(Clone, Debug, PartialEq)]
+impl std::fmt::Debug for IrMeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IrMeta")
+            .field("title", &crate::redact::optional(self.title.as_ref()))
+            .field("paged", &self.paged)
+            .field("bands", &self.bands)
+            .finish()
+    }
+}
+
+/// One block. Depth is the nesting, never a number. The text of a code block
+/// and the alternative text of an image are content. So `Debug` prints their
+/// length alone, and a run prints its own the same way.
+#[derive(Clone, PartialEq)]
 pub enum IrBlock {
     Paragraph {
         /// The paragraph carries a named style, or alignment, indents or
         /// spacing of its own.
-        styled: bool,
+        styled: OwnStyle,
         runs: Vec<IrRun>,
     },
     /// The level is the stored one, unclamped (`PROSE-FEAT-091`).
@@ -63,11 +138,11 @@ pub enum IrBlock {
     },
     Table {
         /// Two or more cells are merged into one.
-        merged: bool,
+        merged: Merging,
         rows: Vec<IrTableRow>,
     },
     CodeBlock {
-        lang: Option<String>,
+        lang: Option<CodeLang>,
         text: String,
     },
     Image {
@@ -78,6 +153,51 @@ pub enum IrBlock {
     Toc,
 }
 
+impl std::fmt::Debug for IrBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use crate::redact::Redacted;
+        match self {
+            Self::Paragraph { styled, runs } => f
+                .debug_struct("Paragraph")
+                .field("styled", styled)
+                .field("runs", runs)
+                .finish(),
+            Self::Heading { level, runs } => f
+                .debug_struct("Heading")
+                .field("level", level)
+                .field("runs", runs)
+                .finish(),
+            Self::ListItem {
+                style,
+                runs,
+                children,
+            } => f
+                .debug_struct("ListItem")
+                .field("style", style)
+                .field("runs", runs)
+                .field("children", children)
+                .finish(),
+            Self::Table { merged, rows } => f
+                .debug_struct("Table")
+                .field("merged", merged)
+                .field("rows", rows)
+                .finish(),
+            Self::CodeBlock { lang, text } => f
+                .debug_struct("CodeBlock")
+                .field("lang", lang)
+                .field("text", &Redacted(text))
+                .finish(),
+            Self::Image { alt } => f
+                .debug_struct("Image")
+                .field("alt", &Redacted(alt))
+                .finish(),
+            Self::PageBreak => f.write_str("PageBreak"),
+            Self::HRule => f.write_str("HRule"),
+            Self::Toc => f.write_str("Toc"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct IrTableRow {
     pub cells: Vec<IrTableCell>,
@@ -86,7 +206,7 @@ pub struct IrTableRow {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct IrTableCell {
     /// The cell carries a fill, a border, a padding or a vertical alignment.
-    pub styled: bool,
+    pub styled: OwnStyle,
     pub blocks: Vec<IrBlock>,
 }
 
@@ -113,23 +233,24 @@ pub enum IrOrderedStyle {
     UpperRoman,
 }
 
-/// A run of text and what it carries.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// A run of text and what it carries. The text is content, so `Debug`
+/// prints its length alone.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct IrRun {
     pub text: String,
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strikethrough: bool,
-    pub superscript: bool,
-    pub subscript: bool,
-    pub code: bool,
+    pub bold: Weight,
+    pub italic: Slant,
+    pub underline: Underline,
+    pub strikethrough: Strikethrough,
+    pub superscript: Superscript,
+    pub subscript: Subscript,
+    pub code: InlineCode,
     pub link: Option<ambre_core::LinkUrl>,
     /// A colour, a background, a size or a family.
-    pub styled: bool,
-    pub comment: bool,
-    pub suggestion: bool,
-    pub cross_ref: bool,
+    pub styled: OwnStyle,
+    pub comment: Commenting,
+    pub suggestion: Suggesting,
+    pub cross_ref: Referencing,
     /// The ordinal of the footnote this run calls.
     pub footnote_ref: Option<FootnoteOrdinal>,
 }
@@ -142,6 +263,27 @@ impl IrRun {
             text: text.into(),
             ..Self::default()
         }
+    }
+}
+
+impl std::fmt::Debug for IrRun {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IrRun")
+            .field("text", &crate::redact::Redacted(&self.text))
+            .field("bold", &self.bold)
+            .field("italic", &self.italic)
+            .field("underline", &self.underline)
+            .field("strikethrough", &self.strikethrough)
+            .field("superscript", &self.superscript)
+            .field("subscript", &self.subscript)
+            .field("code", &self.code)
+            .field("link", &self.link)
+            .field("styled", &self.styled)
+            .field("comment", &self.comment)
+            .field("suggestion", &self.suggestion)
+            .field("cross_ref", &self.cross_ref)
+            .field("footnote_ref", &self.footnote_ref)
+            .finish()
     }
 }
 

@@ -12,7 +12,7 @@ use ambre_bus::app::prose::DocSpan;
 use ambre_core::{CommentId, ReplyId};
 use loro::{LoroList, LoroMap, LoroText, TreeID, UpdateOptions};
 
-use crate::comment::{self, Span};
+use crate::comment::{self, ReplySlot, Span};
 use crate::doc;
 use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
 
@@ -138,10 +138,11 @@ impl ProseState {
             Ok(found) => found,
             Err(outcome) => return outcome,
         };
-        let removed = if index == 0 {
+        let removed = if index == ReplySlot::ZERO {
             self.remove_thread(id)
         } else {
-            list.delete(index, 1).map_err(doc::WriteError::from)
+            list.delete(index.to_usize(), 1)
+                .map_err(doc::WriteError::from)
         };
         if let Err(e) = removed {
             return Self::err_write(e);
@@ -300,15 +301,15 @@ impl ProseState {
         &self,
         id: &CommentId,
         reply: &ReplyId,
-    ) -> Result<(LoroList, usize), ProseOutcome> {
+    ) -> Result<(LoroList, ReplySlot), ProseOutcome> {
         let entry = comment::entry(&self.doc, id)
             .ok_or_else(|| ProseOutcome::refused(ProseRefusal::NoSuchComment(*id)))?;
         let list = comment::replies_of(&entry)
             .ok_or_else(|| ProseOutcome::refused(ProseRefusal::NoSuchReply(*reply)))?;
         let wanted = reply.to_hyphenated();
-        let found = (0..list.len()).find_map(|index| {
-            let map = comment::reply_at(&list, index)?;
-            (doc::read_string(&map, doc::ReplyKey::Id)? == wanted).then_some((index, map))
+        let found = comment::reply_slots(&list).into_iter().find_map(|slot| {
+            let map = comment::reply_at(&list, slot)?;
+            (doc::read_string(&map, doc::ReplyKey::Id)? == wanted).then_some((slot, map))
         });
         let Some((index, map)) = found else {
             return Err(ProseOutcome::refused(ProseRefusal::NoSuchReply(*reply)));

@@ -44,6 +44,7 @@ use crate::layout::geometry::PageBox;
 use crate::layout::measure::EffectiveStyle;
 use crate::layout::pass::{cell_style, column_widths};
 use crate::logic::ProseState;
+use crate::mark::Script;
 use crate::schema::SCHEMA_VERSION;
 use crate::style::ResolvedStyle;
 
@@ -421,8 +422,12 @@ fn block_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
         doc::NodeKey::SpaceBefore => format!("{} px above", style.space_before.get()),
         doc::NodeKey::SpaceAfter => format!("{} px below", style.space_after.get()),
         doc::NodeKey::LineHeight => format!("lines {:?}", style.line_height),
-        doc::NodeKey::KeepTogether => format!("kept together {}", style.keep_together),
-        doc::NodeKey::KeepWithNext => format!("kept with the next {}", style.keep_with_next),
+        doc::NodeKey::KeepTogether => {
+            format!("kept together {}", style.keep_together.as_bool())
+        }
+        doc::NodeKey::KeepWithNext => {
+            format!("kept with the next {}", style.keep_with_next.as_bool())
+        }
         doc::NodeKey::Attrs => attribute_reading(reader, &id, stored)?,
     };
     Some(format!("{name} {what}"))
@@ -460,7 +465,8 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
             let at = stored.at(3)?;
             let stored_widths = doc::col_widths(&tree, id);
             let content = PageBox::from_mm(doc::read_page_format(&reader.doc)).content_width;
-            let widths = column_widths(&stored_widths, stored_widths.len(), content);
+            let cols = crate::events::grid::ColCount::from_len(stored_widths.len());
+            let widths = column_widths(&stored_widths, cols, content);
             format!("column {} is {} px wide", at + 1, widths.get(at)?.get())
         }
         doc::AttrKey::Merged => {
@@ -561,8 +567,7 @@ fn formatting(style: &ResolvedStyle, mark: &str) -> Option<String> {
         italic,
         underline,
         strikethrough,
-        superscript,
-        subscript,
+        script,
         code_inline,
         color,
         background,
@@ -570,14 +575,15 @@ fn formatting(style: &ResolvedStyle, mark: &str) -> Option<String> {
         font_family,
         link,
     } = style;
+    // The reading prints each flag as the bool it stores.
     Some(match mark {
-        "b" => format!("bold {bold}"),
-        "i" => format!("italic {italic}"),
-        "u" => format!("underlined {underline}"),
-        "s" => format!("struck {strikethrough}"),
-        "sup" => format!("raised {superscript}"),
-        "sub" => format!("lowered {subscript}"),
-        "c" => format!("inline code {code_inline}"),
+        "b" => format!("bold {}", bold.as_bool()),
+        "i" => format!("italic {}", italic.as_bool()),
+        "u" => format!("underlined {}", underline.as_bool()),
+        "s" => format!("struck {}", strikethrough.as_bool()),
+        "sup" => format!("raised {}", *script == Script::Raised),
+        "sub" => format!("lowered {}", *script == Script::Lowered),
+        "c" => format!("inline code {}", code_inline.as_bool()),
         "fg" => format!("ink {}", colour((*color)?)),
         "bg" => format!("highlight {}", colour((*background)?)),
         "fs" => format!("{font_size} pt"),

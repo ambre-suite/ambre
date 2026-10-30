@@ -213,12 +213,12 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
 #[wasm_bindgen_test]
 async fn the_ruler_element_sits_on_the_column_it_was_given() {
     use ambre_core::{CssPoint, CssPx, Pt, ViewPx};
-    use ambre_prose::view::ruler::{RulerHandle, RulerState};
+    use ambre_prose::view::ruler::{RulerHandle, RulerHandles, RulerState};
     let origin = CssPoint::new(CssPx::new(40.0), CssPx::new(30.0));
     for zoom in [0.5_f32, 1.0, 2.0] {
         let signals = ProseSignals::new();
         let ruler = RulerState {
-            visible: true,
+            visible: RulerHandles::Visible,
             page_left: ViewPx::new(80.0),
             content_width: ViewPx::new(451.0 * zoom),
             point_width: ViewPx::new(4.0 / 3.0 * zoom),

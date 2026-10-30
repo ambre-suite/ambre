@@ -8,14 +8,18 @@
 //! large, fails as a typed error and yields no form at all (`PROSE-IO-010`).
 
 use ambre_bus::app::prose::{
-    ConversionFormat, ConversionReport, DroppedElement, HeadingLevel, InteropError,
+    CodeLang, ConversionFormat, ConversionReport, DroppedElement, HeadingLevel, InteropError,
 };
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 
+use ambre_core::{Slant, Strikethrough, Weight};
+
 use super::{
-    IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableCell, IrTableRow, ProseIr, Warnings,
+    IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableCell, IrTableRow, Merging, OwnStyle,
+    ProseIr, Warnings,
 };
 use crate::doc::StoredLevel;
+use crate::mark::InlineCode;
 
 /// The largest file a Markdown import reads.
 pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize(16 * 1024 * 1024);
@@ -24,10 +28,7 @@ pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize(16 * 1024 * 1024
 /// hostile file cannot grow the recursion of the passes that follow.
 pub const MAX_LIST_DEPTH: ListDepth = ListDepth::new(16);
 
-ambre_core::define_tally! {
-    /// How many list items an item nests inside: zero for a top item.
-    pub struct ListDepth;
-}
+pub use crate::numbering::ListDepth;
 
 /// Read `bytes` as Markdown.
 ///
@@ -63,8 +64,9 @@ pub fn read(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
 
 /// A block that holds other blocks while the reader is inside it.
 enum Frame {
+    /// A list, with the style each of its items takes.
     List {
-        ordered: bool,
+        style: IrListStyle,
     },
     Item {
         style: IrListStyle,
@@ -91,7 +93,10 @@ enum Leaf {
     Paragraph,
     Heading(HeadingLevel),
     Cell,
-    Code { lang: Option<String>, text: String },
+    Code {
+        lang: Option<CodeLang>,
+        text: String,
+    },
 }
 
 struct Reader {
@@ -193,11 +198,9 @@ impl Reader {
             Tag::CodeBlock(kind) => {
                 self.flush();
                 let lang = match kind {
-                    CodeBlockKind::Fenced(info) => info
-                        .split_whitespace()
-                        .next()
-                        .map(str::to_owned)
-                        .filter(|lang| !lang.is_empty()),
+                    CodeBlockKind::Fenced(info) => {
+                        info.split_whitespace().next().and_then(CodeLang::new)
+                    }
                     CodeBlockKind::Indented => None,
                 };
                 self.leaf = Some(Leaf::Code {
@@ -208,16 +211,17 @@ impl Reader {
             Tag::List(start) => {
                 self.flush();
                 self.frames.push(Frame::List {
-                    ordered: start.is_some(),
+                    style: match start {
+                        Some(_) => IrListStyle::Ordered(IrOrderedStyle::Decimal),
+                        None => IrListStyle::Bullet,
+                    },
                 });
             }
             Tag::Item => {
                 self.flush();
-                let ordered = matches!(self.frames.last(), Some(Frame::List { ordered: true }));
-                let style = if ordered {
-                    IrListStyle::Ordered(IrOrderedStyle::Decimal)
-                } else {
-                    IrListStyle::Bullet
+                let style = match self.frames.last() {
+                    Some(Frame::List { style }) => *style,
+                    _ => IrListStyle::Bullet,
                 };
                 self.frames.push(Frame::Item {
                     style,
@@ -317,9 +321,9 @@ impl Reader {
                 let runs = std::mem::take(&mut self.runs);
                 if let Some(Frame::Row { cells }) = self.frames.last_mut() {
                     cells.push(IrTableCell {
-                        styled: false,
+                        styled: OwnStyle::Plain,
                         blocks: vec![IrBlock::Paragraph {
-                            styled: false,
+                            styled: OwnStyle::Plain,
                             runs,
                         }],
                     });
@@ -335,7 +339,7 @@ impl Reader {
             TagEnd::Table => {
                 if let Some(Frame::Table { rows }) = self.frames.pop() {
                     self.place(IrBlock::Table {
-                        merged: false,
+                        merged: Merging::Unmerged,
                         rows,
                     });
                 }
@@ -368,10 +372,10 @@ impl Reader {
         }
         let run = IrRun {
             text: text.to_owned(),
-            bold: self.bold > 0,
-            italic: self.italic > 0,
-            strikethrough: self.strike > 0,
-            code: inline == Inline::Code,
+            bold: Weight::from_bool(self.bold > 0),
+            italic: Slant::from_bool(self.italic > 0),
+            strikethrough: Strikethrough::from_bool(self.strike > 0),
+            code: InlineCode::from_bool(inline == Inline::Code),
             link: self.links.last().cloned(),
             ..IrRun::default()
         };
@@ -404,7 +408,7 @@ impl Reader {
             return;
         }
         self.place(IrBlock::Paragraph {
-            styled: false,
+            styled: OwnStyle::Plain,
             runs,
         });
     }
@@ -478,7 +482,7 @@ mod tests {
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
         IrBlock::Paragraph {
-            styled: false,
+            styled: OwnStyle::Plain,
             runs,
         }
     }
@@ -498,7 +502,7 @@ mod tests {
                 para(vec![
                     IrRun::plain("Some "),
                     IrRun {
-                        bold: true,
+                        bold: Weight::Bold,
                         ..IrRun::plain("bold")
                     },
                     IrRun::plain(" and "),
@@ -509,7 +513,7 @@ mod tests {
                     IrRun::plain("."),
                 ]),
                 IrBlock::CodeBlock {
-                    lang: Some("rust".to_owned()),
+                    lang: CodeLang::new("rust"),
                     text: "let a = 1;".to_owned()
                 },
             ]

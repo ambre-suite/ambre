@@ -15,7 +15,13 @@ use ambre_bus::app::prose::{
 
 use crate::numbering::ListOrdinal;
 
-use super::{IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow, ProseIr, Warnings};
+use ambre_core::{Slant, Strikethrough, Weight};
+
+use super::{
+    Banding, IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow, Merging, OwnStyle, Paging,
+    ProseIr, Warnings,
+};
+use crate::mark::InlineCode;
 
 /// Write `ir` as Markdown in `flavor`, and the report of what it lost.
 #[must_use]
@@ -25,15 +31,15 @@ pub fn write(ir: &ProseIr, flavor: MarkdownFlavor) -> (String, ConversionReport)
         out: String::new(),
         warnings: Warnings::new(ConversionFormat::Markdown),
     };
-    if ir.meta.paged {
+    if ir.meta.paged == Paging::Paged {
         writer.warnings.unsupported(UnsupportedFeature::PageFormat);
     }
-    if ir.meta.bands {
+    if ir.meta.bands == Banding::Banded {
         writer
             .warnings
             .unsupported(UnsupportedFeature::HeaderAndFooter);
     }
-    writer.blocks(&ir.blocks, "");
+    writer.blocks(&ir.blocks, &Indent::default());
     if writer.flavor == MarkdownFlavor::Gfm {
         for note in &ir.footnotes {
             writer.separate();
@@ -57,6 +63,18 @@ struct ListRun {
     ordinal: ListOrdinal,
 }
 
+/// The spaces every line of a nested block starts with: the width of each
+/// list marker it sits under.
+#[derive(Default)]
+struct Indent(String);
+
+impl Indent {
+    /// The indent of the blocks of an item whose line starts with `marker`.
+    fn under(&self, marker: &str) -> Self {
+        Self(format!("{}{}", self.0, " ".repeat(marker.chars().count())))
+    }
+}
+
 impl Writer {
     /// A blank line before the next block, unless nothing is written yet.
     fn separate(&mut self) {
@@ -69,7 +87,7 @@ impl Writer {
     }
 
     /// Write sibling blocks, each line prefixed with `indent`.
-    fn blocks(&mut self, blocks: &[IrBlock], indent: &str) {
+    fn blocks(&mut self, blocks: &[IrBlock], indent: &Indent) {
         let mut run = ListRun {
             previous: None,
             ordinal: ListOrdinal::FIRST,
@@ -91,10 +109,10 @@ impl Writer {
         }
     }
 
-    fn block(&mut self, block: &IrBlock, indent: &str) {
+    fn block(&mut self, block: &IrBlock, indent: &Indent) {
         match block {
             IrBlock::Paragraph { styled, runs } => {
-                if *styled {
+                if *styled == OwnStyle::Styled {
                     self.warnings
                         .unsupported(UnsupportedFeature::ParagraphFormatting);
                 }
@@ -114,7 +132,7 @@ impl Writer {
             }
             IrBlock::CodeBlock { lang, text } => {
                 let fence = fence_for(text);
-                let info = lang.as_deref().unwrap_or("");
+                let info = ambre_bus::app::prose::CodeLang::stored(lang.as_ref());
                 self.line(indent, &format!("{fence}{info}"));
                 for line in text.split('\n') {
                     self.line(indent, line);
@@ -122,7 +140,7 @@ impl Writer {
                 self.line(indent, &fence);
             }
             IrBlock::Table { merged, rows } => {
-                if *merged {
+                if *merged == Merging::Merged {
                     self.warnings.unsupported(UnsupportedFeature::MergedCells);
                 }
                 self.table(rows, indent);
@@ -152,7 +170,7 @@ impl Writer {
         style: IrListStyle,
         runs: &[IrRun],
         children: &[IrBlock],
-        indent: &str,
+        indent: &Indent,
     ) {
         let joins = matches!(
             (run.previous, style),
@@ -186,7 +204,7 @@ impl Writer {
         };
         let text = self.inline(runs);
         self.line(indent, &format!("{marker}{text}"));
-        let inner = format!("{indent}{}", " ".repeat(marker.chars().count()));
+        let inner = indent.under(&marker);
         let mut child_run = ListRun {
             previous: None,
             ordinal: ListOrdinal::FIRST,
@@ -212,9 +230,9 @@ impl Writer {
         }
     }
 
-    fn table(&mut self, rows: &[IrTableRow], indent: &str) {
+    fn table(&mut self, rows: &[IrTableRow], indent: &Indent) {
         for cell in rows.iter().flat_map(|row| &row.cells) {
-            if cell.styled {
+            if cell.styled == OwnStyle::Styled {
                 self.warnings
                     .unsupported(UnsupportedFeature::CellFormatting);
             }
@@ -261,7 +279,7 @@ impl Writer {
         for block in blocks {
             match block {
                 IrBlock::Paragraph { styled, runs } => {
-                    if *styled {
+                    if *styled == OwnStyle::Styled {
                         self.warnings
                             .unsupported(UnsupportedFeature::ParagraphFormatting);
                     }
@@ -286,12 +304,12 @@ impl Writer {
         parts.join(" ")
     }
 
-    fn line(&mut self, indent: &str, text: &str) {
+    fn line(&mut self, indent: &Indent, text: &str) {
         if text.is_empty() {
             self.out.push('\n');
             return;
         }
-        self.out.push_str(indent);
+        self.out.push_str(&indent.0);
         self.out.push_str(text);
         self.out.push('\n');
     }
@@ -314,7 +332,7 @@ impl Writer {
                 out.push_str(delimiter.open());
                 open.push(delimiter.clone());
             }
-            if run.code {
+            if run.code == InlineCode::Code {
                 out.push_str(&code_span(&run.text));
             } else {
                 out.push_str(&escape(&run.text));
@@ -340,13 +358,13 @@ impl Writer {
         if let Some(url) = &run.link {
             wanted.push(Delimiter::Link(url.clone()));
         }
-        if run.bold {
+        if run.bold == Weight::Bold {
             wanted.push(Delimiter::Bold);
         }
-        if run.italic {
+        if run.italic == Slant::Italic {
             wanted.push(Delimiter::Italic);
         }
-        if run.strikethrough && self.flavor == MarkdownFlavor::Gfm {
+        if run.strikethrough == Strikethrough::Struck && self.flavor == MarkdownFlavor::Gfm {
             wanted.push(Delimiter::Strike);
         }
         wanted
@@ -354,17 +372,17 @@ impl Writer {
 
     fn lost_marks(&mut self, run: &IrRun) {
         let lost: [(bool, UnsupportedFeature); 8] = [
-            (run.underline, UnsupportedFeature::Underline),
-            (run.superscript, UnsupportedFeature::Superscript),
-            (run.subscript, UnsupportedFeature::Subscript),
+            (run.underline.as_bool(), UnsupportedFeature::Underline),
+            (run.superscript.as_bool(), UnsupportedFeature::Superscript),
+            (run.subscript.as_bool(), UnsupportedFeature::Subscript),
             (
-                run.strikethrough && self.flavor != MarkdownFlavor::Gfm,
+                run.strikethrough.as_bool() && self.flavor != MarkdownFlavor::Gfm,
                 UnsupportedFeature::Strikethrough,
             ),
-            (run.styled, UnsupportedFeature::Styling),
-            (run.comment, UnsupportedFeature::Comment),
-            (run.suggestion, UnsupportedFeature::Suggestion),
-            (run.cross_ref, UnsupportedFeature::CrossReference),
+            (run.styled.as_bool(), UnsupportedFeature::Styling),
+            (run.comment.as_bool(), UnsupportedFeature::Comment),
+            (run.suggestion.as_bool(), UnsupportedFeature::Suggestion),
+            (run.cross_ref.as_bool(), UnsupportedFeature::CrossReference),
         ];
         for (on, feature) in lost {
             if on {
@@ -394,7 +412,7 @@ impl Delimiter {
 
     fn close(&self) -> String {
         match self {
-            Self::Link(url) => format!("]({})", link_target(url.as_str())),
+            Self::Link(url) => format!("]({})", link_target(url)),
             Self::Bold => "**".to_owned(),
             Self::Italic => "*".to_owned(),
             Self::Strike => "~~".to_owned(),
@@ -403,7 +421,8 @@ impl Delimiter {
 }
 
 /// A link destination, in angle brackets when it holds a space or a paren.
-fn link_target(url: &str) -> String {
+fn link_target(url: &ambre_core::LinkUrl) -> String {
+    let url = url.as_str();
     if url.contains([' ', '(', ')', '<', '>']) {
         let inner = url.replace('<', "%3C").replace('>', "%3E");
         format!("<{inner}>")
@@ -485,7 +504,7 @@ mod tests {
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
         IrBlock::Paragraph {
-            styled: false,
+            styled: OwnStyle::Plain,
             runs,
         }
     }
@@ -510,14 +529,14 @@ mod tests {
 
     fn cell(text: &str) -> IrTableCell {
         IrTableCell {
-            styled: false,
+            styled: OwnStyle::Plain,
             blocks: vec![para(vec![IrRun::plain(text)])],
         }
     }
 
     fn table() -> IrBlock {
         IrBlock::Table {
-            merged: false,
+            merged: Merging::Unmerged,
             rows: vec![
                 IrTableRow {
                     cells: vec![cell("a"), cell("b")],
@@ -532,12 +551,12 @@ mod tests {
     #[test]
     fn blocks_and_marks_write_as_markdown() {
         let bold = IrRun {
-            bold: true,
+            bold: Weight::Bold,
             ..IrRun::plain("bold")
         };
         let both = IrRun {
-            bold: true,
-            italic: true,
+            bold: Weight::Bold,
+            italic: Slant::Italic,
             ..IrRun::plain("both")
         };
         let link = IrRun {
@@ -551,7 +570,7 @@ mod tests {
             },
             para(vec![bold, both, IrRun::plain(" and "), link]),
             IrBlock::CodeBlock {
-                lang: Some("rust".to_owned()),
+                lang: ambre_bus::app::prose::CodeLang::new("rust"),
                 text: "fn main() {}".to_owned(),
             },
         ]);
@@ -645,13 +664,13 @@ mod tests {
         let mut doc = ir(vec![
             para(vec![
                 IrRun {
-                    underline: true,
+                    underline: ambre_core::Underline::Underlined,
                     ..IrRun::plain("u")
                 },
                 IrRun {
-                    underline: true,
-                    styled: true,
-                    comment: true,
+                    underline: ambre_core::Underline::Underlined,
+                    styled: OwnStyle::Styled,
+                    comment: crate::interop::Commenting::Commented,
                     ..IrRun::plain("v")
                 },
             ]),
@@ -660,8 +679,8 @@ mod tests {
         ]);
         doc.meta = IrMeta {
             title: None,
-            paged: true,
-            bands: true,
+            paged: Paging::Paged,
+            bands: Banding::Banded,
         };
         let (_, report) = write(&doc, MarkdownFlavor::Gfm);
         assert_eq!(
@@ -688,7 +707,7 @@ mod tests {
             para(vec![IrRun::plain("# not a heading *nor* [a link]")]),
             para(vec![IrRun::plain("1. not a list")]),
             para(vec![IrRun {
-                code: true,
+                code: InlineCode::Code,
                 ..IrRun::plain("a`b")
             }]),
         ]);

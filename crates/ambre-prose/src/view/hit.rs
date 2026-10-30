@@ -14,6 +14,7 @@ use crate::layout::place::BlockLayout;
 use crate::layout::run::{CellShape, RunOffset, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
+use crate::view::provisional::PieceRuns;
 use ambre_bus::app::prose::{DocOffset, VAlign};
 
 /// The part of a block one page shows.
@@ -41,8 +42,8 @@ pub(crate) struct CellFrame {
 
 /// The frame of `cell` in `table`. The view draws and hits it alike.
 pub(crate) fn cell_frame(table: &TableShape, cell: &CellShape) -> Option<CellFrame> {
-    let y0 = *table.row_tops.get(cell.rows.start)?;
-    let y1 = *table.row_tops.get(cell.rows.end)?;
+    let y0 = table.row_top(cell.rows.start)?;
+    let y1 = table.row_top(cell.rows.end)?;
     let pad = cell.style.padding;
     let room = (y1 - y0 - pad * 2.0 - cell.content_height).max(DocPx::ZERO);
     let shift = match cell.style.valign {
@@ -343,7 +344,8 @@ impl ProseUiState {
             if let Some((id, offset)) = cell_hit(table, x, y) {
                 // A table drawn with its provisional runs counts the document
                 // in them, even once an input replayed since made them stale.
-                let drawn = chosen.provisional && self.drawn_provisional_run(id).is_some();
+                let drawn = chosen.provisional == PieceRuns::Provisional
+                    && self.drawn_provisional_run(id).is_some();
                 let offset = if drawn {
                     HitOffset::Drawn(DocOffset::new(offset.get()))
                 } else {
@@ -362,7 +364,7 @@ impl ProseUiState {
             }
             None => RunOffset::ZERO,
         };
-        let offset = if chosen.provisional {
+        let offset = if chosen.provisional == PieceRuns::Provisional {
             HitOffset::Drawn(DocOffset::new(offset.get()))
         } else {
             HitOffset::Laid(offset)
@@ -412,7 +414,7 @@ mod tests {
         let far = ui.shaped.layout.blocks.len() - 2;
         let page = ui.shaped.layout.blocks[far].page_start;
         ui.viewport.scroll_y = DocPx::new(ui.column.page_top_y(page).get());
-        assert_eq!(ui.runs.built(), 0);
+        assert_eq!(ui.runs.built(), crate::view::cache::BuildCount::ZERO);
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);
             let hit = ui.hit_test(ViewPoint::new(ViewPx::new(x), ViewPx::new(y)));
@@ -420,7 +422,7 @@ mod tests {
             assert_eq!(hit, Some((expected, DocOffset::new(offset))));
         }
         // Resolving built nothing: the drawing state is a paint's alone.
-        assert_eq!(ui.runs.built(), 0);
+        assert_eq!(ui.runs.built(), crate::view::cache::BuildCount::ZERO);
     }
 
     #[test]

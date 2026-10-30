@@ -102,6 +102,28 @@ pub const WINDOW_PAGES: PageCount = PageCount::new(8);
 /// (`PROSE-UI-212`).
 pub const WINDOW_MARGIN: PageCount = PageCount::new(4);
 
+ambre_core::define_flag! {
+    /// Whether this session owes a newcomer its presence.
+    enum Greeting {
+        /// Every session met has heard from this one.
+        Given,
+        /// A session joined that has not heard from this one yet.
+        Owed,
+    }
+}
+
+/// What a layout handed to the view was computed from. Two layouts of one
+/// basis are the same picture.
+#[derive(Debug, PartialEq)]
+struct LayoutBasis {
+    /// The document's state.
+    frontiers: loro::Frontiers,
+    /// How many faces the layout was shaped on.
+    faces: FaceCount,
+    /// The pages it carries.
+    window: PageSpan,
+}
+
 /// The per-document Prose engine.
 pub struct ProseState {
     /// The CRDT, private and named by no public signature (`PROSE-001`).
@@ -150,7 +172,7 @@ pub struct ProseState {
     /// This session's last presence sample, re-sent to a newcomer.
     last_frame: Option<ambre_core::EphemeralBytes>,
     /// Whether a newcomer has not heard from this session yet.
-    owe_greeting: bool,
+    owe_greeting: Greeting,
     /// The paginator, built on the first layout asked for. It is the one place
     /// the document is measured, for the screen and for export alike
     /// (`PROSE-064`). It lives here so measuring runs where the document does
@@ -164,7 +186,7 @@ pub struct ProseState {
     /// What the last layout handed to the view was computed from: the
     /// document's state and how many faces it was shaped on. A layout from the
     /// same basis is the same picture, so it is not handed over twice.
-    handed: Option<(loro::Frontiers, usize, PageSpan)>,
+    handed: Option<LayoutBasis>,
     /// The pages the view last asked for (`PROSE-125`).
     window: PageSpan,
     /// The version stamped on the last layout handed over. It only grows, even
@@ -304,7 +326,7 @@ impl ProseState {
             presence: HashMap::new(),
             live: std::collections::HashSet::new(),
             last_frame: None,
-            owe_greeting: false,
+            owe_greeting: Greeting::Given,
             paginator: None,
             faces: Vec::new(),
             handed: None,
@@ -343,7 +365,7 @@ impl ProseState {
         let paginator = self.paginator.get_or_insert_with(|| {
             let mut paginator = Paginator::new();
             for bytes in faces {
-                paginator.register_faces(bytes.as_bytes().to_vec());
+                paginator.register_faces(bytes.clone());
             }
             paginator
         });
@@ -401,7 +423,11 @@ impl ProseState {
     /// nothing out and sends nothing.
     pub fn layout_event(&mut self) -> Option<ProseEvent> {
         self.doc.commit();
-        let basis = (self.doc.state_frontiers(), self.faces.len(), self.window);
+        let basis = LayoutBasis {
+            frontiers: self.doc.state_frontiers(),
+            faces: self.face_count(),
+            window: self.window,
+        };
         if self.handed.as_ref() == Some(&basis) {
             return None;
         }
@@ -428,8 +454,10 @@ impl ProseState {
 
     /// How many runs the paginator has shaped, over its life.
     #[cfg(test)]
-    pub(crate) fn shaped_count(&self) -> u64 {
-        self.paginator.as_ref().map_or(0, Paginator::shaped)
+    pub(crate) fn shaped_count(&self) -> crate::layout::measure::ShapedCount {
+        self.paginator
+            .as_ref()
+            .map_or(crate::layout::measure::ShapedCount::ZERO, Paginator::shaped)
     }
 
     /// How many faces this document measures on (`PROSE-115`).
@@ -450,7 +478,7 @@ impl ProseState {
     pub fn load_faces(&mut self, faces: &[ambre_core::FontBytes]) {
         for bytes in faces {
             if let Some(paginator) = self.paginator.as_mut() {
-                paginator.register_faces(bytes.as_bytes().to_vec());
+                paginator.register_faces(bytes.clone());
             }
             self.faces.push(bytes.clone());
         }

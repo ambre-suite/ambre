@@ -528,7 +528,7 @@ fn a_press_places_the_caret_and_collapses_the_selection() {
         (block, DocOffset::new(4), None)
     );
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
-    assert_eq!(rig.ui.runs.built(), 0);
+    assert_eq!(rig.ui.runs.built(), crate::view::cache::BuildCount::ZERO);
     assert!(rig.ui.provisional_run(block).is_none());
 }
 
@@ -1430,8 +1430,8 @@ impl Rig {
         let runs = self.logic.resolved_runs(&block);
         !runs.is_empty()
             && runs.iter().all(|(_, style)| match key {
-                "b" => style.bold,
-                "i" => style.italic,
+                "b" => style.bold.as_bool(),
+                "i" => style.italic.as_bool(),
                 _ => false,
             })
     }
@@ -1670,7 +1670,7 @@ fn a_mark_sent_before_a_remote_insertion_lands_on_its_text() {
     let runs = rig.logic.resolved_runs(&block);
     let bold: String = runs
         .iter()
-        .filter(|(_, style)| style.bold)
+        .filter(|(_, style)| style.bold.as_bool())
         .map(|(text, _)| text.as_str())
         .collect();
     assert_eq!(bold, "world");

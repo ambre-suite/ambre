@@ -121,13 +121,13 @@ carries nothing: see section 6.
 /// draws from it and never looks further up (`PROSE-FEAT-020`, `PROSE-FEAT-177`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedStyle {
-    pub bold:          bool,
-    pub italic:        bool,
-    pub underline:     bool,
-    pub strikethrough: bool,
-    pub superscript:   bool,
-    pub subscript:     bool,
-    pub code_inline:   bool,
+    pub bold:          Weight,         // Regular | Bold
+    pub italic:        Slant,          // Upright | Italic
+    pub underline:     Underline,      // Plain | Underlined
+    pub strikethrough: Strikethrough,  // Plain | Struck
+    /// Raised, lowered or neither, never both (`PROSE-FEAT-174`).
+    pub script:        Script,         // Baseline | Raised | Lowered
+    pub code_inline:   InlineCode,     // Prose | Code
     pub color:         Option<Rgba>,
     pub background:    Option<Rgba>,
     pub font_size:     FontSize,

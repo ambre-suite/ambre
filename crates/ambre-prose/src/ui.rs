@@ -80,13 +80,37 @@ struct DraftEdit {
     at: DocOffset,
     change: Change,
     /// Taken as drawn: the document holds it, and the next layout will.
-    confirmed: bool,
+    confirmed: Confirmation,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+ambre_core::define_flag! {
+    /// Whether the Logic thread took a draft entry as drawn.
+    pub enum Confirmation {
+        /// The entry waits for its answer.
+        Pending,
+        /// The document holds the entry, and the next layout will.
+        Confirmed,
+    }
+}
+
+/// What one draft entry does. The inserted text is the user's, so `Debug`
+/// prints its length alone.
+#[derive(Clone, PartialEq, Eq)]
 enum Change {
     Insert(String),
     Delete(DocCount),
+}
+
+impl std::fmt::Debug for Change {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Insert(text) => f
+                .debug_tuple("Insert")
+                .field(&crate::redact::Redacted(text))
+                .finish(),
+            Self::Delete(count) => f.debug_tuple("Delete").field(count).finish(),
+        }
+    }
 }
 
 impl DraftBuffer {
@@ -97,7 +121,9 @@ impl DraftBuffer {
 
     /// Each entry's acknowledgement number, and whether the Logic thread
     /// confirmed it. The keystroke probes read it (`ambre-spec-budgets.md`).
-    pub fn entries(&self) -> impl Iterator<Item = (ambre_bus::app::prose::TextAck, bool)> + '_ {
+    pub fn entries(
+        &self,
+    ) -> impl Iterator<Item = (ambre_bus::app::prose::TextAck, Confirmation)> + '_ {
         self.edits.iter().map(|edit| (edit.seq, edit.confirmed))
     }
 
@@ -147,7 +173,7 @@ impl DraftBuffer {
             block,
             at,
             change,
-            confirmed: false,
+            confirmed: Confirmation::Pending,
         });
         self.bump();
     }
@@ -160,7 +186,7 @@ impl DraftBuffer {
     /// (`PROSE-UI-005`). The entries confirm in the order they were sent.
     pub fn confirm(&mut self, seq: ambre_bus::app::prose::TextAck) {
         if let Some(edit) = self.edits.iter_mut().find(|edit| edit.seq == seq) {
-            edit.confirmed = true;
+            edit.confirmed = Confirmation::Confirmed;
         }
     }
 
@@ -177,7 +203,8 @@ impl DraftBuffer {
     /// now. Confirmed entries lead the log, since they confirm in order.
     pub fn laid(&mut self) {
         let before = self.edits.len();
-        self.edits.retain(|edit| !edit.confirmed);
+        self.edits
+            .retain(|edit| edit.confirmed == Confirmation::Pending);
         if self.edits.len() != before {
             self.bump();
         }
@@ -340,11 +367,42 @@ pub struct ExportFile {
     pub bytes: ambre_core::FileBytes,
 }
 
+ambre_core::define_flag! {
+    /// Whether a press waits for the first block it asked for.
+    pub(crate) enum BlockWait {
+        /// No press waits.
+        Idle,
+        /// A press waits, and the caret goes to the block once a layout
+        /// carries it.
+        Awaiting,
+    }
+
+    /// Whether a sync holds the input until it is answered.
+    pub(crate) enum SyncHold {
+        /// The input flows on while the sync is in flight.
+        Passes,
+        /// The sync follows a structural command, and the input waits.
+        Holds,
+    }
+
+    /// Whether the document changed since the view last ticked.
+    enum Changed {
+        /// No change arrived.
+        Unchanged,
+        /// A change arrived, and a recount is owed.
+        Changed,
+    }
+}
+
 /// The UI thread's whole state for one open Prose document.
 ///
 /// Every field is either handed over by the Logic thread or local to this
-/// thread. None of them is document content (`PROSE-UI-001`).
-#[derive(Clone, Debug, Default)]
+/// thread. None of them is the document itself (`PROSE-UI-001`).
+///
+/// Many fields carry copies of its text: the runs, the drafts, the comments,
+/// the text in composition and its shape. So `Debug` prints a length or a
+/// count for each of those, and the text of none.
+#[derive(Clone, Default)]
 pub struct ProseUiState {
     // Handed over by the Logic thread.
     /// The version of the last layout this view adopted. An older one is
@@ -397,7 +455,7 @@ pub struct ProseUiState {
     pub(crate) remote_at: HashMap<BlockId, Vec<RemoteCursor>>,
     /// How many highlights paints have read, for the tests to hold
     /// `PROSE-UI-020` against.
-    pub(crate) highlights_walked: u64,
+    pub(crate) highlights_walked: crate::view::walk::HighlightCount,
     /// A link target a press asked to open, until the host takes it
     /// (`PROSE-UI-071`).
     pub followed: Option<ambre_core::LinkUrl>,
@@ -439,7 +497,7 @@ pub struct ProseUiState {
     pub(crate) last_press: Option<crate::input::Press>,
     /// A press asked for a first block, and the caret goes to it once a
     /// layout carries it (`PROSE-UI-072`).
-    pub(crate) awaiting_block: bool,
+    pub(crate) awaiting_block: BlockWait,
     /// A block asked to show that the layout in force does not carry. The
     /// view scrolls to it once a layout does (`PROSE-UI-212`).
     pub(crate) awaited_reveal: Option<BlockId>,
@@ -473,7 +531,7 @@ pub struct ProseUiState {
     /// caret and sends nothing until the composition ends (`PROSE-UI-142`).
     pub(crate) composing: String,
     /// A change arrived since the last tick.
-    changed: bool,
+    changed: Changed,
     /// When the text was last seen changing, while a recount is owed.
     quiet_since: Option<ambre_core::PageTime>,
     /// The number of the last change this view did not draw and applied.
@@ -486,9 +544,43 @@ pub struct ProseUiState {
     pub(crate) popped: ambre_bus::app::prose::TextAck,
     /// The syncs sent and not yet answered, oldest first. One sent after a
     /// structural command holds the input until it is answered.
-    pub(crate) syncs: VecDeque<bool>,
+    pub(crate) syncs: VecDeque<SyncHold>,
     /// The input held meanwhile, replayed in order once it is answered.
     pub(crate) queued: VecDeque<crate::input::ProseInput>,
+}
+
+impl std::fmt::Debug for ProseUiState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProseUiState")
+            .field("layout_version", &self.layout_version)
+            .field("remote_cursors", &self.remote_cursors.len())
+            .field("tocs", &self.tocs.len())
+            .field("find_matches", &self.find_matches.len())
+            .field("find_current", &self.find_current)
+            .field("footnotes", &self.footnotes.len())
+            .field("comments", &self.comments.len())
+            .field("suggestions", &self.suggestions.len())
+            .field("edit_mode", &self.edit_mode)
+            .field("links", &self.links.len())
+            .field("cross_refs", &self.cross_refs.len())
+            .field("reveal_page", &self.reveal_page)
+            .field("blocks", &self.shaped.blocks.len())
+            .field("pending_export", &self.pending_export.is_some())
+            .field("viewport", &self.viewport)
+            .field("cursor", &self.cursor)
+            .field("caret_affinity", &self.caret_affinity)
+            .field("draft", &self.draft)
+            .field("composing", &crate::redact::Redacted(&self.composing))
+            .field("compose_shape", &self.compose_shape.is_some())
+            .field("slash", &self.slash.is_some())
+            .field("seen", &self.seen)
+            .field("sent_seen", &self.sent_seen)
+            .field("popped", &self.popped)
+            .field("inflight", &self.inflight.len())
+            .field("syncs", &self.syncs)
+            .field("queued", &self.queued.len())
+            .finish_non_exhaustive()
+    }
 }
 
 /// What a send to the Logic thread did.
@@ -638,7 +730,7 @@ impl ProseUiState {
             ProseEvent::Synced { acked } => {
                 self.take_acked(*acked, ChangeOrigin::Local);
                 // A split the document refused mints nothing to wait for.
-                if self.syncs.pop_front() == Some(true)
+                if self.syncs.pop_front() == Some(SyncHold::Holds)
                     && self
                         .splitting
                         .is_some_and(|split| split.new_block.is_none())
@@ -646,7 +738,7 @@ impl ProseUiState {
                     self.splitting = None;
                 }
             }
-            ProseEvent::DocUpdated { .. } => self.changed = true,
+            ProseEvent::DocUpdated { .. } => self.changed = Changed::Changed,
             ProseEvent::CellEntered { block, .. } => self.place_caret(*block, DocOffset::ZERO),
             ProseEvent::WordCountUpdated { count } => self.word_count = *count,
             ProseEvent::SelectionMarks {
@@ -860,7 +952,7 @@ impl ProseUiState {
     /// one recount, [`RECOUNT_DELAY`] after the last of them. The caller
     /// sends the command it gets back.
     pub fn tick(&mut self, now: ambre_core::PageTime) -> Option<ProseCommand> {
-        if std::mem::take(&mut self.changed) {
+        if std::mem::take(&mut self.changed) == Changed::Changed {
             self.quiet_since = Some(now);
             return None;
         }
@@ -916,6 +1008,36 @@ pub fn status_figures(count: &WordCount) -> StatusFigures {
 
 #[cfg(test)]
 mod tests {
+    /// The view's state carries the document's text in many fields, and its
+    /// `Debug` prints none of it.
+    #[test]
+    fn the_view_state_prints_lengths_and_counts_alone() {
+        use crate::events::BlockInit;
+        let (mut state, _) = crate::view::tests::laid_out(1, 3);
+        crate::view::tests::append(&mut state, BlockInit::Paragraph, "unseen");
+        let mut ui = super::ProseUiState::default();
+        let _ = ui.apply_layout(state.shaped_layout());
+        ui.composing = "composed".into();
+        let block = state.root_blocks()[0];
+        ui.draft.push_str(
+            ambre_bus::app::prose::TextAck(1),
+            "drafted",
+            &block,
+            ambre_bus::app::prose::DocOffset::ZERO,
+        );
+        let printed = format!("{ui:?}");
+        for secret in ["word", "unseen", "composed", "drafted"] {
+            assert!(!printed.contains(secret), "{secret} in {printed}");
+        }
+        assert!(printed.contains("<8 bytes>"), "{printed}");
+    }
+
+    #[test]
+    fn a_draft_insertion_prints_its_text_by_length_alone() {
+        let change = super::Change::Insert("typed".into());
+        assert!(crate::redact::tests::hides(&change, "typed"));
+    }
+
     /// `PROSE-IO-056`: a written file waits for the host once, with the media
     /// type the Logic thread named.
     #[test]

@@ -139,14 +139,19 @@ pub struct PageView<'v> {
 pub struct PageWalk<'t> {
     pub(crate) runs: &'t mut RunCache,
     /// The highlights the last call drew.
-    pub(crate) highlights_walked: u64,
+    pub(crate) highlights_walked: HighlightCount,
+}
+
+ambre_core::define_tally! {
+    /// How many highlights a paint read.
+    pub struct HighlightCount;
 }
 
 impl DocumentWalk for PageWalk<'_> {
     type View<'v> = PageView<'v>;
 
     fn walk<S: DrawSurface>(&mut self, view: &PageView<'_>, region: Rect, surface: &mut S) {
-        self.highlights_walked = 0;
+        self.highlights_walked = HighlightCount::ZERO;
         surface.push_clip(region);
         for page in view.pages {
             let bounds = Rect::new(
@@ -218,7 +223,7 @@ impl PageWalk<'_> {
             block.insertion.as_slice(),
         );
         for mark in &block.highlights {
-            self.highlights_walked = self.highlights_walked.saturating_add(1);
+            self.highlights_walked = self.highlights_walked.incremented();
             for rect in data.range_boxes(mark.span) {
                 let rect = to_rect(placed, &rect);
                 surface.fill_rect(rect, palette.highlight(mark.kind));
@@ -267,20 +272,21 @@ fn draw_run<S: DrawSurface>(
 ) {
     let data: &ParleyRunData = run.data();
     let brush = Brush::Solid(color);
-    for (line_index, item_index, _) in &cache.draw_state(key, run).glyph_runs {
-        let Some((line, shift)) = data.line(*line_index) else {
+    for at in &cache.draw_state(key, run).glyph_runs {
+        let Some((line, shift)) = data.line(at.line) else {
             continue;
         };
         // A line shaped in a later segment is moved down to its place
         // (`PROSE-128`).
         let origin = placed.origin + (0.0, f64::from(shift.get()));
         let transform = Affine::translate(origin.to_vec2());
-        let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(*item_index) else {
+        let Some(PositionedLayoutItem::GlyphRun(glyphs)) = line.items().nth(at.item.to_usize())
+        else {
             continue;
         };
         let mut cuts = insertions
             .iter()
-            .filter(|cut| cut.line == *line_index)
+            .filter(|cut| cut.line == at.line)
             .peekable();
         if cuts.peek().is_none() {
             surface.draw_glyphs(&glyphs, &brush, transform);

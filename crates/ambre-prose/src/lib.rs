@@ -66,6 +66,7 @@ pub mod note;
 pub mod numbering;
 pub mod probe;
 pub(crate) mod rebase;
+pub(crate) mod redact;
 pub mod schema;
 pub mod style;
 pub mod suggest;

@@ -175,25 +175,27 @@ pub struct ProseIr {
 }
 
 /// What the document carries beside its blocks. A flag says a construct is present, for a
-/// writer that has no syntax for it to report (`PROSE-IO-018`).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// writer that has no syntax for it to report (`PROSE-IO-018`). `Debug` prints the title's
+/// length alone.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct IrMeta {
     pub title: Option<String>,
-    pub paged: bool,
-    pub bands: bool,
+    pub paged: Paging,   // Flow | Paged
+    pub bands: Banding,  // Bare | Banded
 }
 
-/// One block. Depth is the nesting, never a number: the document derives it too.
-#[derive(Clone, Debug, PartialEq)]
+/// One block. Depth is the nesting, never a number: the document derives it too. `Debug`
+/// prints the length of a code block's text and of an image's alternative text alone.
+#[derive(Clone, PartialEq)]
 pub enum IrBlock {
     /// `styled`: a named style, or alignment, indents or spacing of its own.
-    Paragraph { styled: bool, runs: Vec<IrRun> },
+    Paragraph { styled: OwnStyle, runs: Vec<IrRun> },
     /// The level is the stored one, unclamped (`PROSE-FEAT-091`).
     Heading   { level: StoredLevel, runs: Vec<IrRun> },
     ListItem  { style: IrListStyle, runs: Vec<IrRun>, children: Vec<IrBlock> },
     /// `merged`: two or more cells are merged into one.
-    Table     { merged: bool, rows: Vec<IrTableRow> },
-    CodeBlock { lang: Option<String>, text: String },
+    Table     { merged: Merging, rows: Vec<IrTableRow> },
+    CodeBlock { lang: Option<CodeLang>, text: String },
     Image     { alt: String },
     PageBreak,
     HRule,
@@ -206,7 +208,7 @@ pub struct IrTableRow { pub cells: Vec<IrTableCell> }
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct IrTableCell {
     /// A fill, a border, a padding or a vertical alignment.
-    pub styled: bool,
+    pub styled: OwnStyle,  // Plain | Styled
     /// A reader may put anything here; the command builder lifts what the tree refuses
     /// (`PROSE-IO-026`).
     pub blocks: Vec<IrBlock>,
@@ -222,22 +224,23 @@ pub enum IrListStyle { Bullet, Ordered(IrOrderedStyle), Todo(TodoMark) }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IrOrderedStyle { Decimal, LowerAlpha, UpperAlpha, LowerRoman, UpperRoman }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// `Debug` prints the text's length alone.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct IrRun {
     pub text:          String,
-    pub bold:          bool,
-    pub italic:        bool,
-    pub underline:     bool,
-    pub strikethrough: bool,
-    pub superscript:   bool,
-    pub subscript:     bool,
-    pub code:          bool,
+    pub bold:          Weight,         // Regular | Bold
+    pub italic:        Slant,          // Upright | Italic
+    pub underline:     Underline,      // Plain | Underlined
+    pub strikethrough: Strikethrough,  // Plain | Struck
+    pub superscript:   Superscript,    // Level | Raised
+    pub subscript:     Subscript,      // Level | Lowered
+    pub code:          InlineCode,     // Prose | Code
     pub link:          Option<LinkUrl>,
     /// A colour, a background, a size or a family.
-    pub styled:        bool,
-    pub comment:       bool,
-    pub suggestion:    bool,
-    pub cross_ref:     bool,
+    pub styled:        OwnStyle,       // Plain | Styled
+    pub comment:       Commenting,     // Uncommented | Commented
+    pub suggestion:    Suggesting,     // Settled | Suggested
+    pub cross_ref:     Referencing,    // Text | Reference
     /// The ordinal of the footnote this run calls.
     pub footnote_ref:  Option<FootnoteOrdinal>,
 }

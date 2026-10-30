@@ -484,7 +484,7 @@ fn two_peers_bolding_overlapping_ranges_keep_one_run() {
         state
             .resolved_runs(&block)
             .into_iter()
-            .filter(|(_, style)| style.bold)
+            .filter(|(_, style)| style.bold.as_bool())
             .map(|(text, _)| text)
             .collect()
     };
@@ -506,8 +506,7 @@ fn two_peers_raising_and_lowering_one_word_resolve_one_style() {
     let first = alice.resolved_runs(&block).remove(0).1;
     assert_eq!(first, bob.resolved_runs(&block).remove(0).1);
     // Neither write cleared the other, and the raised one wins.
-    assert!(first.superscript);
-    assert!(!first.subscript);
+    assert_eq!(first.script, crate::mark::Script::Raised);
 }
 
 /// Two values of one key converge on one, and both peers resolve that one

@@ -14,6 +14,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::events::grid::{RowCount, RowVec};
 use crate::events::{BlockId, PageIndex, tree_id};
 use crate::input::ProseInput;
 use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
@@ -36,12 +37,26 @@ pub struct Splitting {
 
 /// What the provisional runs were shaped from: the draft, the layout, the
 /// split and the text held behind it.
-type Key = (
-    crate::ui::DraftGeneration,
-    LayoutVersion,
-    Option<Splitting>,
-    String,
-);
+///
+/// The held text is document content, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq)]
+struct Key {
+    generation: crate::ui::DraftGeneration,
+    version: LayoutVersion,
+    splitting: Option<Splitting>,
+    held: String,
+}
+
+impl std::fmt::Debug for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Key")
+            .field("generation", &self.generation)
+            .field("version", &self.version)
+            .field("splitting", &self.splitting)
+            .field("held", &crate::redact::Redacted(&self.held))
+            .finish()
+    }
+}
 
 /// The provisional runs, and what they were shaped from.
 #[derive(Clone, Debug, Default)]
@@ -77,7 +92,18 @@ pub(crate) struct Piece {
     pub table: Option<Arc<TableShape>>,
     /// Whether `run` is provisional, or `table` holds the provisional runs of
     /// its cell blocks: their offsets are then the document's.
-    pub provisional: bool,
+    pub provisional: PieceRuns,
+}
+
+ambre_core::define_flag! {
+    /// Whether a piece draws the runs the layout carries, or provisional
+    /// ones shaped on this thread.
+    pub(crate) enum PieceRuns {
+        /// The runs the layout carries: their offsets are the run's.
+        Laid,
+        /// Provisional runs: their offsets are the document's.
+        Provisional,
+    }
 }
 
 /// The marks over `bytes` of a text, counted from its start.
@@ -106,12 +132,12 @@ impl ProseUiState {
     }
 
     fn provisional_key(&self) -> Key {
-        (
-            self.draft.generation(),
-            self.layout_version,
-            self.splitting,
-            self.held_text(),
-        )
+        Key {
+            generation: self.draft.generation(),
+            version: self.layout_version,
+            splitting: self.splitting,
+            held: self.held_text(),
+        }
     }
 
     /// Whether the provisional runs read what the view shows now.
@@ -123,7 +149,7 @@ impl ProseUiState {
     /// frame draws them then, so a press reads them even when an input
     /// replayed since has made them stale.
     fn provisional_drawn(&self) -> bool {
-        self.provisional.key.as_ref().map(|key| key.1) == Some(self.layout_version)
+        self.provisional.key.as_ref().map(|key| key.version) == Some(self.layout_version)
     }
 
     /// The provisional run a frame draws for `block`, fresh or not.
@@ -173,7 +199,8 @@ impl ProseUiState {
     /// row never shrinks before the answer.
     fn provisional_table(&self, table: &TableShape) -> (TableShape, DocPx) {
         let mut shape = table.clone();
-        let mut growth = vec![DocPx::ZERO; table.row_tops.len().saturating_sub(1)];
+        let rows = table.row_tops.len().saturating_sub(RowCount::ONE);
+        let mut growth: RowVec<DocPx> = vec![DocPx::ZERO; rows.to_usize()].into();
         for cell in &mut shape.cells {
             let mut shift = DocPx::ZERO;
             for (block, top, run) in &mut cell.blocks {
@@ -187,27 +214,19 @@ impl ProseUiState {
                 continue;
             }
             cell.content_height = (cell.content_height + shift).max(DocPx::ZERO);
-            let spanned = match (
-                table.row_tops.get(cell.rows.start),
-                table.row_tops.get(cell.rows.end),
-            ) {
-                (Some(y0), Some(y1)) => *y1 - *y0,
+            let spanned = match (table.row_top(cell.rows.start), table.row_top(cell.rows.end)) {
+                (Some(y0), Some(y1)) => y1 - y0,
                 _ => continue,
             };
             let lack = cell.content_height + cell.style.padding * 2.0 - spanned;
-            if let Some(slot) = cell
-                .rows
-                .end
-                .checked_sub(1)
-                .and_then(|last| growth.get_mut(last))
-            {
+            if let Some(slot) = cell.rows.last().and_then(|last| growth.get_mut(last)) {
                 *slot = slot.max(lack);
             }
         }
         let mut grown = DocPx::ZERO;
-        for (at, lack) in growth.iter().enumerate() {
+        for (at, lack) in growth.iter_enumerated() {
             grown += lack.max(DocPx::ZERO);
-            if let Some(top) = shape.row_tops.get_mut(at + 1) {
+            if let Some(top) = shape.row_tops.get_mut(at.next()) {
                 *top += grown;
             }
         }
@@ -345,7 +364,7 @@ impl ProseUiState {
                 continue;
             };
             if let Some(table) = self.shaped.tables.get(&block.block_id) {
-                let Some(mut piece) = fragment(block, page, &table.row_tops) else {
+                let Some(mut piece) = fragment(block, page, table.row_tops.as_slice()) else {
                     continue;
                 };
                 piece.top += shift;
@@ -369,7 +388,7 @@ impl ProseUiState {
                     fragment: piece,
                     run: None,
                     table: Some(table),
-                    provisional,
+                    provisional: PieceRuns::from_bool(provisional),
                 });
                 continue;
             }
@@ -409,7 +428,7 @@ impl ProseUiState {
                 fragment: piece,
                 run,
                 table: None,
-                provisional: provisional.is_some(),
+                provisional: PieceRuns::from_bool(provisional.is_some()),
             });
         }
         let ghost_at = ghost_at
@@ -419,5 +438,37 @@ impl ProseUiState {
                 ..piece
             });
         (pieces, ghost_at)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_shaping_key_prints_its_held_text_by_length_alone() {
+        let key = super::Key {
+            generation: crate::ui::DraftGeneration::default(),
+            version: super::LayoutVersion::FIRST,
+            splitting: None,
+            held: "held behind".into(),
+        };
+        assert!(crate::redact::tests::hides(&key, "held behind"));
+    }
+
+    #[test]
+    fn a_slash_menu_prints_its_query_by_length_alone() {
+        let menu = crate::view::slash::SlashMenu {
+            origin: (
+                crate::events::block_id(loro::TreeID::new(1, 0)),
+                super::DocOffset::ZERO,
+            ),
+            query: "headi".into(),
+            selected: crate::view::slash::SlashChoice::default(),
+        };
+        assert!(crate::redact::tests::hides(&menu, "headi"));
+        let state = crate::view::slash::SlashMenuState {
+            query: "headi".into(),
+            ..crate::view::slash::SlashMenuState::default()
+        };
+        assert!(crate::redact::tests::hides(&state, "headi"));
     }
 }

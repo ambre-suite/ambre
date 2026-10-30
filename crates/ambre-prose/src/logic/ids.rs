@@ -10,17 +10,34 @@ use std::cell::Cell;
 
 use ambre_core::Uuid;
 
+/// The place of an id in a pinned peer's sequence, the first being zero.
+///
+/// It holds the 62 bits of the low half that the variant bits leave. So no
+/// two places pack to one id, and the sequence ends rather than wrap.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct IdSequence(u64);
+
+impl IdSequence {
+    /// The last place the 62 bits hold.
+    const LAST: Self = Self((1 << 62) - 1);
+
+    /// The place after this one, `None` past [`Self::LAST`].
+    fn next(self) -> Option<Self> {
+        (self.0 < Self::LAST.0).then(|| Self(self.0 + 1))
+    }
+}
+
 /// The id minter a [`ProseState`](super::ProseState) owns.
 #[derive(Debug)]
 pub(super) enum IdSource {
     /// A fresh v7 id per call: the live path.
     Random,
-    /// The pinned peer and the next counter, packed into a version 8 id.
-    /// Interior mutability, because the writers that mint read the state
-    /// through `&self`.
+    /// The pinned peer and the next place of its sequence, packed into a
+    /// version 8 id. `None` once the sequence ran out. Interior mutability,
+    /// because the writers that mint read the state through `&self`.
     Seeded {
         peer: ambre_core::PeerId,
-        next: Cell<u64>,
+        next: Cell<Option<IdSequence>>,
     },
 }
 
@@ -29,33 +46,38 @@ impl IdSource {
     pub(super) fn seeded(peer: ambre_core::PeerId) -> Self {
         Self::Seeded {
             peer,
-            next: Cell::new(0),
+            next: Cell::new(Some(IdSequence::default())),
         }
     }
 
     /// The next id, of whichever annotation kind the caller names. Every kind
-    /// draws from the one counter, so no two annotations share an id.
+    /// draws from the one sequence, so no two annotations share an id. Past
+    /// the end of the sequence the source mints a fresh v7 id. A pinned
+    /// document then loses its repeatable bytes, and keeps unique ids.
     pub(super) fn mint<T: From<Uuid>>(&self) -> T {
         let uuid = match self {
             Self::Random => Uuid::new(),
-            Self::Seeded { peer, next } => {
-                let counter = next.get();
-                next.set(counter.wrapping_add(1));
-                Uuid::from_bytes(pack(*peer, counter).to_be_bytes())
-            }
+            Self::Seeded { peer, next } => match next.get() {
+                Some(place) => {
+                    next.set(place.next());
+                    pack(*peer, place)
+                }
+                None => Uuid::new(),
+            },
         };
         T::from(uuid)
     }
 }
 
-/// `peer` in the high half and `counter` in the low half, with the version
-/// nibble set to 8 and the variant bits to RFC 9562. The six bits those take
-/// cost nothing here: a pinned peer builds one document, alone.
-fn pack(peer: ambre_core::PeerId, counter: u64) -> u128 {
+/// `peer` in the high half and `place` in the low half, with the version
+/// nibble set to 8 and the variant bits to RFC 9562. The four peer bits the
+/// version takes cost nothing here: a pinned peer builds one document, alone.
+fn pack(peer: ambre_core::PeerId, place: IdSequence) -> Uuid {
     const VERSION: u128 = 0xF << 76;
     const VARIANT: u128 = 0b11 << 62;
-    let raw = (u128::from(peer.0) << 64) | u128::from(counter);
-    (raw & !VERSION & !VARIANT) | (0x8 << 76) | (0b10 << 62)
+    let raw = (u128::from(peer.0) << 64) | u128::from(place.0);
+    let bits = (raw & !VERSION & !VARIANT) | (0x8 << 76) | (0b10 << 62);
+    Uuid::from_bytes(bits.to_be_bytes())
 }
 
 #[cfg(test)]
@@ -76,10 +98,30 @@ mod tests {
         }
     }
 
+    /// The end of a sequence mints no id it minted before. A wrapping `u64`
+    /// counter came back to zero there. Its two top bits also fell under the
+    /// variant mask, so place 2^62 packed to the id of place zero.
+    #[test]
+    fn a_seeded_source_never_reissues_an_id_at_the_end_of_its_sequence() {
+        let peer = ambre_core::PeerId(0x5EED);
+        let start: Uuid = IdSource::seeded(peer).mint();
+        let end = IdSource::Seeded {
+            peer,
+            next: Cell::new(Some(IdSequence::LAST)),
+        };
+        let tail: Vec<Uuid> = (0..3).map(|_| end.mint()).collect();
+        assert!(!tail.contains(&start));
+        for (i, id) in tail.iter().enumerate() {
+            assert!(!tail.iter().skip(i + 1).any(|other| other == id));
+        }
+        assert_eq!(IdSequence::LAST.next(), None);
+    }
+
     /// The packed id reads as a version 8 id of the RFC variant.
     #[test]
     fn a_seeded_id_carries_version_8() {
-        let bytes = pack(ambre_core::PeerId(u64::MAX), u64::MAX).to_be_bytes();
+        let bytes = pack(ambre_core::PeerId(u64::MAX), IdSequence::LAST);
+        let bytes = bytes.as_bytes();
         assert_eq!(bytes[6] >> 4, 0x8);
         assert_eq!(bytes[8] >> 6, 0b10);
     }

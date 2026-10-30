@@ -18,7 +18,7 @@ use crate::events::{
     ActiveMarks, BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, TriState, tree_id,
 };
 use crate::mark::{self, MarkRoot};
-use crate::style::{BlockContext, MarkSet, ResolvedStyle, resolve};
+use crate::style::{BlockContext, MarkSet, ResolvedStyle, StoredMarkValue, resolve};
 
 use super::ProseState;
 
@@ -297,11 +297,47 @@ const BAR_KEYS: [MarkRoot; 5] = [
     MarkRoot::Code,
 ];
 
+/// What the runs folded so far say of one bar key. The bar reads whether
+/// some run carries the key and whether some run lacks it, never how many.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum KeySeen {
+    /// No run folded yet.
+    #[default]
+    Unseen,
+    /// Every run folded carries the key.
+    AllOn,
+    /// No run folded carries the key.
+    AllOff,
+    /// Some runs carry the key and some lack it.
+    Mixed,
+}
+
+impl KeySeen {
+    /// What the fold says once one more run, which carries the key or not,
+    /// is folded in.
+    fn with(self, carried: bool) -> Self {
+        match (self, carried) {
+            (Self::Unseen | Self::AllOn, true) => Self::AllOn,
+            (Self::Unseen | Self::AllOff, false) => Self::AllOff,
+            _ => Self::Mixed,
+        }
+    }
+
+    /// The state the bar shows for the key.
+    fn state(self) -> TriState {
+        match self {
+            Self::Unseen | Self::AllOff => TriState::Off,
+            Self::AllOn => TriState::On,
+            Self::Mixed => TriState::Mixed,
+        }
+    }
+}
+
 /// What the selected runs carry, run by run.
 #[derive(Default)]
 struct MarkFold {
-    /// Per bar key: how many runs carry it, and how many do not.
-    counts: [(u32, u32); 5],
+    /// Per bar key: whether the runs carry it.
+    seen: [KeySeen; 5],
     /// The link every run carries so far: `None` before the first run, and
     /// `Some(None)` once two runs disagree or one carries none.
     link: Option<Option<ambre_core::LinkUrl>>,
@@ -309,17 +345,12 @@ struct MarkFold {
 
 impl MarkFold {
     fn take(&mut self, marks: &MarkSet) {
-        for (key, (on, off)) in BAR_KEYS.iter().zip(self.counts.iter_mut()) {
-            if marks.contains_key(key.as_str()) {
-                *on += 1;
-            } else {
-                *off += 1;
-            }
+        for (key, seen) in BAR_KEYS.iter().zip(self.seen.iter_mut()) {
+            *seen = seen.with(marks.contains_key(key.as_str()));
         }
         let this = marks
             .get(MarkRoot::Link.as_str())
-            .cloned()
-            .map(ambre_core::LinkUrl::new);
+            .map(|url| ambre_core::LinkUrl::new(url.as_str().to_owned()));
         self.link = match self.link.take() {
             None => Some(this),
             Some(held) if held == this => Some(held),
@@ -328,12 +359,7 @@ impl MarkFold {
     }
 
     fn finish(self) -> ActiveMarks {
-        let state = |(on, off): (u32, u32)| match (on, off) {
-            (0, _) => TriState::Off,
-            (_, 0) => TriState::On,
-            _ => TriState::Mixed,
-        };
-        let [bold, italic, underline, strikethrough, code] = self.counts.map(state);
+        let [bold, italic, underline, strikethrough, code] = self.seen.map(KeySeen::state);
         ActiveMarks {
             bold,
             italic,
@@ -380,8 +406,8 @@ fn marks_of_run(fields: &LoroValue) -> MarkSet {
         .iter()
         .map(|(key, value)| {
             let stored = match value {
-                LoroValue::String(text) => text.to_string(),
-                _ => String::new(),
+                LoroValue::String(text) => StoredMarkValue::new(text.to_string()),
+                _ => StoredMarkValue::default(),
             };
             (MarkKey::new(key.clone()), stored)
         })
@@ -400,6 +426,30 @@ pub(crate) mod tests {
     use crate::logic::ProseState;
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::prose::DocSpan;
+
+    /// The fold of one key reads as the count of the runs that carry it and
+    /// of the runs that lack it. Every order of up to four runs holds it.
+    #[test]
+    fn a_folded_key_reads_as_the_counts_of_its_runs() {
+        use super::KeySeen;
+        use ambre_bus::app::prose::TriState;
+        for runs in 0_u32..(1 << 4) {
+            for len in 0..=4 {
+                let carried: Vec<bool> = (0..len).map(|at| runs & (1 << at) != 0).collect();
+                let on = carried.iter().filter(|c| **c).count();
+                let off = carried.len() - on;
+                let counted = match (on, off) {
+                    (0, _) => TriState::Off,
+                    (_, 0) => TriState::On,
+                    _ => TriState::Mixed,
+                };
+                let folded = carried
+                    .iter()
+                    .fold(KeySeen::Unseen, |seen, c| seen.with(*c));
+                assert_eq!(folded.state(), counted, "{carried:?}");
+            }
+        }
+    }
 
     fn document_with_text(text: &str) -> (ProseState, crate::events::BlockId) {
         let mut state = ProseState::new().expect("a document is built");
@@ -561,7 +611,7 @@ pub(crate) mod tests {
         });
         let bolded: String = runs(&state, &block)
             .into_iter()
-            .filter(|(_, style)| style.bold)
+            .filter(|(_, style)| style.bold.as_bool())
             .map(|(text, _)| text)
             .collect();
         assert_eq!(bolded, "one");
@@ -711,7 +761,7 @@ pub(crate) mod tests {
 
         assert_eq!(state.text_of(&block).unwrap_or_default(), "hello");
         let (_, style) = runs(&state, &block).remove(0);
-        assert!(style.bold && style.italic);
+        assert!(style.bold.as_bool() && style.italic.as_bool());
         assert_eq!(state.paragraph_style_of(&block).align, Some(Align::Center));
     }
 
@@ -740,13 +790,13 @@ pub(crate) mod tests {
         let resolved = runs(&state, &block);
         let bold: String = resolved
             .iter()
-            .filter(|(_, style)| style.bold)
+            .filter(|(_, style)| style.bold.as_bool())
             .map(|(text, _)| text.clone())
             .collect();
         // The key covers no character of the range, and every one outside it.
         assert_eq!(bold, " two");
         assert!(
-            resolved.iter().all(|(_, style)| style.italic),
+            resolved.iter().all(|(_, style)| style.italic.as_bool()),
             "the other key is untouched"
         );
     }
@@ -779,7 +829,7 @@ pub(crate) mod tests {
 
         assert_eq!(state.text_of(&block).unwrap_or_default(), "hello");
         let (_, style) = runs(&state, &block).remove(0);
-        assert!(!style.bold && !style.italic);
+        assert!(!style.bold.as_bool() && !style.italic.as_bool());
         assert_eq!(style.color, None);
         assert_eq!(style.link, None, "the link is presentation, and it goes");
         assert!(
@@ -828,7 +878,7 @@ pub(crate) mod tests {
         assert_eq!(state.export_snapshot(), before);
 
         assert_eq!(state.text_of(&block).unwrap_or_default(), "hello");
-        assert!(runs(&state, &block).remove(0).1.bold);
+        assert!(runs(&state, &block).remove(0).1.bold.as_bool());
         assert_eq!(
             state.paragraph_style_of(&other).align,
             None,
@@ -861,7 +911,7 @@ pub(crate) mod tests {
             });
             let covered: String = runs(&state, &block)
                 .into_iter()
-                .filter(|(_, style)| style.bold || style.link.is_some())
+                .filter(|(_, style)| style.bold.as_bool() || style.link.is_some())
                 .map(|(text, _)| text)
                 .collect();
             assert_eq!(covered == "oneX", continues, "{key}");

@@ -15,6 +15,31 @@ use crate::note;
 
 use super::ProseState;
 
+/// An anchor the engine mints into a carrier character: a footnote call or a
+/// cross reference.
+pub(super) enum OwnedAnchor<'a> {
+    Footnote(&'a FootnoteId),
+    CrossRef(&'a crate::xref::CrossRefMark),
+}
+
+impl OwnedAnchor<'_> {
+    /// The root the anchor's mark is stored under.
+    fn root(&self) -> MarkRoot {
+        match self {
+            Self::Footnote(_) => MarkRoot::Footnote,
+            Self::CrossRef(_) => MarkRoot::CrossRef,
+        }
+    }
+
+    /// The value the mark stores, which the anchor readers parse back.
+    fn stored(&self) -> String {
+        match self {
+            Self::Footnote(id) => id.to_hyphenated(),
+            Self::CrossRef(record) => record.as_str().to_owned(),
+        }
+    }
+}
+
 impl ProseState {
     /// A note holding `text`, and one call to it at `pos` in `block`
     /// (`PROSE-FEAT-099`).
@@ -46,7 +71,7 @@ impl ProseState {
         if let Err(e) = self.write_note(&id, text) {
             return Self::err_write(e);
         }
-        if let Err(e) = Self::write_carrier(&body, at, MarkRoot::Footnote, &id.to_hyphenated()) {
+        if let Err(e) = Self::write_carrier(&body, at, &OwnedAnchor::Footnote(&id)) {
             return Self::err_write(e);
         }
         self.commit_notes()
@@ -72,10 +97,9 @@ impl ProseState {
         if note::entry(&self.doc, id).is_none() {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         }
-        let key = id.to_hyphenated();
-        let calls: Vec<doc::Anchor> = doc::anchors(&self.doc, crate::mark::MarkRoot::Footnote)
+        let calls: Vec<doc::Anchor<FootnoteId>> = note::footnote_calls(&self.doc)
             .into_iter()
-            .filter(|anchor| anchor.value == key)
+            .filter(|anchor| anchor.value == *id)
             .collect();
         for call in calls.iter().rev() {
             let body = doc::get_block_text(&self.doc, &call.block);
@@ -88,7 +112,7 @@ impl ProseState {
         {
             return Self::err_write(e);
         }
-        if let Err(e) = doc::annots(&self.doc).delete(&key) {
+        if let Err(e) = doc::annots(&self.doc).delete(&id.to_hyphenated()) {
             return Self::err_write(e);
         }
         self.commit_notes()
@@ -116,18 +140,17 @@ impl ProseState {
             .map_err(doc::WriteError::from)
     }
 
-    /// One carrier character at `at`, marked `key` = `value`. The mark never
-    /// expands, so typing beside it stays plain text.
+    /// One carrier character at `at`, marked with `anchor` under its root.
+    /// The mark never expands, so typing beside it stays plain text.
     pub(super) fn write_carrier(
         body: &LoroText,
         at: DocOffset,
-        key: MarkRoot,
-        value: &str,
+        anchor: &OwnedAnchor<'_>,
     ) -> Result<(), doc::WriteError> {
         let at = at.to_usize();
         let mut buffer = [0_u8; 4];
         body.insert(at, doc::CARRIER.encode_utf8(&mut buffer))?;
-        body.mark(at..at + 1, key.as_str(), value)
+        body.mark(at..at + 1, anchor.root().as_str(), anchor.stored())
             .map_err(doc::WriteError::from)
     }
 
@@ -226,6 +249,25 @@ mod tests {
             .collect()
     }
 
+    /// A call another build spelled in upper case names the same note, and
+    /// the numbering counts it. Deleting the note deletes that call too. The
+    /// delete compared the stored text with the lower-case spelling, so it
+    /// left the call behind as a carrier that names no note.
+    #[test]
+    fn deleting_a_note_deletes_a_call_spelled_another_way() {
+        let (mut state, ids) = document(ambre_core::PeerId(1), &["Hello world"]);
+        let id = add(&mut state, ids[0], DocOffset::new(5), "A note.");
+        let body = doc::get_block_text(state.document(), &crate::events::tree_id(ids[0]));
+        let upper = id.to_hyphenated().to_uppercase();
+        body.insert(0, "\u{fffc}").expect("the carrier lands");
+        body.mark(0..1, MarkRoot::Footnote.as_str(), upper)
+            .expect("the call lands");
+        assert_eq!(note::footnote_calls(state.document()).len(), 2);
+        state.handle_command(ProseCommand::DeleteFootnote { footnote_id: id });
+        assert!(note::footnote_calls(state.document()).is_empty());
+        assert_eq!(state.text_of(&ids[0]).as_deref(), Some("Hello world"));
+    }
+
     #[test]
     fn a_note_lands_as_one_call_and_an_entry_holding_its_text() {
         let (mut state, ids) = document(ambre_core::PeerId(1), &["Hello world"]);
@@ -235,10 +277,10 @@ mod tests {
             Some("Hello\u{fffc} world"),
             "the block holds the call and none of the note's text"
         );
-        let calls = doc::anchors(state.document(), crate::mark::MarkRoot::Footnote);
+        let calls = note::footnote_calls(state.document());
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].offset, DocOffset::new(5));
-        assert_eq!(calls[0].value, id.to_hyphenated());
+        assert_eq!(calls[0].value, id);
         assert_eq!(
             note::body(state.document(), &id).map(|t| t.to_string()),
             Some("A note.".to_owned())

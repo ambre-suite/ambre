@@ -75,7 +75,7 @@ is. It publishes that (`ambre-spec-ui.md section 2`).
 // ambre-prose/src/view/ruler.rs -- published to the chrome component, never drawn on the canvas
 
 pub struct RulerState {
-    pub visible:       bool,
+    pub visible:       RulerHandles,  // Hidden | Visible
     /// Where the content column starts and how wide it is, from the canvas's corner.
     pub page_left:     ViewPx,
     pub content_width: ViewPx,

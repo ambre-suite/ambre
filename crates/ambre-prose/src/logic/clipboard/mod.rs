@@ -83,20 +83,45 @@ mod stored_lang {
 }
 
 /// A run of text and the formatting marks it carries. Anchors stay behind:
-/// a comment or a suggestion does not travel with its text.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// a comment or a suggestion does not travel with its text. The text is
+/// content, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 struct ClipRun {
     text: String,
     marks: Vec<(MarkKey, ClipValue)>,
 }
 
-/// A mark's value, in the shapes the registry writes.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+impl std::fmt::Debug for ClipRun {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClipRun")
+            .field("text", &crate::redact::Redacted(&self.text))
+            .field("marks", &self.marks)
+            .finish()
+    }
+}
+
+/// A mark's value, in the shapes the registry writes. A text value may be a
+/// link or a family the user typed, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 enum ClipValue {
     Bool(bool),
     Int(i64),
     Float(f64),
     Text(String),
+}
+
+impl std::fmt::Debug for ClipValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bool(on) => f.debug_tuple("Bool").field(on).finish(),
+            Self::Int(n) => f.debug_tuple("Int").field(n).finish(),
+            Self::Float(x) => f.debug_tuple("Float").field(x).finish(),
+            Self::Text(text) => f
+                .debug_tuple("Text")
+                .field(&crate::redact::Redacted(text))
+                .finish(),
+        }
+    }
 }
 
 impl ClipValue {
@@ -452,6 +477,16 @@ mod tests {
     use crate::view::tests::append;
     use ambre_bus::app::prose::OrderedStyle;
     use ambre_bus::app::prose::{DocOffset, DocSpan};
+
+    #[test]
+    fn a_copied_run_prints_its_text_by_length_alone() {
+        let run = ClipRun {
+            text: "copied".into(),
+            marks: vec![(MarkKey::from("ff"), ClipValue::Text("Family".into()))],
+        };
+        assert!(crate::redact::tests::hides(&run, "copied"));
+        assert!(crate::redact::tests::hides(&run, "Family"));
+    }
 
     fn copied(
         state: &mut ProseState,
