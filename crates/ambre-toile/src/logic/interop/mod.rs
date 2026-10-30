@@ -35,7 +35,9 @@ mod svg_import;
 mod tests;
 
 pub use limits::{CoordBound, ImportDepth, Limits};
-pub use media::{CachedBlobCount, ContentHash, MediaCache, MediaState, RequestOutcome};
+pub use media::{
+    CachedBlobCount, ContentHash, MediaCache, MediaCacheCapacity, MediaState, RequestOutcome,
+};
 #[cfg(all(test, feature = "pdf"))]
 pub(crate) use pdf_export::paint_page;
 #[cfg(feature = "pdf")]
