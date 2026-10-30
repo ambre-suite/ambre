@@ -784,6 +784,8 @@ fn every_declared_key_appears_in_the_shape() {
     }
 }
 
+/// `SCHEMA-018`: the shape holds the keys and the types, so a changed value
+/// does not move it.
 #[test]
 fn a_value_changing_leaves_the_shape_alone() {
     let first = board_of_every_key();

@@ -1306,6 +1306,7 @@ mod address_tests {
         );
     }
 
+    /// `TOILE-087`: an address that names no site is refused before it is placed.
     #[test]
     fn an_address_with_no_site_in_it_is_refused() {
         assert_eq!(WebAddress::parse(""), Err(AddressError::Empty));
@@ -1320,7 +1321,7 @@ mod address_tests {
         assert_eq!(WebAddress::parse("example .com"), Err(AddressError::NoHost));
     }
 
-    /// Every refusal has a sentence, and none of them is empty.
+    /// `TOILE-087`: every refusal has a sentence, and none of them is empty.
     #[test]
     fn every_refusal_says_what_to_do() {
         for e in [
@@ -1357,8 +1358,9 @@ mod web_embed_tests {
         }
     }
 
-    /// The view hands the shell the web embeds and nothing else. A nested
-    /// document is a child view, not a frame, and the two lists must not cross.
+    /// `TOILE-UI-337`: the view hands the shell the web embeds and nothing
+    /// else. A nested document is a child view, not a frame, and the two lists
+    /// must not cross.
     #[test]
     fn only_web_embeds_are_published_for_the_shell() {
         let page = web("w", Rect::new(0.0, 0.0, 100.0, 50.0), "https://example.com");
@@ -1374,7 +1376,8 @@ mod web_embed_tests {
         assert_eq!(got[0].element.0, "w");
     }
 
-    /// A board with no web embed asks the shell for no frame at all.
+    /// `TOILE-UI-337`: a board with no web embed asks the shell for no frame at
+    /// all.
     #[test]
     fn a_board_with_no_web_embed_publishes_nothing() {
         let dv = viewport(vec![DisplayNode::Element(doc_embed(
@@ -1386,9 +1389,9 @@ mod web_embed_tests {
         assert!(visible_web_embeds(&dv, &cam(), None).is_empty());
     }
 
-    /// The browser lays the page out once, at the element's world size, and the
-    /// transform moves it from there. Zooming the board must not reflow the
-    /// page inside the frame.
+    /// `TOILE-UI-413`: the browser lays the page out once, at the element's
+    /// world size, and the transform moves it from there. Zooming the board
+    /// must not reflow the page inside the frame.
     #[test]
     fn the_frames_layout_size_does_not_move_with_the_zoom() {
         let dv = viewport(vec![DisplayNode::Element(web(
@@ -1412,8 +1415,9 @@ mod web_embed_tests {
         assert!(((far - near).hypot() - 300.0).abs() < 1e-9);
     }
 
-    /// The frame goes where the element is, through the camera: a rotated embed
-    /// yields the box containing its quad, like a nested document's.
+    /// `TOILE-UI-414`: the frame goes where the element is, through the
+    /// camera: a rotated embed yields the box containing its quad, like a
+    /// nested document's.
     #[test]
     fn the_frame_follows_the_element_through_the_camera() {
         let dv = viewport(vec![DisplayNode::Element(web(

@@ -49,7 +49,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-154` | `POST` | A transform on a group MUST reach every member. | this spec section 3 | `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- both members at their translated rects | none | verified |
-| `TOILE-053` | `POST` | A transform on a group MUST reach every leaf of its subtree, however deep the nesting. | this spec section 3 | `ambre_toile::logic::structure_tests::a_move_reaches_every_leaf_of_a_nested_group` -- a move of a group nested three deep, every leaf read back at its own box plus the delta | none | verified |
+| `TOILE-053` | `POST` | A transform on a group MUST reach every leaf of its subtree, however deep the nesting. | this spec section 3 | `ambre_toile::logic::structure_tests::a_move_reaches_every_leaf_of_a_nested_group` -- a move of a group nested three deep, every leaf read back at its own box plus the delta; `ambre_toile::logic::state::elements::inner_tests::a_group_aligns_as_one_box` -- an alignment of a group moves both members by the same amount | none | verified |
 | `TOILE-155` | `FRAME` | A transform on a group MUST NOT resize it: its box is derived. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_group_takes_no_box_from_a_resize_or_a_rotation` -- a resize aimed at a group whose member a peer deleted writes no change, and after a rotation its caches equal the other peer's and a rebuild's | none | verified |
 
 ### 1.4 Ungroup

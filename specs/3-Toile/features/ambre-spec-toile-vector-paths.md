@@ -23,6 +23,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-FEAT-006` | `INV` | Each combinator MUST be area-correct: a union is the two areas minus their overlap, an intersection is the overlap, a subtraction is the subject minus the union of the rest, an exclusion is the symmetric difference. | this spec section 3 | `ambre_toile::logic::boolean::tests::union_area_is_combined_minus_overlap`; `::intersect_area_is_overlap`; `::subtract_removes_the_clip`; `::exclude_is_symmetric_difference`; `::union_of_disjoint_keeps_both` -- a degenerate input; `::intersect_of_disjoint_is_empty` -- another; `::subtract_folds_over_multiple_clips` -- the subject against several clips | none | verified |
 | `TOILE-FEAT-033` | `INV` | A combinator MUST return the same outline for the same inputs. | this spec section 3 | `ambre_toile::logic::boolean::tests::deterministic_across_runs` -- it calls the solver twice in one process and compares the SVG, so it holds one build against itself, which is the rule as stated. Nothing compares two builds or two platforms, which is the wider rule the row once carried | none | verified |
 | `TOILE-FEAT-018` | `INV` | A boolean operation MUST be reachable from a surface. | this spec section 4 | not built | unbuilt -- lands with the `Boolean operations reach a surface` Story (`ambre-roadmap.md` E6). The command has no menu entry, no button and no chord anywhere in the workspace, section 6 | unimplemented |
+| `TOILE-FEAT-112` | `INV` | The flatten tolerance MUST be finite and positive. | this spec section 3 | `ambre_toile::logic::boolean::tests::a_flatten_tolerance_is_finite_and_positive` -- the constructor refuses zero, a negative, NaN and infinity | none | verified |
 
 ### 1.2 Draw a path with the pen
 
@@ -51,7 +52,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the pen is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The finished path enters the document as one create and leaves as
   bytes the Sync worker seals (`ZK-001`).
-* **Verification.** 12 `verified`, 1 `unimplemented`. What holds is the pen and the combinators. The
+* **Verification.** 13 `verified`, 1 `unimplemented`. What holds is the pen and the combinators. The
   tests read the span each pen gesture places and both refusals. They also read the frame conditions
   that keep a path in flight off the board, and the style the result wears. What is owed is a
   gesture that invokes a combinator.

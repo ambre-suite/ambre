@@ -949,8 +949,8 @@ mod inner_tests {
         assert_eq!(st.bounds_of(&b).expect("bounds").x0, 0.0);
     }
 
-    /// A group aligns by its own box and carries its subtree, the way a drag
-    /// does.
+    /// `TOILE-053`: a group aligns by its own box and carries its subtree, the
+    /// way a drag does.
     #[test]
     fn a_group_aligns_as_one_box() {
         let mut st = ToileState::new();

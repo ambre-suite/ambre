@@ -30,6 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-281` | `INV` | The rectangle the UI hands over for culling MUST carry a zoom the Logic thread can divide by. | this spec section 2 | `ambre_bus::app::toile::tests::any_zoom_culls_a_finite_rect` | none | verified |
 | `TOILE-UI-025` | `INV` | While the board asks for snapping, every committed geometry MUST sit on a multiple of the grid step. | this spec section 3; section 5 | not built | unbuilt -- lands with the `Snap to the board grid` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TOILE-UI-030` | `INV` | The minimap MUST NOT write to the document: dragging its rectangle moves the camera alone. | this spec section 5 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `TOILE-UI-421` | `INV` | A snapped world point MUST sit on a multiple of the grid step on each axis. | this spec section 3; `TOILE-UI-025` | `ambre_toile::ui::grid::tests::snap_quantizes_to_step` -- (23, -31) on a step of 20 lands on (20, -40) | none | verified |
 
 ### 1.2 Drag the board around
 
@@ -93,10 +94,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the camera is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What crosses to the Logic thread is a rectangle to cull
   against, never document data (`TOILE-UI-001`).
-* **Verification.** 33 `verified`, 2 `unimplemented`. The pure functions of the camera hold the
-  geometry. View tests drive the wheel in each mode, the finger, the edge pan and the resize,
-  then read the cull request each handler queues. The grid is painted into a recording
-  surface on the board's own unit. The two `unimplemented` rows are snapping and the minimap.
+* **Verification.** 34 `verified`, 2 `unimplemented`. The pure functions of the camera hold the
+  geometry. View tests drive the wheel in each mode, the finger, the edge pan and the resize, then
+  read the cull request each handler queues. The grid is painted into a recording surface on the
+  board's own unit. The two `unimplemented` rows are snapping and the minimap.
 
 ---
 

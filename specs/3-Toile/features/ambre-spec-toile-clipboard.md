@@ -49,6 +49,7 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 | `TOILE-139` | `FRAME` | A paste MUST NOT touch what is already on the board. | this spec section 3 | structural -- every write of a paste goes under an identity minted from the peer and a counter that only grows, so no path reaches an element the board already holds | none | verified |
 | `TOILE-260` | `POST` | A plain paste MUST land the plain text as one text element at the pointer, whatever payload the clipboard or this tab's own copy holds. | this spec section 4; `PROSE-UI-227` | not built | unbuilt -- lands with the `Paste as plain text in Toile` Story (`ambre-roadmap.md` E6). A paste with no payload returns before it writes anything, so text from outside lands nowhere | unimplemented |
 | `TOILE-140` | `FRAME` | A paste of an empty payload MUST write nothing and reach nobody. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_empty_paste_writes_nothing` -- no delta, no create, and the same history | none | verified |
+| `TOILE-281` | `FRAME` | A paste MUST NOT write a key the board's schema does not name. | this spec section 3 | `ambre_toile::logic::state::clipboard::tests::a_paste_writes_only_the_keys_the_schema_names` -- a stray key in the clipboard bytes is absent from the pasted element's map | none | verified |
 
 * **Budget.** the paste under 1 ms, the transform-command row of
   `ambre-spec-budgets.md section 1`. A paste reseeds every derived cache from the document rather
@@ -56,9 +57,9 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 * **Boundary.** the payload leaves the client. It is written to the operating system clipboard under
   a private type, outside the sealed path (`ZK-001`), by the user's own copy gesture. The plain-text
   half is left empty, so nothing readable by another application leaves.
-* **Verification.** 17 `verified`, 1 `unimplemented`. What holds is the round trip, the pasted box,
-  and what a pasted set is bound to. Tests read back a pasted group's members, a pasted arrow's ends,
-  and a frame copied with and without its member.
+* **Verification.** 18 `verified`, 1 `unimplemented`. What holds is the round trip, the pasted box,
+  and what a pasted set is bound to. Tests read back a pasted group's members, a pasted arrow's
+  ends, and a frame copied with and without its member.
 
 ---
 

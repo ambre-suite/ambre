@@ -916,8 +916,8 @@ mod tests {
         );
     }
 
-    /// A box that holds an element no frame lists offers add, never a removal
-    /// that would change nothing.
+    /// `TOILE-UI-047`: a box that holds an element no frame lists offers add,
+    /// never a removal that would change nothing.
     #[test]
     fn an_unframed_element_inside_a_box_is_offered_add_only() {
         let dv = viewport(vec![

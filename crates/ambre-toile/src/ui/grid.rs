@@ -293,6 +293,8 @@ mod tests {
         }
     }
 
+    /// `TOILE-UI-421`: a snapped world point sits on a multiple of the grid
+    /// step on each axis.
     #[test]
     fn snap_quantizes_to_step() {
         let s = snap_world(Point::new(23.0, -31.0), BoardLength::new(20.0));

@@ -321,6 +321,7 @@ mod tests {
         assert_eq!(tool_for_command(TOOL_HAND), Some(Tool::Hand));
     }
 
+    /// `TOILE-UI-409`: an id that names no tool arms no tool.
     #[test]
     fn tool_for_command_rejects_non_tool_ids() {
         // A non-tool Toile command (the Find panel opener) and an unknown id both
@@ -465,6 +466,8 @@ mod tests {
         );
     }
 
+    /// `TOILE-UI-410`: the note swatches are distinct opaque colours, the
+    /// default colour first.
     #[test]
     fn sticky_swatches_lead_with_the_default_and_are_distinct() {
         assert_eq!(STICKY_SWATCHES.first(), Some(&STICKY_DEFAULT_FILL));

@@ -139,6 +139,7 @@ mod tests {
             .collect()
     }
 
+    /// `TOILE-277`: aligning left puts every box on the left edge of the union.
     #[test]
     fn aligning_left_puts_every_box_on_the_union_edge() {
         let boxes = [r(10.0, 0.0, 20.0, 10.0), r(50.0, 40.0, 5.0, 10.0)];
@@ -149,6 +150,8 @@ mod tests {
         assert_eq!(out[1].y0, 40.0);
     }
 
+    /// `TOILE-277`: aligning on the horizontal centre puts every box on one
+    /// centre line, and keeps each width.
     #[test]
     fn aligning_centers_shares_one_axis_and_keeps_the_widths() {
         let boxes = [r(0.0, 0.0, 100.0, 10.0), r(0.0, 20.0, 10.0, 10.0)];
@@ -157,6 +160,8 @@ mod tests {
         assert_eq!(out[1].width(), 10.0);
     }
 
+    /// `TOILE-278`: a second bottom alignment leaves every box where the first
+    /// one put it.
     #[test]
     fn aligning_is_idempotent() {
         let boxes = [r(10.0, 0.0, 20.0, 10.0), r(50.0, 40.0, 5.0, 10.0)];
@@ -171,6 +176,8 @@ mod tests {
         );
     }
 
+    /// `TOILE-279`: a distribution equalizes the gaps, and the two extreme boxes
+    /// keep their place.
     #[test]
     fn distributing_equalizes_the_gaps_and_pins_the_extremes() {
         // Widths 10, 30, 10 over a span of 100 leaves 50 for two gaps.
@@ -186,6 +193,8 @@ mod tests {
         assert_eq!(out[1].x0, 35.0);
     }
 
+    /// `TOILE-280`: a distribution orders the boxes by their place on the axis,
+    /// never by selection order.
     #[test]
     fn distributing_reads_screen_order_not_selection_order() {
         let boxes = [
@@ -201,6 +210,8 @@ mod tests {
         assert_eq!(out[2].x0, 35.0);
     }
 
+    /// `TOILE-204`: a vertical distribution leaves every box where it was on the
+    /// horizontal axis.
     #[test]
     fn distributing_on_the_vertical_axis_leaves_x_alone() {
         let boxes = [
@@ -230,6 +241,8 @@ mod tests {
         assert_eq!(align_deltas(&[], AlignOp::Top), Vec::<Vec2>::new());
     }
 
+    /// `TOILE-279`: boxes that overlap get an even overlap, and the two extreme
+    /// boxes keep their place.
     #[test]
     fn overlapping_boxes_get_an_even_overlap_rather_than_a_pushed_extreme() {
         // Three 50-wide boxes over a 60-wide span: the gap is negative.

@@ -188,16 +188,6 @@ pub fn chord(id: CommandId) -> Option<KeyBinding> {
 mod tests {
     use super::*;
 
-    /// The registry is the single declaration site, so two commands that share
-    /// an identity would make one of them unreachable through `find`.
-    #[test]
-    fn every_identity_is_declared_once() {
-        for (i, cmd) in COMMANDS.iter().enumerate() {
-            let twin = COMMANDS.iter().skip(i + 1).find(|c| c.id == cmd.id);
-            assert!(twin.is_none(), "{:?} is declared twice", cmd.id);
-        }
-    }
-
     /// Each command is described once, with a title in every locale, a
     /// group, no blank icon and no chord another command holds
     /// (`UI-THREAD-019`, `UI-THREAD-037`).
@@ -258,9 +248,9 @@ mod tests {
         }
     }
 
-    /// Redo announces Ctrl+Shift+Z and answers Ctrl+Y as well, the pair the
-    /// shared crate decides for every application. The board decodes it
-    /// canvas-side, so the table is where Toile carries the decision.
+    /// `UNDO-011`: redo announces Ctrl+Shift+Z and answers Ctrl+Y as well, the
+    /// pair the shared crate decides for every application. The board decodes
+    /// it canvas-side, so the table is where Toile carries the decision.
     #[test]
     fn redo_announces_both_chords() {
         let redo = ambre_commands::find(COMMANDS, menu_bar::REDO).expect("described");

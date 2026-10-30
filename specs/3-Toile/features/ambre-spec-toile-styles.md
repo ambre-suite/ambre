@@ -64,6 +64,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 | `TOILE-UI-179` | `POST` | Each bar edit MUST start from the selection's style as it stands, so two quick edits compose. | this spec section 3 | `ambre_toile::ui::view::view_tests::two_bar_edits_compose_and_keep_the_selection` -- the second edit carries the first, echoed back with the selection | none | verified |
 | `TOILE-UI-180` | `FAIL` | A size the control cannot mean MUST be refused, not turned into the automatic size. | this spec section 6 | `ambre_toile::ui::floatbar::tests::style_edit_field_mappings` -- a negative size does not decode and changes nothing, and Auto lands as the automatic size | none | verified |
 | `TOILE-UI-181` | `FRAME` | A bar edit MUST NOT change what is selected. | this spec section 3 | `ambre_toile::ui::view::view_tests::two_bar_edits_compose_and_keep_the_selection` | none | verified |
+| `TOILE-UI-419` | `POST` | The floating bar's Delete button MUST report the command id the context menu's Delete entry carries. | this spec section 3 | `ambre_toile::tests::chrome_ui::selection_toolbar_delete_fires_command` -- wasm tier: a click on the mounted bar's Delete button reports `menu::DELETE` | none | verified |
 
 * **Budget.** the view-state update under 0.5 ms, one row of `ambre-spec-budgets.md section 2`. Both models
   are a fold over the selection, and the bar's screen position is recomputed every frame inside that figure.
@@ -71,7 +72,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 * **Boundary.** none: both surfaces are chrome on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The value they emit enters the document and leaves as bytes the Sync
   worker seals (`ZK-001`).
-* **Verification.** 32 `verified`. What holds is the read: the base value, the flags, the anchor,
+* **Verification.** 33 `verified`. What holds is the read: the base value, the flags, the anchor,
   the one-field mapping, and a selection read whole (`TOILE-UI-070`). The write holds: each surface
   writes one field, a restyle undoes as one step, and two bar edits compose. A style carries its own
   layout version (`TOILE-UI-071`). The lock itself is `TOILE-033`.

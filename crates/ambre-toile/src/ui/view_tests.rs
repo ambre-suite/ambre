@@ -261,6 +261,8 @@ fn a_click_on_a_selected_element_keeps_the_whole_selection() {
     assert_eq!(rig.view.selection, [eid("a"), eid("b")], "the release");
 }
 
+/// `TOILE-UI-031`: a marquee takes the element it covers and leaves the one it
+/// does not.
 #[test]
 fn a_marquee_takes_what_it_covers() {
     let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
@@ -557,6 +559,8 @@ fn escape_leaves_the_scope_and_clears_the_selection_in_one_press() {
     assert_eq!(rig.view.group_scope, None);
 }
 
+/// `TOILE-094`: the ungroup chord sends one command over the whole selection,
+/// so the gesture is one undo item.
 #[test]
 fn the_ungroup_chord_sends_one_command_over_the_selection() {
     let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
