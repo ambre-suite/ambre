@@ -649,10 +649,22 @@ impl SealedBlob {
         crate::http::HttpBody::new(self.0.clone())
     }
 
-    /// The sealed bytes, moved out, for the role that stores them: a
-    /// document name or a key link.
+    /// The sealed bytes, moved out, for a test that tampers with them or
+    /// serves them back as a download.
+    #[cfg(test)]
     pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.0
+    }
+
+    /// The sealed bytes, moved out, as the body of a key link.
+    pub(crate) fn into_previous_key(self) -> ambre_core::SealedPreviousKey {
+        ambre_core::SealedPreviousKey::new(self.0)
+    }
+
+    /// The sealed bytes as the name of a document, which the relay stores
+    /// and never opens.
+    pub(crate) fn into_name(self) -> ambre_core::SealedName {
+        ambre_core::SealedName::new(self.0)
     }
 
     /// The size the relay is told, which is the sealed size.
@@ -966,9 +978,7 @@ pub fn seal_link(
         document_id,
         key,
         previous: previous.id(),
-        sealed: ambre_core::SealedPreviousKey::new(
-            object_bytes(key, signing_key, &sealed).into_bytes(),
-        ),
+        sealed: object_bytes(key, signing_key, &sealed).into_previous_key(),
     })
 }
 
