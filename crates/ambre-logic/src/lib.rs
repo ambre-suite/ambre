@@ -825,7 +825,7 @@ struct LogicState {
     erase_owed: Vec<(DocumentId, ambre_core::ContentHash)>,
     /// The images fetched for a preview the relay has not answered, each
     /// with the channel whose view asked.
-    picturing: HashMap<ambre_bus::RequestId, (ambre_bus::ChannelId, ambre_bus::MediaRef)>,
+    picturing: HashMap<ambre_bus::RequestId, (ambre_bus::ChannelId, ambre_bus::ContentHash)>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
     direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,

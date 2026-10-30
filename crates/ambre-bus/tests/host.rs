@@ -258,7 +258,7 @@ fn sync_command_roundtrips_through_postcard() {
             kind: ActivityKind::Content,
             mentions: vec![UserId::new()],
             mentions_all: ambre_bus::MentionScope::All,
-            anchor: Some(ActivityAnchor(vec![1, 2])),
+            anchor: ActivityAnchor::new(vec![1, 2]),
         }),
     });
     roundtrip_sync(&SyncCommand::SendUnsent {
@@ -481,7 +481,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 kind: ActivityKind::Content,
                 mentions: vec![user],
                 mentions_all: ambre_bus::MentionScope::Named,
-                anchor: Some(ActivityAnchor(vec![3])),
+                anchor: ActivityAnchor::new(vec![3]),
             }),
         },
         SyncCommand::SendUnsent {

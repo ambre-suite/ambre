@@ -44,8 +44,8 @@ pub use activity::{Activity, ActivityAnchor, ActivityKind, ActivitySummary, Ment
 pub use app::murmure::{
     Attachment, ByteSize, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity,
     ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, Confirmation,
-    Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent, DirectPeers, DocumentActivity,
-    Emoji, HeldReply, HeldSend, MediaRef, MediaType, MemberChannel, MemberView, Mention,
+    ContentHash, Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent, DirectPeers,
+    DocumentActivity, Emoji, HeldReply, HeldSend, MediaType, MemberChannel, MemberView, Mention,
     MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureCommand,
     MurmureEvent, Notice, Picture, PictureFrame, Presence, PrivateChannelDraft, PublicChannelDraft,
     Reaction, ReplyCount, ReplyEcho, Revision, SealedChannelKey, SearchMatch, SegmentCount,

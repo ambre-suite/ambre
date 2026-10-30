@@ -20,6 +20,7 @@ use ambre_core::DocumentId;
 pub use ambre_core::FontFamily;
 use ambre_core::FontSize;
 use ambre_core::Rgba;
+use ambre_core::StoredBoardLength;
 use ambre_core::UserId;
 use ambre_core::{Slant, Strikethrough, Underline};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
@@ -261,52 +262,9 @@ impl FontSpec {
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Shadow {
     pub color: Rgba,
-    pub dx: StyleLength,
-    pub dy: StyleLength,
-    pub blur: StyleLength,
-}
-
-/// A length on the board that an element's style stores: the width of its
-/// stroke, or the radius of its corners.
-///
-/// It is measured in world units, the same units as the element's frame, so
-/// the camera scales it with the shape. A screen length has its own type, and
-/// the two meet only through the camera. The serde form is the bare `f32`,
-/// through `#[serde(transparent)]`, so the register's bytes are those of the
-/// float. No rule bounds a length, so the type has no fallible constructor.
-#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct StyleLength(f32);
-
-impl StyleLength {
-    /// No length: no stroke, or square corners.
-    pub const ZERO: Self = Self(0.0);
-
-    /// The length of `units` world units.
-    #[must_use]
-    pub const fn new(units: f32) -> Self {
-        Self(units)
-    }
-
-    /// The number of world units, for the drawing call that takes the float.
-    #[must_use]
-    pub const fn get(self) -> f32 {
-        self.0
-    }
-
-    /// The larger of the two lengths.
-    #[must_use]
-    pub fn max(self, other: Self) -> Self {
-        Self(self.0.max(other.0))
-    }
-}
-
-/// A length a style stores, widened to the `f64` the board is measured in.
-/// Both are world units, so no camera stands between them.
-impl From<StyleLength> for ambre_core::BoardLength {
-    fn from(length: StyleLength) -> Self {
-        Self::new(f64::from(length.get()))
-    }
+    pub dx: StoredBoardLength,
+    pub dy: StoredBoardLength,
+    pub blur: StoredBoardLength,
 }
 
 /// The whole visual style of an element, held as **one** postcard-encoded LWW
@@ -322,10 +280,10 @@ impl From<StyleLength> for ambre_core::BoardLength {
 pub struct ElementStyle {
     pub fill: Option<Rgba>, // None = no fill
     pub stroke: Option<Rgba>,
-    pub stroke_w: StyleLength,
+    pub stroke_w: StoredBoardLength,
     pub opacity: ambre_core::Opacity,
     /// The corner radius of a rectangle or a sticky.
-    pub corner: StyleLength,
+    pub corner: StoredBoardLength,
     pub font: FontSpec,
     pub shadow: Option<Shadow>,
     /// Text (foreground) colour, RGBA. `None` = the kind's default ink (a
@@ -339,9 +297,9 @@ impl Default for ElementStyle {
         Self {
             fill: Some(Rgba::from_bits(0xFFFF_FFFF)),
             stroke: Some(Rgba::from_bits(0x3333_33FF)),
-            stroke_w: StyleLength::new(1.0),
+            stroke_w: StoredBoardLength::new(1.0),
             opacity: ambre_core::Opacity::OPAQUE,
-            corner: StyleLength::ZERO,
+            corner: StoredBoardLength::ZERO,
             font: FontSpec::default(),
             shadow: None,
             text_color: None,
@@ -363,7 +321,7 @@ pub const STICKY_DEFAULT_FILL: Rgba = Rgba::from_bits(0xFEF0_8AFF);
 /// Corner radius (world units) of a sticky-note card. A sticky is a plain
 /// rectangle (Miro-style), so this is zero. A named constant keeps the card's
 /// shape spec-anchored and easy to revisit.
-pub const STICKY_CORNER: StyleLength = StyleLength::ZERO;
+pub const STICKY_CORNER: StoredBoardLength = StoredBoardLength::ZERO;
 
 /// The size of a text body: automatic, or a positive size the style names.
 ///
@@ -473,7 +431,7 @@ impl ElementStyle {
             ElementKind::Sticky => Self {
                 fill: Some(STICKY_DEFAULT_FILL),
                 stroke: None,
-                stroke_w: StyleLength::ZERO,
+                stroke_w: StoredBoardLength::ZERO,
                 corner: STICKY_CORNER,
                 font: FontSpec {
                     size: FontSizeChoice::AUTO,
@@ -755,8 +713,8 @@ impl std::fmt::Display for WebAddress {
 /// `f32`s, the coordinates in board units then the pressure.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StrokePoint {
-    pub x: ambre_core::StrokeCoord,
-    pub y: ambre_core::StrokeCoord,
+    pub x: StoredBoardLength,
+    pub y: StoredBoardLength,
     /// How hard the pen pressed, [`UnitFraction::ONE`] when the input device
     /// reports none. The type refuses a value outside `0 ..= 1`; the board
     /// reader clamps a stored one (`TOILE-268`).
@@ -767,7 +725,7 @@ impl StrokePoint {
     /// A sample at `(x, y)` on the board, pressed as hard as a device that
     /// reports no pressure reads.
     #[must_use]
-    pub const fn full_pressure(x: ambre_core::StrokeCoord, y: ambre_core::StrokeCoord) -> Self {
+    pub const fn full_pressure(x: StoredBoardLength, y: StoredBoardLength) -> Self {
         Self {
             x,
             y,
@@ -2695,7 +2653,9 @@ pub struct PresenceUpdate {
 // Errors
 // =============================================================================
 
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+/// Why the board refused a command. The reason of a failed write may quote
+/// the board, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ToileError {
     #[error("element {} not found", .0.as_str())]
     NoSuchElement(ElementId),
@@ -2724,6 +2684,30 @@ pub enum ToileError {
     /// mints under a new PeerID.
     #[error("this session has no fresh id left; reopen the board to create more")]
     IdsExhausted,
+}
+
+impl fmt::Debug for ToileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoSuchElement(id) => f.debug_tuple("NoSuchElement").field(id).finish(),
+            Self::NoSuchConnector(id) => f.debug_tuple("NoSuchConnector").field(id).finish(),
+            Self::NotCreatable { kind } => {
+                f.debug_struct("NotCreatable").field("kind", kind).finish()
+            }
+            Self::ContentKindMismatch => f.write_str("ContentKindMismatch"),
+            Self::UnusableSize => f.write_str("UnusableSize"),
+            Self::GroupNeedsTwo => f.write_str("GroupNeedsTwo"),
+            Self::NotAGroup(id) => f.debug_tuple("NotAGroup").field(id).finish(),
+            Self::RemoteImportFailed => f.write_str("RemoteImportFailed"),
+            Self::BooleanNeedsTwo => f.write_str("BooleanNeedsTwo"),
+            Self::BooleanEmpty => f.write_str("BooleanEmpty"),
+            Self::WriteFailed(reason) => f
+                .debug_tuple("WriteFailed")
+                .field(&ambre_core::char_len(reason))
+                .finish(),
+            Self::IdsExhausted => f.write_str("IdsExhausted"),
+        }
+    }
 }
 
 // =============================================================================
@@ -2995,7 +2979,7 @@ impl fmt::Debug for ToileEvent {
             Self::ImportFailed(reason) => tuple!("ImportFailed", &char_len(reason)),
             Self::DocumentRefused(reason) => tuple!("DocumentRefused", reason),
             Self::UndecodableRecords => f.write_str("UndecodableRecords"),
-            Self::ExportFailed(reason) => tuple!("ExportFailed", reason),
+            Self::ExportFailed(reason) => tuple!("ExportFailed", &char_len(reason)),
             Self::ExportComplete {
                 filename,
                 data,
@@ -3097,8 +3081,10 @@ pub enum DisplayGeom {
     /// `Vec<TextRun>` for char-wise convergence (`toile-text-editing`) and
     /// Parley-ready runs.
     Text(String),
-    /// Media blob hash (`toile-media` resolves the pixels).
-    Image(ambre_core::ContentHash),
+    /// Media blob hash (`toile-media` resolves the pixels). `None` when the
+    /// stored text spells no address: a peer may write any text, and the
+    /// image then paints its placeholder.
+    Image(Option<ambre_core::ContentHash>),
     /// Logic-smoothed polyline (`toile-freehand`).
     Stroke(Vec<Point>),
     /// Background + border, and the frame's title (`TOILE-253`). Children are
@@ -3323,6 +3309,8 @@ mod tests {
                 }
             ),
             format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
+            format!("{:?}", ToileEvent::ExportFailed(secret.clone())),
+            format!("{:?}", ToileError::WriteFailed(secret.clone())),
             format!("{:?}", DisplayGeom::Sticky(secret.clone())),
             format!("{:?}", DisplayGeom::Text(secret.clone())),
             format!("{:?}", DisplayGeom::Frame(secret.clone())),
@@ -3355,8 +3343,8 @@ mod tests {
     #[test]
     fn a_stroke_sample_keeps_three_floats_and_refuses_a_pressure_past_one() {
         let sample = StrokePoint {
-            x: ambre_core::StrokeCoord::new(1.5),
-            y: ambre_core::StrokeCoord::new(-2.0),
+            x: StoredBoardLength::new(1.5),
+            y: StoredBoardLength::new(-2.0),
             pressure: UnitFraction::HALF,
         };
         let encoded = postcard::to_allocvec(&sample).expect("a sample encodes");
@@ -3488,12 +3476,12 @@ mod tests {
     fn a_style_round_trips_through_its_version() {
         let style = ElementStyle {
             fill: Some(Rgba::from_bits(0xaabb_ccff)),
-            corner: StyleLength::new(8.0),
+            corner: StoredBoardLength::new(8.0),
             shadow: Some(Shadow {
                 color: Rgba::from_bits(0x0000_00ff),
-                dx: StyleLength::new(1.0),
-                dy: StyleLength::new(2.0),
-                blur: StyleLength::new(3.0),
+                dx: StoredBoardLength::new(1.0),
+                dy: StoredBoardLength::new(2.0),
+                blur: StoredBoardLength::new(3.0),
             }),
             font: FontSpec {
                 family: Some(FontFamily::Serif),

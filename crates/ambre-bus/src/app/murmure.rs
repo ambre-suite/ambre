@@ -267,42 +267,17 @@ impl From<String> for Emoji {
     }
 }
 
-/// The address of a blob, as the Sync worker named it: sixty-four lowercase
-/// hexadecimal characters, keyed by the document key (`ambre-spec-media.md`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct MediaRef(String);
-
-impl MediaRef {
-    /// The address `word` spells, or `None` for anything else.
-    pub fn parse(word: &str) -> Option<Self> {
-        (word.len() == 64
-            && word
-                .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
-        .then(|| Self(word.to_owned()))
-    }
-
-    /// The address, as the relay names it.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// The content hash the relay stores the blob under: the same address.
-    pub fn content_hash(&self) -> ambre_core::ContentHash {
-        ambre_core::ContentHash::from(self.0.as_str())
-    }
-}
-
 // A file's media type is shown and used to open the file, and never sent to
-// the relay (`SYNC-053`). Both types live in `ambre-core`, which the relay's
-// media routes share.
-pub use ambre_core::{ByteSize, MediaType};
+// the relay (`SYNC-053`). The three types live in `ambre-core`, which the
+// relay's media routes share. A message names its file by the address the
+// Sync worker gave it, read back through `ContentHash::parse`.
+pub use ambre_core::{ByteSize, ContentHash, MediaType};
 
 /// A file a message carries: its address, never its bytes (`MURMURE-017`).
 /// `Debug` prints the length of the file's name alone.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Attachment {
-    pub media_ref: MediaRef,
+    pub media_ref: ContentHash,
     /// The file's name, as its author's file system gave it.
     pub name: String,
     pub media_type: MediaType,
@@ -508,11 +483,11 @@ pub enum MurmureCommand {
     /// `meta`. The answer is the `MediaDownloaded` of request `id`.
     FetchFile {
         id: crate::RequestId,
-        media_ref: MediaRef,
+        media_ref: ContentHash,
     },
     /// Fetch the image `media_ref` of a message and decode it for its
     /// preview. The answer is [`MurmureEvent::Picture`].
-    ShowPicture { media_ref: MediaRef },
+    ShowPicture { media_ref: ContentHash },
 }
 
 impl MurmureCommand {
@@ -811,7 +786,7 @@ pub enum MurmureEvent {
     /// `ShowPicture`. `None` when it could not be fetched or decoded: the
     /// view keeps its chip alone.
     Picture {
-        media_ref: MediaRef,
+        media_ref: ContentHash,
         picture: Option<Picture>,
     },
 }
@@ -1153,7 +1128,7 @@ mod tests {
     #[test]
     fn a_text_of_a_conversation_prints_its_length_alone() {
         use super::{
-            Attachment, ByteSize, Deletion, MediaRef, MediaType, MessageAt, MessageDraft,
+            Attachment, ByteSize, ContentHash, Deletion, MediaType, MessageAt, MessageDraft,
             MessageView, Revision,
         };
         use ambre_core::{MessageId, Timestamp, UserId};
@@ -1166,7 +1141,7 @@ mod tests {
             styles: Vec::new(),
         };
         let attachment = Attachment {
-            media_ref: MediaRef::parse(&"a".repeat(64)).expect("an address"),
+            media_ref: ContentHash::parse(&"a".repeat(64)).expect("an address"),
             name: secret.to_owned(),
             media_type: MediaType("text/plain".to_owned()),
             size: ByteSize(1),

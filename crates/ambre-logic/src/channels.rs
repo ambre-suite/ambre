@@ -1360,7 +1360,7 @@ impl LogicState {
                     id,
                     cmd: RestCommand::DownloadMedia {
                         document_id,
-                        content_hash: media_ref.content_hash(),
+                        content_hash: media_ref,
                     },
                 });
             }
@@ -2096,9 +2096,9 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, Attachment, ByteSize, FoldAnswer, LeaseAnswer, LeaseId, MediaRef, MediaType,
-        Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand, RestEvent, SegmentId,
-        Timestamp,
+        ActivityKind, Attachment, ByteSize, ContentHash, FoldAnswer, LeaseAnswer, LeaseId,
+        MediaType, Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand, RestEvent,
+        SegmentId, Timestamp,
     };
     use ambre_core::CharSpan;
     use ambre_core::WholePx;
@@ -3790,7 +3790,7 @@ mod tests {
         signed_in(&mut state, UserId::new());
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
-        let file = MediaRef::parse(&"cd".repeat(32)).expect("a content hash");
+        let file = ContentHash::parse(&"cd".repeat(32)).expect("a content hash");
         let (up, down) = (RequestId(41), RequestId(42));
         drain(&sync);
 
@@ -3851,7 +3851,7 @@ mod tests {
             MurmureCommand::SendMessage {
                 draft,
                 attachments: vec![Attachment {
-                    media_ref: MediaRef::parse(&file).expect("a content hash"),
+                    media_ref: ContentHash::parse(&file).expect("a content hash"),
                     name: "plan.pdf".to_owned(),
                     media_type: MediaType("application/pdf".to_owned()),
                     size: ByteSize(2048),
@@ -3907,7 +3907,7 @@ mod tests {
             id: again,
             evt: RestEvent::MediaErased {
                 document_id: meta,
-                content_hash: ambre_core::ContentHash(file.clone()),
+                content_hash: ContentHash::parse(&file).expect("a content hash"),
             },
         });
         assert!(drain(&ui).is_empty(), "no view awaits the erase");
@@ -3946,7 +3946,7 @@ mod tests {
         signed_in(&mut state, UserId::new());
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
-        let file = MediaRef::parse(&"cd".repeat(32)).expect("a content hash");
+        let file = ContentHash::parse(&"cd".repeat(32)).expect("a content hash");
         drain(&sync);
         for _ in 0..2 {
             let media_ref = file.clone();
@@ -3970,7 +3970,7 @@ mod tests {
             id: *id,
             evt: RestEvent::MediaDownloaded {
                 document_id: meta,
-                content_hash: ambre_core::ContentHash(file.as_str().to_owned()),
+                content_hash: file.clone(),
                 data: png.into(),
             },
         });
