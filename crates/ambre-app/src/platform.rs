@@ -738,7 +738,7 @@ pub(crate) fn open_plaintext_container(
     // The payload lands as every copy does, sealed under the session's key.
     vault.seal(
         ambre_bus::RowPlace::Document(document_id),
-        ambre_bus::SecretBytes::new(payload.into_bytes()),
+        payload.into_secret(),
         move |sealed| match sealed {
             Some(sealed) => {
                 wasm_bindgen_futures::spawn_local(store_container(
