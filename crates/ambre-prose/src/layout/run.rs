@@ -19,7 +19,7 @@ use loro::TreeID;
 use parley::{Affinity as ParleyAffinity, Cursor, Selection};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::layout::measure::{EffectiveStyle, MarkedSpan};
+use crate::layout::measure::{BlockLine, EffectiveStyle, MarkedSpan};
 use crate::layout::pass::PageLayout;
 use crate::layout::place::BlockLayout;
 
@@ -139,6 +139,15 @@ ambre_core::define_index! {
     pub struct RunLineSpan;
     /// A list indexed by line of one run.
     pub struct RunLineVec;
+}
+
+impl RunLine {
+    /// The line of the block whose whole text this run shapes. A text block
+    /// is one run, so the paginator cuts it at the run's own lines.
+    #[must_use]
+    pub(crate) fn in_block(self) -> BlockLine {
+        BlockLine::from_usize(self.to_usize())
+    }
 }
 
 ambre_core::define_index! {
