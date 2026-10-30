@@ -94,16 +94,20 @@ impl Rig {
     }
 
     fn key(&mut self, key: Key) -> bool {
-        self.view.handle_input(&InputEvent::Key {
-            key,
-            mods: Modifiers::NONE,
-        })
+        self.view
+            .handle_input(&InputEvent::Key {
+                key,
+                mods: Modifiers::NONE,
+            })
+            .is_yes()
     }
 
     fn type_text(&mut self, text: &str) -> bool {
-        self.view.handle_input(&InputEvent::Text {
-            text: text.to_owned(),
-        })
+        self.view
+            .handle_input(&InputEvent::Text {
+                text: text.to_owned(),
+            })
+            .is_yes()
     }
 
     /// Run one frame as the host does: drain, plan, then paint into a
@@ -488,12 +492,12 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
         .cell_pixel_rect(CellPos::new(Row::new(3), Col::new(3)))
         .expect("D4 is in view");
     let point = (cell.x0 + 1.0, cell.center().y);
-    rig.view.handle_input(&InputEvent::PointerDown {
+    let _ = rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(point.0, point.1),
         button: PointerButton::Primary,
         mods: Modifiers::NONE,
     });
-    rig.view.handle_input(&InputEvent::PointerUp {
+    let _ = rig.view.handle_input(&InputEvent::PointerUp {
         at: pointer(point.0, point.1),
         button: PointerButton::Primary,
         mods: Modifiers::NONE,
@@ -508,7 +512,9 @@ fn a_press_reaches_the_editor_in_its_own_frame() {
 impl Rig {
     /// Press `key` with the given modifiers.
     fn chord(&mut self, key: Key, mods: Modifiers) -> bool {
-        self.view.handle_input(&InputEvent::Key { key, mods })
+        self.view
+            .handle_input(&InputEvent::Key { key, mods })
+            .is_yes()
     }
 
     /// Store `raw` in the grid's cache, shown as `shown`, as a viewport answer
@@ -742,7 +748,7 @@ fn an_open_session_writes_nothing_and_holds_the_grid() {
     let mut rig = Rig::new();
     rig.frame();
     rig.type_text("abc");
-    rig.view.handle_input(&InputEvent::CompositionUpdate {
+    let _ = rig.view.handle_input(&InputEvent::CompositionUpdate {
         text: "ka".to_owned(),
     });
     rig.frame();
@@ -769,7 +775,7 @@ fn an_open_session_writes_nothing_and_holds_the_grid() {
     );
     assert_eq!(rig.active(), (0, 0));
     assert_eq!(rig.view.state.selection.bounds(), rect(0, 0, 0, 0));
-    rig.view.handle_input(&InputEvent::CompositionEnd {
+    let _ = rig.view.handle_input(&InputEvent::CompositionEnd {
         text: "か".to_owned(),
     });
     rig.frame();
@@ -889,12 +895,12 @@ fn a_filled_formula_reaches_each_selected_cell_as_typed() {
 impl Rig {
     /// Press and release the primary button at `(x, y)`.
     fn click(&mut self, x: f64, y: f64) {
-        self.view.handle_input(&InputEvent::PointerDown {
+        let _ = self.view.handle_input(&InputEvent::PointerDown {
             at: pointer(x, y),
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
         });
-        self.view.handle_input(&InputEvent::PointerUp {
+        let _ = self.view.handle_input(&InputEvent::PointerUp {
             at: pointer(x, y),
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
@@ -993,7 +999,7 @@ fn a_drag_past_the_largest_size_holds_the_guide_there() {
         ];
         for (start, hit) in drags {
             assert_eq!(rig.view.state.header_hit(start), Some(hit));
-            rig.view.handle_input(&InputEvent::PointerDown {
+            let _ = rig.view.handle_input(&InputEvent::PointerDown {
                 at: start,
                 button: PointerButton::Primary,
                 mods: Modifiers::NONE,
@@ -1003,7 +1009,7 @@ fn a_drag_past_the_largest_size_holds_the_guide_there() {
                 start.x + ambre_core::ViewPx::new(far),
                 start.y + ambre_core::ViewPx::new(far),
             );
-            rig.view.handle_input(&InputEvent::PointerMove { at: to });
+            let _ = rig.view.handle_input(&InputEvent::PointerMove { at: to });
             let held = match hit {
                 HeaderHit::ColBorder(c) => ResizePreview::Col(
                     rig.view.state.col_x(c) + rig.view.state.scaled(MAX_COL_WIDTH),
@@ -1013,7 +1019,7 @@ fn a_drag_past_the_largest_size_holds_the_guide_there() {
                 ),
             };
             assert_eq!(rig.view.state.resize_preview, Some(held), "zoom {zoom}");
-            rig.view.handle_input(&InputEvent::PointerUp {
+            let _ = rig.view.handle_input(&InputEvent::PointerUp {
                 at: to,
                 button: PointerButton::Primary,
                 mods: Modifiers::NONE,
@@ -1050,17 +1056,17 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
             Some(crate::ui::grid::HeaderHit::ColBorder(Col::new(1)))
         );
         let c_before = rig.view.state.col_x(Col::new(2)).get();
-        rig.view.handle_input(&InputEvent::PointerDown {
+        let _ = rig.view.handle_input(&InputEvent::PointerDown {
             at: pointer(edge, y),
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
         });
         // 200 base pixels, drawn at this zoom.
         let target = rig.view.state.col_x(Col::new(1)).get() + 200.0 * zoom;
-        rig.view.handle_input(&InputEvent::PointerMove {
+        let _ = rig.view.handle_input(&InputEvent::PointerMove {
             at: pointer(target, y),
         });
-        rig.view.handle_input(&InputEvent::PointerUp {
+        let _ = rig.view.handle_input(&InputEvent::PointerUp {
             at: pointer(target, y),
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
@@ -1103,9 +1109,13 @@ fn a_double_click_fits_the_column_to_its_whole_content() {
     rig.sent();
     let edge = rig.col_edge(0);
     let y = rig.view.state.header_h().get() * 0.8;
-    assert!(rig.view.handle_input(&InputEvent::DoubleClick {
-        at: pointer(edge, y)
-    }));
+    assert!(
+        rig.view
+            .handle_input(&InputEvent::DoubleClick {
+                at: pointer(edge, y)
+            })
+            .is_yes()
+    );
     rig.frame();
     let asked = rig.sent();
     assert!(
@@ -1174,7 +1184,7 @@ fn a_merged_fill_previews_whole_blocks() {
         .fill_handle_rect()
         .expect("a handle")
         .center();
-    rig.view.handle_input(&InputEvent::PointerDown {
+    let _ = rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(handle.x, handle.y),
         button: PointerButton::Primary,
         mods: Modifiers::NONE,
@@ -1192,7 +1202,8 @@ fn a_merged_fill_previews_whole_blocks() {
     // block that holds it.
     for (row, last) in [(2, 3), (3, 3), (4, 5)] {
         let (x, y) = mid(&rig, row);
-        rig.view
+        let _ = rig
+            .view
             .handle_input(&InputEvent::PointerMove { at: pointer(x, y) });
         assert_eq!(
             rig.view.state.fill_preview,
@@ -1205,16 +1216,18 @@ fn a_merged_fill_previews_whole_blocks() {
 impl Rig {
     /// One wheel sample, as the host forwards it.
     fn wheel(&mut self, dy: f64, delta_mode: u32, mods: Modifiers) -> bool {
-        self.view.handle_input(&InputEvent::Wheel {
-            delta: ambre_canvas::WheelDelta::new(
-                ambre_canvas::WheelVector::new(
-                    ambre_canvas::WheelAmount::new(0.0),
-                    ambre_canvas::WheelAmount::new(dy),
+        self.view
+            .handle_input(&InputEvent::Wheel {
+                delta: ambre_canvas::WheelDelta::new(
+                    ambre_canvas::WheelVector::new(
+                        ambre_canvas::WheelAmount::new(0.0),
+                        ambre_canvas::WheelAmount::new(dy),
+                    ),
+                    ambre_canvas::WheelDeltaMode::from_dom(delta_mode),
                 ),
-                ambre_canvas::WheelDeltaMode::from_dom(delta_mode),
-            ),
-            mods,
-        })
+                mods,
+            })
+            .is_yes()
     }
 
     fn top(&self) -> u32 {
@@ -1291,13 +1304,13 @@ fn a_selection_held_below_the_cells_scrolls_and_follows() {
         .expect("B2 is in view")
         .center();
     let (px, py) = (centre.x, centre.y);
-    rig.view.handle_input(&InputEvent::PointerDown {
+    let _ = rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(px, py),
         button: PointerButton::Primary,
         mods: Modifiers::NONE,
     });
     let below = rig.view.state.canvas_height.get() + 40.0;
-    rig.view.handle_input(&InputEvent::PointerMove {
+    let _ = rig.view.handle_input(&InputEvent::PointerMove {
         at: pointer(px, below),
     });
     for step in 0..=20 {
@@ -1324,12 +1337,12 @@ fn a_selection_held_below_the_cells_scrolls_and_follows() {
 impl Rig {
     /// Press and release the secondary button at `(x, y)`.
     fn right_click(&mut self, x: f64, y: f64) {
-        self.view.handle_input(&InputEvent::PointerDown {
+        let _ = self.view.handle_input(&InputEvent::PointerDown {
             at: pointer(x, y),
             button: PointerButton::Secondary,
             mods: Modifiers::NONE,
         });
-        self.view.handle_input(&InputEvent::PointerUp {
+        let _ = self.view.handle_input(&InputEvent::PointerUp {
             at: pointer(x, y),
             button: PointerButton::Secondary,
             mods: Modifiers::NONE,
@@ -1338,12 +1351,12 @@ impl Rig {
 
     /// Press and release the primary button at `(x, y)` with Shift held.
     fn shift_click(&mut self, x: f64, y: f64) {
-        self.view.handle_input(&InputEvent::PointerDown {
+        let _ = self.view.handle_input(&InputEvent::PointerDown {
             at: pointer(x, y),
             button: PointerButton::Primary,
             mods: Modifiers::SHIFT,
         });
-        self.view.handle_input(&InputEvent::PointerUp {
+        let _ = self.view.handle_input(&InputEvent::PointerUp {
             at: pointer(x, y),
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
@@ -1574,16 +1587,16 @@ impl Rig {
     fn drag_col_1_to(&mut self, width: f64) {
         let edge = self.col_edge(1);
         let y = self.view.state.header_h().get() * 0.8;
-        self.view.handle_input(&InputEvent::PointerDown {
+        let _ = self.view.handle_input(&InputEvent::PointerDown {
             at: pointer(edge, y),
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
         });
         let target = self.view.state.col_x(Col::new(1)).get() + width;
-        self.view.handle_input(&InputEvent::PointerMove {
+        let _ = self.view.handle_input(&InputEvent::PointerMove {
             at: pointer(target, y),
         });
-        self.view.handle_input(&InputEvent::PointerUp {
+        let _ = self.view.handle_input(&InputEvent::PointerUp {
             at: pointer(target, y),
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
@@ -1662,17 +1675,18 @@ fn a_refused_fill_leaves_the_selection() {
         .fill_handle_rect()
         .expect("a handle")
         .center();
-    rig.view.handle_input(&InputEvent::PointerDown {
+    let _ = rig.view.handle_input(&InputEvent::PointerDown {
         at: pointer(handle.x, handle.y),
         button: PointerButton::Primary,
         mods: Modifiers::NONE,
     });
     let (x, y) = rig.cell_mid(3, 0);
-    rig.view
+    let _ = rig
+        .view
         .handle_input(&InputEvent::PointerMove { at: pointer(x, y) });
     assert_eq!(rig.view.state.fill_preview, Some(rect(0, 0, 3, 0)));
     rig.lose_logic();
-    rig.view.handle_input(&InputEvent::PointerUp {
+    let _ = rig.view.handle_input(&InputEvent::PointerUp {
         at: pointer(x, y),
         button: PointerButton::Primary,
         mods: Modifiers::NONE,

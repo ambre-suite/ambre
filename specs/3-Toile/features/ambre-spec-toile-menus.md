@@ -31,9 +31,11 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-125` | `OBS` | The Object menu MUST reuse the group, z-order and lock ids. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::object_menu_reuses_z_order_and_lock_ids` -- it reads the six ids as the ones the context menu emits | none | verified |
 | `TOILE-UI-355` | `OBS` | The Object menu MUST carry the six alignments and the two distributions. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_sit_under_object` -- it reads the eight ids in the layout | none | verified |
 | `TOILE-UI-375` | `OBS` | Each alignment and distribution entry MUST resolve against the selection rather than to a board command of its own. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_align_entries_sit_under_object` -- none of the eight resolves through `menu_bar_edit`; `ambre_toile::ui::menu::tests::an_align_id_resolves_to_one_batch_over_the_selection` -- what each one becomes | none | verified |
-| `TOILE-UI-047` | `OBS` | A context-menu entry MUST be left out when it does not apply to the selection under the cursor. | this spec section 3 | `ambre_toile::ui::menu::tests::an_entry_that_does_not_apply_is_left_out` -- it reads the id list the DOM menu maps for one element and for the empty board | none | verified |
+| `TOILE-UI-047` | `OBS` | A context-menu entry MUST be left out when it does not apply to the selection under the cursor. | this spec section 3 | `ambre_toile::ui::menu::tests::an_entry_that_does_not_apply_is_left_out` -- it reads the id list the DOM menu maps for one element and for the empty board; `ambre_toile::ui::menu::tests::an_unframed_element_inside_a_box_is_offered_add_only` -- an element no frame lists is offered add and never removal; `ambre_toile::tests::chrome_ui::context_menu_empty_canvas_shows_only_paste_and_select_all`; `ambre_toile::tests::chrome_ui::context_menu_copy_row_fires_copy_command`; `ambre_toile::tests::chrome_ui::context_menu_locked_selection_offers_only_unlock` -- wasm tier: the mounted menu leaves out each row that does not apply | none | verified |
 | `TOILE-UI-126` | `OBS` | An entry that would move or remove a locked element MUST be left out when the selection is locked. | this spec section 3 | `ambre_toile::ui::menu::tests::a_locked_selection_omits_move_and_remove_entries` -- cut, delete, duplicate and the four z-order ids are absent from a locked scope; `::an_unlocked_selection_keeps_the_full_set` -- the same ids stay when nothing is locked | none | verified |
 | `TOILE-UI-052` | `OBS` | A shortcut shown beside an entry MUST be the one the keymap binds. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_shown_shortcut_does_what_its_entry_does` -- it presses the chord the registry announces for each board entry and picks the entry on a twin board, and reads the same commands and selection back | none | verified |
+| `TOILE-UI-417` | `OBS` | The Object menu MUST carry the set-link and clear-link entries. | this spec section 3 | `ambre_toile::ui::menu_bar::tests::the_link_entries_sit_under_object` -- both ids in the Object layout, neither resolving to a board command of its own | none | verified |
+| `TOILE-UI-418` | `OBS` | The File menu MUST offer the save to an `.ambre` file, resolved to the board's export of it. | this spec section 3; `ambre-spec-docfile.md section 4` | `ambre_toile::ui::menu_bar::tests::the_file_menu_offers_the_native_file_and_resolves_it` -- the save id in the File layout, resolving to `ExportAmbreFile` | none | verified |
 
 ### 1.2 Right-click over the board
 
@@ -75,6 +77,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-151` | `FRAME` | Resolving an entry MUST NOT change the selection. | this spec section 2 | type-level -- the resolver borrows the selection immutably and returns commands, so it has no way to write it back | none | verified |
 | `TOILE-UI-152` | `FAIL` | An id the resolver does not know MUST be refused, and MUST NOT pass as a view-only intent. | this spec section 5 | `ambre_toile::ui::menu::tests::an_unknown_id_is_refused_not_ui_only` -- an unknown id resolves to `None`, never the empty list a view-only intent returns | none | verified |
 | `TOILE-UI-153` | `FAIL` | With no enclosing frame, the two frame entries MUST tell the user why nothing happened. | this spec section 5 | `ambre_toile::ui::view::view_tests::add_to_frame_with_no_frame_around_says_so_and_sends_nothing` -- one notice and no command, and a frame around the sticky gets the add with no notice; `ambre_toile::ui::view::view_tests::remove_from_frame_outside_any_frame_says_so_and_sends_nothing` -- the same for an unframed selection | none | verified |
+| `TOILE-UI-415` | `POST` | Choosing Group in the context menu MUST report the group command id. | this spec section 2 | `ambre_toile::tests::chrome_ui::context_menu_multi_selection_offers_group` -- wasm tier: the mounted menu over two elements shows Group, and a click on it reports `menu::GROUP` | none | verified |
 
 ### 1.4 Choose a menu-bar entry
 
@@ -94,17 +97,18 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-158` | `POST` | A fit MUST ask the Logic thread for the extent before it moves the camera. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_fit_asks_for_the_extent_before_it_moves` -- both fits send the request with the camera still, and move it on the answer | none | verified |
 | `TOILE-UI-159` | `POST` | A pointer-mode entry MUST stay in the view: it MUST change no camera and reach no thread. | this spec section 3 | `ambre_toile::ui::view::view_tests::a_pointer_mode_entry_stays_in_the_view` | none | verified |
 | `TOILE-UI-160` | `FAIL` | A fit to the selection with nothing selected MUST tell the user why nothing happened. | this spec section 5 | `ambre_toile::ui::view::view_tests::zoom_to_selection_with_nothing_selected_says_so` -- one notice and no request, then a selected sticky asks for its extent with no notice | none | verified |
+| `TOILE-UI-416` | `POST` | The zoom-in button of the menu bar MUST report the zoom-in command. | this spec section 3 | `ambre_toile::tests::chrome_ui::top_menu_bar_zoom_in_fires_command` -- wasm tier: a click on the mounted bar's Zoom in button reports `ZOOM_IN` | none | verified |
 
 * **Budget.** none: a menu is built from a static entry set on the UI thread, and
   `ambre-spec-budgets.md` budgets no menu operation. What an entry commits is budgeted
   by the feature that owns the command.
 * **Boundary.** none: a menu is view state on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. What an entry commits leaves as a command.
-* **Verification.** 54 `verified`, 0 `failing`, 0 `untested`. What holds is the entry set, the omission of
-  what does not apply, and a scope read from the whole selection (`TOILE-UI-134`). The right-click and
-  each zoom entry are driven on the host view, and a shown chord is pressed against its entry on a
-  twin board. An unknown id is refused, and an entry that changes nothing says why. The browser tier
-  holds a palette command against the click that follows it.
+* **Verification.** 58 `verified`. What holds is the entry set, the omission of what does not apply,
+  and a scope read from the whole selection (`TOILE-UI-134`). The right-click and each zoom entry
+  are driven on the host view, and a shown chord is pressed against its entry on a twin board. An
+  unknown id is refused, and an entry that changes nothing says why. The browser tier holds a
+  palette command against the click that follows it.
 
 ---
 
@@ -134,7 +138,7 @@ pub struct CtxScope {
 (`TOILE-UI-134`). The same reply names the selected ids a frame's children list holds, which no box
 tells. The Logic thread announces each board change, local or a peer's, and the view then asks for that
 data again. A camera move is no change, so a pan never re-reads the selection. The re-read costs the
-selection, not the board: containers come from a derived parent map (`TOILE-056`).
+selection, not the board: groups and frames come from a derived parent map (`TOILE-056`).
 
 **The dispatch, in steps:**
 
