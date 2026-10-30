@@ -1114,7 +1114,6 @@ ambre-logic | src/channels.rs | crate::channels | LogicState::murmure_writable()
 ambre-logic | src/channels.rs | crate::channels | LogicState::murmure_writable(identified) | param | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | LogicState::reads_channel_copy() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/channels.rs | crate::channels | NAME_NOT_CHANGED | const | &str	free-text	free text: message, label, name or report
-ambre-logic | src/channels.rs | crate::channels | ReadCursor.active | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::has_pending_work() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::resolve_pending_seal() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/data.rs | crate::data | LogicState::restore_local() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1219,7 +1218,6 @@ ambre-logic | src/spaces.rs | crate::spaces | LogicState::space_presence_heard()
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::LEN | const | usize	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::decode(row) | param | &[u8]	generic	generic byte/text API or codec
 ambre-logic | src/store_ledger.rs | crate::store_ledger | Meta::encode() | ret | [u8;Self::LEN]	generic	generic byte/text API or codec
-ambre-logic | src/store_ledger.rs | crate::store_ledger | Observed.record | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/store_ledger.rs | crate::store_ledger | StoreLedger::unsent() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/threads.rs | crate::threads | LogicState::count_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/threads.rs | crate::threads | LogicState::follows_thread() | ret | bool	generic	yes/no fact or predicate answer, selects no mode

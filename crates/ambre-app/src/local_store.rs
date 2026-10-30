@@ -18,7 +18,7 @@ use ambre_bus::conduit::Sender;
 use ambre_bus::{DocType, DocumentId, LogicCommand, RowPlace, SealedRow};
 use ambre_logic::persistence::{PersistenceStore, Stored};
 use ambre_logic::seal_queue::SealQueue;
-use ambre_logic::store_ledger::{QuotaAttempt, Refusal, StoreLedger};
+use ambre_logic::store_ledger::{QuotaAttempt, Refusal, RowChange, StoreLedger};
 use ambre_logic::{PersistWrite, SealedWrite};
 
 use crate::vault::Vault;
@@ -146,7 +146,7 @@ impl LocalStore {
         for gone in &observed.evict {
             self.inner.store.delete_snapshot(*gone);
         }
-        if observed.record
+        if observed.record == RowChange::Changed
             && let Some(meta) = self.inner.ledger.borrow().meta(id)
         {
             self.inner.store.save_meta(id, &meta);

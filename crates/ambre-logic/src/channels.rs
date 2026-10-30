@@ -27,7 +27,7 @@ pub(crate) struct ReadCursor {
     pub(crate) read: Seq,
     /// Whether the document holds an update past `read`: the relay's yes or
     /// no, the one thing known of a segment this client does not hold.
-    pub(crate) active: bool,
+    pub(crate) active: ambre_bus::Activity,
 }
 
 /// What the Logic thread keeps of a channel whose view closed. Its documents
@@ -252,7 +252,11 @@ fn counts_of(
         .final_segments()
         .into_iter()
         .filter(|segment| !held.contains(segment))
-        .any(|segment| cursors.get(&segment.document_id()).is_none_or(|c| c.active));
+        .any(|segment| {
+            cursors
+                .get(&segment.document_id())
+                .is_none_or(|c| c.active == ambre_bus::Activity::Active)
+        });
     (!unknown_final).then_some(count)
 }
 
@@ -1400,7 +1404,7 @@ impl LogicState {
                         document_id,
                         ReadCursor {
                             read: channel.delivered(document_id),
-                            active: false,
+                            active: ambre_bus::Activity::Quiet,
                         },
                     );
                 }
@@ -1410,9 +1414,9 @@ impl LogicState {
                             .entry(segment.document_id())
                             .or_insert(ReadCursor {
                                 read: Seq::ZERO,
-                                active: false,
+                                active: ambre_bus::Activity::Quiet,
                             });
-                    cursor.active = false;
+                    cursor.active = ambre_bus::Activity::Quiet;
                 }
                 self.send_to_sync(SyncCommand::MarkRead { live, finals });
                 let mark = self.counted(channel_id).unwrap_or(ChannelActivity {
@@ -1474,7 +1478,7 @@ impl LogicState {
                     thread,
                     ReadCursor {
                         read,
-                        active: false,
+                        active: ambre_bus::Activity::Quiet,
                     },
                 );
                 self.send_to_sync(SyncCommand::MarkThreadRead { thread });
@@ -1828,8 +1832,13 @@ impl LogicState {
                 .map(|later| (later, Seq::ZERO)),
         );
         for &(moved, read) in &cursors {
-            self.read_cursors
-                .insert(moved.document_id(), ReadCursor { read, active: true });
+            self.read_cursors.insert(
+                moved.document_id(),
+                ReadCursor {
+                    read,
+                    active: ambre_bus::Activity::Active,
+                },
+            );
         }
         self.send_to_sync(SyncCommand::MoveReadCursors { cursors });
         self.emit_count(channel_id);
@@ -1852,7 +1861,7 @@ impl LogicState {
                 document.document_id,
                 ReadCursor {
                     read: document.read,
-                    active: document.active.as_bool(),
+                    active: document.active,
                 },
             );
             match index.get(&document.channel_id) {
@@ -2487,7 +2496,7 @@ mod tests {
             active.document_id(),
             ReadCursor {
                 read: Seq(0),
-                active: false,
+                active: ambre_bus::Activity::Quiet,
             },
         );
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
@@ -6179,7 +6188,7 @@ mod tests {
             m.bob.read_cursors.get(&thread),
             Some(&ReadCursor {
                 read: Seq(1),
-                active: false,
+                active: ambre_bus::Activity::Quiet,
             })
         );
         let shown = drain(&m.bob_ui);
@@ -6248,7 +6257,7 @@ mod tests {
             document_id,
             ReadCursor {
                 read: Seq(2),
-                active: false,
+                active: ambre_bus::Activity::Quiet,
             },
         );
         thread
@@ -6390,7 +6399,7 @@ mod tests {
             active.document_id(),
             ReadCursor {
                 read: Seq(0),
-                active: false,
+                active: ambre_bus::Activity::Quiet,
             },
         );
         let mut threads = Vec::new();

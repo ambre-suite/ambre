@@ -136,8 +136,19 @@ impl Meta {
 pub struct Observed {
     /// The copies to delete so the store fits its budget (`RESID-002`).
     pub evict: Vec<DocumentId>,
-    /// The document's [`Meta`] changed, so its row is written again.
-    pub record: bool,
+    /// Whether the document's [`Meta`] changed, so its row is written again.
+    pub record: RowChange,
+}
+
+ambre_core::define_flag! {
+    /// Whether one write changed the [`Meta`] row the store keeps of a
+    /// document.
+    pub enum RowChange {
+        /// The row keeps what it held, so it is not written.
+        Unchanged,
+        /// The row changed, so it is written again.
+        Changed,
+    }
 }
 
 /// The documents the local store holds, what each costs, and which leave
@@ -198,7 +209,8 @@ impl StoreLedger {
         }
         // The delta bytes alone change at every keystroke: a reload counts
         // them from the last row, which the next snapshot corrects.
-        let record = self.meta(id).map(Meta::settled) != before.map(Meta::settled);
+        let record =
+            RowChange::from_bool(self.meta(id).map(Meta::settled) != before.map(Meta::settled));
         let evict = self.residency.evictions(self.budget);
         for gone in &evict {
             self.forget(*gone);
@@ -412,21 +424,26 @@ mod tests {
     #[test]
     fn only_a_change_of_the_row_is_recorded() {
         let mut ledger = StoreLedger::default();
-        assert!(ledger.observe(doc(1), &SealedWrite::Shown).record);
-        assert!(
+        assert_eq!(
+            ledger.observe(doc(1), &SealedWrite::Shown).record,
+            RowChange::Changed
+        );
+        assert_eq!(
             ledger
                 .observe(doc(1), &SealedWrite::Delta(SealedRowBytes::new(vec![1])))
-                .record
+                .record,
+            RowChange::Changed
         );
-        assert!(
-            !ledger
+        assert_eq!(
+            ledger
                 .observe(
                     doc(1),
                     &SealedWrite::ForgetSession {
                         peer: ambre_core::PeerId(1)
                     }
                 )
-                .record
+                .record,
+            RowChange::Unchanged
         );
         assert_eq!(Meta::decode(&[0; 3]), None);
     }
