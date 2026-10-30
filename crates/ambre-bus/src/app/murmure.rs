@@ -286,6 +286,11 @@ impl MediaRef {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The content hash the relay stores the blob under: the same address.
+    pub fn content_hash(&self) -> ambre_core::ContentHash {
+        ambre_core::ContentHash::from(self.0.as_str())
+    }
 }
 
 // A file's media type is shown and used to open the file, and never sent to

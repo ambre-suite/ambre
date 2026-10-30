@@ -1360,7 +1360,7 @@ impl LogicState {
                     id,
                     cmd: RestCommand::DownloadMedia {
                         document_id,
-                        content_hash: ambre_core::ContentHash::from(media_ref.as_str()),
+                        content_hash: media_ref.content_hash(),
                     },
                 });
             }

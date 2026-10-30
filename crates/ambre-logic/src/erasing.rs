@@ -16,7 +16,7 @@ impl LogicState {
     /// Ask the relay to erase each of `files`, stored under `document_id`.
     pub(crate) fn erase_files(&mut self, document_id: DocumentId, files: Vec<MediaRef>) {
         for file in files {
-            self.erase(document_id, ambre_core::ContentHash::from(file.as_str()));
+            self.erase(document_id, file.content_hash());
         }
     }
 
