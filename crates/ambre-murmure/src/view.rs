@@ -1881,8 +1881,8 @@ mod tests {
 
     use ambre_bus::conduit::local;
     use ambre_bus::{
-        ChannelId, HeldReply, HeldSend, MediaRef, MediaType, Mention, MentionTarget, MessageView,
-        MurmureEvent, StyleMark, TextStyle, Unreadable,
+        ChannelId, ContentHash, HeldReply, HeldSend, MediaType, Mention, MentionTarget,
+        MessageView, MurmureEvent, StyleMark, TextStyle, Unreadable,
     };
     use ambre_canvas::theme;
     use ambre_draw::kinetic::LONG_PRESS;
@@ -3792,7 +3792,7 @@ mod tests {
 
         let evt = RestEvent::MediaUploaded {
             document_id: DocumentId::new(),
-            content_hash: ambre_core::ContentHash(HASH.to_owned()),
+            content_hash: ContentHash::parse(HASH).expect("an address"),
         };
         page.events
             .try_send(UiEvent::Rest { id, evt })
@@ -3855,7 +3855,7 @@ mod tests {
         let id = drop_file(&mut page, channel, "a.png");
         let evt = RestEvent::MediaUploaded {
             document_id: DocumentId::new(),
-            content_hash: ambre_core::ContentHash(HASH.to_owned()),
+            content_hash: ContentHash::parse(HASH).expect("an address"),
         };
         page.events
             .try_send(UiEvent::Rest { id, evt })
@@ -3897,7 +3897,7 @@ mod tests {
         let channel = ChannelId::new();
         let mut page = composing(channel);
         let file = Attachment {
-            media_ref: MediaRef::parse(HASH).expect("an address"),
+            media_ref: ContentHash::parse(HASH).expect("an address"),
             name: "a.png".to_owned(),
             media_type: MediaType("image/png".to_owned()),
             size: ByteSize(3),
@@ -3915,7 +3915,7 @@ mod tests {
         assert_eq!((channel_id, media_ref.as_str()), (channel, HASH));
         let evt = RestEvent::MediaDownloaded {
             document_id: DocumentId::new(),
-            content_hash: ambre_core::ContentHash(HASH.to_owned()),
+            content_hash: ContentHash::parse(HASH).expect("an address"),
             data: vec![1, 2, 3].into(),
         };
         page.events
@@ -3943,7 +3943,7 @@ mod tests {
     /// A message of `texts.len()` rows whose first carries an animated image.
     fn gif_list(page: &Page, channel: ChannelId, texts: &[&str]) -> Attachment {
         let file = Attachment {
-            media_ref: MediaRef::parse(HASH).expect("an address"),
+            media_ref: ContentHash::parse(HASH).expect("an address"),
             name: "a.gif".to_owned(),
             media_type: MediaType("image/gif".to_owned()),
             size: ByteSize(3),

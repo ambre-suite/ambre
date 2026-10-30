@@ -1839,7 +1839,7 @@ mod tests {
             id,
             evt: RestEvent::MediaUploaded {
                 document_id: doc_id,
-                content_hash: "blake2b-real".into(),
+                content_hash: ambre_core::ContentHash::parse(&"b2".repeat(32)).expect("a hash"),
             },
         });
 
@@ -1934,7 +1934,7 @@ mod tests {
             id,
             evt: RestEvent::MediaUploaded {
                 document_id: doc_id,
-                content_hash: "blake2b-real".into(),
+                content_hash: ambre_core::ContentHash::parse(&"b2".repeat(32)).expect("a hash"),
             },
         });
         // No panic, and above all no viewport for a document that no longer exists.
@@ -2031,11 +2031,11 @@ mod tests {
             },
             RestCommand::DownloadMedia {
                 document_id: doc,
-                content_hash: ambre_core::ContentHash("h".to_owned()),
+                content_hash: ambre_core::ContentHash::parse(&"a".repeat(64)).expect("a hash"),
             },
             RestCommand::EraseMedia {
                 document_id: doc,
-                content_hash: ambre_core::ContentHash("h".to_owned()),
+                content_hash: ambre_core::ContentHash::parse(&"a".repeat(64)).expect("a hash"),
             },
             RestCommand::SealDocFile {
                 plaintext: secret(),
