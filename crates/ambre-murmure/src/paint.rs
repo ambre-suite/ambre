@@ -1179,7 +1179,7 @@ pub(crate) mod tests {
                     glyph_count,
                     color: Some(c),
                     transform,
-                } if *c == color => Some((transform.translation().y, *glyph_count)),
+                } if *c == color => Some((transform.translation().y, glyph_count.get() as usize)),
                 _ => None,
             })
             .collect();
@@ -1712,7 +1712,7 @@ pub(crate) mod tests {
             let tints = surface.count(
                 |op| matches!(op, DrawOp::FillRect { color, .. } if *color == LIGHT.header_hover),
             );
-            (marks, tints)
+            (marks.get(), tints.get())
         };
         let mark = |style, range| StyleMark { style, range };
         let blocks = vec![

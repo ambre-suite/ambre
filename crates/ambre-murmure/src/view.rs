@@ -4942,7 +4942,7 @@ mod tests {
                     ..
                 } => {
                     let y = transform.translation().y;
-                    (y >= top && y < field).then_some(*glyph_count)
+                    (y >= top && y < field).then_some(glyph_count.get() as usize)
                 }
                 _ => None,
             })
@@ -5458,7 +5458,9 @@ mod tests {
             .ops()
             .iter()
             .filter_map(|op| match op {
-                ambre_draw::testing::DrawOp::Glyphs { glyph_count, .. } => Some(*glyph_count),
+                ambre_draw::testing::DrawOp::Glyphs { glyph_count, .. } => {
+                    Some(glyph_count.get() as usize)
+                }
                 _ => None,
             })
             .collect()
@@ -5926,7 +5928,7 @@ mod tests {
 
     /// The marks the field draws in the indent of a block, in the muted ink:
     /// a quote's rule and a list's dots.
-    fn margin_marks(page: &mut Page) -> usize {
+    fn margin_marks(page: &mut Page) -> u32 {
         page.view.update();
         page.view
             .plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
@@ -5937,11 +5939,13 @@ mod tests {
         let ink = crate::look::margin_ink(page.view.theme.palette());
         let top = f64::from(400.0 - page.view.composer().band().get());
         let indent = f64::from(SPACE_8) + f64::from(crate::look::BLOCK_INDENT.get());
-        surface.count(|op| {
-            matches!(op, ambre_draw::testing::DrawOp::FillRect { rect, color }
+        surface
+            .count(|op| {
+                matches!(op, ambre_draw::testing::DrawOp::FillRect { rect, color }
                 if *color == ink && rect.y0 >= top
                     && rect.x0 >= f64::from(SPACE_8) && rect.x1 <= indent)
-        })
+            })
+            .get()
     }
 
     /// A block marker at the start of a line becomes its mark as it closes

@@ -757,7 +757,7 @@ mod tests {
         );
 
         // Transform stack must be balanced.
-        assert_eq!(surface.transform_depth(), 0);
+        assert!(surface.transforms_balanced());
         // One outer camera push/pop wraps the node walk; each element also pushes
         // its own transform. So total PushTransform == 1 + node_count.
         let pushes = surface
@@ -1196,11 +1196,9 @@ mod tests {
             .ops()
             .iter()
             .filter_map(|o| match o {
-                DrawOp::DrawImage {
-                    width,
-                    height,
-                    dest,
-                } => Some((*width, *height, *dest)),
+                DrawOp::DrawImage { size, dest } => {
+                    Some((size.width.get(), size.height.get(), *dest))
+                }
                 _ => None,
             })
             .collect();
@@ -1208,8 +1206,8 @@ mod tests {
         assert_eq!(draws[0], (2, 2, bounds));
         // The unresolved image falls back to a placeholder path fill.
         let fills = surface.count(|o| matches!(o, DrawOp::FillPath { .. }));
-        assert_eq!(fills, 1, "the pending image paints a placeholder box");
-        assert_eq!(surface.transform_depth(), 0);
+        assert_eq!(fills.get(), 1, "the pending image paints a placeholder box");
+        assert!(surface.transforms_balanced());
     }
 
     #[test]
@@ -1709,7 +1707,7 @@ mod tests {
             .ops()
             .iter()
             .filter_map(|o| match o {
-                DrawOp::StrokeRect { color, width, .. } => Some((*color, *width)),
+                DrawOp::StrokeRect { color, width, .. } => Some((*color, width.get())),
                 _ => None,
             })
             .collect();
@@ -2137,14 +2135,9 @@ mod tests {
             .iter()
             .filter_map(|o| match o {
                 // The rules are drawn in the body's ink; other lines are chrome.
-                DrawOp::StrokeLine {
-                    x0,
-                    y0,
-                    x1,
-                    y1,
-                    color,
-                    ..
-                } if Some(*color) == ink => Some((y1 - y0).atan2(x1 - x0)),
+                DrawOp::StrokeLine { line, color, .. } if Some(*color) == ink => {
+                    Some((line.p1.y - line.p0.y).atan2(line.p1.x - line.p0.x))
+                }
                 _ => None,
             })
             .collect();
@@ -2288,9 +2281,9 @@ mod tests {
                 "present {present:?}"
             );
             if present.is_presenting() {
-                assert_eq!(lines(&surface), 0, "focus paints no grid line");
+                assert_eq!(lines(&surface).get(), 0, "focus paints no grid line");
             } else {
-                assert!(lines(&surface) > 0, "the board paints its grid");
+                assert!(lines(&surface).get() > 0, "the board paints its grid");
             }
         }
     }
@@ -2423,7 +2416,7 @@ mod tests {
                 assert_eq!(*transform, world, "under the camera");
                 assert_eq!(*color, Some(LIGHT_PALETTE.selection));
                 assert_eq!(*b, bounds);
-                assert_eq!(width * cam.zoom.get(), px, "a screen-constant width");
+                assert_eq!(width.get() * cam.zoom.get(), px, "a screen-constant width");
             }
             other => panic!("one stroked path: {other:?}"),
         };
@@ -2433,7 +2426,7 @@ mod tests {
             vec![DrawOp::StrokeRect {
                 rect: world_rect_to_screen(r, &cam),
                 color: LIGHT_PALETTE.selection,
-                width: 1.0
+                width: ambre_core::SurfacePx::new(1.0)
             }]
         );
         for kind in [

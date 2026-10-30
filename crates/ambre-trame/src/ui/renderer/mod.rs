@@ -386,8 +386,8 @@ mod tests {
             Theme::Light.palette().cell_border,
             Theme::Dark.palette().cell_border
         );
-        assert_eq!(stroked(Theme::Light), 1);
-        assert_eq!(stroked(Theme::Dark), 1);
+        assert_eq!(stroked(Theme::Light).get(), 1);
+        assert_eq!(stroked(Theme::Dark).get(), 1);
     }
 
     #[test]
@@ -423,12 +423,15 @@ mod tests {
         );
         // Grid lines are stroked with the palette grid colour.
         assert!(
-            surface.count(|op| matches!(
-                op, DrawOp::StrokeLine { color, .. } if *color == palette.grid_line
-            )) > 0
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::StrokeLine { color, .. } if *color == palette.grid_line
+                ))
+                .get()
+                > 0
         );
         // The clip stack is balanced and no cell bg was painted (empty cache).
-        assert_eq!(surface.clip_depth(), 0);
+        assert!(surface.clips_balanced());
         assert_eq!(stats.cells_drawn, ambre_canvas::CellsDrawn::ZERO);
     }
 
@@ -472,9 +475,11 @@ mod tests {
             }),
         );
         assert_eq!(
-            surface.count(|op| matches!(
-                op, DrawOp::FillRect { color, .. } if *color == palette.content_pending
-            )),
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::FillRect { color, .. } if *color == palette.content_pending
+                ))
+                .get(),
             0,
         );
     }
@@ -501,14 +506,16 @@ mod tests {
 
         // Both received cells get a content_bg fill...
         assert_eq!(
-            surface.count(|op| matches!(
-                op, DrawOp::FillRect { color, .. } if *color == palette.content_bg
-            )),
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::FillRect { color, .. } if *color == palette.content_bg
+                ))
+                .get(),
             2,
         );
         // ...but only the non-empty one is tallied as drawn text.
         assert_eq!(stats.cells_drawn, ambre_canvas::CellsDrawn::new(1));
-        assert_eq!(surface.clip_depth(), 0);
+        assert!(surface.clips_balanced());
     }
 
     #[test]
@@ -546,19 +553,25 @@ mod tests {
             screen_layout(&state).merge_rect(at(0, 0), span(2, 2)),
         );
         assert!(
-            surface.count(|op| matches!(
-                op, DrawOp::StrokeRect { rect, color, .. }
-                    if *color == palette.grid_line && *rect == span_rect
-            )) == 1
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::StrokeRect { rect, color, .. }
+                        if *color == palette.grid_line && *rect == span_rect
+                ))
+                .get()
+                == 1
         );
         // The span gets an opaque content_bg fill covering its full rectangle.
         assert!(
-            surface.count(|op| matches!(
-                op, DrawOp::FillRect { rect, color }
-                    if *color == palette.content_bg && *rect == span_rect
-            )) == 1
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::FillRect { rect, color }
+                        if *color == palette.content_bg && *rect == span_rect
+                ))
+                .get()
+                == 1
         );
-        assert_eq!(surface.clip_depth(), 0);
+        assert!(surface.clips_balanced());
     }
 
     /// A border a user asked for is drawn after every grid line and after the
@@ -608,7 +621,7 @@ mod tests {
             .expect("a grid line");
         assert!(last_grid < first_border, "{last_grid} >= {first_border}");
         // Four edges round the span, one on the plain cell.
-        assert_eq!(surface.count(is_border), 5);
+        assert_eq!(surface.count(is_border).get(), 5);
     }
 
     #[test]
@@ -654,19 +667,24 @@ mod tests {
 
         // Header backgrounds use the palette header colour.
         assert!(
-            surface.count(|op| matches!(
-                op, DrawOp::FillRect { color, .. } if *color == palette.header_bg
-            )) >= 2
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::FillRect { color, .. } if *color == palette.header_bg
+                ))
+                .get()
+                >= 2
         );
         // The active cell (0,0) border is stroked with the selection colour.
         assert_eq!(
-            surface.count(|op| matches!(
-                op, DrawOp::StrokeRect { color, width, .. }
-                    if *color == palette.selection && *width == 2.0
-            )),
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::StrokeRect { color, width, .. }
+                        if *color == palette.selection && *width == ambre_core::SurfacePx::new(2.0)
+                ))
+                .get(),
             1,
         );
-        assert_eq!(surface.clip_depth(), 0);
+        assert!(surface.clips_balanced());
     }
 
     /// A lone selected cell shows its border and no range fill
@@ -690,14 +708,18 @@ mod tests {
         );
         let tint = palette.selection.with_alpha(0.16);
         assert_eq!(
-            surface.count(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == tint)),
+            surface
+                .count(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == tint))
+                .get(),
             0,
         );
         assert_eq!(
-            surface.count(|op| matches!(
-                op, DrawOp::StrokeRect { color, width, .. }
-                    if *color == palette.selection && *width == 2.0
-            )),
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::StrokeRect { color, width, .. }
+                        if *color == palette.selection && *width == ambre_core::SurfacePx::new(2.0)
+                ))
+                .get(),
             1,
         );
     }
@@ -725,12 +747,14 @@ mod tests {
         // One bordered button per region column (cell grid lines are stroke_line,
         // so a grid-colour StrokeRect is unambiguously an autofilter button).
         assert_eq!(
-            surface.count(|op| matches!(
-                op, DrawOp::StrokeRect { color, .. } if *color == palette.grid_line
-            )),
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::StrokeRect { color, .. } if *color == palette.grid_line
+                ))
+                .get(),
             2,
         );
-        assert_eq!(surface.clip_depth(), 0);
+        assert!(surface.clips_balanced());
     }
 
     #[test]
@@ -757,11 +781,14 @@ mod tests {
 
         // Several selection-coloured fill spans make up the funnel silhouette.
         assert!(
-            surface.count(|op| matches!(
-                op, DrawOp::FillRect { color, .. } if *color == palette.selection
-            )) > 2
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::FillRect { color, .. } if *color == palette.selection
+                ))
+                .get()
+                > 2
         );
-        assert_eq!(surface.clip_depth(), 0);
+        assert!(surface.clips_balanced());
     }
 
     #[test]
@@ -804,17 +831,21 @@ mod tests {
         // One translucent fill per selected rectangle (2 rects).
         let tint = palette.selection.with_alpha(0.16);
         assert_eq!(
-            surface.count(|op| matches!(
-                op, DrawOp::FillRect { color, .. } if *color == tint
-            )),
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::FillRect { color, .. } if *color == tint
+                ))
+                .get(),
             2,
         );
         // No 2px active-cell border in a multi-cell selection.
         assert_eq!(
-            surface.count(|op| matches!(
-                op, DrawOp::StrokeRect { color, width, .. }
-                    if *color == palette.selection && *width == 2.0
-            )),
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::StrokeRect { color, width, .. }
+                        if *color == palette.selection && *width == ambre_core::SurfacePx::new(2.0)
+                ))
+                .get(),
             0,
         );
     }
@@ -858,11 +889,13 @@ mod tests {
                 ),
             };
             assert_eq!(
-                surface.count(|op| matches!(
-                    op, DrawOp::FillRect { color, rect }
-                        if *color == palette.header_active
-                            && *rect == Rect::new(x0, y0, x1, y1)
-                )),
+                surface
+                    .count(|op| matches!(
+                        op, DrawOp::FillRect { color, rect }
+                            if *color == palette.header_active
+                                && *rect == Rect::new(x0, y0, x1, y1)
+                    ))
+                    .get(),
                 1,
                 "{kind:?}",
             );
@@ -892,9 +925,11 @@ mod tests {
 
         let veil = palette.content_bg.with_alpha(super::DIRTY_VEIL_ALPHA);
         assert_eq!(
-            surface.count(|op| matches!(
-                op, DrawOp::FillRect { color, .. } if *color == veil
-            )),
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::FillRect { color, .. } if *color == veil
+                ))
+                .get(),
             1,
         );
         assert_ne!(
@@ -925,9 +960,12 @@ mod tests {
         );
 
         assert!(
-            surface.count(|op| matches!(
-                op, DrawOp::StrokeLine { color, .. } if *color == palette.cell_error
-            )) > 0
+            surface
+                .count(|op| matches!(
+                    op, DrawOp::StrokeLine { color, .. } if *color == palette.cell_error
+                ))
+                .get()
+                > 0
         );
     }
 

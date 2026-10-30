@@ -802,7 +802,9 @@ mod tests {
 
     fn sheets(surface: &RecordingSurface) -> usize {
         let sheet = palette().sheet;
-        surface.count(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == sheet))
+        let count =
+            surface.count(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == sheet));
+        count.get() as usize
     }
 
     /// The first block that carries text: the document opens on an empty one.
@@ -1061,7 +1063,7 @@ mod tests {
         let separator = surface.count(
             |op| matches!(op, DrawOp::StrokeLine { color, .. } if *color == pal.sheet_border),
         );
-        assert_eq!(separator, 1);
+        assert_eq!(separator.get(), 1);
     }
 
     #[test]
@@ -1090,7 +1092,7 @@ mod tests {
         assert!(pages.1 >= 1);
         // One clip per page each block shows, so a split block has two.
         let clips = surface.count(|op| matches!(op, DrawOp::PushClip { .. }));
-        assert!(clips >= ui.shaped.layout.blocks.len() + pages.1);
+        assert!(clips.get() as usize >= ui.shaped.layout.blocks.len() + pages.1);
     }
 
     #[test]
@@ -1173,7 +1175,11 @@ mod tests {
             (region - 2.0 * cell).abs() < 0.5,
             "the region spans two columns"
         );
-        assert_eq!(surface.count(glyphs), 3, "the covered text is not drawn");
+        assert_eq!(
+            surface.count(glyphs).get(),
+            3,
+            "the covered text is not drawn"
+        );
     }
 
     /// A styled table: two cells, the first one typed, both laid out and
@@ -1331,11 +1337,11 @@ mod tests {
             .to_owned()
     }
 
-    fn drawn_glyphs(surface: &RecordingSurface, n: usize) -> bool {
+    fn drawn_glyphs(surface: &RecordingSurface, n: u32) -> bool {
         surface
             .ops()
             .iter()
-            .any(|op| matches!(op, DrawOp::Glyphs { glyph_count, .. } if *glyph_count == n))
+            .any(|op| matches!(op, DrawOp::Glyphs { glyph_count, .. } if glyph_count.get() == n))
     }
 
     /// `PROSE-UI-142`: a composition opened away from a draft still in
@@ -1605,9 +1611,9 @@ mod tests {
             .ops()
             .iter()
             .filter_map(|op| match op {
-                DrawOp::StrokeLine {
-                    x0, y0, x1, color, ..
-                } if *color == text => Some((*x0, *x1, *y0)),
+                DrawOp::StrokeLine { line, color, .. } if *color == text => {
+                    Some((line.p0.x, line.p1.x, line.p0.y))
+                }
                 _ => None,
             })
             .collect();
@@ -1640,7 +1646,9 @@ mod tests {
                 .ops()
                 .iter()
                 .filter_map(|op| match op {
-                    DrawOp::StrokeLine { x0, x1, color, .. } if *color == text => Some((*x0, *x1)),
+                    DrawOp::StrokeLine { line, color, .. } if *color == text => {
+                        Some((line.p0.x, line.p1.x))
+                    }
                     _ => None,
                 })
                 .collect()
@@ -2069,7 +2077,7 @@ mod tests {
                 .ops()
                 .iter()
                 .find_map(|op| match op {
-                    DrawOp::StrokeLine { y0, color: c, .. } if *c == color => Some(*y0),
+                    DrawOp::StrokeLine { line, color: c, .. } if *c == color => Some(line.p0.y),
                     _ => None,
                 })
                 .expect("the line")
@@ -2136,7 +2144,7 @@ mod tests {
                 highlights_walked: crate::view::walk::HighlightCount::ZERO,
             }
             .walk(&view, region, &mut walked);
-            proptest::prop_assert!(walked.count(glyphs) > 0);
+            proptest::prop_assert!(walked.count(glyphs) > ambre_draw::testing::OpCount::ZERO);
             proptest::prop_assert!(screen.holds_walk(&walked));
         }
     }

@@ -905,7 +905,7 @@ mod tests {
                 DrawOp::PopClip,
             ]
         );
-        assert_eq!((surface.clip_depth(), surface.transform_depth()), (0, 0));
+        assert!(surface.clips_balanced() && surface.transforms_balanced());
     }
 
     /// `CANVAS-068`: a face fetched after boot reaches the Logic thread as the

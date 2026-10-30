@@ -201,7 +201,7 @@ mod tests {
     fn columns(ops: &[DrawOp]) -> Vec<f64> {
         ops.iter()
             .filter_map(|o| match o {
-                DrawOp::StrokeLine { x0, x1, .. } if x0 == x1 => Some(*x0),
+                DrawOp::StrokeLine { line, .. } if line.p0.x == line.p1.x => Some(line.p0.x),
                 _ => None,
             })
             .collect()
@@ -264,7 +264,7 @@ mod tests {
             for op in &ops {
                 match op {
                     DrawOp::StrokeLine { width, .. } => {
-                        assert_eq!(*width, 1.0, "zoom {zoom}");
+                        assert_eq!(width.get(), 1.0, "zoom {zoom}");
                         lines += 1;
                     }
                     DrawOp::PushTransform { .. } => panic!("zoom {zoom}: a scaled line"),

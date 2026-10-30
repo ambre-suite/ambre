@@ -1096,7 +1096,7 @@ ambre-draw | src/text.rs | crate::text | ScriptSet.0 | field | u8	newtype-inner	
 ambre-draw | src/text.rs | crate::text | ScriptSet::contains() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/text.rs | crate::text | ScriptSet::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/text.rs | crate::text | ScriptSet::of_text(text) | param | &str	generic	generic parser/reader/formatter over text
-ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::is_step() | ret | bool	newtype-inner	WheelDelta field, constructor or accessor
+ambre-draw | src/wheel.rs | crate::wheel | WheelDelta::is_step() | ret | bool	generic	predicate result
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::from_dom(mode) | param | u32	newtype-inner	the DOM deltaMode code, which the enum's own constructor reads into its variant
 ambre-draw | src/wheel.rs | crate::wheel | WheelDeltaMode::is_step() | ret | bool	generic	predicate result
 ambre-draw | src/peer.rs | crate::peer | Hue.0 | field | u16	newtype-inner	the whole degrees of a hue below 360, built only by Hue::of_user
@@ -3427,7 +3427,11 @@ ambre-core | src/secret.rs | crate::secret | OidcState::present_state(store) | p
 ambre-core | src/secret.rs | crate::secret | PresignedUrl::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
 ambre-core | src/secret.rs | crate::secret | PresignedUrl::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count(pred) | param | impl Fn(&DrawOp)->bool	generic	a predicate over the recorded operations
+ambre-draw | src/testing.rs | crate::testing | RecordingSurface::clips_balanced() | ret | bool	generic	predicate result
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::holds_walk() | ret | bool	generic	predicate or handled-flag result
+ambre-draw | src/testing.rs | crate::testing | RecordingSurface::transforms_balanced() | ret | bool	generic	predicate result
+ambre-draw | src/testing.rs | crate::testing | StackDepth.0 | field | u32	newtype-inner	the inside of a stack depth, which never goes below zero
+ambre-draw | src/testing.rs | crate::testing | StackDepth::is_balanced() | ret | bool	generic	predicate result
 ambre-murmure | src/testing.rs | crate::testing | channel_of(texts) | param | &[&str]	free-text	message texts a test channel is built from
 ambre-primitives | src/secrets.rs | crate::secrets | RELAY_SECRETS | const | (&str,&str)	generic	the crate name and the directory path a check admits, matched against the scanned file
 ambre-primitives | src/secrets.rs | crate::secrets | INCLUDE | const | &[&str]	generic	a word list the scanner matches Rust tokens against

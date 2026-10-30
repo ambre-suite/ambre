@@ -21,9 +21,38 @@
 )]
 
 use crate::{
-    Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush,
-    Rect, Stroke,
+    Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSize, ImageSource, Line,
+    ParleyBrush, Rect, Stroke, SurfacePx,
 };
+
+ambre_core::define_tally! {
+    /// How many glyphs one recorded run holds.
+    pub struct GlyphCount;
+    /// How many recorded operations match a predicate.
+    pub struct OpCount;
+}
+
+/// How many pushes of one stack no pop has closed yet. It never goes below
+/// zero: a pop with no push is the renderer bug the double exists to catch.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct StackDepth(u32);
+
+impl StackDepth {
+    /// The depth after one more push.
+    fn pushed(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+
+    /// The depth after one pop, or `None` when no push is open.
+    fn popped(self) -> Option<Self> {
+        self.0.checked_sub(1).map(Self)
+    }
+
+    /// Whether every push has its pop.
+    fn is_balanced(self) -> bool {
+        self.0 == 0
+    }
+}
 
 /// One recorded drawing operation. Glyph runs are summarised by their glyph
 /// count and transform rather than captured verbatim. The run borrows from a
@@ -37,32 +66,28 @@ pub enum DrawOp {
     StrokeRect {
         rect: Rect,
         color: Color,
-        width: f64,
+        width: SurfacePx,
     },
     StrokeLine {
-        x0: f64,
-        y0: f64,
-        x1: f64,
-        y1: f64,
+        line: Line,
         color: Color,
-        width: f64,
+        width: SurfacePx,
     },
     /// A pre-shaped glyph run: how many glyphs, the solid brush colour (if any),
     /// and the run origin transform.
     Glyphs {
-        glyph_count: usize,
+        glyph_count: GlyphCount,
         color: Option<Color>,
         transform: Affine,
     },
     FillPath {
         color: Option<Color>,
     },
-    /// A raster image paint: its native pixel dimensions and the destination
-    /// rect it was scaled into. The pixels themselves are not captured -- tests
+    /// A raster image paint: its native pixel size and the destination rect
+    /// it was scaled into. The pixels themselves are not captured -- tests
     /// assert on placement and that a real image (not a placeholder) was drawn.
     DrawImage {
-        width: u32,
-        height: u32,
+        size: ImageSize,
         dest: Rect,
     },
     /// A stroked path: its colour, the box of its control points in the
@@ -70,7 +95,7 @@ pub enum DrawOp {
     StrokePath {
         color: Option<Color>,
         bounds: Rect,
-        width: f64,
+        width: SurfacePx,
     },
     PushClip {
         rect: Rect,
@@ -101,9 +126,9 @@ pub struct RecordingSurface {
     ops: Vec<DrawOp>,
     /// Current clip-stack depth, updated live so tests can assert balance even
     /// mid-frame. Underflow (pop without push) panics -- that is a renderer bug.
-    clip_depth: usize,
+    clip_depth: StackDepth,
     /// Current transform-stack depth, same contract as `clip_depth`.
-    transform_depth: usize,
+    transform_depth: StackDepth,
 }
 
 impl RecordingSurface {
@@ -116,20 +141,22 @@ impl RecordingSurface {
         &self.ops
     }
 
-    /// Clip-stack depth right now (0 at a balanced frame boundary).
-    pub fn clip_depth(&self) -> usize {
-        self.clip_depth
+    /// Whether every clip pushed so far is popped: true at a balanced frame
+    /// boundary.
+    pub fn clips_balanced(&self) -> bool {
+        self.clip_depth.is_balanced()
     }
 
-    /// Transform-stack depth right now (0 at a balanced frame boundary).
-    pub fn transform_depth(&self) -> usize {
-        self.transform_depth
+    /// Whether every transform pushed so far is popped: true at a balanced
+    /// frame boundary.
+    pub fn transforms_balanced(&self) -> bool {
+        self.transform_depth.is_balanced()
     }
 
     /// Count the ops matching `pred`, for example
     /// `count(|op| matches!(op, DrawOp::FillRect { .. }))`.
-    pub fn count(&self, pred: impl Fn(&DrawOp) -> bool) -> usize {
-        self.ops.iter().filter(|op| pred(op)).count()
+    pub fn count(&self, pred: impl Fn(&DrawOp) -> bool) -> OpCount {
+        OpCount::of_len(self.ops.iter().filter(|op| pred(op)).count())
     }
 
     /// Every distinct fill colour seen, in first-seen order. Handy for asserting
@@ -170,43 +197,31 @@ impl DrawSurface for RecordingSurface {
         self.ops.push(DrawOp::FillRect { rect, color });
     }
 
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: ambre_core::SurfacePx) {
-        self.ops.push(DrawOp::StrokeRect {
-            rect,
-            color,
-            width: width.get(),
-        });
+    fn stroke_rect(&mut self, rect: Rect, color: Color, width: SurfacePx) {
+        self.ops.push(DrawOp::StrokeRect { rect, color, width });
     }
 
-    fn stroke_line(&mut self, line: Line, color: Color, width: ambre_core::SurfacePx) {
-        let width = width.get();
-        self.ops.push(DrawOp::StrokeLine {
-            x0: line.p0.x,
-            y0: line.p0.y,
-            x1: line.p1.x,
-            y1: line.p1.y,
-            color,
-            width,
-        });
+    fn stroke_line(&mut self, line: Line, color: Color, width: SurfacePx) {
+        self.ops.push(DrawOp::StrokeLine { line, color, width });
     }
 
     fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
         self.ops.push(DrawOp::Glyphs {
-            glyph_count: run.glyphs().count(),
+            glyph_count: GlyphCount::of_len(run.glyphs().count()),
             color: brush_color(brush),
             transform,
         });
     }
 
     fn push_clip(&mut self, rect: Rect) {
-        self.clip_depth += 1;
+        self.clip_depth = self.clip_depth.pushed();
         self.ops.push(DrawOp::PushClip { rect });
     }
 
     fn pop_clip(&mut self) {
         self.clip_depth = self
             .clip_depth
-            .checked_sub(1)
+            .popped()
             .expect("pop_clip without a matching push_clip");
         self.ops.push(DrawOp::PopClip);
     }
@@ -221,27 +236,26 @@ impl DrawSurface for RecordingSurface {
         self.ops.push(DrawOp::StrokePath {
             color: brush_color(brush),
             bounds: path.control_box(),
-            width: stroke.width,
+            width: SurfacePx::new(stroke.width),
         });
     }
 
     fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {
         self.ops.push(DrawOp::DrawImage {
-            width: image.size.width.get(),
-            height: image.size.height.get(),
+            size: image.size,
             dest,
         });
     }
 
     fn push_transform(&mut self, transform: Affine) {
-        self.transform_depth += 1;
+        self.transform_depth = self.transform_depth.pushed();
         self.ops.push(DrawOp::PushTransform { transform });
     }
 
     fn pop_transform(&mut self) {
         self.transform_depth = self
             .transform_depth
-            .checked_sub(1)
+            .popped()
             .expect("pop_transform without a matching push_transform");
         self.ops.push(DrawOp::PopTransform);
     }
@@ -264,5 +278,26 @@ impl FixedClock {
 impl Clock for FixedClock {
     fn now(&self) -> ambre_core::PageTime {
         self.at
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A depth never goes below zero: a pop with no push has no depth.
+    #[test]
+    fn a_pop_with_no_push_has_no_depth() {
+        assert_eq!(StackDepth::default().popped(), None);
+        let one = StackDepth::default().pushed();
+        assert!(!one.is_balanced());
+        assert_eq!(one.popped().map(StackDepth::is_balanced), Some(true));
+    }
+
+    /// The double stops the test at a pop that no push opened.
+    #[test]
+    #[should_panic(expected = "pop_clip without a matching push_clip")]
+    fn an_unbalanced_pop_stops_the_test() {
+        RecordingSurface::new().pop_clip();
     }
 }

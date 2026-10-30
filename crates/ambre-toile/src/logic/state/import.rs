@@ -1012,16 +1012,13 @@ mod tests {
             s.count(|op| {
                 matches!(
                     op,
-                    DrawOp::DrawImage {
-                        width: 8,
-                        height: 8,
-                        ..
-                    }
+                    DrawOp::DrawImage { size, .. }
+                        if (size.width.get(), size.height.get()) == (8, 8)
                 )
             })
         };
-        assert_eq!(paint(&st.decoded_media()), 1, "the picture's pixels");
-        assert_eq!(paint(&crate::ui::render::ImageStore::new()), 0);
+        assert_eq!(paint(&st.decoded_media()).get(), 1, "the picture's pixels");
+        assert_eq!(paint(&crate::ui::render::ImageStore::new()).get(), 0);
     }
 
     /// `TOILE-IO-036`: the undo of a picture import takes back the entry it

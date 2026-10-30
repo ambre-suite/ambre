@@ -457,7 +457,7 @@ mod tests {
         assert!(cursors.is_empty());
         let s = paint(&cursors, &vp_with(vec![]));
         assert!(s.ops().is_empty());
-        assert_eq!(s.transform_depth(), 0);
+        assert!(s.transforms_balanced());
     }
 
     #[test]
@@ -475,9 +475,9 @@ mod tests {
         let s = paint(&cursors, &vp_with(vec![]));
         // Arrow is one filled path; the chip is one filled rect; the label is a
         // glyph run.
-        assert_eq!(s.count(|o| matches!(o, DrawOp::FillPath { .. })), 1);
-        assert_eq!(s.count(|o| matches!(o, DrawOp::FillRect { .. })), 1);
-        assert_eq!(s.count(|o| matches!(o, DrawOp::Glyphs { .. })), 1);
+        assert_eq!(s.count(|o| matches!(o, DrawOp::FillPath { .. })).get(), 1);
+        assert_eq!(s.count(|o| matches!(o, DrawOp::FillRect { .. })).get(), 1);
+        assert_eq!(s.count(|o| matches!(o, DrawOp::Glyphs { .. })).get(), 1);
     }
 
     #[test]
@@ -494,7 +494,7 @@ mod tests {
         );
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 50.0, 50.0))]);
         let s = paint(&cursors, &vp);
-        assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeRect { .. })), 1);
+        assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeRect { .. })).get(), 1);
     }
 
     /// `PRESENCE-010`: a remote pointer that jumps is painted at its new
@@ -574,7 +574,7 @@ mod tests {
             },
         );
         let s = paint(&cursors, &vp_with(vec![]));
-        assert_eq!(s.count(|o| matches!(o, DrawOp::StrokePath { .. })), 1);
+        assert_eq!(s.count(|o| matches!(o, DrawOp::StrokePath { .. })).get(), 1);
     }
 
     #[test]
@@ -592,12 +592,12 @@ mod tests {
             );
         }
         let s = paint(&cursors, &vp_with(vec![]));
-        assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeLine { .. })), 2);
+        assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeLine { .. })).get(), 2);
 
         // Lifting the highlighter (laser = None) clears the trail.
         adopt_one(&mut cursors, user(11), PresencePayload::default());
         let s = paint(&cursors, &vp_with(vec![]));
-        assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeLine { .. })), 0);
+        assert_eq!(s.count(|o| matches!(o, DrawOp::StrokeLine { .. })).get(), 0);
     }
 
     /// TOILE-UI-075 / TOILE-185: the overlay drops a peer absent from the live
@@ -626,7 +626,9 @@ mod tests {
             ambre_bus::PageTime(0.0),
         );
         assert_eq!(
-            paint(&cursors, &vp_with(vec![])).count(|o| matches!(o, DrawOp::FillPath { .. })),
+            paint(&cursors, &vp_with(vec![]))
+                .count(|o| matches!(o, DrawOp::FillPath { .. }))
+                .get(),
             2,
             "one arrow per live peer"
         );
@@ -641,7 +643,7 @@ mod tests {
         );
         let s = paint(&cursors, &vp_with(vec![]));
         assert_eq!(
-            s.count(|o| matches!(o, DrawOp::FillPath { .. })),
+            s.count(|o| matches!(o, DrawOp::FillPath { .. })).get(),
             1,
             "the departed peer is gone"
         );
@@ -672,7 +674,8 @@ mod tests {
         // Read at the sample clock: the segments are there.
         assert_eq!(
             paint_at(&cursors, &vp_with(vec![]), ambre_bus::PageTime(0.0))
-                .count(|o| matches!(o, DrawOp::StrokeLine { .. })),
+                .count(|o| matches!(o, DrawOp::StrokeLine { .. }))
+                .get(),
             2
         );
         // Read a fade later, with no new sample: the painter draws nothing.
@@ -682,7 +685,8 @@ mod tests {
                 &vp_with(vec![]),
                 ambre_bus::PageTime(LASER_FADE.get() + 1.0)
             )
-            .count(|o| matches!(o, DrawOp::StrokeLine { .. })),
+            .count(|o| matches!(o, DrawOp::StrokeLine { .. }))
+            .get(),
             0,
             "an aged trail is not painted"
         );
@@ -786,7 +790,7 @@ mod tests {
 
         let twins = painted(vec![sample(1, "Ada"), sample(2, "Ada")]);
         assert_eq!(
-            twins.count(|o| matches!(o, DrawOp::FillPath { .. })),
+            twins.count(|o| matches!(o, DrawOp::FillPath { .. })).get(),
             2,
             "one arrow per peer"
         );
@@ -825,7 +829,7 @@ mod tests {
         // Two arrows, each its own peer colour.
         let colors = s.fill_colors();
         assert_eq!(
-            s.count(|o| matches!(o, DrawOp::FillPath { .. })),
+            s.count(|o| matches!(o, DrawOp::FillPath { .. })).get(),
             2,
             "one arrow per peer"
         );

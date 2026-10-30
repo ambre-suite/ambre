@@ -150,12 +150,13 @@ fn draw_cells_on_fills_each_and_counts_nonempty_text() {
 
     // Both cells get a content_bg fill...
     assert_eq!(
-        s.count(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == palette.content_bg)),
+        s.count(|op| matches!(op, DrawOp::FillRect { color, .. } if *color == palette.content_bg))
+            .get(),
         2,
     );
     // ...but only the non-empty one is tallied.
     assert_eq!(drawn, ambre_canvas::CellsDrawn::new(1));
-    assert_eq!(s.clip_depth(), 0);
+    assert!(s.clips_balanced());
 }
 
 #[test]
@@ -232,6 +233,7 @@ fn draw_grid_lines_on_strokes_with_grid_color() {
 
     assert!(
         s.count(|op| matches!(op, DrawOp::StrokeLine { color, .. } if *color == palette.grid_line))
+            .get()
             > 0
     );
 }
@@ -257,22 +259,28 @@ fn col_headers_draw_bg_separator_and_active_tint() {
     assert!(
         s.count(|op| matches!(
             op, DrawOp::FillRect { color, .. } if *color == palette.header_bg
-        )) >= 1
+        ))
+        .get()
+            >= 1
     );
     // The active-column tint.
     assert!(
         s.count(|op| matches!(
             op, DrawOp::FillRect { color, .. } if *color == palette.header_active
-        )) >= 1
+        ))
+        .get()
+            >= 1
     );
     // The bottom separator plus one per-column hairline: strictly more than the
     // single bottom line, proving the inter-column separators are drawn.
     assert!(
         s.count(|op| matches!(
             op, DrawOp::StrokeLine { color, .. } if *color == palette.header_border
-        )) >= 2
+        ))
+        .get()
+            >= 2
     );
-    assert_eq!(s.clip_depth(), 0);
+    assert!(s.clips_balanced());
 }
 
 #[test]
@@ -296,7 +304,9 @@ fn col_headers_draw_hover_tint() {
     assert!(
         s.count(|op| matches!(
             op, DrawOp::FillRect { color, .. } if *color == palette.header_hover
-        )) >= 1
+        ))
+        .get()
+            >= 1
     );
 }
 
@@ -321,7 +331,8 @@ fn col_headers_skip_hover_tint_on_active_column() {
     assert_eq!(
         s.count(
             |op| matches!(op, DrawOp::FillRect { color, .. } if *color == palette.header_hover)
-        ),
+        )
+        .get(),
         0,
     );
 }
@@ -348,7 +359,9 @@ fn row_headers_draw_hover_tint() {
     assert!(
         s.count(|op| matches!(
             op, DrawOp::FillRect { color, .. } if *color == palette.header_hover
-        )) >= 1
+        ))
+        .get()
+            >= 1
     );
 }
 
@@ -374,7 +387,9 @@ fn row_headers_draw_corner_hover_tint() {
     assert!(
         s.count(|op| matches!(
             op, DrawOp::FillRect { color, .. } if *color == palette.header_hover
-        )) >= 1
+        ))
+        .get()
+            >= 1
     );
 }
 
@@ -401,9 +416,11 @@ fn row_headers_draw_per_row_separators() {
     assert!(
         s.count(|op| matches!(
             op, DrawOp::StrokeLine { color, .. } if *color == palette.header_border
-        )) >= 2
+        ))
+        .get()
+            >= 2
     );
-    assert_eq!(s.clip_depth(), 0);
+    assert!(s.clips_balanced());
 }
 
 #[test]
@@ -428,15 +445,18 @@ fn row_headers_skip_tint_when_inactive() {
     assert_eq!(
         s.count(
             |op| matches!(op, DrawOp::FillRect { color, .. } if *color == palette.header_active)
-        ),
+        )
+        .get(),
         0,
     );
     assert!(
         s.count(|op| matches!(
             op, DrawOp::FillRect { color, .. } if *color == palette.header_bg
-        )) >= 1
+        ))
+        .get()
+            >= 1
     );
-    assert_eq!(s.clip_depth(), 0);
+    assert!(s.clips_balanced());
 }
 
 #[test]
@@ -463,10 +483,11 @@ fn row_headers_draw_active_tint() {
         s.count(|op| matches!(
             op, DrawOp::FillRect { color, rect, .. }
                 if *color == palette.header_active && rect.y0 == top && rect.y1 == top + 20.0
-        )),
+        ))
+        .get(),
         1,
     );
-    assert_eq!(s.clip_depth(), 0);
+    assert!(s.clips_balanced());
 }
 
 #[test]
@@ -504,7 +525,7 @@ fn draw_one(l: &GridLayout<'_>, row: u32, col: u32, content: CellContent<'_>) ->
         ambre_canvas::CellsDrawn::new(1),
         "the cell has text, so it is drawn"
     );
-    assert_eq!(s.clip_depth(), 0);
+    assert!(s.clips_balanced());
     s.ops().to_vec()
 }
 
@@ -661,15 +682,16 @@ fn a_fill_and_a_border_stop_at_the_cell_edge() {
     let mut s = RecordingSurface::new();
     draw_cell_borders_on(&mut s, [(rect, c)], Theme::Light.palette().cell_border);
     let lines = s.count(|op| {
-        let DrawOp::StrokeLine { x0, y0, x1, y1, .. } = *op else {
+        let DrawOp::StrokeLine { line, .. } = *op else {
             return false;
         };
-        let inside =
-            |x: f64, y: f64| (rect.x0..=rect.x1).contains(&x) && (rect.y0..=rect.y1).contains(&y);
-        assert!(inside(x0, y0) && inside(x1, y1), "{op:?}");
+        let inside = |p: ambre_draw::Point| {
+            (rect.x0..=rect.x1).contains(&p.x) && (rect.y0..=rect.y1).contains(&p.y)
+        };
+        assert!(inside(line.p0) && inside(line.p1), "{op:?}");
         true
     });
-    assert_eq!(lines, 4);
+    assert_eq!(lines.get(), 4);
 }
 
 #[test]

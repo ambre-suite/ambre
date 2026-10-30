@@ -825,7 +825,7 @@ mod pdf_tests {
             ambre_bus::app::toile::PresentMode::Editing,
         );
         let lines = |s: &RecordingSurface| s.count(|op| matches!(op, DrawOp::StrokeLine { .. }));
-        assert!(lines(&board) > 0, "the editing walk draws the grid");
-        assert_eq!(lines(&page), 0, "the page drew a grid line");
+        assert!(lines(&board).get() > 0, "the editing walk draws the grid");
+        assert_eq!(lines(&page).get(), 0, "the page drew a grid line");
     }
 }

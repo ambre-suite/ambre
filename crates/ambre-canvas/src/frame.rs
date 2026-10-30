@@ -439,8 +439,8 @@ mod tests {
         };
         assert_eq!(*rect, Rect::new(0.0, 0.0, 800.0, 600.0));
         let runs = surface
-            .count(|op| matches!(op, DrawOp::Glyphs { glyph_count, .. } if *glyph_count > 0));
-        assert!(runs >= 2, "the title and the message are drawn");
+            .count(|op| matches!(op, DrawOp::Glyphs { glyph_count, .. } if glyph_count.get() > 0));
+        assert!(runs.get() >= 2, "the title and the message are drawn");
     }
 
     /// A layer planned `Reuse` is not built, and so not uploaded

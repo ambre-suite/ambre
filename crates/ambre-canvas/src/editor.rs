@@ -1183,12 +1183,16 @@ mod tests {
         let band = selection.with_alpha(0.30);
         let ink = style().color;
         let paths = |c: Color| {
-            surface.count(|op| matches!(op, DrawOp::FillPath { color: Some(k) } if *k == c))
+            surface
+                .count(|op| matches!(op, DrawOp::FillPath { color: Some(k) } if *k == c))
+                .get()
         };
         assert!(paths(band) >= 1, "the selection band is not a path");
         assert!(paths(ink) >= 1, "the caret is not a path");
         assert_eq!(
-            surface.count(|op| matches!(op, DrawOp::FillRect { .. })),
+            surface
+                .count(|op| matches!(op, DrawOp::FillRect { .. }))
+                .get(),
             0,
             "a fill_rect maps only its bounding box under a rotation"
         );
@@ -1477,10 +1481,14 @@ mod tests {
             Caret::Hidden,
         );
         let glyphs = |c: Color| {
-            surface.count(|op| matches!(op, DrawOp::Glyphs { color: Some(k), .. } if *k == c))
+            surface
+                .count(|op| matches!(op, DrawOp::Glyphs { color: Some(k), .. } if *k == c))
+                .get()
         };
         let paths = |c: Color| {
-            surface.count(|op| matches!(op, DrawOp::FillPath { color: Some(k) } if *k == c))
+            surface
+                .count(|op| matches!(op, DrawOp::FillPath { color: Some(k) } if *k == c))
+                .get()
         };
         assert_eq!(glyphs(ink), 1, "the span's ink");
         assert_eq!(glyphs(style().color), 1, "the rest keeps the pinned ink");

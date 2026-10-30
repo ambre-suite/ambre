@@ -515,15 +515,18 @@ mod tests {
             &ImageStore::new(),
         );
         assert!(
-            page.count(|op| matches!(op, DrawOp::Glyphs { .. })) >= 1,
+            page.count(|op| matches!(op, DrawOp::Glyphs { .. })).get() >= 1,
             "the word is drawn as glyphs"
         );
         assert!(
-            page.count(|op| matches!(op, DrawOp::FillPath { .. } | DrawOp::FillRect { .. })) >= 1,
+            page.count(|op| matches!(op, DrawOp::FillPath { .. } | DrawOp::FillRect { .. }))
+                .get()
+                >= 1,
             "the shape is drawn as a vector fill"
         );
         assert_eq!(
-            page.count(|op| matches!(op, DrawOp::DrawImage { .. })),
+            page.count(|op| matches!(op, DrawOp::DrawImage { .. }))
+                .get(),
             0,
             "a page with no picture rasterized something"
         );
