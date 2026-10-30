@@ -460,8 +460,6 @@ ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Cl
 ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | request_frame(slot) | param | &FrameSlot	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in a PageTime
 ambre-canvas | src/host.rs | crate::host | fetch_bytes(url) | param | &str	generic	generic codec/parser/bytes API
-ambre-canvas | src/host.rs | crate::host | surface_config(height) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/host.rs | crate::host | surface_config(width) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/host.rs | crate::host | url_flag() | ret | bool	generic	predicate result
 ambre-canvas | src/host.rs | crate::host | url_flag(flag) | param | &str	free-text	text, label or message
 ambre-canvas | src/intent.rs | crate::intent | FilterOpenPublisher.slot | field | Rc<Cell<bool>>	generic	named state or style flag, local
@@ -516,12 +514,8 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload.bytes | field
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.height | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.pixels | field | Vec<u8>	generic	bytes
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.width | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | build_chain(height) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | build_chain(pixels) | param | &[u8]	generic	generic codec/parser/bytes API
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | build_chain(width) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | level_count() | ret | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | level_count(height) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | level_count(width) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce() | ret | Vec<u8>	generic	generic codec/parser/bytes API
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(h) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(nh) | param | u32	math	geometry, layout, GPU or count arithmetic
