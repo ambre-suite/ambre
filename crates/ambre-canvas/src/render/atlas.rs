@@ -25,6 +25,10 @@ use crate::density::DevicePixelRatio;
 // ============================================================================
 
 const ATLAS_SIZE: u32 = 2048;
+/// The largest em a glyph is rasterized at, in device pixels: half the atlas
+/// side. A glyph box up to twice its em then still packs. A larger size is
+/// rasterized at this one and drawn scaled up (`CANVAS-087`).
+const RASTER_CAP: RasterSize = RasterSize::new((ATLAS_SIZE / 2) as f32);
 // 1-pixel padding between glyphs prevents bilinear bleed at atlas boundaries.
 const ATLAS_PAD: u32 = 1;
 
@@ -82,6 +86,17 @@ impl RasterSize {
     /// The size Swash renders, in device pixels.
     const fn get(self) -> f32 {
         self.0
+    }
+
+    /// The size the bitmap is made at: this one, or [`RASTER_CAP`] past it.
+    fn capped(self) -> Self {
+        Self(self.0.min(RASTER_CAP.0))
+    }
+
+    /// The device pixels one texel of the bitmap covers: one up to
+    /// [`RASTER_CAP`], and the ratio of this size to the cap past it.
+    fn texel_scale(self) -> f32 {
+        (self.0 / RASTER_CAP.0).max(1.0)
     }
 }
 
@@ -150,6 +165,10 @@ pub struct AtlasSlot {
     /// The atlas this glyph lives in. Routes the draw to the matching
     /// pipeline.
     pub atlas: AtlasKind,
+    /// The device pixels one texel covers: 1, or more for a glyph rasterized
+    /// at the cap and drawn scaled up (`CANVAS-087`). The pixel lengths above
+    /// are in texels.
+    pub texel_scale: f32,
 }
 
 ambre_core::define_flag! {
@@ -415,6 +434,7 @@ impl GlyphCache {
                 bearing_left: left,
                 bearing_top: top,
                 atlas,
+                texel_scale: 1.0,
             };
             self.cache.insert(
                 key,
@@ -457,6 +477,7 @@ impl GlyphCache {
             bearing_left: left,
             bearing_top: top,
             atlas,
+            texel_scale: 1.0,
         };
 
         pending.push(Upload {
@@ -564,7 +585,8 @@ impl GlyphAtlas {
     /// Look up a glyph in the cache. If absent, rasterize it via Swash and
     /// queue the bitmap for upload. Returns `None` for invisible glyphs (for example
     /// whitespace) or if the atlas just became full (will clear next frame).
-    /// A size past the atlas side also gives `None` (`CANVAS-087`).
+    /// A size that is not finite also gives `None`, and one past the raster
+    /// cap is made at the cap and drawn scaled up (`CANVAS-087`).
     pub fn get_or_rasterize(
         &mut self,
         font_data: &parley::FontData,
@@ -572,22 +594,15 @@ impl GlyphAtlas {
         normalized_coords: &[swash::NormalizedCoord],
         glyph: GlyphId,
     ) -> Option<AtlasSlot> {
-        let key = GlyphKey::new(FontId::of_blob(font_data.data.id()), glyph, font_size);
-
-        if let Some(slot) = self.glyphs.lookup(&key) {
-            return Some(slot);
-        }
-
-        let font_ref =
-            swash::FontRef::from_index(font_data.data.as_ref(), font_data.index as usize)?;
-        let raster = rasterize(
+        glyph_slot(
+            &mut self.glyphs,
             &mut self.scale_cx,
-            font_ref,
+            FontId::of_blob(font_data.data.id()),
+            || swash::FontRef::from_index(font_data.data.as_ref(), font_data.index as usize),
             font_size,
             normalized_coords,
             glyph,
-        )?;
-        self.glyphs.insert(key, raster)
+        )
     }
 
     /// Upload all pending rasterized glyphs to the two GPU textures.
@@ -604,15 +619,48 @@ impl GlyphAtlas {
     }
 }
 
+/// The slot of `glyph` at `size`, from the cache or rasterized into it, the
+/// body of [`GlyphAtlas::get_or_rasterize`]. `font` is parsed on a miss only.
+///
+/// A size past [`RASTER_CAP`] is keyed and rasterized at the cap, and its slot
+/// carries the ratio to draw it at (`CANVAS-087`). The bitmap stays bounded,
+/// and the text stays visible.
+fn glyph_slot<'a>(
+    glyphs: &mut GlyphCache,
+    scale_cx: &mut swash::scale::ScaleContext,
+    font_id: FontId,
+    font: impl FnOnce() -> Option<swash::FontRef<'a>>,
+    size: RasterSize,
+    normalized_coords: &[swash::NormalizedCoord],
+    glyph: GlyphId,
+) -> Option<AtlasSlot> {
+    if !size.get().is_finite() {
+        return None;
+    }
+    let drawn = size.capped();
+    let key = GlyphKey::new(font_id, glyph, drawn);
+    let slot = match glyphs.lookup(&key) {
+        Some(slot) => slot,
+        None => {
+            let raster = rasterize(scale_cx, font()?, drawn, normalized_coords, glyph)?;
+            glyphs.insert(key, raster)?
+        }
+    };
+    Some(AtlasSlot {
+        texel_scale: size.texel_scale(),
+        ..slot
+    })
+}
+
 /// Rasterize one glyph at `size`, in device pixels, through Swash.
 ///
 /// The caller passes the logical size times the density (`CANVAS-033`). A
 /// colour glyph comes back as straight-alpha RGBA, anything else as an R8
 /// coverage mask.
 ///
-/// A size whose em exceeds the atlas side, or is not a number, gives `None`
-/// before Swash runs (`CANVAS-087`). Swash allocates a mask of about the size
-/// squared, and such a glyph could not be packed anyway.
+/// A size past [`RASTER_CAP`], or one that is not finite, gives `None` before
+/// Swash runs (`CANVAS-087`). Swash allocates a mask of about the size
+/// squared, so [`glyph_slot`] passes the capped size.
 pub(super) fn rasterize(
     scale_cx: &mut swash::scale::ScaleContext,
     font: swash::FontRef<'_>,
@@ -620,7 +668,7 @@ pub(super) fn rasterize(
     normalized_coords: &[swash::NormalizedCoord],
     glyph: GlyphId,
 ) -> Option<Raster> {
-    if size.get().is_nan() || size.get() > ATLAS_SIZE as f32 {
+    if !size.get().is_finite() || size.get() > RASTER_CAP.get() {
         return None;
     }
     // Source order: an embedded colour bitmap (CBDT emoji), then a colour
@@ -775,21 +823,41 @@ mod tests {
         );
     }
 
-    /// A raster whose em cannot fit the atlas side is refused before Swash
-    /// allocates its mask, so `get_or_rasterize` returns `None` (`CANVAS-087`).
+    /// A glyph past the raster cap is rasterized at the cap, and its slot
+    /// carries the ratio to draw it at. Swash never allocates a mask of the
+    /// size asked, and a size that is not finite gives no glyph (`CANVAS-087`).
     #[test]
-    fn a_raster_past_the_atlas_side_is_refused_before_swash() {
+    fn a_glyph_past_the_raster_cap_is_made_at_the_cap_and_drawn_scaled() {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         let bytes = std::fs::read(format!("{dir}NotoSans-Regular.ttf")).expect("a shipped face");
         let font = swash::FontRef::from_index(&bytes, 0).expect("a parsable face");
         let glyph = GlyphId::new(font.charmap().map('H'));
         let mut scale_cx = swash::scale::ScaleContext::new();
-        for size in [ATLAS_SIZE as f32 + 1.0, 1.0e6, f32::INFINITY, f32::NAN] {
-            let raster = rasterize(&mut scale_cx, font, RasterSize::new(size), &[], glyph);
-            assert!(raster.is_none(), "{size}");
+        let mut cache = GlyphCache::new(ATLAS_SIZE);
+        cache.begin_frame();
+        let mut slot_at = |size: f32| {
+            glyph_slot(
+                &mut cache,
+                &mut scale_cx,
+                FontId::of_blob(7),
+                || Some(font),
+                RasterSize::new(size),
+                &[],
+                glyph,
+            )
+        };
+        let at_cap = slot_at(RASTER_CAP.get()).expect("a glyph at the cap");
+        assert_eq!(at_cap.texel_scale, 1.0);
+        for size in [ATLAS_SIZE as f32 + 1.0, 1.0e6] {
+            let past = slot_at(size).expect("a glyph past the cap");
+            assert_eq!(past.pixel_height, at_cap.pixel_height, "{size}");
+            assert_eq!(past.uv_min, at_cap.uv_min, "one bitmap, {size}");
+            assert_eq!(past.texel_scale, size / RASTER_CAP.get(), "{size}");
         }
-        let at_side = raster_of("NotoSans-Regular.ttf", 'H', ATLAS_SIZE as f32);
-        assert!(at_side.h > 0);
+        assert!(slot_at(f32::INFINITY).is_none());
+        assert!(slot_at(f32::NAN).is_none());
+        let past = RasterSize::new(RASTER_CAP.get() + 1.0);
+        assert!(rasterize(&mut scale_cx, font, past, &[], glyph).is_none());
     }
 
     /// An emoji rasterizes to colour and a letter to a mask, which is what

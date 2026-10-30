@@ -24,6 +24,7 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 |---|---|---|---|---|---|---|
 | `TOILE-UI-067` | `INV` | A style edit MUST be sent as one whole value per element, never one per attribute. | this spec section 3; `TOILE-018` | structural -- the only command that changes style carries a whole value, and the format has one register per element, so no attribute has a register of its own | none | verified |
 | `TOILE-163` | `CONC` | Two users restyling the same element MUST both end on one of the two styles, never on a mixture. | this spec section 2; `TOILE-018` | `ambre_toile::logic::convergence_tests::two_peers_converge` -- it drives concurrent edits and reads the two peers in agreement | none | verified |
+| `TOILE-UI-398` | `INV` | A text size MUST read as at most 4000 points, the presentation cap: a stored or received size past it reads as 4000. | this spec section 3; `CANVAS-088` | `ambre_bus::app::toile::tests::a_size_choice_past_the_cap_reads_as_the_cap` -- a million points and 4001 decode as 4000, and a size in range keeps its bytes; type-level -- `FontSizeChoice` holds a `FontSize`, itself at most 4000, so no local input names more | none | verified |
 | `TOILE-UI-069` | `INV` | Neither surface MUST hold an authoritative style: both MUST re-derive from the selection and what is painted. | this spec section 3 | type-level -- both models are functions of the selection and the painted set returning a fresh value, so there is no field a style could survive a selection change in | none | verified |
 | `TOILE-UI-066` | `OBS` | The panel MUST report a field that differs across the selection as mixed, rather than showing one member's value as shared. | this spec section 3 | `ambre_toile::ui::style::tests::differing_fill_flags_only_fill_mixed` -- the fill flag; `ambre_toile::ui::style::tests::differing_stroke_width_and_opacity_flag_both` -- two more; `ambre_toile::ui::style::tests::differing_text_decorations_flag_underline_and_strikethrough` -- the two decorations; `ambre_toile::ui::style::tests::a_mixed_field_stays_mixed` -- a later agreeing pair never clears the mix | none | verified |
 | `TOILE-UI-161` | `OBS` | The panel MUST report a field that agrees across the selection as a value, never as mixed. | this spec section 3 | `ambre_toile::ui::style::tests::differing_fill_flags_only_fill_mixed` -- the three fields that agree stay unflagged; `ambre_toile::ui::style::tests::identical_elements_are_not_mixed` -- no flag at all on a uniform pair; `ambre_toile::ui::style::tests::two_elements_on_the_default_family_are_not_mixed` -- a fresh element and one the picker reset to the default agree | none | verified |
@@ -70,10 +71,10 @@ format's rule (`TOILE-018`), and the tear a per-attribute layout suffers is
 * **Boundary.** none: both surfaces are chrome on the UI thread, where `UI-THREAD-004` bans a network,
   crypto or persistence path. The value they emit enters the document and leaves as bytes the Sync
   worker seals (`ZK-001`).
-* **Verification.** 31 `verified`, 0 `failing`, 0 `untested`. What holds is the read: the base value, the
-  flags, the anchor, the one-field mapping, and a selection read whole (`TOILE-UI-070`). The write holds:
-  each surface writes one field, a restyle undoes as one step, and two bar edits compose. A style carries
-  its own layout version (`TOILE-UI-071`). The lock itself is `TOILE-033`.
+* **Verification.** 32 `verified`. What holds is the read: the base value, the flags, the anchor,
+  the one-field mapping, and a selection read whole (`TOILE-UI-070`). The write holds: each surface
+  writes one field, a restyle undoes as one step, and two bar edits compose. A style carries its own
+  layout version (`TOILE-UI-071`). The lock itself is `TOILE-033`.
 
 ---
 

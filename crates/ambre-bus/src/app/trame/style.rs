@@ -310,8 +310,11 @@ pub struct CellStyle {
     pub borders: Borders,
 }
 
+/// The smallest font size a style command may set on a cell.
+pub const CELL_FONT_SIZE_MIN: FontSize = FontSize::from_whole_points(1);
+
 /// The largest font size a cell carries: 409 points, the cap of the
-/// spreadsheet formats (`CANVAS-088`).
+/// spreadsheet formats (`CANVAS-088`). A style command past it is refused.
 pub const CELL_FONT_SIZE_MAX: FontSize = FontSize::from_whole_points(409);
 
 /// The whole-point layout of [`CellStyle::size`], read back at most

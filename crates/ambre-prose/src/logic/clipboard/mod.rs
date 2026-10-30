@@ -160,8 +160,14 @@ const FAMILY_MAX: ambre_core::ByteSize = ambre_core::ByteSize(64);
 /// The value a paste writes under `root`, from either half of the clipboard
 /// (`PROSE-UI-220`, `PROSE-UI-234`). The value passes the grammar of a typed
 /// mark first. A paste then adds two limits: a link a reader follows, and a
-/// family name of bounded length and plain characters.
+/// family name of bounded length and plain characters. A size past the cap
+/// lands at the cap, as a stored one reads (`CANVAS-088`).
 fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
+    if matches!(root, MarkRoot::FontSize) {
+        let size = mark::read_font_size(raw?)?;
+        let points = mark::canonical_number(size.points());
+        return mark::validate_value(&root.key(), points.as_deref()).ok();
+    }
     let value = mark::validate_value(&root.key(), raw).ok()?;
     let kept = match root {
         MarkRoot::Link => safe_link(value.as_str()),
@@ -641,8 +647,9 @@ mod tests {
     }
 
     /// `PROSE-UI-234`: a crafted payload writes only the formatting marks a
-    /// typed mark may carry. A colour, a size or a flag value the grammar
-    /// refuses is dropped, and so is an anchor and a value of no mark shape.
+    /// typed mark may carry. A colour or a flag value the grammar refuses is
+    /// dropped, and so is an anchor and a value of no mark shape. A size past
+    /// the cap lands at the cap (`CANVAS-088`).
     #[test]
     fn a_crafted_payload_writes_only_the_marks_a_typed_mark_may() {
         let written = pasted_marks(vec![
@@ -658,6 +665,7 @@ mod tests {
         assert_eq!(
             written,
             vec![
+                ("fs".to_owned(), LoroValue::from("1638")),
                 ("bg".to_owned(), LoroValue::from("#ffff00")),
                 ("i".to_owned(), LoroValue::from("")),
             ]

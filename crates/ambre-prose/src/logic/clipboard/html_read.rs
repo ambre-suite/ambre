@@ -885,9 +885,7 @@ fn font_size(value: &str) -> Option<ambre_core::FontSize> {
             .to_pt()
             .get()
     };
-    // A pasted size past the cap reads as the cap (`CANVAS-088`).
     ambre_core::FontSize::new((points * 2.0).round() / 2.0)
-        .map(|size| size.at_most(mark::FONT_SIZE_MAX))
 }
 
 /// The first family a font stack names, when it names one rather than a

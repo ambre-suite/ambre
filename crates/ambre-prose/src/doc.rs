@@ -1782,6 +1782,21 @@ mod tests {
         assert_eq!(format.margin_left, Mm::new(5.0));
     }
 
+    /// A default size a peer stored past the cap reads as the cap
+    /// (`CANVAS-088`).
+    #[test]
+    fn a_default_size_past_the_cap_reads_as_the_cap() {
+        let doc = LoroDoc::new();
+        seed(&doc);
+        let defaults = map_at(&meta(&doc), MetaKey::Defaults)
+            .map(Fields::<DefaultsKey>::of)
+            .expect("seed writes the defaults register");
+        defaults
+            .insert(DefaultsKey::FontSizePt, 1.0e6)
+            .expect("the register takes a double");
+        assert_eq!(read_defaults(&doc).font_size, crate::mark::FONT_SIZE_MAX);
+    }
+
     #[test]
     fn a_body_key_re_reads_as_the_pair_it_joins() {
         let id = TreeID::new(0xDEAD_BEEF_0BAD_F00D, 42);
