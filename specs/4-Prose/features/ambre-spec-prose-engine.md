@@ -743,13 +743,15 @@ container is `ambre-spec-docfile.md section 3`.
 
 ### G. What the UI thread holds
 
-View state, and no document content (`PROSE-UI-001`). Each field is owned by the feature document its
-comment names; the engine declares the struct and the rule, never the field's behaviour.
+View state, and never the document itself (`PROSE-UI-001`). Each field is owned by the feature
+document its comment names; the engine declares the struct and the rule, never the field's
+behaviour. Several fields carry copies of the document's text: the runs, the drafts, the comments,
+the text in composition. So `Debug` is written by hand, and prints a count or a length for each.
 
 ```rust
 // ambre-prose/src/ui.rs
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]  // Debug by hand: counts and lengths, never text
 pub struct ProseUiState {
     // Handed over by the Logic thread
     /// The layout in force and the runs it carries, as last taken

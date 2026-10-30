@@ -62,10 +62,12 @@ pub(crate) mod tests {
     fn a_block_of_the_form_prints_its_text_by_length_alone() {
         use crate::interop::IrBlock;
         let code = IrBlock::CodeBlock {
-            lang: ambre_bus::app::prose::CodeLang::new("rust"),
+            lang: ambre_bus::app::prose::CodeLang::new("privatelang"),
             text: "let secret = 1;".into(),
         };
         assert!(hides(&code, "let secret = 1;"));
+        // The language is a word the user typed after a fence.
+        assert!(hides(&code, "privatelang"));
         let image = IrBlock::Image {
             alt: "a private photo".into(),
         };

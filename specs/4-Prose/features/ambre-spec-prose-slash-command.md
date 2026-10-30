@@ -96,7 +96,8 @@ it (`ambre-spec-ui.md section 2`).
 ```rust
 // ambre-prose/src/view/slash.rs -- published to the chrome component, never drawn on the canvas
 
-#[derive(Clone, Debug, Default, PartialEq)]
+/// The query is what the user typed, so `Debug` prints its length alone.
+#[derive(Clone, Default, PartialEq)]  // Debug by hand, the query redacted
 pub struct SlashMenuState {
     /// Under the slash, in canvas space. `None` hides the menu.
     pub anchor:   Option<ViewPoint>,
@@ -106,8 +107,9 @@ pub struct SlashMenuState {
     pub selected: SlashChoice,
 }
 
-/// What the view keeps while the menu is open. Never published, never written.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What the view keeps while the menu is open. Never published, never written. `Debug` prints
+/// the query's length alone.
+#[derive(Clone, PartialEq, Eq)]  // Debug by hand, the query redacted
 struct SlashMenu {
     /// The block the slash was typed in, and the offset of the slash itself. A remote edit
     /// moves the offset with the text (`PROSE-UI-193`).
