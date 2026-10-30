@@ -130,7 +130,7 @@ impl NumericStats {
 }
 
 /// Display events emitted by the Trame logic to the UI Thread.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum TrameEvent {
     /// Cell content for a requested viewport region.
     ///
@@ -437,6 +437,144 @@ pub enum TrameEvent {
     },
 }
 
+// A cell value, a validation message and a protection note are the author's,
+// and print their length alone. A refusal the engine words prints whole.
+impl std::fmt::Debug for TrameEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ambre_core::char_len;
+        macro_rules! fields {
+            ($name:literal $(, $field:ident)*) => {
+                f.debug_struct($name)$(.field(stringify!($field), $field))*.finish()
+            };
+        }
+        macro_rules! at_cell {
+            ($name:literal, $version:expr, $row:expr, $col:expr, $label:literal, $text:expr) => {
+                f.debug_struct($name)
+                    .field("version", $version)
+                    .field("row", $row)
+                    .field("col", $col)
+                    .field($label, &char_len($text))
+                    .finish()
+            };
+        }
+        match self {
+            Self::ViewportData {
+                version,
+                row_start,
+                col_start,
+                cells,
+                col_widths,
+                row_heights,
+            } => fields!(
+                "ViewportData",
+                version,
+                row_start,
+                col_start,
+                cells,
+                col_widths,
+                row_heights
+            ),
+            Self::StyleApplied {
+                style,
+                bold,
+                italic,
+                merged,
+                numeric,
+            } => fields!("StyleApplied", style, bold, italic, merged, numeric),
+            Self::DataReset => f.write_str("DataReset"),
+            Self::SelectRange { rect } => fields!("SelectRange", rect),
+            Self::MergeRejected { reason } => fields!("MergeRejected", reason),
+            Self::MergeConflictDetected {
+                master_row,
+                master_col,
+                covered_row,
+                covered_col,
+            } => fields!(
+                "MergeConflictDetected",
+                master_row,
+                master_col,
+                covered_row,
+                covered_col
+            ),
+            Self::UndoState { undo, redo } => fields!("UndoState", undo, redo),
+            Self::SheetList { sheets, active } => fields!("SheetList", sheets, active),
+            Self::Error { message } => fields!("Error", message),
+            Self::EditTargetMoved { session, row, col } => {
+                fields!("EditTargetMoved", session, row, col)
+            }
+            Self::EditTargetGone { session } => fields!("EditTargetGone", session),
+            Self::DocumentRefused { reason } => fields!("DocumentRefused", reason),
+            Self::UndecodableRecords => f.write_str("UndecodableRecords"),
+            Self::SortComplete => f.write_str("SortComplete"),
+            Self::SortRange { r1, c1, r2, c2 } => fields!("SortRange", r1, c1, r2, c2),
+            Self::ColumnContent { col, cells } => fields!("ColumnContent", col, cells),
+            Self::FilterApplied {
+                hidden_row_count,
+                col,
+            } => fields!("FilterApplied", hidden_row_count, col),
+            Self::ColumnValues { col, values } => f
+                .debug_struct("ColumnValues")
+                .field("col", col)
+                .field(
+                    "values",
+                    &values.iter().map(|text| char_len(text)).collect::<Vec<_>>(),
+                )
+                .finish(),
+            Self::SelectionStats { count, numbers } => fields!("SelectionStats", count, numbers),
+            Self::FilterCleared => f.write_str("FilterCleared"),
+            Self::FindResult { matches, active } => fields!("FindResult", matches, active),
+            Self::ReplaceDone { replaced } => fields!("ReplaceDone", replaced),
+            Self::PasteRejected { reason } => fields!("PasteRejected", reason),
+            Self::Clipboard(payload) => f.debug_tuple("Clipboard").field(payload).finish(),
+            Self::FilterViewSaved { view_id } => fields!("FilterViewSaved", view_id),
+            Self::CondFormatsUpdated { version } => fields!("CondFormatsUpdated", version),
+            Self::ValidationError {
+                version,
+                row,
+                col,
+                message,
+            } => at_cell!("ValidationError", version, row, col, "message", message),
+            Self::ValidationWarning {
+                version,
+                row,
+                col,
+                message,
+            } => at_cell!("ValidationWarning", version, row, col, "message", message),
+            Self::ProtectionDenied {
+                version,
+                row,
+                col,
+                description,
+            } => at_cell!(
+                "ProtectionDenied",
+                version,
+                row,
+                col,
+                "description",
+                description
+            ),
+            Self::ImportComplete {
+                sheet_id,
+                rows,
+                cols,
+            } => fields!("ImportComplete", sheet_id, rows, cols),
+            Self::ExportComplete { filename, data } => fields!("ExportComplete", filename, data),
+            Self::ProtectionViolationWarning {
+                row,
+                col,
+                from_user_id,
+                description,
+            } => f
+                .debug_struct("ProtectionViolationWarning")
+                .field("row", row)
+                .field("col", col)
+                .field("from_user_id", from_user_id)
+                .field("description", &char_len(description))
+                .finish(),
+        }
+    }
+}
+
 /// Stable identity of a sheet, peer-scoped where it is minted
 /// (`{peer:016x}_{counter:08x}`). A rename leaves it unchanged
 /// (`trame-sheets`).
@@ -664,6 +802,98 @@ mod tests {
             "{printed}"
         );
         assert!(!printed.contains("4200") && !printed.contains("SALARY"));
+    }
+
+    /// Every command, event and rule that holds a text the author typed prints
+    /// its length in `Debug`, and none of the text.
+    #[test]
+    fn an_authored_text_prints_its_length_alone() {
+        use super::super::{
+            CellFormat, ClipboardCell, ClipboardPayload, CondFormatKind, FilterKind, FilterOp,
+            FormulaSource, TrameCommand, ValidationKind,
+        };
+        let secret = "Q3 layoffs".to_owned();
+        let at = (Row::ZERO, Col::ZERO);
+        let payload = ClipboardPayload {
+            cells: vec![ClipboardCell {
+                raw: secret.clone(),
+                ..ClipboardCell::default()
+            }],
+            ..ClipboardPayload::default()
+        };
+        let printed = [
+            format!(
+                "{:?}",
+                TrameCommand::SetCellText {
+                    row: at.0,
+                    col: at.1,
+                    text: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                TrameCommand::SetCellsBatch {
+                    cells: vec![(CellPos::new(at.0, at.1), secret.clone())],
+                }
+            ),
+            format!(
+                "{:?}",
+                TrameCommand::PasteText {
+                    text: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                TrameCommand::ReplaceAll {
+                    query: None,
+                    replacement: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                TrameCommand::PasteClipboardAtActive {
+                    payload: payload.clone(),
+                }
+            ),
+            format!("{:?}", TrameEvent::Clipboard(payload)),
+            format!(
+                "{:?}",
+                TrameEvent::ColumnValues {
+                    col: at.1,
+                    values: vec![secret.clone()],
+                }
+            ),
+            format!(
+                "{:?}",
+                TrameEvent::ProtectionViolationWarning {
+                    row: at.0,
+                    col: at.1,
+                    from_user_id: crate::UserId::default(),
+                    description: secret.clone(),
+                }
+            ),
+            format!("{:?}", CondFormatKind::Contains(secret.clone())),
+            format!(
+                "{:?}",
+                CondFormatKind::Formula(FormulaSource::new(secret.clone()))
+            ),
+            format!("{:?}", ValidationKind::Regex(secret.clone())),
+            format!("{:?}", ValidationKind::List(vec![secret.clone()])),
+            format!("{:?}", FilterKind::Values(vec![secret.clone()])),
+            format!(
+                "{:?}",
+                FilterKind::Condition {
+                    op: FilterOp::Eq,
+                    value: secret.clone(),
+                }
+            ),
+            format!("{:?}", CellFormat::Custom(secret.clone())),
+        ];
+        for line in printed {
+            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(!line.contains("Q3 layoffs"), "{line}");
+        }
+        assert_eq!(format!("{:?}", CellFormat::Date), "Date");
     }
 
     /// Totals exist only over at least one number, and the average is the sum

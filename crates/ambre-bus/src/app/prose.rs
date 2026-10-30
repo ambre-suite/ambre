@@ -1079,24 +1079,48 @@ pub struct FindMatch {
 /// The ordinal is counted from the calls in document order and never stored
 /// (`PROSE-FEAT-013`, `PROSE-FEAT-095`). `None` marks a note no call reaches,
 /// kept for the author to review (`PROSE-FEAT-098`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct FootnoteEntry {
     pub footnote_id: FootnoteId,
     pub ordinal: Option<FootnoteOrdinal>,
     pub text: String,
 }
 
+// The note's body is the author's: a log carries its length alone.
+impl fmt::Debug for FootnoteEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FootnoteEntry")
+            .field("footnote_id", &self.footnote_id)
+            .field("ordinal", &self.ordinal)
+            .field("text", &ambre_core::char_len(&self.text))
+            .finish()
+    }
+}
+
 /// One reply of a comment thread (`features/ambre-spec-prose-comments.md`).
 ///
 /// The author is the one the writing session stamped, never a field the
 /// command carried (`PROSE-FEAT-077`). The stamp is display only.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct CommentReply {
     pub reply_id: ReplyId,
     pub author: Option<ambre_core::DisplayName>,
     pub user_id: UserId,
     pub created_at: crate::Timestamp,
     pub text: String,
+}
+
+// The reply's body is the author's: a log carries its length alone.
+impl fmt::Debug for CommentReply {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CommentReply")
+            .field("reply_id", &self.reply_id)
+            .field("author", &self.author)
+            .field("user_id", &self.user_id)
+            .field("created_at", &self.created_at)
+            .field("text", &ambre_core::char_len(&self.text))
+            .finish()
+    }
 }
 
 ambre_core::define_flag! {
@@ -1228,7 +1252,7 @@ pub struct Suggestion {
 ///
 /// The reference record stores it, and the variant's position is its stored
 /// code: a new kind is appended, never inserted.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CrossRefKind {
     /// The page the target starts on.
     PageNumber,
@@ -1238,9 +1262,23 @@ pub enum CrossRefKind {
     CustomText(String),
 }
 
+// The label is the author's: a log carries its length alone.
+impl fmt::Debug for CrossRefKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::PageNumber => f.write_str("PageNumber"),
+            Self::HeadingNumber => f.write_str("HeadingNumber"),
+            Self::CustomText(text) => f
+                .debug_tuple("CustomText")
+                .field(&ambre_core::char_len(text))
+                .finish(),
+        }
+    }
+}
+
 /// One cross reference as drawn from the last layout. Nothing here is stored
 /// (`PROSE-FEAT-129`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ResolvedCrossRef {
     /// Where the reference sits: its block and its code-point offset.
     pub block_id: BlockId,
@@ -1248,6 +1286,18 @@ pub struct ResolvedCrossRef {
     pub target: BlockId,
     /// The value drawn. `None` is the broken mark (`PROSE-FEAT-014`).
     pub shown: Option<String>,
+}
+
+// The value drawn may be a label the author wrote: a log carries its length.
+impl fmt::Debug for ResolvedCrossRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResolvedCrossRef")
+            .field("block_id", &self.block_id)
+            .field("offset", &self.offset)
+            .field("target", &self.target)
+            .field("shown", &self.shown.as_deref().map(ambre_core::char_len))
+            .finish()
+    }
 }
 
 /// The number drawn in front of a heading, one counter per level from the
@@ -1285,7 +1335,7 @@ impl fmt::Display for HeadingNumber {
 
 /// One line of a table of contents. Nothing here is persisted
 /// (`features/ambre-spec-prose-table-of-contents.md`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TocEntry {
     pub block_id: BlockId,
     pub level: HeadingLevel,
@@ -1296,6 +1346,19 @@ pub struct TocEntry {
     /// The page the heading starts on (`PROSE-FEAT-060`). `None` while the
     /// layout places no block that holds the heading.
     pub page: Option<PageNumber>,
+}
+
+// The heading's text is the author's: a log carries its length alone.
+impl fmt::Debug for TocEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TocEntry")
+            .field("block_id", &self.block_id)
+            .field("level", &self.level)
+            .field("text", &ambre_core::char_len(&self.text))
+            .field("heading_number", &self.heading_number)
+            .field("page", &self.page)
+            .finish()
+    }
 }
 
 /// The entries one table-of-contents block lists, built from the headings and
@@ -1349,7 +1412,7 @@ impl TocNumbering {
 /// The variants are the ones the engine answers today. The pictures, the
 /// spell checker and the Word, HTML and PDF filters reach this enum with the
 /// Story that builds each of them (`ambre-roadmap.md`).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum ProseCommand {
     /// Changes nothing, and is the one command a test drives the empty outcome
     /// with (`PROSE-047`).
@@ -1782,6 +1845,226 @@ pub enum ProseCommand {
     },
 }
 
+// A text a user typed prints its length alone, and every other field its own
+// `Debug`. A log of a command carries none of the document's text.
+impl fmt::Debug for ProseCommand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        macro_rules! fields {
+            ($name:literal $(, $field:ident)*) => {
+                f.debug_struct($name)$(.field(stringify!($field), $field))*.finish()
+            };
+        }
+        macro_rules! texts {
+            ($name:literal $(, $field:ident)* ; $text:ident $(, $tail:ident)*) => {
+                f.debug_struct($name)
+                    $(.field(stringify!($field), $field))*
+                    .field(stringify!($text), &ambre_core::char_len($text))
+                    $(.field(stringify!($tail), $tail))*
+                    .finish()
+            };
+        }
+        match self {
+            Self::Noop => f.write_str("Noop"),
+            Self::Sync { seen } => fields!("Sync", seen),
+            Self::InsertText {
+                block_id,
+                pos,
+                text,
+            } => texts!("InsertText", block_id, pos; text),
+            Self::DeleteText { block_id, range } => fields!("DeleteText", block_id, range),
+            Self::DeleteRange { anchor, focus } => fields!("DeleteRange", anchor, focus),
+            Self::SplitBlock { block_id, pos } => fields!("SplitBlock", block_id, pos),
+            Self::ApplyMark {
+                block_id,
+                range,
+                key,
+                value,
+            } => fields!("ApplyMark", block_id, range, key, value),
+            Self::RemoveMark {
+                block_id,
+                range,
+                key,
+            } => fields!("RemoveMark", block_id, range, key),
+            Self::ClearInlineMarks { block_id, range } => {
+                fields!("ClearInlineMarks", block_id, range)
+            }
+            Self::InsertBlock {
+                parent_id,
+                after_id,
+                init,
+                style_id,
+            } => fields!("InsertBlock", parent_id, after_id, init, style_id),
+            Self::DeleteBlock { block_id } => fields!("DeleteBlock", block_id),
+            Self::MoveBlock {
+                block_id,
+                new_parent,
+                after_id,
+            } => fields!("MoveBlock", block_id, new_parent, after_id),
+            Self::SetBlockStyle { block_id, style_id } => {
+                fields!("SetBlockStyle", block_id, style_id)
+            }
+            Self::SetHeadingLevel { block_id, level } => {
+                fields!("SetHeadingLevel", block_id, level)
+            }
+            Self::SetCodeLang { block_id, lang } => fields!("SetCodeLang", block_id, lang),
+            Self::SetListStyle { block_id, style } => fields!("SetListStyle", block_id, style),
+            Self::IndentList { block_id } => fields!("IndentList", block_id),
+            Self::UnindentList { block_id } => fields!("UnindentList", block_id),
+            Self::SetParagraphStyle { block_id, style } => {
+                fields!("SetParagraphStyle", block_id, style)
+            }
+            Self::InsertTable {
+                parent_id,
+                after_id,
+                rows,
+                cols,
+            } => fields!("InsertTable", parent_id, after_id, rows, cols),
+            Self::InsertTableRow {
+                table_id,
+                after_row,
+            } => fields!("InsertTableRow", table_id, after_row),
+            Self::DeleteTableRow { row_id } => fields!("DeleteTableRow", row_id),
+            Self::InsertTableCol {
+                table_id,
+                at_col,
+                width,
+            } => fields!("InsertTableCol", table_id, at_col, width),
+            Self::DeleteTableCol {
+                table_id,
+                col_index,
+            } => fields!("DeleteTableCol", table_id, col_index),
+            Self::ResizeTableCol {
+                table_id,
+                col_index,
+                width,
+            } => fields!("ResizeTableCol", table_id, col_index, width),
+            Self::MergeTableCells {
+                table_id,
+                start,
+                end,
+            } => fields!("MergeTableCells", table_id, start, end),
+            Self::UnmergeTableCell { cell_id } => fields!("UnmergeTableCell", cell_id),
+            Self::SetCellStyle {
+                cell_id,
+                bg,
+                valign,
+                border,
+                padding,
+            } => fields!("SetCellStyle", cell_id, bg, valign, border, padding),
+            Self::StepTableCell { cell_id, direction } => {
+                fields!("StepTableCell", cell_id, direction)
+            }
+            Self::InsertToc {
+                parent_id,
+                after_id,
+                max_level,
+                numbered,
+            } => fields!("InsertToc", parent_id, after_id, max_level, numbered),
+            Self::UpdateTocConfig {
+                block_id,
+                max_level,
+                numbered,
+            } => fields!("UpdateTocConfig", block_id, max_level, numbered),
+            Self::ShowPages { first, last } => fields!("ShowPages", first, last),
+            Self::ShowBlock { block_id } => fields!("ShowBlock", block_id),
+            Self::CountWords => f.write_str("CountWords"),
+            Self::ReadMarks { anchor, focus } => fields!("ReadMarks", anchor, focus),
+            Self::CopyRange { anchor, focus } => fields!("CopyRange", anchor, focus),
+            Self::Paste {
+                at,
+                text,
+                html,
+                payload,
+            } => f
+                .debug_struct("Paste")
+                .field("at", at)
+                .field("text", &ambre_core::char_len(text))
+                .field("html", &html.as_deref().map(ambre_core::char_len))
+                .field("payload", payload)
+                .finish(),
+            Self::FormatSelection {
+                anchor,
+                focus,
+                key,
+                action,
+            } => fields!("FormatSelection", anchor, focus, key, action),
+            Self::SetHeaderEnabled { shown } => fields!("SetHeaderEnabled", shown),
+            Self::SetFooterEnabled { shown } => fields!("SetFooterEnabled", shown),
+            Self::SetDifferentFirstPage { first_page } => {
+                fields!("SetDifferentFirstPage", first_page)
+            }
+            Self::InsertHeaderField { field, target, pos } => {
+                fields!("InsertHeaderField", field, target, pos)
+            }
+            Self::InsertFooterField { field, target, pos } => {
+                fields!("InsertFooterField", field, target, pos)
+            }
+            Self::SetBandAlign { block_id, align } => fields!("SetBandAlign", block_id, align),
+            Self::StampModified { now } => fields!("StampModified", now),
+            Self::FindStart { query } => fields!("FindStart", query),
+            Self::FindNext => f.write_str("FindNext"),
+            Self::FindPrev => f.write_str("FindPrev"),
+            Self::FindClose => f.write_str("FindClose"),
+            Self::ReplaceOne { replacement } => texts!("ReplaceOne"; replacement),
+            Self::ReplaceAll { replacement } => texts!("ReplaceAll"; replacement),
+            Self::InsertFootnote {
+                block_id,
+                pos,
+                note_text,
+            } => texts!("InsertFootnote", block_id, pos; note_text),
+            Self::EditFootnote {
+                footnote_id,
+                new_text,
+            } => texts!("EditFootnote", footnote_id; new_text),
+            Self::DeleteFootnote { footnote_id } => fields!("DeleteFootnote", footnote_id),
+            Self::AddComment {
+                block_id,
+                range,
+                text,
+                now,
+            } => texts!("AddComment", block_id, range; text, now),
+            Self::ReplyToComment {
+                comment_id,
+                text,
+                now,
+            } => texts!("ReplyToComment", comment_id; text, now),
+            Self::ResolveComment { comment_id } => fields!("ResolveComment", comment_id),
+            Self::ReopenComment { comment_id } => fields!("ReopenComment", comment_id),
+            Self::DeleteComment { comment_id } => fields!("DeleteComment", comment_id),
+            Self::DeleteReply {
+                comment_id,
+                reply_id,
+            } => fields!("DeleteReply", comment_id, reply_id),
+            Self::EditCommentReply {
+                comment_id,
+                reply_id,
+                new_text,
+            } => texts!("EditCommentReply", comment_id, reply_id; new_text),
+            Self::EnableTrackChanges { mode } => fields!("EnableTrackChanges", mode),
+            Self::AcceptSuggestion { suggestion_id } => {
+                fields!("AcceptSuggestion", suggestion_id)
+            }
+            Self::RejectSuggestion { suggestion_id } => {
+                fields!("RejectSuggestion", suggestion_id)
+            }
+            Self::AcceptAllSuggestions => f.write_str("AcceptAllSuggestions"),
+            Self::RejectAllSuggestions => f.write_str("RejectAllSuggestions"),
+            Self::InsertCrossRef {
+                block_id,
+                pos,
+                target_block_id,
+                kind,
+            } => fields!("InsertCrossRef", block_id, pos, target_block_id, kind),
+            Self::FollowCrossRef { block_id, pos } => fields!("FollowCrossRef", block_id, pos),
+            Self::UpdateCursor { pos } => fields!("UpdateCursor", pos),
+            Self::Undo => f.write_str("Undo"),
+            Self::Redo => f.write_str("Redo"),
+            Self::ExportDocument { format } => fields!("ExportDocument", format),
+            Self::ImportDocument { format, data } => fields!("ImportDocument", format, data),
+        }
+    }
+}
+
 /// The formats a file enters the editor in
 /// (`features/ambre-spec-prose-import-export.md section 3`). A reader adds its
 /// variant on the day it lands.
@@ -2177,7 +2460,7 @@ impl ProseCommand {
 ///
 /// The interop reports reach this enum later, with the Story that builds them
 /// (`ambre-roadmap.md` E5).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum ProseEvent {
     /// A layout the Logic thread computed and shaped, whole. The view draws it
     /// and never lays text out itself (`PROSE-UI-006`).
@@ -2312,6 +2595,77 @@ pub enum ProseEvent {
     /// A command the engine could not honour. The value names what was
     /// refused and why (`PROSE-105`).
     Error(ProseError),
+}
+
+// The clipboard text is the author's and prints its length alone; every other
+// field prints its own `Debug`, which holds no text of the document.
+impl fmt::Debug for ProseEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        macro_rules! fields {
+            ($name:literal $(, $field:ident)*) => {
+                f.debug_struct($name)$(.field(stringify!($field), $field))*.finish()
+            };
+        }
+        match self {
+            Self::LayoutShaped { layout } => fields!("LayoutShaped", layout),
+            Self::DocUpdated { payload } => fields!("DocUpdated", payload),
+            Self::TextChanged {
+                origin,
+                seq,
+                acked,
+                edits,
+                removed,
+            } => fields!("TextChanged", origin, seq, acked, edits, removed),
+            Self::BlockSplit { source, new_block } => fields!("BlockSplit", source, new_block),
+            Self::Synced { acked } => fields!("Synced", acked),
+            Self::RemoteCursors { cursors } => fields!("RemoteCursors", cursors),
+            Self::MediaArrived {
+                content_hash,
+                blocks,
+            } => fields!("MediaArrived", content_hash, blocks),
+            Self::DocumentRefused { reason } => fields!("DocumentRefused", reason),
+            Self::ExportReady {
+                filename,
+                media_type,
+                data,
+                report,
+            } => fields!("ExportReady", filename, media_type, data, report),
+            Self::ImportCompleted { report } => fields!("ImportCompleted", report),
+            Self::TocUpdated { block_id, toc } => fields!("TocUpdated", block_id, toc),
+            Self::WordCountUpdated { count } => fields!("WordCountUpdated", count),
+            Self::SelectionMarks {
+                anchor,
+                focus,
+                marks,
+            } => fields!("SelectionMarks", anchor, focus, marks),
+            Self::Clipboard {
+                text,
+                html,
+                payload,
+            } => f
+                .debug_struct("Clipboard")
+                .field("text", &ambre_core::char_len(text))
+                .field("html", &ambre_core::char_len(html))
+                .field("payload", payload)
+                .finish(),
+            Self::MergeConflictDetected { cell_id } => fields!("MergeConflictDetected", cell_id),
+            Self::CellEntered { cell, block } => fields!("CellEntered", cell, block),
+            Self::CaretPlaced { block, offset } => fields!("CaretPlaced", block, offset),
+            Self::FootnotesUpdated { notes } => fields!("FootnotesUpdated", notes),
+            Self::CommentsUpdated { threads } => fields!("CommentsUpdated", threads),
+            Self::SuggestionsUpdated { mode, suggestions } => {
+                fields!("SuggestionsUpdated", mode, suggestions)
+            }
+            Self::LinksUpdated { links } => fields!("LinksUpdated", links),
+            Self::CrossRefsUpdated { refs } => fields!("CrossRefsUpdated", refs),
+            Self::RevealBlock { block, page } => fields!("RevealBlock", block, page),
+            Self::BandsUpdated { bands } => fields!("BandsUpdated", bands),
+            Self::FindResults { matches, current } => fields!("FindResults", matches, current),
+            Self::FindUpdated { current } => fields!("FindUpdated", current),
+            Self::UndoState { undo, redo } => fields!("UndoState", undo, redo),
+            Self::Error(error) => f.debug_tuple("Error").field(error).finish(),
+        }
+    }
 }
 
 // =============================================================================
@@ -2621,6 +2975,148 @@ mod tests {
         assert!(BlockType::Table.accepted_at_root());
         assert!(!BlockType::TableRow.accepted_at_root());
         assert!(!BlockType::TableCell.accepted_at_root());
+    }
+
+    /// Every command, event and listed record that holds a text the author
+    /// wrote prints its length in `Debug`, and none of the text.
+    #[test]
+    fn an_authored_text_prints_its_length_alone() {
+        let secret = "Q3 layoffs".to_owned();
+        let block_id = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
+        let pos = DocOffset::ZERO;
+        let now = ambre_core::Timestamp::default();
+        let comment_id = CommentId::new();
+        let reply_id = ReplyId::new();
+        let footnote_id = FootnoteId::new();
+        let printed = [
+            format!(
+                "{:?}",
+                ProseCommand::InsertText {
+                    block_id,
+                    pos,
+                    text: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseCommand::Paste {
+                    at: (block_id, pos),
+                    text: secret.clone(),
+                    html: Some(secret.clone()),
+                    payload: None,
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseCommand::ReplaceOne {
+                    replacement: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseCommand::ReplaceAll {
+                    replacement: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseCommand::InsertFootnote {
+                    block_id,
+                    pos,
+                    note_text: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseCommand::EditFootnote {
+                    footnote_id,
+                    new_text: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseCommand::AddComment {
+                    block_id,
+                    range: DocSpan::new(pos, pos),
+                    text: secret.clone(),
+                    now,
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseCommand::ReplyToComment {
+                    comment_id,
+                    text: secret.clone(),
+                    now,
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseCommand::EditCommentReply {
+                    comment_id,
+                    reply_id,
+                    new_text: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseCommand::InsertCrossRef {
+                    block_id,
+                    pos,
+                    target_block_id: block_id,
+                    kind: CrossRefKind::CustomText(secret.clone()),
+                }
+            ),
+            format!(
+                "{:?}",
+                ProseEvent::Clipboard {
+                    text: secret.clone(),
+                    html: secret.clone(),
+                    payload: ambre_core::ClipboardBytes::default(),
+                }
+            ),
+            format!(
+                "{:?}",
+                FootnoteEntry {
+                    footnote_id,
+                    ordinal: None,
+                    text: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                CommentReply {
+                    reply_id,
+                    author: None,
+                    user_id: UserId::default(),
+                    created_at: now,
+                    text: secret.clone(),
+                }
+            ),
+            format!(
+                "{:?}",
+                TocEntry {
+                    block_id,
+                    level: HeadingLevel::new(1).expect("a level"),
+                    text: secret.clone(),
+                    heading_number: None,
+                    page: None,
+                }
+            ),
+            format!(
+                "{:?}",
+                ResolvedCrossRef {
+                    block_id,
+                    offset: pos,
+                    target: block_id,
+                    shown: Some(secret.clone()),
+                }
+            ),
+        ];
+        for line in printed {
+            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(!line.contains("Q3 layoffs"), "{line}");
+        }
     }
 
     #[test]

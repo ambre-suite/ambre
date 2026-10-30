@@ -1886,7 +1886,7 @@ impl SlidePosition {
 /// board, so it captures the two frame snapshots and the target frame rect here
 /// in one shot. The UI holds no board state and cannot derive them itself. Local
 /// view state, never crosses the wire.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct SlideChange {
     /// The new active slide and the deck's length: the presenter panel's
     /// `k / n` counter (`toile-presentation`).
@@ -1912,6 +1912,21 @@ pub struct SlideChange {
     /// off the document (`TOILE-FEAT-028`). The render thread holds no board
     /// data, so the length rides the event like the snapshots beside it.
     pub transition: std::time::Duration,
+}
+
+// The speaker notes are the author's: a log carries their length alone.
+impl fmt::Debug for SlideChange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SlideChange")
+            .field("position", &self.position)
+            .field("from", &self.from)
+            .field("to", &self.to)
+            .field("to_rect", &self.to_rect)
+            .field("frame", &self.frame)
+            .field("notes", &ambre_core::char_len(&self.notes))
+            .field("transition", &self.transition)
+            .finish()
+    }
 }
 
 crate::token::define_token! {
@@ -2966,7 +2981,7 @@ pub struct DisplayElement {
     pub group: Option<ElementId>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum DisplayGeom {
     Rect,
     Ellipse,
@@ -3006,7 +3021,46 @@ pub enum DisplayGeom {
     },
 }
 
-#[derive(Clone, Debug)]
+// A sticky's body, a text box and a frame's title are the author's, and
+// print their length alone.
+impl fmt::Debug for DisplayGeom {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Rect => f.write_str("Rect"),
+            Self::Ellipse => f.write_str("Ellipse"),
+            Self::Triangle => f.write_str("Triangle"),
+            Self::Path(path) => f.debug_tuple("Path").field(path).finish(),
+            Self::Sticky(text) => f
+                .debug_tuple("Sticky")
+                .field(&ambre_core::char_len(text))
+                .finish(),
+            Self::Text(text) => f
+                .debug_tuple("Text")
+                .field(&ambre_core::char_len(text))
+                .finish(),
+            Self::Image(hash) => f.debug_tuple("Image").field(hash).finish(),
+            Self::Stroke(points) => f.debug_tuple("Stroke").field(points).finish(),
+            Self::Frame(title) => f
+                .debug_tuple("Frame")
+                .field(&ambre_core::char_len(title))
+                .finish(),
+            Self::Group => f.write_str("Group"),
+            Self::Embed(address) => f.debug_tuple("Embed").field(address).finish(),
+            Self::DocEmbed {
+                document_id,
+                doc_type,
+                focused,
+            } => f
+                .debug_struct("DocEmbed")
+                .field("document_id", document_id)
+                .field("doc_type", doc_type)
+                .field("focused", focused)
+                .finish(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct DisplayConnector {
     pub id: ConnectorId,
     /// Already routed against the current bounds (`toile-connectors`).
@@ -3016,6 +3070,19 @@ pub struct DisplayConnector {
     /// The edge caption, empty when the arrow carries none. Read from the
     /// connector's `label` char-CRDT (`toile-connectors`).
     pub label: String,
+}
+
+// The caption is the author's: a log carries its length alone.
+impl fmt::Debug for DisplayConnector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DisplayConnector")
+            .field("id", &self.id)
+            .field("path", &self.path)
+            .field("style", &self.style)
+            .field("arrows", &self.arrows)
+            .field("label", &ambre_core::char_len(&self.label))
+            .finish()
+    }
 }
 
 #[cfg(test)]
@@ -3142,6 +3209,29 @@ mod tests {
             format!("{frame:?}"),
             format!("{:?}", InitContent::Text(secret.clone())),
             format!("{:?}", ToileEvent::Clipboard(payload)),
+            format!(
+                "{:?}",
+                ToileEvent::SlideChanged(SlideChange {
+                    notes: secret.clone(),
+                    ..SlideChange::default()
+                })
+            ),
+            format!("{:?}", DisplayGeom::Sticky(secret.clone())),
+            format!("{:?}", DisplayGeom::Text(secret.clone())),
+            format!("{:?}", DisplayGeom::Frame(secret.clone())),
+            format!(
+                "{:?}",
+                DisplayConnector {
+                    id: ConnectorId::mint(ambre_core::PeerId(1), IdCounter::new(4)),
+                    path: BezPath::new(),
+                    style: ElementStyle::default(),
+                    arrows: EndCaps {
+                        start: Cap::Plain,
+                        end: Cap::Arrow,
+                    },
+                    label: secret.clone(),
+                }
+            ),
         ]
         .into_iter()
         .chain(commands.iter().map(|command| format!("{command:?}")));

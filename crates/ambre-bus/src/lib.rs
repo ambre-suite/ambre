@@ -86,7 +86,7 @@ pub use ui::{AppEvent, MentionState, UiEvent};
 /// payload) under the private `application/x-ambre` MIME type. Each app (de)serializes its
 /// own payload behind these bytes; a cross-app paste falls back to `text` when the bytes
 /// fail to decode.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct ClipboardBlob {
     pub text: String,
     /// The `text/html` half, for an application that reads formatting but
@@ -96,6 +96,18 @@ pub struct ClipboardBlob {
     /// [`PasteForm::Plain`] when the user asked for the plain text alone: a
     /// view ignores every richer half, and the copy it kept in memory too.
     pub form: ambre_core::PasteForm,
+}
+
+// The two text halves are the author's: a log carries their length alone.
+impl std::fmt::Debug for ClipboardBlob {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClipboardBlob")
+            .field("text", &ambre_core::char_len(&self.text))
+            .field("html", &self.html.as_deref().map(ambre_core::char_len))
+            .field("ambre", &self.ambre)
+            .field("form", &self.form)
+            .finish()
+    }
 }
 
 /// Whose copy the clipboard holds when a paste reads it. The ownership token
@@ -213,11 +225,25 @@ const HTML_TOKEN_CLOSE: &str = "-->";
 ///   host prevents the default, so the browser does not clobber the OS clipboard
 ///   with empty content. One frame later it drains
 ///   [`poll_clipboard`](crate::ClipboardBlob) into the async clipboard write.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum CopyOutcome {
     Nothing,
     Text(String),
     Deferred,
+}
+
+// The selected text is the author's: a log carries its length alone.
+impl std::fmt::Debug for CopyOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Nothing => f.write_str("Nothing"),
+            Self::Text(text) => f
+                .debug_tuple("Text")
+                .field(&ambre_core::char_len(text))
+                .finish(),
+            Self::Deferred => f.write_str("Deferred"),
+        }
+    }
 }
 // Re-export core types so that users don't need to depend on ambre-core directly.
 /// The text offsets, one family per unit, for a crate that reaches the core
@@ -242,6 +268,22 @@ mod clipboard_tests {
             text: text.into(),
             ambre: Some(ambre_core::ClipboardBytes::new(vec![ambre])),
             ..ClipboardBlob::default()
+        }
+    }
+
+    /// A blob and a copied selection print the length of their text alone.
+    #[test]
+    fn a_copied_text_prints_its_length_alone() {
+        let secret = "Q3 layoffs";
+        let mut copied = blob(secret, 1);
+        copied.html = Some(secret.to_owned());
+        let printed = [
+            format!("{copied:?}"),
+            format!("{:?}", super::CopyOutcome::Text(secret.to_owned())),
+        ];
+        for line in printed {
+            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(!line.contains(secret), "{line}");
         }
     }
 
