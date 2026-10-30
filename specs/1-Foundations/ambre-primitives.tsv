@@ -1450,7 +1450,6 @@ ambre-murmure | src/schema.rs | crate::schema | unsigned() | ret | Option<u64>	g
 ambre-murmure | src/search.rs | crate::search | Query.words | field | Vec<String>	newtype-inner	the folded words of a search, the own representation of a Query
 ambre-murmure | src/search.rs | crate::search | Query::matches() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/search.rs | crate::search | Query::matches(text) | param | &str	free-text	text, label or user content
-ambre-murmure | src/search.rs | crate::search | Query::parse(text) | param | &str	newtype-inner	the text a member typed, which the one constructor of Query folds into its words
 ambre-murmure | src/search.rs | crate::search | base() | ret | Option<&'static str>	free-text	text, label or user content
 ambre-murmure | src/search.rs | crate::search | base(c) | param | char	free-text	text, label or user content
 ambre-murmure | src/search.rs | crate::search | fold() | ret | String	free-text	text, label or user content
