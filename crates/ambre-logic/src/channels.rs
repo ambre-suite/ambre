@@ -665,8 +665,8 @@ impl LogicState {
             return false;
         };
         let now = Counts {
-            unread: UnreadCount(counters.content.get()),
-            mentions: MentionCount(counters.mentions.get()),
+            unread: UnreadCount::of_updates(counters.content),
+            mentions: MentionCount::of_updates(counters.mentions),
         };
         let before = closed.counted.insert(document_id, now).unwrap_or_default();
         // The summaries counted a message since the last count: that is

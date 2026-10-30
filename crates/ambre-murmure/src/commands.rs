@@ -757,7 +757,7 @@ mod tests {
                 format!("{:?}", MessageAction::Copy(target.text.clone())),
                 "Copy(ByteCount(12))",
             ),
-            (format!("{send:?}"), "text: CharCount(12)"),
+            (format!("{send:?}"), "text: 12 chars"),
         ];
         for (shown, length) in shown {
             assert!(!shown.contains("secret"), "{shown}");

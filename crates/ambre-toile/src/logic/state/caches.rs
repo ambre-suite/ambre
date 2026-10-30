@@ -17,7 +17,7 @@ use crate::logic::model::{ConnectorId, ElementId, NodeId};
 use super::ToileState;
 use super::codec::{expanded_aabb, map_placement, rotation_of, stored_rect};
 use super::codec::{has_type, value_has_type};
-use super::names::{ElementKey, FieldValues, Fields, Root, entry, root_map};
+use super::names::{ElementKey, FieldValues, Fields, Root, entry};
 use crate::logic::model::ElementKind;
 
 impl ToileState {
@@ -282,7 +282,7 @@ impl ToileState {
 
     /// The map of an element, or `None` if absent.
     pub(super) fn element_map(&self, id: &ElementId) -> Option<Fields<ElementKey>> {
-        entry(&root_map(&self.doc, Root::Elements), id.as_str())
+        entry::<ElementKey>(&self.doc, id)
     }
 }
 

@@ -102,8 +102,11 @@ pub struct ClipboardBlob {
 impl std::fmt::Debug for ClipboardBlob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClipboardBlob")
-            .field("text", &ambre_core::char_len(&self.text))
-            .field("html", &self.html.as_deref().map(ambre_core::char_len))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
+            .field(
+                "html",
+                &self.html.as_deref().map(ambre_core::RedactedChars::of),
+            )
             .field("ambre", &self.ambre)
             .field("form", &self.form)
             .finish()
@@ -239,7 +242,7 @@ impl std::fmt::Debug for CopyOutcome {
             Self::Nothing => f.write_str("Nothing"),
             Self::Text(text) => f
                 .debug_tuple("Text")
-                .field(&ambre_core::char_len(text))
+                .field(&ambre_core::RedactedChars::of(text))
                 .finish(),
             Self::Deferred => f.write_str("Deferred"),
         }
@@ -282,7 +285,7 @@ mod clipboard_tests {
             format!("{:?}", super::CopyOutcome::Text(secret.to_owned())),
         ];
         for line in printed {
-            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(line.contains("10 chars"), "{line}");
             assert!(!line.contains(secret), "{line}");
         }
     }

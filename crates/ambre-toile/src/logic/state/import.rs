@@ -194,7 +194,7 @@ impl ToileState {
         bytes: &ambre_core::FileBytes,
         at: Point,
     ) -> ToileOutcome {
-        self.begin_import(import_svg(bytes.as_bytes(), &Limits::default()), at)
+        self.begin_import(import_svg(bytes, &Limits::default()), at)
     }
 
     /// Convert a dropped raster image and apply it (`toile-import-export`). The mime
@@ -205,7 +205,7 @@ impl ToileState {
         bytes: &ambre_core::FileBytes,
         at: Point,
     ) -> ToileOutcome {
-        self.begin_import(import_raster(bytes.as_bytes(), &Limits::default()), at)
+        self.begin_import(import_raster(bytes, &Limits::default()), at)
     }
 
     /// Route a converted batch. A parse / limit failure aborts with `ImportFailed`
@@ -840,7 +840,7 @@ mod tests {
     fn a_placeholder_token_never_becomes_a_key() {
         let mut st = ToileState::new();
         let decoded = crate::logic::interop::import_raster(
-            &solid_png(4, 4),
+            &ambre_core::FileBytes::new(solid_png(4, 4)),
             &crate::logic::interop::Limits::default(),
         )
         .expect("a picture");

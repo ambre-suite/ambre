@@ -65,7 +65,11 @@ use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
 /// [`ImportError::Parse`] when usvg refuses `bytes`, the limit errors of
 /// [`Limits`] when the tree exceeds one, and [`ImportError::Empty`] when the
 /// walk yields no element. No command survives an error: the batch is atomic.
-pub fn import_svg(bytes: &[u8], limits: &Limits) -> Result<ImportBatch, ImportError> {
+pub fn import_svg(
+    file: &ambre_core::FileBytes,
+    limits: &Limits,
+) -> Result<ImportBatch, ImportError> {
+    let bytes = file.as_bytes();
     let opt = usvg::Options::default();
     let tree = usvg::Tree::from_data(bytes, &opt).map_err(|e| ImportError::Parse(e.to_string()))?;
 

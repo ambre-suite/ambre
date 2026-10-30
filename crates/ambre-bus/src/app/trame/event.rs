@@ -443,7 +443,7 @@ pub enum TrameEvent {
 // words from positions and counts prints whole.
 impl std::fmt::Debug for TrameEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ambre_core::char_len;
+        use ambre_core::RedactedChars;
         macro_rules! fields {
             ($name:literal $(, $field:ident)*) => {
                 f.debug_struct($name)$(.field(stringify!($field), $field))*.finish()
@@ -455,7 +455,7 @@ impl std::fmt::Debug for TrameEvent {
                     .field("version", $version)
                     .field("row", $row)
                     .field("col", $col)
-                    .field($label, &char_len($text))
+                    .field($label, &RedactedChars::of($text))
                     .finish()
             };
         }
@@ -502,7 +502,7 @@ impl std::fmt::Debug for TrameEvent {
             Self::SheetList { sheets, active } => fields!("SheetList", sheets, active),
             Self::Error { message } => f
                 .debug_struct("Error")
-                .field("message", &char_len(message))
+                .field("message", &RedactedChars::of(message))
                 .finish(),
             Self::EditTargetMoved { session, row, col } => {
                 fields!("EditTargetMoved", session, row, col)
@@ -522,7 +522,10 @@ impl std::fmt::Debug for TrameEvent {
                 .field("col", col)
                 .field(
                     "values",
-                    &values.iter().map(|text| char_len(text)).collect::<Vec<_>>(),
+                    &values
+                        .iter()
+                        .map(|text| RedactedChars::of(text))
+                        .collect::<Vec<_>>(),
                 )
                 .finish(),
             Self::SelectionStats { count, numbers } => fields!("SelectionStats", count, numbers),
@@ -574,7 +577,7 @@ impl std::fmt::Debug for TrameEvent {
                 .field("row", row)
                 .field("col", col)
                 .field("from_user_id", from_user_id)
-                .field("description", &char_len(description))
+                .field("description", &RedactedChars::of(description))
                 .finish(),
         }
     }
@@ -726,8 +729,8 @@ impl std::fmt::Debug for DisplayCell {
         f.debug_struct("DisplayCell")
             .field("row", &self.row)
             .field("col", &self.col)
-            .field("text", &ambre_core::char_len(&self.text))
-            .field("raw", &ambre_core::char_len(&self.raw))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
+            .field("raw", &ambre_core::RedactedChars::of(&self.raw))
             .field("bold", &self.bold)
             .field("italic", &self.italic)
             .field("underline", &self.underline)
@@ -803,7 +806,7 @@ mod tests {
         };
         let printed = format!("{cell:?}");
         assert!(
-            printed.contains("text: CharCount(4), raw: CharCount(10)"),
+            printed.contains("text: 4 chars, raw: 10 chars"),
             "{printed}"
         );
         assert!(!printed.contains("4200") && !printed.contains("SALARY"));
@@ -901,7 +904,7 @@ mod tests {
             ),
         ];
         for line in printed {
-            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(line.contains("10 chars"), "{line}");
             assert!(!line.contains("Q3 layoffs"), "{line}");
         }
         assert_eq!(format!("{:?}", CellFormat::Date), "Date");
