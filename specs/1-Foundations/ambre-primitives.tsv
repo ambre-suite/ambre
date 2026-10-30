@@ -5,8 +5,8 @@ ambre-app | src/host/cell.rs | crate::host::cell | Bound.listeners | field | Vec
 ambre-app | src/host/cell.rs | crate::host::cell | Bound.restored | field | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/cell.rs | crate::host::cell | Cells.content_held | field | bool	generic	named flag
 ambre-app | src/host/cell.rs | crate::host::cell | Cells::route() | ret | Option<bool>	generic	consumed answer
-ambre-app | src/host/cell.rs | crate::host::cell | INPUTS | const | [&str;6]	free-text	DOM event names
-ambre-app | src/host/cell.rs | crate::host::cell | Listener | alias | (&'static str,Closure<dyn FnMut(web_sys::Event)>)	free-text	DOM event name
+ambre-app | src/host/cell.rs | crate::host::cell | INPUTS | const | [&str;6]	foreign-api	DOM event names from the browser's fixed vocabulary, which addEventListener takes as &str
+ambre-app | src/host/cell.rs | crate::host::cell | Listener | alias | (&'static str,Closure<dyn FnMut(web_sys::Event)>)	foreign-api	the DOM event name a closure is added under, which add- and removeEventListener take as &str
 ambre-app | src/host/cell.rs | crate::host::cell | present() | ret | bool	generic	predicate result
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.clip_published | field | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/frame.rs | crate::host::frame | FrameHost.web_frames_empty | field | bool	generic	state flag
@@ -966,7 +966,7 @@ ambre-core | src/serde_enums.rs | crate::serde_enums::channel_document_kind | de
 ambre-core | src/serde_enums.rs | crate::serde_enums::doc_type | deserialize::WORDS | const | &[&str]	generic	serde deserializer: the words of a closed set
 ambre-core | src/serde_enums.rs | crate::serde_enums::role | deserialize::WORDS | const | &[&str]	generic	serde deserializer: the words of a closed set
 ambre-core | src/serde_enums.rs | crate::serde_enums::space_flag | is_personal() | ret | bool	generic	predicate result: the serde skip test of a DocumentScope flag
-ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text() | ret | Result<Self,String>	generic	an error that echoes the refused text
+ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text() | ret | Result<Self,String>	free-text	the fixed message of KeyIdError, which read hands serde's de::Error::custom
 ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text(text) | param | &str	newtype-inner	KeyId's own hex spelling, read back
 ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::to_text() | ret | String	newtype-inner	KeyId's own hex spelling
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::from_text() | ret | Result<Self,String>	generic	generic text-id serde helper
@@ -2242,7 +2242,7 @@ ambre-server | src/ws/pubsub_hub.rs | crate::ws::pubsub_hub | Topic::as_str() | 
 ambre-server | src/redis_keys.rs | crate::redis_keys | DocumentStateKeys::texts() | ret | [&str;8]	foreign-api	the key texts a DEL, EXISTS or EVAL of the store takes
 ambre-server | src/redis_keys.rs | crate::redis_keys | FlushDirtySet::as_str() | ret | &'static str	foreign-api	the key text of the dirty set, which a Redis command takes as &str
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey.text | field | String	generic	the key text of PendingKey, beside its document and read back by PendingKey::parse
-ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	foreign-api	the key text of PendingKey, which a Redis command takes as &str
+ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::as_str() | ret | &str	generic	the key text of PendingKey, its own codec, read back by PendingKey::parse
 ambre-server | src/redis_keys.rs | crate::redis_keys | PendingKey::parse(text) | param | &str	foreign-api	a dirty-set member or scanned key the store hands back as text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::BAD_PASS | const | &str	free-text	message text
 ambre-sync | src/auth.rs | crate::auth | SyncState::handle_unlock::CORRUPT | const | &str	free-text	message text
