@@ -397,10 +397,11 @@ ambre_core::define_flag! {
 /// The UI thread's whole state for one open Prose document.
 ///
 /// Every field is either handed over by the Logic thread or local to this
-/// thread. None of them is document content (`PROSE-UI-001`).
+/// thread. None of them is the document itself (`PROSE-UI-001`).
 ///
-/// Many fields carry copies of the document's text. So `Debug` prints a
-/// length or a count for each of those, and the text of none.
+/// Many fields carry copies of its text: the runs, the drafts, the comments,
+/// the text in composition and its shape. So `Debug` prints a length or a
+/// count for each of those, and the text of none.
 #[derive(Clone, Default)]
 pub struct ProseUiState {
     // Handed over by the Logic thread.

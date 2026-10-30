@@ -53,7 +53,7 @@ impl std::fmt::Debug for Key {
             .field("generation", &self.generation)
             .field("version", &self.version)
             .field("splitting", &self.splitting)
-            .field("held_len", &self.held.len())
+            .field("held", &crate::redact::Redacted(&self.held))
             .finish()
     }
 }
@@ -438,5 +438,37 @@ impl ProseUiState {
                 ..piece
             });
         (pieces, ghost_at)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_shaping_key_prints_its_held_text_by_length_alone() {
+        let key = super::Key {
+            generation: crate::ui::DraftGeneration::default(),
+            version: super::LayoutVersion::FIRST,
+            splitting: None,
+            held: "held behind".into(),
+        };
+        assert!(crate::redact::tests::hides(&key, "held behind"));
+    }
+
+    #[test]
+    fn a_slash_menu_prints_its_query_by_length_alone() {
+        let menu = crate::view::slash::SlashMenu {
+            origin: (
+                crate::events::block_id(loro::TreeID::new(1, 0)),
+                super::DocOffset::ZERO,
+            ),
+            query: "headi".into(),
+            selected: crate::view::slash::SlashChoice::default(),
+        };
+        assert!(crate::redact::tests::hides(&menu, "headi"));
+        let state = crate::view::slash::SlashMenuState {
+            query: "headi".into(),
+            ..crate::view::slash::SlashMenuState::default()
+        };
+        assert!(crate::redact::tests::hides(&state, "headi"));
     }
 }

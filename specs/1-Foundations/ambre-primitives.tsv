@@ -2129,8 +2129,8 @@ ambre-prose | src/ui.rs | crate::ui | DraftBuffer::push_str(text) | param | &str
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of() | ret | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::text_of(laid) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | DraftBuffer::touches() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Option<(String,ShapedRun)>	free-text	text content / label / parser input
-ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	text content / label / parser input
+ambre-prose | src/ui.rs | crate::ui | ProseUiState.compose_shape | field | Option<(String,ShapedRun)>	free-text	the text in composition as last shaped, and its run; Debug prints whether it is there alone
+ambre-prose | src/ui.rs | crate::ui | ProseUiState.composing | field | String	free-text	the input method's text in composition, as the user types it; Debug prints its length alone
 ambre-prose | src/ui.rs | crate::ui | SendResult::accepted() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/ui.rs | crate::ui | StatusFigures.characters | field | String	free-text	text content / label / parser input
 ambre-prose | src/ui.rs | crate::ui | StatusFigures.pages | field | String	free-text	text content / label / parser input
@@ -2165,8 +2165,8 @@ ambre-prose | src/view/provisional.rs | crate::view::provisional | ProseUiState:
 ambre-prose | src/view/provisional.rs | crate::view::provisional | Key.held | field | String	free-text	the text held behind a split, document content that Debug prints the length of alone
 ambre-prose | src/view/slash.rs | crate::view::slash | ProseUiState::opens_menu() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashItem.label | field | &'static str	free-text	text content / label / parser input
-ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu.query | field | String	free-text	text content / label / parser input
-ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.query | field | String	free-text	text content / label / parser input
+ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenu.query | field | String	free-text	what the user typed after the slash; Debug prints its length alone
+ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.query | field | String	free-text	what the user typed after the slash, as the menu shows it; Debug prints its length alone
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState::visible() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/view/slash.rs | crate::view::slash | filter(query) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/view/toolbar.rs | crate::view::toolbar | ToolbarState::visible() | ret | bool	generic	independent flag or predicate

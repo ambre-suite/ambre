@@ -144,14 +144,6 @@ pub fn lay_out(measurer: &mut Measurer, document: &LoroDoc) -> PageLayout {
 /// The room between a note's number and its text, in pixels.
 pub const NOTE_GAP: DocPx = DocPx::new(4.0);
 
-/// Every footnote numbered and measured, before any block is placed
-/// (`PROSE-117`).
-///
-/// The ordinals are counted from the calls in document order (`PROSE-068`),
-/// so where placement later puts a note never changes its number
-/// (`PROSE-099`). A note's text is shaped alone, as the run of its block, with
-/// its number beside it. An offset in the run is an offset in the block, so
-/// the caret reads a note like any other text (`PROSE-UI-187`).
 /// One reachable note: its id, its ordinal, its text and the marked spans
 /// of it (`PROSE-UI-207`).
 ///
@@ -169,12 +161,20 @@ impl std::fmt::Debug for NoteKey {
         f.debug_struct("NoteKey")
             .field("id", &self.id)
             .field("ordinal", &self.ordinal)
-            .field("text_len", &self.text.len())
+            .field("text", &crate::redact::Redacted(&self.text))
             .field("marks", &self.marks)
             .finish()
     }
 }
 
+/// Every footnote numbered and measured, before any block is placed
+/// (`PROSE-117`).
+///
+/// The ordinals are counted from the calls in document order (`PROSE-068`),
+/// so where placement later puts a note never changes its number
+/// (`PROSE-099`). A note's text is shaped alone, as the run of its block, with
+/// its number beside it. An offset in the run is an offset in the block, so
+/// the caret reads a note like any other text (`PROSE-UI-187`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct NotePlan {
     /// What the plan was read from: each reachable note, its ordinal, its
@@ -924,6 +924,17 @@ fn string_at(attrs: &doc::Fields<doc::AttrKey>, key: doc::AttrKey) -> Option<Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_note_key_prints_its_text_by_length_alone() {
+        let key = NoteKey {
+            id: FootnoteId::new(),
+            ordinal: FootnoteOrdinal::FIRST,
+            text: "private note".into(),
+            marks: Vec::new(),
+        };
+        assert!(crate::redact::tests::hides(&key, "private note"));
+    }
 
     /// A document with one block per type the caller names, all at the root.
     fn document_of(types: &[BlockType]) -> (LoroDoc, Vec<TreeID>) {

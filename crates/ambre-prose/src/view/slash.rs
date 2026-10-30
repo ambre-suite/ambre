@@ -159,8 +159,9 @@ pub fn filter(query: &str) -> SlashChoiceVec<SlashItem> {
         .collect()
 }
 
-/// The open menu, as the view keeps it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// The open menu, as the view keeps it. The query is what the user typed,
+/// so `Debug` prints its length alone.
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct SlashMenu {
     /// The block the slash was typed in, and the offset of the slash
     /// (`PROSE-UI-091`).
@@ -168,6 +169,16 @@ pub(crate) struct SlashMenu {
     /// What was typed after the slash.
     pub(crate) query: String,
     pub(crate) selected: SlashChoice,
+}
+
+impl std::fmt::Debug for SlashMenu {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SlashMenu")
+            .field("origin", &self.origin)
+            .field("query", &crate::redact::Redacted(&self.query))
+            .field("selected", &self.selected)
+            .finish()
+    }
 }
 
 impl SlashMenu {
@@ -178,14 +189,26 @@ impl SlashMenu {
     }
 }
 
-/// What the menu shows, rebuilt on every frame.
-#[derive(Clone, Debug, Default, PartialEq)]
+/// What the menu shows, rebuilt on every frame. The query is what the user
+/// typed, so `Debug` prints its length alone.
+#[derive(Clone, Default, PartialEq)]
 pub struct SlashMenuState {
     /// Under the slash, on the canvas. `None` hides the menu.
     pub anchor: Option<ViewPoint>,
     pub query: String,
     pub items: SlashChoiceVec<&'static str>,
     pub selected: SlashChoice,
+}
+
+impl std::fmt::Debug for SlashMenuState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SlashMenuState")
+            .field("anchor", &self.anchor)
+            .field("query", &crate::redact::Redacted(&self.query))
+            .field("items", &self.items)
+            .field("selected", &self.selected)
+            .finish()
+    }
 }
 
 impl SlashMenuState {
