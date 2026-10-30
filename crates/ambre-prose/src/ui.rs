@@ -324,7 +324,7 @@ impl DraftBuffer {
     /// offset at an insertion stays before it.
     #[must_use]
     pub fn to_doc(&self, block: BlockId, laid: RunOffset) -> DocOffset {
-        let start = DocOffset::new(laid.get());
+        let start = laid.as_doc();
         self.of(block).fold(start, |at, edit| match &edit.change {
             Change::Insert(text) if at > edit.at => at + DocCount::of(text),
             Change::Delete(len) if at > edit.at => (at - *len).max(edit.at),
@@ -344,7 +344,7 @@ impl DraftBuffer {
                 Change::Delete(len) if at > edit.at => at + *len,
                 _ => at,
             });
-        RunOffset::new(laid.get())
+        RunOffset::from_doc(laid)
     }
 
     pub fn clear(&mut self) {
@@ -919,7 +919,7 @@ impl ProseUiState {
                 let len = run.data().len();
                 (
                     crate::events::block_id(block.block_id),
-                    DocOffset::new(len.get()),
+                    len.as_end().as_doc(),
                 )
             })
         };
