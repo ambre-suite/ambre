@@ -272,7 +272,7 @@ impl FixtureGen for ToileFixture {
 
     fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
-        let mut state = ToileState::with_peer(ambre_core::PeerId(seed.get()));
+        let mut state = ToileState::with_peer(seed.peer_id());
         match self {
             Self::ShapesAndFrame => build_shapes_and_frame(&mut state),
             Self::ConnectorsAndGroups => build_connectors_and_groups(&mut state),
@@ -494,7 +494,7 @@ impl FixtureGen for ToileBenchFixture {
 
     fn build(&self) -> ambre_core::PlaintextContainer {
         let seed = self.seed();
-        let mut state = ToileState::with_peer(ambre_core::PeerId(seed.get()));
+        let mut state = ToileState::with_peer(seed.peer_id());
         match self {
             // 100 tiles of 500 on a 4 000-unit pitch: far wider than one
             // viewport, so a cull that returned everything shows up as a figure.
