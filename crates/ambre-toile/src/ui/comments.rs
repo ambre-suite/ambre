@@ -313,6 +313,8 @@ mod tests {
     use super::*;
     use ambre_bus::app::toile::{ElementId, Viewport};
     use ambre_canvas::PointerButton;
+    use ambre_canvas::theme::LIGHT;
+    use ambre_draw::testing::{DrawOp, RecordingSurface};
 
     /// An intent's debug form prints a body's length, none of it.
     #[test]
@@ -331,8 +333,6 @@ mod tests {
             assert!(form.contains("<11 chars>"), "{form}");
         }
     }
-    use ambre_canvas::theme::LIGHT;
-    use ambre_draw::testing::{DrawOp, RecordingSurface};
 
     fn pin(id: &str, at: Point, messages: u32, resolved: ambre_core::ThreadState) -> CommentPin {
         CommentPin {

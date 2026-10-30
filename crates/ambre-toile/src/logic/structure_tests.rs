@@ -344,7 +344,7 @@ fn a_locked_element_refuses_every_command_but_the_lock() {
 /// its group, it leaves the group; grouped out of its frame, it leaves the
 /// frame.
 #[test]
-fn an_element_sits_in_one_container_at_most() {
+fn an_element_sits_in_one_group_or_frame_at_most() {
     let mut st = ToileState::new();
     let f = frame(&mut st, 0.0, 0.0);
     let a = rect(&mut st, 10.0, 10.0);

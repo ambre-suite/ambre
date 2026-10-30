@@ -863,10 +863,10 @@ mod cache_tests {
         let gone = create(&mut old, ElementKind::Shape(ShapeKind::Rect));
         let frame = frame_with(&mut old, &gone);
         // The delete of an older build: the element goes, its entry stays.
-        let _ = old
-            .doc
+        old.doc
             .get_map(super::super::Root::Elements.as_str())
-            .delete(gone.as_str());
+            .delete(gone.as_str())
+            .expect("an attached board takes the delete");
         old.doc.commit();
         let stored = old.export_snapshot();
         let load = || {
@@ -877,6 +877,7 @@ mod cache_tests {
         };
 
         let mut st = load();
+        assert!(st.bounds_of(&gone).is_none(), "the element is gone");
         assert_eq!(st.membership_of(&frame), vec![gone.clone()]);
         st.handle_command(ToileCommand::SetFrameChildren {
             frame: frame.clone(),
