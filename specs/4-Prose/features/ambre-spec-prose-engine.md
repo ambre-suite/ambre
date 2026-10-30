@@ -160,7 +160,7 @@ is total over every key (`PROSE-090`).
 pub fn get_block_text(doc: &LoroDoc, id: &TreeID) -> LoroText;
 
 // ambre-prose/src/numbering.rs
-pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> u32;
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> ListDepth;
 
 // ambre-prose/src/mark.rs
 pub fn expand_type_for(mark_key: &MarkKey) -> ExpandType;

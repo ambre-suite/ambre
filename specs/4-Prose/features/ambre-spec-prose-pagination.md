@@ -157,12 +157,12 @@ pub struct BlockLayout {
     pub block_id:    TreeID,
     pub block_type:  BlockType,
     /// The height of the portion on `page_start` alone -- never the whole block when
-    /// `is_split`. The later fragments are in `continuation_heights`.
+    /// `is_split()`. The later fragments are in `continuation_heights`.
     pub height:      DocPx,
     pub page_start:  PageIndex,
     pub y_in_page:   DocPx,
-    pub is_split:    bool,
-    /// The first line carried by each page after `page_start`.
+    /// The first line carried by each page after `page_start`. `is_split()` reads
+    /// whether it holds one.
     pub split_points: Vec<BlockLine>,
     /// The height of each fragment after `page_start`, one per split point. A
     /// continuation starts at y = 0 (`PROSE-018`) and carries no leading margin
