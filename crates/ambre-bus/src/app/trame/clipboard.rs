@@ -74,7 +74,7 @@ impl ClipboardPayload {
 /// One cell of a [`ClipboardPayload`], positioned by its offset from the source
 /// origin. It carries its raw text (formula source for a formula cell) plus its
 /// full formatting.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardCell {
     /// Row offset from [`ClipboardPayload::src_row`].
     pub dr: RowCount,
@@ -87,4 +87,18 @@ pub struct ClipboardCell {
     pub italic: Slant,
     /// The cell's resolved rich formatting, written verbatim at the destination.
     pub style: CellStyle,
+}
+
+// The raw text is the author's: a log carries its length alone.
+impl std::fmt::Debug for ClipboardCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClipboardCell")
+            .field("dr", &self.dr)
+            .field("dc", &self.dc)
+            .field("raw", &ambre_core::char_len(&self.raw))
+            .field("bold", &self.bold)
+            .field("italic", &self.italic)
+            .field("style", &self.style)
+            .finish()
+    }
 }

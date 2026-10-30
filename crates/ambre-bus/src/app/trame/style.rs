@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 /// `Serialize` / `Deserialize` back the one whole register the Logic thread
 /// persists (`TRAME-FEAT-025`). Column and kind encode together, so two
 /// concurrent filters race once, never field by field.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum FilterKind {
     /// Keep only rows whose filtered-column display text is one of these values
     /// (Google Sheets "filter by values": the listed values are the *checked*,
@@ -31,6 +31,24 @@ pub enum FilterKind {
         /// ([`IsEmpty`](FilterOp::IsEmpty) / [`IsNotEmpty`](FilterOp::IsNotEmpty)).
         value: String,
     },
+}
+
+// A kept value and an operand are cell text, and print their length alone.
+impl std::fmt::Debug for FilterKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ambre_core::char_len;
+        match self {
+            Self::Values(values) => f
+                .debug_tuple("Values")
+                .field(&values.iter().map(|text| char_len(text)).collect::<Vec<_>>())
+                .finish(),
+            Self::Condition { op, value } => f
+                .debug_struct("Condition")
+                .field("op", op)
+                .field("value", &char_len(value))
+                .finish(),
+        }
+    }
 }
 
 /// Condition operators for a [`FilterKind::Condition`]
@@ -83,7 +101,7 @@ pub enum VAlign {
 /// A cell number-format family (`trame-number-formats`). The decimal places
 /// rides alongside in [`CellStyle::decimals`]; [`Custom`](Self::Custom) carries
 /// its own pattern string (applied verbatim by the Logic thread).
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum CellFormat {
     /// No reformatting: the raw value / formula result is shown as-is.
     #[default]
@@ -101,6 +119,29 @@ pub enum CellFormat {
     /// Force textual interpretation (no numeric coercion).
     Text,
     Custom(String),
+}
+
+// A custom pattern is the author's, and prints its length alone.
+impl std::fmt::Debug for CellFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::General => "General",
+            Self::Number => "Number",
+            Self::Currency => "Currency",
+            Self::Percent => "Percent",
+            Self::Scientific => "Scientific",
+            Self::Fraction => "Fraction",
+            Self::Date => "Date",
+            Self::Time => "Time",
+            Self::Text => "Text",
+            Self::Custom(pattern) => {
+                return f
+                    .debug_tuple("Custom")
+                    .field(&ambre_core::char_len(pattern))
+                    .finish();
+            }
+        })
+    }
 }
 
 /// A count of decimal places a number format renders, from zero to

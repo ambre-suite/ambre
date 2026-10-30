@@ -130,6 +130,27 @@ fn colour(rgb: Rgb) -> String {
     format!("#{:06x}", rgb.bits())
 }
 
+/// A number format, spelled as its derived `Debug` once printed it. The type
+/// now prints a custom pattern by its length, and the frozen reading keeps the
+/// pattern itself.
+fn format_reading(format: &ambre_bus::CellFormat) -> String {
+    match format {
+        ambre_bus::CellFormat::Custom(pattern) => format!("Custom({:?})", pattern.as_str()),
+        other => format!("{other:?}"),
+    }
+}
+
+/// A filter, spelled as its derived `Debug` once printed it, for the reason
+/// [`format_reading`] gives.
+fn filter_reading(kind: &ambre_bus::FilterKind) -> String {
+    match kind {
+        ambre_bus::FilterKind::Values(values) => format!("Values({values:?})"),
+        ambre_bus::FilterKind::Condition { op, value } => {
+            format!("Condition {{ op: {op:?}, value: {:?} }}", value.as_str())
+        }
+    }
+}
+
 /// What a resolved style sets, field by field, each in its unit.
 ///
 /// The record is destructured whole: a field added to it fails to compile here
@@ -174,7 +195,7 @@ fn style_reading(bold: bool, italic: bool, style: &CellStyle) -> String {
     if let Some(size) = size {
         parts.push(format!("{size} pt"));
     }
-    parts.push(format!("format {format:?}"));
+    parts.push(format!("format {}", format_reading(format)));
     if let Some(decimals) = decimals {
         parts.push(format!("{decimals} decimals"));
     }
@@ -322,8 +343,9 @@ fn sheet_reading(
         SheetRoot::Filters if FilterKey::parse(key) == Some(FilterKey::Active) => {
             let (col, kind) = reader.load_active_filter()?;
             Some(format!(
-                "column {} keeps {kind:?}",
-                ordinal(index.col_pos(&col)?.get())
+                "column {} keeps {}",
+                ordinal(index.col_pos(&col)?.get()),
+                filter_reading(&kind)
             ))
         }
         SheetRoot::FilterHidden => {

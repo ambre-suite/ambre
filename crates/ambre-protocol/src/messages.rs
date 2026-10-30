@@ -21,7 +21,10 @@ pub use ambre_core::envelope::{Ciphertext, CommitmentTag, Nonce, Signature};
 /// Server-assigned monotonic sequence number, shared with the client threads.
 pub use ambre_core::Seq;
 
-/// Lamport logical clock (client-side).
+/// The per-author counter a delta carries (`ambre-spec-delta-order.md`). Every
+/// session of one author key shares it, and each update takes a clock above
+/// every one the author used for the document (`SYNC-024`). It is not a
+/// Lamport clock: no peer's clock moves it (`SYNC-025`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Clock(pub u64);
 

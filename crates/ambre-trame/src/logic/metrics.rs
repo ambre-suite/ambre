@@ -14,9 +14,58 @@
 
 use super::*;
 
+/// The size range of one axis, and the size of a line never resized.
+#[derive(Clone, Copy)]
+struct AxisSizes {
+    default: DocPx,
+    min: DocPx,
+    max: DocPx,
+}
+
+const COL_SIZES: AxisSizes = AxisSizes {
+    default: COL_WIDTH,
+    min: MIN_COL_WIDTH,
+    max: MAX_COL_WIDTH,
+};
+
+const ROW_SIZES: AxisSizes = AxisSizes {
+    default: ROW_HEIGHT,
+    min: MIN_ROW_HEIGHT,
+    max: MAX_ROW_HEIGHT,
+};
+
+impl AxisSizes {
+    /// Clamp a requested size into the range. A non-finite request takes the
+    /// default size.
+    fn clamp(self, size: DocPx) -> DocPx {
+        if size.is_finite() {
+            size.clamp(self.min, self.max)
+        } else {
+            self.default
+        }
+    }
+
+    /// Read a stored size. Any peer writes this map, so a size out of range
+    /// reads clamped and a non-finite one reads as the default (`TRAME-UI-181`):
+    /// the layout walks lines until their sizes cover the screen. `None` when
+    /// the value is no number.
+    fn read(self, value: &LoroValue) -> Option<DocPx> {
+        let LoroValue::Double(size) = value else {
+            return None;
+        };
+        // Clamp before the cast: a finite `f64` past the `f32` range would
+        // cast to an infinity and read as the default, not as the bound.
+        if !size.is_finite() {
+            return Some(self.default);
+        }
+        let size = size.clamp(f64::from(self.min.get()), f64::from(self.max.get()));
+        Some(DocPx::new(size as f32))
+    }
+}
+
 impl TrameState {
     /// Set column `col`'s width (logical px) on the active sheet, clamped to
-    /// [`MIN_COL_WIDTH`]. Pins the column's identity (materializes it, like
+    /// [`MIN_COL_WIDTH`] ..= [`MAX_COL_WIDTH`]. Pins the column's identity (materializes it, like
     /// formatting a cell does) and writes its stable `Uid` -> width into
     /// `col_widths_{sheet}`. Undoable (a plain value commit under the default
     /// origin); replies with a [`TrameEvent::DataReset`] so the UI re-fetches the
@@ -32,7 +81,7 @@ impl TrameState {
         if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
-        let width = width.max(MIN_COL_WIDTH);
+        let width = COL_SIZES.clamp(width);
         // Materialize the column to mint/resolve its stable id (materialize keys
         // on a cell; row 0 is the cheapest anchor). Refused: say why.
         let col_uid = match self.materialize(CellPos::new(Row::ZERO, col)) {
@@ -54,7 +103,7 @@ impl TrameState {
     }
 
     /// Set row `row`'s height (logical px) on the active sheet, clamped to
-    /// [`MIN_ROW_HEIGHT`]. Row analogue of [`resize_col`](Self::resize_col):
+    /// [`MIN_ROW_HEIGHT`] ..= [`MAX_ROW_HEIGHT`]. Row analogue of [`resize_col`](Self::resize_col):
     /// writes `row_heights_{sheet}`.
     pub(super) fn resize_row(
         &mut self,
@@ -65,7 +114,7 @@ impl TrameState {
         if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
         }
-        let height = height.max(MIN_ROW_HEIGHT);
+        let height = ROW_SIZES.clamp(height);
         let row_uid = match self.materialize(CellPos::new(row, Col::ZERO)) {
             Ok((uid, _)) => uid,
             Err(why) => return TrameOutcome::display_only(vec![why.notice()]),
@@ -104,11 +153,11 @@ impl TrameState {
                     self.note_unreadable_key();
                     continue;
                 };
-                let LoroValue::Double(w) = value else {
+                let Some(width) = COL_SIZES.read(value) else {
                     continue;
                 };
                 if let Some(pos) = self.index.col_pos(&uid) {
-                    self.col_widths.insert(pos, DocPx::new(*w as f32));
+                    self.col_widths.insert(pos, width);
                 }
             }
         }
@@ -123,11 +172,11 @@ impl TrameState {
                     self.note_unreadable_key();
                     continue;
                 };
-                let LoroValue::Double(h) = value else {
+                let Some(height) = ROW_SIZES.read(value) else {
                     continue;
                 };
                 if let Some(pos) = self.index.row_pos(&uid) {
-                    self.row_heights.insert(pos, DocPx::new(*h as f32));
+                    self.row_heights.insert(pos, height);
                 }
             }
         }

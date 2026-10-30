@@ -10,8 +10,17 @@
 macro_rules! cell_text {
     ($(#[$doc:meta])* $name:ident) => {
         $(#[$doc])*
-        #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+        #[derive(Clone, Default, PartialEq, Eq, Hash)]
         pub struct $name(String);
+
+        // A cell's text is the author's: a log carries its length alone.
+        impl std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.debug_tuple(stringify!($name))
+                    .field(&ambre_core::char_len(&self.0))
+                    .finish()
+            }
+        }
 
         impl $name {
             /// The text `text`, in this form.

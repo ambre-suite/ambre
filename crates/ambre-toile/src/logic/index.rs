@@ -40,7 +40,14 @@ impl ElementBounds {
 impl RTreeObject for ElementBounds {
     type Envelope = AABB<[f64; 2]>;
     fn envelope(&self) -> Self::Envelope {
-        let r = self.rect;
+        // `rstar` orders envelopes with `partial_cmp().unwrap()`, so a NaN
+        // corner would panic the build or an insert. The codec already reads a
+        // stored NaN as zero (`TOILE-274`); this guard holds for any caller.
+        let r = if self.rect.is_finite() {
+            self.rect
+        } else {
+            Rect::ZERO
+        };
         AABB::from_corners([r.x0, r.y0], [r.x1, r.y1])
     }
 }

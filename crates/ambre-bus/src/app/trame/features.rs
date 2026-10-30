@@ -94,7 +94,7 @@ impl Percent {
 /// `String` operands are either a literal value or a cell reference, resolved at
 /// evaluation. MVP+ kinds (value/text/formula/presets) land in Phase 2; the
 /// gradient / data-bar / top-bottom kinds are Phase 3.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum CondFormatKind {
     GreaterThan(String),
     LessThan(String),
@@ -127,6 +127,54 @@ pub enum CondFormatKind {
     TopN(RankCount),
     BottomN(RankCount),
     TopNPercent(Percent),
+}
+
+// An operand the author typed prints its length alone.
+impl std::fmt::Debug for CondFormatKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ambre_core::char_len;
+        let operand = |name: &str, f: &mut std::fmt::Formatter<'_>, text: &str| {
+            f.debug_tuple(name).field(&char_len(text)).finish()
+        };
+        match self {
+            Self::GreaterThan(text) => operand("GreaterThan", f, text),
+            Self::LessThan(text) => operand("LessThan", f, text),
+            Self::Between { low, high } => f
+                .debug_struct("Between")
+                .field("low", &char_len(low))
+                .field("high", &char_len(high))
+                .finish(),
+            Self::Equal(text) => operand("Equal", f, text),
+            Self::Contains(text) => operand("Contains", f, text),
+            Self::StartsWith(text) => operand("StartsWith", f, text),
+            Self::Formula(source) => f.debug_tuple("Formula").field(source).finish(),
+            Self::IsEmpty => f.write_str("IsEmpty"),
+            Self::IsNotEmpty => f.write_str("IsNotEmpty"),
+            Self::IsError => f.write_str("IsError"),
+            Self::ColorScale2 {
+                min_color,
+                max_color,
+            } => f
+                .debug_struct("ColorScale2")
+                .field("min_color", min_color)
+                .field("max_color", max_color)
+                .finish(),
+            Self::ColorScale3 {
+                min_color,
+                mid_color,
+                max_color,
+            } => f
+                .debug_struct("ColorScale3")
+                .field("min_color", min_color)
+                .field("mid_color", mid_color)
+                .field("max_color", max_color)
+                .finish(),
+            Self::DataBar { color } => f.debug_struct("DataBar").field("color", color).finish(),
+            Self::TopN(count) => f.debug_tuple("TopN").field(count).finish(),
+            Self::BottomN(count) => f.debug_tuple("BottomN").field(count).finish(),
+            Self::TopNPercent(share) => f.debug_tuple("TopNPercent").field(share).finish(),
+        }
+    }
 }
 
 ambre_core::define_tally! {
@@ -200,7 +248,7 @@ impl NumberBounds {
 /// A data-validation predicate (`trame-cell-editing`). `List` /
 /// `NumberRange` / `TextLength` are Phase 2; `ListRange` / `DateRange` / `Regex`
 /// are Phase 3.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum ValidationKind {
     /// Dropdown over a fixed value set.
     List(Vec<String>),
@@ -231,6 +279,42 @@ pub enum ValidationKind {
     /// Custom formula that must return `TRUE`, as the user typed it. The Logic
     /// thread parses it.
     Formula(FormulaSource),
+}
+
+// A list entry and a pattern the author typed print their length alone.
+impl std::fmt::Debug for ValidationKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use ambre_core::char_len;
+        match self {
+            Self::List(values) => f
+                .debug_tuple("List")
+                .field(&values.iter().map(|text| char_len(text)).collect::<Vec<_>>())
+                .finish(),
+            Self::ListRange { sheet, range } => f
+                .debug_struct("ListRange")
+                .field("sheet", sheet)
+                .field("range", range)
+                .finish(),
+            Self::NumberRange { limits, bounds } => f
+                .debug_struct("NumberRange")
+                .field("limits", limits)
+                .field("bounds", bounds)
+                .finish(),
+            Self::NumberInteger => f.write_str("NumberInteger"),
+            Self::DateRange { min, max } => f
+                .debug_struct("DateRange")
+                .field("min", min)
+                .field("max", max)
+                .finish(),
+            Self::TextLength { min, max } => f
+                .debug_struct("TextLength")
+                .field("min", min)
+                .field("max", max)
+                .finish(),
+            Self::Regex(pattern) => f.debug_tuple("Regex").field(&char_len(pattern)).finish(),
+            Self::Formula(source) => f.debug_tuple("Formula").field(source).finish(),
+        }
+    }
 }
 
 /// What happens when a [`ValidationKind`] rejects an input (`trame-cell-editing`).

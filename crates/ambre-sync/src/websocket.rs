@@ -13,9 +13,13 @@ const REPLAY_RETRY_LIMIT: u32 = 5;
 /// The delay before asking again after the `stop`-th stop of one replay,
 /// counted from one. Past the budget there is none (`SYNC-154`).
 fn replay_retry_delay(stop: u32) -> Option<ambre_core::Millis> {
-    (1..=REPLAY_RETRY_LIMIT)
-        .contains(&stop)
-        .then(|| ambre_core::Millis(REPLAY_RETRY_BASE.0 << (stop - 1)))
+    let doublings = stop
+        .checked_sub(1)
+        .filter(|doublings| *doublings < REPLAY_RETRY_LIMIT)?;
+    2_u64
+        .checked_pow(doublings)
+        .and_then(|factor| REPLAY_RETRY_BASE.0.checked_mul(factor))
+        .map(ambre_core::Millis)
 }
 
 /// The stops of one document's replay since its budget last started.
@@ -87,7 +91,7 @@ impl SyncState {
         if self.update_owed || self.inbound_held {
             return;
         }
-        self.socket_opens += 1;
+        self.socket_opens = self.socket_opens.saturating_add(1);
         tracing::info!("Sync: WebSocket opened (native mock)");
     }
 

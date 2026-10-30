@@ -8,7 +8,7 @@
 use ambre_bus::{Col, ColCount, Row, RowCount};
 
 use super::types::{CellValue, FormulaError, FunctionName, finite_number, nearly_equal};
-use ambre_bus::{CivilDate, DateSerial, DayCount, DayOfMonth, DaySerial, MonthCount, Year};
+use ambre_bus::{DateParts, DateSerial, DayCount, DayOfMonth, DaySerial, MonthCount, Year};
 
 // -----------------------------------------------------------------------------
 // Dispatch

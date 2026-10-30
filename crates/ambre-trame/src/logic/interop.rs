@@ -7,7 +7,7 @@
 // plaintext file ever transits to the Blind Relay (Zero-Knowledge invariant).
 
 use super::*;
-use crate::CsvDelimiter;
+use crate::{CsvDelimiter, TOTAL_COLS, TOTAL_ROWS};
 
 impl TrameState {
     /// Import CSV bytes into the workbook (`trame-import-export`). Parses the
@@ -53,6 +53,37 @@ impl TrameState {
                 },
             )]);
         }
+        // The grid ends at `LAST_ROW` and `LAST_COL`, and a field past either
+        // would land outside it: cut the records there, and say so
+        // (`TRAME-IO-050`).
+        let room_rows = TOTAL_ROWS.as_end().count_from(start.row).to_usize();
+        let room_cols = TOTAL_COLS.as_end().count_from(start.col).to_usize();
+        let cut_records = records.len().saturating_sub(room_rows);
+        records.truncate(room_rows);
+        let cut_fields: usize = records
+            .iter_mut()
+            .map(|record| {
+                let cut = record.len().saturating_sub(room_cols);
+                record.truncate(room_cols);
+                cut
+            })
+            .sum();
+        let cut_notice = (cut_records > 0 || cut_fields > 0).then(|| TrameEvent::Error {
+            message: format!(
+                "the grid ends at row {} and column {}: {cut_records} record(s) and \
+                 {cut_fields} field(s) past its edge were left out",
+                TOTAL_ROWS.get(),
+                TOTAL_COLS.get()
+            ),
+        });
+        // A start past the edge cuts every field: nothing is left to write,
+        // so the document stays untouched, as for an empty file
+        // (`TRAME-IO-028`).
+        if cut_notice.is_some() && records.iter().all(Vec::is_empty) {
+            return TrameOutcome::display_only(
+                unreadable_notice.into_iter().chain(cut_notice).collect(),
+            );
+        }
 
         // Resolve the target sheet: an existing id is reused, anything else
         // (including `None`) creates a fresh "CSV Import" sheet. The id is
@@ -64,6 +95,7 @@ impl TrameState {
                 let Some(id) = self.mint_sheet_id() else {
                     let mut display = vec![super::sheets::sheet_ids_exhausted()];
                     display.extend(unreadable_notice);
+                    display.extend(cut_notice);
                     return TrameOutcome::display_only(display);
                 };
                 (id, true)
@@ -136,6 +168,7 @@ impl TrameState {
             cols,
         });
         outcome.display.extend(unreadable_notice);
+        outcome.display.extend(cut_notice);
         outcome
     }
 

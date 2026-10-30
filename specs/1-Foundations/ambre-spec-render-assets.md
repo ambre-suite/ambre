@@ -142,7 +142,7 @@ of ours.
 3. Swash rasterizes each glyph, keyed on the font blob id, the glyph id and the size. A peer
    writes the size, so each application reads a size past its cap as the cap (`CANVAS-088`).
    The caps are those of the office counterparts: 1638 points for Prose, 409 for Trame and
-   4000 for Toile (`PROSE-FEAT-313`, `TRAME-259`, `TOILE-UI-398`). `FontSize` itself holds at
+   4000 for Toile (`PROSE-FEAT-313`, `TRAME-259`, `TOILE-UI-399`). `FontSize` itself holds at
    most the highest of the three. A zoom can still multiply that size. So the atlas rasterizes
    past half its side at that cap, and the quad draws the bitmap scaled up (`CANVAS-087`).
 4. the glyph lands in one of two atlases, and its slot records which (`CANVAS-019`).

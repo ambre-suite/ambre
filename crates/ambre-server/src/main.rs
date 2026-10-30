@@ -1,5 +1,11 @@
 //! Blind Relay server for Ambre.
 
+// A length, count, sequence or timestamp here comes from a client or the
+// store, so an overflow, a wrap or an arithmetic panic is refused. A test
+// asserts by panicking, so the lint stops at its boundary, as the panic lints
+// of `clippy.toml` do (`ARCH-028`).
+#![cfg_attr(not(test), deny(clippy::arithmetic_side_effects))]
+
 mod auth;
 mod compaction;
 mod db;

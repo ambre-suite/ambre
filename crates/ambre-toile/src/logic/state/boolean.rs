@@ -18,7 +18,9 @@ use crate::logic::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKin
 
 use super::ToileState;
 use super::codec::has_type;
-use super::codec::{bin_of, locked, path_of, rotation_of, shape_of, stored_rect};
+use super::codec::{
+    bin_of, locked, path_of, rotation_of, shape_of, store_corner, store_size, stored_rect,
+};
 use super::names::{ElementKey, Fields, Root};
 
 impl ToileState {
@@ -85,10 +87,8 @@ impl ToileState {
             ElementKind::Shape(ShapeKind::Path).type_tag(),
         );
         let _ = em.insert(ElementKey::Shape, ShapeKind::Path.tag());
-        let _ = em.insert(ElementKey::X, rect.x0);
-        let _ = em.insert(ElementKey::Y, rect.y0);
-        let _ = em.insert(ElementKey::W, rect.width());
-        let _ = em.insert(ElementKey::H, rect.height());
+        store_corner(&em, rect.origin());
+        store_size(&em, rect.size());
         let _ = em.insert(ElementKey::Rot, 0.0);
         let _ = em.insert(ElementKey::Locked, false);
         let style = style_bytes.unwrap_or_else(|| ElementStyle::default().to_bytes());

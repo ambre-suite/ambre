@@ -971,6 +971,67 @@ fn the_inline_insert_lands_on_its_boundary_and_sizes_nothing() {
     assert_eq!(rig.view.state.row_heights, heights);
 }
 
+/// A drag far past the largest size holds the guide at that size, and sends
+/// that size, at every zoom (`TRAME-UI-181`). The guide then never jumps when
+/// the Logic thread answers.
+#[test]
+fn a_drag_past_the_largest_size_holds_the_guide_there() {
+    use crate::ui::grid::{HeaderHit, MAX_COL_WIDTH, MAX_ROW_HEIGHT, ResizePreview};
+    for zoom in [1.0, 2.0] {
+        let mut rig = Rig::new();
+        assert!(rig.view.set_zoom(ambre_core::ZoomFactor::positive(zoom)) || zoom == 1.0);
+        rig.frame();
+        rig.sent();
+        let row_1 = Row::new(1);
+        let col_y = rig.view.state.header_h().get() * 0.8;
+        let row_x = rig.view.state.header_w().get() * 0.5;
+        let row_edge =
+            rig.view.state.row_y(row_1).get() + rig.view.state.row_height_of(row_1).get();
+        let drags = [
+            (pointer(rig.col_edge(1), col_y), HeaderHit::ColBorder(COL_1)),
+            (pointer(row_x, row_edge), HeaderHit::RowBorder(row_1)),
+        ];
+        for (start, hit) in drags {
+            assert_eq!(rig.view.state.header_hit(start), Some(hit));
+            rig.view.handle_input(&InputEvent::PointerDown {
+                at: start,
+                button: PointerButton::Primary,
+                mods: Modifiers::NONE,
+            });
+            let far = 10_000.0 * zoom as f32;
+            let to = ambre_core::ViewPoint::new(
+                start.x + ambre_core::ViewPx::new(far),
+                start.y + ambre_core::ViewPx::new(far),
+            );
+            rig.view.handle_input(&InputEvent::PointerMove { at: to });
+            let held = match hit {
+                HeaderHit::ColBorder(c) => ResizePreview::Col(
+                    rig.view.state.col_x(c) + rig.view.state.scaled(MAX_COL_WIDTH),
+                ),
+                _ => ResizePreview::Row(
+                    rig.view.state.row_y(row_1) + rig.view.state.scaled(MAX_ROW_HEIGHT),
+                ),
+            };
+            assert_eq!(rig.view.state.resize_preview, Some(held), "zoom {zoom}");
+            rig.view.handle_input(&InputEvent::PointerUp {
+                at: to,
+                button: PointerButton::Primary,
+                mods: Modifiers::NONE,
+            });
+        }
+        let sent: Vec<ambre_core::DocPx> = rig
+            .sent()
+            .iter()
+            .filter_map(|cmd| match cmd {
+                TrameCommand::ResizeCol { width, .. } => Some(*width),
+                TrameCommand::ResizeRow { height, .. } => Some(*height),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(sent, [MAX_COL_WIDTH, MAX_ROW_HEIGHT], "zoom {zoom}");
+    }
+}
+
 /// A boundary dragged at any zoom stores the width in unzoomed pixels: the
 /// same on-screen gesture scaled by the zoom stores the same size
 /// (`TRAME-UI-040`). The grid takes the width before any answer

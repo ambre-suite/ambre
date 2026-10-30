@@ -1550,7 +1550,13 @@ impl SyncState {
             tracing::warn!("Sync: SendEphemeral for unknown doc {document_id:?}");
             return;
         };
-        doc_state.ephemeral_counter.0 += 1;
+        // A wrapped counter would read as a replay to every peer, so an
+        // exhausted counter drops the ephemeral instead.
+        let Some(next) = doc_state.ephemeral_counter.0.checked_add(1) else {
+            tracing::warn!("Sync: ephemeral counter exhausted for {document_id:?}, dropping");
+            return;
+        };
+        doc_state.ephemeral_counter.0 = next;
         let public_data = EphemeralPublicData {
             document_id,
             pub_key,
