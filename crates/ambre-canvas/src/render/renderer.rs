@@ -906,8 +906,8 @@ impl QuadRenderer {
         queue: &wgpu::Queue,
         image: &ImageSource<'_>,
     ) -> Option<CacheEntry<wgpu::BindGroup>> {
-        let level0 = (image.size.width.get() as usize) * (image.size.height.get() as usize) * 4;
-        let level0_pixels = image.pixels.as_bytes().get(..level0)?;
+        let level0 = mipmap::level0_size(image.size);
+        let level0_pixels = image.pixels.as_bytes().get(..level0.as_len())?;
         let chain = mipmap::build_chain(image.pixels, image.size);
         let levels = mipmap::level_count(image.size);
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -951,7 +951,7 @@ impl QuadRenderer {
             image.size.width.get(),
             image.size.height.get(),
         );
-        let mut bytes = ByteSize::of_len(level0);
+        let mut bytes = level0;
         for (i, level) in chain.iter().enumerate() {
             write(
                 i as u32 + 1,

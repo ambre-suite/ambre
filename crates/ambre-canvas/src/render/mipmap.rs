@@ -16,13 +16,18 @@
 //   stays on screen. So the CPU pays once and no frame pays.
 // ============================================================================
 
-use ambre_core::{ImageSize, RgbaPixels};
+use ambre_core::{ByteSize, ImageSize, RgbaPixels};
 
 /// One level of a mip chain: RGBA8 samples and the dimensions they describe.
 pub struct MipLevel {
     pub pixels: RgbaPixels,
     pub width: u32,
     pub height: u32,
+}
+
+/// The bytes level 0 of an image of `size` holds: four per pixel, RGBA8.
+pub fn level0_size(size: ImageSize) -> ByteSize {
+    ByteSize::of_len((size.width.get() as usize) * (size.height.get() as usize) * 4)
 }
 
 /// Build the levels *below* level 0 by repeated 2x2 box reduction, stopping at
@@ -41,7 +46,7 @@ pub fn build_chain(pixels: &RgbaPixels, size: ImageSize) -> Vec<MipLevel> {
     if width == 0 || height == 0 {
         return out;
     }
-    if pixels.as_bytes().len() < (width as usize) * (height as usize) * 4 {
+    if ByteSize::of_len(pixels.len()) < level0_size(size) {
         return out;
     }
     let mut src = pixels.clone();
