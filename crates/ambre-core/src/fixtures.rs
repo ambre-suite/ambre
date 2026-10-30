@@ -70,6 +70,12 @@ impl FixtureSeed {
     pub const fn get(self) -> u64 {
         self.0
     }
+
+    /// The `PeerID` the seed pins for the generator's own writes.
+    #[must_use]
+    pub const fn peer_id(self) -> crate::PeerId {
+        crate::PeerId(self.0)
+    }
 }
 
 /// The version a generator author bumps when the produced document changes on
