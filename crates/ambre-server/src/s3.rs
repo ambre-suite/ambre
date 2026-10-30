@@ -279,8 +279,8 @@ pub async fn delete_prefix(
                     failed.message().unwrap_or("refused")
                 )));
             }
-            // A count of objects held in memory: the sum cannot reach the
-            // bound, and saturating states that it stops there if it did.
+            // A sum of object counts across the pages of one prefix. No bucket
+            // holds `usize::MAX` objects, and saturating states the bound.
             deleted = deleted.saturating_add(count);
         }
         match page.next_continuation_token() {

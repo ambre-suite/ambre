@@ -3276,6 +3276,7 @@
   {"edge": "verified-by", "from": "SYNC-178", "to": "ambre_sync::documents::tests::a_name_past_its_budget_is_not_sealed"},
   {"edge": "verified-by", "from": "SYNC-178", "to": "ambre_app::landing::tests::a_rename_past_the_cap_is_refused_with_a_toast"},
   {"edge": "cites-document", "from": "SYNC-180", "section": "6", "to": "ambre-spec-budgets.md"},
+  {"edge": "cites-rule", "from": "SYNC-180", "to": "SRV-240"},
   {"edge": "verified-by", "from": "SYNC-180", "to": "ambre_sync::channels::tests::a_direct_message_past_its_budget_is_refused_before_any_request"},
   {"edge": "cites-section", "from": "SYNC-136", "section": "2", "to": "1-Foundations/ambre-spec-sync.md"},
   {"edge": "cites-rule", "from": "SYNC-136", "to": "SYNC-068"},
