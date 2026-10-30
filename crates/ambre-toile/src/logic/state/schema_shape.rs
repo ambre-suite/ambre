@@ -63,6 +63,12 @@ use super::{
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../../schema/shapes.txt");
 
+/// The address the sample board's picture and its media entry share. Every
+/// reader checks a stored hash, so the sample spells a real one.
+fn sample_hash() -> ContentHash {
+    ContentHash::parse(&"0".repeat(64)).expect("sixty-four hex digits")
+}
+
 /// The frozen scaffolding identities, one section per `SCHEMA_VERSION`.
 const SCAFFOLD: &str = include_str!("../../../schema/scaffold.txt");
 
@@ -496,7 +502,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         &mut st,
         ElementKind::Image,
         Point::new(0.0, 200.0),
-        InitContent::Image(crate::logic::command::MediaRef::Stored("h".into())),
+        InitContent::Image(crate::logic::command::MediaRef::Stored(sample_hash())),
         None,
     );
     let _embed = create(
@@ -656,7 +662,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         )
         .expect("a 1x2 image encodes");
     st.seed_media(&[MediaBlob {
-        media: crate::logic::command::MediaRef::Stored(ContentHash("h".to_owned())),
+        media: crate::logic::command::MediaRef::Stored(sample_hash()),
         plaintext: ambre_core::MediaBytes::new(vec![1]),
         mime: ambre_core::MediaType::from("image/png"),
         size: ambre_core::ImageSize::new(WholePx::new(1), WholePx::new(2)),

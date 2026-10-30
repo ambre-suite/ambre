@@ -140,7 +140,8 @@ pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use lang::LangTag;
 pub use link::LinkUrl;
 pub use media::{
-    ByteSize, ContentHash, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress, MediaType,
+    ByteSize, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress,
+    MediaType,
 };
 pub use member_count::{MemberCount, MemberCountError};
 pub use mode::{

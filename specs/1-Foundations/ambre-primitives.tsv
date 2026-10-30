@@ -874,8 +874,7 @@ ambre-core | src/link.rs | crate::link | <LinkUrl as From<String>>::from(text) |
 ambre-core | src/link.rs | crate::link | LinkUrl.0 | field | String	newtype-inner	LinkUrl newtype
 ambre-core | src/link.rs | crate::link | LinkUrl::as_str() | ret | &str	newtype-inner	LinkUrl newtype
 ambre-core | src/link.rs | crate::link | LinkUrl::new(text) | param | String	newtype-inner	LinkUrl newtype
-ambre-core | src/media.rs | crate::media | <ContentHash as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of ContentHash copies into its text
-ambre-core | src/media.rs | crate::media | <ContentHash as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of ContentHash wraps
+ambre-core | src/media.rs | crate::media | <ContentHash as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the checked constructor of ContentHash keeps, which serde reads through
 ambre-core | src/media.rs | crate::media | <ContentHash as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of ContentHash, lent through Borrow
 ambre-core | src/media.rs | crate::media | <MediaType as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MediaType copies into its text
 ambre-core | src/media.rs | crate::media | <MediaType as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of MediaType wraps
@@ -2213,7 +2212,6 @@ ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret 
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
 ambre-server | src/s3.rs | crate::s3 | delete_prefix() | ret | Result<usize,AppError>	math	deleted count
 ambre-server | src/s3.rs | crate::s3 | global_s3_flusher::RECONCILE_EVERY | const | u32	math	a local limit or period, passed to SQL or a loop
-ambre-server | src/s3.rs | crate::s3 | is_valid_content_hash() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	generic	predicate result
 ambre-server | src/supervise.rs | crate::supervise | contained(task) | param | &'static str	free-text	task label for logs
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | ClockFences::holds() | ret | bool	generic	predicate result

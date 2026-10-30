@@ -4752,6 +4752,40 @@ fn a_peers_unsafe_web_address_never_reaches_a_frame() {
     }
 }
 
+/// A hostile peer writes a path traversal as the address of a picture. The
+/// reader's board derives no address from it, so it never reaches the media
+/// URL of the relay, and the picture paints its placeholder.
+#[test]
+fn a_peers_traversal_in_a_picture_address_derives_no_address() {
+    let mut peer = ToileState::new();
+    let hash = ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash");
+    let out = peer.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Image,
+        at: Point::ZERO,
+        size: Size::new(100.0, 100.0),
+        fill: None,
+        content: InitContent::Image(crate::logic::command::MediaRef::Stored(hash)),
+        correlate: None,
+    });
+    let id = created_id(&out);
+    peer.debug_set_element_field(&id, crate::logic::state::ElementKey::Hash, "../documents/X");
+
+    let mut reader = ToileState::new();
+    reader.apply_remote_snapshot(&peer.export_snapshot());
+    let geom = reader
+        .debug_viewport()
+        .nodes
+        .into_iter()
+        .find_map(|n| match n {
+            DisplayNode::Element(e) => Some(e.geom),
+            _ => None,
+        });
+    assert!(
+        matches!(geom, Some(DisplayGeom::Image(None))),
+        "expected a picture with no address, got {geom:?}"
+    );
+}
+
 /// `TOILE-085` and `TOILE-226`: a pasted embed is a second reference to the
 /// same document. The copy and the paste ask the service plane for nothing,
 /// so no second document comes into being.

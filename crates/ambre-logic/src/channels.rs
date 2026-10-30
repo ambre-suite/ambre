@@ -3907,7 +3907,7 @@ mod tests {
             id: again,
             evt: RestEvent::MediaErased {
                 document_id: meta,
-                content_hash: ambre_core::ContentHash(file.clone()),
+                content_hash: ContentHash::parse(&file).expect("a content hash"),
             },
         });
         assert!(drain(&ui).is_empty(), "no view awaits the erase");

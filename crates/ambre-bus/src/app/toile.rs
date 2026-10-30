@@ -3048,8 +3048,10 @@ pub enum DisplayGeom {
     /// `Vec<TextRun>` for char-wise convergence (`toile-text-editing`) and
     /// Parley-ready runs.
     Text(String),
-    /// Media blob hash (`toile-media` resolves the pixels).
-    Image(ambre_core::ContentHash),
+    /// Media blob hash (`toile-media` resolves the pixels). `None` when the
+    /// stored text spells no address: a peer may write any text, and the
+    /// image then paints its placeholder.
+    Image(Option<ambre_core::ContentHash>),
     /// Logic-smoothed polyline (`toile-freehand`).
     Stroke(Vec<Point>),
     /// Background + border, and the frame's title (`TOILE-253`). Children are
