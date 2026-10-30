@@ -689,7 +689,8 @@ impl TrameView {
     }
 
     /// Move the live resize guide to the pointer, clamped so the dragged
-    /// column/row never shrinks below its minimum.
+    /// column/row stays inside the size range the Logic thread stores
+    /// (`TRAME-UI-181`). The guide then never jumps at the confirmation.
     pub(crate) fn update_resize_preview(&mut self, at: ViewPoint) {
         let (x, y) = (
             crate::ui::grid::on_grid(at.x),
@@ -697,15 +698,20 @@ impl TrameView {
         );
         match self.resize_drag {
             Some(HeaderHit::ColBorder(c)) => {
-                // The guide is in logical px, so the minimum width is the base
-                // clamp scaled by the current zoom.
-                let min_x = self.state.col_x(c) + self.state.scaled(crate::ui::grid::MIN_COL_WIDTH);
-                self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(x.max(min_x)));
+                // The guide is in logical px, so each bound is the base size
+                // scaled by the current zoom.
+                let left = self.state.col_x(c);
+                let min_x = left + self.state.scaled(crate::ui::grid::MIN_COL_WIDTH);
+                let max_x = left + self.state.scaled(crate::ui::grid::MAX_COL_WIDTH);
+                self.state.resize_preview =
+                    Some(crate::ui::grid::ResizePreview::Col(x.clamp(min_x, max_x)));
             }
             Some(HeaderHit::RowBorder(r)) => {
-                let min_y =
-                    self.state.row_y(r) + self.state.scaled(crate::ui::grid::MIN_ROW_HEIGHT);
-                self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(y.max(min_y)));
+                let top = self.state.row_y(r);
+                let min_y = top + self.state.scaled(crate::ui::grid::MIN_ROW_HEIGHT);
+                let max_y = top + self.state.scaled(crate::ui::grid::MAX_ROW_HEIGHT);
+                self.state.resize_preview =
+                    Some(crate::ui::grid::ResizePreview::Row(y.clamp(min_y, max_y)));
             }
             _ => {}
         }
@@ -728,19 +734,19 @@ impl TrameView {
                 // The guide is in logical (zoomed) px; the stored width is BASE
                 // px (zoom-independent content). Divide the on-screen extent
                 // back out by the zoom before persisting.
-                let width = self
-                    .state
-                    .unscaled(px - self.state.col_x(c))
-                    .max(crate::ui::grid::MIN_COL_WIDTH);
+                let width = self.state.unscaled(px - self.state.col_x(c)).clamp(
+                    crate::ui::grid::MIN_COL_WIDTH,
+                    crate::ui::grid::MAX_COL_WIDTH,
+                );
                 for col in self.resize_target_cols(c) {
                     self.send_resize_col(col, width);
                 }
             }
             (HeaderHit::RowBorder(r), crate::ui::grid::ResizePreview::Row(py)) => {
-                let height = self
-                    .state
-                    .unscaled(py - self.state.row_y(r))
-                    .max(crate::ui::grid::MIN_ROW_HEIGHT);
+                let height = self.state.unscaled(py - self.state.row_y(r)).clamp(
+                    crate::ui::grid::MIN_ROW_HEIGHT,
+                    crate::ui::grid::MAX_ROW_HEIGHT,
+                );
                 for row in self.resize_target_rows(r) {
                     self.send_resize_row(row, height);
                 }
