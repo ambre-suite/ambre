@@ -29,8 +29,15 @@ pub struct InvalidDefinedName(pub String);
 /// letters, digits and underscores, which is the shape of a formula bareword.
 /// The grammar reads some such words as something else first, a cell
 /// reference (`A1`) or a boolean (`TRUE`). `DefineName` refuses those.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// `Debug` prints the length alone, so a log carries none of the name.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DefinedName(String);
+
+impl std::fmt::Debug for DefinedName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DefinedName({} chars)", self.0.chars().count())
+    }
+}
 
 impl DefinedName {
     /// The name `text` is.
@@ -95,15 +102,28 @@ pub enum SheetNameRefusal {
 /// [`SheetName::stored`] wraps a name a formula or the document holds, and
 /// [`SheetName::numbered`] is the fallback a stored name the rule refuses
 /// reads as (`TRAME-235`). Uniqueness compares [`SheetName::key`], which
-/// ignores case (`TRAME-078`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// ignores case (`TRAME-078`). `Debug` prints the length alone, so a log
+/// carries none of the name.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SheetName(String);
+
+impl std::fmt::Debug for SheetName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SheetName({} chars)", self.0.chars().count())
+    }
+}
 
 /// The comparison key of a [`SheetName`]: the name with its case folded. Two
 /// names with one key are one name to the uniqueness rule and to a formula
-/// qualifier (`TRAME-078`, `TRAME-236`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+/// qualifier (`TRAME-078`, `TRAME-236`). Its `Debug` form is the length too.
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SheetNameKey(String);
+
+impl std::fmt::Debug for SheetNameKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SheetNameKey({} chars)", self.0.chars().count())
+    }
+}
 
 impl SheetName {
     /// The most characters a sheet name holds.
@@ -981,6 +1001,17 @@ impl TrameCommand {
 #[cfg(test)]
 mod tests {
     use super::{CsvDelimiter, DefinedName, SheetName, SheetNameRefusal};
+
+    /// A sheet name, its key and a defined name print their length alone in
+    /// `Debug`, and none of the text a user typed.
+    #[test]
+    fn a_name_of_a_workbook_prints_its_length_alone() {
+        let sheet = SheetName::new("Payroll").unwrap();
+        assert_eq!(format!("{sheet:?}"), "SheetName(7 chars)");
+        assert_eq!(format!("{:?}", sheet.key()), "SheetNameKey(7 chars)");
+        let name = DefinedName::new("TOTAL").unwrap();
+        assert_eq!(format!("{name:?}"), "DefinedName(5 chars)");
+    }
 
     /// The Excel rule: 1 to 31 characters, none of `: \ / ? * [ ]`, and no
     /// apostrophe at either end (`TRAME-234`).

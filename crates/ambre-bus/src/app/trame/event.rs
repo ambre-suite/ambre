@@ -522,7 +522,9 @@ pub struct SheetTab {
 /// Flat, data-oriented. The UI Thread stores these in a
 /// `HashMap<CellPos, DisplayCell>`; missing entries
 /// are blank (white background, no text), so only non-empty cells are sent.
-#[derive(Debug, Clone, Default)]
+/// `Debug` prints the length of `text` and `raw` alone, so a log carries
+/// none of the cell's content.
+#[derive(Clone, Default)]
 pub struct DisplayCell {
     pub row: Row,
     pub col: Col,
@@ -576,6 +578,33 @@ pub struct DisplayCell {
     pub is_filtered: RowFilter,
 }
 
+impl std::fmt::Debug for DisplayCell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DisplayCell")
+            .field("row", &self.row)
+            .field("col", &self.col)
+            .field("text", &ambre_core::char_len(&self.text))
+            .field("raw", &ambre_core::char_len(&self.raw))
+            .field("bold", &self.bold)
+            .field("italic", &self.italic)
+            .field("underline", &self.underline)
+            .field("strikethrough", &self.strikethrough)
+            .field("h_align", &self.h_align)
+            .field("numeric", &self.numeric)
+            .field("v_align", &self.v_align)
+            .field("wrap", &self.wrap)
+            .field("fg", &self.fg)
+            .field("bg", &self.bg)
+            .field("font", &self.font)
+            .field("size", &self.size)
+            .field("borders", &self.borders)
+            .field("is_merged", &self.is_merged)
+            .field("merge_span", &self.merge_span)
+            .field("is_filtered", &self.is_filtered)
+            .finish()
+    }
+}
+
 ambre_core::define_flag! {
     /// Whether a cell is part of a merged range (`trame-cell-merges`): the
     /// master cell or a cell it covers.
@@ -618,6 +647,23 @@ mod tests {
 
     fn number(value: f64) -> CellNumber {
         CellNumber::new(value).expect("a finite number")
+    }
+
+    /// A display cell's `Debug` form holds the length of its text and of its
+    /// raw text, and none of either.
+    #[test]
+    fn a_display_cell_prints_the_length_of_its_text_alone() {
+        let cell = DisplayCell {
+            text: "4200".to_owned(),
+            raw: "=SALARY*12".to_owned(),
+            ..DisplayCell::default()
+        };
+        let printed = format!("{cell:?}");
+        assert!(
+            printed.contains("text: CharCount(4), raw: CharCount(10)"),
+            "{printed}"
+        );
+        assert!(!printed.contains("4200") && !printed.contains("SALARY"));
     }
 
     /// Totals exist only over at least one number, and the average is the sum

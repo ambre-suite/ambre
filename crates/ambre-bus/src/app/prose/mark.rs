@@ -175,9 +175,16 @@ pub fn parse_font_size(raw: &str) -> Result<FontSize, MarkValueError> {
 /// [`validate_value`] and [`canonical_value`] are the only ways in, so a value
 /// of this type has passed the grammar of the key it was checked under. A
 /// value read back from the document has not, and stays a string: a peer on
-/// another build may have written it.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// another build may have written it. The text of a key that carries text is
+/// the user's, so `Debug` prints the length alone.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MarkValue(String);
+
+impl std::fmt::Debug for MarkValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "MarkValue({} chars)", self.0.chars().count())
+    }
+}
 
 impl MarkValue {
     /// The value, for the call that writes it into the text.

@@ -222,8 +222,15 @@ impl fmt::Display for BlockId {
 /// The name of a paragraph style a block carries, built-in or user-defined
 /// (`ambre-spec-prose-schema.md`). The tree stores the name itself, so the
 /// newtype exists only to keep it apart from the other strings of a command.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// A user may have typed the name, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StyleId(pub String);
+
+impl fmt::Debug for StyleId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "StyleId({} chars)", self.0.chars().count())
+    }
+}
 
 // =============================================================================
 // Block model (`ambre-spec-prose-schema.md section 3`)
@@ -2529,6 +2536,17 @@ pub enum ProseRefusal {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A style name and a mark value print their length alone in `Debug`,
+    /// and none of the text a user may have typed.
+    #[test]
+    fn a_style_name_and_a_mark_value_print_their_length_alone() {
+        let style = StyleId("My notes".to_owned());
+        assert_eq!(format!("{style:?}"), "StyleId(8 chars)");
+        let link = mark::MarkRoot::Link.key();
+        let value = mark::validate_value(&link, Some("https://a.example")).unwrap();
+        assert_eq!(format!("{value:?}"), "MarkValue(17 chars)");
+    }
 
     /// A heading number reads as its counters joined by dots, and there is
     /// none without a counter.

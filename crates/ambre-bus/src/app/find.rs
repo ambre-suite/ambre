@@ -24,9 +24,16 @@ ambre_core::define_index! {
 
 /// The query of a find, as the user typed it, never empty. An empty field
 /// sends no query at all, which is how the panel clears its highlight
-/// (`FIND-005`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// (`FIND-005`). `Debug` prints the length alone, so a log carries none of
+/// the text, nor of the [`FindQuery`] that holds it.
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct FindText(String);
+
+impl std::fmt::Debug for FindText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "FindText({} chars)", self.0.chars().count())
+    }
+}
 
 impl FindText {
     /// The text as typed; `None` when it is empty.
@@ -90,6 +97,15 @@ mod tests {
         let text = FindText::new("a".to_owned()).expect("a text");
         let query = FindQuery::new(text, ());
         assert_eq!(query.text.as_str(), "a");
+    }
+
+    /// A query's `Debug` form holds none of the typed text.
+    #[test]
+    fn a_query_prints_the_length_of_its_text_alone() {
+        let text = FindText::new("secret plan".to_owned()).expect("a text");
+        assert_eq!(format!("{text:?}"), "FindText(11 chars)");
+        let query = format!("{:?}", FindQuery::new(text, ()));
+        assert_eq!(query, "FindQuery { text: FindText(11 chars), options: () }");
     }
 
     #[test]
