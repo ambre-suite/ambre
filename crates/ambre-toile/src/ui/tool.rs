@@ -1036,7 +1036,12 @@ pub(crate) fn resolve_group_target(
 ) -> ElementId {
     let mut chain = vec![hit.clone()];
     let mut cur = hit;
+    // A peer can write a group into its own subtree. The walk stops at the
+    // first group already in the chain, so a cycle ends it (`TOILE-UI-398`).
     while let Some(g) = enclosing_group_of(&cur, display) {
+        if chain.contains(&g) {
+            break;
+        }
         chain.push(g.clone());
         cur = g;
     }
@@ -1469,6 +1474,22 @@ mod tests {
         assert_eq!(target, ElementId("g".into()));
         // Scope = g: the click selects the member itself.
         let scope = ElementId("g".into());
+        let target = resolve_group_target(ElementId("m".into()), &disp, Some(&scope));
+        assert_eq!(target, ElementId("m".into()));
+    }
+
+    /// `TOILE-UI-398`: a peer wrote `g1` into `g2` and `g2` into `g1`. A click
+    /// on a member ends, and picks a group of the cycle.
+    #[test]
+    fn a_click_into_a_group_cycle_ends() {
+        let disp = viewport(vec![
+            member_elem("m", Rect::new(0.0, 0.0, 100.0, 100.0), "g1"),
+            group_node("g1", Rect::new(0.0, 0.0, 100.0, 100.0), Some("g2")),
+            group_node("g2", Rect::new(0.0, 0.0, 100.0, 100.0), Some("g1")),
+        ]);
+        let target = resolve_group_target(ElementId("m".into()), &disp, None);
+        assert_eq!(target, ElementId("g2".into()));
+        let scope = ElementId("g1".into());
         let target = resolve_group_target(ElementId("m".into()), &disp, Some(&scope));
         assert_eq!(target, ElementId("m".into()));
     }
