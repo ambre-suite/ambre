@@ -507,7 +507,7 @@ pub(super) fn map_placement(fields: FieldValues<'_, ElementKey>) -> (Rect, ambre
 mod tests {
     use super::*;
 
-    /// A free anchor reads back as it was written, and a fraction off the
+    /// `TOILE-282`: a free anchor reads back as it was written, and a fraction off the
     /// side reads as the middle rather than outside the box.
     #[test]
     fn a_free_anchor_reads_back_and_a_fraction_off_the_side_reads_as_the_middle() {

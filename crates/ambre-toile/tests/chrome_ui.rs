@@ -97,6 +97,7 @@ fn mount_bar(
     (root, zoom)
 }
 
+/// `TOILE-UI-053`: the mounted band shows the count of a multi-selection.
 #[wasm_bindgen_test]
 fn multi_selection_shows_count_bounds_and_chips() {
     let owner = Owner::new();
@@ -127,6 +128,7 @@ fn multi_selection_shows_count_bounds_and_chips() {
     root.remove();
 }
 
+/// `TOILE-UI-107`: an empty selection leaves the mounted band empty.
 #[wasm_bindgen_test]
 fn empty_selection_shows_only_the_chips() {
     let owner = Owner::new();
@@ -151,6 +153,7 @@ fn empty_selection_shows_only_the_chips() {
     root.remove();
 }
 
+/// `TOILE-UI-106`: a lone element shows its count and no bounds in the mounted band.
 #[wasm_bindgen_test]
 fn single_selection_shows_count_without_bounds() {
     let owner = Owner::new();
@@ -246,6 +249,7 @@ fn click_by_aria(root: &web_sys::Element, aria: &str) -> bool {
     }
 }
 
+/// `TOILE-UI-047`: the empty-canvas menu shows only the Paste and Select all rows.
 #[wasm_bindgen_test]
 fn context_menu_empty_canvas_shows_only_paste_and_select_all() {
     let owner = Owner::new();
@@ -260,6 +264,7 @@ fn context_menu_empty_canvas_shows_only_paste_and_select_all() {
     root.remove();
 }
 
+/// `TOILE-UI-047`: a single unlocked element shows no Group row and no Unlock row.
 #[wasm_bindgen_test]
 fn context_menu_copy_row_fires_copy_command() {
     let owner = Owner::new();
@@ -287,6 +292,8 @@ fn context_menu_copy_row_fires_copy_command() {
     root.remove();
 }
 
+/// `TOILE-UI-415`: choosing Group in the context menu reports the group
+/// command id.
 #[wasm_bindgen_test]
 fn context_menu_multi_selection_offers_group() {
     let owner = Owner::new();
@@ -306,6 +313,7 @@ fn context_menu_multi_selection_offers_group() {
     root.remove();
 }
 
+/// `TOILE-UI-047`: a locked selection shows the Unlock row and no Lock row.
 #[wasm_bindgen_test]
 fn context_menu_locked_selection_offers_only_unlock() {
     let owner = Owner::new();
@@ -330,6 +338,7 @@ fn context_menu_locked_selection_offers_only_unlock() {
 
 // -- Tool palette, input --------------------------------------
 
+/// `TOILE-UI-408`: a palette button arms the tool it names.
 #[wasm_bindgen_test]
 fn tool_palette_click_switches_active_tool() {
     let owner = Owner::new();
@@ -356,6 +365,8 @@ fn tool_palette_click_switches_active_tool() {
 
 // -- Top menu bar zoom cluster, input -------------------------
 
+/// `TOILE-UI-416`: the zoom-in button of the menu bar reports the zoom-in
+/// command.
 #[wasm_bindgen_test]
 fn top_menu_bar_zoom_in_fires_command() {
     let owner = Owner::new();
@@ -416,6 +427,8 @@ fn undo_state_mirrors_into_command_store() {
 
 // -- Floating selection toolbar, input ------------------------
 
+/// `TOILE-UI-419`: the floating bar's Delete button reports the command id
+/// the context menu's Delete entry carries.
 #[wasm_bindgen_test]
 fn selection_toolbar_delete_fires_command() {
     let owner = Owner::new();

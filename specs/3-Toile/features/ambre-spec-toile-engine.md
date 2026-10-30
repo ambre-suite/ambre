@@ -33,6 +33,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-089` | `INV` | A command handler MUST NOT send on a queue: it returns an outcome, and nothing else. | this spec section 3; `ambre-spec-message-bus.md` | type-level -- `ToileState` holds no sink and no sender, every handler returns `ToileOutcome` by value, and the absence is the proof | none | verified |
 | `TOILE-UI-099` | `INV` | Every board mutation MUST leave the UI thread as a command; the UI MUST NOT write board state locally. | `ambre-spec-ui.md section 2` (`UI-THREAD-020`) | type-level -- the three outbound paths of `ui/view.rs` (`send_lossy`, `send_edit`, `send_open`) each hand a command to the Logic queue, there is no other sender, and `TOILE-UI-001` bans the CRDT on this side | none | verified |
 | `TOILE-UI-101` | `INV` | The canvas dispatch over the display events MUST be exhaustive -- no wildcard arm -- so a new event is a compile error and never a silent drop. | this spec section 4 | exhaustive-match -- the dispatch of `ui/view.rs` carries **no `_` arm**, so adding an event fails the build | none | verified |
+| `TOILE-286` | `INV` | The board MUST hold no user id until the session seeds one, and that id afterwards. | this spec section 3 | `ambre_toile::logic::convergence_tests::identity_is_seeded_and_read_back` -- no id on a new board, then the seeded id read back | none | verified |
+| `TOILE-289` | `INV` | The debug form of a Toile value that holds user text MUST print its length and none of the text. | `ambre-spec-zero-knowledge.md section 1`, `ZK-006` | `ambre_toile::logic::interop::svg_export::tests::an_export_debug_form_prints_no_content`; `ambre_toile::logic::text_merge::tests::an_edit_debug_form_prints_no_text`; `ambre_toile::ui::comments::tests::an_intent_debug_form_prints_no_body`; `ambre_toile::ui::deck::tests::a_rename_debug_form_prints_no_name`; `ambre_toile::ui::presenter::tests::a_notes_edit_debug_form_prints_no_note`; `ambre_toile::ui::render::tests::a_frame_title_debug_form_prints_no_title` -- each formats the value with `{:?}`, finds no word of its text and reads its length | none | verified |
 
 ### 1.2 Do one thing to the board
 
@@ -80,7 +82,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TOILE-091` | `POST` | Dropping an element from the spatial index MUST NOT cost a walk of the index. | this spec section 3; `ambre-spec-budgets.md section 1` | `ambre_toile::logic::index::tests::a_drag_and_a_delete_walk_no_index` | none | verified |
-| `TOILE-220` | `POST` | An element dropped from the index MUST NOT come back in a query. | this spec section 3 | `ambre_toile::logic::index::tests::remove_then_query_is_empty`; proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws a removal branch and compares against a rebuild | none | verified |
+| `TOILE-220` | `POST` | An element dropped from the index MUST NOT come back in a query. | this spec section 3 | `ambre_toile::logic::index::tests::remove_then_query_is_empty`; proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws a removal branch and compares against a rebuild; `ambre_toile::logic::index::tests::a_leaf_that_is_not_a_number_still_leaves` -- a leaf with a NaN corner leaves the index on its removal | none | verified |
 | `TOILE-221` | `FRAME` | Updating one element's leaf MUST NOT change another element's. | this spec section 3 | proptest -- `ambre_toile::logic::index::prop::incremental_matches_rebuild` draws an interleaved upsert and remove stream over eight keys and reads it against a model map, so a leaf touched in place of another diverges from the rebuild | none | verified |
 
 ### 1.7 Send a command from the drawing thread
@@ -105,9 +107,9 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none of its own: the board lives in this thread's CRDT and leaves as bytes the Sync
   worker seals (`ZK-001`). Its one outbound flow of user content is the media path of
   `features/ambre-spec-toile-media.md section 1`.
-* **Verification.** 40 `verified`, 0 `untested`. What holds is the pair no other application holds:
-  the index equivalence, at a camera that culls too, and the convergence of every derived cache. Ten
-  verified rows are structural.
+* **Verification.** 42 `verified`. What holds is the pair no other application holds: the index
+  equivalence, at a camera that culls too, and the convergence of every derived cache. Ten verified
+  rows are structural.
 
 ---
 

@@ -141,7 +141,7 @@ mod tests {
     use super::*;
     use crate::logic::command::SlideIndex;
 
-    /// A notes edit's debug form prints lengths, none of the note.
+    /// `TOILE-289`: a notes edit's debug form prints lengths, none of the note.
     #[test]
     fn a_notes_edit_debug_form_prints_no_note() {
         let base = "merger talk".to_owned();
@@ -153,6 +153,8 @@ mod tests {
         assert!(form.contains("<7 chars>"), "{form}");
     }
 
+    /// `TOILE-UI-316`: the notes caret shifts past a peer's prefix and stays put
+    /// under a suffix.
     #[test]
     fn a_caret_keeps_its_place_under_a_peer_write() {
         // A prefix before the caret shifts it; a suffix after it does not.

@@ -2390,6 +2390,7 @@ ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaC
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::pixels() | ret | Option<&[u8]>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::resolve(pixels) | param | Vec<u8>	generic	opaque bytes handed to a parser/encoder/decoder
+ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCacheCapacity::is_exceeded_by() | ret | bool	generic	predicate result: whether a held tally is past the bound
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ExportElement.text | field | Option<String>	free-text	label, message or user text
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportElementSlot.0 | field | u32	newtype-inner	the rank of a create in one import batch, with no arithmetic on it
 ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | ImportElementSlot::from_usize(len) | param | usize	foreign-api	the length Vec::len hands back, the rank of the next create

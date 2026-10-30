@@ -48,7 +48,7 @@ is `features/ambre-spec-toile-menus.md` and is not restated here.
 | `TOILE-FEAT-020` | `POST` | Clearing a reaction the user does not have MUST do nothing at all: no delta, and nothing to undo. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_broadcasts_delta_and_is_undoable` -- it clears twice and reads nothing broadcast by the second clear | none | verified |
 | `TOILE-FEAT-063` | `POST` | Placing again the reaction the user already has MUST do nothing at all, on the same terms. | this spec section 3 | `ambre_toile::logic::convergence_tests::placing_the_same_reaction_again_does_nothing` -- no delta, no event, and no undo item | none | verified |
 | `TOILE-FEAT-021` | `FAIL` | A reaction MUST NOT be written before the user's canonical identity is known. | this spec section 3 | `ambre_toile::logic::convergence_tests::react_before_session_ready_is_a_noop` -- it reacts on a state with no identity and reads nothing broadcast and no tally | none | verified |
-| `TOILE-FEAT-064` | `FAIL` | A reaction the client cannot write MUST tell the user, rather than leave the gesture looking applied. | this spec section 3; section 6 | `ambre_toile::logic::state::reactions::tests::a_reaction_that_will_not_encode_answers_a_write_failure` -- it encodes a value that refuses to be written and requires a typed write failure back, so the warning-and-empty-outcome the code used to answer fails it | none | verified |
+| `TOILE-FEAT-064` | `FAIL` | A reaction the client cannot write MUST tell the user, rather than leave the gesture looking applied. | this spec section 3; section 6 | `ambre_toile::logic::state::reactions::tests::a_reaction_that_will_not_encode_answers_a_write_failure` -- it encodes a value that refuses to be written and requires a typed write failure back, so the warning-and-empty-outcome the code used to answer fails it; `ambre_toile::logic::state::reactions::tests::a_reaction_encodes` -- the other side: the reaction the board stores encodes, so only the failing arm answers an error | none | verified |
 | `TOILE-FEAT-065` | `FRAME` | Reacting MUST NOT touch anybody else's reaction on that target. | this spec section 3; section 5 | structural -- the write is one insert or one delete under the key built from this user's identity, so no other user's key is reachable | none | verified |
 
 ### 1.3 Undo a reaction
@@ -205,7 +205,7 @@ resolve and are tested like every other menu entry
   difference.
 * **The facilitation layer is a design** (`TOILE-FEAT-024`, `TOILE-FEAT-025`). A shared timer and a
   facilitated vote session are shared intent, so they are CRDT and their containers are declared. The
-  Story that would build them is the last one of its epic. A vote budget can only be advisory, like
+  Story that would build them is the last one of its epic. A vote cap can only be advisory, like
   a lock: a modified client can
   overspend, and the relay cannot arbitrate (`features/ambre-spec-toile-engine.md section 3`).
 * **A reaction carries a timestamp nothing writes** (`ts`). The picker sends zero, because the UI
