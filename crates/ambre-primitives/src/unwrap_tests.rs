@@ -1,0 +1,508 @@
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+use super::{
+    Finding, HEADER, Outcome, Report, Row, Strictness, Tally, judge, parse_allowlist, report,
+};
+use crate::allowlist::LineNo;
+use crate::scan::{Tree, lexical, scan};
+
+/// A source tree held in memory, so a test states every file it reads.
+struct Memory(BTreeMap<PathBuf, String>);
+
+impl Tree for Memory {
+    fn read(&self, path: &Path) -> Option<String> {
+        self.0.get(&lexical(path)).cloned()
+    }
+
+    fn files(&self, dir: &Path) -> Vec<PathBuf> {
+        self.0
+            .keys()
+            .filter(|path| path.starts_with(dir))
+            .cloned()
+            .collect()
+    }
+
+    fn canonical(&self, path: &Path) -> PathBuf {
+        lexical(path)
+    }
+}
+
+const CRATES: &str = "/w/crates";
+
+/// The report over one crate `demo` whose `src/lib.rs` is `lib`.
+fn run(lib: &str) -> Report {
+    let mut tree = BTreeMap::new();
+    tree.insert(PathBuf::from(CRATES).join("demo/Cargo.toml"), String::new());
+    tree.insert(
+        PathBuf::from(CRATES).join("demo/src/lib.rs"),
+        lib.to_owned(),
+    );
+    let tree = Memory(tree);
+    let scanned = scan(&tree, Path::new(CRATES));
+    assert!(scanned.errors.is_empty(), "{:?}", scanned.errors);
+    report(&tree, &scanned)
+}
+
+/// The refusals, each as the report prints it.
+fn refusals(report: &Report) -> Vec<String> {
+    report.refusals.iter().map(ToString::to_string).collect()
+}
+
+/// A newtype over a `String` with its accessor, in a module of its own.
+const NAME: &str = "pub mod name {\n\
+    pub struct Name(String);\n\
+    impl Name {\n\
+        pub fn as_str(&self) -> &str { &self.0 }\n\
+    }\n\
+}\n\
+use name::Name;\n\
+pub fn store(text: &str) {}\n";
+
+#[test]
+fn an_unwrap_handed_to_a_workspace_fn_is_refused() {
+    let lib = format!("{NAME}pub fn save(name: &Name) {{ store(name.as_str()); }}\n");
+    let report = run(&lib);
+    assert_eq!(
+        refusals(&report),
+        ["demo | src/lib.rs:9 | Name::as_str -> store"]
+    );
+    assert_eq!(report.sites, Tally::new(1));
+}
+
+#[test]
+fn an_unwrap_kept_in_a_binding_is_refused_where_the_binding_reaches_the_workspace() {
+    let lib = format!(
+        "{NAME}pub fn save(name: &Name) {{\n\
+         let text = name.as_str();\n\
+         store(text);\n\
+         }}\n"
+    );
+    assert_eq!(
+        refusals(&run(&lib)),
+        ["demo | src/lib.rs:11 | Name::as_str -> store"]
+    );
+}
+
+#[test]
+fn an_unwrap_handed_to_a_foreign_call_passes() {
+    let lib = format!(
+        "{NAME}pub fn save(name: &Name, out: &mut String) {{\n\
+         out.push_str(name.as_str());\n\
+         std::mem::drop(name.as_str());\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert!(report.ambiguous.is_empty());
+    assert_eq!(report.foreign, Tally::new(2));
+}
+
+#[test]
+fn the_own_impl_and_the_defining_module_of_a_newtype_unwrap_it_freely() {
+    let lib = "pub mod name {\n\
+        pub struct Name(String);\n\
+        impl Name {\n\
+            pub fn as_str(&self) -> &str { &self.0 }\n\
+        }\n\
+        pub fn spell(name: &Name) { super::store(name.as_str()); }\n\
+    }\n\
+    pub fn store(text: &str) {}\n\
+    impl name::Name {\n\
+        pub fn keep(&self) { store(self.as_str()); }\n\
+    }\n";
+    let report = run(lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(report.sites, Tally::new(0));
+}
+
+#[test]
+fn a_method_both_the_workspace_and_std_define_is_ambiguous() {
+    let lib = format!(
+        "{NAME}pub struct Bag;\n\
+         impl Bag {{ pub fn push(&mut self, text: &str) {{}} }}\n\
+         pub fn save(name: &Name) {{\n\
+         let mut bag = make();\n\
+         bag.push(name.as_str());\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    let ambiguous: Vec<String> = report.ambiguous.iter().map(ToString::to_string).collect();
+    assert_eq!(ambiguous, ["demo | src/lib.rs:13 | Name::as_str -> .push"]);
+}
+
+#[test]
+fn a_method_only_the_workspace_defines_is_refused() {
+    let lib = format!(
+        "{NAME}pub struct Bag;\n\
+         impl Bag {{ pub fn keep_text(&mut self, text: &str) {{}} }}\n\
+         pub fn save(name: &Name) {{\n\
+         let mut bag = make();\n\
+         bag.keep_text(name.as_str());\n\
+         }}\n"
+    );
+    assert_eq!(
+        refusals(&run(&lib)),
+        ["demo | src/lib.rs:13 | Name::as_str -> .keep_text"]
+    );
+}
+
+#[test]
+fn test_code_is_not_read() {
+    let lib = format!(
+        "{NAME}#[cfg(test)]\n\
+         mod tests {{\n\
+         fn save(name: &super::Name) {{ super::store(name.as_str()); }}\n\
+         }}\n\
+         #[test]\n\
+         fn saves(name: &Name) {{ store(name.as_str()); }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(report.sites, Tally::new(0));
+}
+
+#[test]
+fn a_receiver_of_another_type_is_no_unwrap() {
+    let lib = format!("{NAME}pub fn save(text: &String) {{ store(text.as_str()); }}\n");
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(report.sites, Tally::new(0));
+}
+
+#[test]
+fn a_std_accessor_on_an_unknown_receiver_is_ambiguous() {
+    let lib = format!(
+        "{NAME}pub fn save() {{\n\
+         let text = make();\n\
+         store(text.as_str());\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(report.ambiguous_receivers(), Tally::new(1));
+}
+
+#[test]
+fn a_newtype_a_macro_family_writes_carries_the_accessors_of_the_macro() {
+    let lib = "macro_rules! define_id {\n\
+        ($name:ident) => {\n\
+            pub struct $name(Uuid);\n\
+            impl $name {\n\
+                pub fn as_bytes(&self) -> &[u8; 16] { self.0.as_bytes() }\n\
+                pub fn is_nil(&self) -> bool { false }\n\
+            }\n\
+        };\n\
+    }\n\
+    pub mod ids { define_id!(DocId); }\n\
+    pub fn keep(bytes: &[u8; 16]) {}\n\
+    pub fn save(id: &ids::DocId) { keep(id.as_bytes()); }\n";
+    assert_eq!(
+        refusals(&run(lib)),
+        ["demo | src/lib.rs:12 | DocId::as_bytes -> keep"]
+    );
+}
+
+#[test]
+fn a_field_of_a_known_struct_types_its_receiver() {
+    let lib = format!(
+        "{NAME}pub struct Doc {{ name: Name }}\n\
+         impl Doc {{ pub fn save(&self) {{ store(self.name.as_str()); }} }}\n"
+    );
+    assert_eq!(
+        refusals(&run(&lib)),
+        ["demo | src/lib.rs:10 | Name::as_str -> store"]
+    );
+}
+
+#[test]
+fn a_public_tuple_field_is_an_unwrap_and_a_private_one_is_not() {
+    let lib = "pub mod key {\n\
+        pub struct Key(pub String);\n\
+        pub struct Seal(String);\n\
+        pub mod inner {\n\
+            pub fn hide(seal: &super::Seal) { crate::store(&seal.0); }\n\
+        }\n\
+    }\n\
+    pub fn store(text: &str) {}\n\
+    pub fn save(key: &key::Key) { store(&key.0); }\n";
+    let report = run(lib);
+    assert_eq!(refusals(&report), ["demo | src/lib.rs:9 | Key::0 -> store"]);
+    assert_eq!(report.sites, Tally::new(1));
+}
+
+#[test]
+fn to_string_is_an_unwrap_when_the_display_reads_a_field() {
+    let lib = "pub mod name {\n\
+        pub struct Name(String);\n\
+        impl std::fmt::Display for Name {\n\
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n\
+                f.write_str(&self.0)\n\
+            }\n\
+        }\n\
+        pub struct Token(String);\n\
+        impl std::fmt::Display for Token {\n\
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {\n\
+                f.write_str(\"[token]\")\n\
+            }\n\
+        }\n\
+    }\n\
+    pub fn store(text: &str) {}\n\
+    pub fn save(name: &name::Name, token: &name::Token) {\n\
+        store(&name.to_string());\n\
+        store(&token.to_string());\n\
+    }\n";
+    assert_eq!(
+        refusals(&run(lib)),
+        ["demo | src/lib.rs:17 | Name::to_string -> store"]
+    );
+}
+
+#[test]
+fn the_tuple_struct_of_a_newtype_is_refused_like_its_new() {
+    let lib = "pub mod offset {\n\
+        pub struct DocOffset(pub u64);\n\
+        impl DocOffset { pub fn new(at: u64) -> Self { Self(at) } }\n\
+        pub struct RunLen(u64);\n\
+        impl RunLen { pub fn get(&self) -> u64 { self.0 } }\n\
+    }\n\
+    use offset::{DocOffset, RunLen};\n\
+    pub fn place(run: &RunLen) {\n\
+        DocOffset::new(run.get());\n\
+        DocOffset(run.get());\n\
+        Some(run.get());\n\
+    }\n";
+    assert_eq!(
+        refusals(&run(lib)),
+        [
+            "demo | src/lib.rs:9 | RunLen::get -> DocOffset::new",
+            "demo | src/lib.rs:10 | RunLen::get -> DocOffset",
+        ]
+    );
+}
+
+#[test]
+fn the_impl_of_a_newtype_unwraps_that_newtype_alone() {
+    let lib = format!(
+        "{NAME}pub mod key {{\n\
+         pub struct Key(String);\n\
+         impl Key {{ pub fn as_str(&self) -> &str {{ &self.0 }} }}\n\
+         }}\n\
+         impl Name {{\n\
+         pub fn mine(&self) {{ store(self.as_str()); }}\n\
+         pub fn theirs(&self, key: &key::Key) {{ store(key.as_str()); }}\n\
+         }}\n"
+    );
+    assert_eq!(
+        refusals(&run(&lib)),
+        ["demo | src/lib.rs:15 | Key::as_str -> store"]
+    );
+}
+
+#[test]
+fn a_conversion_impl_unwraps_the_newtype_it_converts() {
+    let lib = format!(
+        "{NAME}pub struct Label;\n\
+         impl From<Name> for Label {{\n\
+         fn from(name: Name) -> Self {{ store(name.as_str()); Label }}\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(report.sites, Tally::new(0));
+}
+
+#[test]
+fn a_from_impl_into_a_primitive_makes_into_and_from_unwraps() {
+    let lib = "pub mod query {\n\
+        pub struct Query(String);\n\
+        impl From<Query> for String { fn from(q: Query) -> String { q.0 } }\n\
+    }\n\
+    use query::Query;\n\
+    pub fn store(text: &str) {}\n\
+    pub fn save(q: Query, r: Query) {\n\
+        let text: String = q.into();\n\
+        store(&text);\n\
+        store(&String::from(r));\n\
+        store(&make().into());\n\
+    }\n";
+    let report = run(lib);
+    assert_eq!(
+        refusals(&report),
+        [
+            "demo | src/lib.rs:9 | Query::into -> store",
+            "demo | src/lib.rs:10 | Query::from -> store",
+        ]
+    );
+    assert!(report.ambiguous.is_empty());
+}
+
+#[test]
+fn a_hand_written_as_ref_of_bytes_is_an_accessor() {
+    let lib = "pub mod blob {\n\
+        pub struct Blob(Vec<u8>);\n\
+        impl AsRef<[u8]> for Blob { fn as_ref(&self) -> &[u8] { &self.0 } }\n\
+    }\n\
+    pub fn keep(bytes: &[u8]) {}\n\
+    pub fn save(blob: &blob::Blob) { keep(blob.as_ref()); }\n";
+    assert_eq!(
+        refusals(&run(lib)),
+        ["demo | src/lib.rs:6 | Blob::as_ref -> keep"]
+    );
+}
+
+#[test]
+fn an_accessor_many_newtypes_share_is_ambiguous_on_an_untyped_receiver() {
+    let lib = "pub mod units {\n\
+        pub struct A(u32); impl A { pub fn to_usize(self) -> usize { 0 } }\n\
+        pub struct B(u32); impl B { pub fn to_usize(self) -> usize { 0 } }\n\
+        pub struct C(u32); impl C { pub fn to_usize(self) -> usize { 0 } }\n\
+        pub struct D(u32); impl D { pub fn to_usize(self) -> usize { 0 } }\n\
+    }\n\
+    pub fn keep(n: usize) {}\n\
+    pub fn save() { keep(make().to_usize()); }\n";
+    let report = run(lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    let ambiguous: Vec<String> = report.ambiguous.iter().map(ToString::to_string).collect();
+    assert_eq!(ambiguous, ["demo | src/lib.rs:8 | *::to_usize -> keep"]);
+    assert_eq!(report.ambiguous_receivers(), Tally::new(1));
+}
+
+#[test]
+fn an_untyped_receiver_drops_the_site_only_when_every_candidate_is_local() {
+    let lib = "pub mod here {\n\
+        pub struct Mine(u32);\n\
+        impl Mine { pub fn spell(self) -> u32 { self.0 } }\n\
+        pub fn keep(n: u32) {}\n\
+        pub fn save() { keep(make().spell()); }\n\
+    }\n\
+    pub mod there {\n\
+        pub struct Theirs(u32);\n\
+        impl Theirs { pub fn spell_out(self) -> u32 { self.0 } }\n\
+        pub struct Other(u32);\n\
+        impl Other { pub fn spell(self) -> u32 { self.0 } }\n\
+        pub fn keep(n: u32) {}\n\
+        pub fn save() { keep(make().spell_out()); }\n\
+    }\n";
+    let report = run(lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    let ambiguous: Vec<String> = report.ambiguous.iter().map(ToString::to_string).collect();
+    assert_eq!(
+        ambiguous,
+        ["demo | src/lib.rs:5 | Mine|Other::spell -> keep"]
+    );
+}
+
+/// The allowlist text over the header, one line per row.
+fn allowlist(rows: &[&str]) -> String {
+    let mut text = format!("# comment\n{HEADER}\n");
+    for row in rows {
+        text.push_str(row);
+        text.push('\n');
+    }
+    text
+}
+
+#[test]
+fn the_allowlist_names_each_defect_of_its_lines() {
+    let text = "key\treason\n\
+        a\t0\tzero\n\
+        b\tx\tnot a number\n\
+        c\t1\t \n\
+        d\n\
+        e\t1\tfine\n\
+        e\t2\ttwice\n";
+    let errors = parse_allowlist(text).unwrap_err();
+    assert_eq!(
+        errors,
+        [
+            format!("line 1: the header is {HEADER:?}"),
+            "line 2: the count is a whole number above 0".to_owned(),
+            "line 3: the count is a whole number above 0".to_owned(),
+            "line 4: the reason is empty".to_owned(),
+            "line 5: a key, a tab, a count, a tab, then the reason".to_owned(),
+            "line 7: the key is named twice".to_owned(),
+        ]
+    );
+    assert_eq!(
+        parse_allowlist("# only a comment\n").unwrap_err(),
+        [format!("the header {HEADER:?} is missing")]
+    );
+    let rows = parse_allowlist(&allowlist(&["k\t2\tthe reason"])).unwrap();
+    assert_eq!(
+        rows.get("k"),
+        Some(&Row {
+            line: LineNo(3),
+            count: Tally::new(2)
+        })
+    );
+}
+
+/// A report with two sites of one key, `Name::as_str -> store` in `save`.
+fn two_sites() -> (Report, String) {
+    let lib = format!(
+        "{NAME}pub fn save(name: &Name) {{\n\
+         store(name.as_str());\n\
+         store(name.as_str());\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    let key = report.refusals.first().map(Finding::key).unwrap();
+    assert_eq!(report.refusals.len(), 2);
+    assert_eq!(
+        key,
+        "demo | src/lib.rs | crate::save | Name::as_str -> store"
+    );
+    (report, key)
+}
+
+#[test]
+fn report_mode_passes_on_refusals_and_strict_mode_fails() {
+    let (report, _) = two_sites();
+    let empty = allowlist(&[]);
+    let lenient = judge(&report, Some(&empty), Strictness::Report).unwrap();
+    assert_eq!(lenient.outcome, Outcome::Pass);
+    assert_eq!(lenient.unlisted, Tally::new(1));
+    let strict = judge(&report, Some(&empty), Strictness::Strict).unwrap();
+    assert_eq!(strict.outcome, Outcome::Fail);
+}
+
+#[test]
+fn a_missing_or_malformed_allowlist_fails_both_modes() {
+    let (report, _) = two_sites();
+    for strictness in [Strictness::Report, Strictness::Strict] {
+        assert!(judge(&report, None, strictness).is_err());
+        assert!(judge(&report, Some("key\treason\n"), strictness).is_err());
+    }
+}
+
+#[test]
+fn strict_mode_holds_each_line_to_its_count() {
+    let (report, key) = two_sites();
+    let exact = allowlist(&[&format!("{key}\t2\tthe reason")]);
+    let passed = judge(&report, Some(&exact), Strictness::Strict).unwrap();
+    assert_eq!(passed.outcome, Outcome::Pass);
+    assert!(passed.problems.is_empty());
+
+    let short = allowlist(&[&format!("{key}\t1\tthe reason")]);
+    let over = judge(&report, Some(&short), Strictness::Strict).unwrap();
+    assert_eq!(over.outcome, Outcome::Fail);
+    assert_eq!(over.over, Tally::new(1));
+
+    let long = allowlist(&[&format!("{key}\t3\tthe reason")]);
+    let stale = judge(&report, Some(&long), Strictness::Strict).unwrap();
+    assert_eq!(stale.outcome, Outcome::Fail);
+    assert_eq!(stale.stale, Tally::new(1));
+
+    let gone = allowlist(&[&format!("{key}\t2\tthe reason"), "no such key\t1\tgone"]);
+    let judged = judge(&report, Some(&gone), Strictness::Strict).unwrap();
+    assert_eq!(judged.outcome, Outcome::Fail);
+    assert_eq!(judged.stale, Tally::new(1));
+    assert_eq!(
+        judged.problems,
+        ["line 4 allows 1 sites, the report finds 0\n  no such key"]
+    );
+    let lenient = judge(&report, Some(&gone), Strictness::Report).unwrap();
+    assert_eq!(lenient.outcome, Outcome::Pass);
+}

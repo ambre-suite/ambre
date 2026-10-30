@@ -107,7 +107,7 @@ pub(crate) fn stroke_reach(stroke_w: BoardLength, pick: BoardLength) -> BoardLen
 /// The stroke width of a style, as a board length. The style keeps the `f32`
 /// the bus and the document store carry.
 pub(crate) fn stroke_width(style: &ambre_bus::app::toile::ElementStyle) -> BoardLength {
-    BoardLength::from(style.stroke_w)
+    style.stroke_w.widened()
 }
 
 /// A closed path hits on fill; either open or closed also hits within `tol`
@@ -314,7 +314,7 @@ mod tests {
             Rect::new(0.0, 0.0, 100.0, 0.0),
             Affine::IDENTITY,
         );
-        e.style.stroke_w = ambre_bus::app::toile::StyleLength::new(2.0);
+        e.style.stroke_w = ambre_core::StoredBoardLength::new(2.0);
         assert!(hit(&e, Point::new(50.0, 1.0))); // on the line
         assert!(!hit(&e, Point::new(50.0, 40.0))); // far from it
     }
@@ -346,7 +346,7 @@ mod tests {
             Rect::new(0.0, 0.0, 1000.0, 0.0),
             Affine::IDENTITY,
         );
-        e.style.stroke_w = ambre_bus::app::toile::StyleLength::new(0.5);
+        e.style.stroke_w = ambre_core::StoredBoardLength::new(0.5);
         let mut cam = ViewportTransform::default();
         use super::super::viewport::{MAX_ZOOM, MIN_ZOOM};
         for zoom in [MIN_ZOOM.get(), 0.5, 1.0, 4.0, MAX_ZOOM.get()] {

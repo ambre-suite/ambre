@@ -36,8 +36,8 @@ use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};
 /// pressure thus loses no stroke over a field the board never draws.
 #[derive(serde::Deserialize)]
 struct StoredPoint {
-    x: ambre_core::StrokeCoord,
-    y: ambre_core::StrokeCoord,
+    x: ambre_core::StoredBoardLength,
+    y: ambre_core::StoredBoardLength,
     #[serde(deserialize_with = "clamped_pressure")]
     pressure: UnitFraction,
 }
@@ -244,9 +244,9 @@ impl ToileState {
                 DisplayGeom::Path(path_of(em).unwrap_or_default())
             }
             // An image or an embed that names no source paints its placeholder.
-            ElementKind::Image => DisplayGeom::Image(ambre_core::ContentHash(
-                str_of(em, ElementKey::Hash).unwrap_or_default(),
-            )),
+            ElementKind::Image => DisplayGeom::Image(
+                str_of(em, ElementKey::Hash).and_then(|hash| ambre_core::ContentHash::parse(&hash)),
+            ),
             // A peer may have written any text here, so the stored address
             // passes the same check as a typed one (`TOILE-267`).
             ElementKind::Embed => DisplayGeom::Embed(
@@ -469,8 +469,8 @@ mod tests {
         let mut st = ToileState::new();
         let sample = |x: f32| {
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(x),
-                ambre_core::StrokeCoord::new(x),
+                ambre_core::StoredBoardLength::new(x),
+                ambre_core::StoredBoardLength::new(x),
             )
         };
         let id = st

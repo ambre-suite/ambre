@@ -105,7 +105,7 @@ enum Line {
 }
 
 /// The 1-based number of a line in the file, for the error messages.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LineNo(pub(crate) usize);
 
 impl fmt::Display for LineNo {

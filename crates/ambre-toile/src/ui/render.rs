@@ -55,7 +55,7 @@ pub fn missing_media(
         let DisplayNode::Element(de) = node else {
             continue;
         };
-        let DisplayGeom::Image(hash) = &de.geom else {
+        let DisplayGeom::Image(Some(hash)) = &de.geom else {
             continue;
         };
         if images.contains_key(hash) || requested.contains(hash) || out.iter().any(|h| h == hash) {
@@ -617,6 +617,11 @@ fn draw_handle<S: DrawSurface>(surface: &mut S, p: Point, palette: &Palette) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The address that repeats the hex `digit` sixty-four times.
+    fn hh(digit: char) -> ambre_core::ContentHash {
+        ambre_core::ContentHash::parse(&digit.to_string().repeat(64)).expect("a hex digit")
+    }
     use crate::ui::walk::{
         STICKY_INK, STICKY_SHADOW, TextHost, anim_transform, contrast, resolved_text_ink,
         sticky_font_size, sticky_or_style_font_size, style_color,
@@ -1109,23 +1114,23 @@ mod tests {
     fn only_the_unresolved_pictures_are_asked_for() {
         let b = Rect::new(0.0, 0.0, 10.0, 10.0);
         let nodes = vec![
-            elem("a", DisplayGeom::Image("h1".into()), b),
-            elem("b", DisplayGeom::Image("h2".into()), b),
+            elem("a", DisplayGeom::Image(Some(hh('1'))), b),
+            elem("b", DisplayGeom::Image(Some(hh('2'))), b),
             // The same picture twice: one request, not two.
-            elem("c", DisplayGeom::Image("h2".into()), b),
+            elem("c", DisplayGeom::Image(Some(hh('2'))), b),
             // Not a picture: it names no address at all.
             elem("d", DisplayGeom::Rect, b),
         ];
         let mut images = ImageStore::new();
         images.insert(
-            "h1".into(),
+            hh('1'),
             DecodedImage {
                 pixels: vec![0u8; 4].into(),
                 size: ambre_core::ImageSize::new(WholePx::new(1), WholePx::new(1)),
             },
         );
         let asked = missing_media(&nodes, &images, &std::collections::HashSet::new());
-        assert_eq!(asked, vec![ambre_core::ContentHash::from("h2")]);
+        assert_eq!(asked, vec![hh('2')]);
     }
 
     /// A picture already asked for is not asked for again. That stops a
@@ -1134,9 +1139,9 @@ mod tests {
     #[test]
     fn a_pending_request_is_not_repeated() {
         let b = Rect::new(0.0, 0.0, 10.0, 10.0);
-        let nodes = vec![elem("a", DisplayGeom::Image("h1".into()), b)];
+        let nodes = vec![elem("a", DisplayGeom::Image(Some(hh('1'))), b)];
         let mut pending = std::collections::HashSet::new();
-        pending.insert(ambre_core::ContentHash::from("h1"));
+        pending.insert(hh('1'));
         assert!(missing_media(&nodes, &ImageStore::new(), &pending).is_empty());
         // With nothing pending, the same list does ask.
         assert_eq!(
@@ -1145,7 +1150,7 @@ mod tests {
                 &ImageStore::new(),
                 &std::collections::HashSet::new()
             ),
-            vec![ambre_core::ContentHash::from("h1")]
+            vec![hh('1')]
         );
     }
 
@@ -1162,14 +1167,14 @@ mod tests {
             reactions: Default::default(),
             viewport: Default::default(),
             nodes: vec![
-                elem("has", DisplayGeom::Image("h1".into()), bounds),
-                elem("missing", DisplayGeom::Image("h2".into()), bounds),
+                elem("has", DisplayGeom::Image(Some(hh('1'))), bounds),
+                elem("missing", DisplayGeom::Image(Some(hh('2'))), bounds),
             ],
         };
         // Only "h1" is decoded; "h2" is still pending.
         let mut images = ImageStore::new();
         images.insert(
-            "h1".into(),
+            hh('1'),
             DecodedImage {
                 pixels: vec![255u8; 2 * 2 * 4].into(),
                 size: ambre_core::ImageSize::new(WholePx::new(2), WholePx::new(2)),
@@ -2167,7 +2172,7 @@ mod tests {
         };
         let mut pass = Pass::default();
         pass.images.insert(
-            "h".into(),
+            hh('f'),
             DecodedImage {
                 pixels: vec![255u8; 2 * 2 * 4].into(),
                 size: ambre_core::ImageSize::new(WholePx::new(2), WholePx::new(2)),
@@ -2175,8 +2180,8 @@ mod tests {
         );
         pass.anim.insert(tween.id.clone(), tween.clone());
         let vp = board(vec![
-            elem("a", DisplayGeom::Image("h".into()), at_a),
-            elem("b", DisplayGeom::Image("h".into()), at_b),
+            elem("a", DisplayGeom::Image(Some(hh('f'))), at_a),
+            elem("b", DisplayGeom::Image(Some(hh('f'))), at_b),
         ]);
         let surface = paint_pass(&vp, &cam(), &pass);
         let dests: Vec<Rect> = surface

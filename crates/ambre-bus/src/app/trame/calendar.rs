@@ -8,6 +8,11 @@
 //
 // The calendar lives on the bus: a validation rule carries its date bounds
 // across the seam as serials. The view parses the text once, at input.
+//
+// The year and the month live in `ambre-core`, which Prose shares. The day
+// stays here: it runs past either end of its month, as `DATE` reads it.
+
+pub use ambre_core::{Month, Year};
 
 /// Days from the spreadsheet epoch to the Unix epoch, 1970-01-01.
 const UNIX_EPOCH_SERIAL: i64 = 25_569;
@@ -46,9 +51,15 @@ impl DaySerial {
         let mp = (5 * doy + 2) / 153;
         let day = doy - (153 * mp + 2) / 5 + 1;
         let month = if mp < 10 { mp + 3 } else { mp - 9 };
+        debug_assert!(matches!(month, 1..=12), "civil_from_days gives a month");
         DateParts {
-            year: Year(if month <= 2 { y + 1 } else { y }),
-            month: Month(month),
+            year: Year::new(if month <= 2 { y + 1 } else { y }),
+            // The arithmetic keeps the month in 1 to 12; January stands in
+            // for a value it never computes.
+            month: match Month::new(month) {
+                Some(month) => month,
+                None => Month::JANUARY,
+            },
             day: DayOfMonth(day),
         }
     }
@@ -65,44 +76,6 @@ impl DayCount {
     }
 
     /// The count itself.
-    pub const fn get(self) -> i64 {
-        self.0
-    }
-}
-
-/// A proleptic-Gregorian year. Year 0 is 1 BC, and any year reads as one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Year(i64);
-
-impl Year {
-    /// The year `year`.
-    pub const fn new(year: i64) -> Self {
-        Self(year)
-    }
-
-    /// The year itself.
-    pub const fn get(self) -> i64 {
-        self.0
-    }
-}
-
-/// A month of the year, from 1 for January to 12 for December.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Month(i64);
-
-impl Month {
-    /// The month numbered `month`, `None` outside 1 to 12. A count of months
-    /// past either end of a year is a [`MonthCount`], which
-    /// [`DateParts::of_months`] reads.
-    pub const fn new(month: i64) -> Option<Self> {
-        if matches!(month, 1..=12) {
-            Some(Self(month))
-        } else {
-            None
-        }
-    }
-
-    /// The month's number, from 1 to 12.
     pub const fn get(self) -> i64 {
         self.0
     }
@@ -204,16 +177,25 @@ impl DateParts {
     /// `EDATE` read a month out of range. Twelve months after January 2024
     /// is January 2025.
     pub const fn of_months(year: Year, months: MonthCount, day: DayOfMonth) -> Self {
+        debug_assert!(
+            matches!(months.0.rem_euclid(12) + 1, 1..=12),
+            "a remainder of twelve gives a month"
+        );
         Self {
-            year: Year(year.0 + months.0.div_euclid(12)),
-            month: Month(months.0.rem_euclid(12) + 1),
+            year: Year::new(year.get() + months.0.div_euclid(12)),
+            // The remainder keeps the month in 1 to 12. A count of months
+            // past either end of a year is a `MonthCount`.
+            month: match Month::new(months.0.rem_euclid(12) + 1) {
+                Some(month) => month,
+                None => Month::JANUARY,
+            },
             day,
         }
     }
 
     /// The day this date names, after Howard Hinnant's `days_from_civil`.
     pub const fn serial(self) -> DaySerial {
-        let (year, month, day) = (self.year.0, self.month.0, self.day.0);
+        let (year, month, day) = (self.year.get(), self.month.get() as i64, self.day.0);
         let yy = year - if month <= 2 { 1 } else { 0 };
         let era = if yy >= 0 { yy } else { yy - 399 } / 400;
         let yoe = yy - era * 400;
@@ -225,7 +207,11 @@ impl DateParts {
 
     /// The first day of the month after this date's month.
     pub const fn next_month_start(self) -> Self {
-        Self::of_months(self.year, MonthCount(self.month.0), DayOfMonth(1))
+        Self::of_months(
+            self.year,
+            MonthCount(self.month.get() as i64),
+            DayOfMonth(1),
+        )
     }
 }
 
@@ -234,7 +220,7 @@ mod tests {
     use super::*;
 
     const fn date(year: i64, month: i64, day: i64) -> DateParts {
-        DateParts::of_months(Year(year), MonthCount(month - 1), DayOfMonth(day))
+        DateParts::of_months(Year::new(year), MonthCount(month - 1), DayOfMonth(day))
     }
 
     #[test]

@@ -221,6 +221,25 @@
     impl writes as a generic argument of the trait, or as the type it implements for. So
     `impl Add<u32> for Px` and `impl Add<Px> for u32` both take a type at the site.
   * The note of a line describes the value truthfully. A reviewer reads the note as code.
+* **The unwrap report holds the newtype rule inside a body.** The gate reads signatures, so a body
+  can still unwrap a newtype early. `ambre-primitives unwrap` reports each unwrap that a workspace
+  call receives. An unwrap is an accessor of the newtype, a `.0` that is not private, or a
+  `to_string` that prints the content. A conversion into a primitive, `into` or `String::from`,
+  is an unwrap too.
+
+  The module of the newtype is exempt. So is its own impl, and an impl of a conversion trait that
+  names it. Such an impl still refuses the unwrap of any other newtype. The tuple struct of a
+  newtype is a workspace call, as `T::new` is, so the report refuses `DocOffset(run.get())`.
+
+  The report reads no type. On a receiver whose type it knows, an accessor or a callee that std
+  shares is refused. On a receiver it cannot type, that name is ambiguous, never refused. So is an
+  accessor that many newtypes share. The report does not read an `into` on such a receiver, a
+  macro argument, or a closure that returns the unwrap.
+
+  A missing or malformed `specs/1-Foundations/ambre-unwrap.tsv` fails the report, which otherwise
+  exits 0. With `--strict`, it also fails on a refusal key that no line names. Each line carries
+  the count of sites its key allows. A key with more sites fails, and a line with fewer is stale
+  and fails too.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
   Rust is preferred. The workspace lint table forbids `unsafe_code`, and every crate inherits it.
