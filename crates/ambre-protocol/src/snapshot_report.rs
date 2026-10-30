@@ -20,7 +20,9 @@ pub fn report_transcript(
     snapshot_id: SnapshotId,
     author: &PublicKey,
 ) -> SignedTranscript {
-    let mut transcript = Vec::with_capacity(REPORT_DOMAIN.len() + 16 + 16 + 32);
+    // The domain, two UUIDs and one key. The compiler sums the constants, so
+    // the sum cannot overflow at run time.
+    let mut transcript = Vec::with_capacity(const { REPORT_DOMAIN.len() + 16 + 16 + 32 });
     transcript.extend_from_slice(REPORT_DOMAIN);
     transcript.extend_from_slice(document_id.as_uuid().as_bytes());
     transcript.extend_from_slice(snapshot_id.as_uuid().as_bytes());

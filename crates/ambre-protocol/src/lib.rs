@@ -9,6 +9,11 @@
 // No hand-written `unsafe` in this crate (constitution pillar): any future
 // `unsafe` block breaks the build.
 #![forbid(unsafe_code)]
+// A length, count, position or version here comes from the wire or a peer, so
+// an overflow, a wrap or an arithmetic panic is refused. A test asserts by
+// panicking, so the lint stops at its boundary, as the panic lints of
+// `clippy.toml` do (`ARCH-028`).
+#![cfg_attr(not(test), deny(clippy::arithmetic_side_effects))]
 
 pub mod error;
 pub mod key_link;
