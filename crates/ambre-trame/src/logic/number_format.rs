@@ -12,7 +12,7 @@
 // result shows the mistake.
 
 use crate::formula::text::LiteralText;
-use ambre_bus::{CivilDate, DateSerial};
+use ambre_bus::{DateParts, DateSerial};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.
 const MONTHS: [&str; 12] = [
@@ -46,11 +46,11 @@ const DAYS: [&str; 7] = [
 /// order is the one no locale misreads; the document has no locale yet
 /// (`TRAME-110`).
 pub(crate) fn format_date(serial: DateSerial) -> String {
-    let CivilDate {
+    let DateParts {
         year: y,
         month: m,
         day: d,
-    } = serial.day().civil();
+    } = serial.day().parts();
     let (y, m, d) = (y.get(), m.get(), d.get());
     format!("{y:04}-{m:02}-{d:02}")
 }
@@ -412,11 +412,11 @@ fn place_fraction(tokens: &[Token], digits: &str) -> String {
 
 /// Render a date or time section.
 fn render_date(tokens: &[Token], serial: DateSerial) -> String {
-    let CivilDate {
+    let DateParts {
         year: y,
         month: mo,
         day: d,
-    } = serial.day().civil();
+    } = serial.day().parts();
     let (y, mo, d) = (y.get(), mo.get(), d.get());
     let TimeOfDay {
         hours: h,

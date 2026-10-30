@@ -462,7 +462,7 @@ pub(crate) fn date(args: &[CellValue]) -> CellValue {
     let year = if (0..1900).contains(&y) { y + 1900 } else { y };
     // A month past either end of the year carries into it (Excel allows it).
     let serial =
-        CivilDate::of_months(Year::new(year), MonthCount::new(m - 1), DayOfMonth::new(d)).serial();
+        DateParts::of_months(Year::new(year), MonthCount::new(m - 1), DayOfMonth::new(d)).serial();
     CellValue::Number(serial.get() as f64)
 }
 
@@ -478,13 +478,13 @@ pub(crate) fn day(args: &[CellValue]) -> CellValue {
     date_part(args, |date| date.day.get())
 }
 
-pub(crate) fn date_part(args: &[CellValue], pick: fn(CivilDate) -> i64) -> CellValue {
+pub(crate) fn date_part(args: &[CellValue], pick: fn(DateParts) -> i64) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
     match arg(args, ArgIndex::new(0)).as_number() {
         Ok(serial) => {
-            let date = DateSerial::new(serial).day().civil();
+            let date = DateSerial::new(serial).day().parts();
             CellValue::Number(pick(date) as f64)
         }
         Err(_) => CellValue::Error(FormulaError::TypeError),

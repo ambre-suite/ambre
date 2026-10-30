@@ -184,7 +184,7 @@
 | display formula | a cell's text as the formula bar shows it | | `2-Trame/features/ambre-spec-trame-formula-engine.md` |
 | function name | the name a formula calls a built-in function by | | `2-Trame/features/ambre-spec-trame-function-library.md` |
 | date serial | a date held as a count of days, time in the fraction | | `2-Trame/features/ambre-spec-trame-function-library.md` |
-| civil date | a calendar year, month and day | | `2-Trame/features/ambre-spec-trame-function-library.md` |
+| date parts | a year, month and day whose day may pass its month | | `2-Trame/features/ambre-spec-trame-function-library.md` |
 | cell rect | a rectangle of cells, both corners included | | `2-Trame/features/ambre-spec-trame-selection.md` |
 | cell number | a finite number a cell holds, as it crosses the bus | | `2-Trame/features/ambre-spec-trame-status-bar.md` |
 | grid cursor | the pointer shape the grid sets on the canvas | | `2-Trame/features/ambre-spec-trame-resize.md` |

@@ -61,8 +61,8 @@ pub use event::{
 // re-exported flat at the crate root so downstream crates keep `ambre_bus::...`.
 pub use app::trame::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
-    CellStyle, CellValueKind, CivilDate, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta,
-    ColSpan, ColVec, CondFormatId, CondFormatKind, CondFormatPriority, CondStyle, CsvDelimiter,
+    CellStyle, CellValueKind, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan,
+    ColVec, CondFormatId, CondFormatKind, CondFormatPriority, CondStyle, CsvDelimiter, DateParts,
     DateSerial, DayCount, DayOfMonth, DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell,
     EditSessionId, FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, Merge,
     MergeSpan, Month, MonthCount, Percent, Row, RowCount, RowDelta, RowFilter, RowSpan, RowVec,
