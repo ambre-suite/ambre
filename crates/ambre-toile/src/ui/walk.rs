@@ -362,7 +362,7 @@ fn fill_and_stroke<S: DrawSurface>(surface: &mut S, path: &BezPath, style: &Elem
         surface.fill_path(path, &Brush::Solid(style_color(fill, style.opacity)));
     }
     if let Some(stroke) = style.stroke
-        && style.stroke_w > ambre_bus::app::toile::StyleLength::ZERO
+        && style.stroke_w > ambre_core::StoredBoardLength::ZERO
     {
         surface.stroke_path(
             path,
@@ -515,13 +515,16 @@ fn paint_element<S: DrawSurface>(
         // not yet in the store paints a placeholder box until a later frame
         // carries the media. `draw_image` maps through the active element
         // transform, so a rotated image rotates with its box.
-        DisplayGeom::Image(hash) => match images.get(hash) {
-            Some(img) => surface.draw_image(
+        DisplayGeom::Image(hash) => match hash
+            .as_ref()
+            .and_then(|hash| Some((hash, images.get(hash)?)))
+        {
+            Some((hash, img)) => surface.draw_image(
                 &ImageSource {
                     // The media address already identifies these pixels, so the
                     // back end recognises the texture it uploaded on an earlier
                     // frame without hashing the buffer again.
-                    key: ImageKey::from_address(hash.as_str()),
+                    key: ImageKey::from_address(hash),
                     pixels: &img.pixels,
                     size: img.size,
                 },

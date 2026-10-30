@@ -536,7 +536,7 @@ fn an_arrow_carries_its_own_style() {
     let two = create_connector(&mut st);
     let red = ElementStyle {
         stroke: Some(Rgba::from_bits(0xCC22_22FF)),
-        stroke_w: ambre_bus::app::toile::StyleLength::new(6.0),
+        stroke_w: ambre_core::StoredBoardLength::new(6.0),
         ..Default::default()
     };
 
@@ -552,7 +552,7 @@ fn an_arrow_carries_its_own_style() {
     assert_eq!(conn_style(&st, &two).stroke, ElementStyle::default().stroke);
 }
 
-/// The board refuses a restyle whole when it does not hold the arrow.
+/// `TOILE-283`: the board refuses a restyle whole when it does not hold the arrow.
 #[test]
 fn restyling_a_missing_arrow_is_refused() {
     let mut st = ToileState::new();
@@ -568,7 +568,7 @@ fn restyling_a_missing_arrow_is_refused() {
     );
 }
 
-/// A caption written on an arrow comes back on the arrow's display node.
+/// `TOILE-284`: a caption written on an arrow comes back on the arrow's display node.
 #[test]
 fn a_caption_reaches_the_viewport() {
     let mut st = ToileState::new();
@@ -712,12 +712,12 @@ fn commit_stroke_creates_drawing() {
     let out = st.handle_command(ToileCommand::CommitStroke {
         points: vec![
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(0.0),
-                ambre_core::StrokeCoord::new(0.0),
+                ambre_core::StoredBoardLength::new(0.0),
+                ambre_core::StoredBoardLength::new(0.0),
             ),
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(10.0),
-                ambre_core::StrokeCoord::new(5.0),
+                ambre_core::StoredBoardLength::new(10.0),
+                ambre_core::StoredBoardLength::new(5.0),
             ),
         ],
         style: ElementStyle::default(),
@@ -765,6 +765,8 @@ fn selection_stats_empty_ids_span_whole_board() {
     }
 }
 
+/// `TOILE-117`: a tally of zero comes back with no rectangle, here for an empty
+/// list on an empty board.
 #[test]
 fn selection_stats_empty_ids_on_empty_board_is_none() {
     let mut st = ToileState::new();
@@ -1393,6 +1395,8 @@ fn presence_frame(
         .expect("presence broadcasts an ephemeral")
 }
 
+/// `TOILE-286`: the board holds no user id until the session seeds one, and
+/// that id afterwards.
 #[test]
 fn identity_is_seeded_and_read_back() {
     // #1: my_user_id is `None` until SessionReady, then the dispatcher seeds it.
@@ -1412,13 +1416,13 @@ fn a_stroke_in_flight_reaches_the_other_users() {
     let mut drawer = ToileState::new();
     let tail = vec![
         StrokePoint {
-            x: ambre_core::StrokeCoord::new(10.0),
-            y: ambre_core::StrokeCoord::new(10.0),
+            x: ambre_core::StoredBoardLength::new(10.0),
+            y: ambre_core::StoredBoardLength::new(10.0),
             pressure: ambre_bus::app::toile::UnitFraction::HALF,
         },
         StrokePoint {
-            x: ambre_core::StrokeCoord::new(12.0),
-            y: ambre_core::StrokeCoord::new(14.0),
+            x: ambre_core::StoredBoardLength::new(12.0),
+            y: ambre_core::StoredBoardLength::new(14.0),
             pressure: ambre_bus::app::toile::UnitFraction::new(0.6)
                 .expect("a pressure inside 0 ..= 1"),
         },
@@ -1579,6 +1583,8 @@ fn a_departure_message_drops_the_peer_at_once() {
     );
 }
 
+/// `TOILE-287`: a local clock that steps backwards ages no peer out of the
+/// live set.
 #[test]
 fn a_clock_that_steps_backwards_ages_nobody() {
     // The local clock is monotonic: an NTP correction or a suspended tab must
@@ -1640,8 +1646,8 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
         cursor: Some(Point::new(7.0, 8.0)),
         selection: Vec::new(),
         live_stroke: Some(vec![StrokePoint::full_pressure(
-            ambre_core::StrokeCoord::new(1.0),
-            ambre_core::StrokeCoord::new(2.0),
+            ambre_core::StoredBoardLength::new(1.0),
+            ambre_core::StoredBoardLength::new(2.0),
         )]),
         laser: None,
         present_slide: None,
@@ -2242,7 +2248,8 @@ fn deleting_the_target_frame_leaves_the_link() {
     );
 }
 
-/// The board refuses a link whole when it does not hold the target element.
+/// `TOILE-288`: the board refuses a link whole when it does not hold the
+/// target element.
 #[test]
 fn linking_a_missing_element_is_refused() {
     let mut st = ToileState::new();
@@ -2387,11 +2394,11 @@ fn a_member_framed_out_of_its_group_shrinks_the_group() {
     assert_eq!(st.bounds_of(&g), st.bounds_of(&a));
 }
 
-/// `TOILE-056`: reading which container an element belongs to walks no board.
-/// The selection's data names each member's group and frame, and a camera move
-/// derives the visible set, without resolving the element map once.
+/// `TOILE-056`: reading which group or frame an element belongs to walks no
+/// board. The selection's data names each member's group and frame, and a
+/// camera move derives the visible set, without resolving the element map once.
 #[test]
-fn a_container_read_walks_no_board() {
+fn a_parent_read_walks_no_board() {
     let mut st = ToileState::new();
     for i in 0..20 {
         create_rect(
@@ -2418,11 +2425,7 @@ fn a_container_read_walks_no_board() {
         ids: vec![a, b, c.clone()],
     });
     st.handle_command(ToileCommand::SetViewport(wide_viewport()));
-    assert_eq!(
-        st.board_walks(),
-        before,
-        "a container read walked the board"
-    );
+    assert_eq!(st.board_walks(), before, "a parent read walked the board");
     match out.display.as_slice() {
         [
             ToileEvent::SelectionData {
@@ -2531,6 +2534,8 @@ fn a_clamped_membership_change_is_one_undo_item() {
 // Smart Animate snapshot derivation (`toile-presentation`)
 // -----------------------------------------------------------------------------
 
+/// `TOILE-FEAT-110`: a slide's snapshot holds the frame's declared members with
+/// their box, rotation, opacity and fill.
 #[test]
 fn frame_snapshot_captures_declared_children_props() {
     use crate::logic::animate::smart_animate;
@@ -2571,6 +2576,7 @@ fn frame_snapshot_captures_declared_children_props() {
         vec![a.clone(), b.clone()]
     );
     let sa = snap.by_id(&a).expect("a captured");
+    assert_eq!(snap.by_id(&ElementId("absent".to_owned())), None);
     assert_eq!(sa.bounds, Rect::new(10.0, 20.0, 40.0, 60.0));
     assert_eq!(sa.rotation, ambre_core::Radians::new(1.0));
     assert_eq!(sa.opacity.get(), 0.5);
@@ -3182,6 +3188,8 @@ fn resize_updates_bounds() {
     assert_eq!(st.bounds_of(&id), Some(Rect::new(5.0, 5.0, 45.0, 25.0)));
 }
 
+/// `TOILE-285`: re-aiming an arrow at an element the board holds announces no
+/// dangling arrow.
 #[test]
 fn retarget_rebinds_endpoint_without_dangling() {
     let mut st = ToileState::new();
@@ -3514,6 +3522,8 @@ fn slide_change(out: &crate::logic::command::ToileOutcome) -> crate::logic::comm
         .expect("a playback command emits a SlideChanged")
 }
 
+/// `TOILE-FEAT-081`: a slide change carries both slides' snapshots and the
+/// camera target.
 #[test]
 fn slide_change_carries_snapshots_and_fit_rect() {
     // The camera pass needs both frame snapshots + the target rect in one shot,
@@ -3538,6 +3548,8 @@ fn slide_change_carries_snapshots_and_fit_rect() {
     );
 }
 
+/// `TOILE-FEAT-081`: a slide change carries the deck length, the target frame
+/// and its notes.
 #[test]
 fn slide_change_carries_count_frame_and_notes() {
     // The presenter overlay panel (toile-presentation) reads the deck length,
@@ -3576,6 +3588,8 @@ fn slide_change_carries_count_frame_and_notes() {
     );
 }
 
+/// `TOILE-FEAT-111`: entering presentation mode starts from an empty source
+/// snapshot, so the first slide fades in.
 #[test]
 fn enter_present_starts_from_empty_snapshot() {
     // Entering present mode has no source frame: `from` is empty so slide 0 fades
@@ -4750,6 +4764,40 @@ fn a_peers_unsafe_web_address_never_reaches_a_frame() {
             frames.iter().map(|f| &f.url).collect::<Vec<_>>()
         );
     }
+}
+
+/// A hostile peer writes a path traversal as the address of a picture. The
+/// reader's board derives no address from it, so it never reaches the media
+/// URL of the relay, and the picture paints its placeholder.
+#[test]
+fn a_peers_traversal_in_a_picture_address_derives_no_address() {
+    let mut peer = ToileState::new();
+    let hash = ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash");
+    let out = peer.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Image,
+        at: Point::ZERO,
+        size: Size::new(100.0, 100.0),
+        fill: None,
+        content: InitContent::Image(crate::logic::command::MediaRef::Stored(hash)),
+        correlate: None,
+    });
+    let id = created_id(&out);
+    peer.debug_set_element_field(&id, crate::logic::state::ElementKey::Hash, "../documents/X");
+
+    let mut reader = ToileState::new();
+    reader.apply_remote_snapshot(&peer.export_snapshot());
+    let geom = reader
+        .debug_viewport()
+        .nodes
+        .into_iter()
+        .find_map(|n| match n {
+            DisplayNode::Element(e) => Some(e.geom),
+            _ => None,
+        });
+    assert!(
+        matches!(geom, Some(DisplayGeom::Image(None))),
+        "expected a picture with no address, got {geom:?}"
+    );
 }
 
 /// `TOILE-085` and `TOILE-226`: a pasted embed is a second reference to the
@@ -6160,12 +6208,12 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<ambre_core::DeltaByte
         PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
             points: vec![
                 StrokePoint::full_pressure(
-                    ambre_core::StrokeCoord::new(*x as f32),
-                    ambre_core::StrokeCoord::new(*y as f32),
+                    ambre_core::StoredBoardLength::new(*x as f32),
+                    ambre_core::StoredBoardLength::new(*y as f32),
                 ),
                 StrokePoint::full_pressure(
-                    ambre_core::StrokeCoord::new(*x as f32 + 10.0),
-                    ambre_core::StrokeCoord::new(*y as f32 + 5.0),
+                    ambre_core::StoredBoardLength::new(*x as f32 + 10.0),
+                    ambre_core::StoredBoardLength::new(*y as f32 + 5.0),
                 ),
             ],
             style: ElementStyle::default(),
@@ -6829,7 +6877,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: Some(Rgba::from_bits(0xFF00_00FF)),
             stroke: None,
-            stroke_w: ambre_bus::app::toile::StyleLength::new(4.0),
+            stroke_w: ambre_core::StoredBoardLength::new(4.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
             text_color: Some(Rgba::from_bits(0x00FF_00FF)),
             ..ElementStyle::default()
@@ -6840,7 +6888,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: None,
             stroke: Some(Rgba::from_bits(0x0000_FFFF)),
-            stroke_w: ambre_bus::app::toile::StyleLength::new(1.5),
+            stroke_w: ambre_core::StoredBoardLength::new(1.5),
             opacity: ambre_core::Opacity::new(0.25).unwrap(),
             text_color: None,
             ..ElementStyle::default()
@@ -7275,8 +7323,8 @@ fn an_empty_combine_is_refused() {
 
 fn sample(x: f32, y: f32) -> StrokePoint {
     StrokePoint::full_pressure(
-        ambre_core::StrokeCoord::new(x),
-        ambre_core::StrokeCoord::new(y),
+        ambre_core::StoredBoardLength::new(x),
+        ambre_core::StoredBoardLength::new(y),
     )
 }
 

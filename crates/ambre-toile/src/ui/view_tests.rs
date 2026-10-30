@@ -97,11 +97,13 @@ impl Rig {
     }
 
     fn key(&mut self, key: Key, mods: Modifiers) -> bool {
-        self.view.handle_input(&InputEvent::Key { key, mods })
+        self.view
+            .handle_input(&InputEvent::Key { key, mods })
+            .is_yes()
     }
 
     fn input(&mut self, ev: InputEvent) -> bool {
-        self.view.handle_input(&ev)
+        self.view.handle_input(&ev).is_yes()
     }
 
     /// The screen point over the world point (x, y).
@@ -261,6 +263,8 @@ fn a_click_on_a_selected_element_keeps_the_whole_selection() {
     assert_eq!(rig.view.selection, [eid("a"), eid("b")], "the release");
 }
 
+/// `TOILE-UI-031`: a marquee takes the element it covers and leaves the one it
+/// does not.
 #[test]
 fn a_marquee_takes_what_it_covers() {
     let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
@@ -557,6 +561,8 @@ fn escape_leaves_the_scope_and_clears_the_selection_in_one_press() {
     assert_eq!(rig.view.group_scope, None);
 }
 
+/// `TOILE-094`: the ungroup chord sends one command over the whole selection,
+/// so the gesture is one undo item.
 #[test]
 fn the_ungroup_chord_sends_one_command_over_the_selection() {
     let mut rig = Rig::with_stickies(&[("a", A), ("b", B)]);
@@ -1816,42 +1822,49 @@ fn a_finger_pans_only_the_empty_board() {
     assert!(
         rig.view
             .touch_down(pointer(empty.0, empty.1), ambre_bus::PageTime(0.0))
+            .is_yes()
     );
     assert_eq!(rig.view.finger, Some(FingerRole::Pans));
     let centre = rig.view.cam.center;
-    rig.view
+    let _ = rig
+        .view
         .touch_move(pointer(empty.0 - 60.0, empty.1), ambre_bus::PageTime(16.0));
-    rig.view
+    let _ = rig
+        .view
         .touch_move(pointer(empty.0 - 120.0, empty.1), ambre_bus::PageTime(32.0));
     assert!(rig.view.cam.center.x > centre.x, "the finger pans");
-    rig.view.touch_cancel();
+    let _ = rig.view.touch_cancel();
 
     let on_a = rig.screen(50.0, 50.0);
-    rig.view
+    let _ = rig
+        .view
         .touch_down(pointer(on_a.0, on_a.1), ambre_bus::PageTime(100.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
         "an element is grabbed"
     );
-    rig.view
+    let _ = rig
+        .view
         .touch_up(pointer(on_a.0, on_a.1), ambre_bus::PageTime(110.0));
     assert_eq!(rig.view.selection, [eid("a")]);
 
     let (x0, y0) = rig.screen(A.x0, A.y0);
     let (x1, y1) = rig.screen(A.x1, A.y1);
     let knob = crate::ui::tool::rotate_handle_point(Rect::new(x0, y0, x1, y1));
-    rig.view
+    let _ = rig
+        .view
         .touch_down(pointer(knob.x, knob.y), ambre_bus::PageTime(200.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
         "a handle is grabbed"
     );
-    rig.view.touch_cancel();
+    let _ = rig.view.touch_cancel();
 
     rig.view.set_tool(Tool::Pen);
-    rig.view
+    let _ = rig
+        .view
         .touch_down(pointer(empty.0, empty.1), ambre_bus::PageTime(300.0));
     assert_eq!(
         rig.view.finger,
@@ -2476,7 +2489,7 @@ fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
     let b = DisplayElement {
         locked: ambre_bus::app::toile::LockState::Locked,
         style: ElementStyle {
-            stroke_w: ambre_bus::app::toile::StyleLength::new(4.0),
+            stroke_w: ambre_core::StoredBoardLength::new(4.0),
             ..ElementStyle::default()
         },
         ..sticky("b", B)
@@ -2953,18 +2966,19 @@ fn a_dropped_media_request_is_offered_again() {
     rig.view.update();
     let mut picture = sticky("p", Rect::new(0.0, 0.0, 100.0, 100.0));
     picture.kind = ElementKind::Image;
-    picture.geom = ambre_bus::app::toile::DisplayGeom::Image("h".into());
+    let hash = "f".repeat(64);
+    picture.geom = ambre_bus::app::toile::DisplayGeom::Image(ambre_core::ContentHash::parse(&hash));
     rig.show(vec![DisplayNode::Element(picture)]);
     let asks = |sent: &[ToileCommand]| {
         sent.iter()
-            .filter(|c| matches!(c, ToileCommand::RequestMedia { hashes } if hashes.len() == 1 && hashes[0].as_str() == "h"))
+            .filter(|c| matches!(c, ToileCommand::RequestMedia { hashes } if hashes.len() == 1 && hashes[0].as_str() == hash))
             .count()
     };
     assert_eq!(asks(&rig.drain()), 0, "the full queue took the request");
     assert!(rig.view.media_requested.is_empty());
     rig.view.update();
     assert_eq!(asks(&rig.drain()), 1);
-    assert!(rig.view.media_requested.contains("h"));
+    assert!(rig.view.media_requested.contains(hash.as_str()));
     rig.view.update();
     assert_eq!(asks(&rig.drain()), 0, "a request in flight is asked once");
 }

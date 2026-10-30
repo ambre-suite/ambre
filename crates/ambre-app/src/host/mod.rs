@@ -45,7 +45,7 @@ use ambre_canvas::{
 };
 use ambre_chrome::commands::ClipboardWrite;
 use ambre_core::{CanvasId, ViewPoint, ViewPx};
-use ambre_draw::{DrawSurface, Point, Rect, Size};
+use ambre_draw::{Consumed, DrawSurface, Point, Rect, Size};
 use ambre_toile::ui::ToileView;
 use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
 use ambre_trame::ui::TrameView;
@@ -399,8 +399,8 @@ impl AppView {
         }
     }
 
-    /// Handle an input event; returns `true` to `preventDefault()`.
-    fn handle_input(&mut self, ev: &InputEvent) -> bool {
+    /// Handle an input event; `Consumed::Yes` asks for `preventDefault()`.
+    fn handle_input(&mut self, ev: &InputEvent) -> Consumed {
         match self {
             AppView::Trame(v) => v.handle_input(ev),
             AppView::Toile(v) => v.handle_input(ev),
@@ -457,16 +457,16 @@ impl AppView {
     }
 
     /// Text dropped at a canvas point. Only Prose takes it.
-    fn drop_text(&mut self, at: ViewPoint, text: String) -> bool {
+    fn drop_text(&mut self, at: ViewPoint, text: String) -> Consumed {
         match self {
-            AppView::Trame(_) | AppView::Toile(_) | AppView::Murmure(_) => false,
+            AppView::Trame(_) | AppView::Toile(_) | AppView::Murmure(_) => Consumed::No,
             AppView::Prose(v) => v.drop_text(at, text),
         }
     }
 
     /// A finger on the canvas. Every application takes it apart from the
     /// mouse.
-    fn touch(&mut self, phase: TouchPhase, at: ViewPoint, now: ambre_core::PageTime) -> bool {
+    fn touch(&mut self, phase: TouchPhase, at: ViewPoint, now: ambre_core::PageTime) -> Consumed {
         match self {
             AppView::Toile(v) => match phase {
                 TouchPhase::Down => v.touch_down(at, now),
@@ -481,7 +481,7 @@ impl AppView {
                     TouchPhase::Up => v.touch_up(now),
                     TouchPhase::Cancel => v.touch_cancel(),
                 }
-                true
+                Consumed::Yes
             }
             AppView::Prose(v) => v.touch(phase, at, now),
             AppView::Murmure(v) => {
@@ -495,7 +495,7 @@ impl AppView {
                     }
                     TouchPhase::Cancel => v.touch_cancel(),
                 }
-                true
+                Consumed::Yes
             }
         }
     }

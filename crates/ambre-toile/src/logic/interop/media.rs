@@ -46,8 +46,26 @@ struct Entry {
 }
 
 ambre_core::define_tally! {
-    /// How many blobs a media cache holds, or may hold.
+    /// How many blobs a media cache holds.
     pub struct CachedBlobCount;
+}
+
+/// The most blobs a media cache keeps resident. A bound is no tally: it never
+/// counts up, and the cache only compares its tally against it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MediaCacheCapacity(CachedBlobCount);
+
+impl MediaCacheCapacity {
+    /// A bound of `blobs`. A bound of zero becomes one, so a single in-flight
+    /// request always has a slot.
+    pub fn new(blobs: CachedBlobCount) -> Self {
+        Self(blobs.max(CachedBlobCount::new(1)))
+    }
+
+    /// Whether a cache that holds `held` blobs is past this bound.
+    pub fn is_exceeded_by(self, held: CachedBlobCount) -> bool {
+        held > self.0
+    }
 }
 
 /// Bounded, content-addressed LRU cache with placeholder-then-load semantics.
@@ -56,19 +74,17 @@ ambre_core::define_tally! {
 /// never holds plaintext beyond the session -- it lives in Logic-thread memory
 /// only, consistent with the confidentiality posture.
 pub struct MediaCache {
-    /// Never zero, so a single in-flight request always has a slot.
-    capacity: CachedBlobCount,
+    capacity: MediaCacheCapacity,
     entries: HashMap<ContentHash, Entry>,
     /// Access order, least-recently-used at the front, most-recently at the back.
     order: Vec<ContentHash>,
 }
 
 impl MediaCache {
-    /// A cache bounded to `capacity` resident blobs. `capacity` of 0 is coerced
-    /// to 1 so a single in-flight request always has a slot.
-    pub fn new(capacity: CachedBlobCount) -> Self {
+    /// A cache bounded to `capacity` resident blobs.
+    pub fn new(capacity: MediaCacheCapacity) -> Self {
         Self {
-            capacity: capacity.max(CachedBlobCount::new(1)),
+            capacity,
             entries: HashMap::new(),
             order: Vec::new(),
         }
@@ -186,7 +202,7 @@ impl MediaCache {
     /// Drop least-recently-used entries until within capacity, skipping any
     /// `Loading` slot so an in-flight download never resolves into a hole.
     fn evict_if_needed(&mut self) {
-        while self.len() > self.capacity {
+        while self.capacity.is_exceeded_by(self.len()) {
             let victim = self.order.iter().position(|h| {
                 self.entries
                     .get(h)
@@ -210,13 +226,14 @@ impl MediaCache {
 mod tests {
     use super::*;
 
+    /// The hash that repeats the hex digit `s` sixty-four times.
     fn h(s: &str) -> ContentHash {
-        ContentHash(s.to_owned())
+        ContentHash::parse(&s.repeat(64)).expect("a hex digit")
     }
 
     #[test]
     fn first_request_fetches_then_dedups() {
-        let mut cache = MediaCache::new(CachedBlobCount::new(8));
+        let mut cache = MediaCache::new(MediaCacheCapacity::new(CachedBlobCount::new(8)));
         assert_eq!(cache.request(&h("a")), RequestOutcome::Fetch);
         // Second request for the same content does not re-fetch (dedup,).
         assert_eq!(
@@ -232,7 +249,7 @@ mod tests {
 
     #[test]
     fn loading_to_ready_carries_pixels() {
-        let mut cache = MediaCache::new(CachedBlobCount::new(8));
+        let mut cache = MediaCache::new(MediaCacheCapacity::new(CachedBlobCount::new(8)));
         cache.request(&h("a"));
         assert!(
             cache.resolve(&h("a"), vec![1, 2, 3]),
@@ -249,7 +266,7 @@ mod tests {
 
     #[test]
     fn loading_to_failed() {
-        let mut cache = MediaCache::new(CachedBlobCount::new(8));
+        let mut cache = MediaCache::new(MediaCacheCapacity::new(CachedBlobCount::new(8)));
         cache.request(&h("a"));
         cache.fail(&h("a"));
         assert_eq!(cache.state(&h("a")), Some(MediaState::Failed));
@@ -262,7 +279,7 @@ mod tests {
 
     #[test]
     fn lru_evicts_least_recently_used_ready_entry() {
-        let mut cache = MediaCache::new(CachedBlobCount::new(2));
+        let mut cache = MediaCache::new(MediaCacheCapacity::new(CachedBlobCount::new(2)));
         cache.resolve(&h("a"), vec![0]);
         cache.resolve(&h("b"), vec![0]);
         // Touch "a" so "b" becomes least-recently-used.
@@ -277,7 +294,7 @@ mod tests {
 
     #[test]
     fn loading_entries_are_never_evicted() {
-        let mut cache = MediaCache::new(CachedBlobCount::new(1));
+        let mut cache = MediaCache::new(MediaCacheCapacity::new(CachedBlobCount::new(1)));
         cache.request(&h("a")); // in-flight
         cache.request(&h("b")); // in-flight, over capacity but a is Loading
         // Neither in-flight download may be dropped -> capacity exceeded transiently.
@@ -292,7 +309,7 @@ mod tests {
 
     #[test]
     fn capacity_zero_coerced_to_one() {
-        let mut cache = MediaCache::new(CachedBlobCount::ZERO);
+        let mut cache = MediaCache::new(MediaCacheCapacity::new(CachedBlobCount::ZERO));
         cache.resolve(&h("a"), vec![0]);
         assert_eq!(cache.len(), CachedBlobCount::new(1));
     }

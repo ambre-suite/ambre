@@ -45,7 +45,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-268` | `OBS` | Only a single selection MUST carry the resize handles; several elements MUST show their union box alone. | this spec section 3; `features/ambre-spec-toile-selection.md section 3` | `ambre_toile::ui::render::tests::overlay_draws_box_and_handles_for_single_selection` -- the single case, counted as five squares; `ambre_toile::ui::render::tests::several_selected_elements_show_their_union_box_alone` -- one box, the union, and the rotate knob as the only square | none | verified |
 | `TOILE-UI-269` | `OBS` | Every find match in view MUST be outlined. | this spec section 3; `features/ambre-spec-toile-find.md section 1` | `ambre_toile::ui::render::tests::overlay_outlines_visible_find_hits` -- one outline per hit, with both hits on screen; `ambre_toile::ui::render::tests::a_match_out_of_view_gets_no_outline` -- a hit off screen draws nothing | none | verified |
 | `TOILE-UI-357` | `OBS` | The current find match MUST stand out from the rest. | this spec section 3; `features/ambre-spec-toile-find.md section 1` | `ambre_toile::ui::render::tests::the_current_match_is_outlined_apart_from_the_rest` -- the current match in the accent at the heavier width, the others in a softer tint | none | verified |
-| `TOILE-UI-270` | `OBS` | A gesture in flight MUST show its preview above the content, tracking the geometry it will commit. | this spec section 3; `features/ambre-spec-toile-tools.md section 1` | `ambre_toile::ui::render::tests::every_preview_tracks_the_geometry_it_will_commit` -- the marquee, the shapes, the connector, the pen line and the stroke, each at its world geometry | none | verified |
+| `TOILE-UI-270` | `OBS` | A gesture in flight MUST show its preview above the content, tracking the geometry it will commit. | this spec section 3; `features/ambre-spec-toile-tools.md section 1` | `ambre_toile::ui::render::tests::every_preview_tracks_the_geometry_it_will_commit` -- the marquee, the shapes, the connector, the pen line and the stroke, each at its world geometry; `ambre_toile::ui::tool::tests::gesture_overrides_track_resize_move_and_rotate` -- a resize, a move and a rotate in flight each override the geometry they will commit | none | verified |
+| `TOILE-UI-420` | `OBS` | A rounded card and an ellipse MUST paint the outline their geometry defines. | this spec section 3 | `ambre_toile::ui::render::tests::a_rounded_card_keeps_the_shape_of_its_arcs` -- at five radii, the box of kurbo's rounded rectangle and its area to a thousandth; `ambre_toile::ui::render::tests::an_ellipse_keeps_the_shape_of_its_arcs` -- at four sizes, the box of kurbo's ellipse within 0.1 and its area to a thousandth | none | verified |
 
 ### 1.2 Paint one frame
 
@@ -70,7 +71,7 @@ status values are normative in `ambre-spec-template.md`.
   a bench.
 * **Boundary.** none: the walk paints view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. It reads no document and holds no key (`TOILE-UI-001`).
-* **Verification.** 30 `verified`. The walk paints into a recording surface with the shipped font,
+* **Verification.** 31 `verified`. The walk paints into a recording surface with the shipped font,
   so every glyph assertion reads real runs. The order, each arm, the overrides, the overlay and each
   preview are read back from the recorded ops. The repaint plan is driven through the view.
 
@@ -174,7 +175,7 @@ override at all, which is what stops a fade half-way (`TOILE-UI-085`).
   `ambre-spec-budgets.md section 2` have no bench: the board paint at 2 000 elements, the pan and
   zoom latency, the presence overlay. The idle board is a rule with no figure at all.
   The plan is held by host tests that drive the view, not by a timing.
-* **The heavy-path budget is a design, not code.** A pathological path is described as tessellated
+* **The heavy-path plan is a design, not code.** A pathological path is described as tessellated
   across frames behind a bounding-box placeholder, with a cache keyed by geometry and tolerance.
   Nothing caps the work a single frame does, so one dense import can stall it.
 * **The tessellation cache is the canvas layer's, and unmeasured here.** The tolerance bucketing this

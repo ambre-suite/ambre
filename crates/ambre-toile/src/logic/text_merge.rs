@@ -509,7 +509,7 @@ fn backtrack(
 mod tests {
     use super::*;
 
-    /// An edit's debug form prints the insert's length, none of it.
+    /// `TOILE-289`: an edit's debug form prints the insert's length, none of it.
     #[test]
     fn an_edit_debug_form_prints_no_text() {
         let edit = Edit {
@@ -522,6 +522,7 @@ mod tests {
         assert!(form.contains("<10 chars>"), "{form}");
     }
 
+    /// `TOILE-UI-381`: two changes to separate runs of the body both apply.
     #[test]
     fn two_runs_apart_both_apply() {
         assert_eq!(
@@ -534,6 +535,7 @@ mod tests {
         );
     }
 
+    /// `TOILE-UI-381`: two changes inside a long body both apply.
     #[test]
     fn edits_inside_a_long_text_both_apply() {
         let base = "alpha beta gamma delta epsilon";
@@ -545,6 +547,8 @@ mod tests {
         );
     }
 
+    /// `TOILE-UI-381`: a deletion on one side and an insertion elsewhere on the
+    /// other both apply.
     #[test]
     fn a_deletion_and_an_edit_elsewhere_both_apply() {
         assert_eq!(
@@ -553,16 +557,22 @@ mod tests {
         );
     }
 
+    /// `TOILE-UI-381`: where both sides replace one run, the merge keeps both
+    /// words, the peer's first.
     #[test]
     fn a_clash_keeps_both_words_peer_first() {
         assert_eq!(merge_text("red", "pink", "cyan"), "pinkcyan");
     }
 
+    /// `TOILE-UI-401`: a change both sides made the same way lands once in the
+    /// merged body.
     #[test]
     fn the_same_change_on_both_sides_lands_once() {
         assert_eq!(merge_text("a b", "a X b", "a X b c"), "a X b c");
     }
 
+    /// `TOILE-UI-381`: an insertion at the edge of the peer's deletion stays in
+    /// the merged body.
     #[test]
     fn an_insert_at_the_edge_of_a_deletion_survives() {
         assert_eq!(
@@ -571,6 +581,8 @@ mod tests {
         );
     }
 
+    /// `TOILE-UI-381`: when one side did not change the base, the merge gives
+    /// the other side.
     #[test]
     fn an_untouched_side_yields_the_other() {
         assert_eq!(merge_text("x", "x", "y"), "y");
@@ -578,11 +590,14 @@ mod tests {
         assert_eq!(merge_text("x", "y", "y"), "y");
     }
 
+    /// `TOILE-UI-381`: both changes apply to a body with multibyte characters.
     #[test]
     fn multibyte_text_merges_by_character() {
         assert_eq!(merge_text("été", "un été", "été chaud"), "un été chaud");
     }
 
+    /// `TOILE-UI-381`: a change longer than the edit cap still keeps both
+    /// changes.
     #[test]
     fn a_change_past_the_cap_still_keeps_both_changes() {
         let base: String = "ab".repeat(400);
@@ -612,7 +627,7 @@ mod tests {
     }
 
     proptest::proptest! {
-        /// Under the cap the search finds a script, and the shortest one. It
+        /// `TOILE-UI-402`: under the cap the search finds a script, and the shortest one. It
         /// deletes and inserts every character outside a longest common
         /// subsequence, and no other.
         #[test]
@@ -625,7 +640,7 @@ mod tests {
             proptest::prop_assert_eq!(steps.map_or(0, |s| s.len()), shortest);
         }
 
-        /// A diff applied to its base rebuilds the other text exactly, on a
+        /// `TOILE-UI-382`: a diff applied to its base rebuilds the other text exactly, on a
         /// small alphabet, so the texts share many characters.
         #[test]
         fn a_diff_rebuilds_its_target(base in "[abc ]{0,40}", side in "[abc ]{0,40}") {
@@ -638,7 +653,7 @@ mod tests {
             proptest::prop_assert_eq!(rebuilt, side.iter().collect::<String>());
         }
 
-        /// The edits of a merge, replayed on the stored text in order, yield
+        /// `TOILE-UI-382`: the edits of a merge, replayed on the stored text in order, yield
         /// the merged text: what Logic writes is what the view echoes. The
         /// alphabet carries a multibyte character, so a position counted in
         /// bytes fails.

@@ -42,6 +42,7 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 | `TOILE-UI-075` | `OBS` | A peer who leaves the board MUST stop being painted. | this spec section 4 | `ambre_toile::ui::presence::tests::a_peer_absent_from_the_set_stops_being_painted` -- it adopts a two-peer set, then a one-peer set, then an empty one, and counts what each paints | none | verified |
 | `TOILE-UI-076` | `OBS` | A peer's label MUST be the display name their session carries. | this spec section 4 | `ambre_toile::ui::presence::tests::the_label_is_the_name_the_sample_carried` -- the reader, over a name; `ambre_toile::logic::convergence_tests::the_outbound_sample_carries_the_session_display_name` -- the writer. That a label decides neither identity nor colour is `PRESENCE-004` | none | verified |
 | `TOILE-UI-367` | `OBS` | A peer's label MUST fall back to a prefix of their identifier only when they send no display name. | this spec section 4 | `ambre_toile::ui::presence::tests::the_label_is_the_name_the_sample_carried` -- the reader, over an absent name and a blank one | none | verified |
+| `TOILE-287` | `INV` | A local clock that steps backwards MUST NOT age a peer out of the live set. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_clock_that_steps_backwards_ages_nobody` -- a sample lands at a late clock, the next tick reads an earlier one, and the peer is still there | none | verified |
 
 ### 1.2 A peer's sample arrives
 
@@ -53,6 +54,7 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 | `TOILE-UI-376` | `POST` | A sample carrying no laser point MUST clear that peer's trail: a lifted highlighter leaves nothing behind. | this spec section 3 | `ambre_toile::ui::presence::tests::laser_accumulates_a_fading_trail_and_clears_on_lift` -- the segment count after the lift | none | verified |
 | `TOILE-180` | `FRAME` | An arriving sample MUST NOT move this viewer's camera, selection or slide -- unless the viewer follows the sender, which is the one exception (`features/ambre-spec-toile-presentation.md`). | this spec section 3 | `ambre_toile::ui::view::view_tests::an_arriving_sample_keeps_the_camera_and_the_selection`; `ambre_toile::logic::convergence_tests::non_follower_ignores_broadcast` -- the slide stays; `ambre_toile::logic::convergence_tests::following_other_peer_ignores_broadcast`; `ambre_toile::logic::convergence_tests::follower_adopts_presenter_slide` -- the one exception | none | verified |
 | `TOILE-181` | `FAIL` | Given a sample it cannot read, the client MUST drop it and MUST NOT announce anything: presence is best effort, and the next sample corrects it. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_drops_a_malformed_sample` -- no event comes out of a malformed sample | none | verified |
+| `TOILE-UI-403` | `FAIL` | Given a clock that reads no number, a laser segment's alpha MUST stay inside 0 to 1. | this spec section 4 | `ambre_toile::ui::presence::tests::a_laser_alpha_stays_in_range_on_a_nan_clock` -- a NaN sample time and a NaN current time each read as a fresh, opaque segment | none | verified |
 
 ### 1.3 Broadcast this peer's gesture
 
@@ -71,10 +73,10 @@ own half: the board anchor, what the overlay paints, and the trail the receiver 
 * **Boundary.** every presence sample leaves the client, sealed by `ZK-005`: the relay reads
   `document_id`, `pub_key` and `counter` alone. `ambre-sync` resolves the author first, so no peer
   paints a cursor under another name (`SYNC-014`).
-* **Verification.** 28 `verified`. What holds is the round trip: a sample leaves on every gesture
-  and on a heartbeat, carrying the cursor, the selection and the stroke. A peer who leaves goes,
-  and a ghost carries its session's name. The board view holds the screen side: the pass order,
-  the second board, and an arriving sample that moves nothing.
+* **Verification.** 30 `verified`. What holds is the round trip: a sample leaves on every gesture
+  and on a heartbeat, carrying the cursor, the selection and the stroke. A peer who leaves goes, and
+  a ghost carries its session's name. The board view holds the screen side: the pass order, the
+  second board, and an arriving sample that moves nothing.
 
 ---
 

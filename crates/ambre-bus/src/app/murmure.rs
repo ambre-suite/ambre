@@ -267,37 +267,17 @@ impl From<String> for Emoji {
     }
 }
 
-/// The address of a blob, as the Sync worker named it: sixty-four lowercase
-/// hexadecimal characters, keyed by the document key (`ambre-spec-media.md`).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct MediaRef(String);
-
-impl MediaRef {
-    /// The address `word` spells, or `None` for anything else.
-    pub fn parse(word: &str) -> Option<Self> {
-        (word.len() == 64
-            && word
-                .bytes()
-                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
-        .then(|| Self(word.to_owned()))
-    }
-
-    /// The address, as the relay names it.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 // A file's media type is shown and used to open the file, and never sent to
-// the relay (`SYNC-053`). Both types live in `ambre-core`, which the relay's
-// media routes share.
-pub use ambre_core::{ByteSize, MediaType};
+// the relay (`SYNC-053`). The three types live in `ambre-core`, which the
+// relay's media routes share. A message names its file by the address the
+// Sync worker gave it, read back through `ContentHash::parse`.
+pub use ambre_core::{ByteSize, ContentHash, MediaType};
 
 /// A file a message carries: its address, never its bytes (`MURMURE-017`).
 /// `Debug` prints the length of the file's name alone.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Attachment {
-    pub media_ref: MediaRef,
+    pub media_ref: ContentHash,
     /// The file's name, as its author's file system gave it.
     pub name: String,
     pub media_type: MediaType,
@@ -503,11 +483,11 @@ pub enum MurmureCommand {
     /// `meta`. The answer is the `MediaDownloaded` of request `id`.
     FetchFile {
         id: crate::RequestId,
-        media_ref: MediaRef,
+        media_ref: ContentHash,
     },
     /// Fetch the image `media_ref` of a message and decode it for its
     /// preview. The answer is [`MurmureEvent::Picture`].
-    ShowPicture { media_ref: MediaRef },
+    ShowPicture { media_ref: ContentHash },
 }
 
 impl MurmureCommand {
@@ -806,7 +786,7 @@ pub enum MurmureEvent {
     /// `ShowPicture`. `None` when it could not be fetched or decoded: the
     /// view keeps its chip alone.
     Picture {
-        media_ref: MediaRef,
+        media_ref: ContentHash,
         picture: Option<Picture>,
     },
 }
@@ -835,6 +815,34 @@ impl SealedChannelKey {
     /// Wrap the sealed bytes the Sync worker produced.
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
         Self(bytes)
+    }
+
+    /// The catalogue form of one seal: the id of the space key that sealed
+    /// it, the nonce, then the ciphertext and its tag.
+    pub fn from_parts(
+        key_id: ambre_core::KeyId,
+        nonce: &ambre_core::Nonce,
+        ciphertext: &ambre_core::Ciphertext,
+    ) -> Self {
+        let mut bytes = Vec::new();
+        key_id.push_to(&mut bytes);
+        nonce.push_to(&mut bytes);
+        bytes.extend_from_slice(&ciphertext.0);
+        Self(bytes)
+    }
+
+    /// The id of the space key that sealed it. `None` for bytes too short to
+    /// name a key.
+    pub fn key_id(&self) -> Option<ambre_core::KeyId> {
+        ambre_core::KeyId::split_from(&self.0).map(|(key_id, _)| key_id)
+    }
+
+    /// The parts [`Self::from_parts`] joined. `None` for bytes too short to
+    /// hold a key id and a nonce.
+    pub fn split(&self) -> Option<(ambre_core::KeyId, ambre_core::Nonce, ambre_core::Ciphertext)> {
+        let (key_id, rest) = ambre_core::KeyId::split_from(&self.0)?;
+        let (nonce, ciphertext) = ambre_core::Nonce::split_from(rest)?;
+        Some((key_id, nonce, ambre_core::Ciphertext(ciphertext.to_vec())))
     }
 
     /// The sealed bytes, as the catalogue stores them.
@@ -1116,8 +1124,25 @@ pub enum SpaceEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::{MurmureCommand, Topic};
-    use ambre_core::SegmentId;
+    use super::{MurmureCommand, SealedChannelKey, Topic};
+    use ambre_core::{Ciphertext, KeyId, Nonce, SegmentId};
+
+    /// A split gives back the parts a join wrote. Bytes too short to hold a
+    /// key id and a nonce give nothing.
+    #[test]
+    fn a_sealed_channel_key_splits_into_the_parts_it_joined() {
+        let (key_id, nonce) = (KeyId::from_array([3; 16]), Nonce([7; 24]));
+        let ciphertext = Ciphertext(b"sealed".to_vec());
+        let sealed = SealedChannelKey::from_parts(key_id, &nonce, &ciphertext);
+        assert_eq!(sealed.key_id(), Some(key_id));
+        assert_eq!(sealed.split(), Some((key_id, nonce, ciphertext)));
+        let empty = SealedChannelKey::from_parts(key_id, &nonce, &Ciphertext(Vec::new()));
+        assert_eq!(empty.split(), Some((key_id, nonce, Ciphertext(Vec::new()))));
+        let short = SealedChannelKey::from_bytes(vec![3; 39]);
+        assert_eq!(short.key_id(), Some(key_id));
+        assert_eq!(short.split(), None);
+        assert_eq!(SealedChannelKey::from_bytes(vec![3; 15]).key_id(), None);
+    }
 
     /// A retry fetches again what the channel already holds: it writes no
     /// document, so a read-only member sends it too.
@@ -1148,7 +1173,7 @@ mod tests {
     #[test]
     fn a_text_of_a_conversation_prints_its_length_alone() {
         use super::{
-            Attachment, ByteSize, Deletion, MediaRef, MediaType, MessageAt, MessageDraft,
+            Attachment, ByteSize, ContentHash, Deletion, MediaType, MessageAt, MessageDraft,
             MessageView, Revision,
         };
         use ambre_core::{MessageId, Timestamp, UserId};
@@ -1161,7 +1186,7 @@ mod tests {
             styles: Vec::new(),
         };
         let attachment = Attachment {
-            media_ref: MediaRef::parse(&"a".repeat(64)).expect("an address"),
+            media_ref: ContentHash::parse(&"a".repeat(64)).expect("an address"),
             name: secret.to_owned(),
             media_type: MediaType("text/plain".to_owned()),
             size: ByteSize(1),

@@ -28,7 +28,7 @@ use ambre_commands::{ClipboardWrite, FunctionKey, Key, KeyBinding, Modifiers};
 use ambre_core::{CssPx, CssVector, ViewPoint, ViewPx, ViewSize};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::wheel::WheelDeltaMode;
-use ambre_draw::{DrawSurface, FontContext, Point, Rect};
+use ambre_draw::{Consumed, DrawSurface, FontContext, Point, Rect};
 
 use crate::commands::{
     AskedAll, EDIT, EMOJI_KEY, FromThread, MessageAction, MessageTarget, PendingEdit, Writer,
@@ -1067,7 +1067,9 @@ impl MurmureView {
             Some(at) if self.in_composer(at.y) => {
                 if let Some(of) = self.writes_in() {
                     self.composer.press(of, at);
-                    self.composer.release();
+                    // The tap already took the finger; the release only ends
+                    // the drag the press began.
+                    let _ = self.composer.release();
                     self.reads.pipe.focus();
                     self.dirty = Repaint::Due;
                 }
@@ -1648,7 +1650,7 @@ impl MurmureView {
     /// The composer takes the text of the pipe, and a press in its band. Once
     /// it holds the focus, it takes the keys it edits with. Page Up and Page
     /// Down still move the list.
-    pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+    pub fn handle_input(&mut self, ev: &InputEvent) -> Consumed {
         if let Some(consumed) = self.composer_input(ev) {
             self.typed();
             self.dirty = Repaint::Due;
@@ -1696,16 +1698,16 @@ impl MurmureView {
                 if drag == Some(Drag::Moved) {
                     self.selecting.drag = Some(pointer);
                     self.dirty = Repaint::Due;
-                    return false;
+                    return Consumed::No;
                 }
                 if self.on_jump(at) {
                     self.rest_at_latest();
-                    return true;
+                    return Consumed::Yes;
                 }
                 // A click of the main button on a band asks for its segment
                 // again (`MURMURE-513`).
                 if drag == Some(Drag::Held) && self.retry_at(pointer.y) {
-                    return true;
+                    return Consumed::Yes;
                 }
                 // A click that moved nothing may land on a link, which the
                 // next paint finds under it (`MURMURE-567`).
@@ -1732,9 +1734,9 @@ impl MurmureView {
                     Key::ArrowUp => self.move_focus(ListRowDelta::new(-1)),
                     Key::Enter if self.retry_focus() => {}
                     Key::Escape if self.mark_shown_read() || self.close_thread() => {}
-                    _ => return false,
+                    _ => return Consumed::No,
                 }
-                return true;
+                return Consumed::Yes;
             }
             InputEvent::Wheel {
                 delta,
@@ -1746,16 +1748,16 @@ impl MurmureView {
                 let now = (self.reads.now)();
                 let step = self.kinetic.wheel(down(px.dy), delta.mode(), now);
                 self.scroll_by(step);
-                return true;
+                return Consumed::Yes;
             }
             _ => {}
         }
-        false
+        Consumed::No
     }
 
     /// The share of `ev` the composer takes, and whether its default is
     /// prevented. `None` leaves it to the list.
-    fn composer_input(&mut self, ev: &InputEvent) -> Option<bool> {
+    fn composer_input(&mut self, ev: &InputEvent) -> Option<Consumed> {
         let channel = self.writes_in()?;
         match *ev {
             InputEvent::Text { ref text } => self.composer.text(channel, text),
@@ -1786,17 +1788,17 @@ impl MurmureView {
                 if button != PointerButton::Primary {
                     // No message is under the band.
                     (self.reads.act_on)(None);
-                    return Some(false);
+                    return Some(Consumed::No);
                 }
                 self.composer.press(channel, at);
                 // The pipe takes the keys. The press is consumed, so the
                 // canvas does not take the focus back.
                 self.reads.pipe.focus();
             }
-            InputEvent::PointerMove { at } if self.composer.drag_to(channel, at) => {
+            InputEvent::PointerMove { at } if self.composer.drag_to(channel, at).is_yes() => {
                 self.hover = Some(on_screen(at));
             }
-            InputEvent::PointerUp { .. } if self.composer.release() => {}
+            InputEvent::PointerUp { .. } if self.composer.release().is_yes() => {}
             InputEvent::DoubleClick { at } if self.in_composer(at.y) => {
                 self.composer.word_at(channel, at);
             }
@@ -1814,13 +1816,13 @@ impl MurmureView {
                     && let Some(edit) = self.last_own_edit(channel)
                 {
                     self.composer.start_edit(edit);
-                    return Some(true);
+                    return Some(Consumed::Yes);
                 }
                 if pressed.map(|key| KeyBinding::new(mods, key)) == Some(EMOJI_KEY) {
                     (self.reads.ask_emoji)(self.region);
-                    return Some(true);
+                    return Some(Consumed::Yes);
                 }
-                if !pressed.is_some_and(|key| self.composer.key(channel, key, mods)) {
+                if !pressed.is_some_and(|key| self.composer.key(channel, key, mods).is_yes()) {
                     return None;
                 }
                 // The box is drawn, so its turn by Alt+Enter is said
@@ -1836,7 +1838,7 @@ impl MurmureView {
             }
             _ => return None,
         }
-        Some(true)
+        Some(Consumed::Yes)
     }
 
     /// The text a copy or a cut puts on the clipboard. The composer's
@@ -1879,8 +1881,8 @@ mod tests {
 
     use ambre_bus::conduit::local;
     use ambre_bus::{
-        ChannelId, HeldReply, HeldSend, MediaRef, MediaType, Mention, MentionTarget, MessageView,
-        MurmureEvent, StyleMark, TextStyle, Unreadable,
+        ChannelId, ContentHash, HeldReply, HeldSend, MediaType, Mention, MentionTarget,
+        MessageView, MurmureEvent, StyleMark, TextStyle, Unreadable,
     };
     use ambre_canvas::theme;
     use ambre_draw::kinetic::LONG_PRESS;
@@ -2329,18 +2331,21 @@ mod tests {
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
         };
-        assert!(!view.handle_input(&press), "the press is the page's");
+        assert!(
+            !view.handle_input(&press).is_yes(),
+            "the press is the page's"
+        );
         assert!(view.drags_text());
         let (x, y) = up;
         if up != down {
-            view.handle_input(&InputEvent::PointerMove { at: pointer(x, y) });
+            let _ = view.handle_input(&InputEvent::PointerMove { at: pointer(x, y) });
         }
         let release = InputEvent::PointerUp {
             at: pointer(x, y),
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
         };
-        view.handle_input(&release);
+        let _ = view.handle_input(&release);
         assert!(!view.drags_text());
     }
 
@@ -2596,7 +2601,7 @@ mod tests {
             ),
             mods: Modifiers::NONE,
         };
-        page.view.handle_input(&ev)
+        page.view.handle_input(&ev).is_yes()
     }
 
     /// `count` messages of one author, written from `from` on, in one new
@@ -2765,7 +2770,7 @@ mod tests {
     fn key(page: &mut Page, key: Key, mods: Modifiers, now: ambre_core::PageTime) -> bool {
         page.clock.set(now);
         let ev = InputEvent::Key { key, mods };
-        page.view.handle_input(&ev)
+        page.view.handle_input(&ev).is_yes()
     }
 
     /// Page Up rests the list where a wheel step of one page does, through
@@ -2862,7 +2867,10 @@ mod tests {
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
         };
-        assert!(page.view.handle_input(&click), "the click is taken");
+        assert!(
+            page.view.handle_input(&click).is_yes(),
+            "the click is taken"
+        );
         frame(&mut page.view);
         assert_eq!(shown(&page.view).latest_shown, OnScreen::Shown);
 
@@ -3161,7 +3169,7 @@ mod tests {
                 mods: Modifiers::NONE,
             });
             frame_at(view, now);
-            taken
+            taken.is_yes()
         };
         assert!(press(&mut view, Key::ArrowUp, ambre_bus::PageTime(10.0)));
         assert_eq!(view.focused(), row(&replies, 199), "the last reply");
@@ -3255,7 +3263,7 @@ mod tests {
             button,
             mods: Modifiers::NONE,
         };
-        page.view.handle_input(&ev)
+        page.view.handle_input(&ev).is_yes()
     }
 
     /// A channel shown with a band for `cause` at its top, then two messages.
@@ -3311,12 +3319,12 @@ mod tests {
             mods: Modifiers::NONE,
         };
         button(&mut page, PointerButton::Primary, band_y);
-        assert!(page.view.handle_input(&release(band_y)));
+        assert!(page.view.handle_input(&release(band_y)).is_yes());
         assert_eq!(retried(&page), [(channel, older)]);
 
         let message_y = middle_of(&page.view, 1);
         button(&mut page, PointerButton::Primary, message_y);
-        assert!(!page.view.handle_input(&release(message_y)));
+        assert!(!page.view.handle_input(&release(message_y)).is_yes());
         assert!(retried(&page).is_empty(), "a message is no band");
 
         page.view
@@ -3526,7 +3534,7 @@ mod tests {
             key: Key::F(FunctionKey::F10),
             mods: Modifiers::SHIFT,
         };
-        assert!(page.view.handle_input(&shift_f10));
+        assert!(page.view.handle_input(&shift_f10).is_yes());
         assert!(
             !key(
                 &mut page,
@@ -3604,7 +3612,7 @@ mod tests {
         let ev = InputEvent::PointerMove {
             at: pointer(3.0, 4.0),
         };
-        assert!(!page.view.handle_input(&ev));
+        assert!(!page.view.handle_input(&ev).is_yes());
         assert_eq!(page.view.hover(), Some(Point::new(3.0, 4.0)));
         assert_eq!(
             page.view.size(),
@@ -3645,15 +3653,15 @@ mod tests {
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
         };
-        page.view.handle_input(&up);
-        consumed
+        let _ = page.view.handle_input(&up);
+        consumed.is_yes()
     }
 
     fn type_text(page: &mut Page, text: &str) -> bool {
         let ev = InputEvent::Text {
             text: text.to_owned(),
         };
-        page.view.handle_input(&ev)
+        page.view.handle_input(&ev).is_yes()
     }
 
     fn shift_key(page: &mut Page, key: Key) -> bool {
@@ -3661,7 +3669,7 @@ mod tests {
             key,
             mods: Modifiers::SHIFT,
         };
-        page.view.handle_input(&ev)
+        page.view.handle_input(&ev).is_yes()
     }
 
     /// The messages sent since the last call, as text and time.
@@ -3784,7 +3792,7 @@ mod tests {
 
         let evt = RestEvent::MediaUploaded {
             document_id: DocumentId::new(),
-            content_hash: ambre_core::ContentHash(HASH.to_owned()),
+            content_hash: ContentHash::parse(HASH).expect("an address"),
         };
         page.events
             .try_send(UiEvent::Rest { id, evt })
@@ -3847,7 +3855,7 @@ mod tests {
         let id = drop_file(&mut page, channel, "a.png");
         let evt = RestEvent::MediaUploaded {
             document_id: DocumentId::new(),
-            content_hash: ambre_core::ContentHash(HASH.to_owned()),
+            content_hash: ContentHash::parse(HASH).expect("an address"),
         };
         page.events
             .try_send(UiEvent::Rest { id, evt })
@@ -3862,7 +3870,7 @@ mod tests {
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
         };
-        page.view.handle_input(&press);
+        let _ = page.view.handle_input(&press);
         frame_with_fonts(&mut page.view);
         assert!(
             page.view
@@ -3889,7 +3897,7 @@ mod tests {
         let channel = ChannelId::new();
         let mut page = composing(channel);
         let file = Attachment {
-            media_ref: MediaRef::parse(HASH).expect("an address"),
+            media_ref: ContentHash::parse(HASH).expect("an address"),
             name: "a.png".to_owned(),
             media_type: MediaType("image/png".to_owned()),
             size: ByteSize(3),
@@ -3907,7 +3915,7 @@ mod tests {
         assert_eq!((channel_id, media_ref.as_str()), (channel, HASH));
         let evt = RestEvent::MediaDownloaded {
             document_id: DocumentId::new(),
-            content_hash: ambre_core::ContentHash(HASH.to_owned()),
+            content_hash: ContentHash::parse(HASH).expect("an address"),
             data: vec![1, 2, 3].into(),
         };
         page.events
@@ -3935,7 +3943,7 @@ mod tests {
     /// A message of `texts.len()` rows whose first carries an animated image.
     fn gif_list(page: &Page, channel: ChannelId, texts: &[&str]) -> Attachment {
         let file = Attachment {
-            media_ref: MediaRef::parse(HASH).expect("an address"),
+            media_ref: ContentHash::parse(HASH).expect("an address"),
             name: "a.gif".to_owned(),
             media_type: MediaType("image/gif".to_owned()),
             size: ByteSize(3),
@@ -4249,7 +4257,7 @@ mod tests {
     /// A `Ctrl` chord, with Shift when `shift`.
     fn chord(page: &mut Page, key: Key, mods: Modifiers) -> bool {
         let ev = InputEvent::Key { key, mods };
-        page.view.handle_input(&ev)
+        page.view.handle_input(&ev).is_yes()
     }
 
     /// A `Cmd` chord, as macOS reports it: the host folds the command key,
@@ -4261,7 +4269,7 @@ mod tests {
                 .ctrl_if(KeyState::Released)
                 .meta_if(KeyState::Held),
         };
-        page.view.handle_input(&ev)
+        page.view.handle_input(&ev).is_yes()
     }
 
     /// `UI-THREAD-028`: on macOS the composer's chords are the command key's.
@@ -4803,7 +4811,7 @@ mod tests {
             button: PointerButton::Primary,
             mods: Modifiers::NONE,
         };
-        page.view.handle_input(&press);
+        let _ = page.view.handle_input(&press);
         assert!(!page.view.composer().focused(), "the list has it back");
     }
 
@@ -5417,7 +5425,7 @@ mod tests {
             key: Key::Enter,
             mods: Modifiers::ALT,
         };
-        page.view.handle_input(&ev)
+        page.view.handle_input(&ev).is_yes()
     }
 
     /// Alt+Enter in a thread's composer checks the box and sends nothing.

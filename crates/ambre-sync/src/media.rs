@@ -41,7 +41,7 @@ fn open_blob(
     // of the wrapper with no copy. A blob the address refuses is wiped.
     let data = ambre_core::MediaBytes::new(data.into_plaintext());
     if ambre_crypto::commitment::media_address(doc_key, &data) != address {
-        ambre_core::Secret::wipe(data.into_bytes());
+        data.wipe();
         return Err(SyncError::BlobMismatch);
     }
     Ok(data)
@@ -650,7 +650,11 @@ mod tests {
             &self,
             url: &crate::http::RelayUrl,
         ) -> Result<ambre_core::HttpStatus, http::HttpError> {
-            assert!(url.as_str().ends_with("/media/hash"), "{url}");
+            assert!(
+                url.as_str()
+                    .ends_with(&format!("/media/{}", "cd".repeat(32))),
+                "{url}"
+            );
             self.step("delete")?;
             Ok(self.erase_status)
         }
@@ -675,7 +679,8 @@ mod tests {
             let mut http = FakeMedia::new(fail, Vec::new());
             http.erase_status = ambre_core::HttpStatus(status);
             let id = RequestId::next();
-            erase_media(&http, &base(), id, document_id, "hash".into(), &tx, &logic).await;
+            let hash = ambre_core::ContentHash::parse(&"cd".repeat(32)).expect("a hash");
+            erase_media(&http, &base(), id, document_id, hash, &tx, &logic).await;
             let (errors, sent) = answers(&logic_rx, &events);
             if erased {
                 assert!(errors.is_empty(), "{status}");
@@ -886,6 +891,7 @@ mod tests {
             b"other bytes"
         );
         assert!(open_blob(forged, document_id, &wanted, &key).is_err());
-        assert!(open_blob(forged, document_id, &"not hex".into(), &key).is_err());
+        // A text that is no address never reaches the opener: no hash spells it.
+        assert_eq!(ambre_core::ContentHash::parse("not hex"), None);
     }
 }

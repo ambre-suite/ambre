@@ -11,7 +11,7 @@ use std::io::Cursor;
 
 use super::*;
 use ambre_bus::{
-    ChannelId, MediaRef, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent,
+    ChannelId, ContentHash, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent,
 };
 use ambre_core::{ByteSize, ImageSize};
 use image::codecs::gif::GifDecoder;
@@ -42,14 +42,14 @@ impl LogicState {
         &mut self,
         channel_id: ChannelId,
         document_id: DocumentId,
-        media_ref: MediaRef,
+        media_ref: ContentHash,
     ) {
         let asked = (channel_id, media_ref);
         if self.picturing.values().any(|held| *held == asked) {
             return;
         }
         let id = RequestId::next();
-        let content_hash = ambre_core::ContentHash::from(asked.1.as_str());
+        let content_hash = asked.1.clone();
         self.picturing.insert(id, asked);
         self.send_to_sync(SyncCommand::Rest {
             id,
@@ -84,7 +84,12 @@ impl LogicState {
         true
     }
 
-    fn send_picture(&self, channel_id: ChannelId, media_ref: MediaRef, picture: Option<Picture>) {
+    fn send_picture(
+        &self,
+        channel_id: ChannelId,
+        media_ref: ContentHash,
+        picture: Option<Picture>,
+    ) {
         self.send_to_ui(UiEvent::Channel {
             channel_id,
             event: MurmureEvent::Picture { media_ref, picture },

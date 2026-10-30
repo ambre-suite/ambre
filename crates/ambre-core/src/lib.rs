@@ -26,6 +26,7 @@
 /// (`ambre-spec-residency.md`).
 pub mod activity;
 pub mod authorship;
+pub mod calendar;
 pub mod canvas_id;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`].
@@ -98,6 +99,7 @@ pub mod zoom;
 pub use authorship::{
     IdCounter, OpCounter, PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce,
 };
+pub use calendar::{Month, Year};
 pub use canvas_id::CanvasId;
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, InvalidOpacity, Opacity, Rgb, Rgba};
@@ -138,7 +140,8 @@ pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use lang::LangTag;
 pub use link::LinkUrl;
 pub use media::{
-    ByteSize, ContentHash, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress, MediaType,
+    ByteSize, ContentHash, ContentHashError, KnownMediaType, MEDIA_ADDRESS_LEN, MediaAddress,
+    MediaType,
 };
 pub use member_count::{MemberCount, MemberCountError};
 pub use mode::{
@@ -151,8 +154,8 @@ pub use name::{
 pub use object_key::ObjectKey;
 pub use payload::{
     ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic, LoroPayload,
-    LoroPayloadRef, MediaBytes, PickedContainer, PlaintextContainer, RgbaPixels, SealedContainer,
-    SealedPreviousKey, SealedRowBytes, SnapshotBytes, ThumbnailPng,
+    LoroPayloadRef, MediaBytes, PickedContainer, PickedFile, PlaintextContainer, RgbaPixels,
+    SealedContainer, SealedPreviousKey, SealedRowBytes, SnapshotBytes, ThumbnailPng,
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};
@@ -184,7 +187,7 @@ pub use text_offset::{
 };
 pub use unit::{
     BoardLength, CssPoint, CssPx, CssVector, DocPoint, DocPx, ImagePx, ImageSize, Mm, PX_PER_MM,
-    PixelSize, Point, Pt, Radians, Size, StrokeCoord, SurfacePx, Vector, ViewPoint, ViewPx,
+    PixelSize, Point, Pt, Radians, Size, StoredBoardLength, SurfacePx, Vector, ViewPoint, ViewPx,
     ViewSize, ViewSpeed, ViewSpeedVector, ViewVector, WholePx,
 };
 pub use uuid::Uuid;

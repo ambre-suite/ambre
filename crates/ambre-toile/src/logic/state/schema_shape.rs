@@ -63,6 +63,12 @@ use super::{
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../../schema/shapes.txt");
 
+/// The address the sample board's picture and its media entry share. Every
+/// reader checks a stored hash, so the sample spells a real one.
+fn sample_hash() -> ContentHash {
+    ContentHash::parse(&"0".repeat(64)).expect("sixty-four hex digits")
+}
+
 /// The frozen scaffolding identities, one section per `SCHEMA_VERSION`.
 const SCAFFOLD: &str = include_str!("../../../schema/scaffold.txt");
 
@@ -246,9 +252,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
     let style = ElementStyle {
         fill: Some(Rgba::from_bits(0x0203_0401)),
         stroke: Some(Rgba::from_bits(0x0607_0805)),
-        stroke_w: ambre_bus::app::toile::StyleLength::new(1.5),
+        stroke_w: ambre_core::StoredBoardLength::new(1.5),
         opacity: ambre_core::Opacity::new(0.25).unwrap(),
-        corner: ambre_bus::app::toile::StyleLength::new(3.5),
+        corner: ambre_core::StoredBoardLength::new(3.5),
         font: FontSpec {
             family: Some(ambre_bus::app::toile::FontFamily::Other("f".to_owned())),
             size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),
@@ -259,9 +265,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
         },
         shadow: Some(Shadow {
             color: Rgba::from_bits(0x0a0b_0c09),
-            dx: ambre_bus::app::toile::StyleLength::new(11.5),
-            dy: ambre_bus::app::toile::StyleLength::new(12.5),
-            blur: ambre_bus::app::toile::StyleLength::new(13.5),
+            dx: ambre_core::StoredBoardLength::new(11.5),
+            dy: ambre_core::StoredBoardLength::new(12.5),
+            blur: ambre_core::StoredBoardLength::new(13.5),
         }),
         text_color: Some(Rgba::from_bits(0x0e0f_100d)),
     };
@@ -278,8 +284,8 @@ fn postcard_layouts() -> Vec<(String, String)> {
         sizing: Sizing::Fill,
     };
     let points = vec![StrokePoint {
-        x: ambre_core::StrokeCoord::new(1.5),
-        y: ambre_core::StrokeCoord::new(2.5),
+        x: ambre_core::StoredBoardLength::new(1.5),
+        y: ambre_core::StoredBoardLength::new(2.5),
         pressure: ambre_bus::app::toile::UnitFraction::HALF,
     }];
     vec![
@@ -496,7 +502,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         &mut st,
         ElementKind::Image,
         Point::new(0.0, 200.0),
-        InitContent::Image(crate::logic::command::MediaRef::Stored("h".into())),
+        InitContent::Image(crate::logic::command::MediaRef::Stored(sample_hash())),
         None,
     );
     let _embed = create(
@@ -581,12 +587,12 @@ pub(super) fn board_of_every_key() -> ToileState {
     st.handle_command(ToileCommand::CommitStroke {
         points: vec![
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(0.0),
-                ambre_core::StrokeCoord::new(0.0),
+                ambre_core::StoredBoardLength::new(0.0),
+                ambre_core::StoredBoardLength::new(0.0),
             ),
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(1.0),
-                ambre_core::StrokeCoord::new(1.0),
+                ambre_core::StoredBoardLength::new(1.0),
+                ambre_core::StoredBoardLength::new(1.0),
             ),
         ],
         style: ElementStyle::default(),
@@ -656,7 +662,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         )
         .expect("a 1x2 image encodes");
     st.seed_media(&[MediaBlob {
-        media: crate::logic::command::MediaRef::Stored(ContentHash("h".to_owned())),
+        media: crate::logic::command::MediaRef::Stored(sample_hash()),
         plaintext: ambre_core::MediaBytes::new(vec![1]),
         mime: ambre_core::MediaType::from("image/png"),
         size: ambre_core::ImageSize::new(WholePx::new(1), WholePx::new(2)),
@@ -784,6 +790,8 @@ fn every_declared_key_appears_in_the_shape() {
     }
 }
 
+/// `SCHEMA-018`: the shape holds the keys and the types, so a changed value
+/// does not move it.
 #[test]
 fn a_value_changing_leaves_the_shape_alone() {
     let first = board_of_every_key();

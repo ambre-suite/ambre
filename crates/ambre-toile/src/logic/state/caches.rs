@@ -44,10 +44,10 @@ impl ToileState {
                     // Groups and frames name their members; the same pass
                     // indexes them, so the parent lookup costs no walk of its own.
                     if let Some(LoroValue::List(kids)) = fields.get(ElementKey::Children) {
-                        let container = ElementId(key.clone());
+                        let parent = ElementId(key.clone());
                         for kid in kids.iter() {
                             if let LoroValue::String(s) = kid {
-                                self.link_parent(&ElementId(s.to_string()), &container);
+                                self.link_parent(&ElementId(s.to_string()), &parent);
                             }
                         }
                     }
@@ -207,7 +207,7 @@ impl ToileState {
         }
     }
 
-    /// Drop every entry naming `id`, as a member and as a container, once the
+    /// Drop every entry naming `id`, as a member and as a parent, once the
     /// board no longer holds it and no list names it. A peer refreshing the
     /// removed map drops the links its list held, so the two caches agree.
     pub(super) fn forget_links(&mut self, id: &ElementId) {
@@ -226,8 +226,9 @@ impl ToileState {
         }
     }
 
-    /// The containers whose `children` list names `id`, stale ones included.
-    /// A reader filters by kind, which also skips a container since deleted.
+    /// The groups and frames whose `children` list names `id`, stale ones
+    /// included. A reader filters by kind, which also skips a parent since
+    /// deleted.
     pub(super) fn parents_of(&self, id: &ElementId) -> &[ElementId] {
         self.parents.get(id).map_or(&[], Vec::as_slice)
     }
@@ -506,7 +507,7 @@ mod peer_geometry_tests {
     fn a_drag_past_the_world_bound_holds_at_the_bound() {
         let mut st = ToileState::new();
         let id = create(&mut st);
-        let mut nudge = |st: &mut ToileState, dx: f64| {
+        let nudge = |st: &mut ToileState, dx: f64| {
             st.handle_command(ToileCommand::MoveElements {
                 ids: vec![id.clone()],
                 delta: kurbo::Vec2::new(dx, 0.0),

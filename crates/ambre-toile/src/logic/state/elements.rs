@@ -516,13 +516,13 @@ impl ToileState {
         }
         // Drop the id from every list that names it, a frame's as a group's
         // (`TOILE-271`). The removal is a document write, so a peer that
-        // refreshes the container unlinks the id too. The parent cache names
+        // refreshes the list unlinks the id too. The parent cache names
         // each list once per entry, so a list holding the id twice loses both.
         // A deleted frame keeps its members on the board, and the cache drops
         // the links its list held.
         for id in &expanded {
-            for container in self.parents_of(id).to_vec() {
-                self.remove_child(&container, id);
+            for parent in self.parents_of(id).to_vec() {
+                self.remove_child(&parent, id);
             }
             self.forget_links(id);
         }
@@ -780,8 +780,8 @@ mod inner_tests {
         let doc = st.doc.get_deep_value();
         let point = |x: f32| {
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(x),
-                ambre_core::StrokeCoord::new(x),
+                ambre_core::StoredBoardLength::new(x),
+                ambre_core::StoredBoardLength::new(x),
             )
         };
         let commands = [
@@ -949,8 +949,8 @@ mod inner_tests {
         assert_eq!(st.bounds_of(&b).expect("bounds").x0, 0.0);
     }
 
-    /// A group aligns by its own box and carries its subtree, the way a drag
-    /// does.
+    /// `TOILE-053`: a group aligns by its own box and carries its subtree, the
+    /// way a drag does.
     #[test]
     fn a_group_aligns_as_one_box() {
         let mut st = ToileState::new();
@@ -1058,13 +1058,13 @@ mod inner_tests {
         // Seed two members with differing hidden fields, whole (the import path).
         let shadow = ambre_bus::app::toile::Shadow {
             color: Rgba::from_bits(0x0000_0000),
-            dx: ambre_bus::app::toile::StyleLength::new(1.0),
-            dy: ambre_bus::app::toile::StyleLength::new(1.0),
-            blur: ambre_bus::app::toile::StyleLength::new(2.0),
+            dx: ambre_core::StoredBoardLength::new(1.0),
+            dy: ambre_core::StoredBoardLength::new(1.0),
+            blur: ambre_core::StoredBoardLength::new(2.0),
         };
         let style_a = ElementStyle {
             fill: Some(Rgba::from_bits(0xff00_00ff)),
-            corner: ambre_bus::app::toile::StyleLength::new(12.0),
+            corner: ambre_core::StoredBoardLength::new(12.0),
             shadow: Some(shadow),
             font: ambre_bus::app::toile::FontSpec {
                 weight: ambre_core::FontWeight::new(600).unwrap(),
@@ -1074,7 +1074,7 @@ mod inner_tests {
         };
         let style_b = ElementStyle {
             fill: Some(Rgba::from_bits(0x00ff_00ff)),
-            corner: ambre_bus::app::toile::StyleLength::ZERO,
+            corner: ambre_core::StoredBoardLength::ZERO,
             shadow: None,
             font: ambre_bus::app::toile::FontSpec {
                 weight: ambre_core::FontWeight::REGULAR,
@@ -1098,14 +1098,11 @@ mod inner_tests {
         // The hidden fields survive; the shown fill changes on both.
         assert_eq!(
             st.style_of(&a).corner,
-            ambre_bus::app::toile::StyleLength::new(12.0)
+            ambre_core::StoredBoardLength::new(12.0)
         );
         assert!(st.style_of(&a).shadow.is_some());
         assert_eq!(st.style_of(&a).font.weight.get(), 600);
-        assert_eq!(
-            st.style_of(&b).corner,
-            ambre_bus::app::toile::StyleLength::ZERO
-        );
+        assert_eq!(st.style_of(&b).corner, ambre_core::StoredBoardLength::ZERO);
         assert!(st.style_of(&b).shadow.is_none());
         assert_eq!(st.style_of(&b).font.weight, ambre_core::FontWeight::REGULAR);
         assert_eq!(st.style_of(&a).fill, Some(Rgba::from_bits(0x0000_ffff)));

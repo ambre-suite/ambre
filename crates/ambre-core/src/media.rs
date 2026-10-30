@@ -1,7 +1,7 @@
 //! The values that name and measure a media blob.
 //!
-//! Each that travels is `#[serde(transparent)]`. It reads and writes the bare
-//! string or integer the relay exchanges, and changes no byte on the wire.
+//! Each that travels reads and writes the bare string or integer the relay
+//! exchanges, and changes no byte on the wire.
 //! [`MediaAddress`] never travels; its hex spelling does.
 
 use serde::{Deserialize, Serialize};
@@ -9,11 +9,28 @@ use serde::{Deserialize, Serialize};
 /// The content address of a media blob, which the relay stores it under
 /// (`ambre-spec-media.md`). A distinct type, so an element id or a URL never
 /// takes its place.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ContentHash(pub String);
+///
+/// An address is the lowercase hex spelling of a [`MediaAddress`]: sixty-four
+/// characters. [`ContentHash::parse`] and [`MediaAddress::content_hash`] are
+/// the only ways in. Serde reads through the same check, so a peer, the relay
+/// or the store never hands over another text. The serde form is the bare
+/// string, as before the check.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize)]
+#[serde(try_from = "String")]
+pub struct ContentHash(String);
+
+/// A text that spells no content address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("a content hash is sixty-four lowercase hex characters")]
+pub struct ContentHashError;
 
 impl ContentHash {
+    /// The address `word` spells, or `None` for anything else.
+    #[must_use]
+    pub fn parse(word: &str) -> Option<Self> {
+        Self::try_from(word.to_owned()).ok()
+    }
+
     /// The address, as the relay names it.
     pub fn as_str(&self) -> &str {
         &self.0
@@ -70,15 +87,29 @@ impl std::borrow::Borrow<str> for ContentHash {
     }
 }
 
-impl From<&str> for ContentHash {
-    fn from(text: &str) -> Self {
-        Self(text.to_owned())
+/// The one check of a hash, which serde reads through too: sixty-four
+/// lowercase hex characters, the spelling of a [`MediaAddress`]. The text is
+/// kept, never copied.
+impl TryFrom<String> for ContentHash {
+    type Error = ContentHashError;
+
+    fn try_from(text: String) -> Result<Self, Self::Error> {
+        let is_address = text.len() == 2 * MEDIA_ADDRESS_LEN
+            && text
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b));
+        if is_address {
+            Ok(Self(text))
+        } else {
+            Err(ContentHashError)
+        }
     }
 }
 
-impl From<String> for ContentHash {
-    fn from(text: String) -> Self {
-        Self(text)
+/// The bare string, as `#[serde(transparent)]` wrote it.
+impl Serialize for ContentHash {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
     }
 }
 
@@ -220,19 +251,59 @@ mod tests {
         assert_eq!(serde_json::to_string(&ByteSize(7)).unwrap(), "7");
         assert_eq!(ByteSize::from_i64(-1), ByteSize(0));
         assert_eq!(ByteSize(u64::MAX).to_i64_saturating(), i64::MAX);
+        let hex = "ab".repeat(32);
+        let hash = ContentHash::parse(&hex).unwrap();
         assert_eq!(
-            serde_json::to_string(&ContentHash("ab".to_owned())).unwrap(),
-            "\"ab\""
+            serde_json::to_string(&hash).unwrap(),
+            serde_json::to_string(&hex).unwrap()
+        );
+        assert_eq!(
+            postcard::to_allocvec(&hash).unwrap(),
+            postcard::to_allocvec(&hex).unwrap()
         );
     }
 
     #[test]
-    fn an_address_reads_back_from_its_hex_spelling_and_nothing_else_does() {
+    fn an_address_reads_back_from_its_hex_spelling() {
         let address = MediaAddress::from_array([0xab; 32]);
         let hash = address.content_hash();
         assert_eq!(hash.as_str(), "ab".repeat(32));
         assert_eq!(MediaAddress::parse(&hash), Some(address));
-        assert_eq!(MediaAddress::parse(&ContentHash("ab".to_owned())), None);
-        assert_eq!(MediaAddress::parse(&ContentHash("zz".repeat(32))), None);
+    }
+
+    /// The constructor and serde refuse an uppercase spelling and a wrong
+    /// length alike, so no reader takes a text that is no address.
+    #[test]
+    fn a_hash_takes_sixty_four_lowercase_hex_characters_alone() {
+        let hex = "0a".repeat(32);
+        assert_eq!(
+            ContentHash::parse(&hex).map(|hash| hash.as_str().to_owned()),
+            Some(hex.clone())
+        );
+        let refused = [
+            hex.to_uppercase(),
+            hex[1..].to_owned(),
+            format!("{hex}0"),
+            "g".repeat(64),
+            String::new(),
+        ];
+        for text in refused {
+            assert_eq!(ContentHash::parse(&text), None, "{text}");
+            let json = serde_json::to_string(&text).unwrap();
+            assert!(
+                serde_json::from_str::<ContentHash>(&json).is_err(),
+                "{text}"
+            );
+            let bytes = postcard::to_allocvec(&text).unwrap();
+            assert!(
+                postcard::from_bytes::<ContentHash>(&bytes).is_err(),
+                "{text}"
+            );
+        }
+        let json = serde_json::to_string(&hex).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ContentHash>(&json).unwrap().as_str(),
+            hex
+        );
     }
 }

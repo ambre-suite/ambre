@@ -162,7 +162,7 @@ A frame with a rule is painted like a frame without one, because the solve never
 | Only a frame carries a rule | letting a group carry one | it needs a derived box the group does not have: a group is a transform binding with no box of its own, so it has nothing to lay children out inside. Promoting it to a frame is the way to get a rule |
 | The children order is the frame's own list | a separate layout order | it is a second list to keep convergent, and the frame's own list is already the order the author set and the one the paint pass follows |
 | The solver stays in the tree, frozen | removing it | it drops working geometry that is complete, passes, and costs nothing to keep |
-| The solver stays in the tree, frozen | wiring it up and promising it | stabilizing it spends an MVP budget on another product's job |
+| The solver stays in the tree, frozen | wiring it up and promising it | stabilizing it spends MVP time on another product's job |
 | Hug and Fixed are one case for the solver | growing the frame from its children | it makes the frame box an output and the layout a fixed point. The frame box is an input here, so a rule that hugs its content and one that keeps a fixed size place the children identically |
 
 ---

@@ -238,8 +238,8 @@ mod tests {
         assert!(matches!(answer, Err(ToileError::WriteFailed(_))));
     }
 
-    /// The reaction the board actually stores encodes, so the failing arm is
-    /// the only one that carries an error.
+    /// `TOILE-FEAT-064`: the reaction the board actually stores encodes, so the
+    /// failing arm is the only one that carries an error.
     #[test]
     fn a_reaction_encodes() {
         let reaction = Reaction {
