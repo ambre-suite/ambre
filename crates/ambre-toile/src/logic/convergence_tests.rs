@@ -2418,11 +2418,7 @@ fn a_parent_read_walks_no_board() {
         ids: vec![a, b, c.clone()],
     });
     st.handle_command(ToileCommand::SetViewport(wide_viewport()));
-    assert_eq!(
-        st.board_walks(),
-        before,
-        "a parent read walked the board"
-    );
+    assert_eq!(st.board_walks(), before, "a parent read walked the board");
     match out.display.as_slice() {
         [
             ToileEvent::SelectionData {
