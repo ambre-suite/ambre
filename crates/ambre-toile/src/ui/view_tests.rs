@@ -97,11 +97,13 @@ impl Rig {
     }
 
     fn key(&mut self, key: Key, mods: Modifiers) -> bool {
-        self.view.handle_input(&InputEvent::Key { key, mods })
+        self.view
+            .handle_input(&InputEvent::Key { key, mods })
+            .is_yes()
     }
 
     fn input(&mut self, ev: InputEvent) -> bool {
-        self.view.handle_input(&ev)
+        self.view.handle_input(&ev).is_yes()
     }
 
     /// The screen point over the world point (x, y).
@@ -1816,42 +1818,49 @@ fn a_finger_pans_only_the_empty_board() {
     assert!(
         rig.view
             .touch_down(pointer(empty.0, empty.1), ambre_bus::PageTime(0.0))
+            .is_yes()
     );
     assert_eq!(rig.view.finger, Some(FingerRole::Pans));
     let centre = rig.view.cam.center;
-    rig.view
+    let _ = rig
+        .view
         .touch_move(pointer(empty.0 - 60.0, empty.1), ambre_bus::PageTime(16.0));
-    rig.view
+    let _ = rig
+        .view
         .touch_move(pointer(empty.0 - 120.0, empty.1), ambre_bus::PageTime(32.0));
     assert!(rig.view.cam.center.x > centre.x, "the finger pans");
-    rig.view.touch_cancel();
+    let _ = rig.view.touch_cancel();
 
     let on_a = rig.screen(50.0, 50.0);
-    rig.view
+    let _ = rig
+        .view
         .touch_down(pointer(on_a.0, on_a.1), ambre_bus::PageTime(100.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
         "an element is grabbed"
     );
-    rig.view
+    let _ = rig
+        .view
         .touch_up(pointer(on_a.0, on_a.1), ambre_bus::PageTime(110.0));
     assert_eq!(rig.view.selection, [eid("a")]);
 
     let (x0, y0) = rig.screen(A.x0, A.y0);
     let (x1, y1) = rig.screen(A.x1, A.y1);
     let knob = crate::ui::tool::rotate_handle_point(Rect::new(x0, y0, x1, y1));
-    rig.view
+    let _ = rig
+        .view
         .touch_down(pointer(knob.x, knob.y), ambre_bus::PageTime(200.0));
     assert_eq!(
         rig.view.finger,
         Some(FingerRole::ActsAsMouse),
         "a handle is grabbed"
     );
-    rig.view.touch_cancel();
+    let _ = rig.view.touch_cancel();
 
     rig.view.set_tool(Tool::Pen);
-    rig.view
+    let _ = rig
+        .view
         .touch_down(pointer(empty.0, empty.1), ambre_bus::PageTime(300.0));
     assert_eq!(
         rig.view.finger,

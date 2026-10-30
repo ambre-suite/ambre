@@ -403,7 +403,7 @@ impl AppView {
     fn handle_input(&mut self, ev: &InputEvent) -> bool {
         match self {
             AppView::Trame(v) => v.handle_input(ev).is_yes(),
-            AppView::Toile(v) => v.handle_input(ev),
+            AppView::Toile(v) => v.handle_input(ev).is_yes(),
             AppView::Prose(v) => v.handle_input(ev),
             AppView::Murmure(v) => v.handle_input(ev).is_yes(),
         }
@@ -469,10 +469,10 @@ impl AppView {
     fn touch(&mut self, phase: TouchPhase, at: ViewPoint, now: ambre_core::PageTime) -> bool {
         match self {
             AppView::Toile(v) => match phase {
-                TouchPhase::Down => v.touch_down(at, now),
-                TouchPhase::Move => v.touch_move(at, now),
-                TouchPhase::Up => v.touch_up(at, now),
-                TouchPhase::Cancel => v.touch_cancel(),
+                TouchPhase::Down => v.touch_down(at, now).is_yes(),
+                TouchPhase::Move => v.touch_move(at, now).is_yes(),
+                TouchPhase::Up => v.touch_up(at, now).is_yes(),
+                TouchPhase::Cancel => v.touch_cancel().is_yes(),
             },
             AppView::Trame(v) => {
                 match phase {
