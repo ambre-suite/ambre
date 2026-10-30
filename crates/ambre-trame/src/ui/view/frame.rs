@@ -135,8 +135,7 @@ impl TrameView {
                 if let Some(i) = active
                     && let Some(&at) = i.to_index().and_then(|i| matches.get(i))
                 {
-                    // No input event rides this move, so nothing reads the answer.
-                    let _ = self.nav_goto(at, ambre_commands::SelectionMode::Move);
+                    self.nav_goto(at, ambre_commands::SelectionMode::Move);
                 }
             }
             // Wholesale content change: a local snapshot restore (DataReset) or a
@@ -564,7 +563,7 @@ impl TrameView {
                 PendingCommit::Stay => self.commit_edit(),
                 PendingCommit::Nav(dr, dc) => {
                     self.commit_edit();
-                    let _ = self.nav_move(dr, dc, ambre_commands::SelectionMode::Move);
+                    self.nav_move(dr, dc, ambre_commands::SelectionMode::Move);
                 }
             }
         }

@@ -351,10 +351,22 @@ impl TrameView {
                     SelectionMode::Move
                 };
                 match *key {
-                    Key::ArrowUp => self.nav_move(RowDelta::new(-1), ColDelta::ZERO, ext),
-                    Key::ArrowDown => self.nav_move(RowDelta::new(1), ColDelta::ZERO, ext),
-                    Key::ArrowLeft => self.nav_move(RowDelta::ZERO, ColDelta::new(-1), ext),
-                    Key::ArrowRight => self.nav_move(RowDelta::ZERO, ColDelta::new(1), ext),
+                    Key::ArrowUp => {
+                        self.nav_move(RowDelta::new(-1), ColDelta::ZERO, ext);
+                        Consumed::Yes
+                    }
+                    Key::ArrowDown => {
+                        self.nav_move(RowDelta::new(1), ColDelta::ZERO, ext);
+                        Consumed::Yes
+                    }
+                    Key::ArrowLeft => {
+                        self.nav_move(RowDelta::ZERO, ColDelta::new(-1), ext);
+                        Consumed::Yes
+                    }
+                    Key::ArrowRight => {
+                        self.nav_move(RowDelta::ZERO, ColDelta::new(1), ext);
+                        Consumed::Yes
+                    }
                     // Tab / Shift+Tab walk columns; Enter / Shift+Enter walk rows
                     // (convention, `trame-selection`). These always collapse the
                     // selection: Shift is the reverse-direction modifier here, not
@@ -362,11 +374,13 @@ impl TrameView {
                     // moving focus off the canvas.
                     Key::Tab if !mods.primary() => {
                         let step = ColDelta::new(if mods.shift() { -1 } else { 1 });
-                        self.nav_move(RowDelta::ZERO, step, SelectionMode::Move)
+                        self.nav_move(RowDelta::ZERO, step, SelectionMode::Move);
+                        Consumed::Yes
                     }
                     Key::Enter if !mods.primary() => {
                         let step = RowDelta::new(if mods.shift() { -1 } else { 1 });
-                        self.nav_move(step, ColDelta::ZERO, SelectionMode::Move)
+                        self.nav_move(step, ColDelta::ZERO, SelectionMode::Move);
+                        Consumed::Yes
                     }
                     // Page Down / Up move by a full viewport height.
                     Key::PageDown | Key::PageUp => {
@@ -377,12 +391,17 @@ impl TrameView {
                         } else {
                             page
                         };
-                        self.nav_move(step, ColDelta::ZERO, ext)
+                        self.nav_move(step, ColDelta::ZERO, ext);
+                        Consumed::Yes
                     }
                     // Home: column 0 of the row; Ctrl+Home: top-left of the grid.
-                    Key::Home if mods.primary() => self.nav_goto(CellPos::ORIGIN, ext),
+                    Key::Home if mods.primary() => {
+                        self.nav_goto(CellPos::ORIGIN, ext);
+                        Consumed::Yes
+                    }
                     Key::Home => {
-                        self.nav_goto(CellPos::new(self.state.active_row(), Col::ZERO), ext)
+                        self.nav_goto(CellPos::new(self.state.active_row(), Col::ZERO), ext);
+                        Consumed::Yes
                     }
                     // End: last cell with content in the row; Ctrl+End: bottom-right
                     // of the used (cached) range. With Shift the range grows to that
@@ -394,7 +413,8 @@ impl TrameView {
                             .state
                             .last_content_cell()
                             .unwrap_or(self.state.active_cell());
-                        self.nav_goto(at, ext)
+                        self.nav_goto(at, ext);
+                        Consumed::Yes
                     }
                     Key::End => {
                         let row = self.state.active_row();
@@ -402,7 +422,8 @@ impl TrameView {
                             .state
                             .last_content_col(row)
                             .unwrap_or(self.state.active_col());
-                        self.nav_goto(CellPos::new(row, col), ext)
+                        self.nav_goto(CellPos::new(row, col), ext);
+                        Consumed::Yes
                     }
                     // Escape clears the marching-ants clipboard marquee (`trame-clipboard`),
                     // if any; otherwise it is not ours.
@@ -415,7 +436,10 @@ impl TrameView {
                     // the native `cut` clipboard event the host services (`trame-clipboard`).
                     Key::Delete if mods.shift() => Consumed::No,
                     // Delete / Backspace clear the active cell.
-                    Key::Delete | Key::Backspace => self.clear_active_cell(),
+                    Key::Delete | Key::Backspace => {
+                        self.clear_active_cell();
+                        Consumed::Yes
+                    }
                     // F2 opens an editor on the cell's current text.
                     Key::F(FunctionKey::F2) => {
                         let seed = self.cell_seed(self.state.active_cell());
@@ -445,7 +469,7 @@ impl TrameView {
     /// Pan the viewport from a wheel / two-finger touchpad scroll. Pixel deltas
     /// (touchpad, modern mice) accumulate sub-cell residue across events; line
     /// and page deltas are read as pixels first (`KINETIC-015`).
-    /// Returns `true` when consumed (so the page itself doesn't scroll).
+    /// Answers `Consumed::Yes` when it pans, so the page itself doesn't scroll.
     pub(crate) fn handle_wheel(
         &mut self,
         delta: ambre_canvas::WheelDelta,
@@ -548,25 +572,19 @@ impl TrameView {
         self.scroll.cancel();
     }
 
-    /// Move the active cell by `dr` rows and `dc` columns; returns `true`
-    /// (consumed). With `extend` (Shift held) the selection range grows
-    /// instead of collapsing.
-    pub(crate) fn nav_move(
-        &mut self,
-        dr: RowDelta,
-        dc: ColDelta,
-        extend: SelectionMode,
-    ) -> Consumed {
+    /// Move the active cell by `dr` rows and `dc` columns. With `extend`
+    /// (Shift held) the selection range grows instead of collapsing.
+    pub(crate) fn nav_move(&mut self, dr: RowDelta, dc: ColDelta, extend: SelectionMode) {
         let mv = self.state.move_cursor(dr, dc, extend);
-        self.apply_cursor_move(mv)
+        self.apply_cursor_move(mv);
     }
 
     /// Jump the active cell to absolute `at` (Home / End / Ctrl+Home /
-    /// Ctrl+End); returns `true` (consumed). With `extend` the range grows to
-    /// the target (Shift+End, Shift+Ctrl+End...).
-    pub(crate) fn nav_goto(&mut self, at: CellPos, extend: SelectionMode) -> Consumed {
+    /// Ctrl+End). With `extend` the range grows to the target (Shift+End,
+    /// Shift+Ctrl+End...).
+    pub(crate) fn nav_goto(&mut self, at: CellPos, extend: SelectionMode) {
         let mv = self.state.move_to(at, extend);
-        self.apply_cursor_move(mv)
+        self.apply_cursor_move(mv);
     }
 
     /// Build the active-cell report from the current selection, carrying the
@@ -608,8 +626,8 @@ impl TrameView {
     /// Forward a cursor move to Logic and keep the text pipe / a11y in sync.
     /// Shared by relative ([`nav_move`](Self::nav_move)) and absolute
     /// ([`nav_goto`](Self::nav_goto)) navigation. A `None` move (clamped at an
-    /// edge / no change) is a no-op but still reports the key as consumed.
-    pub(crate) fn apply_cursor_move(&mut self, mv: Option<CursorMove>) -> Consumed {
+    /// edge / no change) is a no-op; the key map still consumes its key.
+    pub(crate) fn apply_cursor_move(&mut self, mv: Option<CursorMove>) {
         self.viewport_changed = true;
         if let Some(mv) = mv {
             if let Err(SendError::Refused) = self.send_command_lossless(mv.active) {
@@ -621,14 +639,12 @@ impl TrameView {
             self.park_input_on(self.state.active_cell());
             self.announce_active();
         }
-        Consumed::Yes
     }
 
     /// Clear every selected cell's content (Delete / Backspace in navigation
     /// mode). Forwards one `SetCellsBatch` of empty texts, then empties the
     /// local cache. A refused send leaves the cache as it was (`BUS-018`).
-    /// Returns `true` (consumed).
-    pub(crate) fn clear_active_cell(&mut self) -> Consumed {
+    pub(crate) fn clear_active_cell(&mut self) {
         let cells = self.state.selection.selected_cells();
         // One batch command so the whole clear is a single undo item.
         let batch = cells.iter().map(|&at| (at, String::new())).collect();
@@ -637,14 +653,13 @@ impl TrameView {
             .is_err()
         {
             tracing::error!("Trame: the cell clear was dropped, the cells keep their text");
-            return Consumed::Yes;
+            return;
         }
         for &at in &cells {
             self.state.set_cell_text(at, String::new());
         }
         self.needs_full = true;
         self.announce_active();
-        Consumed::Yes
     }
 
     /// Set `cursor` on `#ambre-canvas` (`trame-resize`, `trame-autofill`);
