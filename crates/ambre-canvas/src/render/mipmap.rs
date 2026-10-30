@@ -16,6 +16,8 @@
 //   stays on screen. So the CPU pays once and no frame pays.
 // ============================================================================
 
+use ambre_core::{ImageSize, RgbaPixels};
+
 /// One level of a mip chain: RGBA8 samples and the dimensions they describe.
 pub struct MipLevel {
     pub pixels: Vec<u8>,
@@ -33,11 +35,13 @@ pub struct MipLevel {
 ///
 /// `pixels` shorter than `width * height * 4` yields no levels at all: a
 /// malformed source is a caller bug the upload path already declines to guess at.
-pub fn build_chain(pixels: &[u8], width: u32, height: u32) -> Vec<MipLevel> {
+pub fn build_chain(pixels: &RgbaPixels, size: ImageSize) -> Vec<MipLevel> {
     let mut out = Vec::new();
+    let (width, height) = (size.width.get(), size.height.get());
     if width == 0 || height == 0 {
         return out;
     }
+    let pixels = pixels.as_bytes();
     if pixels.len() < (width as usize) * (height as usize) * 4 {
         return out;
     }
@@ -59,8 +63,8 @@ pub fn build_chain(pixels: &[u8], width: u32, height: u32) -> Vec<MipLevel> {
 
 /// The number of mip levels wgpu expects for an image of this size, level 0
 /// included -- `floor(log2(max(w, h))) + 1`, and 1 for a degenerate size.
-pub fn level_count(width: u32, height: u32) -> u32 {
-    let longest = width.max(height);
+pub fn level_count(size: ImageSize) -> u32 {
+    let longest = size.width.get().max(size.height.get());
     if longest <= 1 {
         return 1;
     }
@@ -122,6 +126,15 @@ fn reduce(src: &[u8], w: u32, h: u32, nw: u32, nh: u32) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::WholePx;
+
+    fn size(width: u32, height: u32) -> ImageSize {
+        ImageSize::new(WholePx::new(width), WholePx::new(height))
+    }
+
+    fn chain_of(px: Vec<u8>, width: u32, height: u32) -> Vec<MipLevel> {
+        build_chain(&RgbaPixels::new(px), size(width, height))
+    }
 
     /// The chain descends to 1x1 and every step halves (`CANVAS-065`). Without
     /// the full descent a picture zoomed far out samples the smallest level it
@@ -129,11 +142,11 @@ mod tests {
     #[test]
     fn the_chain_halves_down_to_one_texel() {
         let px = vec![128u8; 8 * 8 * 4];
-        let chain = build_chain(&px, 8, 8);
+        let chain = chain_of(px, 8, 8);
         let dims: Vec<(u32, u32)> = chain.iter().map(|l| (l.width, l.height)).collect();
         assert_eq!(dims, vec![(4, 4), (2, 2), (1, 1)]);
         // The chain omits level 0, so it holds one level less than wgpu counts.
-        assert_eq!(chain.len() as u32 + 1, level_count(8, 8));
+        assert_eq!(chain.len() as u32 + 1, level_count(size(8, 8)));
     }
 
     /// A picture is sampled through its chain: linear inside a level and
@@ -158,10 +171,10 @@ mod tests {
     #[test]
     fn a_flat_image_keeps_halving_its_long_axis() {
         let px = vec![0u8; 8 * 2 * 4];
-        let chain = build_chain(&px, 8, 2);
+        let chain = chain_of(px, 8, 2);
         let dims: Vec<(u32, u32)> = chain.iter().map(|l| (l.width, l.height)).collect();
         assert_eq!(dims, vec![(4, 1), (2, 1), (1, 1)]);
-        assert_eq!(chain.len() as u32 + 1, level_count(8, 2));
+        assert_eq!(chain.len() as u32 + 1, level_count(size(8, 2)));
     }
 
     /// A reduced texel is the mean of the four it replaces, per channel. This is
@@ -174,7 +187,7 @@ mod tests {
         let px: Vec<u8> = vec![
             0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255,
         ];
-        let chain = build_chain(&px, 2, 2);
+        let chain = chain_of(px, 2, 2);
         assert_eq!(chain.len(), 1);
         assert_eq!(chain[0].pixels, vec![128, 128, 128, 255]);
     }
@@ -185,7 +198,7 @@ mod tests {
     #[test]
     fn an_odd_dimension_clamps_instead_of_overrunning() {
         let px = vec![200u8; 3 * 4];
-        let chain = build_chain(&px, 3, 1);
+        let chain = chain_of(px, 3, 1);
         let dims: Vec<(u32, u32)> = chain.iter().map(|l| (l.width, l.height)).collect();
         assert_eq!(dims, vec![(1, 1)]);
         assert_eq!(chain[0].pixels, vec![200, 200, 200, 200]);
@@ -196,15 +209,15 @@ mod tests {
     /// in memory.
     #[test]
     fn a_malformed_source_yields_no_levels() {
-        assert!(build_chain(&[0, 1, 2], 2, 2).is_empty());
-        assert!(build_chain(&[], 0, 0).is_empty());
+        assert!(chain_of(vec![0, 1, 2], 2, 2).is_empty());
+        assert!(chain_of(Vec::new(), 0, 0).is_empty());
     }
 
     /// A 1x1 image has one level and nothing below it, so the chain is empty and
     /// the sampler falls back to level 0.
     #[test]
     fn a_single_texel_image_has_no_chain() {
-        assert_eq!(level_count(1, 1), 1);
-        assert!(build_chain(&[1, 2, 3, 4], 1, 1).is_empty());
+        assert_eq!(level_count(size(1, 1)), 1);
+        assert!(chain_of(vec![1, 2, 3, 4], 1, 1).is_empty());
     }
 }
