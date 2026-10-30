@@ -160,12 +160,10 @@ impl LocalByteCount {
     fn in_run(self) -> ByteCount {
         ByteCount::new(self.0)
     }
-}
 
-/// A count of the run's bytes, taken into one segment's text: the bytes are
-/// the same.
-impl From<ByteCount> for LocalByteCount {
-    fn from(count: ByteCount) -> Self {
+    /// A count of the run's bytes, taken into one segment's text: the bytes
+    /// are the same.
+    fn of_run(count: ByteCount) -> Self {
         Self(count.get())
     }
 }
@@ -256,7 +254,7 @@ impl Segment {
 
     /// A byte of the run's text, in the layout's text.
     fn to_local(&self, byte: ByteOffset) -> LocalByte {
-        self.local_start + LocalByteCount::from(byte.count_from(self.start))
+        self.local_start + LocalByteCount::of_run(byte.count_from(self.start))
     }
 
     /// The line of the layout's text, `parley` numbering it.
@@ -1103,10 +1101,10 @@ ambre_core::define_index! {
     pub struct WindowPageVec;
 }
 
-/// A count of the document's pages, taken into the window: the pages are
-/// the same.
-impl From<PageCount> for WindowPageCount {
-    fn from(count: PageCount) -> Self {
+impl WindowPageCount {
+    /// A count of the document's pages, taken into the window: the pages
+    /// are the same.
+    fn of_pages(count: PageCount) -> Self {
         Self::from_len(count.to_usize())
     }
 }
@@ -1295,7 +1293,7 @@ impl ShapedLayout {
 
 /// The place of `page` in a window that starts at `first`, `None` before it.
 fn page_offset(first: PageIndex, page: PageIndex) -> Option<WindowPage> {
-    (page >= first).then(|| WindowPageCount::from(page.count_from(first)).as_end())
+    (page >= first).then(|| WindowPageCount::of_pages(page.count_from(first)).as_end())
 }
 
 /// Every block of `blocks`, by its place in the flow.
