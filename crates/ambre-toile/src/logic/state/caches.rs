@@ -507,7 +507,7 @@ mod peer_geometry_tests {
     fn a_drag_past_the_world_bound_holds_at_the_bound() {
         let mut st = ToileState::new();
         let id = create(&mut st);
-        let mut nudge = |st: &mut ToileState, dx: f64| {
+        let nudge = |st: &mut ToileState, dx: f64| {
             st.handle_command(ToileCommand::MoveElements {
                 ids: vec![id.clone()],
                 delta: kurbo::Vec2::new(dx, 0.0),
