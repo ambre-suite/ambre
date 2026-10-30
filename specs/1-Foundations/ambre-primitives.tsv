@@ -986,6 +986,7 @@ ambre-core | src/status.rs | crate::status | HttpStatus::is_client_error() | ret
 ambre-core | src/status.rs | crate::status | HttpStatus::is_success() | ret | bool	newtype-inner	HttpStatus field or accessor
 ambre-core | src/status.rs | crate::status | SnapshotStatus::as_str() | ret | &'static str	newtype-inner	SnapshotStatus codec / StatusError
 ambre-core | src/status.rs | crate::status | StatusError.0 | field | String	newtype-inner	SnapshotStatus codec / StatusError
+ambre-core | src/text_offset.rs | crate::text_offset | RedactedChars::of(text) | param | &str	free-text	the text a redacted Debug prints by its length alone
 ambre-core | src/text_offset.rs | crate::text_offset | byte_span_to_chars(text) | param | &str	free-text	the text an offset counts into
 ambre-core | src/text_offset.rs | crate::text_offset | byte_to_char(text) | param | &str	free-text	the text an offset counts into
 ambre-core | src/text_offset.rs | crate::text_offset | char_len(text) | param | &str	free-text	the text an offset counts into
@@ -1884,6 +1885,7 @@ ambre-prose | src/layout/run.rs | crate::layout::run | ShapedRun::styled(text) |
 ambre-prose | src/link.rs | crate::link | OpenableScheme::as_str() | ret | &'static str	newtype-inner	the scheme word of a link the host may open, as a URL spells it
 ambre-prose | src/link.rs | crate::link | OpenableScheme::parse(word) | param | &str	newtype-inner	a link's scheme word, case folded; any word outside the closed set opens nothing
 ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	whether a link's target may be handed to the host to open
+ambre-prose | src/link.rs | crate::link | within_href_max() | ret | bool	generic	whether a link's target fits the cap a copy or an export writes
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	generic	the carrier a band field occupies in a band's text, doc::CARRIER
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	whether every live parentage is one the nesting table declares, read after a merge
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
@@ -2495,6 +2497,10 @@ ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_r
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::note_undecodable(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::notes_change(before) | param | &Option<(FrameId,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | waits_for_import() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <ConnectorKey as EntrySchema>::key() | ret | &str	foreign-api	a connector id as the Loro connectors map keys its entry
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <ElementKey as EntrySchema>::key() | ret | &str	foreign-api	an element id as the Loro elements map keys its entry
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <ThreadKey as EntrySchema>::key() | ret | &str	foreign-api	a thread id as the Loro comments map keys its entry
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | EntrySchema::key() | ret | &str	foreign-api	an entry id as its root's Loro map keys the entry
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | REACTION_SEPARATOR | const | char	generic	the character ReactionKey writes between the target and the user of a reactions map key
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey.0 | field | String	newtype-inner	the reactions map key ReactionKey types
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::as_str() | ret | &str	newtype-inner	the accessor of ReactionKey, read by the Loro call that reads or writes the key
