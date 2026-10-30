@@ -642,6 +642,32 @@ fn mid_refuses_a_start_below_one_and_a_negative_length() {
     assert!(refused(&[txt("abc"), num(1.0), num(f64::NAN)]));
 }
 
+/// LEFT and RIGHT read their count as MID does. A blank is 0, a numeric text
+/// its number, and an error passes through (`TRAME-253`, `TRAME-254`). A
+/// count out of domain is `#NUM!`. A blank or an error read as the default 1.
+#[test]
+fn left_and_right_read_their_count_as_mid_does() {
+    let div = CellValue::Error(FormulaError::DivisionByZero);
+    for f in [left, right] {
+        assert_eq!(f(&[txt("abc"), CellValue::Empty]).to_display(), "");
+        assert_eq!(f(&[txt("abc"), txt("2")]).to_display().chars().count(), 2);
+        assert!(matches!(
+            f(&[txt("abc"), div.clone()]),
+            CellValue::Error(FormulaError::DivisionByZero)
+        ));
+        assert!(matches!(
+            f(&[txt("abc"), txt("x")]),
+            CellValue::Error(FormulaError::TypeError)
+        ));
+        for out in [num(-1.0), num(f64::NAN)] {
+            assert!(matches!(
+                f(&[txt("abc"), out]),
+                CellValue::Error(FormulaError::NumError)
+            ));
+        }
+    }
+}
+
 /// MID reads a blank count as 0 and a numeric text as its number, as Excel
 /// does (`TRAME-250`).
 #[test]
