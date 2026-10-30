@@ -274,12 +274,6 @@ ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayCount::
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth.0 | field | i64	newtype-inner	the number a calendar part wraps
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth::get() | ret | i64	newtype-inner	the number a calendar part wraps
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth::new(day) | param | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Month.0 | field | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Month::get() | ret | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Month::new(month) | param | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Year.0 | field | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Year::get() | ret | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Year::new(year) | param | i64	newtype-inner	the number a calendar part wraps
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.raw | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload::to_tsv() | ret | String	generic	TSV rendering of the payload
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
@@ -734,6 +728,12 @@ ambre-core | src/authorship.rs | crate::authorship | PeerKey::as_str() | ret | &
 ambre-core | src/authorship.rs | crate::authorship | SESSION_NONCE_LEN | const | usize	generic	length of the [u8;N] session nonce array; other crates read it only as an array length (an array literal, a const generic) and frame the nonce with SessionNonce::SIZE and SessionNonce::split_from
 ambre-core | src/authorship.rs | crate::authorship | SessionNonce.0 | field | [u8;SESSION_NONCE_LEN]	newtype-inner	PeerId/SessionNonce newtype
 ambre-core | src/authorship.rs | crate::authorship | PeerEntryBytes::into_bytes() | ret | Vec<u8>	newtype-inner	The bytes of a PeerEntryBytes, handed to the LoroMap insert of a document registry.
+ambre-core | src/calendar.rs | crate::calendar | Month.0 | field | u8	newtype-inner	a month of the year, 1 to 12
+ambre-core | src/calendar.rs | crate::calendar | Month::get() | ret | u8	newtype-inner	a month of the year, 1 to 12, for a date count or the text a date prints
+ambre-core | src/calendar.rs | crate::calendar | Month::new(month) | param | i64	newtype-inner	a candidate month of the year, refused outside 1 to 12
+ambre-core | src/calendar.rs | crate::calendar | Year.0 | field | i64	newtype-inner	a year of the proleptic Gregorian calendar
+ambre-core | src/calendar.rs | crate::calendar | Year::get() | ret | i64	newtype-inner	a year of the proleptic Gregorian calendar, for a date count or the text a date prints
+ambre-core | src/calendar.rs | crate::calendar | Year::new(year) | param | i64	newtype-inner	a year of the proleptic Gregorian calendar
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId.0 | field | &'static str	newtype-inner	CanvasId newtype
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId::as_str() | ret | &'static str	newtype-inner	CanvasId newtype
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId::new(id) | param | &'static str	newtype-inner	CanvasId newtype
@@ -3038,13 +3038,6 @@ ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conve
 ambre-prose | src/band.rs | crate::band | Day.0 | field | u8	newtype-inner	a day of the month, 1 to 31
 ambre-prose | src/band.rs | crate::band | Day::get() | ret | u8	newtype-inner	a day of the month, 1 to 31, for the text a date prints
 ambre-prose | src/band.rs | crate::band | Day::new(value) | param | u32	newtype-inner	a candidate day of the month, refused outside 1 to 31
-ambre-prose | src/band.rs | crate::band | Month.0 | field | u8	newtype-inner	a month of the year, 1 to 12
-ambre-prose | src/band.rs | crate::band | Month::get() | ret | u8	newtype-inner	a month of the year, 1 to 12, for the text a date prints
-ambre-prose | src/band.rs | crate::band | Month::index() | ret | usize	local	the place of the month in the twelve names of one language, read by one get
-ambre-prose | src/band.rs | crate::band | Month::new(value) | param | u32	newtype-inner	a candidate month of the year, refused outside 1 to 12
-ambre-prose | src/band.rs | crate::band | Year.0 | field | i64	newtype-inner	a year of the proleptic Gregorian calendar
-ambre-prose | src/band.rs | crate::band | Year::get() | ret | i64	newtype-inner	a year of the proleptic Gregorian calendar, for the text a date prints
-ambre-prose | src/band.rs | crate::band | Year::new(value) | param | i64	newtype-inner	a year of the proleptic Gregorian calendar
 ambre-core | src/unit.rs | crate::unit | Radians::to_degrees() | ret | f64	newtype-inner	the angle unwrapped in degrees, for a writer whose format takes degrees
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate.0 | field | f64	newtype-inner	the log-zoom rate per wheel pixel
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate::factor() | ret | f64	math	relative zoom factor, not an absolute zoom: the argument of ViewportTransform::zoom_about

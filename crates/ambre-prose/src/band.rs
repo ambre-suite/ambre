@@ -6,7 +6,7 @@
 //! read, so every reader resolves one date (`PROSE-FEAT-066`). Nothing here
 //! writes to the document.
 
-use ambre_core::{LangTag, Millis, Timestamp};
+use ambre_core::{LangTag, Millis, Month, Timestamp, Year};
 use loro::{LoroDoc, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
@@ -153,50 +153,6 @@ impl CivilDate {
     }
 }
 
-/// A year of the common era, before or after year zero.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Year(i64);
-
-impl Year {
-    /// The year `value` of the common era.
-    #[must_use]
-    pub const fn new(value: i64) -> Self {
-        Self(value)
-    }
-
-    /// The year as a number, for the text a date prints.
-    #[must_use]
-    pub const fn get(self) -> i64 {
-        self.0
-    }
-}
-
-/// A month of the year, January being one. No other value builds one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Month(u8);
-
-impl Month {
-    /// The month `value`, `None` outside `1 ..= 12`.
-    #[must_use]
-    pub fn new(value: u32) -> Option<Self> {
-        u8::try_from(value)
-            .ok()
-            .filter(|month| (1..=12).contains(month))
-            .map(Self)
-    }
-
-    /// The month as a number from one, for the text a date prints.
-    #[must_use]
-    pub const fn get(self) -> u8 {
-        self.0
-    }
-
-    /// The place of the month in a list of twelve names, January at zero.
-    fn index(self) -> usize {
-        usize::from(self.0).saturating_sub(1)
-    }
-}
-
 /// A day of the month, the first being one. No value past 31 builds one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Day(u8);
@@ -215,18 +171,6 @@ impl Day {
     #[must_use]
     pub const fn get(self) -> u8 {
         self.0
-    }
-}
-
-impl std::fmt::Display for Year {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
-    }
-}
-
-impl std::fmt::Display for Month {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
     }
 }
 
@@ -268,10 +212,7 @@ pub fn civil_date(at: Timestamp) -> CivilDate {
     // fallbacks stand in for a value it never answers.
     CivilDate {
         year: Year::new(year),
-        month: u32::try_from(month)
-            .ok()
-            .and_then(Month::new)
-            .unwrap_or(Month(1)),
+        month: Month::new(month).unwrap_or(Month::JANUARY),
         day: u32::try_from(day).ok().and_then(Day::new).unwrap_or(Day(1)),
     }
 }
@@ -394,7 +335,9 @@ pub fn format_date(at: Timestamp, format: DateFieldFormat, lang: Option<&LangTag
         return iso;
     };
     let primary = lang.primary();
-    let name = names.get(month.index()).copied().unwrap_or("");
+    // January sits at place zero of the twelve names.
+    let place = usize::from(month.get()).saturating_sub(1);
+    let name = names.get(place).copied().unwrap_or("");
     match (format, primary.as_str()) {
         (DateFieldFormat::Short, "en") => format!("{month}/{day}/{year}"),
         (DateFieldFormat::Short, "de") => format!("{day:02}.{month:02}.{year}"),

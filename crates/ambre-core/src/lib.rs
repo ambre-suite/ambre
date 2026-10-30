@@ -26,6 +26,7 @@
 /// (`ambre-spec-residency.md`).
 pub mod activity;
 pub mod authorship;
+pub mod calendar;
 pub mod canvas_id;
 pub mod channel_kind;
 /// Colours typed by their packing: [`Rgba`], [`Rgb`].
@@ -98,6 +99,7 @@ pub mod zoom;
 pub use authorship::{
     IdCounter, OpCounter, PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce,
 };
+pub use calendar::{Month, Year};
 pub use canvas_id::CanvasId;
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
 pub use color::{Alpha, InvalidOpacity, Opacity, Rgb, Rgba};
