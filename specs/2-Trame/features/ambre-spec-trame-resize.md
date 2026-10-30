@@ -79,9 +79,11 @@ status values are normative in `ambre-spec-template.md`.
 A column with no entry takes the default width. A column reset to the default drops its entry
 rather than storing the default (`ambre-spec-trame-schema.md section 4`, "absence is a value").
 A width spans 24 px to 4096 px, and a height spans 12 px to 2048 px. A local resize and its drag
-guide clamp into that range. A peer can write any `f64`, so the Logic thread clamps each stored size on read, and a
-size that is no finite number reads as the default (`TRAME-UI-181`). The layout walks lines until
-their sizes cover the screen, so a negative size would make the walk cover every line.
+guide clamp into that range.
+
+A peer can write any `f64`. The Logic thread therefore clamps each stored size on read, and a size
+that is no finite number reads as the default (`TRAME-UI-181`). The layout walks lines until their
+sizes cover the screen, so a negative size would make the walk cover every line.
 
 **Commands and events** (`ambre-bus`):
 

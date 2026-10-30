@@ -145,9 +145,10 @@ and writes each leaf's coordinates, then recomputes the group boxes bottom-up (`
 **A membership cycle.** No command of ours puts a group inside itself, but a peer can write one. Each
 walk of the group tree therefore stops where it has been. The leaf expansion enters each group once
 (`TOILE-276`), and the UI walk stops at the first group already on its chain (`TOILE-UI-398`). The
-box recomputation runs at most one pass more than the groups it walks (`TOILE-275`). A cycle
-keeps its stale box on the incremental path, and that box can differ from a rebuild. This is the one
-exception `TOILE-186` names.
+box recomputation runs at most one pass more than the groups it walks (`TOILE-275`).
+
+A cycle keeps its stale box on the incremental path, and that box can differ from a rebuild. This is
+the one exception `TOILE-186` names.
 
 **How the parent is found.** The Logic thread keeps a derived map from each element to the containers
 whose membership list names it, one entry per occurrence. Each write to a membership list updates

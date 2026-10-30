@@ -175,11 +175,12 @@ geometry is tested on the UI thread (`features/ambre-spec-toile-selection.md`).
 **A stored box is read, never trusted.** A peer can store any number in a coordinate, a size or a
 rotation. The R-tree panics on a NaN corner, and a NaN box never settles a group fixpoint. So the
 field readers read a value that is not finite as zero, and hold a finite one inside the import world
-bound (`TOILE-274`). Every write of a box holds it inside the same bound: a create, a move, a
-resize, an alignment, a paste, a stroke and a boolean result. A value read back is then the value
-written. The bound holds each field on its own, so the far edge of a box can reach twice the bound.
-The board still loads: a bad value never refuses the document. The index also reads a box that is
-not finite as the empty box at the origin, for any other caller.
+bound (`TOILE-274`). The board still loads: a bad value never refuses the document. The index also
+reads a box that is not finite as the empty box at the origin, for any other caller.
+
+Every write of a box holds it inside the same bound. That covers a create, a move, a resize, an
+alignment, a paste, a stroke and a boolean result. A value read back is then the value written. The
+bound holds each field on its own, so the far edge of a box can reach twice the bound.
 
 **Code:**
 

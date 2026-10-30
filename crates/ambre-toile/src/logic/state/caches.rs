@@ -500,7 +500,7 @@ mod peer_geometry_tests {
         assert!(victim.bounds.get(hit).is_some_and(|r| r.is_finite()));
     }
 
-    /// `TOILE-274`: a drag past the world bound stores the bound, so the box
+    /// `TOILE-274`: a drag past the world bound stores the bound. The box
     /// read back is the box written, and a nudge after it loses nothing.
     #[test]
     fn a_drag_past_the_world_bound_holds_at_the_bound() {
