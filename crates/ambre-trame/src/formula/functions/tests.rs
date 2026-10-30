@@ -975,6 +975,28 @@ fn an_exact_lookup_ignores_case() {
     assert_eq!(match_fn(&[txt("été"), col, num(0.0)]).to_display(), "2");
 }
 
+/// An exact lookup folds a final sigma as the find and SEARCH fold it. A
+/// whole-string lowercase turned a word's last capital sigma into a final
+/// one, so a key typed with a plain sigma met nothing (`TRAME-202`).
+#[test]
+fn an_exact_lookup_folds_a_final_sigma_as_the_find_does() {
+    let table = range(1, 2, vec![txt("\u{39F}\u{3A3}"), num(1.0)]);
+    let exact = CellValue::Boolean(false);
+    for key in ["\u{3BF}\u{3C3}", "\u{3BF}\u{3C2}", "\u{39F}\u{3A3}"] {
+        assert_eq!(
+            vlookup(&[txt(key), table.clone(), num(2.0), exact.clone()]).to_display(),
+            "1",
+            "{key}"
+        );
+    }
+    let cells = range(1, 1, vec![txt("\u{39F}\u{3A3}")]);
+    assert_eq!(
+        countif(&[cells, txt("\u{3BF}\u{3C3}")]).to_display(),
+        "1",
+        "a criterion folds alike"
+    );
+}
+
 /// An approximate lookup over keys that fall answers `#N/A`, not the row it
 /// stopped on. Blanks after the keys do not count as a fall (`TRAME-197`).
 #[test]

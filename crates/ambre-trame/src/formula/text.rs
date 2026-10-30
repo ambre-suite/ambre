@@ -38,6 +38,14 @@ pub(crate) fn fold_char(ch: char) -> impl Iterator<Item = char> {
         .map(|lower| if lower == '\u{3C2}' { '\u{3C3}' } else { lower })
 }
 
+/// The order of two texts, their case ignored through [`fold_char`]: the one
+/// comparison a lookup, a criterion and a find share.
+pub(crate) fn fold_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    a.chars()
+        .flat_map(fold_char)
+        .cmp(b.chars().flat_map(fold_char))
+}
+
 /// One char folded to exactly one, for a reader that counts positions. A
 /// char whose fold is several chars has no simple fold, so it stays itself.
 /// Unicode simple case folding leaves a capital I with a dot so.

@@ -405,11 +405,15 @@ pub(crate) fn range_cells(value: &CellValue) -> Box<dyn Iterator<Item = &CellVal
 }
 
 /// Case-insensitive equality used by lookups (numbers compared numerically).
-/// The case folds over the whole of Unicode, not ASCII alone (`TRAME-202`).
+/// The case folds over the whole of Unicode, not ASCII alone, through the one
+/// fold the find and SEARCH read (`TRAME-202`).
 pub(crate) fn values_equal_ci(a: &CellValue, b: &CellValue) -> bool {
     match (a.as_number(), b.as_number()) {
         (Ok(x), Ok(y)) => nearly_equal(x, y),
-        _ => a.to_display().to_lowercase() == b.to_display().to_lowercase(),
+        _ => {
+            crate::formula::text::fold_cmp(&a.to_display(), &b.to_display())
+                == std::cmp::Ordering::Equal
+        }
     }
 }
 
@@ -434,11 +438,10 @@ pub(crate) fn keys_ascending<'a>(keys: impl Iterator<Item = &'a CellValue>) -> b
 pub(crate) fn compare_cells(a: &CellValue, b: &CellValue) -> Option<std::cmp::Ordering> {
     match (a.as_number(), b.as_number()) {
         (Ok(x), Ok(y)) => x.partial_cmp(&y),
-        _ => Some(
-            a.to_display()
-                .to_lowercase()
-                .cmp(&b.to_display().to_lowercase()),
-        ),
+        _ => Some(crate::formula::text::fold_cmp(
+            &a.to_display(),
+            &b.to_display(),
+        )),
     }
 }
 
