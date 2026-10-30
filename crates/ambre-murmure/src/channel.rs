@@ -9,9 +9,9 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    ActivityKind, ActivitySummary, Attachment, ChannelMatches, Deletion, Emoji, MediaRef, Mention,
-    MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent, Notice,
-    Revision, SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
+    ActivityKind, ActivitySummary, Attachment, ChannelMatches, ContentHash, Deletion, Emoji,
+    Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent,
+    Notice, Revision, SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
 };
 use ambre_core::{
     ChannelId, DeltaBytes, DocumentId, LoroPayload, LoroPayloadRef, MessageId, MetaId,
@@ -1342,7 +1342,7 @@ impl ChannelState {
         segment: SegmentId,
         message: MessageId,
         author: UserId,
-    ) -> Vec<MediaRef> {
+    ) -> Vec<ContentHash> {
         let Some(target) = self.messages(segment).ok().and_then(|messages| {
             messages.into_iter().find(|view| {
                 view.id == message && view.author == author && view.deleted == Deletion::Live
@@ -1359,7 +1359,7 @@ impl ChannelState {
                 view.author == author && view.deleted == Deletion::Live && view.id != message
             })
             .collect();
-        let mut erasable: Vec<MediaRef> = Vec::new();
+        let mut erasable: Vec<ContentHash> = Vec::new();
         for attachment in target.attachments {
             let elsewhere = others.iter().any(|view| {
                 view.attachments

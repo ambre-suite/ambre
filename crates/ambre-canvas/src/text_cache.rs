@@ -111,8 +111,31 @@ impl IndentPx {
 
     /// The indent in the units of the width a layout breaks to.
     #[must_use]
-    pub fn layout_units(self) -> f32 {
-        f32::from(self.0)
+    pub fn layout_units(self) -> LayoutPx {
+        LayoutPx(f32::from(self.0))
+    }
+}
+
+/// A length in the units of a parley layout. These are the units of its
+/// caller: [`ViewPx`] for a screen text, [`DocPx`] for a board text.
+///
+/// A drawn glyph run no longer knows which, so the units get a type of their
+/// own. A font size, a wrap width and an indent of one layout share it. The
+/// `f32` is unwrapped at the parley call, the cache key and the raster size.
+#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
+pub struct LayoutPx(f32);
+
+impl LayoutPx {
+    /// A length of `units` layout units, as parley hands one back.
+    #[must_use]
+    pub const fn new(units: f32) -> Self {
+        Self(units)
+    }
+
+    /// The number of layout units, for the parley call that takes the float.
+    #[must_use]
+    pub const fn get(self) -> f32 {
+        self.0
     }
 }
 
@@ -139,10 +162,11 @@ pub struct SpanShape {
 pub(crate) fn break_indented<B: parley::Brush>(
     layout: &mut Layout<B>,
     text: &str,
-    width: f32,
-    indents: &[(ByteSpan, f32)],
+    width: LayoutPx,
+    indents: &[(ByteSpan, LayoutPx)],
 ) {
-    if !indents.iter().any(|(_, indent)| *indent > 0.0) {
+    let width = width.get();
+    if !indents.iter().any(|(_, indent)| indent.get() > 0.0) {
         layout.break_all_lines(Some(width));
         return;
     }
@@ -152,7 +176,7 @@ pub(crate) fn break_indented<B: parley::Brush>(
                 .iter()
                 .filter(|(range, _)| !range.is_empty())
                 .filter(|(range, _)| range.start <= held.end && held.start < range.end)
-                .map(|(_, indent)| *indent)
+                .map(|(_, indent)| indent.get())
                 .fold(0.0, f32::max)
                 .min(width)
         })
@@ -252,21 +276,21 @@ pub(crate) fn push_shape(
 /// Parley lays out in the units of its caller, so a screen text passes
 /// [`ViewPx`] and a board text passes [`DocPx`]. Both lengths of one layout
 /// share the space, so a font size in one space never meets a width in the
-/// other. The `f32` is unwrapped at the parley call and the cache key only.
+/// other. The length enters the layout as a [`LayoutPx`].
 pub trait TextLength: Copy {
     /// The length in the units parley lays out in.
-    fn layout_units(self) -> f32;
+    fn layout_units(self) -> LayoutPx;
 }
 
 impl TextLength for ViewPx {
-    fn layout_units(self) -> f32 {
-        self.get()
+    fn layout_units(self) -> LayoutPx {
+        LayoutPx(self.get())
     }
 }
 
 impl TextLength for DocPx {
-    fn layout_units(self) -> f32 {
-        self.get()
+    fn layout_units(self) -> LayoutPx {
+        LayoutPx(self.get())
     }
 }
 
@@ -500,8 +524,8 @@ impl TextCache {
         } = look;
         let key = CacheKey {
             text: text.into(),
-            font_size_x100: (font_size.layout_units() * 100.0) as u32,
-            max_width_x10: (max_width.layout_units() * 10.0) as u32,
+            font_size_x100: (font_size.layout_units().get() * 100.0) as u32,
+            max_width_x10: (max_width.layout_units().get() * 10.0) as u32,
             align,
             weight,
             slant,
@@ -570,7 +594,7 @@ impl TextCache {
         // Edit mode -- which already routed through here -- showed it fine.
         let font_family = FontFamilyName::Named(registered_family_name(family).into());
         builder.push_default(StyleProperty::FontFamily(FontFamily::Single(font_family)));
-        builder.push_default(StyleProperty::FontSize(font_size.layout_units()));
+        builder.push_default(StyleProperty::FontSize(font_size.layout_units().get()));
         if weight == Weight::Bold {
             builder.push_default(StyleProperty::FontWeight(FontWeight::BOLD));
         }

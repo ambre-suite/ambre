@@ -405,7 +405,7 @@ mod tests {
         );
         js_sys::Reflect::set(&window, &key, &recorder).expect("a writable open");
         let file = |media_type: &str| Attachment {
-            media_ref: ambre_bus::MediaRef::parse(&"0".repeat(64)).expect("an address"),
+            media_ref: ambre_bus::ContentHash::parse(&"0".repeat(64)).expect("an address"),
             name: "a".to_owned(),
             media_type: ambre_core::MediaType::from(media_type),
             size: ambre_bus::ByteSize(1),

@@ -10,13 +10,13 @@
 //! before the retry leaves the blob to the channel's deletion.
 
 use super::*;
-use ambre_bus::{MediaRef, RestCommand, RestEvent};
+use ambre_bus::{ContentHash, RestCommand, RestEvent};
 
 impl LogicState {
     /// Ask the relay to erase each of `files`, stored under `document_id`.
-    pub(crate) fn erase_files(&mut self, document_id: DocumentId, files: Vec<MediaRef>) {
+    pub(crate) fn erase_files(&mut self, document_id: DocumentId, files: Vec<ContentHash>) {
         for file in files {
-            self.erase(document_id, ambre_core::ContentHash::from(file.as_str()));
+            self.erase(document_id, file);
         }
     }
 

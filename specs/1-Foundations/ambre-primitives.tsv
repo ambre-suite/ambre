@@ -107,7 +107,6 @@ ambre-app | src/signin.rs | crate::signin | is_return_path() | ret | bool	generi
 ambre-app | src/signin.rs | crate::signin | is_return_path(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
-ambre-bus | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	serde mirror of ambre-core ActivityAnchor; to_sealed applies the bound
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of Topic validates
@@ -116,9 +115,6 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectMessageEvent::Faile
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji.0 | field | std::borrow::Cow<'static,str>	newtype-inner	Emoji newtype, borrowed for a static table and owned otherwise
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji::as_str() | ret | &str	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Emoji::from_static(glyph) | param | &'static str	newtype-inner	Emoji newtype, its const constructor for a static table
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef.0 | field | String	newtype-inner	newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef::as_str() | ret | &str	newtype-inner	newtype
-ambre-bus | src/app/murmure.rs | crate::app::murmure | MediaRef::parse(word) | param | &str	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MentionCount.0 | field | u32	newtype-inner	newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageDraft.text | field | String	free-text	message body
 ambre-bus | src/app/murmure.rs | crate::app::murmure | MessageView.text | field | String	free-text	message body
@@ -242,9 +238,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | PresentMode::is_presenting() 
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::from_tag(s) | param | &str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::tag() | ret | &'static str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | SlideChange.notes | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength.0 | field | f32	newtype-inner	StyleLength newtype: the board length a style stores
-ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength::get() | ret | f32	newtype-inner	StyleLength newtype: the board length a style stores
-ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength::new(units) | param | f32	newtype-inner	StyleLength newtype: the board length a style stores
 ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.insert | field | String	free-text	inserted text of the splice
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateComment.body | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditNotes.base | field | String	free-text	user text
@@ -281,12 +274,6 @@ ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayCount::
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth.0 | field | i64	newtype-inner	the number a calendar part wraps
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth::get() | ret | i64	newtype-inner	the number a calendar part wraps
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DayOfMonth::new(day) | param | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Month.0 | field | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Month::get() | ret | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Month::new(month) | param | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Year.0 | field | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Year::get() | ret | i64	newtype-inner	the number a calendar part wraps
-ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | Year::new(year) | param | i64	newtype-inner	the number a calendar part wraps
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardCell.raw | field | String	free-text	cell text / query / user message
 ambre-bus | src/app/trame/clipboard.rs | crate::app::trame::clipboard | ClipboardPayload::to_tsv() | ret | String	generic	TSV rendering of the payload
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | TrameCommand::AddValidation.message | field | String	free-text	cell text / query / user message
@@ -609,9 +596,7 @@ ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build_l
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::get_or_build_spans(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::hit_rate() | ret | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | TextCache::lazy_fonts_requested() | ret | usize	math	count of font loads, read by tests and diagnostics
-ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(indents) | param | &[(ByteSpan,f32)]	math	local geometry / pixel arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/text_cache.rs | crate::text_cache | break_indented(width) | param | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/text_cache.rs | crate::text_cache | paragraphs(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape() | ret | bool	generic	predicate result
 ambre-canvas | src/text_cache.rs | crate::text_cache | push_shape(text) | param | &str	free-text	text, label or message
@@ -743,6 +728,12 @@ ambre-core | src/authorship.rs | crate::authorship | PeerKey::as_str() | ret | &
 ambre-core | src/authorship.rs | crate::authorship | SESSION_NONCE_LEN | const | usize	generic	length of the [u8;N] session nonce array; other crates read it only as an array length (an array literal, a const generic) and frame the nonce with SessionNonce::SIZE and SessionNonce::split_from
 ambre-core | src/authorship.rs | crate::authorship | SessionNonce.0 | field | [u8;SESSION_NONCE_LEN]	newtype-inner	PeerId/SessionNonce newtype
 ambre-core | src/authorship.rs | crate::authorship | PeerEntryBytes::into_bytes() | ret | Vec<u8>	newtype-inner	The bytes of a PeerEntryBytes, handed to the LoroMap insert of a document registry.
+ambre-core | src/calendar.rs | crate::calendar | Month.0 | field | u8	newtype-inner	a month of the year, 1 to 12
+ambre-core | src/calendar.rs | crate::calendar | Month::get() | ret | u8	newtype-inner	a month of the year, 1 to 12, for a date count or the text a date prints
+ambre-core | src/calendar.rs | crate::calendar | Month::new(month) | param | i64	newtype-inner	a candidate month of the year, refused outside 1 to 12
+ambre-core | src/calendar.rs | crate::calendar | Year.0 | field | i64	newtype-inner	a year of the proleptic Gregorian calendar
+ambre-core | src/calendar.rs | crate::calendar | Year::get() | ret | i64	newtype-inner	a year of the proleptic Gregorian calendar, for a date count or the text a date prints
+ambre-core | src/calendar.rs | crate::calendar | Year::new(year) | param | i64	newtype-inner	a year of the proleptic Gregorian calendar
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId.0 | field | &'static str	newtype-inner	CanvasId newtype
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId::as_str() | ret | &'static str	newtype-inner	CanvasId newtype
 ambre-core | src/canvas_id.rs | crate::canvas_id | CanvasId::new(id) | param | &'static str	newtype-inner	CanvasId newtype
@@ -881,8 +872,7 @@ ambre-core | src/link.rs | crate::link | <LinkUrl as From<String>>::from(text) |
 ambre-core | src/link.rs | crate::link | LinkUrl.0 | field | String	newtype-inner	LinkUrl newtype
 ambre-core | src/link.rs | crate::link | LinkUrl::as_str() | ret | &str	newtype-inner	LinkUrl newtype
 ambre-core | src/link.rs | crate::link | LinkUrl::new(text) | param | String	newtype-inner	LinkUrl newtype
-ambre-core | src/media.rs | crate::media | <ContentHash as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of ContentHash copies into its text
-ambre-core | src/media.rs | crate::media | <ContentHash as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of ContentHash wraps
+ambre-core | src/media.rs | crate::media | <ContentHash as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the checked constructor of ContentHash keeps, which serde reads through
 ambre-core | src/media.rs | crate::media | <ContentHash as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of ContentHash, lent through Borrow
 ambre-core | src/media.rs | crate::media | <MediaType as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MediaType copies into its text
 ambre-core | src/media.rs | crate::media | <MediaType as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of MediaType wraps
@@ -893,6 +883,7 @@ ambre-core | src/media.rs | crate::media | ByteSize::of_len(len) | param | usize
 ambre-core | src/media.rs | crate::media | ByteSize::to_i64_saturating() | ret | i64	newtype-inner	ByteSize storage conversion
 ambre-core | src/media.rs | crate::media | ContentHash.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | ContentHash::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
+ambre-core | src/media.rs | crate::media | ContentHash::parse(word) | param | &str	newtype-inner	the text the checked constructor of ContentHash reads
 ambre-core | src/media.rs | crate::media | KnownMediaType::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/media.rs | crate::media | MEDIA_ADDRESS_LEN | const | usize	generic	length constant
 ambre-core | src/media.rs | crate::media | MediaAddress.0 | field | [u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
@@ -2219,7 +2210,6 @@ ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret 
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
 ambre-server | src/s3.rs | crate::s3 | delete_prefix() | ret | Result<usize,AppError>	math	deleted count
 ambre-server | src/s3.rs | crate::s3 | global_s3_flusher::RECONCILE_EVERY | const | u32	math	a local limit or period, passed to SQL or a loop
-ambre-server | src/s3.rs | crate::s3 | is_valid_content_hash() | ret | bool	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | is_valid_snapshot_key() | ret | bool	generic	predicate result
 ambre-server | src/supervise.rs | crate::supervise | contained(task) | param | &'static str	free-text	task label for logs
 ambre-server | src/ws/handler/message.rs | crate::ws::handler::message | ClockFences::holds() | ret | bool	generic	predicate result
@@ -3049,13 +3039,6 @@ ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conve
 ambre-prose | src/band.rs | crate::band | Day.0 | field | u8	newtype-inner	a day of the month, 1 to 31
 ambre-prose | src/band.rs | crate::band | Day::get() | ret | u8	newtype-inner	a day of the month, 1 to 31, for the text a date prints
 ambre-prose | src/band.rs | crate::band | Day::new(value) | param | u32	newtype-inner	a candidate day of the month, refused outside 1 to 31
-ambre-prose | src/band.rs | crate::band | Month.0 | field | u8	newtype-inner	a month of the year, 1 to 12
-ambre-prose | src/band.rs | crate::band | Month::get() | ret | u8	newtype-inner	a month of the year, 1 to 12, for the text a date prints
-ambre-prose | src/band.rs | crate::band | Month::index() | ret | usize	local	the place of the month in the twelve names of one language, read by one get
-ambre-prose | src/band.rs | crate::band | Month::new(value) | param | u32	newtype-inner	a candidate month of the year, refused outside 1 to 12
-ambre-prose | src/band.rs | crate::band | Year.0 | field | i64	newtype-inner	a year of the proleptic Gregorian calendar
-ambre-prose | src/band.rs | crate::band | Year::get() | ret | i64	newtype-inner	a year of the proleptic Gregorian calendar, for the text a date prints
-ambre-prose | src/band.rs | crate::band | Year::new(value) | param | i64	newtype-inner	a year of the proleptic Gregorian calendar
 ambre-core | src/unit.rs | crate::unit | Radians::to_degrees() | ret | f64	newtype-inner	the angle unwrapped in degrees, for a writer whose format takes degrees
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate.0 | field | f64	newtype-inner	the log-zoom rate per wheel pixel
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate::factor() | ret | f64	math	relative zoom factor, not an absolute zoom: the argument of ViewportTransform::zoom_about
@@ -3069,11 +3052,10 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize.0 | field
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::get() | ret | f32	newtype-inner	the raster size unwrapped for Swash, which takes the float, and for the atlas key
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::texel_scale() | ret | f32	math	device pixels per atlas texel, a bare ratio of the size to the raster cap
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::new(device_px) | param | f32	newtype-inner	the constructor of the glyph raster size, in device pixels
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(font_size) | param | f32	newtype-inner	the constructor of the glyph raster size: the font size parley's glyph run returns, in the units of its layout
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(scale) | param | f64	newtype-inner	the constructor of the glyph raster size: the scale of the drawing transform, a bare ratio
-ambre-canvas | src/text_cache.rs | crate::text_cache | TextLength::layout_units() | ret | f32	foreign-api	a text length unwrapped for parley, which lays out in the f32 of its caller's units
-ambre-canvas | src/text_cache.rs | crate::text_cache | <DocPx as TextLength>::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
-ambre-canvas | src/text_cache.rs | crate::text_cache | <ViewPx as TextLength>::layout_units() | ret | f32	newtype-inner	a text length unwrapped for parley, which lays out in the f32 of its caller's units
+ambre-canvas | src/text_cache.rs | crate::text_cache | LayoutPx.0 | field | f32	newtype-inner	the inside of the layout length newtype, in the f32 units parley lays out in
+ambre-canvas | src/text_cache.rs | crate::text_cache | LayoutPx::get() | ret | f32	newtype-inner	the layout length unwrapped for the parley call, the cache key or the raster size
+ambre-canvas | src/text_cache.rs | crate::text_cache | LayoutPx::new(units) | param | f32	newtype-inner	the constructor of the layout length, from the f32 parley hands back
 ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::get() | ret | u8	newtype-inner	HeadingLevel field, constructor or accessor
@@ -3511,7 +3493,6 @@ ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<ambre
 ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx.0 | field | u16	newtype-inner	the inside of the indent newtype, in whole units of the width its text breaks to
 ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::get() | ret | u16	newtype-inner	the indent unwrapped, for a view that lays out in f64
 ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::new(units) | param | u16	newtype-inner	the constructor of the indent newtype
-ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::layout_units() | ret | f32	math	the indent in the f32 units parley lays out in
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount.0 | field | f64	newtype-inner	the inside of the wheel amount, a count of the delta's unit
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::new(units) | param | f64	newtype-inner	the constructor of the wheel amount, from the DOM delta
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f64	math	the CSS length of one unit, the factor the amount scales by
