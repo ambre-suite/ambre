@@ -26,15 +26,17 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
     }
 
     // Vertical lines at each visible column boundary.
-    let cells_top = layout.top + layout.header_height.get();
+    // The surface draws in bare f64: the lengths unwrap once, here.
+    let cells_top = layout.cells_top().get();
+    let (width, height) = (layout.width.get(), layout.height.get());
     let line_y0 = area.y0.max(cells_top);
-    let line_y1 = area.y1.min(layout.height);
+    let line_y1 = area.y1.min(height);
     if line_y1 > line_y0 {
         // Walk the variable column widths, stroking a separator at each left edge.
         let mut col = layout.origin_col;
         let mut x = layout.header_width.get();
         loop {
-            if col > layout.total_cols.as_end() || x > layout.width {
+            if col > layout.total_cols.as_end() || x > width {
                 break;
             }
             if x >= area.x0 && x <= area.x1 {
@@ -44,20 +46,20 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
                     ambre_core::SurfacePx::new(1.0),
                 );
             }
-            x += layout.col_w(col);
+            x += layout.col_w(col).get();
             col = col.next();
         }
     }
 
     // Horizontal lines at each visible row boundary.
     let line_x0 = area.x0.max(layout.header_width.get());
-    let line_x1 = area.x1.min(layout.width);
+    let line_x1 = area.x1.min(width);
     if line_x1 > line_x0 {
         // Walk the *visible* rows' variable heights (hidden rows occupy no space).
         let mut row = layout.origin_row;
         let mut y = cells_top;
         loop {
-            if row > layout.total_rows.as_end() || y > layout.height {
+            if row > layout.total_rows.as_end() || y > height {
                 break;
             }
             if y >= area.y0 && y <= area.y1 {
@@ -68,7 +70,7 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
                 );
             }
             if !layout.is_hidden(row) {
-                y += layout.row_h(row);
+                y += layout.row_h(row).get();
             }
             row = row.next();
         }

@@ -282,7 +282,7 @@ pub fn draw_overlay<S: DrawSurface>(
         let w = 8.0 * z;
         let h = 7.0 * z;
         let bx = (cell.x1 - w - 3.0 * z).max(cell.x0 + 2.0);
-        let by = layout.top + (layout.header_height.get() - h) / 2.0;
+        let by = layout.top.get() + (layout.header_height.get() - h) / 2.0;
         draw_funnel(surface, bx, by, w, h, palette.selection);
     }
 
@@ -474,7 +474,7 @@ pub fn draw_overlay<S: DrawSurface>(
         Some(grid::ResizePreview::Col(x)) => {
             let (x, bottom) = (x.get(), state.grid_bottom().get());
             surface.stroke_line(
-                ambre_draw::Line::new((x, layout.top), (x, bottom)),
+                ambre_draw::Line::new((x, layout.top.get()), (x, bottom)),
                 palette.selection,
                 ambre_core::SurfacePx::new(1.0),
             );
@@ -497,7 +497,7 @@ pub fn draw_overlay<S: DrawSurface>(
         Some(grid::AxisPos::Col(i)) => {
             let (x, bottom) = (state.col_x(i).get(), state.grid_bottom().get());
             surface.stroke_line(
-                ambre_draw::Line::new((x, layout.top), (x, bottom)),
+                ambre_draw::Line::new((x, layout.top.get()), (x, bottom)),
                 palette.selection,
                 ambre_core::SurfacePx::new(2.5),
             );
@@ -520,7 +520,7 @@ pub fn draw_overlay<S: DrawSurface>(
             let bx = state.col_x(i).get();
             // At the top of the column separator: the pill hugs the header's top
             // edge rather than floating in its centre.
-            let cy = layout.top + BADGE_RADIUS + 1.0;
+            let cy = layout.top.get() + BADGE_RADIUS + 1.0;
             draw_insert_badge(surface, bx, cy, palette.selection, palette.content_bg);
         }
         Some(grid::HeaderHit::RowInsert(i)) => {

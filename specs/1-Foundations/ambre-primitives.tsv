@@ -3283,8 +3283,6 @@ ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex:
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	generic	the key part a list element stores, read back into a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	generic	the key part a list element stores for a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
-ambre-trame | src/render/cells.rs | crate::render::cells | spill_width() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(need) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.text | field | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | border_stroke() | ret | (f64,f64)	math	local geometry / pixel arithmetic
@@ -3292,16 +3290,7 @@ ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset() |
 ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset(box_h) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset(text_h) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | has_border() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.height | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.top | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.width | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_at(px) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_left() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_w() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_at(py) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_h() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_top() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/merges.rs | crate::render::merges | draw_merges_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/text.rs | crate::render::text | col_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(text) | param | &str	free-text	free text: user content, label, message or display string

@@ -6,6 +6,7 @@
 
 use super::content::{cell_alignment, cell_v_offset, rgb};
 use super::*;
+use ambre_core::SurfacePx;
 
 // -----------------------------------------------------------------------------
 // draw_cells_on -- cell backgrounds + body text
@@ -21,10 +22,10 @@ pub(super) fn spill_width<E: Fn(CellPos) -> bool>(
     layout: &GridLayout<'_>,
     at: CellPos,
     step: ColDelta,
-    need: f64,
+    need: SurfacePx,
     is_empty: &E,
-) -> f64 {
-    let mut acc = 0.0;
+) -> SurfacePx {
+    let mut acc = SurfacePx::ZERO;
     let mut next = at.col.checked_offset(step);
     while let Some(c) = next
         && acc < need
@@ -78,8 +79,9 @@ where
         let CellPos { row, col } = at;
         let rect = layout.cell_rect(at);
         // Per-cell metrics (variable column width / row height).
-        let col_w = layout.col_w(col);
-        let row_h = layout.row_h(row);
+        // The surface draws in bare f64: the lengths unwrap once, here.
+        let col_w = layout.col_w(col).get();
+        let row_h = layout.row_h(row).get();
         let cell_max_width = (col_w - 8.0) as f32;
         // Lift the cell out of the pending grey with its fill (the manual fill
         // colour if set, else the opaque content background).
@@ -128,24 +130,24 @@ where
         let (x_off, clip_rect, needs_clip) = if overflow {
             // Extend the clip rect into the empty neighbours in the spill
             // direction(s); the text is shifted so its anchored edge stays put.
-            let need = text_w - avail;
+            let need = SurfacePx::new(text_w - avail);
             match align {
                 Alignment::Center => {
                     let half = need / 2.0;
-                    let left = spill_width(layout, at, ColDelta::new(-1), half, &is_empty);
-                    let right = spill_width(layout, at, ColDelta::new(1), half, &is_empty);
+                    let left = spill_width(layout, at, ColDelta::new(-1), half, &is_empty).get();
+                    let right = spill_width(layout, at, ColDelta::new(1), half, &is_empty).get();
                     let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1 + right, rect.y1);
                     (-left, clip, true)
                 }
                 Alignment::End | Alignment::Right => {
-                    let left = spill_width(layout, at, ColDelta::new(-1), need, &is_empty);
+                    let left = spill_width(layout, at, ColDelta::new(-1), need, &is_empty).get();
                     let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1, rect.y1);
                     // Right-anchored: keep the right edge inside the cell content
                     // box (negative offset), clipped on the left at the spill.
                     (avail - text_w, clip, true)
                 }
                 _ => {
-                    let right = spill_width(layout, at, ColDelta::new(1), need, &is_empty);
+                    let right = spill_width(layout, at, ColDelta::new(1), need, &is_empty).get();
                     let clip = Rect::new(rect.x0, rect.y0, rect.x1 + right, rect.y1);
                     (0.0, clip, true)
                 }
