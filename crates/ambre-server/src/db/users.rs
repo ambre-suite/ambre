@@ -13,7 +13,7 @@ pub struct UserRow {
     /// Whether `email` was proven by a provider (OIDC/dev) rather than merely
     /// self-asserted at `/auth/setup`. A verified email wins any collision (#3):
     /// an OIDC login reclaims an unverified holder's email.
-    pub email_verified: bool,
+    pub email_verified: EmailProof,
     pub display_name: ambre_core::DisplayName,
     pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
     pub master_key_salt: Option<ambre_core::MasterKeySalt>,
@@ -31,11 +31,24 @@ pub struct UserInfoRow {
     /// Whether the email was provider-verified (see [`UserRow::email_verified`]).
     /// Surfaced in search so the sharer sees the TOFU signal for an unverified,
     /// possibly-squatted recipient before wrapping the doc key to them (#3).
-    pub email_verified: bool,
+    pub email_verified: EmailProof,
     pub display_name: ambre_core::DisplayName,
     pub signing_pubkey: ambre_core::PublicKey,
     pub exchange_pubkey: ambre_core::ExchangePublicKey,
 }
+
+ambre_core::define_flag! {
+    /// Whether a user's email was proven by a provider (OIDC or dev) or only
+    /// asserted at `/auth/setup`. The `users.email_verified` column and the
+    /// `email_verified` member of the JSON answers keep their `bool`.
+    pub enum EmailProof {
+        /// Self-asserted: an OIDC login may reclaim it (#3).
+        Asserted,
+        /// Proven by a provider: it wins any collision.
+        Verified,
+    }
+}
+ambre_core::define_flag!(@sqlx EmailProof);
 
 /// Fetches a user by their typed `UserId`.
 pub async fn get_user(
@@ -425,7 +438,11 @@ mod tests {
         )
         .await
         .expect("setup account");
-        assert!(!squatter.email_verified, "a setup email is unverified");
+        assert_eq!(
+            squatter.email_verified,
+            EmailProof::Asserted,
+            "a setup email is unverified"
+        );
 
         let oidc = upsert_user_from_oidc(
             &pool,
@@ -436,7 +453,11 @@ mod tests {
         )
         .await
         .expect("verified login must reclaim the squatted email");
-        assert!(oidc.email_verified, "the OIDC email is verified");
+        assert_eq!(
+            oidc.email_verified,
+            EmailProof::Verified,
+            "the OIDC email is verified"
+        );
         assert_ne!(oidc.id, squatter.id, "a distinct OIDC identity");
 
         // The email now resolves to the verified OIDC account, not the squatter.
@@ -539,7 +560,7 @@ mod tests {
         .await
         .expect("re-login must not self-conflict");
         assert_eq!(first.id, second.id);
-        assert!(second.email_verified);
+        assert_eq!(second.email_verified, EmailProof::Verified);
     }
 
     /// N5 guard: uniqueness is case-insensitive across setup accounts too.

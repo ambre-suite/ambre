@@ -2130,7 +2130,6 @@ ambre-server | src/db/content.rs | crate::db::content | attach_wire() | ret | Re
 ambre-server | src/db/content.rs | crate::db::content | document_holds_media() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | parse_status(text) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/content.rs | crate::db::content | point_rows_at_batch() | ret | Result<u64,AppError>	math	row count
-ambre-server | src/db/members.rs | crate::db::members | MemberWithUserRow.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/db/members.rs | crate::db::members | rotation_owed() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/mod.rs | crate::db | PgId.0 | field | uuid::Uuid	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/mod.rs | crate::db | PgKey.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
@@ -2172,8 +2171,6 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareThreshold as TryFrom<i16
 ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal::new(count) | param | i16	newtype-inner	the validated constructor of ShareTotal: a count below 1 is refused
 ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal::get() | ret | i16	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareTotal as TryFrom<i16>>::try_from(count) | param | i16	newtype-inner	the smallint the fallible constructor of ShareTotal validates, as a row or a request body carries it
-ambre-server | src/db/users.rs | crate::db::users | UserInfoRow.email_verified | field | bool	generic	named state or style flag, local
-ambre-server | src/db/users.rs | crate::db::users | UserRow.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/error.rs | crate::error | AppError::BadRequest.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Conflict.detail | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Internal.0 | field | String	free-text	user text or error message
@@ -2234,18 +2231,13 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | store_refusal(error) | para
 ambre-server | src/redis_ops.rs | crate::redis_ops | store_refusal(what) | param | &str	free-text	context label
 ambre-server | src/redis_ops.rs | crate::redis_ops | try_acquire_flush_lock() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | ACQUIRE_LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | RotationDebt::owed_if(owed) | param | bool	newtype-inner	the bool the one constructor of RotationDebt reads into its variant
 ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_callback(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
 ambre-server | src/routes/auth.rs | crate::routes::auth | oidc_login(Path(provider)) | param | Path<String>	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_client(word) | param | &str	foreign-api	the path segment axum extracts, parsed to OidcProvider at once
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(given_name) | param | Option<&str>	foreign-api	claims of the identity provider, read as text
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(name) | param | Option<&str>	foreign-api	claims of the identity provider, read as text
 ambre-server | src/routes/auth.rs | crate::routes::auth | provider_display_name(subject) | param | &str	foreign-api	claims of the identity provider, read as text
-ambre-server | src/routes/documents.rs | crate::routes::documents | MemberInfoJson.email_verified | field | bool	generic	named state or style flag, local
-ambre-server | src/routes/documents.rs | crate::routes::documents | MembersResponse.rotation_owed | field | bool	generic	named state or style flag, local
-ambre-server | src/routes/documents.rs | crate::routes::documents | UserInfoJson.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/orgs.rs | crate::routes::orgs | CreateOrgResponse.name | field | String	free-text	the row's name text, echoed whole: a legacy row may hold a name OrgName refuses (SRV-233)
-ambre-server | src/routes/share.rs | crate::routes::share | InviteResponse.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/routes/share.rs | crate::routes::share | space_admin_of_public_meta() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/s3.rs | crate::s3 | <S3Sink<'_> as DrainSink>::store() | ret | Result<(),String>	trait	impl of the private DrainSink trait
 ambre-server | src/s3.rs | crate::s3 | DrainSink::store() | ret | impl Future<Output=Result<(),String>>+Send	free-text	retryable error text of a private trait
@@ -3266,7 +3258,6 @@ ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | cons
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(BlockIndex,&Cursor)->bool	generic	the stop predicate over a block and the cursor
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | SlashChoiceVec<&'static str>	free-text	the labels of the slash menu entries
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | InstanceId.0 | field | uuid::Uuid	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-server | src/routes/orgs.rs | crate::routes::orgs | OrgMemberResponse.has_shamir_share | field | bool	generic	a fact of the store, whether it holds a recovery share for the member, sent as the JSON bool
 ambre-core | src/export_file.rs | crate::export_file | ExportExtension::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename.0 | field | String	newtype-inner	the validated name the newtype wraps
 ambre-core | src/export_file.rs | crate::export_file | ExportFilename::as_str() | ret | &str	newtype-inner	the validated name the newtype wraps

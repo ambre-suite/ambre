@@ -74,7 +74,18 @@ pub struct OrgMemberResponse {
     /// Serialized as its lowercase word.
     pub role: Role,
     /// Whether the store holds a recovery share for the member.
-    pub has_shamir_share: bool,
+    pub has_shamir_share: RecoveryShare,
+}
+
+ambre_core::define_flag! {
+    /// Whether the store holds a Shamir recovery share for an organization
+    /// member. The JSON member `has_shamir_share` keeps its `bool`.
+    pub enum RecoveryShare {
+        /// No share is stored for the member.
+        Absent,
+        /// A sealed share is stored for the member.
+        Held,
+    }
 }
 
 fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
@@ -83,7 +94,10 @@ fn member_to_response(m: &db::OrgMemberRow) -> OrgMemberResponse {
         email: m.email.clone(),
         display_name: m.display_name.clone(),
         role: m.role,
-        has_shamir_share: m.shamir_share_enc.is_some(),
+        has_shamir_share: match m.shamir_share_enc {
+            Some(_) => RecoveryShare::Held,
+            None => RecoveryShare::Absent,
+        },
     }
 }
 
@@ -585,7 +599,12 @@ mod tests {
         assert_eq!(resp.email, ambre_core::Email::from("user@test.com"));
         assert_eq!(resp.display_name, "Test User");
         assert_eq!(resp.role, Role::Admin);
-        assert!(resp.has_shamir_share);
+        assert_eq!(resp.has_shamir_share, RecoveryShare::Held);
+        assert_eq!(
+            serde_json::to_value(&resp).unwrap()["has_shamir_share"],
+            serde_json::Value::Bool(true),
+            "the wire keeps the bool"
+        );
     }
 
     #[test]
@@ -600,7 +619,7 @@ mod tests {
         };
         let resp = member_to_response(&member);
         assert_eq!(resp.role, Role::Member);
-        assert!(!resp.has_shamir_share);
+        assert_eq!(resp.has_shamir_share, RecoveryShare::Absent);
     }
 
     // -- Integration tests (require Postgres + Redis) -----------------------

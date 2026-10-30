@@ -433,7 +433,7 @@ pub struct UserInfoJson {
     /// Whether the email was provider-verified (OIDC) vs self-asserted at
     /// `/auth/setup` (#3). The share UI should flag an unverified recipient for
     /// the TOFU out-of-band key check. Additive field; older clients ignore it.
-    pub email_verified: bool,
+    pub email_verified: crate::db::EmailProof,
     pub display_name: ambre_core::DisplayName,
     pub signing_pubkey: ambre_core::SigningKeyHex,
     pub exchange_pubkey: ambre_core::ExchangeKeyHex,
@@ -531,7 +531,7 @@ pub struct MemberInfoJson {
     pub email: ambre_core::Email,
     /// Whether the member's email was provider-verified (#3). Additive field;
     /// older clients ignore it.
-    pub email_verified: bool,
+    pub email_verified: crate::db::EmailProof,
     pub display_name: ambre_core::DisplayName,
     /// Serialized as its lowercase word.
     pub role: Role,
@@ -587,7 +587,8 @@ pub async fn list_document_members(
         .collect();
     // A member with write access that reads a debt rotates before it sends a
     // frame (`ambre-spec-key-rotation.md`, `SYNC-128`).
-    let rotation_owed = db::rotation_owed(&state.db, &doc_id).await?;
+    let rotation_owed =
+        ambre_core::RotationDebt::from_bool(db::rotation_owed(&state.db, &doc_id).await?);
     // The signed entries beside the rows, for a client to check them against
     // (`SRV-104`, `SYNC-108`).
     let log = db::membership_log(&state.db, &doc_id).await?;
@@ -603,7 +604,7 @@ pub async fn list_document_members(
 pub struct MembersResponse {
     pub members: Vec<MemberInfoJson>,
     /// Whether a member with write access must rotate before it sends.
-    pub rotation_owed: bool,
+    pub rotation_owed: ambre_core::RotationDebt,
     /// The signed membership entries, each in URL-safe base64.
     pub log: Vec<ambre_core::EncodedLogEntry>,
 }

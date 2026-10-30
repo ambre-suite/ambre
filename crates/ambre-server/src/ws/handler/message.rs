@@ -231,7 +231,7 @@ pub(crate) async fn handle_subscribe(
     // until the next subscribe (`SRV-123`).
     let mirrored = match db::rotation_owed(&state.db, &document_id).await {
         Ok(owed) => {
-            let debt = redis_ops::RotationDebt::owed_if(owed);
+            let debt = redis_ops::RotationDebt::from_bool(owed);
             redis_ops::mirror_rotation_owed(&state.redis, &document_id, debt).await
         }
         Err(e) => Err(e),

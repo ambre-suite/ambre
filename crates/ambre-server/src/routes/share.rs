@@ -106,7 +106,7 @@ pub struct InviteResponse {
     /// invitee's exchange key here. An unverified recipient is a squat candidate,
     /// so the client should surface the TOFU out-of-band key check before trusting
     /// the wrap. Additive field; older clients ignore it.
-    pub email_verified: bool,
+    pub email_verified: crate::db::EmailProof,
 }
 
 pub async fn invite_to_document(
@@ -525,7 +525,7 @@ async fn notify_rotation(state: &AppState, doc_id: &ambre_core::DocumentId) {
 async fn restore_debt_mirror(state: &AppState, doc_id: &ambre_core::DocumentId) {
     let restored = match db::rotation_owed(&state.db, doc_id).await {
         Ok(owed) => {
-            let debt = crate::redis_ops::RotationDebt::owed_if(owed);
+            let debt = crate::redis_ops::RotationDebt::from_bool(owed);
             crate::redis_ops::mirror_rotation_owed(&state.redis, doc_id, debt).await
         }
         Err(e) => Err(e),

@@ -1032,23 +1032,8 @@ pub async fn mirror_segment_lock(
 }
 
 /// Whether a document owes a key rotation, as its mirror holds it
-/// (`SRV-123`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RotationDebt {
-    Settled,
-    Owed,
-}
-
-impl RotationDebt {
-    /// [`RotationDebt::Owed`] when the register says `owed`.
-    pub fn owed_if(owed: bool) -> Self {
-        if owed {
-            RotationDebt::Owed
-        } else {
-            RotationDebt::Settled
-        }
-    }
-}
+/// (`SRV-123`): the flag the members answer carries too.
+pub use ambre_core::RotationDebt;
 
 /// Sets or clears the mirror of an owed rotation.
 pub async fn mirror_rotation_owed(

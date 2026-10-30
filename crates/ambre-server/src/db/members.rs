@@ -55,7 +55,7 @@ pub struct MemberWithUserRow {
     /// Whether the member's email was provider-verified vs self-asserted at
     /// `/auth/setup` (#3). Lets the member list flag an unverified peer for the
     /// TOFU out-of-band key check.
-    pub email_verified: bool,
+    pub email_verified: super::EmailProof,
     pub display_name: ambre_core::DisplayName,
     pub role: ambre_core::Role,
     pub signing_pubkey: ambre_core::PublicKey,

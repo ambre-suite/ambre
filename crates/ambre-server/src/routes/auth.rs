@@ -320,7 +320,7 @@ mod tests {
             id: ambre_core::UserId::new(),
             oidc_subject: Some(openidconnect::SubjectIdentifier::new("subject".into())),
             email: "a@example.com".into(),
-            email_verified: true,
+            email_verified: db::EmailProof::Verified,
             display_name: ambre_core::DisplayName::new("A").unwrap(),
             master_key_enc: signing_pubkey
                 .as_ref()
