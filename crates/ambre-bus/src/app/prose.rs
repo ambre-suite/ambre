@@ -2789,7 +2789,10 @@ impl fmt::Display for TableValue {
 /// One variant per reason the engine can state, never one per call site. Two
 /// handlers refusing a range out of bounds carry the same variant. They differ
 /// by the command they name.
-#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+///
+/// `Debug` prints a refused mark value by its length: the author typed it.
+/// `Display` keeps it, because the author reads the refusal.
+#[derive(Clone, PartialEq, thiserror::Error)]
 pub enum ProseRefusal {
     /// A block id that resolves to no live block.
     #[error("block {0} is not in the document")]
@@ -2887,6 +2890,49 @@ pub enum ProseRefusal {
     Interop(#[from] InteropError),
 }
 
+impl fmt::Debug for ProseRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        macro_rules! tuple {
+            ($name:literal, $value:expr) => {
+                f.debug_tuple($name).field($value).finish()
+            };
+        }
+        match self {
+            Self::NoSuchBlock(block) => tuple!("NoSuchBlock", block),
+            Self::BadRange => f.write_str("BadRange"),
+            Self::NestingRefused => f.write_str("NestingRefused"),
+            Self::UnknownMark(key) => tuple!("UnknownMark", key),
+            Self::AnchorKey(key) => tuple!("AnchorKey", key),
+            Self::BadMarkValue { key, value } => f
+                .debug_struct("BadMarkValue")
+                .field("key", key)
+                .field("value", &ambre_core::char_len(value))
+                .finish(),
+            Self::RemoteImportFailed => f.write_str("RemoteImportFailed"),
+            Self::OutsideTheGrid => f.write_str("OutsideTheGrid"),
+            Self::MergeNotRectangular => f.write_str("MergeNotRectangular"),
+            Self::MergeOverText => f.write_str("MergeOverText"),
+            Self::BadTableValue(value) => tuple!("BadTableValue", value),
+            Self::BandJustified => f.write_str("BandJustified"),
+            Self::FirstPageBandOff => f.write_str("FirstPageBandOff"),
+            Self::FindRefused(refusal) => tuple!("FindRefused", refusal),
+            Self::FootnoteInBand => f.write_str("FootnoteInBand"),
+            Self::FootnoteInNote => f.write_str("FootnoteInNote"),
+            Self::NoSuchFootnote(footnote) => tuple!("NoSuchFootnote", footnote),
+            Self::CommentInBand => f.write_str("CommentInBand"),
+            Self::CommentInNote => f.write_str("CommentInNote"),
+            Self::NoSuchComment(comment) => tuple!("NoSuchComment", comment),
+            Self::NoSuchReply(reply) => tuple!("NoSuchReply", reply),
+            Self::NotYourReply => f.write_str("NotYourReply"),
+            Self::NoIdentity => f.write_str("NoIdentity"),
+            Self::NotWhileSuggesting => f.write_str("NotWhileSuggesting"),
+            Self::NoCrossRef => f.write_str("NoCrossRef"),
+            Self::WriteFailed(why) => tuple!("WriteFailed", why),
+            Self::Interop(error) => tuple!("Interop", error),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2900,6 +2946,14 @@ mod tests {
         let link = mark::MarkRoot::Link.key();
         let value = mark::validate_value(&link, Some("https://a.example")).unwrap();
         assert_eq!(format!("{value:?}"), "MarkValue(17 chars)");
+        let refused = ProseRefusal::BadMarkValue {
+            key: link,
+            value: "Q3 layoffs".to_owned(),
+        };
+        let printed = format!("{refused:?}");
+        assert!(printed.contains("CharCount(10)"), "{printed}");
+        assert!(!printed.contains("Q3 layoffs"), "{printed}");
+        assert!(refused.to_string().contains("Q3 layoffs"));
     }
 
     /// A heading number reads as its counters joined by dots, and there is

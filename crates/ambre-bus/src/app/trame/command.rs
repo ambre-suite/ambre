@@ -19,10 +19,17 @@ crate::token::define_token! {
 }
 
 /// A text refused as a defined name: empty, or not a letter or underscore
-/// followed by letters, digits and underscores.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+/// followed by letters, digits and underscores. `Debug` prints the length
+/// alone; `Display` quotes the text, for the author who typed it.
+#[derive(Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{0:?} is not a name: a letter or underscore, then letters, digits and underscores")]
 pub struct InvalidDefinedName(pub String);
+
+impl std::fmt::Debug for InvalidDefinedName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "InvalidDefinedName({} chars)", self.0.chars().count())
+    }
+}
 
 /// The name of a workbook named range, as a formula writes it (`TOTAL`), case
 /// kept (`trame-named-ranges`). It is an ASCII letter or underscore, then ASCII
@@ -1283,6 +1290,9 @@ mod tests {
         assert_eq!(format!("{:?}", sheet.key()), "SheetNameKey(7 chars)");
         let name = DefinedName::new("TOTAL").unwrap();
         assert_eq!(format!("{name:?}"), "DefinedName(5 chars)");
+        let refused = DefinedName::new("Q3 layoffs").unwrap_err();
+        assert_eq!(format!("{refused:?}"), "InvalidDefinedName(10 chars)");
+        assert!(refused.to_string().contains("Q3 layoffs"));
     }
 
     /// The Excel rule: 1 to 31 characters, none of `: \ / ? * [ ]`, and no
