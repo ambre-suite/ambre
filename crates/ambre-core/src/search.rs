@@ -5,9 +5,16 @@ use serde::{Deserialize, Serialize};
 
 /// The text of a message search, as typed, holding at least one character
 /// that is not white space. The box sends no search for a blank text.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// `Debug` prints the length alone, so a log carries none of the text.
+#[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct SearchQuery(String);
+
+impl std::fmt::Debug for SearchQuery {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SearchQuery({} chars)", self.0.chars().count())
+    }
+}
 
 impl SearchQuery {
     /// The search for `text`, kept as typed; `None` when it is blank.
@@ -40,9 +47,16 @@ impl From<SearchQuery> for String {
 /// The text a user search matches, trimmed and at least two characters long.
 /// A shorter text would match a near-arbitrary slice of the user table. The
 /// sharing lookup would then list the directory, each email and key with it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// `Debug` prints the length alone.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct UserSearch(String);
+
+impl std::fmt::Debug for UserSearch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "UserSearch({} chars)", self.0.chars().count())
+    }
+}
 
 impl UserSearch {
     /// The search for `text`, `None` when its trimmed text is shorter than two
@@ -77,6 +91,15 @@ impl From<UserSearch> for String {
 #[cfg(test)]
 mod tests {
     use super::{SearchQuery, UserSearch};
+
+    /// Both searches print their length in `Debug`, and none of the text.
+    #[test]
+    fn a_search_prints_its_length_alone() {
+        let query = SearchQuery::new("salary review".to_owned()).expect("a query");
+        assert_eq!(format!("{query:?}"), "SearchQuery(13 chars)");
+        let search = UserSearch::new(" ada ").expect("a search");
+        assert_eq!(format!("{search:?}"), "UserSearch(3 chars)");
+    }
 
     /// A message search keeps its text as typed, and refuses a blank one,
     /// from the box as from the bytes.
