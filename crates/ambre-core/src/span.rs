@@ -303,6 +303,12 @@ impl UnixMillis {
         Self(self.0.saturating_add(span.0))
     }
 
+    /// The span from `earlier` to this instant, zero when `earlier` is later.
+    #[must_use]
+    pub const fn since(self, earlier: Self) -> Millis {
+        Millis(self.0.saturating_sub(earlier.0))
+    }
+
     /// The whole second the instant falls in.
     pub const fn to_unix_seconds(self) -> UnixSeconds {
         UnixSeconds(self.0 / 1000)
@@ -337,7 +343,7 @@ impl UnixSeconds {
 
 #[cfg(test)]
 mod tests {
-    use super::{LamportStamp, Millis, Seconds, Timestamp, UnixSeconds};
+    use super::{LamportStamp, Millis, Seconds, Timestamp, UnixMillis, UnixSeconds};
     use std::time::Duration;
 
     #[test]
@@ -432,6 +438,13 @@ mod tests {
         assert_eq!(UnixSeconds(100).since(UnixSeconds(40)), Seconds(60));
         assert_eq!(UnixSeconds(40).since(UnixSeconds(100)), Seconds(0));
         assert_eq!(UnixSeconds(u64::MAX).to_i64_saturating(), i64::MAX);
+    }
+
+    #[test]
+    fn a_relay_instant_measures_the_span_since_another_and_never_goes_below_zero() {
+        assert_eq!(UnixMillis(1_000).since(UnixMillis(250)), Millis(750));
+        assert_eq!(UnixMillis(250).since(UnixMillis(1_000)), Millis(0));
+        assert_eq!(UnixMillis(7).since(UnixMillis(7)), Millis(0));
     }
 }
 

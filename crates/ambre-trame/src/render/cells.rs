@@ -81,7 +81,7 @@ where
         // Per-cell metrics (variable column width / row height).
         // The surface draws in bare f64: the lengths unwrap once, here.
         let col_w = layout.col_w(col).get();
-        let row_h = layout.row_h(row).get();
+        let row_h = layout.row_h(row);
         let cell_max_width = (col_w - 8.0) as f32;
         // Lift the cell out of the pending grey with its fill (the manual fill
         // colour if set, else the opaque content background).
@@ -119,7 +119,7 @@ where
         let text_h = layout_text.height() as f64;
         let text_w = layout_text.width() as f64;
         let fit = TextFit {
-            box_height: SurfacePx::new(row_h),
+            box_height: row_h,
             text_height: SurfacePx::new(text_h),
         };
         let y_off = cell_v_offset(content.v_align, fit).get();
@@ -129,7 +129,7 @@ where
         // clipped to its own box. `single_line` guards against newlines pushing a
         // non-wrap value taller than the row -- that case clips like wrap does.
         let align = cell_alignment(content.h_align, content.numeric);
-        let single_line = text_h <= row_h;
+        let single_line = text_h <= row_h.get();
         let overflow = !wraps && single_line && text_w > avail;
         let (x_off, clip_rect, needs_clip) = if overflow {
             // Extend the clip rect into the empty neighbours in the spill

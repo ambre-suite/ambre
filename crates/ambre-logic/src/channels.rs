@@ -2066,7 +2066,7 @@ impl LogicState {
     /// engine reads the segments it holds, and nothing reaches the Sync
     /// worker: the query never leaves the client, and no segment loads.
     pub(crate) fn search_messages(&self, query: ambre_core::SearchQuery) {
-        let mut channels: Vec<ChannelMatches> = match Query::parse(query.as_str()) {
+        let mut channels: Vec<ChannelMatches> = match Query::parse(&query) {
             Some(parsed) => self
                 .channels
                 .values()

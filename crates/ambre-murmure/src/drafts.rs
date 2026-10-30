@@ -56,6 +56,13 @@ impl DraftRow {
         self.0.into_bytes()
     }
 
+    /// The row as the plaintext the store seals, wiped as it drops. The
+    /// bytes move, so no copy of the draft is left behind.
+    #[must_use]
+    pub fn into_plaintext(self) -> ambre_core::SecretBytes {
+        ambre_core::SecretBytes::new(self.0.into_bytes())
+    }
+
     /// The row an opened seal holds, `None` for bytes that are not text.
     /// Refused bytes are a plaintext too, so they are wiped as they drop.
     pub fn from_bytes(bytes: Vec<u8>) -> Option<Self> {

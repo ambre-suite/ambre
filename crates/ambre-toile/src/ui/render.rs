@@ -528,7 +528,7 @@ pub fn frame_bands<'a>(
             return None;
         };
         let shown = frame_title_label(title);
-        let band = frame_title_box(world_rect_to_screen(e.bounds, cam), shown.label())?;
+        let band = frame_title_box(world_rect_to_screen(e.bounds, cam), shown)?;
         Some((e, band, shown))
     })
 }
@@ -541,8 +541,8 @@ pub fn frame_bands<'a>(
 /// estimate of the glyphs. The exact advance is known only once the text is
 /// shaped, and the hit target has to exist without a font at all
 /// (`TOILE-254`).
-pub fn frame_title_box(screen: Rect, title: &str) -> Option<Rect> {
-    let title = title.trim();
+pub fn frame_title_box(screen: Rect, title: FrameTitle<'_>) -> Option<Rect> {
+    let title = title.label().trim();
     if title.is_empty() {
         return None;
     }
@@ -699,7 +699,8 @@ mod tests {
     #[test]
     fn a_named_frame_reserves_a_title_band_above_itself() {
         let screen = Rect::new(100.0, 200.0, 400.0, 500.0);
-        let band = frame_title_box(screen, "Agenda").expect("a named frame has a band");
+        let band =
+            frame_title_box(screen, FrameTitle::Named("Agenda")).expect("a named frame has a band");
         assert!(
             band.y1 <= screen.y0,
             "the title covers the frame: {band:?} over {screen:?}"
@@ -708,7 +709,8 @@ mod tests {
         assert_eq!(band.height(), f64::from(FRAME_TITLE_HEIGHT.get()));
         // A longer title reserves a wider band, which is what the click target
         // is measured against.
-        let wider = frame_title_box(screen, "Agenda and next steps").expect("a band");
+        let wider =
+            frame_title_box(screen, FrameTitle::Named("Agenda and next steps")).expect("a band");
         assert!(wider.width() > band.width());
     }
 

@@ -1138,7 +1138,7 @@ impl MurmureView {
             let now = (self.reads.now)();
             let step = self
                 .kinetic
-                .wheel(down(CssPx::new(over.get())), WheelDeltaMode::Page, now);
+                .wheel(down(over.css_length()), WheelDeltaMode::Page, now);
             self.scroll_by(step);
         }
     }

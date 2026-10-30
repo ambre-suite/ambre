@@ -91,7 +91,7 @@ impl ViewportTransform {
 
     /// Clamp a zoom request to the supported range.
     fn clamp_zoom(z: f64) -> ZoomFactor {
-        ZoomFactor::within(z, MIN_ZOOM.get(), MAX_ZOOM.get())
+        ZoomFactor::positive(z).clamped(MIN_ZOOM, MAX_ZOOM)
     }
 
     /// Zoom by `factor` about a screen anchor (typically the cursor), keeping the

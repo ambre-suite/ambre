@@ -316,6 +316,14 @@ impl CssPx {
     pub fn in_canvas(self, canvas_origin: CssPx) -> ViewPx {
         ViewPx(self.0 - canvas_origin.0)
     }
+
+    /// The same length on the view, such as a wheel delta. A view pixel is a
+    /// CSS pixel in size (`CANVAS-032`), so a length crosses one for one. A
+    /// coordinate takes [`CssPx::in_canvas`] instead.
+    #[must_use]
+    pub fn view_length(self) -> ViewPx {
+        ViewPx(self.0)
+    }
 }
 
 impl SurfacePx {

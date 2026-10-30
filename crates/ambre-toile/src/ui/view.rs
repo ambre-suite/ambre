@@ -3251,8 +3251,8 @@ impl ToileView {
             DisplayGeom::Frame(t) => t.as_str(),
             _ => "",
         };
-        let label = render::frame_title_label(title).label();
-        render::frame_title_box(world_rect_to_screen(e.bounds, &self.cam), label)
+        let shown = render::frame_title_label(title);
+        render::frame_title_box(world_rect_to_screen(e.bounds, &self.cam), shown)
     }
 
     /// Optimistically set a frame's title in the local display, so the band
