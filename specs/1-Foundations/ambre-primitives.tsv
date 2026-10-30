@@ -1445,6 +1445,7 @@ ambre-murmure | src/mention_list.rs | crate::mention_list | query_at(text) | par
 ambre-murmure | src/mention_list.rs | crate::mention_list | MentionList.entries | field | OfferVec<String>	free-text	text, label or user content
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | PLACEHOLDER_ASPECT | const | f32	math	a ratio: the width-to-height aspect of a picture not decoded yet
+ambre-murmure | src/paint.rs | crate::paint | SELECTION_OPACITY | const | f32	math	a factor: how strongly a selection tints the text, read once through Opacity::clamped, since Opacity has no const constructor
 ambre-murmure | src/paint.rs | crate::paint | chip_boxes(labels) | param | &[String]	free-text	text, label or user content
 ambre-murmure | src/paint.rs | crate::paint | paint_list(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
 ambre-murmure | src/paint.rs | crate::paint | shape(text) | param | &str	free-text	text, label or user content

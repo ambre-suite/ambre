@@ -431,8 +431,8 @@ impl Sent {
 fn kept_mentions(edit: DraftEdit<'_>, mentions: &[Mention]) -> Vec<Mention> {
     let markers::Changed {
         head,
-        old_end,
-        new_end,
+        before_end,
+        after_end,
     } = markers::change(edit);
     mentions
         .iter()
@@ -440,8 +440,8 @@ fn kept_mentions(edit: DraftEdit<'_>, mentions: &[Mention]) -> Vec<Mention> {
             let range = mention.range;
             if range.end <= head {
                 Some(mention.clone())
-            } else if range.start >= old_end {
-                let start = range.start + (new_end - old_end);
+            } else if range.start >= before_end {
+                let start = range.start + (after_end - before_end);
                 Some(Mention {
                     target: mention.target,
                     range: CharSpan::from_count(start, range.len()),

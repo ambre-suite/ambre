@@ -349,8 +349,8 @@ impl std::fmt::Debug for DraftEdit<'_> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Changed {
     pub head: CharOffset,
-    pub old_end: CharOffset,
-    pub new_end: CharOffset,
+    pub before_end: CharOffset,
+    pub after_end: CharOffset,
 }
 
 /// Where `edit` falls.
@@ -368,8 +368,8 @@ pub(crate) fn change(edit: DraftEdit<'_>) -> Changed {
         .count();
     Changed {
         head: CharOffset::from_usize(head),
-        old_end: CharOffset::from_usize(old.len() - tail),
-        new_end: CharOffset::from_usize(new.len() - tail),
+        before_end: CharOffset::from_usize(old.len() - tail),
+        after_end: CharOffset::from_usize(new.len() - tail),
     }
 }
 
@@ -379,24 +379,24 @@ pub(crate) fn change(edit: DraftEdit<'_>) -> Changed {
 pub fn kept_styles(edit: DraftEdit<'_>, styles: &[StyleMark]) -> Vec<StyleMark> {
     let Changed {
         head,
-        old_end,
-        new_end,
+        before_end,
+        after_end,
     } = change(edit);
-    let shifted = |at: CharOffset| at + (new_end - old_end);
+    let shifted = |at: CharOffset| at + (after_end - before_end);
     styles
         .iter()
         .filter_map(|mark| {
             let (start, end) = (mark.range.start, mark.range.end);
             let start = if start < head {
                 start
-            } else if start >= old_end {
+            } else if start >= before_end {
                 shifted(start)
             } else {
-                new_end
+                after_end
             };
             let end = if end <= head {
                 end
-            } else if end >= old_end {
+            } else if end >= before_end {
                 shifted(end)
             } else {
                 head

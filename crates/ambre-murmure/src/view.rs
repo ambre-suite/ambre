@@ -346,6 +346,15 @@ ambre_core::define_flag! {
         /// The focus moved: the next paint brings its row into view.
         Due,
     }
+
+    /// Whether a list rests on its latest row, with that row on screen.
+    enum AtLatest {
+        /// The list rests higher up, or its latest row is off screen.
+        Away,
+        /// The list rests at the bottom, its latest row on screen: a new
+        /// message is announced (`MURMURE-208`).
+        Resting,
+    }
 }
 
 impl Drop for MurmureView {
@@ -1393,8 +1402,8 @@ impl MurmureView {
             // (`MURMURE-509`).
             (self.reads.announce)(JUMP_HINT);
         }
-        let latest_row = OnScreen::from_bool(at_bottom && latest_shown);
-        self.hear_latest(self.list_of(pane), list, latest_row);
+        let rest = AtLatest::from_bool(at_bottom && latest_shown);
+        self.hear_latest(self.list_of(pane), list, rest);
         if self.region == Region::Channel
             && painted.oldest_shown == OnScreen::Shown
             && let Some((channel, oldest)) = on_screen.zip(list.oldest_segment())
@@ -1426,11 +1435,11 @@ impl MurmureView {
     }
 
     /// Announce a message newer than the latest one this region heard. Only
-    /// a list at rest on its latest row announces, as `latest_row` says
+    /// a list at rest on its latest row announces, as `rest` says
     /// (`MURMURE-208`). The first list a channel shows is not news, and the
     /// focus stays where it was (`MURMURE-209`).
-    fn hear_latest(&mut self, of: Option<ListOf>, list: &MessageList, latest_row: OnScreen) {
-        let at_bottom = latest_row == OnScreen::Shown;
+    fn hear_latest(&mut self, of: Option<ListOf>, list: &MessageList, rest: AtLatest) {
+        let at_bottom = rest == AtLatest::Resting;
         let latest = list.latest().map(|m| (m.id, m.ts));
         let (heard_in, heard) = std::mem::replace(&mut self.heard, (of, latest));
         let news = match (heard, latest) {

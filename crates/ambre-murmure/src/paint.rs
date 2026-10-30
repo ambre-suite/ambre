@@ -26,11 +26,16 @@ use crate::look;
 use crate::pictures::{Pictures, frame_at, frame_key, previews};
 use crate::select::{Selecting, Spot, TextSelection};
 
-/// The ink `selection` tints the text under a selection with: faint, so
-/// the text stays legible.
+/// How strongly a selection tints the text under it: faint, so the text
+/// stays legible. A bare factor, since `Opacity` has no const constructor;
+/// [`selection_tint`] reads it through one.
+const SELECTION_OPACITY: f32 = 0.3;
+
+/// The ink `selection` tints the text under a selection with.
 fn selection_tint(selection: Color) -> Color {
-    selection.with_alpha(ambre_core::Opacity::clamped(0.3).get())
+    selection.with_alpha(ambre_core::Opacity::clamped(SELECTION_OPACITY).get())
 }
+
 /// The height of the box an image previews in. A picture not decoded yet
 /// takes the same, so its row keeps its height when it lands.
 pub const PREVIEW_TALL: ViewPx = ViewPx::new(160.0);
