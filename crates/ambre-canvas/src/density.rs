@@ -70,6 +70,14 @@ impl DevicePixelRatio {
         (ratio.is_finite() && ratio > 0.0).then_some(Self(ratio))
     }
 
+    /// The density a browser reports. A value that is not a positive finite
+    /// number reads as 1, so no buffer is sized by a zero or a NaN.
+    #[must_use]
+    #[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
+    pub(crate) fn reported(ratio: f64) -> Self {
+        Self::new(ratio).unwrap_or(Self::ONE)
+    }
+
     /// The ratio, for the arithmetic that scales a length by it.
     #[must_use]
     pub(crate) const fn get(self) -> f64 {
@@ -103,20 +111,19 @@ impl SurfaceSize {
         density: DevicePixelRatio::ONE,
     };
 
-    /// A CSS box of `width` x `height` at `density`, or `None` when the box
-    /// has no area. A density that is not a positive number reads as 1.
+    /// The CSS box `logical` at `density`, or `None` when the drawing buffer
+    /// has no area.
     #[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
-    pub(crate) fn new(width: u32, height: u32, density: f64) -> Option<Self> {
-        let density = DevicePixelRatio::new(density).unwrap_or(DevicePixelRatio::ONE);
-        let physical = DeviceSize::new(
-            WholePx::new((f64::from(width) * density.get()).round() as u32),
-            WholePx::new((f64::from(height) * density.get()).round() as u32),
-        );
+    pub(crate) fn new(logical: CssSize, density: DevicePixelRatio) -> Option<Self> {
+        let scale = |side: WholePx<CssPx>| {
+            WholePx::new((f64::from(side.get()) * density.get()).round() as u32)
+        };
+        let physical = DeviceSize::new(scale(logical.width), scale(logical.height));
         if physical.width == WholePx::ZERO || physical.height == WholePx::ZERO {
             return None;
         }
         Some(Self {
-            logical: CssSize::new(WholePx::new(width), WholePx::new(height)),
+            logical,
             physical,
             density,
         })
@@ -181,11 +188,9 @@ impl SurfaceSize {
 /// both sizes. `None` when the box has no area, detached or `display: none`.
 #[cfg(target_arch = "wasm32")]
 pub fn size_backing_store(canvas: &web_sys::HtmlCanvasElement) -> Option<SurfaceSize> {
-    let size = SurfaceSize::new(
-        canvas.client_width().max(0) as u32,
-        canvas.client_height().max(0) as u32,
-        read(),
-    )?;
+    let side = |client: i32| WholePx::new(client.max(0) as u32);
+    let logical = CssSize::new(side(canvas.client_width()), side(canvas.client_height()));
+    let size = SurfaceSize::new(logical, read())?;
     canvas.set_width(size.physical.width.get());
     canvas.set_height(size.physical.height.get());
     Some(size)
@@ -197,7 +202,7 @@ pub fn size_backing_store(canvas: &web_sys::HtmlCanvasElement) -> Option<Surface
 /// re-armed on a fresh query after each change (`CANVAS-045`).
 #[cfg(target_arch = "wasm32")]
 pub fn density_query() -> String {
-    format!("(resolution: {}dppx)", read())
+    format!("(resolution: {}dppx)", read().get())
 }
 
 /// A watch on the density, re-armed on a fresh query each time it fires.
@@ -261,8 +266,10 @@ impl DensityWatch {
 
 /// The browser's density. The one read of it in the workspace (`CANVAS-031`).
 #[cfg(target_arch = "wasm32")]
-fn read() -> f64 {
-    web_sys::window().map_or(1.0, |w| w.device_pixel_ratio())
+fn read() -> DevicePixelRatio {
+    web_sys::window().map_or(DevicePixelRatio::ONE, |w| {
+        DevicePixelRatio::reported(w.device_pixel_ratio())
+    })
 }
 
 #[cfg(test)]
@@ -282,12 +289,20 @@ mod tests {
         }
     }
 
+    /// A CSS box of `width` x `height` at the reported `density`.
+    fn surface(width: u32, height: u32, density: f64) -> Option<SurfaceSize> {
+        SurfaceSize::new(
+            CssSize::new(WholePx::new(width), WholePx::new(height)),
+            DevicePixelRatio::reported(density),
+        )
+    }
+
     /// The same CSS box on a denser screen is the same layout (`CANVAS-046`).
     /// Only the buffer behind it grows.
     #[test]
     fn a_density_change_keeps_the_logical_size() {
-        let one = SurfaceSize::new(800, 600, 1.0).unwrap();
-        let two = SurfaceSize::new(800, 600, 2.0).unwrap();
+        let one = surface(800, 600, 1.0).unwrap();
+        let two = surface(800, 600, 2.0).unwrap();
         assert_eq!(one.logical(), two.logical());
         assert_eq!(
             two.physical(),
@@ -301,31 +316,40 @@ mod tests {
     fn an_unusable_density_reads_as_one() {
         for density in [0.0, -2.0, f64::NAN, f64::INFINITY] {
             assert_eq!(DevicePixelRatio::new(density), None);
-            let size = SurfaceSize::new(300, 150, density).unwrap();
+            assert_eq!(DevicePixelRatio::reported(density), DevicePixelRatio::ONE);
+            let size = surface(300, 150, density).unwrap();
             assert_eq!(size.density(), DevicePixelRatio::ONE);
             assert_eq!(
                 size.physical(),
                 DeviceSize::new(WholePx::new(300), WholePx::new(150))
             );
         }
-        assert!(SurfaceSize::new(0, 150, 2.0).is_none());
+        assert!(surface(0, 150, 2.0).is_none());
+    }
+
+    /// A density so small that the buffer rounds to no pixel is a box with
+    /// no area, never a buffer of no size.
+    #[test]
+    fn a_buffer_that_rounds_to_nothing_has_no_size() {
+        assert!(surface(1, 1, 0.25).is_none());
+        assert!(surface(4, 4, 0.25).is_some());
     }
 
     /// A view lays out in CSS pixels, whatever the density.
     #[test]
     fn the_view_size_is_the_css_box() {
-        let two = SurfaceSize::new(800, 600, 2.0).unwrap();
+        let two = surface(800, 600, 2.0).unwrap();
         assert_eq!(
             two.view(),
             ambre_core::ViewSize::new(ViewPx::new(800.0), ViewPx::new(600.0))
         );
-        assert_eq!(SurfaceSize::new(800, 600, 1.0).unwrap().view(), two.view());
+        assert_eq!(surface(800, 600, 1.0).unwrap().view(), two.view());
     }
 
     /// A shift is copied in device pixels, so it is scaled with the buffer.
     #[test]
     fn a_scroll_shift_is_copied_in_device_pixels() {
-        let plan = SurfaceSize::new(800, 600, 2.0)
+        let plan = surface(800, 600, 2.0)
             .unwrap()
             .on_device(scroll(0.0, -24.0));
         assert!(matches!(
@@ -339,7 +363,7 @@ mod tests {
     /// rounded to a whole pixel would leave the strip a half pixel off.
     #[test]
     fn a_shift_between_two_device_pixels_repaints_in_full() {
-        let plan = SurfaceSize::new(800, 600, 1.25)
+        let plan = surface(800, 600, 1.25)
             .unwrap()
             .on_device(scroll(0.0, -25.0));
         assert!(matches!(plan.content, ContentRepaint::Full));

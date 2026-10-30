@@ -80,8 +80,14 @@ fn glyph_box(slot: &AtlasSlot, density: DevicePixelRatio) -> GlyphBox {
 pub(super) trait GlyphSink {
     /// An axis-aligned quad, in screen pixels.
     fn glyph(&mut self, quad: GlyphQuad, tint: Option<Color>);
-    /// A rotated quad, by its four screen corners.
-    fn glyph_corners(&mut self, corners: [[f32; 2]; 4], uv: [[f32; 2]; 2], tint: Option<Color>);
+    /// A rotated quad, by its four screen corners, showing the atlas texels
+    /// of `slot`.
+    fn glyph_corners(
+        &mut self,
+        corners: [ambre_core::ViewPoint; 4],
+        slot: &AtlasSlot,
+        tint: Option<Color>,
+    );
 }
 
 impl GlyphSink for QuadRenderer {
@@ -92,10 +98,16 @@ impl GlyphSink for QuadRenderer {
         }
     }
 
-    fn glyph_corners(&mut self, corners: [[f32; 2]; 4], uv: [[f32; 2]; 2], tint: Option<Color>) {
+    fn glyph_corners(
+        &mut self,
+        corners: [ambre_core::ViewPoint; 4],
+        slot: &AtlasSlot,
+        tint: Option<Color>,
+    ) {
+        let corners = corners.map(|p| [p.x.get(), p.y.get()]);
         match tint {
-            Some(color) => self.push_glyph_quad(corners, uv[0], uv[1], color),
-            None => self.push_color_glyph_quad(corners, uv[0], uv[1]),
+            Some(color) => self.push_glyph_quad(corners, slot.uv_min, slot.uv_max, color),
+            None => self.push_color_glyph_quad(corners, slot.uv_min, slot.uv_max),
         }
     }
 }
@@ -141,9 +153,12 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
         let local = [(bl, -bt), (bl + w, -bt), (bl + w, -bt + h), (bl, -bt + h)];
         let corners = local.map(|(ox, oy)| {
             let v = linear * Point::new(ox, oy);
-            [(origin.x + v.x) as f32, (origin.y + v.y) as f32]
+            ambre_core::ViewPoint::new(
+                ViewPx::new((origin.x + v.x) as f32),
+                ViewPx::new((origin.y + v.y) as f32),
+            )
         });
-        sink.glyph_corners(corners, [slot.uv_min, slot.uv_max], tint);
+        sink.glyph_corners(corners, slot, tint);
         return;
     }
 
@@ -682,7 +697,12 @@ mod tests {
         fn glyph(&mut self, quad: GlyphQuad, tint: Option<Color>) {
             self.quads.push((quad, tint));
         }
-        fn glyph_corners(&mut self, _: [[f32; 2]; 4], _: [[f32; 2]; 2], tint: Option<Color>) {
+        fn glyph_corners(
+            &mut self,
+            _: [ambre_core::ViewPoint; 4],
+            _: &AtlasSlot,
+            tint: Option<Color>,
+        ) {
             self.corners.push(tint);
         }
     }

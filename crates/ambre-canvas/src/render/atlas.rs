@@ -16,6 +16,8 @@
 
 use rustc_hash::FxHashMap;
 
+use ambre_core::{PixelSize, WholePx};
+
 use crate::density::DevicePixelRatio;
 
 // ============================================================================
@@ -211,13 +213,17 @@ pub struct GlyphAtlas {
     scale_cx: swash::scale::ScaleContext,
 }
 
+/// The texel space of an atlas texture: a glyph's place in it is never a
+/// CSS, device or image pixel.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Texel {}
+
 /// A rectangle of texels in an atlas: its top-left corner and its size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TexelRect {
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
+    x: WholePx<Texel>,
+    y: WholePx<Texel>,
+    size: PixelSize<Texel>,
 }
 
 /// One queued texture upload: the bytes and the texels they fill.
@@ -225,16 +231,6 @@ struct TexelRect {
 pub(super) struct Upload {
     rect: TexelRect,
     bytes: Vec<u8>,
-}
-
-impl Upload {
-    /// The upload of `bytes` into a `w` by `h` box at `(x, y)`.
-    fn at(x: u32, y: u32, w: u32, h: u32, bytes: Vec<u8>) -> Self {
-        Self {
-            rect: TexelRect { x, y, w, h },
-            bytes,
-        }
-    }
 }
 
 /// One glyph as the rasterizer returned it, before it is packed.
@@ -364,7 +360,14 @@ impl GlyphCache {
                     };
                     cached.slot.uv_min = [ax as f32 * inv, ay as f32 * inv];
                     cached.slot.uv_max = [(ax + bmp.w) as f32 * inv, (ay + bmp.h) as f32 * inv];
-                    pending.push(Upload::at(ax, ay, bmp.w, bmp.h, bmp.data.clone()));
+                    pending.push(Upload {
+                        rect: TexelRect {
+                            x: WholePx::new(ax),
+                            y: WholePx::new(ay),
+                            size: PixelSize::new(WholePx::new(bmp.w), WholePx::new(bmp.h)),
+                        },
+                        bytes: bmp.data.clone(),
+                    });
                     survivors.insert(key, cached);
                 }
             }
@@ -445,7 +448,14 @@ impl GlyphCache {
             is_color,
         };
 
-        pending.push(Upload::at(ax, ay, w, h, data.clone()));
+        pending.push(Upload {
+            rect: TexelRect {
+                x: WholePx::new(ax),
+                y: WholePx::new(ay),
+                size: PixelSize::new(WholePx::new(w), WholePx::new(h)),
+            },
+            bytes: data.clone(),
+        });
         self.cache.insert(
             key,
             CachedGlyph {
@@ -629,9 +639,10 @@ pub(super) fn rasterize(
 /// path is already a multiple of 4 (`w * 4`), so it uploads as-is.
 fn upload_glyph(queue: &wgpu::Queue, texture: &wgpu::Texture, upload: Upload, bpp: u32) {
     let Upload {
-        rect: TexelRect { x, y, w, h },
+        rect: TexelRect { x, y, size },
         bytes: data,
     } = upload;
+    let (x, y, w, h) = (x.get(), y.get(), size.width.get(), size.height.get());
     let row_bytes = w * bpp;
     let aligned_bpr = (row_bytes + 3) & !3;
     let upload_data: Vec<u8> = if aligned_bpr == row_bytes {
@@ -669,6 +680,18 @@ fn upload_glyph(queue: &wgpu::Queue, texture: &wgpu::Texture, upload: Upload, bp
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The upload of `bytes` into a `w` by `h` box at `(x, y)`.
+    fn upload(x: u32, y: u32, w: u32, h: u32, bytes: Vec<u8>) -> Upload {
+        Upload {
+            rect: TexelRect {
+                x: WholePx::new(x),
+                y: WholePx::new(y),
+                size: PixelSize::new(WholePx::new(w), WholePx::new(h)),
+            },
+            bytes,
+        }
+    }
 
     /// A square mask glyph of side `side`, filled with `fill`.
     fn mask(side: u32, fill: u8) -> Raster {
@@ -769,7 +792,7 @@ mod tests {
         assert_eq!((again.uv_min, again.uv_max), (slot.uv_min, slot.uv_max));
         assert!(cache.lookup(&key(2)).is_none());
         let (masks, colors) = cache.take_uploads();
-        assert_eq!(masks, vec![Upload::at(0, 0, 4, 4, vec![9; 16])]);
+        assert_eq!(masks, vec![upload(0, 0, 4, 4, vec![9; 16])]);
         assert!(colors.is_empty());
         assert_eq!(cache.take_uploads(), (Vec::new(), Vec::new()));
     }
@@ -839,7 +862,7 @@ mod tests {
         let expected: Vec<u8> = (0..25).collect();
         assert_eq!(
             masks,
-            vec![Upload::at(x, y, 5, 5, expected)],
+            vec![upload(x, y, 5, 5, expected)],
             "its own bitmap, at its new place"
         );
     }

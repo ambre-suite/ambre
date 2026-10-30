@@ -419,11 +419,8 @@ ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::publish() | ret | bool
 ambre-canvas | src/density.rs | crate::density | DevicePixelRatio.0 | field | f64	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/density.rs | crate::density | DevicePixelRatio::get() | ret | f64	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/density.rs | crate::density | DevicePixelRatio::new(ratio) | param | f64	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/density.rs | crate::density | SurfaceSize::new(density) | param | f64	newtype-inner	SurfaceSize constructor
-ambre-canvas | src/density.rs | crate::density | SurfaceSize::new(height) | param | u32	newtype-inner	SurfaceSize constructor
-ambre-canvas | src/density.rs | crate::density | SurfaceSize::new(width) | param | u32	newtype-inner	SurfaceSize constructor
+ambre-canvas | src/density.rs | crate::density | DevicePixelRatio::reported(ratio) | param | f64	newtype-inner	the density the browser reports, read as 1 when it is not a positive finite number
 ambre-canvas | src/density.rs | crate::density | density_query() | ret | String	free-text	text, label or message
-ambre-canvas | src/density.rs | crate::density | read() | ret | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Compose.0 | field | String	free-text	user text or error message
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::ComposeEnd.0 | field | String	free-text	user text or error message
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Insert.0 | field | String	free-text	user text or error message
@@ -463,6 +460,7 @@ ambre-canvas | src/frame.rs | crate::frame | text_height() | ret | f64	math	geom
 ambre-canvas | src/frame.rs | crate::frame | text_height(text) | param | &str	free-text	text, label or message
 ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in a PageTime
 ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
+ambre-canvas | src/host.rs | crate::host | request_frame(slot) | param | &FrameSlot	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in a PageTime
 ambre-canvas | src/host.rs | crate::host | fetch_bytes(url) | param | &str	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | surface_config(height) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/host.rs | crate::host | surface_config(width) | param | u32	math	geometry, layout, GPU or count arithmetic
@@ -517,16 +515,7 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId.0 | field | 
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::get() | ret | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::new(index) | param | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSizeKey.0 | field | u32	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | TexelRect.h | field | u32	newtype-inner	texel corner and size inside the atlas rectangle type
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | TexelRect.w | field | u32	newtype-inner	texel corner and size inside the atlas rectangle type
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | TexelRect.x | field | u32	newtype-inner	texel corner and size inside the atlas rectangle type
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | TexelRect.y | field | u32	newtype-inner	texel corner and size inside the atlas rectangle type
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload.bytes | field | Vec<u8>	generic	raw texel bytes the GPU copies
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(bytes) | param | Vec<u8>	generic	raw texel bytes the GPU copies
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(h) | param | u32	newtype-inner	texel corner and size of the upload's own constructor
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(w) | param | u32	newtype-inner	texel corner and size of the upload's own constructor
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(x) | param | u32	newtype-inner	texel corner and size of the upload's own constructor
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload::at(y) | param | u32	newtype-inner	texel corner and size of the upload's own constructor
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.height | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.pixels | field | Vec<u8>	generic	bytes
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.width | field | u32	math	geometry, layout, GPU or count arithmetic
@@ -592,20 +581,18 @@ ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | QuadRenderer::push_mesh(vertices) | param | &[[f32;2]]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | extend_runs(end) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/renderer.rs | crate::render::renderer | extend_runs(start) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/surface.rs | crate::render::surface | <QuadRenderer as GlyphSink>::glyph_corners(corners) | param | [[f32;2];4]	trait	signature set by the trait
-ambre-canvas | src/render/surface.rs | crate::render::surface | <QuadRenderer as GlyphSink>::glyph_corners(uv) | param | [[f32;2];2]	trait	signature set by the trait
-ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphSink::glyph_corners(corners) | param | [[f32;2];4]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/surface.rs | crate::render::surface | GlyphSink::glyph_corners(uv) | param | [[f32;2];2]	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/surface.rs | crate::render::surface | Mesh | alias | VertexBuffers<[f32;2],u32>	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/surface.rs | crate::render::surface | Mesh | alias | VertexBuffers<[f32;2],u32>	foreign-api	the lyon tessellation buffers: vertex positions and indices, which the renderer copies to the GPU as they are
 ambre-canvas | src/render/surface.rs | crate::render::surface | PATH_TOLERANCE_PX | const | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::path_outside_clip() | ret | bool	generic	predicate result
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::path_outside_clip_padded() | ret | bool	generic	predicate result
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::path_outside_clip_padded(pad) | param | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | WgpuSurface<'r>::tolerance() | ret | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | affine_scale() | ret | f64	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/surface.rs | crate::render::surface | fill_mesh() | ret | Option<Mesh>	foreign-api	the lyon tessellation buffers: vertex positions and indices, which the renderer copies to the GPU as they are
 ambre-canvas | src/render/surface.rs | crate::render::surface | fill_mesh(tolerance) | param | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | screen_vertex() | ret | [f32;2]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/surface.rs | crate::render::surface | split_linear() | ret | Option<(f64,Affine)>	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/surface.rs | crate::render::surface | stroke_mesh() | ret | Option<Mesh>	foreign-api	the lyon tessellation buffers: vertex positions and indices, which the renderer copies to the GPU as they are
 ambre-canvas | src/render/surface.rs | crate::render::surface | stroke_mesh(tolerance) | param | f32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/request_registry.rs | crate::request_registry | RequestRegistry<T>::pending_count() | ret | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/request_registry.rs | crate::request_registry | RequestRegistry<T>::try_recv() | ret | bool	generic	predicate result
