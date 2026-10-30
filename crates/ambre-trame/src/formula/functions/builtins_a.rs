@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::formula::types::ArgIndex;
-use ambre_core::CharCount;
+use ambre_core::{CharCount, CharOffset};
 
 /// The argument at `i`, or an empty cell when the call passed fewer. Every
 /// builtin checks its arity first, so the fallback only guards a slip there.
@@ -560,20 +560,29 @@ pub(crate) fn mid(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let s = arg(args, ArgIndex::new(0)).to_display();
-    let start = flatten_numeric(one(args, ArgIndex::new(1)))
-        .first()
-        .copied()
-        .unwrap_or(1.0)
-        .max(1.0) as usize
-        - 1;
-    let n = flatten_numeric(one(args, ArgIndex::new(2)))
-        .first()
-        .copied()
-        .unwrap_or(0.0)
-        .max(0.0) as usize;
-    let chars: Vec<char> = s.chars().collect();
-    let slice: String = chars.iter().skip(start).take(n).collect();
-    CellValue::Text(slice)
+    let number = |i| {
+        flatten_numeric(one(args, ArgIndex::new(i)))
+            .first()
+            .copied()
+            .map(f64::trunc)
+    };
+    // A start below the first char or a negative length is refused, as Excel
+    // refuses it with `#VALUE!`; the floats truncate first, as there.
+    let (Some(start), Some(n)) = (number(1), number(2)) else {
+        return CellValue::Error(FormulaError::TypeError);
+    };
+    if start < 1.0 || n < 0.0 {
+        return CellValue::Error(FormulaError::TypeError);
+    }
+    // The float saturates as `as` does: a start past the text takes nothing.
+    let start = CharOffset::from_usize(start as usize - 1);
+    let n = CharCount::from_len(n as usize);
+    CellValue::Text(
+        s.chars()
+            .skip(start.to_usize())
+            .take(n.to_usize())
+            .collect(),
+    )
 }
 
 pub(crate) fn upper(args: &[CellValue]) -> CellValue {

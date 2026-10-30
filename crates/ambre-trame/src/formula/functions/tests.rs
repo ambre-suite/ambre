@@ -613,6 +613,19 @@ fn search_counts_the_chars_of_the_text_it_was_given() {
     ));
 }
 
+/// MID refuses a start below 1 and a negative length, as Excel does with
+/// `#VALUE!`, which reads `#TYPE!` here. Both were clamped and answered text.
+#[test]
+fn mid_refuses_a_start_below_one_and_a_negative_length() {
+    let refused =
+        |args: &[CellValue]| matches!(mid(args), CellValue::Error(FormulaError::TypeError));
+    assert!(refused(&[txt("abc"), num(0.0), num(2.0)]));
+    assert!(refused(&[txt("abc"), num(-1.0), num(2.0)]));
+    assert!(refused(&[txt("abc"), num(1.0), num(-1.0)]));
+    assert_eq!(mid(&[txt("abc"), num(1.0), num(0.0)]).to_display(), "");
+    assert_eq!(mid(&[txt("abc"), num(2.0), num(5.0)]).to_display(), "bc");
+}
+
 #[test]
 fn more_text_functions() {
     assert_eq!(search_fn(&[txt("C"), txt("abcabc")]).to_display(), "3");
