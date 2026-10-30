@@ -633,7 +633,7 @@ fn fill_handle_sits_on_merge_extent_corner() {
     let extent = state
         .cell_pixel_rect(CellPos::new(Row::new(2), Col::new(2)))
         .expect("extent corner visible");
-    let s = super::super::FILL_HANDLE_SIZE;
+    let s = super::super::FILL_HANDLE_SIZE.get();
     assert_eq!(handle.x0, extent.x1 - s / 2.0, "handle x on extent");
     assert_eq!(handle.y0, extent.y1 - s / 2.0, "handle y on extent");
 }

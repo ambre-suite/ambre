@@ -165,7 +165,7 @@ impl<'a> EvalContext<'a> {
         for op in &bc.ops {
             match op {
                 Op::PushNum(n) => stack.push(CellValue::Number(*n)),
-                Op::PushStr(s) => stack.push(CellValue::Text(s.clone())),
+                Op::PushStr(s) => stack.push(CellValue::Text(s.as_str().to_owned())),
                 Op::PushBool(b) => stack.push(CellValue::Boolean(*b)),
                 Op::PushEmpty => stack.push(CellValue::Empty),
                 Op::PushError(e) => stack.push(CellValue::Error(e.clone())),
@@ -274,7 +274,7 @@ impl<'a> EvalContext<'a> {
                     stack.push(CellValue::Boolean(!truthy));
                 }
                 Op::CallFn { name, n_args } => {
-                    let split = stack.len().saturating_sub(*n_args);
+                    let split = stack.len().saturating_sub(n_args.to_usize());
                     let args: Vec<CellValue> = stack.drain(split..).collect();
                     let fnctx = super::functions::FnCtx {
                         now_serial: self.now_serial,

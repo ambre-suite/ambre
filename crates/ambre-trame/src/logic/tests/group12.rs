@@ -94,8 +94,8 @@ fn an_imported_number_that_is_not_finite_stays_text() {
     assert_eq!(numbers_in_col_a(&mut state, 8), no_numbers(8));
 }
 
-/// A fill copies a spelling of a number that is not finite as text. A series
-/// that runs past the largest number writes text too (`TRAME-245`).
+/// A fill copies a spelling of a number that is not finite as text
+/// (`TRAME-245`).
 #[test]
 fn a_filled_number_that_is_not_finite_stays_text() {
     let mut state = TrameState::new();
@@ -108,22 +108,74 @@ fn a_filled_number_that_is_not_finite_stays_text() {
         dest: crate::CellRect::spanning(cell(0), cell(1)),
         mode: crate::FillMode::Copy,
     });
-    seed_col_a(&mut state, &["NaN", "NaN", "1e308", "1.7e308"]);
-    state.handle_command(TrameCommand::FillRange {
+    assert_eq!(read_cell(&mut state, 1, 0), "NaN");
+    assert_eq!(numbers_in_col_a(&mut state, 2), no_numbers(2));
+}
+
+/// A series stops at its last finite value: the cells past it keep what
+/// they held, and the fill says so. The series wrote the text `inf` there
+/// before (`TRAME-UI-180`).
+#[test]
+fn a_series_past_the_largest_number_stops_there() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["1e308", "1.7e308", "", "kept"]);
+    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let sheet_id = state.active_sheet.clone();
+    let out = state.handle_command(TrameCommand::FillRange {
         sheet_id,
-        src: crate::CellRect::spanning(cell(2), cell(3)),
-        dest: crate::CellRect::spanning(cell(2), cell(4)),
+        src: crate::CellRect::spanning(cell(0), cell(1)),
+        dest: crate::CellRect::spanning(cell(0), cell(3)),
         mode: crate::FillMode::Series,
     });
-    assert_eq!(read_cell(&mut state, 1, 0), "NaN");
-    assert_eq!(read_cell(&mut state, 4, 0), "inf");
-    assert_eq!(numbers_in_col_a(&mut state, 5), {
-        let mut expected = no_numbers(5);
-        let yes = CellValue::Boolean(true).to_display();
-        expected[2] = yes.clone();
-        expected[3] = yes;
-        expected
+    assert_eq!(read_cell(&mut state, 2, 0), "");
+    assert_eq!(read_cell(&mut state, 3, 0), "kept");
+    assert!(
+        out.display.iter().any(
+            |e| matches!(e, TrameEvent::Error { message } if message.contains("largest number"))
+        ),
+        "the fill says where it stopped"
+    );
+}
+
+/// A series from one number steps by one, even below the spacing of the
+/// floats. So 1e16 two terms on is 1e16 + 2. A step taken as
+/// `(start + 1) - start` read zero there, and the number repeated.
+#[test]
+fn a_series_from_one_large_number_keeps_its_step() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["10000000000000000"]);
+    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let sheet_id = state.active_sheet.clone();
+    state.handle_command(TrameCommand::FillRange {
+        sheet_id,
+        src: crate::CellRect::spanning(cell(0), cell(0)),
+        dest: crate::CellRect::spanning(cell(0), cell(2)),
+        mode: crate::FillMode::Series,
     });
+    assert_eq!(read_cell(&mut state, 2, 0), "10000000000000002");
+}
+
+/// A step past the largest number passes it at the first filled cell. The
+/// series stops there and says so, and no cell reads `inf` (`TRAME-UI-180`).
+#[test]
+fn a_step_past_the_largest_number_stops_at_once() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["-1.7e308", "1.7e308", "kept"]);
+    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let sheet_id = state.active_sheet.clone();
+    let out = state.handle_command(TrameCommand::FillRange {
+        sheet_id,
+        src: crate::CellRect::spanning(cell(0), cell(1)),
+        dest: crate::CellRect::spanning(cell(0), cell(2)),
+        mode: crate::FillMode::Series,
+    });
+    assert_eq!(read_cell(&mut state, 2, 0), "kept");
+    assert!(
+        out.display.iter().any(
+            |e| matches!(e, TrameEvent::Error { message } if message.contains("largest number"))
+        ),
+        "the fill says where it stopped"
+    );
 }
 
 /// A function the library does not know reads as `#N/A`, never as a blank
@@ -262,6 +314,96 @@ fn an_import_is_one_undo_item() {
         "the reader left it too"
     );
     assert_eq!(read_cell(&mut state, 0, 0), "kept", "the edit before stays");
+}
+
+/// An import into a new sheet, with the sheet counter spent, says so and
+/// writes nothing: no sheet, no cell, no undo item. The undo that follows
+/// takes back the edit before it (`TRAME-243`).
+#[test]
+fn an_import_with_a_spent_sheet_counter_writes_nothing() {
+    let mut state = with_one_edit();
+    state.sheet_counter = None;
+    let undo_before = state.undo_manager.undo_count();
+    let vv_before = state.doc.oplog_vv();
+    let out = import(&mut state, b"1,2\n3,4\n", None);
+    assert!(
+        out.display.iter().any(
+            |e| matches!(e, TrameEvent::Error { message } if message.contains("no fresh sheet id"))
+        ),
+        "the refusal says so"
+    );
+    assert!(out.update.is_none());
+    state.doc.commit();
+    assert_eq!(state.doc.oplog_vv(), vv_before, "nothing left pending");
+    assert_eq!(state.undo_manager.undo_count(), undo_before);
+    assert_eq!(state.sheet_order_ids().len(), 1);
+    assert_eq!(state.active_sheet, crate::logic::default_sheet());
+    state.handle_command(TrameCommand::Undo);
+    assert_eq!(read_cell(&mut state, 0, 0), "", "the edit before is undone");
+}
+
+/// A workbook whose cell map holds `key`, a key no build writes, opened.
+fn open_with_cell_key(key: &str) -> Vec<TrameEvent> {
+    let source = TrameState::new();
+    source
+        .doc
+        .get_map(SheetContainer::of(SheetRoot::Cells, &crate::logic::default_sheet()).as_str())
+        .insert(key, "shadow")
+        .expect("a crafted key");
+    source.doc.commit();
+    let mut opened = TrameState::new();
+    opened
+        .import_snapshot(&source.export_snapshot())
+        .expect("the workbook still opens")
+}
+
+/// A cell key in a spelling no build writes is refused, and the refusal is
+/// said. A crafted peer's short, signed or upper-case uid never reads in
+/// silence (`TRAME-248`).
+#[test]
+fn a_cell_key_in_a_non_canonical_spelling_is_refused_and_said() {
+    let canonical = "00000000000000ab_00000002";
+    for key in [
+        "ab_2:ab_3".to_owned(),
+        format!("+{canonical}:{canonical}"),
+        format!("{}:{canonical}", canonical.to_uppercase()),
+    ] {
+        let events = open_with_cell_key(&key);
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, TrameEvent::UndecodableRecords)),
+            "{key}"
+        );
+    }
+}
+
+/// A line element in a spelling no build writes is skipped, and said.
+#[test]
+fn a_line_element_in_a_non_canonical_spelling_is_refused_and_said() {
+    let source = TrameState::new();
+    source
+        .doc
+        .get_movable_list(
+            SheetContainer::of(SheetRoot::Rows, &crate::logic::default_sheet()).as_str(),
+        )
+        .push("ab_2")
+        .expect("a crafted line");
+    source.doc.commit();
+    let mut opened = TrameState::new();
+    let events = opened
+        .import_snapshot(&source.export_snapshot())
+        .expect("the workbook still opens");
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, TrameEvent::UndecodableRecords))
+    );
+    assert_eq!(
+        opened.index.row_len(),
+        RowCount::ZERO,
+        "the line is skipped"
+    );
 }
 
 /// A file with no record writes nothing: no sheet, no delta, no undo item.

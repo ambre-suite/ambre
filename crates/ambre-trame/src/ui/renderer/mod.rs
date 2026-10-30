@@ -55,16 +55,16 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
         // layout multiplies only the content-area metrics by `zoom`).
         header_width: state.header_w(),
         header_height: state.header_h(),
-        top: 0.0,
+        top: ambre_core::SurfacePx::ZERO,
         col_width: COL_WIDTH,
         row_height: ROW_HEIGHT,
         col_widths: &state.col_widths,
         row_heights: &state.row_heights,
         origin_col: state.left_col,
         origin_row: state.top_row,
-        width: state.canvas_width.get(),
+        width: state.canvas_width,
         // The grid stops above the bottom sheet-tab strip (`trame-sheets`).
-        height: state.grid_bottom().get(),
+        height: state.grid_bottom(),
         total_cols: TOTAL_COLS,
         total_rows: TOTAL_ROWS,
         zoom: state.zoom,
@@ -100,7 +100,7 @@ const DIRTY_VEIL_ALPHA: f32 = 0.5;
 
 /// Leg length, in logical pixels, of the right-triangle error marker drawn in
 /// a cell's top-right corner.
-const ERROR_MARK_SIZE: f64 = 7.0;
+const ERROR_MARK_SIZE: SurfacePx = SurfacePx::new(7.0);
 
 /// The half-open rows and columns covering a repaint strip. Bundling both
 /// spans keeps the per-cell helpers' argument lists short.
@@ -771,7 +771,7 @@ mod tests {
         let contours = super::mdi_filter_polygon();
         assert!(contours.iter().any(|c| c.len() >= 3));
         for c in contours {
-            for &(x, y) in c {
+            for &kurbo::Point { x, y } in c {
                 assert!((-1e-6..=1.0 + 1e-6).contains(&x), "x out of unit box: {x}");
                 assert!((-1e-6..=1.0 + 1e-6).contains(&y), "y out of unit box: {y}");
             }
@@ -908,7 +908,7 @@ mod tests {
         // A formula error on (1,1) draws the corner marker with the error colour;
         // a clean cell draws none.
         let mut state = fixture(&[(1, 1, "")]);
-        state.set_formula_error(CellPos::new(Row::new(1), Col::new(1)), "#DIV/0!".to_owned());
+        state.set_formula_error(CellPos::new(Row::new(1), Col::new(1)));
         let palette = Theme::Light.palette();
         let (mut surface, clock, mut font_cx, mut cache, mut stats) = harness();
 

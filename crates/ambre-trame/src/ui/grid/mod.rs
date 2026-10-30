@@ -55,18 +55,18 @@ pub struct CellData {
     /// Raw cell text (formula source for formula cells, equal to `text`
     /// otherwise). Seeds the in-cell editor so formulas are editable as text.
     pub raw: DisplayFormula,
-    pub bold: bool,
-    pub italic: bool,
+    pub bold: ambre_bus::Weight,
+    pub italic: ambre_bus::Slant,
     /// Rich manual formatting (`trame-cell-styles`): underline run, alignments,
     /// wrap, text/fill colours, font family/size, border preset. Pinned to the
     /// cell, fed by [`DisplayCell`](crate::DisplayCell).
-    pub underline: bool,
-    pub strikethrough: bool,
+    pub underline: ambre_bus::Underline,
+    pub strikethrough: ambre_bus::Strikethrough,
     pub h_align: ambre_bus::HAlign,
-    /// The computed value is a number (`DisplayCell::numeric`).
-    pub numeric: bool,
+    /// What the computed value is (`DisplayCell::numeric`).
+    pub numeric: ambre_bus::CellValueKind,
     pub v_align: ambre_bus::VAlign,
-    pub wrap: bool,
+    pub wrap: ambre_bus::WordBreak,
     pub fg: Option<Rgb>,
     pub bg: Option<Rgb>,
     pub font: Option<ambre_core::FontFamily>,
@@ -77,7 +77,7 @@ pub struct CellData {
     pub merge_span: Option<MergeSpan>,
     /// The cell's row is hidden by the active shared filter (`trame-shared-filter`):
     /// the row axis collapses over it. Drives [`TrameUiState::hidden_rows`].
-    pub is_filtered: bool,
+    pub is_filtered: ambre_bus::RowFilter,
 }
 
 impl CellData {
@@ -501,10 +501,11 @@ pub struct TrameUiState {
     /// the next `ViewportData` carries it. UI-only derived state -- never synced.
     pub dirty_cells: HashSet<CellPos>,
 
-    /// Cells whose formula evaluation failed, keyed to the error string (for example
-    /// `#DIV/0!`). Rendered with a small corner marker. Populated by
-    /// `TrameEvent::FormulaError`, cleared when a valid value arrives. UI-only.
-    pub formula_errors: HashMap<CellPos, String>,
+    /// Cells whose formula evaluation failed, rendered with a small corner
+    /// marker. Populated by [`TrameUiState::set_formula_error`], cleared when a
+    /// valid value arrives. UI-only. No event of the bus calls the setter
+    /// today, so only a test fills it.
+    pub formula_errors: HashSet<CellPos>,
 
     /// Version of the last accepted `ViewportData` response (anti-flicker).
     pub accepted_version: ambre_bus::ViewportVersion,
@@ -585,12 +586,12 @@ pub struct TrameUiState {
 
 /// Side of the square autofill handle drawn at the selection's bottom-right
 /// corner, in device pixels (`trame-autofill`).
-pub const FILL_HANDLE_SIZE: f64 = 7.0;
+pub const FILL_HANDLE_SIZE: SurfacePx = SurfacePx::new(7.0);
 
 /// Side of the square Excel-style autofilter button drawn at the right edge of
 /// each current-region header cell, in device pixels at 100% zoom
 /// (`trame-shared-filter`). Scaled by the grid zoom in [`filter_button_rect`].
-pub const FILTER_BUTTON_SIZE: f64 = 13.0;
+pub const FILTER_BUTTON_SIZE: SurfacePx = SurfacePx::new(13.0);
 
 #[cfg(test)]
 mod tests;

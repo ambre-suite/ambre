@@ -51,10 +51,21 @@ pub use ambre_bus::app::trame::FindQuery;
 
 /// A `ReplaceOne` or `ReplaceAll` request. The panel sends none for an empty
 /// query. The launcher forwards it as [`ambre_bus::TrameCommand::ReplaceAll`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ReplaceRequest {
     pub query: FindQuery,
     pub replacement: String,
+}
+
+/// The replacement's length alone: the text is document content. The query
+/// prints as its own type prints it.
+impl std::fmt::Debug for ReplaceRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReplaceRequest")
+            .field("query", &self.query)
+            .field("replacement_chars", &self.replacement.chars().count())
+            .finish()
+    }
 }
 
 /// Where the last search left the counter: the focused match, counted from one,

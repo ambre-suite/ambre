@@ -4,8 +4,9 @@
 // Submodule of `render`; reaches sibling helpers, constants and imports through
 // the `use super::*` glob (the parent re-exports every renderer item).
 
-use super::content::{cell_alignment, cell_v_offset, rgb};
+use super::content::{TextFit, cell_alignment, cell_v_offset, rgb};
 use super::*;
+use ambre_core::SurfacePx;
 
 // -----------------------------------------------------------------------------
 // draw_cells_on -- cell backgrounds + body text
@@ -21,10 +22,10 @@ pub(super) fn spill_width<E: Fn(CellPos) -> bool>(
     layout: &GridLayout<'_>,
     at: CellPos,
     step: ColDelta,
-    need: f64,
+    need: SurfacePx,
     is_empty: &E,
-) -> f64 {
-    let mut acc = 0.0;
+) -> SurfacePx {
+    let mut acc = SurfacePx::ZERO;
     let mut next = at.col.checked_offset(step);
     while let Some(c) = next
         && acc < need
@@ -78,8 +79,9 @@ where
         let CellPos { row, col } = at;
         let rect = layout.cell_rect(at);
         // Per-cell metrics (variable column width / row height).
-        let col_w = layout.col_w(col);
-        let row_h = layout.row_h(row);
+        // The surface draws in bare f64: the lengths unwrap once, here.
+        let col_w = layout.col_w(col).get();
+        let row_h = layout.row_h(row).get();
         let cell_max_width = (col_w - 8.0) as f32;
         // Lift the cell out of the pending grey with its fill (the manual fill
         // colour if set, else the opaque content background).
@@ -98,11 +100,8 @@ where
         // shape left-aligned and position the run horizontally ourselves. Parley's
         // own alignment needs a finite advance, and an unbounded (non-wrap) layout
         // would push centred/right text off-screen.
-        let max_w = if content.wrap {
-            cell_max_width
-        } else {
-            f32::MAX
-        };
+        let wraps = content.wrap == ambre_canvas::WordBreak::Anywhere;
+        let max_w = if wraps { cell_max_width } else { f32::MAX };
         // True zoom: the glyph size scales with the grid (the per-axis metrics
         // already do via `col_w`/`row_h`).
         let font_size = super::cell_font_size(content.size).zoomed(layout.zoom);
@@ -112,14 +111,18 @@ where
             font_size,
             ViewPx::new(max_w),
             Alignment::Start,
-            ambre_canvas::Weight::from_bool(content.bold),
-            ambre_canvas::Slant::from_bool(content.italic),
+            content.bold,
+            content.italic,
             content.font,
-            ambre_canvas::WordBreak::from_bool(content.wrap),
+            content.wrap,
         );
         let text_h = layout_text.height() as f64;
         let text_w = layout_text.width() as f64;
-        let y_off = cell_v_offset(content.v_align, row_h, text_h);
+        let fit = TextFit {
+            box_height: SurfacePx::new(row_h),
+            text_height: SurfacePx::new(text_h),
+        };
+        let y_off = cell_v_offset(content.v_align, fit).get();
         let avail = cell_max_width as f64;
         // A non-wrapped single line wider than its column spills into empty
         // neighbour cells (`trame-cell-rendering`); wrapped or multi-line text is
@@ -127,28 +130,28 @@ where
         // non-wrap value taller than the row -- that case clips like wrap does.
         let align = cell_alignment(content.h_align, content.numeric);
         let single_line = text_h <= row_h;
-        let overflow = !content.wrap && single_line && text_w > avail;
+        let overflow = !wraps && single_line && text_w > avail;
         let (x_off, clip_rect, needs_clip) = if overflow {
             // Extend the clip rect into the empty neighbours in the spill
             // direction(s); the text is shifted so its anchored edge stays put.
-            let need = text_w - avail;
+            let need = SurfacePx::new(text_w - avail);
             match align {
                 Alignment::Center => {
                     let half = need / 2.0;
-                    let left = spill_width(layout, at, ColDelta::new(-1), half, &is_empty);
-                    let right = spill_width(layout, at, ColDelta::new(1), half, &is_empty);
+                    let left = spill_width(layout, at, ColDelta::new(-1), half, &is_empty).get();
+                    let right = spill_width(layout, at, ColDelta::new(1), half, &is_empty).get();
                     let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1 + right, rect.y1);
                     (-left, clip, true)
                 }
                 Alignment::End | Alignment::Right => {
-                    let left = spill_width(layout, at, ColDelta::new(-1), need, &is_empty);
+                    let left = spill_width(layout, at, ColDelta::new(-1), need, &is_empty).get();
                     let clip = Rect::new(rect.x0 - left, rect.y0, rect.x1, rect.y1);
                     // Right-anchored: keep the right edge inside the cell content
                     // box (negative offset), clipped on the left at the spill.
                     (avail - text_w, clip, true)
                 }
                 _ => {
-                    let right = spill_width(layout, at, ColDelta::new(1), need, &is_empty);
+                    let right = spill_width(layout, at, ColDelta::new(1), need, &is_empty).get();
                     let clip = Rect::new(rect.x0, rect.y0, rect.x1 + right, rect.y1);
                     (0.0, clip, true)
                 }
@@ -161,7 +164,7 @@ where
                 Alignment::End | Alignment::Right => (avail - text_w).max(0.0),
                 _ => 0.0,
             };
-            (x, rect, content.wrap || !single_line)
+            (x, rect, wraps || !single_line)
         };
         if needs_clip {
             surface.push_clip(clip_rect);

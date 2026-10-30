@@ -131,7 +131,7 @@ fn line_uid(input: &str) -> nom::IResult<&str, Uid> {
     let hex = |c: char| c.is_ascii_digit() || ('a'..='f').contains(&c);
     map_res(
         recognize((take_while1(hex), char('_'), take_while1(hex))),
-        |s: &str| Uid::parse(s).ok_or(()),
+        |s: &str| Uid::parse_hex(s).ok_or(()),
     )
     .parse(input)
 }

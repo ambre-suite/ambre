@@ -69,8 +69,7 @@ impl FormulaEngine {
         // Plain (non-formula) cells never go through the VM, so their value must
         // be published here for formula references to resolve. It is read
         // before the cache takes the text.
-        let plain =
-            (!raw.is_formula()).then(|| (!raw.is_empty()).then(|| literal_value(raw.as_str())));
+        let plain = (!raw.is_formula()).then(|| (!raw.is_empty()).then(|| literal_value(&raw)));
         let rejected = self
             .bytecode
             .recompile_if_stale(cell, raw, indices, &mut self.deps, ctx);
@@ -159,11 +158,6 @@ impl FormulaEngine {
     pub fn is_formula_cell(&self, cell: CellId) -> bool {
         self.bytecode.get(&cell).is_some()
     }
-
-    /// Number of cached formula cells.
-    pub fn formula_count(&self) -> usize {
-        self.bytecode.len()
-    }
 }
 
 /// Current wall-clock time as an Excel serial number. The integer part is the
@@ -190,10 +184,10 @@ fn now_serial() -> DateSerial {
 
 /// Parse a plain cell's raw text into a literal [`CellValue`]. Text that
 /// spells no finite number stays text (`TRAME-245`).
-fn literal_value(raw: &str) -> CellValue {
-    match super::types::finite_number(raw) {
+fn literal_value(raw: &StoredFormula) -> CellValue {
+    match super::types::finite_number(raw.as_str()) {
         Some(n) => CellValue::Number(n),
-        None => CellValue::Text(raw.to_string()),
+        None => CellValue::Text(raw.as_str().to_owned()),
     }
 }
 

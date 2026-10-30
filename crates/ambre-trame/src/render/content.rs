@@ -17,16 +17,16 @@ use ambre_core::Rgb;
 #[derive(Clone, Copy)]
 pub struct CellContent<'a> {
     pub text: &'a str,
-    pub bold: bool,
-    pub italic: bool,
+    pub bold: Weight,
+    pub italic: Slant,
     /// Underline run drawn under the glyphs (`trame-cell-styles`).
-    pub underline: bool,
+    pub underline: Underline,
     /// Strikethrough run drawn through the glyphs.
-    pub strikethrough: bool,
+    pub strikethrough: Strikethrough,
     /// Horizontal alignment ([`HAlign::Auto`] resolves numbers right, text left).
     pub h_align: ambre_bus::HAlign,
-    /// The computed value is a number: what [`HAlign::Auto`] resolves on.
-    pub numeric: bool,
+    /// What the computed value is: what [`HAlign::Auto`] resolves on.
+    pub numeric: CellValueKind,
     /// Vertical alignment within the cell (or the span rect for a merge master).
     pub v_align: ambre_bus::VAlign,
     /// Text colour, packed `0xRRGGBB` (`None` = the palette default).
@@ -38,7 +38,7 @@ pub struct CellContent<'a> {
     /// Font size (`None` = the grid default [`BODY_FONT`](super::BODY_FONT)).
     pub size: Option<ambre_core::FontSize>,
     /// Wrap onto multiple lines inside the cell instead of overflowing.
-    pub wrap: bool,
+    pub wrap: WordBreak,
     /// Per-edge border (style + colour each); `None` edges are not drawn.
     pub borders: ambre_bus::Borders,
 }
@@ -49,18 +49,18 @@ impl<'a> CellContent<'a> {
     pub fn plain(text: &'a str) -> Self {
         Self {
             text,
-            bold: false,
-            italic: false,
-            underline: false,
-            strikethrough: false,
+            bold: Weight::Regular,
+            italic: Slant::Upright,
+            underline: Underline::Plain,
+            strikethrough: Strikethrough::Plain,
             h_align: ambre_bus::HAlign::Auto,
-            numeric: crate::formula::types::finite_number(text).is_some(),
+            numeric: CellValueKind::from_bool(crate::formula::types::finite_number(text).is_some()),
             v_align: ambre_bus::VAlign::Middle,
             fg: None,
             bg: None,
             font: None,
             size: None,
-            wrap: false,
+            wrap: WordBreak::Whole,
             borders: ambre_bus::Borders::default(),
         }
     }
@@ -73,14 +73,16 @@ pub struct Decoration {
     pub strikethrough: Strikethrough,
 }
 
+use ambre_bus::CellValueKind;
+use ambre_core::{Slant, SurfacePx, Weight, WordBreak};
 pub use ambre_core::{Strikethrough, Underline};
 
 impl Decoration {
     /// The lines the style of `content` asks for.
     pub fn of(content: &CellContent<'_>) -> Self {
         Self {
-            underline: Underline::from_bool(content.underline),
-            strikethrough: Strikethrough::from_bool(content.strikethrough),
+            underline: content.underline,
+            strikethrough: content.strikethrough,
         }
     }
 }
@@ -94,43 +96,62 @@ pub(super) fn rgb(packed: Rgb) -> Color {
 /// Resolve a cell's parley alignment from its [`HAlign`], deferring `Auto` to
 /// whether the cell computes to a number. The formatted text is not asked: a
 /// currency or a fraction no longer parses as one (`TRAME-UI-093`).
-pub(super) fn cell_alignment(h: ambre_bus::HAlign, numeric: bool) -> Alignment {
-    match h {
-        ambre_bus::HAlign::Left => Alignment::Start,
-        ambre_bus::HAlign::Center => Alignment::Center,
-        ambre_bus::HAlign::Right => Alignment::End,
-        ambre_bus::HAlign::Auto => {
-            if numeric {
-                Alignment::End
-            } else {
-                Alignment::Start
-            }
+pub(super) fn cell_alignment(h: ambre_bus::HAlign, numeric: CellValueKind) -> Alignment {
+    match (h, numeric) {
+        (ambre_bus::HAlign::Left, _) | (ambre_bus::HAlign::Auto, CellValueKind::Text) => {
+            Alignment::Start
+        }
+        (ambre_bus::HAlign::Center, _) => Alignment::Center,
+        (ambre_bus::HAlign::Right, _) | (ambre_bus::HAlign::Auto, CellValueKind::Number) => {
+            Alignment::End
         }
     }
 }
 
-/// Vertical text offset inside a box of height `box_h` for a text block of height
-/// `text_h`, honouring the cell's [`VAlign`](ambre_bus::VAlign). Clamped to `>= 0`
-/// so oversized text never lifts above the box top.
-pub(super) fn cell_v_offset(v: ambre_bus::VAlign, box_h: f64, text_h: f64) -> f64 {
+/// The two heights a vertical alignment places a text block by. Named
+/// fields, so the box and the text cannot trade places.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct TextFit {
+    /// The height of the box the text sits in.
+    pub(super) box_height: SurfacePx,
+    /// The height of the laid-out text block.
+    pub(super) text_height: SurfacePx,
+}
+
+/// Vertical text offset of a text block inside its box, honouring the cell's
+/// [`VAlign`](ambre_bus::VAlign). Clamped to `>= 0` so oversized text never
+/// lifts above the box top.
+pub(super) fn cell_v_offset(v: ambre_bus::VAlign, fit: TextFit) -> SurfacePx {
+    let room = fit.box_height - fit.text_height;
     match v {
-        ambre_bus::VAlign::Top => 0.0,
-        ambre_bus::VAlign::Middle => ((box_h - text_h) / 2.0).max(0.0),
-        ambre_bus::VAlign::Bottom => (box_h - text_h).max(0.0),
+        ambre_bus::VAlign::Top => SurfacePx::ZERO,
+        ambre_bus::VAlign::Middle => (room / 2.0).max(SurfacePx::ZERO),
+        ambre_bus::VAlign::Bottom => room.max(SurfacePx::ZERO),
     }
 }
 
-/// Resolve a [`BorderStyle`] into a stroke `(width, dash_period)`; `dash_period`
-/// of `0.0` means a solid stroke. `Double` is handled by the caller (two passes).
-fn border_stroke(style: ambre_bus::BorderStyle) -> (f64, f64) {
+/// The stroke a [`BorderStyle`] draws with. `Double` is handled by the
+/// caller (two passes).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct BorderStroke {
+    width: SurfacePx,
+    /// The length of one dash and its gap; zero draws a solid stroke.
+    dash_period: SurfacePx,
+}
+
+/// Resolve a [`BorderStyle`] into the stroke it draws with.
+fn border_stroke(style: ambre_bus::BorderStyle) -> BorderStroke {
     use ambre_bus::BorderStyle as Bs;
-    match style {
-        Bs::Solid => (1.0, 0.0),
+    let (width, dash_period) = match style {
+        Bs::Solid | Bs::Double => (1.0, 0.0),
         Bs::Dashed => (1.0, 6.0),
         Bs::Dotted => (1.0, 2.5),
         Bs::Medium => (2.0, 0.0),
         Bs::Thick => (3.0, 0.0),
-        Bs::Double => (1.0, 0.0),
+    };
+    BorderStroke {
+        width: SurfacePx::new(width),
+        dash_period: SurfacePx::new(dash_period),
     }
 }
 
@@ -146,7 +167,9 @@ fn styled_segment<S: DrawSurface>(
 ) {
     use ambre_bus::BorderStyle as Bs;
     let (x0, y0, x1, y1) = (segment.p0.x, segment.p0.y, segment.p1.x, segment.p1.y);
-    let (width, period) = border_stroke(style);
+    let stroke = border_stroke(style);
+    // The surface draws in bare f64: the period unwraps once, here.
+    let period = stroke.dash_period.get();
     if style == Bs::Double {
         // Two 1px lines offset by 1px on each side of the edge.
         let (dx, dy) = if (y1 - y0).abs() < f64::EPSILON {
@@ -170,7 +193,7 @@ fn styled_segment<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((x0, y0), (x1, y1)),
             color,
-            ambre_core::SurfacePx::new(width),
+            stroke.width,
         );
         return;
     }
@@ -188,7 +211,7 @@ fn styled_segment<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((x0 + ux * s, y0 + uy * s), (x0 + ux * e, y0 + uy * e)),
             color,
-            ambre_core::SurfacePx::new(width),
+            stroke.width,
         );
         t += period;
     }

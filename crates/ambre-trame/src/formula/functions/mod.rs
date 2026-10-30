@@ -293,11 +293,7 @@ impl Criterion {
                 Err(_) => *negated == Polarity::NotMatch && *ord == std::cmp::Ordering::Equal,
             },
             Criterion::Text(ord, operand, negated) => {
-                let hit = value
-                    .to_display()
-                    .to_lowercase()
-                    .cmp(&operand.to_lowercase())
-                    == *ord;
+                let hit = crate::formula::text::fold_cmp(&value.to_display(), operand) == *ord;
                 match negated {
                     Polarity::Match => hit,
                     Polarity::NotMatch => !hit,

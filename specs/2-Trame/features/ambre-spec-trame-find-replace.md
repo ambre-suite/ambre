@@ -20,7 +20,7 @@ match, and the replace-all is one undo item. Trame's own turn is what a cell mat
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-077` | `INV` | Case sensitivity and whole-cell matching MUST apply to a search as to a replace. | this spec section 4 | `ambre_trame::logic::tests::group6::find_next_honors_case_and_whole_cell` -- both options reach both gestures through one predicate | none | verified |
+| `TRAME-UI-077` | `INV` | Case sensitivity and whole-cell matching MUST apply to a search as to a replace. | this spec section 4 | `ambre_trame::logic::tests::group6::find_next_honors_case_and_whole_cell` -- both options reach both gestures through one predicate; `ambre_trame::logic::find::tests::case_insensitive_replace_meets_what_find_meets_over_a_final_sigma` -- a replace folds each char as a find does; `::a_find_meets_no_cell_a_replace_leaves_untouched` -- a needle that ends inside the fold of one char | none | verified |
 | `TRAME-UI-078` | `INV` | A plain cell MUST be matched on its displayed value. | this spec section 3 | `ambre_trame::logic::tests::group7::find_matches_the_formatted_value` | none | verified |
 | `TRAME-UI-079` | `INV` | A formula cell MUST be matched on its source text, and only when the user asks for it. | this spec section 3 | `ambre_trame::logic::tests::group6::replace_all_gates_formula_cells` -- it runs over both settings of the option, and the option is a replace option: a find has none, so it matches a formula on its value (section 6) | none | verified |
 

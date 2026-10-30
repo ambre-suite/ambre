@@ -9,6 +9,7 @@
 // super::*`.
 
 use super::*;
+use crate::formula::text::fold_char;
 use crate::formula::types::CellId;
 use ambre_bus::app::find::{FindText, MatchCount, MatchIndex};
 
@@ -25,8 +26,15 @@ fn fold_needle(query: &FindText, case: CaseMatch) -> FoldedNeedle {
 
 /// The text a replace writes in place of each match, as the user typed it.
 /// Any text, the empty one included, is a replacement.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(super) struct Replacement(String);
+
+/// The length alone: the text is document content.
+impl std::fmt::Debug for Replacement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Replacement({} chars)", self.0.chars().count())
+    }
+}
 
 impl Replacement {
     /// The replacement `text`.
@@ -349,17 +357,31 @@ impl TrameState {
 fn fold(s: &str, case: CaseMatch) -> String {
     match case {
         CaseMatch::Sensitive => s.to_string(),
-        CaseMatch::Insensitive => s.to_lowercase(),
+        CaseMatch::Insensitive => s.chars().flat_map(fold_char).collect(),
     }
 }
 
 /// Whether `haystack` matches `needle`, folded by the needle's case: exact
 /// equality for a whole-cell match, else substring containment.
+///
+/// An insensitive match reads the cell through [`strip_ci_match`], as a
+/// replace does. A needle that ends inside the fold of one char matches for
+/// neither. So a find meets no cell a replace leaves untouched.
 fn cell_matches(haystack: &str, needle: &FoldedNeedle, extent: MatchExtent) -> bool {
-    let hay = fold(haystack, needle.case);
-    match extent {
-        MatchExtent::WholeCell => hay == needle.text,
-        MatchExtent::Substring => hay.contains(needle.text.as_str()),
+    match (needle.case, extent) {
+        (CaseMatch::Sensitive, MatchExtent::WholeCell) => haystack == needle.text,
+        (CaseMatch::Sensitive, MatchExtent::Substring) => haystack.contains(needle.text.as_str()),
+        (CaseMatch::Insensitive, MatchExtent::WholeCell) => {
+            strip_ci_match(haystack, needle) == Some("")
+        }
+        (CaseMatch::Insensitive, MatchExtent::Substring) => {
+            haystack.char_indices().any(|(at, _)| {
+                haystack
+                    .get(at..)
+                    .and_then(|rest| strip_ci_match(rest, needle))
+                    .is_some()
+            })
+        }
     }
 }
 
@@ -382,30 +404,30 @@ fn rewrite(
     })
 }
 
-/// Byte length, measured in `hay`, of a case-insensitive match of the
-/// lower-cased `needle` anchored at the start of `hay`. `None` when `hay` does not start with it.
+/// What follows a case-insensitive match of the folded `needle` anchored at
+/// the start of `hay`. `None` when `hay` does not start with it.
 ///
-/// Lowercasing is compared character by character rather than on a pre-folded
+/// Folding is compared character by character rather than on a pre-folded
 /// copy of `hay`, because `to_lowercase` is not length-preserving. `I` (U+0130)
 /// grows from 2 bytes to 3, the Kelvin sign `K` (U+212A) shrinks from 3 to 1. An
 /// offset found in the folded text therefore does not address the original.
-fn ci_match_len(hay: &str, needle: &FoldedNeedle) -> Option<usize> {
+fn strip_ci_match<'a>(hay: &'a str, needle: &FoldedNeedle) -> Option<&'a str> {
     let mut needle = needle.text.chars();
     let mut pending = needle.next();
     for (offset, ch) in hay.char_indices() {
         if pending.is_none() {
-            return Some(offset);
+            return hay.get(offset..);
         }
         // One source char can lowercase to several; all of them must line up, so
         // a needle ending mid-expansion is not a match.
-        for lower in ch.to_lowercase() {
+        for lower in fold_char(ch) {
             match pending {
                 Some(want) if want == lower => pending = needle.next(),
                 _ => return None,
             }
         }
     }
-    pending.is_none().then_some(hay.len())
+    pending.is_none().then_some("")
 }
 
 /// Case-insensitive substring replace: replace every occurrence of `needle`
@@ -415,19 +437,21 @@ fn ci_match_len(hay: &str, needle: &FoldedNeedle) -> Option<usize> {
 fn replace_ci(raw: &str, needle: &FoldedNeedle, replacement: &Replacement) -> String {
     let mut out = String::with_capacity(raw.len());
     let mut rest = raw;
-    while let Some(ch) = rest.chars().next() {
+    let mut chars = rest.chars();
+    while let Some(ch) = chars.next() {
         // A non-empty needle always consumes at least one char, so `rest` shrinks
         // on every iteration whichever branch is taken.
-        match ci_match_len(rest, needle) {
-            Some(len) if len > 0 => {
+        match strip_ci_match(rest, needle) {
+            Some(after) if after.len() < rest.len() => {
                 out.push_str(replacement.as_str());
-                rest = &rest[len..];
+                rest = after;
             }
             _ => {
                 out.push(ch);
-                rest = &rest[ch.len_utf8()..];
+                rest = chars.as_str();
             }
         }
+        chars = rest.chars();
     }
     out
 }
@@ -467,6 +491,39 @@ mod tests {
         assert_eq!(ci("a\u{212A}b", "k", "Z"), "aZb");
     }
 
+    /// A capital sigma lowercases to a final sigma at the end of a word in a
+    /// whole string, and to a plain sigma alone. A replace must meet every
+    /// match a find meets, so both fold a sigma to one letter.
+    #[test]
+    fn case_insensitive_replace_meets_what_find_meets_over_a_final_sigma() {
+        assert_eq!(ci("\u{39F}\u{3A3}", "\u{39F}\u{3A3}", "Z"), "Z");
+        assert_eq!(ci("\u{3BF}\u{3C2}", "\u{39F}\u{3A3}", "Z"), "Z");
+        assert_eq!(ci("\u{39F}\u{3A3}", "\u{3BF}\u{3C3}", "Z"), "Z");
+        let hit = |hay: &str, query: &str| {
+            super::cell_matches(
+                hay,
+                &needle(query, CaseMatch::Insensitive),
+                MatchExtent::Substring,
+            )
+        };
+        assert!(hit("\u{3BF}\u{3C3}", "\u{39F}\u{3A3}"));
+        assert!(hit("\u{39F}\u{3A3}", "\u{3BF}\u{3C3}"));
+    }
+
+    /// A capital I with a dot folds to two chars. A needle that ends between
+    /// them is no match for a replace, so a find must not meet it either.
+    #[test]
+    fn a_find_meets_no_cell_a_replace_leaves_untouched() {
+        let hit = |hay: &str, query: &str, extent| {
+            super::cell_matches(hay, &needle(query, CaseMatch::Insensitive), extent)
+        };
+        assert!(!hit("\u{130}", "i", MatchExtent::Substring));
+        assert_eq!(ci("\u{130}", "i", "Z"), "\u{130}");
+        assert!(hit("a\u{130}b", "\u{130}B", MatchExtent::Substring));
+        assert!(hit("\u{130}", "\u{130}", MatchExtent::WholeCell));
+        assert!(!hit("ab", "a", MatchExtent::WholeCell));
+    }
+
     #[test]
     fn case_insensitive_replace_handles_the_ordinary_cases() {
         assert_eq!(ci("Hello hello", "HELLO", "hi"), "hi hi");
@@ -475,6 +532,13 @@ mod tests {
         assert_eq!(ci("abc", "abc", ""), "");
         // A replacement containing the query must not be rescanned.
         assert_eq!(ci("a", "a", "aa"), "aa");
+    }
+
+    /// A replacement is document content, so its Debug form is its length.
+    #[test]
+    fn a_replacement_prints_its_length_alone() {
+        let printed = format!("{:?}", Replacement::new("secret".to_owned()));
+        assert_eq!(printed, "Replacement(6 chars)");
     }
 
     #[test]

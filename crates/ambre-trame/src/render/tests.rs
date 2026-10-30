@@ -28,15 +28,15 @@ fn layout() -> GridLayout<'static> {
         hidden_rows: &[],
         header_width: SurfacePx::new(50.0),
         header_height: SurfacePx::new(24.0),
-        top: 0.0,
+        top: SurfacePx::ZERO,
         col_width: ambre_core::DocPx::new(80.0),
         row_height: ambre_core::DocPx::new(20.0),
         col_widths: empty_widths(),
         row_heights: empty_heights(),
         origin_col: Col::new(0),
         origin_row: Row::new(0),
-        width: 800.0,
-        height: 600.0,
+        width: SurfacePx::new(800.0),
+        height: SurfacePx::new(600.0),
         total_cols: ColCount::new(1000),
         total_rows: RowCount::new(100_000),
         zoom: ambre_core::ZoomFactor::positive(1.0),
@@ -70,10 +70,10 @@ fn variable_metrics_shift_cells_and_hit_test() {
     l.row_heights = &rows;
 
     // col_w / row_h report the per-axis values, default elsewhere.
-    assert_eq!(l.col_w(Col::new(1)), 200.0);
-    assert_eq!(l.col_w(Col::new(2)), 80.0);
-    assert_eq!(l.row_h(Row::new(0)), 50.0);
-    assert_eq!(l.row_h(Row::new(1)), 20.0);
+    assert_eq!(l.col_w(Col::new(1)), SurfacePx::new(200.0));
+    assert_eq!(l.col_w(Col::new(2)), SurfacePx::new(80.0));
+    assert_eq!(l.row_h(Row::new(0)), SurfacePx::new(50.0));
+    assert_eq!(l.row_h(Row::new(1)), SurfacePx::new(20.0));
 
     // cell_rect: col 2 starts after the widened col 1; row 1 starts below the
     // tall row 0.
@@ -84,10 +84,22 @@ fn variable_metrics_shift_cells_and_hit_test() {
     assert_eq!(r.y1 - r.y0, 20.0);
 
     // col_at / row_at invert the mapping through the variable bands.
-    assert_eq!(l.col_at(50.0 + 80.0 + 10.0), Some(Col::new(1))); // inside the wide col 1
-    assert_eq!(l.col_at(50.0 + 80.0 + 200.0 + 5.0), Some(Col::new(2)));
-    assert_eq!(l.row_at(24.0 + 25.0), Some(Row::new(0))); // inside the tall row 0
-    assert_eq!(l.row_at(24.0 + 50.0 + 5.0), Some(Row::new(1)));
+    let px = SurfacePx::new;
+    assert_eq!(l.col_at(px(50.0 + 80.0 + 10.0)), Some(Col::new(1))); // inside the wide col 1
+    assert_eq!(l.col_at(px(50.0 + 80.0 + 200.0 + 5.0)), Some(Col::new(2)));
+    assert_eq!(l.row_at(px(24.0 + 25.0)), Some(Row::new(0))); // inside the tall row 0
+    assert_eq!(l.row_at(px(24.0 + 50.0 + 5.0)), Some(Row::new(1)));
+}
+
+/// A coordinate that is not finite lies in no band. A NaN once walked every
+/// column of the grid before it answered none.
+#[test]
+fn a_coordinate_that_is_not_finite_hits_no_line() {
+    let l = layout();
+    for bad in [f64::NAN, f64::INFINITY] {
+        assert_eq!(l.col_at(SurfacePx::new(bad)), None);
+        assert_eq!(l.row_at(SurfacePx::new(bad)), None);
+    }
 }
 
 #[test]
@@ -152,16 +164,17 @@ fn spill_width_stops_at_first_non_empty_neighbour() {
     let l = layout(); // col_width 80, 1000 cols
 
     // All neighbours empty: capped at `need`, not at the column boundary.
+    let px = SurfacePx::new;
     let all_empty = |_: CellPos| true;
     assert_eq!(
         spill_width(
             &l,
             CellPos::new(Row::new(0), Col::new(0)),
             ColDelta::new(1),
-            100.0,
+            px(100.0),
             &all_empty
         ),
-        100.0
+        px(100.0)
     );
 
     // Column 3 is occupied: spilling right from col 0 covers cols 1+2 (160px)
@@ -172,10 +185,10 @@ fn spill_width_stops_at_first_non_empty_neighbour() {
             &l,
             CellPos::new(Row::new(0), Col::new(0)),
             ColDelta::new(1),
-            1000.0,
+            px(1000.0),
             &occupied_3
         ),
-        160.0
+        px(160.0)
     );
 
     // Spilling left from col 5 with col 3 occupied covers cols 4 only (80px).
@@ -184,16 +197,16 @@ fn spill_width_stops_at_first_non_empty_neighbour() {
             &l,
             CellPos::new(Row::new(0), Col::new(5)),
             ColDelta::new(-1),
-            1000.0,
+            px(1000.0),
             &occupied_3
         ),
-        80.0
+        px(80.0)
     );
 
     // An immediately non-empty neighbour yields no spill (text clips to cell).
     assert_eq!(
-        spill_width(&l, at(0, 0), ColDelta::new(1), 1000.0, &|_| false),
-        0.0
+        spill_width(&l, at(0, 0), ColDelta::new(1), px(1000.0), &|_| false),
+        SurfacePx::ZERO
     );
 
     // The grid edge bounds the leftward walk at column 0.
@@ -202,10 +215,10 @@ fn spill_width_stops_at_first_non_empty_neighbour() {
             &l,
             CellPos::new(Row::new(0), Col::new(1)),
             ColDelta::new(-1),
-            1000.0,
+            px(1000.0),
             &all_empty
         ),
-        80.0
+        px(80.0)
     );
 }
 
@@ -326,7 +339,7 @@ fn row_headers_draw_hover_tint() {
         palette,
         None,
         Some(Row::new(1)),
-        false,
+        CornerHover::Plain,
         &mut fc,
         &mut tc,
         TextPass::WithText,
@@ -352,7 +365,7 @@ fn row_headers_draw_corner_hover_tint() {
         palette,
         None,
         None,
-        true,
+        CornerHover::Hovered,
         &mut fc,
         &mut tc,
         TextPass::WithText,
@@ -377,7 +390,7 @@ fn row_headers_draw_per_row_separators() {
         palette,
         None,
         None,
-        false,
+        CornerHover::Plain,
         &mut fc,
         &mut tc,
         TextPass::WithText,
@@ -406,7 +419,7 @@ fn row_headers_skip_tint_when_inactive() {
         palette,
         None,
         None,
-        false,
+        CornerHover::Plain,
         &mut fc,
         &mut tc,
         TextPass::WithText,
@@ -438,14 +451,14 @@ fn row_headers_draw_active_tint() {
         palette,
         Some(Row::new(2)),
         None,
-        false,
+        CornerHover::Plain,
         &mut fc,
         &mut tc,
         TextPass::WithText,
     );
 
     // One tint, over the band of row 2 alone.
-    let top = l.row_top(Row::new(2));
+    let top = l.row_top(Row::new(2)).get();
     assert_eq!(
         s.count(|op| matches!(
             op, DrawOp::FillRect { color, rect, .. }
@@ -544,7 +557,7 @@ fn a_wrapped_cell_is_cut_at_its_own_box() {
     // `TRAME-UI-097`: wrap takes the cell out of the spill and clips it.
     let l = layout();
     let mut c = CellContent::plain(LONG);
-    c.wrap = true;
+    c.wrap = ambre_core::WordBreak::Anywhere;
     let ops = draw_one(&l, 0, 3, c);
     assert_eq!(
         the_clip(&ops),
@@ -567,13 +580,23 @@ fn text_taller_than_its_row_is_cut_at_the_row() {
 #[test]
 fn a_vertical_alignment_never_lifts_text_above_the_top() {
     // `TRAME-UI-099`: text taller than the box sits at the top for every align.
-    use super::content::cell_v_offset;
+    use super::content::{TextFit, cell_v_offset};
     use ambre_bus::VAlign;
+    let fit = |box_h: f64, text_h: f64| TextFit {
+        box_height: SurfacePx::new(box_h),
+        text_height: SurfacePx::new(text_h),
+    };
     for v in [VAlign::Top, VAlign::Middle, VAlign::Bottom] {
-        assert_eq!(cell_v_offset(v, 20.0, 50.0), 0.0, "{v:?}");
-        assert!(cell_v_offset(v, 20.0, 10.0) >= 0.0, "{v:?}");
+        assert_eq!(cell_v_offset(v, fit(20.0, 50.0)), SurfacePx::ZERO, "{v:?}");
+        assert!(
+            cell_v_offset(v, fit(20.0, 10.0)) >= SurfacePx::ZERO,
+            "{v:?}"
+        );
     }
-    assert_eq!(cell_v_offset(VAlign::Bottom, 20.0, 10.0), 10.0);
+    assert_eq!(
+        cell_v_offset(VAlign::Bottom, fit(20.0, 10.0)),
+        SurfacePx::new(10.0)
+    );
 }
 
 #[test]

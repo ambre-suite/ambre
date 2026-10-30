@@ -299,7 +299,7 @@ impl TrameView {
         // Arm the latency probe: timestamp now (~keydown), and drop a
         // `performance.mark` so the measure shows in the browser Performance panel.
         self.pending_input_mark = Some(now);
-        performance_mark("ambre:input");
+        performance_mark(PerfMark::Input);
     }
 
     /// Seed text for an editor opened on `at`: the cell's current text, or
@@ -522,7 +522,7 @@ impl TrameView {
     /// value when no session is open (`TRAME-UI-055`).
     pub(crate) fn sync_formula_bar(&mut self) {
         self.formula.reference = self.active_cell_ref();
-        if self.formula.focused {
+        if self.formula.focused == BarFocus::Focused {
             let text = self.formula.text.clone();
             if let Some(ed) = self.editor.as_mut() {
                 if ed.text() != text {
@@ -559,7 +559,7 @@ impl TrameView {
         }
         // Without the focus, the bar holds only what the view wrote. That text
         // is the base a later keystroke is told apart from.
-        if !self.formula.focused {
+        if self.formula.focused == BarFocus::Blurred {
             self.formula.shown = self.formula.text.clone();
         }
         let Some(action) = self.formula.action.take() else {

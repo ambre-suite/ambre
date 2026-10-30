@@ -115,7 +115,9 @@ fn compile_into(
         Expr::Literal(val) => {
             match val {
                 super::types::CellValue::Number(n) => ops.push(Op::PushNum(*n)),
-                super::types::CellValue::Text(s) => ops.push(Op::PushStr(s.clone())),
+                super::types::CellValue::Text(s) => {
+                    ops.push(Op::PushStr(super::text::LiteralText::new(s.clone())))
+                }
                 super::types::CellValue::Boolean(b) => ops.push(Op::PushBool(*b)),
                 super::types::CellValue::Empty => ops.push(Op::PushEmpty),
                 super::types::CellValue::Range(_) => {
@@ -164,7 +166,7 @@ fn compile_into(
             }
             ops.push(Op::CallFn {
                 name: name.clone(),
-                n_args: args.len(),
+                n_args: super::types::Arity::from_len(args.len()),
             });
         }
         // `SheetRef`/`Name` are eliminated by `parser::resolve_refs` before
@@ -238,7 +240,9 @@ mod tests {
         let bc = compile_str("SUM(A1:B10)");
         assert_eq!(bc.ops.len(), 2); // EvalRange + CallFn
         assert!(matches!(&bc.ops[0], Op::EvalRange(_)));
-        assert!(matches!(&bc.ops[1], Op::CallFn { name, n_args: 1 } if name.as_str() == "SUM"));
+        assert!(
+            matches!(&bc.ops[1], Op::CallFn { name, n_args } if name.as_str() == "SUM" && *n_args == super::super::types::Arity::new(1))
+        );
     }
 
     #[test]

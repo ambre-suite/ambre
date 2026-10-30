@@ -173,15 +173,17 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
     // assembled from 1px horizontal lines. It then renders on the GPU
     // surface, since `WgpuSurface` does not implement fill_path.
     let err = palette.cell_error;
-    for &at in state.formula_errors.keys() {
+    for &at in &state.formula_errors {
         if !span.contains(at) || state.is_row_hidden(at.row) {
             continue;
         }
         let rect = layout.cell_rect(at);
+        // The surface draws in bare f64: the leg unwraps once, here.
+        let leg = ERROR_MARK_SIZE.get();
         let mut dy = 0.0;
-        while dy < ERROR_MARK_SIZE {
+        while dy < leg {
             // Row `dy` from the top spans the hypotenuse to the right edge.
-            let x0 = rect.x1 - (ERROR_MARK_SIZE - dy);
+            let x0 = rect.x1 - (leg - dy);
             let y = rect.y0 + dy + 0.5;
             surface.stroke_line(
                 ambre_draw::Line::new((x0, y), (rect.x1, y)),

@@ -2938,61 +2938,43 @@ ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | NU
 ambre-trame | src/chrome/popovers/style.rs | crate::chrome::popovers::style | V_ALIGNS | const | &[(VAlign,icondata::Icon,&str)]	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/relay.rs | crate::chrome::relay | TrameRelay.filter_values | field | RwSignal<Vec<String>>	free-text	free text: user content, label, message or display string
 ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.bold | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.italic | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.merged | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.numeric | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.strikethrough | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.underline | field | RwSignal<bool>	generic	state flag
-ambre-trame | src/chrome/style.rs | crate::chrome::style | StyleState.wrap | field | RwSignal<bool>	generic	state flag
 ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | col_to_alpha() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | row_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	local	private: the formulas compiled since construction, which only its own impl writes and only a test reads
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::compiled_from() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::is_empty() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/dag.rs | crate::formula::dag | DependencyGraph::node_count() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::evaluated_text() | ret | Option<String>	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::formula_count() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::is_formula_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/engine.rs | crate::formula::engine | literal_value(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | SUM_SCALE | const | f64	math	the power of two an exact sum scales its terms by when a partial overflows
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | arg(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials() | ret | f64	math	the exact sum of the terms inside the formula engine
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_partials(nums) | param | impl IntoIterator<Item=f64>	math	the terms of an exact sum inside the formula engine
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum() | ret | f64	math	the exact sum of the terms inside the formula engine
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | exact_sum(nums) | param | impl IntoIterator<Item=f64>	math	the terms of an exact sum inside the formula engine
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | first_num() | ret | Option<f64>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric() | ret | Vec<f64>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric_inner(out) | param | &mut Vec<f64>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_total() | ret | Result<Vec<f64>,CellValue>	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | first_num() | ret | Option<f64>	math	the first formula number of the first argument of a call
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric() | ret | Vec<f64>	math	the formula numbers of the arguments, flattened from ranges
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric_inner(out) | param | &mut Vec<f64>	math	the accumulator of the flattened formula numbers
+ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_total() | ret | Result<Vec<f64>,CellValue>	math	the flattened formula numbers, or the first error value
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | is_truthy() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | one(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | rest_from(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | str_count_arg() | ret | Result<usize,FormulaError>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | str_count_arg(default) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | average_at(idx) | param | &[usize]	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | keys_ascending() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | log_checked(f) | param | fn(f64)->f64	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | matching_indices() | ret | Vec<usize>	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | log_checked(f) | param | fn(f64)->f64	math	the std f64 logarithm a LOG function applies to a formula number
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | numbers_at() | ret | Vec<f64>	math	the formula numbers of a range argument at the matched places
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | push_display(out) | param | &mut String	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at(idx) | param | &[usize]	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | sum_at() | ret | f64	math	the sum of the formula numbers at the matched indices
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | to_index() | ret | Option<usize>	math	local: the 1-based number argument of INDEX; its axis, row or column, is known only after the arity is read
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | unary_math(f) | param | fn(f64)->f64	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | unary_math(f) | param | fn(f64)->f64	math	the std f64 function a one-argument formula function applies
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | values_equal_ci() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(nper) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(paytype) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | annuity_factor(rate) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(i) | param | usize	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.periods | field | f64	math	the count of periods of an annuity, a formula number the call passed
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity.rate | field | f64	math	the rate per period of an annuity, a formula number the call passed
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | Annuity::factor() | ret | f64	math	the annuity factor PMT, PV, FV and RATE read, a formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth() | ret | f64	math	the factor one payment grows by before it counts, a formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | PayTiming::growth(rate) | param | f64	math	the rate per period of the annuity, a formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num() | ret | f64	math	an optional numeric argument of a call, or its default formula number
+ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | opt_num(default) | param | f64	math	the formula number an absent argument reads as
 ambre-trame | src/formula/functions/builtins_c.rs | crate::formula::functions::builtins_c | row_col(current) | param | Option<f64>	math	formula number: the evaluating cell's 1-based row or column
-ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	local geometry / pixel arithmetic
+ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Num.1 | field | f64	math	the formula number a criterion compares against
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::Text.1 | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/mod.rs | crate::formula::functions | Criterion::matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/identity.rs | crate::formula::identity | reanchor(edited) | param | &impl Fn(Option<&SheetQualifier>)->bool	generic	predicate over typed qualifiers, the caller's filter
@@ -3063,7 +3045,6 @@ ambre-trame | src/formula/render.rs | crate::formula::render | binop_symbol() | 
 ambre-trame | src/formula/render.rs | crate::formula::render | emit() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | emit(min_prec) | param | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | needs_quoting() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/render.rs | crate::formula::render | needs_quoting(name) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | precedence() | ret | u8	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render() | ret | String	generic	renderer: an expression as formula text, whose form the caller names
 ambre-trame | src/formula/render.rs | crate::formula::render | render_cell() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3074,44 +3055,47 @@ ambre-trame | src/formula/render.rs | crate::formula::render | render_range() | 
 ambre-trame | src/formula/render.rs | crate::formula::render | render_span() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_stored() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/formula/render.rs | crate::formula::render | render_uid() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
+ambre-trame | src/formula/text.rs | crate::formula::text | LiteralText.0 | field | String	newtype-inner	the text of a literal a user typed in a formula or a number format
+ambre-trame | src/formula/text.rs | crate::formula::text | LiteralText::as_str() | ret | &str	newtype-inner	the text of the literal, for the value or the output that holds it
+ambre-trame | src/formula/text.rs | crate::formula::text | LiteralText::new(text) | param | String	newtype-inner	the text of a literal a user typed
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_cmp(a) | param | &str	generic	one of the two texts compared with their case ignored, the order of the two free
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_cmp(b) | param | &str	generic	the other text compared with its case ignored, the order of the two free
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_char() | ret | impl Iterator<Item=char>	generic	the folded form of one char of a text a comparison ignoring case folds
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_char(ch) | param | char	generic	one char of a text a comparison ignoring case folds: a query, a cell's text or a SEARCH argument
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_char_simple() | ret | char	generic	the one char a char folds to, or the char itself when its fold is several
+ambre-trame | src/formula/text.rs | crate::formula::text | fold_char_simple(ch) | param | char	generic	one char of a SEARCH argument, folded to one so positions stay aligned
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Boolean.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Number.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::Text.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::as_number() | ret | Result<f64,FormulaError>	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::as_number() | ret | Result<f64,FormulaError>	math	the cell value read as a formula number
 ambre-trame | src/formula/types.rs | crate::formula::types | CellValue::to_display() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet.0 | field | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::index() | ret | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::new(index) | param | u16	newtype-inner	EngineSheet field, constructor or accessor
 ambre-trame | src/formula/types.rs | crate::formula::types | EngineSheet::position() | ret | usize	newtype-inner	EngineSheet field, constructor or accessor
-ambre-trame | src/formula/types.rs | crate::formula::types | Op::CallFn.n_args | field | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushBool.0 | field | bool	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushNum.0 | field | f64	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
-ambre-trame | src/formula/types.rs | crate::formula::types | Op::PushStr.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::is_empty() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | RangeDep::len() | ret | usize	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/formula/types.rs | crate::formula::types | RangeId::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number() | ret | Option<f64>	math	the finite number a cell's text spells, inside the formula engine
 ambre-trame | src/formula/types.rs | crate::formula::types | finite_number(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	local geometry / pixel arithmetic
+ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(x) | param | f64	math	one of the two formula numbers compared, the order of the two free
+ambre-trame | src/formula/types.rs | crate::formula::types | nearly_equal(y) | param | f64	math	the other formula number compared, the order of the two free
 ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	math	an operator's result inside the formula engine
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
+ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	the step of a fill series: 1 for a lone number, else the difference of two finite sources, infinite past the largest number
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
-ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/fill.rs | crate::logic::fill | format_number(v) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num() | ret | Option<f64>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/fill.rs | crate::logic::fill | parse_num(raw) | param | &str	free-text	free text: user content, label, message or display string
+ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::carries_style() | ret | bool	generic	predicate: whether a cell holds a style a fill carries
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(haystack) | param | &str	free-text	the displayed text of a cell; the query is the typed FoldedNeedle and the extent a MatchExtent
-ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len() | ret | Option<usize>	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/find.rs | crate::logic::find | ci_match_len(hay) | param | &str	free-text	the raw text of a matched cell, scanned for the query; the query is the typed FoldedNeedle
 ambre-trame | src/logic/find.rs | crate::logic::find | fold() | ret | String	generic	case-folds any text; a folded query is a FoldedNeedle
-ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	free-text	text folded for a comparison: the query, which only fold_needle hands it, or a cell's displayed text
+ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	free-text	the query text, which only fold_needle hands it to fold
+ambre-trame | src/logic/find.rs | crate::logic::find | strip_ci_match() | ret | Option<&'a str>	free-text	the raw text of a cell past a match of the query
+ambre-trame | src/logic/find.rs | crate::logic::find | strip_ci_match(hay) | param | &'a str	free-text	the raw text of a cell, scanned for the query; the query is the typed FoldedNeedle
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci(raw) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | TrameState::canonical_dump() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3121,48 +3105,41 @@ ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_dag
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_formula_grid::ROWS | const | u32	math	a value local to one algorithm
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_grid(cols) | param | u32	math	fixture grid dimensions
 ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | build_literal_grid(rows) | param | u32	math	fixture grid dimensions
-ambre-trame | src/logic/fixtures.rs | crate::logic::fixtures | new_sheet_id(name) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | compare_cell_values::rank() | ret | u8	math	a value local to one algorithm
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(operand) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
+ambre-trame | src/logic/helpers.rs | crate::logic::helpers | condition_pass(operand) | param | &str	free-text	the filter operand the user typed, compared as a number when it spells a finite one, else as text
 ambre-trame | src/logic/helpers.rs | crate::logic::helpers | filter_pass() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/interop.rs | crate::logic::interop | TrameState::export_cell_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/interop.rs | crate::logic::interop | detect_csv_delimiter(data) | param | &[u8]	generic	file bytes or CSV delimiter
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::cell_has_raw() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | TrameState::delete_merge_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/merges.rs | crate::logic::merges | has_raw_value() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/mod.rs | crate::logic | TrameState.entry_end | field | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.sheet_list_sent | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/logic/mod.rs | crate::logic | TrameState.undecodable | field | std::cell::Cell<bool>	generic	state flag
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | const | [&str;7]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | MONTHS | const | [&str;12]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Token::Date.1 | field | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | Token::Literal.0 | field | String	newtype-inner	tuple-variant or newtype inner; the type or variant names the value
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | DAYS | const | [&str;7]	free-text	the English day names a ddd or dddd run prints
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | MONTHS | const | [&str;12]	free-text	the English month names a mmm or mmmm run prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(pattern) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(value) | param | f64	math	local geometry / pixel arithmetic
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_custom(value) | param | f64	math	the formula number a custom pattern formats
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_date() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | format_time() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | group_thousands(text) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | lex(section) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad(len) | param | usize	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad(n) | param | u32	math	pad width
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | pad(n) | param | u32	math	the date or time component printed, on two digits when the run asks
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_fraction() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_fraction(digits) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_integer() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | place_integer(digits) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_date() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_number() | ret | String	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_number(value) | param | f64	math	local geometry / pixel arithmetic
+ambre-trame | src/logic/number_format.rs | crate::logic::number_format | render_number(value) | param | f64	math	the formula number the format tokens render
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | split_sections() | ret | Vec<String>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | split_sections(pattern) | param | &str	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/logic/schema.rs | crate::logic::schema | MATERIALIZE_CAP | const | usize	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	the formula number formatted to the cell format
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
-ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	foreign-api	the per-sheet root name, for the Loro call that opens it
+ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	newtype-inner	the per-sheet root name SheetContainer holds, which the Loro call that opens the root reads
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/schema.rs | crate::logic::schema | gate_through() | ret | Result<Cow<'a,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
@@ -3181,49 +3158,21 @@ ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_di
 ambre-trame | src/logic/styles.rs | crate::logic::styles | TrameState::format_display(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::adopt_session() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::merge_payload() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/logic/sync.rs | crate::logic::sync | TrameState::note_undecodable(bytes) | param | &[u8]	math	count, length, local index, limit or calendar/arith helper
-ambre-trame | src/logic/sync.rs | crate::logic::sync | write_entry() | ret | Option<i32>	trait	Loro Counter (i32) of the oplog version vector
 ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
-ambre-trame | src/model/line.rs | crate::model::line | <Col as Line>::to_index() | ret | Option<usize>	newtype-inner	the Line view of Col::to_index, the newtype conversion to a Loro list index
 ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
-ambre-trame | src/model/line.rs | crate::model::line | <Row as Line>::to_index() | ret | Option<usize>	newtype-inner	the Line view of Row::to_index, the newtype conversion to a Loro list index
 ambre-trame | src/model/line.rs | crate::model::line | Line::count_of(len) | param | usize	math	count, size or local index: a Loro list index or length
-ambre-trame | src/model/line.rs | crate::model::line | Line::to_index() | ret | Option<usize>	newtype-inner	the axis newtype conversion to a Loro list index, one per axis
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey.0 | field | String	newtype-inner	the stored cell key CellKey types
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	foreign-api	the stored cell key, for the Loro call into the map
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | CellKey::as_str() | ret | &str	newtype-inner	the stored cell key CellKey holds, which the Loro call into the map reads
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | SheetIndex::contains_row() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	newtype-inner	Uid's own field, key-part formatter and parser
-ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	newtype-inner	Uid's own field, key-part formatter and parser
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse(s) | param | &str	generic	the key part a list element or a cell key stores, read back into a uid from its canonical spelling alone: the codec of a struct of two fields
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::parse_hex(s) | param | &str	generic	the compact uid a stored formula writes, read back into a uid: the codec of a struct of two fields
+ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | Uid::to_key_part() | ret | String	generic	the key part a list element stores for a uid: the codec of a struct of two fields
 ambre-trame | src/model/sheet_index.rs | crate::model::sheet_index | parse_cell_key(key) | param | &str	foreign-api	a stored cell key as Loro reports it
-ambre-trame | src/render/cells.rs | crate::render::cells | spill_width() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/cells.rs | crate::render::cells | spill_width(need) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.bold | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.italic | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.numeric | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.strikethrough | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/render/content.rs | crate::render::content | CellContent.text | field | &'a str	free-text	free text: user content, label, message or display string
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.underline | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | CellContent.wrap | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(text) | param | &'a str	free-text	free text: user content, label, message or display string
-ambre-trame | src/render/content.rs | crate::render::content | border_stroke() | ret | (f64,f64)	math	local geometry / pixel arithmetic
-ambre-trame | src/render/content.rs | crate::render::content | cell_alignment(numeric) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset(box_h) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/content.rs | crate::render::content | cell_v_offset(text_h) | param | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/content.rs | crate::render::content | has_border() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/headers.rs | crate::render::headers | draw_row_headers_on(hover_corner) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.height | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.top | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout.width | field | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_at(px) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_left() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::col_w() | ret | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_at(py) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_h() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::row_top() | ret | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/render/merges.rs | crate::render::merges | draw_merges_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/text.rs | crate::render::text | col_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | row_label() | ret | String	free-text	free text: user content, label, message or display string
@@ -3231,28 +3180,17 @@ ambre-trame | src/render/walk.rs | crate::render::walk | SheetAxes<'_>::is_hidde
 ambre-trame | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::fill_handle_at() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_cell_text(text) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/geometry.rs | crate::ui::grid::geometry | TrameUiState::set_formula_error(error) | param | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.bold | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.is_filtered | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.italic | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.numeric | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.strikethrough | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.text | field | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.underline | field | bool	generic	independent state or style flag, not a mode selector
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData.wrap | field | bool	generic	independent state or style flag, not a mode selector
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellData::content(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::commit_command(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::follow() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::new(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::selected_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILL_HANDLE_SIZE | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILTER_BUTTON_SIZE | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::band_contains() | ret | bool	generic	predicate result
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_col() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_row() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::is_multi() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | TrameUiState.formula_errors | field | HashMap<CellPos,String>	free-text	formula error message, keyed by cell
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::is_row_hidden() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_by() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::scroll_to_include() | ret | bool	generic	predicate or did-it-change return
@@ -3260,35 +3198,8 @@ ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::set_
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap_active_to_master() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/renderer/edit.rs | crate::ui::renderer::edit | draw_edit(caret_visible) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | ERROR_MARK_SIZE | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | BADGE_RADIUS | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHING_DASH | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHING_GAP | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHING_PERIOD | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MDI_FILTER_PATH | const | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_h(phase) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_v(phase) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(bx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(by) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(h) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(w) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_funnel(bx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_funnel(by) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_funnel(h) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_funnel(w) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_insert_badge(cx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_insert_badge(cy) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_disc(cx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_disc(cy) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_disc(r) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(bx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(by) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(contours) | param | &[Vec<(f64,f64)>]	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(h) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(w) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | mdi_filter_polygon() | ret | &'static Vec<Vec<(f64,f64)>>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | mdi_filter_polygon::POLY | static | std::sync::OnceLock<Vec<Vec<(f64,f64)>>>	math	a value local to one algorithm
+ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	foreign-api	the alpha of the dirty-cell veil, which peniko's Color::with_alpha alone reads
+ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MDI_FILTER_PATH | const | &str	foreign-api	the SVG path data of the MDI filter icon, which kurbo::BezPath::from_svg alone reads
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::handle_input() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoom() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::apply_cursor_move() | ret | bool	generic	predicate or did-it-change return
@@ -3317,8 +3228,7 @@ ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView:
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::signal_fatal(reason) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears(is_multi) | param | bool	generic	fact passed in (state predicate), not a mode selector
-ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears(send) | param | impl FnOnce()->bool	generic	state flag
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.focused | field | bool	generic	independent state or style flag, not a mode selector
+ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | stats_band_clears(send) | param | impl FnOnce()->bool	generic	the send of the stats request, answering whether it reached the Logic thread
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.reference | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.shown | field | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | FormulaBar.text | field | String	free-text	free text: user content, label, message or display string
@@ -3337,9 +3247,8 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | TrameView.viewport_changed 
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(value) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_input_focused() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_mark(name) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(name) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/mod.rs | crate::ui::view | performance_measure(start) | param | &str	free-text	free text: user content, label, message or display string
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | PerfMark::name() | ret | &'static str	newtype-inner	the name the browser Performance panel knows the mark by
+ambre-trame | src/ui/view/mod.rs | crate::ui::view | PerfMeasure::name() | ret | &'static str	newtype-inner	the name the browser Performance panel knows the measure by
 ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
 ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-api	the mark key a loro text delta reports; parsed into a HeaderField at once, the inverse of FieldMark
@@ -3422,7 +3331,7 @@ ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | MonthCount::new(months) | param | i64	newtype-inner	a count of months from January, past either end of the year
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | UNIX_EPOCH_SERIAL | const | i64	math	calendar arithmetic: a count of days
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | date_part(pick) | param | fn(CivilDate)->i64	math	calendar arithmetic (y/m/d), local
-ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	newtype-inner	newtype inner, accessor or constructor
+ambre-trame | src/logic/find.rs | crate::logic::find | FoldedNeedle.text | field | String	free-text	the search text the user typed, folded by the case it is compared under
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement.0 | field | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::new(text) | param | String	newtype-inner	newtype inner, accessor or constructor
 ambre-trame | src/logic/find.rs | crate::logic::find | Replacement::as_str() | ret | &str	newtype-inner	newtype inner, accessor or constructor
@@ -3489,9 +3398,6 @@ ambre-murmure | src/paint.rs | crate::paint | LaidRow::holds() | ret | bool	gene
 ambre-murmure | src/paint.rs | crate::paint | RowBounds::holds() | ret | bool	generic	predicate result
 ambre-murmure | src/paint.rs | crate::paint | painter_px(at) | param | f64	math	the f64 a kurbo rectangle of the surface takes, converted at the painter boundary
 ambre-murmure | src/paint.rs | crate::paint | surface_px() | ret | f64	math	the f64 a kurbo rectangle of the surface takes, converted at the painter boundary
-ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.start | field | f64	math	start and step of the linear fill series, a cell value
-ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	start and step of the linear fill series, a cell value
-ambre-trame | src/logic/fill.rs | crate::logic::fill | Series::at() | ret | f64	math	start and step of the linear fill series, a cell value
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.hours | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.minutes | field | u32	math	calendar arithmetic: a field of the time of day the number format prints
 ambre-trame | src/logic/number_format.rs | crate::logic::number_format | TimeOfDay.seconds | field | u32	math	calendar arithmetic: a field of the time of day the number format prints

@@ -66,11 +66,12 @@ impl TrameState {
                 TrameOutcome::display_only(vec![])
             }
             TrameCommand::SetCellText { row, col, text } => {
+                // The text is document content: the log holds its length alone.
                 tracing::info!(
-                    "[Logic] SetCellText row={:?} col={:?} text='{:.80}'",
+                    "[Logic] SetCellText row={:?} col={:?} text of {} chars",
                     row,
                     col,
-                    text,
+                    text.chars().count(),
                 );
                 // Open the edit group: the cell write below and any derived
                 // commit (filter recompute) merge into a single undo item. The
@@ -83,7 +84,10 @@ impl TrameState {
                 self.begin_cell_edit(session, CellPos::new(row, col))
             }
             TrameCommand::CommitCellEdit { session, text } => {
-                tracing::info!("[Logic] CommitCellEdit session={session} text='{text:.80}'");
+                tracing::info!(
+                    "[Logic] CommitCellEdit session={session} text of {} chars",
+                    text.chars().count()
+                );
                 self.commit_cell_edit(session, &FormulaSource::new(text))
             }
             TrameCommand::EndCellEdit { session } => self.end_cell_edit(session),

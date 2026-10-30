@@ -15,9 +15,9 @@
 
 | Feature | Scope | State | Rows | Loose |
 | :--- | :--- | :--- | ---: | ---: |
-| `trame-autofill` | A user types 1 and 2, grabs the small square at the corner of the selection and drags down. | implemented | 10 |  |
+| `trame-autofill` | A user types 1 and 2, grabs the small square at the corner of the selection and drags down. | implemented | 11 |  |
 | `trame-context-menu` | A user right-clicks. | implemented | 10 |  |
-| `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 18 |  |
+| `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 19 |  |
 | `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 6 |  |
 | `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | implemented | 46 |  |
 | `trame-headers` | Two fixed strips name the rows and the columns, show where the selection is, and carry the gestures that act on a whole axis. | implemented | 9 |  |
@@ -32,7 +32,7 @@
 | `trame-cell-rendering` | A label wider than its column runs over the empty cells beside it. | partial | 13 |  |
 | `trame-cell-styles` | A user selects a range and presses Bold. | partial | 24 |  |
 | `trame-clipboard` | A user selects a thousand rows, scrolls past them and copies. | partial | 9 |  |
-| `trame-function-library` | The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. | partial | 29 |  |
+| `trame-function-library` | The named calls a user may write inside a formula: `SUM`, `VLOOKUP`, `IF`, `TEXT`, `PMT`. | partial | 32 |  |
 | `trame-grid-viewport` | A user scrolls a sheet of 100 000 rows. | partial | 20 |  |
 | `trame-import-export` | A user opens a table that came from somewhere else, and hands one back to someone who does not use Ambre. | partial | 41 |  |
 | `trame-number-formats` | A user picks Percent. | partial | 14 |  |
@@ -41,4 +41,4 @@
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 35 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 12 implemented, 13 partial, 0 design-only. 484 contract rows, 0 loose.**
+**25 features: 12 implemented, 13 partial, 0 design-only. 489 contract rows, 0 loose.**

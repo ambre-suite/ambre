@@ -479,6 +479,38 @@ fn financial_functions() {
     );
 }
 
+/// The type argument of an annuity names when a payment falls: 0 at the end
+/// of a period, any other number at its start. A type of 2 once scaled the
+/// rate twice over and answered a third timing.
+#[test]
+fn an_annuity_type_other_than_zero_reads_as_the_start() {
+    let at = |kind: f64| {
+        let args = [num(0.05), num(10.0), num(1000.0), num(0.0), num(kind)];
+        (
+            pmt(&args).to_display(),
+            fv(&args).to_display(),
+            pv(&args).to_display(),
+            nper(&args).to_display(),
+        )
+    };
+    assert_eq!(at(2.0), at(1.0));
+    assert_eq!(at(-1.0), at(1.0));
+    assert_ne!(at(1.0), at(0.0));
+    // RATE recovers the rate of a start-of-period annuity, whatever type
+    // other than zero names it.
+    let rate_at = |kind: f64| {
+        rate(&[
+            num(10.0),
+            num(-123.337_69),
+            num(1000.0),
+            num(0.0),
+            num(kind),
+        ])
+    };
+    approx(rate_at(1.0), 0.05);
+    approx(rate_at(2.0), 0.05);
+}
+
 #[test]
 fn logic_info_functions() {
     assert_eq!(is_text(&[txt("x")]).to_display(), "true");
@@ -571,6 +603,40 @@ fn lookup_reference_functions() {
         row_col(&[num(1.0)], Some(7.0)),
         CellValue::Error(FormulaError::NaError)
     ));
+}
+
+/// SEARCH counts its position in the chars of the text it was given. A
+/// capital I with a dot lowercases to two chars, and a whole-string lowercase
+/// put every later match one place too far.
+#[test]
+fn search_counts_the_chars_of_the_text_it_was_given() {
+    assert_eq!(search_fn(&[txt("x"), txt("\u{130}x")]).to_display(), "2");
+    assert_eq!(
+        search_fn(&[txt("X"), txt("\u{130}\u{130}x"), num(2.0)]).to_display(),
+        "3"
+    );
+    assert_eq!(
+        search_fn(&[txt("\u{3C3}"), txt("A\u{3A3}")]).to_display(),
+        "2"
+    );
+    // A capital I with a dot has no simple fold, so a plain i does not meet it.
+    assert!(matches!(
+        search_fn(&[txt("i"), txt("\u{130}")]),
+        CellValue::Error(_)
+    ));
+}
+
+/// MID refuses a start below 1 and a negative length, as Excel does with
+/// `#VALUE!`, which reads `#TYPE!` here. Both were clamped and answered text.
+#[test]
+fn mid_refuses_a_start_below_one_and_a_negative_length() {
+    let refused =
+        |args: &[CellValue]| matches!(mid(args), CellValue::Error(FormulaError::TypeError));
+    assert!(refused(&[txt("abc"), num(0.0), num(2.0)]));
+    assert!(refused(&[txt("abc"), num(-1.0), num(2.0)]));
+    assert!(refused(&[txt("abc"), num(1.0), num(-1.0)]));
+    assert_eq!(mid(&[txt("abc"), num(1.0), num(0.0)]).to_display(), "");
+    assert_eq!(mid(&[txt("abc"), num(2.0), num(5.0)]).to_display(), "bc");
 }
 
 #[test]
@@ -864,6 +930,17 @@ fn text_that_spells_no_finite_number_counts_in_no_total() {
     assert!(txt("1e999").as_number().is_err());
 }
 
+/// A criterion that spells no finite number compares as text. Read as a
+/// number, `inf` would match no text cell and `>1e999` no cell at all
+/// (`TRAME-245`).
+#[test]
+fn a_criterion_that_spells_no_finite_number_compares_as_text() {
+    let r = range(3, 1, vec![num(1.0), txt("inf"), txt("NaN")]);
+    assert_eq!(countif(&[r.clone(), txt("inf")]).to_display(), "1");
+    assert_eq!(countif(&[r.clone(), txt("=NaN")]).to_display(), "1");
+    assert_eq!(countif(&[r, txt(">1e999")]).to_display(), "2");
+}
+
 /// Text that reads as a number counts in a total, from a range as from a
 /// scalar; text that does not is left out (`TRAME-200`).
 #[test]
@@ -922,6 +999,28 @@ fn an_exact_lookup_ignores_case() {
     );
     let col = range(2, 1, vec![txt("Paris"), txt("Été")]);
     assert_eq!(match_fn(&[txt("été"), col, num(0.0)]).to_display(), "2");
+}
+
+/// An exact lookup folds a final sigma as the find and SEARCH fold it. A
+/// whole-string lowercase turned a word's last capital sigma into a final
+/// one, so a key typed with a plain sigma met nothing (`TRAME-202`).
+#[test]
+fn an_exact_lookup_folds_a_final_sigma_as_the_find_does() {
+    let table = range(1, 2, vec![txt("\u{39F}\u{3A3}"), num(1.0)]);
+    let exact = CellValue::Boolean(false);
+    for key in ["\u{3BF}\u{3C3}", "\u{3BF}\u{3C2}", "\u{39F}\u{3A3}"] {
+        assert_eq!(
+            vlookup(&[txt(key), table.clone(), num(2.0), exact.clone()]).to_display(),
+            "1",
+            "{key}"
+        );
+    }
+    let cells = range(1, 1, vec![txt("\u{39F}\u{3A3}")]);
+    assert_eq!(
+        countif(&[cells, txt("\u{3BF}\u{3C3}")]).to_display(),
+        "1",
+        "a criterion folds alike"
+    );
 }
 
 /// An approximate lookup over keys that fall answers `#N/A`, not the row it

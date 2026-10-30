@@ -57,6 +57,19 @@ impl TrameState {
             } else {
                 raw
             };
+            // The value and the style both need the cell's lines. A cell short
+            // of them is refused once, and the refusal is reported, as a fill
+            // reports it. A cell with no line is blank and unstyled already, so
+            // an empty unstyled paste leaves nothing to refuse (`TRAME-243`).
+            if let Err(refused) = self.materialize(at) {
+                let styled = cell.bold == Weight::Bold
+                    || cell.italic == Slant::Italic
+                    || cell.style != CellStyle::default();
+                if !text.as_str().is_empty() || styled {
+                    self.write_refusals.push(WriteRefusal::from(refused));
+                }
+                continue;
+            }
             self.write_cell(at, &text);
             self.apply_pasted_style(at, cell);
         }

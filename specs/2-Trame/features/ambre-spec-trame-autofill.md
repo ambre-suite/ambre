@@ -18,7 +18,8 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-067` | `POST` | A numeric pattern in the source MUST continue across the filled range. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_extrapolates_numeric_series`; `::fill_series_single_cell_increments_by_one`; `group6::fill_merged_series_increments_per_block` | none | verified |
+| `TRAME-UI-067` | `POST` | A numeric pattern in the source MUST continue across the filled range. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_extrapolates_numeric_series`; `::fill_series_single_cell_increments_by_one`; `group6::fill_merged_series_increments_per_block`; `ambre_trame::logic::tests::group12::a_series_from_one_large_number_keeps_its_step` -- a step of one past the spacing of the floats | none | verified |
+| `TRAME-UI-180` | `FAIL` | A series that runs past the largest number MUST NOT write the cells past it, and MUST answer with a notice saying so. | this spec section 3; `ambre-spec-trame-function-library.md` (`TRAME-244`) | `ambre_trame::logic::tests::group12::a_series_past_the_largest_number_stops_there` -- the cells past it keep what they held; `::a_step_past_the_largest_number_stops_at_once` -- a step past it stops at the first filled cell | none | verified |
 | `TRAME-UI-068` | `POST` | A source with no numeric pattern MUST be repeated verbatim. | this spec section 3 | `ambre_trame::logic::tests::group10::a_text_source_repeats_verbatim`; `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks` -- the merged path | none | verified |
 | `TRAME-UI-069` | `POST` | A filled formula MUST have its relative references shifted by its own offset from the source. | this spec section 3 | `ambre_trame::logic::tests::group5::fill_auto_copies_text_and_reindexes_formula` | none | verified |
 | `TRAME-UI-070` | `POST` | A source tiled by equal merged blocks MUST fill block by block, not cell by cell. | this spec section 3 | `ambre_trame::logic::tests::group6::fill_merged_source_tiles_and_remerges_blocks`; `::fill_merged_series_increments_per_block`; `::fill_multi_merged_source_continues_pattern` | none | verified |
@@ -33,7 +34,7 @@ status values are normative in `ambre-spec-template.md`.
   the operation that row was written for. No bench measures it.
 * **Boundary.** none of its own: the fill writes cells to the document, and `ZK-001` seals every
   payload before it leaves the client.
-* **Verification.** 10 `verified`. What is proven is what the fill produces on the numeric, the text
+* **Verification.** 11 `verified`. What is proven is what the fill produces on the numeric, the text
   and the merged paths. It refuses a malformed range, a drag back to its start and another sheet. A
   fill is one undo item, and a fill the queue refused leaves the selection where it was. A merged
   fill writes up to the edge of the drag, and a tail shorter than a block is cut at that edge.
@@ -74,7 +75,8 @@ fill_drag: Option<(CellRect, (u32, u32))>,  // the source rectangle, and its blo
 2. It counts the source values along that axis -- blocks, not cells, when the source is merged.
 3. It picks the mode: `Auto` without the modifier, otherwise `Series` on a single value and `Copy`
    on several.
-4. The Logic thread walks each fill line, extrapolating a numeric series or tiling the source.
+4. The Logic thread walks each fill line, extrapolating a numeric series or tiling the source. A
+   series stops at its last finite value, so a step past the largest number stops it at once.
 5. Each written formula shifts by its own offset; each written cell carries the source style.
 6. The selection grows to the whole filled rectangle.
 

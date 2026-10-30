@@ -28,9 +28,10 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     text_cache: &mut TextCache,
     text_pass: TextPass,
 ) {
-    let w = layout.width;
+    // The surface draws in bare f64: the lengths unwrap once, here.
+    let w = layout.width.get();
     let hh = layout.header_height.get();
-    let top = layout.top;
+    let top = layout.top.get();
 
     // Opaque background over the full top strip (corner included).
     surface.fill_rect(Rect::new(0.0, top, w, top + hh), palette.header_bg);
@@ -41,10 +42,10 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         && Some(col) != active_col
         && col >= layout.origin_col
     {
-        let x = layout.col_left(col);
+        let x = layout.col_left(col).get();
         if x < w {
             surface.fill_rect(
-                Rect::new(x, top, x + layout.col_w(col), top + hh),
+                Rect::new(x, top, x + layout.col_w(col).get(), top + hh),
                 palette.header_hover,
             );
         }
@@ -54,10 +55,10 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     if let Some(col) = active_col
         && col >= layout.origin_col
     {
-        let x = layout.col_left(col);
+        let x = layout.col_left(col).get();
         if x < w {
             surface.fill_rect(
-                Rect::new(x, top, x + layout.col_w(col), top + hh),
+                Rect::new(x, top, x + layout.col_w(col).get(), top + hh),
                 palette.header_active,
             );
         }
@@ -77,7 +78,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         let mut col = layout.origin_col;
         let mut col_x = layout.header_width.get();
         while col < layout.total_cols.as_end() && col_x < w {
-            let edge = col_x + layout.col_w(col);
+            let edge = col_x + layout.col_w(col).get();
             surface.stroke_line(
                 ambre_draw::Line::new((edge, top), (edge, top + hh)),
                 palette.header_border,
@@ -98,7 +99,7 @@ pub fn draw_col_headers_on<S: DrawSurface>(
         if col >= layout.total_cols.as_end() || col_x >= w {
             break;
         }
-        let cw = layout.col_w(col);
+        let cw = layout.col_w(col).get();
         let label = col_label(col);
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,
@@ -124,6 +125,16 @@ pub fn draw_col_headers_on<S: DrawSurface>(
     }
 }
 
+ambre_core::define_flag! {
+    /// Whether the pointer rests on the top-left select-all corner.
+    pub enum CornerHover {
+        /// The pointer is elsewhere: the corner draws plain.
+        Plain,
+        /// The pointer rests on the corner: it draws the hover tint.
+        Hovered,
+    }
+}
+
 /// Draw the left row-header strip. The order is the opaque background, then the
 /// hover tint (when `hover_row` is visible and not the active row). Then the
 /// active-row tint (when `active_row` is visible), the right separator, and the
@@ -138,22 +149,23 @@ pub fn draw_row_headers_on<S: DrawSurface>(
     palette: &Palette,
     active_row: Option<Row>,
     hover_row: Option<Row>,
-    hover_corner: bool,
+    hover_corner: CornerHover,
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     text_pass: TextPass,
 ) {
-    let h = layout.height;
+    // The surface draws in bare f64: the lengths unwrap once, here.
+    let h = layout.height.get();
     let hw = layout.header_width.get();
-    let top = layout.top;
-    let cells_top = top + layout.header_height.get();
+    let top = layout.top.get();
+    let cells_top = layout.cells_top().get();
 
     // Opaque background over the full left strip (below the formula bar band).
     surface.fill_rect(Rect::new(0.0, top, hw, h), palette.header_bg);
 
     // Hover tint on the top-left corner (select-all affordance). The corner is
     // the last bg drawn over this region, so the tint sits cleanly on top.
-    if hover_corner {
+    if hover_corner == CornerHover::Hovered {
         surface.fill_rect(Rect::new(0.0, top, hw, cells_top), palette.header_hover);
     }
 
@@ -164,10 +176,10 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         && row >= layout.origin_row
         && !layout.is_hidden(row)
     {
-        let y = layout.row_top(row);
+        let y = layout.row_top(row).get();
         if y < h {
             surface.fill_rect(
-                Rect::new(0.0, y, hw, y + layout.row_h(row)),
+                Rect::new(0.0, y, hw, y + layout.row_h(row).get()),
                 palette.header_hover,
             );
         }
@@ -179,10 +191,10 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         && row >= layout.origin_row
         && !layout.is_hidden(row)
     {
-        let y = layout.row_top(row);
+        let y = layout.row_top(row).get();
         if y < h {
             surface.fill_rect(
-                Rect::new(0.0, y, hw, y + layout.row_h(row)),
+                Rect::new(0.0, y, hw, y + layout.row_h(row).get()),
                 palette.header_active,
             );
         }
@@ -205,7 +217,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
             if row_y >= h {
                 break;
             }
-            let edge = row_y + layout.row_h(row);
+            let edge = row_y + layout.row_h(row).get();
             surface.stroke_line(
                 ambre_draw::Line::new((0.0, edge), (hw, edge)),
                 palette.header_border,
@@ -235,7 +247,7 @@ pub fn draw_row_headers_on<S: DrawSurface>(
         if row_y >= h {
             break;
         }
-        let rh = layout.row_h(row);
+        let rh = layout.row_h(row).get();
         let label = row_label(row);
         let lyt: &Layout<ParleyBrush> = text_cache.get_or_build(
             font_cx,

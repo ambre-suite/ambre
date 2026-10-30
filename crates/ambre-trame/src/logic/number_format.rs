@@ -11,6 +11,7 @@
 // stands, so no pattern is refused. A mistyped pattern still renders, and the
 // result shows the mistake.
 
+use crate::formula::text::LiteralText;
 use ambre_bus::{CivilDate, DateSerial};
 
 /// Month names, for `mmm` (the first three letters) and `mmmm`.
@@ -88,7 +89,7 @@ fn hms(serial: DateSerial) -> TimeOfDay {
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
     /// Printed as it stands.
-    Literal(String),
+    Literal(LiteralText),
     /// `0`: a digit, a zero when the number has none there.
     Zero,
     /// `#`: a digit, nothing when the number has none there.
@@ -100,9 +101,34 @@ enum Token {
     /// `%`: the value is shown times a hundred.
     Percent,
     /// A run of one date or time letter, with its length.
-    Date(DateLetter, usize),
+    Date(DateLetter, Run),
     /// `AM/PM`: a twelve-hour clock.
     AmPm,
+}
+
+/// How many times a date or time letter repeats in a run, held at four: the
+/// widths a letter prints at. A longer run prints as four.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Run {
+    /// `d`: the number with no padding.
+    One,
+    /// `dd`: the number on two digits.
+    Two,
+    /// `ddd`: the short name.
+    Three,
+    /// `dddd` or longer: the full name, or a four-digit year.
+    Four,
+}
+
+impl Run {
+    /// The run one letter longer, held at four.
+    fn longer(self) -> Self {
+        match self {
+            Self::One => Self::Two,
+            Self::Two => Self::Three,
+            Self::Three | Self::Four => Self::Four,
+        }
+    }
 }
 
 /// The letter of a date or time token, in either case.
@@ -178,12 +204,12 @@ fn lex(section: &str) -> Vec<Token> {
                 let len = tail.iter().position(|&q| q == '"').unwrap_or(tail.len());
                 let text: String = tail.iter().take(len).collect();
                 i += len + 1;
-                Token::Literal(text)
+                Token::Literal(LiteralText::new(text))
             }
             '\\' => {
                 let escaped = chars.get(i).map(char::to_string).unwrap_or_default();
                 i += 1;
-                Token::Literal(escaped)
+                Token::Literal(LiteralText::new(escaped))
             }
             '0' => Token::Zero,
             '#' => Token::Hash,
@@ -204,15 +230,15 @@ fn lex(section: &str) -> Vec<Token> {
                     'h' => DateLetter::Hour,
                     _ => DateLetter::Second,
                 };
-                let run = chars
+                let same = chars
                     .iter()
                     .skip(i)
                     .take_while(|n| n.to_ascii_lowercase() == lower)
                     .count();
-                i += run;
-                Token::Date(letter, run + 1)
+                i += same;
+                Token::Date(letter, (0..same).fold(Run::One, |run, _| run.longer()))
             }
-            other => Token::Literal(other.to_string()),
+            other => Token::Literal(LiteralText::new(other.to_string())),
         };
         tokens.push(token);
     }
@@ -313,7 +339,7 @@ fn place_integer(tokens: &[Token], digits: &str, thousands: Thousands) -> String
                 };
                 out.push(text);
             }
-            Token::Literal(text) => out.push(text.clone()),
+            Token::Literal(text) => out.push(text.as_str().to_owned()),
             Token::Percent => out.push("%".to_owned()),
             Token::AmPm | Token::Date(..) | Token::Comma | Token::Point => {}
         }
@@ -376,7 +402,7 @@ fn place_fraction(tokens: &[Token], digits: &str) -> String {
                 }
                 place += 1;
             }
-            Token::Literal(text) => out.push_str(text),
+            Token::Literal(text) => out.push_str(text.as_str()),
             Token::Percent => out.push('%'),
             Token::AmPm | Token::Date(..) | Token::Comma | Token::Point => {}
         }
@@ -398,26 +424,26 @@ fn render_date(tokens: &[Token], serial: DateSerial) -> String {
         seconds: s,
     } = hms(serial);
     let twelve_hour = tokens.contains(&Token::AmPm);
-    let month = |len: usize| -> String {
+    let month = |run: Run| -> String {
         let name = MONTHS
             .get((mo - 1).clamp(0, 11) as usize)
             .copied()
             .unwrap_or("");
-        match len {
-            1 => mo.to_string(),
-            2 => format!("{mo:02}"),
-            3 => name.chars().take(3).collect(),
-            _ => name.to_owned(),
+        match run {
+            Run::One => mo.to_string(),
+            Run::Two => format!("{mo:02}"),
+            Run::Three => name.chars().take(3).collect(),
+            Run::Four => name.to_owned(),
         }
     };
     let mut out = String::new();
     for (i, token) in tokens.iter().enumerate() {
         match token {
-            Token::Date(DateLetter::Year, len) => match len {
-                1 | 2 => out.push_str(&format!("{:02}", y.rem_euclid(100))),
-                _ => out.push_str(&format!("{y:04}")),
+            Token::Date(DateLetter::Year, run) => match run {
+                Run::One | Run::Two => out.push_str(&format!("{:02}", y.rem_euclid(100))),
+                Run::Three | Run::Four => out.push_str(&format!("{y:04}")),
             },
-            Token::Date(DateLetter::Month, len) => {
+            Token::Date(DateLetter::Month, run) => {
                 // `m` after an hour or before a second is the minutes.
                 let after_hour = tokens
                     .iter()
@@ -430,20 +456,20 @@ fn render_date(tokens: &[Token], serial: DateSerial) -> String {
                     .skip(i + 1)
                     .find(|t| matches!(t, Token::Date(..)))
                     .is_some_and(|t| matches!(t, Token::Date(DateLetter::Second, _)));
-                if *len <= 2 && (after_hour || before_second) {
-                    out.push_str(&pad(mi, *len));
+                if *run <= Run::Two && (after_hour || before_second) {
+                    out.push_str(&pad(mi, *run));
                 } else {
-                    out.push_str(&month(*len));
+                    out.push_str(&month(*run));
                 }
             }
-            Token::Date(DateLetter::Day, len) => match len {
-                1 | 2 => out.push_str(&pad(d as u32, *len)),
-                _ => {
+            Token::Date(DateLetter::Day, run) => match run {
+                Run::One | Run::Two => out.push_str(&pad(d as u32, *run)),
+                Run::Three | Run::Four => {
                     let name = DAYS
                         .get(serial.day().get().rem_euclid(7) as usize)
                         .copied()
                         .unwrap_or("");
-                    let shown: String = if *len == 3 {
+                    let shown: String = if *run == Run::Three {
                         name.chars().take(3).collect()
                     } else {
                         name.to_owned()
@@ -451,17 +477,17 @@ fn render_date(tokens: &[Token], serial: DateSerial) -> String {
                     out.push_str(&shown);
                 }
             },
-            Token::Date(DateLetter::Hour, len) => {
+            Token::Date(DateLetter::Hour, run) => {
                 let hour = match (twelve_hour, h % 12) {
                     (true, 0) => 12,
                     (true, hour) => hour,
                     (false, _) => h,
                 };
-                out.push_str(&pad(hour, *len));
+                out.push_str(&pad(hour, *run));
             }
-            Token::Date(DateLetter::Second, len) => out.push_str(&pad(s, *len)),
+            Token::Date(DateLetter::Second, run) => out.push_str(&pad(s, *run)),
             Token::AmPm => out.push_str(if h < 12 { "AM" } else { "PM" }),
-            Token::Literal(text) => out.push_str(text),
+            Token::Literal(text) => out.push_str(text.as_str()),
             Token::Zero => out.push('0'),
             Token::Hash => out.push('#'),
             Token::Point => out.push('.'),
@@ -472,12 +498,11 @@ fn render_date(tokens: &[Token], serial: DateSerial) -> String {
     out
 }
 
-/// `n` on at least `len` digits, `len` capped at two.
-fn pad(n: u32, len: usize) -> String {
-    if len >= 2 {
-        format!("{n:02}")
-    } else {
-        n.to_string()
+/// `n` with no padding for a one-letter run, else on two digits.
+fn pad(n: u32, run: Run) -> String {
+    match run {
+        Run::One => n.to_string(),
+        Run::Two | Run::Three | Run::Four => format!("{n:02}"),
     }
 }
 
@@ -541,5 +566,27 @@ mod tests {
         assert_eq!(f(serial, "dddd d mmmm"), "Tuesday 29 September");
         assert_eq!(f(serial, "hh:mm:ss"), "14:05:09");
         assert_eq!(f(serial, "h:mm AM/PM"), "2:05 PM");
+    }
+
+    /// The literal part of a format is document content: the Debug form of
+    /// its token holds a length alone.
+    #[test]
+    fn a_literal_token_prints_its_length_alone() {
+        let tokens = lex(r#"0 "salary""#);
+        let printed = format!("{tokens:?}");
+        assert!(!printed.contains("salary"), "{printed}");
+        assert!(printed.contains("6 chars"), "{printed}");
+    }
+
+    /// A run of a date letter prints at one of four widths, and a run past
+    /// four prints as four.
+    #[test]
+    fn a_date_run_past_four_letters_prints_as_four() {
+        let f = format_custom;
+        let serial = 46294.0;
+        assert_eq!(f(serial, "d|dd|ddd"), "29|29|Tue");
+        assert_eq!(f(serial, "ddddd"), f(serial, "dddd"));
+        assert_eq!(f(serial, "mmmmmm"), "September");
+        assert_eq!(f(serial, "yyyyyy"), "2026");
     }
 }

@@ -30,10 +30,19 @@ fn label(id: CommandId) -> String {
 fn glyph(id: CommandId) -> Option<icondata::Icon> {
     registry::icon(id).and_then(icons::resolve)
 }
+
+/// The command the merge toggle sends: a merged cell splits, any other cell
+/// merges the selection.
+fn merge_command(merged: ambre_bus::Merge) -> CommandId {
+    match merged {
+        ambre_bus::Merge::Single => MERGE,
+        ambre_bus::Merge::Merged => UNMERGE,
+    }
+}
 use super::popovers::{
     BordersPopover, ColorPopover, FontPopover, HAlignPopover, NumberFormatPopover, VAlignPopover,
 };
-use super::style::{StyleState, Toggles};
+use super::style::{Flip, StyleState, Toggles};
 
 /// The Trame format toolbar (the launcher mounts it inside the chrome `Toolbar`
 /// slot). Bold/Italic/Undo/Redo invoke their `CommandId` through `on_command`,
@@ -130,34 +139,30 @@ pub fn FormatBar(
         <FormatToggle
             label=label(BOLD)
             icon=glyph(BOLD)
-            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.bold.get()))
+            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.bold.get().as_bool()))
             on_toggle=Callback::new(move |()| on_command.run(BOLD))
         />
         <FormatToggle
             label=label(ITALIC)
             icon=glyph(ITALIC)
-            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.italic.get()))
+            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.italic.get().as_bool()))
             on_toggle=Callback::new(move |()| on_command.run(ITALIC))
         />
         <FormatToggle
             label="Underline"
             icon=icondata::BsTypeUnderline
-            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.underline.get()))
+            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.underline.get().as_bool()))
             on_toggle=Callback::new(move |()| on_style.run(StylePatch {
-                underline: Some(ambre_bus::Underline::from_bool(
-                    !style.underline.get_untracked(),
-                )),
+                underline: Some(style.underline.get_untracked().flipped()),
                 ..Default::default()
             }))
         />
         <FormatToggle
             label="Strikethrough"
             icon=icondata::BsTypeStrikethrough
-            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.strikethrough.get()))
+            pressed=Signal::derive(move || ambre_chrome::Pressed::from_bool(style.strikethrough.get().as_bool()))
             on_toggle=Callback::new(move |()| on_style.run(StylePatch {
-                strikethrough: Some(ambre_bus::Strikethrough::from_bool(
-                    !style.strikethrough.get_untracked(),
-                )),
+                strikethrough: Some(style.strikethrough.get_untracked().flipped()),
                 ..Default::default()
             }))
         />
@@ -236,10 +241,10 @@ pub fn FormatBar(
         // Wrap text.
         <button
             aria-label="Wrap text"
-            aria-pressed=move || ambre_chrome::Pressed::from_bool(style.wrap.get()).aria()
+            aria-pressed=move || ambre_chrome::Pressed::from_bool(style.wrap.get().as_bool()).aria()
             on:mousedown=move |ev| ev.prevent_default()
             on:click=move |_| on_style.run(StylePatch {
-                wrap: Some(ambre_bus::WordBreak::from_bool(!style.wrap.get_untracked())),
+                wrap: Some(style.wrap.get_untracked().flipped()),
                 ..Default::default()
             })
         >
@@ -253,12 +258,10 @@ pub fn FormatBar(
         <button
             // The label names the command the click will send, so a merged cell
             // announces "Unmerge cells" instead of the action it will not do.
-            aria-label=move || label(if style.merged.get() { UNMERGE } else { MERGE })
-            aria-pressed=move || ambre_chrome::Pressed::from_bool(style.merged.get()).aria()
+            aria-label=move || label(merge_command(style.merged.get()))
+            aria-pressed=move || ambre_chrome::Pressed::from_bool(style.merged.get().as_bool()).aria()
             on:mousedown=move |ev| ev.prevent_default()
-            on:click=move |_| {
-                on_command.run(if style.merged.get_untracked() { UNMERGE } else { MERGE })
-            }
+            on:click=move |_| on_command.run(merge_command(style.merged.get_untracked()))
         >
             // One glyph for both states: the button is a toggle, so it must not
             // change shape under the pointer.

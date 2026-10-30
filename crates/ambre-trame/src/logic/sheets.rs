@@ -66,7 +66,13 @@ impl TrameState {
             for (key, value) in entries {
                 // Masked cells (covered by a merge, conflicting value) stay out of
                 // the DAG.
-                let (Some((rl, cl)), LoroValue::String(text)) = (parse_cell_key(key), value) else {
+                let Some((rl, cl)) = parse_cell_key(key) else {
+                    // A key no build writes, a crafted peer's among them, is
+                    // said, never read in silence (`SCHEMA-003`).
+                    self.note_unreadable_key();
+                    continue;
+                };
+                let LoroValue::String(text) = value else {
                     continue;
                 };
                 if masked.contains(&CellKey::of(rl, cl)) {
@@ -187,7 +193,9 @@ impl TrameState {
         let cols = self
             .doc
             .get_movable_list(SheetContainer::of(SheetRoot::Cols, sheet_id).as_str());
-        SheetIndex::build(&rows, &cols)
+        let index = SheetIndex::build(&rows, &cols);
+        self.note_index_read(&index);
+        index
     }
 
     /// The target `reference` names for the name `name`, both checked, or

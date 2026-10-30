@@ -196,7 +196,7 @@ impl TrameState {
     /// `rows_/cols_` lists) and return the `(row_lid, col_lid)` pair to key the
     /// cell with. Extends the dense used range by pushing placeholder elements,
     /// capturing each new element's stable id. The write is refused when the
-    /// jump past the high-water mark exceeds [`MATERIALIZE_CAP`]. It is refused
+    /// jump past the high-water mark exceeds [`MATERIALIZE_ROWS`]. It is refused
     /// too when the session cannot mint every uid the cell needs. Every uid is minted
     /// before the first push, so a refusal for want of one pushes no line.
     pub(super) fn materialize(&mut self, at: CellPos) -> Result<(Uid, Uid), Unmaterialized> {
@@ -282,6 +282,7 @@ impl TrameState {
             .doc
             .get_movable_list(SheetContainer::of(SheetRoot::Cols, &self.active_sheet).as_str());
         self.index = SheetIndex::build(&rows, &cols);
+        self.note_index_read(&self.index);
     }
 
     /// Build the per-sheet position<->uid index map the formula engine needs to
@@ -369,11 +370,7 @@ impl TrameState {
                 Err(refused) => {
                     // The write is refused, and `finish_cell_writes` says so
                     // (`TRAME-UI-164`).
-                    self.write_refusals.push(match refused {
-                        Unmaterialized::BeyondCap => WriteRefusal::BeyondCap,
-                        Unmaterialized::IdsExhausted => WriteRefusal::IdsExhausted,
-                        Unmaterialized::Unwritten => WriteRefusal::Unwritten,
-                    });
+                    self.write_refusals.push(WriteRefusal::from(refused));
                     return;
                 }
             };
@@ -434,13 +431,15 @@ impl TrameState {
             .count();
         let spent = refusals.contains(&WriteRefusal::IdsExhausted);
         let unwritten_lines = refusals.contains(&WriteRefusal::Unwritten);
+        let past_largest = refusals.contains(&WriteRefusal::PastLargestNumber);
         let mut unknown: Vec<SheetName> = refusals
             .into_iter()
             .filter_map(|r| match r {
                 WriteRefusal::UnknownSheet(name) => Some(name),
-                WriteRefusal::BeyondCap | WriteRefusal::IdsExhausted | WriteRefusal::Unwritten => {
-                    None
-                }
+                WriteRefusal::BeyondCap
+                | WriteRefusal::IdsExhausted
+                | WriteRefusal::Unwritten
+                | WriteRefusal::PastLargestNumber => None,
             })
             .collect();
         unknown.sort();
@@ -449,7 +448,8 @@ impl TrameState {
         if beyond_cap > 0 {
             events.push(TrameEvent::Error {
                 message: format!(
-                    "{beyond_cap} cell(s) lie beyond the sheet's {MATERIALIZE_CAP}-line limit and were not written"
+                    "{beyond_cap} cell(s) lie beyond the sheet's {}-line limit and were not written",
+                    MATERIALIZE_ROWS.get()
                 ),
             });
         }
@@ -458,6 +458,11 @@ impl TrameState {
         }
         if unwritten_lines {
             events.push(unwritten());
+        }
+        if past_largest {
+            events.push(TrameEvent::Error {
+                message: "the series runs past the largest number; the fill stops there".to_owned(),
+            });
         }
         events.extend(unknown.into_iter().map(|name| TrameEvent::Error {
             message: format!("no sheet is named \"{name}\": the formula was not written"),
@@ -471,12 +476,23 @@ impl TrameState {
 /// reports both.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Unmaterialized {
-    /// The cell lies past the materialization cap ([`MATERIALIZE_CAP`]).
+    /// The cell lies past the materialization cap ([`MATERIALIZE_ROWS`]).
     BeyondCap,
     /// The cell needs a new line, and the session cannot mint its uid.
     IdsExhausted,
     /// The document refused a new line, so the cell still has none.
     Unwritten,
+}
+
+impl From<Unmaterialized> for WriteRefusal {
+    /// The refusal a batch reports for a cell given no lines.
+    fn from(refused: Unmaterialized) -> Self {
+        match refused {
+            Unmaterialized::BeyondCap => Self::BeyondCap,
+            Unmaterialized::IdsExhausted => Self::IdsExhausted,
+            Unmaterialized::Unwritten => Self::Unwritten,
+        }
+    }
 }
 
 impl Unmaterialized {
@@ -485,7 +501,8 @@ impl Unmaterialized {
         match self {
             Self::BeyondCap => TrameEvent::Error {
                 message: format!(
-                    "the cell lies beyond the sheet's {MATERIALIZE_CAP}-line limit and was not written"
+                    "the cell lies beyond the sheet's {}-line limit and was not written",
+                    MATERIALIZE_ROWS.get()
                 ),
             },
             Self::IdsExhausted => ids_exhausted(),

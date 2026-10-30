@@ -19,12 +19,11 @@ impl HitTest for TrameUiState {
 }
 
 impl TrameUiState {
-    /// Record a formula evaluation failure for `at` (from
-    /// `TrameEvent::FormulaError`). The cell renders with a corner error marker
-    /// until a valid `ViewportData` value clears it.
-    pub fn set_formula_error(&mut self, at: CellPos, error: String) {
+    /// Record a formula evaluation failure for `at`. The cell renders with a
+    /// corner error marker until a valid `ViewportData` value clears it.
+    pub fn set_formula_error(&mut self, at: CellPos) {
         self.dirty_cells.remove(&at);
-        self.formula_errors.insert(at, error);
+        self.formula_errors.insert(at);
     }
 
     /// Optimistically set a cell's text after a local edit commit, preserving
@@ -40,7 +39,9 @@ impl TrameUiState {
         entry.raw = DisplayFormula::new(text.clone());
         // A literal the engine would read as a number aligns as one until the
         // pack confirms it.
-        entry.numeric = !is_formula && crate::formula::types::finite_number(&text).is_some();
+        entry.numeric = ambre_bus::CellValueKind::from_bool(
+            !is_formula && crate::formula::types::finite_number(&text).is_some(),
+        );
         entry.text = if is_formula { String::new() } else { text };
         // The shown value is now optimistic: a formula awaits recompute, and a
         // literal awaits the CRDT echo. Either way the prior error is stale.
@@ -507,7 +508,7 @@ impl TrameUiState {
     pub fn fill_handle_rect(&self) -> Option<ambre_draw::Rect> {
         let corner = self.expand_to_merges(self.selection.bounds()).bottom_right;
         let cell = self.cell_pixel_rect(corner)?;
-        let s = FILL_HANDLE_SIZE;
+        let s = FILL_HANDLE_SIZE.get();
         let (x0, y0) = (cell.x1 - s / 2.0, cell.y1 - s / 2.0);
         Some(ambre_draw::Rect::new(x0, y0, x0 + s, y0 + s))
     }
@@ -590,7 +591,9 @@ impl TrameUiState {
         let (x, y, w, h) = (cell.x0, cell.y0, cell.width(), cell.height());
         // Scale the button with the grid zoom so it tracks the cell (which is
         // already zoom-scaled via `cell_pixel_rect`); clamp to the cell height.
-        let s = (FILTER_BUTTON_SIZE * self.zoom.get()).min(h - 2.0).max(0.0);
+        let s = (FILTER_BUTTON_SIZE.get() * self.zoom.get())
+            .min(h - 2.0)
+            .max(0.0);
         let bx = x + w - s - 1.0;
         let by = y + (h - s) / 2.0;
         Some(ambre_draw::Rect::new(bx, by, bx + s, by + s))

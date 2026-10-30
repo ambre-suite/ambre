@@ -34,10 +34,10 @@ pub fn draw_edit<S: DrawSurface>(
         .cell_cache
         .get(&editor.at)
         .map(|c| (c.bold, c.italic))
-        .unwrap_or((false, false));
+        .unwrap_or_default();
     editor.core.set_style(TextEditorStyle {
-        weight: ambre_core::FontWeight::of(ambre_core::Weight::from_bool(bold)),
-        italic: ambre_core::Slant::from_bool(italic),
+        weight: ambre_core::FontWeight::of(bold),
+        italic,
         family: ambre_core::FontFamily::Sans,
         base_size: BODY_SIZE,
         color: palette.cell_text,

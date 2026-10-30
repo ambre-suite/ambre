@@ -1061,7 +1061,7 @@ fn toolbar_reports_the_block_style_inside_a_merge() {
 #[test]
 fn style_beyond_the_cap_is_refused_and_not_drawn() {
     let mut state = TrameState::new();
-    let row = crate::logic::schema::MATERIALIZE_CAP as u32 + 5;
+    let row = crate::logic::schema::MATERIALIZE_ROWS.get() + 5;
     select(&mut state, (row, 0), (row, 0));
     let out = state.handle_command(TrameCommand::SetCellStyle {
         patch: StylePatch {

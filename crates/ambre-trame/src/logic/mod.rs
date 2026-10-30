@@ -114,7 +114,7 @@ struct TrackedSelection {
 /// Why a cell write was refused. Nothing of it reached the document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum WriteRefusal {
-    /// The cell lies past the materialization cap ([`MATERIALIZE_CAP`]).
+    /// The cell lies past the materialization cap ([`MATERIALIZE_ROWS`]).
     BeyondCap,
     /// The formula qualifies a sheet no tab carries (`TRAME-211`).
     UnknownSheet(SheetName),
@@ -122,6 +122,9 @@ enum WriteRefusal {
     IdsExhausted,
     /// The document refused the cell's new line.
     Unwritten,
+    /// A fill series runs past the largest number at the cell, so the fill
+    /// stops there (`TRAME-UI-180`).
+    PastLargestNumber,
 }
 
 /// Per-document state for a Trame (spreadsheet) document.
@@ -270,7 +273,7 @@ pub struct TrameState {
     /// This PeerID's counter just past its registry entry, while the entry is
     /// all the session wrote. No delta goes out for it alone; the first edit
     /// carries it (`AUTHOR-009`). Set by [`adopt_session`](Self::adopt_session).
-    entry_end: Option<i32>,
+    entry_end: Option<ambre_core::OpCounter>,
 }
 
 /// The workbook scaffolding, which every peer writes on open, before any edit.

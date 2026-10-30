@@ -133,26 +133,69 @@ fn fill_dest(src: CellRect, at: CellPos, block: MergeSpan) -> CellRect {
     }
 }
 
-/// Drop a mark named `name` on the browser's Performance panel. A native build
-/// has no panel.
-fn performance_mark(name: &str) {
-    #[cfg(target_arch = "wasm32")]
-    if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
-        let _ = perf.mark(name);
-    }
-    #[cfg(not(target_arch = "wasm32"))]
-    let _ = name;
+/// A mark the view drops on the browser's Performance panel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PerfMark {
+    /// A key or a text input reached the view.
+    Input,
 }
 
-/// Draw the measure `name` from the mark `start` on the browser's Performance
-/// panel. A native build has no panel.
-fn performance_measure(name: &str, start: &str) {
+// Only the browser reads the names: a native build has no panel.
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+impl PerfMark {
+    /// The name the Performance panel shows.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Input => "ambre:input",
+        }
+    }
+}
+
+/// A measure the view draws on the browser's Performance panel, from the
+/// mark it starts at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PerfMeasure {
+    /// From an input to the frame that drew its caret.
+    InputToCaret,
+}
+
+#[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+impl PerfMeasure {
+    /// The name the Performance panel shows.
+    fn name(self) -> &'static str {
+        match self {
+            Self::InputToCaret => "ambre:input-to-caret",
+        }
+    }
+
+    /// The mark the measure starts at.
+    fn start(self) -> PerfMark {
+        match self {
+            Self::InputToCaret => PerfMark::Input,
+        }
+    }
+}
+
+/// Drop `mark` on the browser's Performance panel. A native build has no
+/// panel.
+fn performance_mark(mark: PerfMark) {
     #[cfg(target_arch = "wasm32")]
     if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
-        let _ = perf.measure_with_start_mark(name, start);
+        let _ = perf.mark(mark.name());
     }
     #[cfg(not(target_arch = "wasm32"))]
-    let _ = (name, start);
+    let _ = mark;
+}
+
+/// Draw `measure` from its start mark on the browser's Performance panel. A
+/// native build has no panel.
+fn performance_measure(measure: PerfMeasure) {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
+        let _ = perf.measure_with_start_mark(measure.name(), measure.start().name());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = measure;
 }
 
 /// Result of folding the pixel accumulator into a viewport pan.
@@ -520,7 +563,7 @@ pub(crate) enum FormulaBarSync {
 ///
 /// The browser copies its signals and its focus in before the sync, and copies
 /// the result back out. A host test sets the fields itself.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub(crate) struct FormulaBar {
     /// The reference of the cell an edit will reach (`TRAME-UI-091`).
     pub(crate) reference: String,
@@ -532,7 +575,32 @@ pub(crate) struct FormulaBar {
     /// A commit or a cancel the bar raised, not served yet.
     pub(crate) action: Option<FormulaAction>,
     /// Whether the bar holds the keyboard focus.
-    pub(crate) focused: bool,
+    pub(crate) focused: BarFocus,
+}
+
+ambre_core::define_flag! {
+    /// Whether the formula bar holds the keyboard focus.
+    pub(crate) enum BarFocus {
+        /// The focus is elsewhere: the grid, or outside the page.
+        Blurred,
+        /// The bar holds the focus, so a key types into it.
+        Focused,
+    }
+}
+
+/// The lengths alone: the reference names a sheet, and the texts are cell
+/// content.
+impl std::fmt::Debug for FormulaBar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let chars = |text: &str| text.chars().count();
+        f.debug_struct("FormulaBar")
+            .field("reference_chars", &chars(&self.reference))
+            .field("text_chars", &chars(&self.text))
+            .field("shown_chars", &chars(&self.shown))
+            .field("action", &self.action)
+            .field("focused", &self.focused)
+            .finish()
+    }
 }
 
 impl FormulaBar {
@@ -615,6 +683,21 @@ mod tests {
         // The user typed while the peer wrote: the typing wins.
         assert_eq!(bar("old5").sync("new"), FormulaBarSync::OpenSession);
         assert_eq!(bar("old").sync("old"), FormulaBarSync::Idle);
+    }
+
+    /// The formula bar holds cell content, so its Debug form holds lengths.
+    #[test]
+    fn the_formula_bar_prints_lengths_alone() {
+        let bar = FormulaBar {
+            reference: "Payroll!A1".to_owned(),
+            text: "=salary".to_owned(),
+            shown: "salary".to_owned(),
+            ..FormulaBar::default()
+        };
+        let printed = format!("{bar:?}");
+        assert!(!printed.contains("Payroll"), "{printed}");
+        assert!(!printed.contains("salary"), "{printed}");
+        assert!(printed.contains("text_chars: 7"), "{printed}");
     }
 
     fn scroll_cmd(version: u64) -> TrameCommand {

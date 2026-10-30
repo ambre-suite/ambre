@@ -369,10 +369,11 @@ fn build_multi_sheet(state: &mut TrameState) {
             .collect(),
     });
     for name in ["Data", "Notes"] {
+        let sheet_name = SheetName::new(name).expect("a fixed name");
         let outcome = state.handle_command(TrameCommand::CreateSheet {
-            name: SheetName::new(name).expect("a fixed name"),
+            name: sheet_name.clone(),
         });
-        let sheet_id = new_sheet_id(&outcome, name);
+        let sheet_id = new_sheet_id(&outcome, &sheet_name);
         state.handle_command(TrameCommand::ActivateSheet {
             sheet_id: sheet_id.clone(),
         });
@@ -462,14 +463,14 @@ fn build_two_peer_merge(state: &mut TrameState, seed: FixtureSeed) {
 /// Panics when the event is absent or names no such sheet. A generator drives
 /// commands it chose itself, so a missing reply is a defect here rather than
 /// a runtime condition (`FixtureGen::build`).
-fn new_sheet_id(outcome: &TrameOutcome, name: &str) -> SheetId {
+fn new_sheet_id(outcome: &TrameOutcome, name: &SheetName) -> SheetId {
     outcome
         .display
         .iter()
         .find_map(|event| match event {
             TrameEvent::SheetList { sheets, .. } => sheets
                 .iter()
-                .find(|tab| tab.name.as_str() == name)
+                .find(|tab| tab.name == *name)
                 .map(|tab| tab.id.clone()),
             _ => None,
         })

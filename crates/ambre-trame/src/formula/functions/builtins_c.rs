@@ -3,6 +3,7 @@
 // resolve through the module glob mesh.
 
 use super::*;
+use crate::formula::types::ArgIndex;
 
 /// STDEV / VAR over the sample (denominator `n - 1`).
 pub(crate) fn variance(args: &[CellValue]) -> CellValue {
@@ -57,11 +58,11 @@ pub(crate) fn rank(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let num = match arg(args, 0).as_number() {
+    let num = match arg(args, ArgIndex::new(0)).as_number() {
         Ok(n) => n,
         Err(e) => return CellValue::Error(e),
     };
-    let data: Vec<f64> = range_cells(arg(args, 1))
+    let data: Vec<f64> = range_cells(arg(args, ArgIndex::new(1)))
         .filter_map(|v| v.as_number().ok())
         .collect();
     if !data.iter().any(|n| nearly_equal(*n, num)) {
@@ -99,14 +100,58 @@ pub(crate) fn mode(args: &[CellValue]) -> CellValue {
     CellValue::Number(best)
 }
 
-/// `(1+r)^n * pmt-coefficient` shared by the annuity formulas.
-pub(crate) fn annuity_factor(rate: f64, nper: f64, paytype: f64) -> f64 {
-    ((1.0 + rate).powf(nper) - 1.0) / rate * (1.0 + rate * paytype)
+/// When the payments of an annuity fall, from its type argument.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PayTiming {
+    /// Type 0, the default: at the end of each period.
+    End,
+    /// Any other type: at the start of each period.
+    Start,
+}
+
+impl PayTiming {
+    /// The timing the type argument at `i` names. An absent or zero type is
+    /// the end, and any other number the start: a type of 2 is no third
+    /// timing.
+    pub(crate) fn of_arg(args: &[CellValue], i: ArgIndex) -> Self {
+        if opt_num(args, i, 0.0) == 0.0 {
+            Self::End
+        } else {
+            Self::Start
+        }
+    }
+
+    /// What one payment grows by before it counts: one period of interest
+    /// at the start, nothing at the end.
+    pub(crate) fn growth(self, rate: f64) -> f64 {
+        match self {
+            Self::End => 1.0,
+            Self::Start => 1.0 + rate,
+        }
+    }
+}
+
+/// The terms of an annuity the formulas share. Named fields, so the rate and
+/// the count of periods cannot trade places.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Annuity {
+    pub(crate) rate: f64,
+    pub(crate) periods: f64,
+    pub(crate) timing: PayTiming,
+}
+
+impl Annuity {
+    /// `((1+r)^n - 1) / r` times the growth of one payment: what the stream
+    /// of payments is worth at the last period.
+    pub(crate) fn factor(self) -> f64 {
+        ((1.0 + self.rate).powf(self.periods) - 1.0) / self.rate * self.timing.growth(self.rate)
+    }
 }
 
 /// Optional positional argument as a number, with a default.
-pub(crate) fn opt_num(args: &[CellValue], i: usize, default: f64) -> f64 {
-    args.get(i)
+pub(crate) fn opt_num(args: &[CellValue], i: ArgIndex, default: f64) -> f64 {
+    i.to_index()
+        .and_then(|i| args.get(i))
         .and_then(|v| v.as_number().ok())
         .unwrap_or(default)
 }
@@ -117,19 +162,24 @@ pub(crate) fn pmt(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (rate, nper, pv) = (
-        opt_num(args, 0, 0.0),
-        opt_num(args, 1, 0.0),
-        opt_num(args, 2, 0.0),
+        opt_num(args, ArgIndex::new(0), 0.0),
+        opt_num(args, ArgIndex::new(1), 0.0),
+        opt_num(args, ArgIndex::new(2), 0.0),
     );
-    let fv = opt_num(args, 3, 0.0);
-    let paytype = opt_num(args, 4, 0.0);
+    let fv = opt_num(args, ArgIndex::new(3), 0.0);
+    let timing = PayTiming::of_arg(args, ArgIndex::new(4));
     if nper == 0.0 {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
+    let annuity = Annuity {
+        rate,
+        periods: nper,
+        timing,
+    };
     let value = if rate == 0.0 {
         -(pv + fv) / nper
     } else {
-        -(pv * (1.0 + rate).powf(nper) + fv) / annuity_factor(rate, nper, paytype)
+        -(pv * (1.0 + rate).powf(nper) + fv) / annuity.factor()
     };
     CellValue::Number(value)
 }
@@ -140,16 +190,20 @@ pub(crate) fn fv(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (rate, nper, pmt_v) = (
-        opt_num(args, 0, 0.0),
-        opt_num(args, 1, 0.0),
-        opt_num(args, 2, 0.0),
+        opt_num(args, ArgIndex::new(0), 0.0),
+        opt_num(args, ArgIndex::new(1), 0.0),
+        opt_num(args, ArgIndex::new(2), 0.0),
     );
-    let pv = opt_num(args, 3, 0.0);
-    let paytype = opt_num(args, 4, 0.0);
+    let pv = opt_num(args, ArgIndex::new(3), 0.0);
+    let annuity = Annuity {
+        rate,
+        periods: nper,
+        timing: PayTiming::of_arg(args, ArgIndex::new(4)),
+    };
     let value = if rate == 0.0 {
         -(pv + pmt_v * nper)
     } else {
-        -(pv * (1.0 + rate).powf(nper) + pmt_v * annuity_factor(rate, nper, paytype))
+        -(pv * (1.0 + rate).powf(nper) + pmt_v * annuity.factor())
     };
     CellValue::Number(value)
 }
@@ -160,16 +214,20 @@ pub(crate) fn pv(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (rate, nper, pmt_v) = (
-        opt_num(args, 0, 0.0),
-        opt_num(args, 1, 0.0),
-        opt_num(args, 2, 0.0),
+        opt_num(args, ArgIndex::new(0), 0.0),
+        opt_num(args, ArgIndex::new(1), 0.0),
+        opt_num(args, ArgIndex::new(2), 0.0),
     );
-    let fv = opt_num(args, 3, 0.0);
-    let paytype = opt_num(args, 4, 0.0);
+    let fv = opt_num(args, ArgIndex::new(3), 0.0);
+    let annuity = Annuity {
+        rate,
+        periods: nper,
+        timing: PayTiming::of_arg(args, ArgIndex::new(4)),
+    };
     let value = if rate == 0.0 {
         -(fv + pmt_v * nper)
     } else {
-        -(fv + pmt_v * annuity_factor(rate, nper, paytype)) / (1.0 + rate).powf(nper)
+        -(fv + pmt_v * annuity.factor()) / (1.0 + rate).powf(nper)
     };
     CellValue::Number(value)
 }
@@ -180,19 +238,19 @@ pub(crate) fn nper(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (rate, pmt_v, pv) = (
-        opt_num(args, 0, 0.0),
-        opt_num(args, 1, 0.0),
-        opt_num(args, 2, 0.0),
+        opt_num(args, ArgIndex::new(0), 0.0),
+        opt_num(args, ArgIndex::new(1), 0.0),
+        opt_num(args, ArgIndex::new(2), 0.0),
     );
-    let fv = opt_num(args, 3, 0.0);
-    let paytype = opt_num(args, 4, 0.0);
+    let fv = opt_num(args, ArgIndex::new(3), 0.0);
+    let timing = PayTiming::of_arg(args, ArgIndex::new(4));
     if rate == 0.0 {
         if pmt_v == 0.0 {
             return CellValue::Error(FormulaError::DivisionByZero);
         }
         return CellValue::Number(-(pv + fv) / pmt_v);
     }
-    let adj = pmt_v * (1.0 + rate * paytype);
+    let adj = pmt_v * timing.growth(rate);
     let num = adj - fv * rate;
     let den = adj + pv * rate;
     if den == 0.0 || num / den <= 0.0 {
@@ -208,19 +266,24 @@ pub(crate) fn rate(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let (nper, pmt_v, pv) = (
-        opt_num(args, 0, 0.0),
-        opt_num(args, 1, 0.0),
-        opt_num(args, 2, 0.0),
+        opt_num(args, ArgIndex::new(0), 0.0),
+        opt_num(args, ArgIndex::new(1), 0.0),
+        opt_num(args, ArgIndex::new(2), 0.0),
     );
-    let fv = opt_num(args, 3, 0.0);
-    let paytype = opt_num(args, 4, 0.0);
-    let mut r = opt_num(args, 5, 0.1);
-    // f(r) = pv*(1+r)^n + pmt*(1+r*type)*((1+r)^n-1)/r + fv
+    let fv = opt_num(args, ArgIndex::new(3), 0.0);
+    let timing = PayTiming::of_arg(args, ArgIndex::new(4));
+    let mut r = opt_num(args, ArgIndex::new(5), 0.1);
+    // f(r) = pv*(1+r)^n + pmt*growth(r)*((1+r)^n-1)/r + fv
     let f = |r: f64| -> f64 {
         if r == 0.0 {
             pv + pmt_v * nper + fv
         } else {
-            pv * (1.0 + r).powf(nper) + pmt_v * annuity_factor(r, nper, paytype) + fv
+            let annuity = Annuity {
+                rate: r,
+                periods: nper,
+                timing,
+            };
+            pv * (1.0 + r).powf(nper) + pmt_v * annuity.factor() + fv
         }
     };
     for _ in 0..100 {
@@ -248,14 +311,14 @@ pub(crate) fn npv(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let rate = match arg(args, 0).as_number() {
+    let rate = match arg(args, ArgIndex::new(0)).as_number() {
         Ok(r) => r,
         Err(e) => return CellValue::Error(e),
     };
     if rate == -1.0 {
         return CellValue::Error(FormulaError::DivisionByZero);
     }
-    let flows = match flatten_total(rest_from(args, 1)) {
+    let flows = match flatten_total(rest_from(args, ArgIndex::new(1))) {
         Ok(nums) => nums,
         Err(err) => return err,
     };
@@ -273,7 +336,7 @@ pub(crate) fn irr(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    let flows = match flatten_total(one(args, 0)) {
+    let flows = match flatten_total(one(args, ArgIndex::new(0))) {
         Ok(nums) => nums,
         Err(err) => return err,
     };
@@ -347,8 +410,8 @@ pub(crate) fn ifna(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    match arg(args, 0) {
-        CellValue::Error(FormulaError::NaError) => arg(args, 1).clone(),
+    match arg(args, ArgIndex::new(0)) {
+        CellValue::Error(FormulaError::NaError) => arg(args, ArgIndex::new(1)).clone(),
         other => other.clone(),
     }
 }
@@ -373,8 +436,8 @@ pub(crate) fn switch_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let subject = arg(args, 0);
-    let rest = rest_from(args, 1);
+    let subject = arg(args, ArgIndex::new(0));
+    let rest = rest_from(args, ArgIndex::new(1));
     let pairs = rest.chunks_exact(2);
     // A trailing unpaired argument is the default.
     let default = pairs.remainder().first().cloned();
@@ -393,11 +456,11 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let table = match arg(args, 1) {
+    let table = match arg(args, ArgIndex::new(1)) {
         CellValue::Range(r) => r,
         _ => return CellValue::Error(FormulaError::NaError),
     };
-    let row_index = match arg(args, 2).as_number() {
+    let row_index = match arg(args, ArgIndex::new(2)).as_number() {
         Ok(n) if n >= 1.0 => Row::from_usize(n as usize - 1),
         _ => return CellValue::Error(FormulaError::NaError),
     };
@@ -423,7 +486,7 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
             None => continue,
         };
         if approximate {
-            if compare_cells(key, arg(args, 0))
+            if compare_cells(key, arg(args, ArgIndex::new(0)))
                 .map(|o| o.is_le())
                 .unwrap_or(false)
             {
@@ -431,7 +494,7 @@ pub(crate) fn hlookup(args: &[CellValue]) -> CellValue {
             } else {
                 break;
             }
-        } else if values_equal_ci(key, arg(args, 0)) {
+        } else if values_equal_ci(key, arg(args, ArgIndex::new(0))) {
             best = Some(col);
             break;
         }
@@ -447,8 +510,10 @@ pub(crate) fn choose(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    match arg(args, 0).as_number() {
-        Ok(n) if n >= 1.0 && (n as usize) < args.len() => arg(args, n as usize).clone(),
+    match arg(args, ArgIndex::new(0)).as_number() {
+        Ok(n) if n >= 1.0 && (n as usize) < args.len() => {
+            arg(args, ArgIndex::from_usize(n as usize)).clone()
+        }
         Ok(_) => CellValue::Error(FormulaError::NumError),
         Err(e) => CellValue::Error(e),
     }
@@ -478,9 +543,19 @@ pub(crate) fn search_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
+    // One folded char per char, so a position in the folded text is the
+    // position in the text the call was given. A whole-string lowercase
+    // grows a capital I with a dot into two chars.
+    let fold = |value: &CellValue| -> String {
+        value
+            .to_display()
+            .chars()
+            .map(crate::formula::text::fold_char_simple)
+            .collect()
+    };
     let lowered = vec![
-        CellValue::Text(arg(args, 0).to_display().to_lowercase()),
-        CellValue::Text(arg(args, 1).to_display().to_lowercase()),
+        CellValue::Text(fold(arg(args, ArgIndex::new(0)))),
+        CellValue::Text(fold(arg(args, ArgIndex::new(1)))),
     ];
     let mut call: Vec<CellValue> = lowered;
     if let Some(start) = args.get(2) {
@@ -494,16 +569,16 @@ pub(crate) fn replace_fn(args: &[CellValue]) -> CellValue {
     if args.len() < 4 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let chars: Vec<char> = arg(args, 0).to_display().chars().collect();
-    let start = match arg(args, 1).as_number() {
+    let chars: Vec<char> = arg(args, ArgIndex::new(0)).to_display().chars().collect();
+    let start = match arg(args, ArgIndex::new(1)).as_number() {
         Ok(n) if n >= 1.0 => n as usize - 1,
         _ => return CellValue::Error(FormulaError::NumError),
     };
-    let count = match arg(args, 2).as_number() {
+    let count = match arg(args, ArgIndex::new(2)).as_number() {
         Ok(n) if n >= 0.0 => n as usize,
         _ => return CellValue::Error(FormulaError::NumError),
     };
-    let new = arg(args, 3).to_display();
+    let new = arg(args, ArgIndex::new(3)).to_display();
     let start = start.min(chars.len());
     let end = (start + count).min(chars.len());
     let mut out: String = chars.iter().take(start).collect();
@@ -517,7 +592,9 @@ pub(crate) fn exact(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    CellValue::Boolean(arg(args, 0).to_display() == arg(args, 1).to_display())
+    CellValue::Boolean(
+        arg(args, ArgIndex::new(0)).to_display() == arg(args, ArgIndex::new(1)).to_display(),
+    )
 }
 
 /// TEXTJOIN(delimiter, ignore_empty, text1, ...) -- join with a separator.
@@ -525,9 +602,9 @@ pub(crate) fn textjoin(args: &[CellValue]) -> CellValue {
     if args.len() < 3 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let delim = arg(args, 0).to_display();
-    let ignore_empty = is_truthy(arg(args, 1));
-    let parts: Vec<String> = flatten_all(rest_from(args, 2))
+    let delim = arg(args, ArgIndex::new(0)).to_display();
+    let ignore_empty = is_truthy(arg(args, ArgIndex::new(1)));
+    let parts: Vec<String> = flatten_all(rest_from(args, ArgIndex::new(2)))
         .iter()
         .filter(|v| !(ignore_empty && matches!(v, CellValue::Empty)))
         .map(|v| v.to_display())
@@ -553,7 +630,7 @@ pub(crate) fn code_fn(args: &[CellValue]) -> CellValue {
     if args.is_empty() {
         return CellValue::Error(FormulaError::NaError);
     }
-    match arg(args, 0).to_display().chars().next() {
+    match arg(args, ArgIndex::new(0)).to_display().chars().next() {
         Some(c) => CellValue::Number(c as u32 as f64),
         None => CellValue::Error(FormulaError::TypeError),
     }
@@ -565,9 +642,9 @@ pub(crate) fn time_fn(args: &[CellValue]) -> CellValue {
         return CellValue::Error(FormulaError::NaError);
     }
     let secs = match (
-        arg(args, 0).as_number(),
-        arg(args, 1).as_number(),
-        arg(args, 2).as_number(),
+        arg(args, ArgIndex::new(0)).as_number(),
+        arg(args, ArgIndex::new(1)).as_number(),
+        arg(args, ArgIndex::new(2)).as_number(),
     ) {
         (Ok(h), Ok(m), Ok(s)) => h * 3600.0 + m * 60.0 + s,
         _ => return CellValue::Error(FormulaError::TypeError),
@@ -659,7 +736,10 @@ pub(crate) fn edate(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (serial, months) = match (arg(args, 0).as_number(), arg(args, 1).as_number()) {
+    let (serial, months) = match (
+        arg(args, ArgIndex::new(0)).as_number(),
+        arg(args, ArgIndex::new(1)).as_number(),
+    ) {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
@@ -673,7 +753,10 @@ pub(crate) fn eomonth(args: &[CellValue]) -> CellValue {
     if args.len() < 2 {
         return CellValue::Error(FormulaError::NaError);
     }
-    let (serial, months) = match (arg(args, 0).as_number(), arg(args, 1).as_number()) {
+    let (serial, months) = match (
+        arg(args, ArgIndex::new(0)).as_number(),
+        arg(args, ArgIndex::new(1)).as_number(),
+    ) {
         (Ok(s), Ok(m)) => (s.floor() as i64, m as i64),
         _ => return CellValue::Error(FormulaError::TypeError),
     };
