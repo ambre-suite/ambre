@@ -25,18 +25,14 @@ impl Term {
         let at = usize::try_from(self.0.rem_euclid(len)).ok()?;
         items.get(at)
     }
-}
 
-/// The term of a row, by its distance from the source origin.
-impl From<RowDelta> for Term {
-    fn from(delta: RowDelta) -> Self {
+    /// The term of a row, `delta` rows from the source origin.
+    fn of_row(delta: RowDelta) -> Self {
         Self(delta.get())
     }
-}
 
-/// The term of a column, by its distance from the source origin.
-impl From<ColDelta> for Term {
-    fn from(delta: ColDelta) -> Self {
+    /// The term of a column, `delta` columns from the source origin.
+    fn of_col(delta: ColDelta) -> Self {
         Self(delta.get())
     }
 }
@@ -307,7 +303,7 @@ impl TrameState {
                     continue; // inside the source block -- left untouched.
                 }
                 // Signed: fill may go up or down.
-                let term = Term::from(row - origin);
+                let term = Term::of_row(row - origin);
                 let k = term.0.rem_euclid(sources.len().max(1) as i64) as u32;
                 let from = CellPos::new(origin + RowCount::new(k), col);
                 self.fill_one(CellPos::new(row, col), from, term, &sources, series);
@@ -329,7 +325,7 @@ impl TrameState {
                 if src.cols().contains(col) {
                     continue;
                 }
-                let term = Term::from(col - origin);
+                let term = Term::of_col(col - origin);
                 let k = term.0.rem_euclid(sources.len().max(1) as i64) as u32;
                 let from = CellPos::new(row, origin + ColCount::new(k));
                 self.fill_one(CellPos::new(row, col), from, term, &sources, series);
