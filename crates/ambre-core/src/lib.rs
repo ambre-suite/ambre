@@ -154,8 +154,8 @@ pub use name::{
 pub use object_key::ObjectKey;
 pub use payload::{
     ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic, LoroPayload,
-    LoroPayloadRef, MediaBytes, PickedContainer, PlaintextContainer, RgbaPixels, SealedContainer,
-    SealedPreviousKey, SealedRowBytes, SnapshotBytes, ThumbnailPng,
+    LoroPayloadRef, MediaBytes, PickedContainer, PickedFile, PlaintextContainer, RgbaPixels,
+    SealedContainer, SealedPreviousKey, SealedRowBytes, SnapshotBytes, ThumbnailPng,
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};

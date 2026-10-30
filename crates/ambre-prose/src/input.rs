@@ -10,6 +10,7 @@ use ambre_bus::PasteSource;
 use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
 use ambre_commands::{ClipboardWrite, Key, KeyChar, Modifiers, SelectionMode};
 use ambre_core::{StepDirection, ViewPoint, ViewPx};
+use ambre_draw::Consumed;
 
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
 use crate::layout::run::Affinity;
@@ -253,10 +254,10 @@ impl ProseUiState {
         &mut self,
         input: &ProseInput,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         if self.waiting() {
             self.hold(input);
-            return true;
+            return Consumed::Yes;
         }
         let (seen, mut sent_seen) = (self.seen, self.sent_seen);
         let mut synced = false;
@@ -358,7 +359,7 @@ impl ProseUiState {
     ///
     /// The Logic thread keeps each change until this view says it applied
     /// it, so the view says so here, once per batch of events taken.
-    pub fn replay(&mut self, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+    pub fn replay(&mut self, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> Consumed {
         if !self.waiting()
             && self.seen > self.sent_seen
             && send(ProseCommand::Sync { seen: self.seen }).accepted()
@@ -366,12 +367,14 @@ impl ProseUiState {
             self.sent_seen = self.seen;
             self.syncs.push_back(SyncHold::Passes);
         }
-        let mut consumed = false;
+        let mut consumed = Consumed::No;
         while !self.waiting() {
             let Some(input) = self.queued.pop_front() else {
                 break;
             };
-            consumed |= self.handle_input(&input, send);
+            if self.handle_input(&input, send).is_yes() {
+                consumed = Consumed::Yes;
+            }
         }
         consumed
     }
@@ -380,7 +383,7 @@ impl ProseUiState {
         &mut self,
         input: &ProseInput,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         // A press or a key stops the motion a flick left (`PROSE-UI-218`).
         if matches!(input, ProseInput::Press { .. } | ProseInput::Key { .. }) {
             self.stop_fling();
@@ -398,15 +401,17 @@ impl ProseUiState {
                 // The preview replaces the selection, as typing does
                 // (`PROSE-UI-197`).
                 if !text.is_empty() && !self.take_selection(send) {
-                    return true;
+                    return Consumed::Yes;
                 }
                 self.composing.clone_from(text);
-                true
+                Consumed::Yes
             }
             ProseInput::ComposeEnd(text) => {
                 self.composing.clear();
-                self.type_into_menu(text, send);
-                true
+                // The end of a composition is the view's whether or not the
+                // run landed.
+                let _ = self.type_into_menu(text, send);
+                Consumed::Yes
             }
             ProseInput::Press { at, mods, now } => {
                 let target = mods
@@ -422,7 +427,7 @@ impl ProseUiState {
                         if crate::link::openable(&url) {
                             self.followed = Some(url);
                         }
-                        true
+                        Consumed::Yes
                     }
                     None => {
                         // A press on the canvas is outside the menu.
@@ -433,9 +438,9 @@ impl ProseUiState {
             }
             ProseInput::Drag { at } => {
                 self.update_drag(*at);
-                self.dragging.is_some()
+                Consumed::yes_if(self.dragging.is_some())
             }
-            ProseInput::Release => self.end_drag(),
+            ProseInput::Release => Consumed::yes_if(self.end_drag()),
             ProseInput::Drop { at, text } => self.drop_text(*at, text, send),
             ProseInput::Copy(write) => self.copy(*write, send),
             ProseInput::Paste { text, html, rich } => {
@@ -479,17 +484,17 @@ impl ProseUiState {
         &mut self,
         write: ClipboardWrite,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         let Some((anchor, focus)) = self.selection() else {
-            return false;
+            return Consumed::No;
         };
         if !send(ProseCommand::CopyRange { anchor, focus }).accepted() {
-            return true;
+            return Consumed::Yes;
         }
         if write == ClipboardWrite::Cut {
             self.take_selection(send);
         }
-        true
+        Consumed::Yes
     }
 
     /// Paste over the selection, or at the caret. The content leaves as a
@@ -500,15 +505,15 @@ impl ProseUiState {
         html: Option<&str>,
         rich: Option<&ambre_core::ClipboardBytes>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         if rich.is_none() && html.is_none() && !text.contains('\n') {
             return self.type_into_menu(text, send);
         }
         if !self.take_selection(send) {
-            return true;
+            return Consumed::Yes;
         }
         let Some(cursor) = self.cursor else {
-            return false;
+            return Consumed::No;
         };
         let at = (cursor.block_id, cursor.offset);
         send(ProseCommand::Paste {
@@ -517,7 +522,7 @@ impl ProseUiState {
             html: html.map(str::to_owned),
             payload: rich.cloned(),
         });
-        true
+        Consumed::Yes
     }
 
     /// Text dropped at a point: the caret goes there, collapsed, and the text
@@ -529,9 +534,9 @@ impl ProseUiState {
         at: ViewPoint,
         text: &str,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         let Some((block_id, offset)) = self.place_at(at) else {
-            return false;
+            return Consumed::No;
         };
         self.slash = None;
         self.end_drag();
@@ -546,8 +551,10 @@ impl ProseUiState {
         if text.contains('\n') {
             return self.paste(&text, None, None, send);
         }
-        self.type_text(&text, send);
-        true
+        // The drop placed the caret, so it is the view's whether or not the
+        // insertion landed.
+        let _ = self.type_text(&text, send);
+        Consumed::Yes
     }
 
     /// Type a run of text, and open, narrow or close the slash menu with it.
@@ -558,7 +565,7 @@ impl ProseUiState {
         &mut self,
         text: &str,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         let text: String = text.chars().filter(|c| !c.is_control()).collect();
         if self.slash.is_some() && text.chars().any(char::is_whitespace) {
             self.slash = None;
@@ -595,7 +602,7 @@ impl ProseUiState {
         key: ProseKey,
         mods: Modifiers,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> Option<bool> {
+    ) -> Option<Consumed> {
         let menu = self.slash.as_mut()?;
         match key {
             ProseKey::Up | ProseKey::Down if !mods.shift() && !mods.primary() => {
@@ -604,7 +611,7 @@ impl ProseUiState {
                 } else {
                     StepDirection::Backward
                 });
-                Some(true)
+                Some(Consumed::Yes)
             }
             ProseKey::Enter if !crate::view::slash::filter(&menu.query).is_empty() => {
                 let selected = menu.selected;
@@ -612,7 +619,7 @@ impl ProseUiState {
             }
             ProseKey::Escape => {
                 self.slash = None;
-                Some(true)
+                Some(Consumed::Yes)
             }
             // The Backspace over the slash closes the menu; one over the
             // query narrows it less. Both delete like any Backspace.
@@ -634,40 +641,44 @@ impl ProseUiState {
         &mut self,
         index: crate::view::slash::SlashChoice,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         let Some(menu) = self.slash.take() else {
-            return false;
+            return Consumed::No;
         };
         let Some(item) = crate::view::slash::filter(&menu.query).get(index).copied() else {
             self.slash = Some(menu);
-            return true;
+            return Consumed::Yes;
         };
         let erase = ProseCommand::DeleteText {
             block_id: menu.origin.0,
             range: menu.span(),
         };
         if !send(erase).accepted() {
-            return true;
+            return Consumed::Yes;
         }
         self.set_caret(menu.origin);
         send(item.command.resolve(menu.origin.0));
-        true
+        Consumed::Yes
     }
 
     /// Type a run of text at the caret (`PROSE-UI-136`, `PROSE-UI-176`).
     ///
     /// The selection goes first. The draft then takes the text only when the
     /// insertion reached the channel: a dropped command never happened.
-    fn type_text(&mut self, text: &str, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+    fn type_text(
+        &mut self,
+        text: &str,
+        send: &mut dyn FnMut(ProseCommand) -> SendResult,
+    ) -> Consumed {
         let text: String = text.chars().filter(|c| !c.is_control()).collect();
         if text.is_empty() || self.cursor.is_none() {
-            return false;
+            return Consumed::No;
         }
         if !self.take_selection(send) {
-            return true;
+            return Consumed::Yes;
         }
         let Some(cursor) = self.cursor else {
-            return true;
+            return Consumed::Yes;
         };
         let command = ProseCommand::InsertText {
             block_id: cursor.block_id,
@@ -677,7 +688,7 @@ impl ProseUiState {
         if send(command).accepted() {
             self.advance_cursor(DocCount::of(&text));
         }
-        true
+        Consumed::Yes
     }
 
     /// Delete the active selection, and collapse the caret to where it
@@ -717,7 +728,7 @@ impl ProseUiState {
         key: ProseKey,
         mods: Modifiers,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         let ctrl = mods.primary();
         // A history step needs no caret: the engine places it after
         // (`UNDO-010`, `UNDO-011`). The key is the view's whether or not the
@@ -729,10 +740,10 @@ impl ProseUiState {
             } else {
                 ProseCommand::Undo
             });
-            return true;
+            return Consumed::Yes;
         }
         if self.cursor.is_none() {
-            return false;
+            return Consumed::No;
         }
         let direction = match key {
             ProseKey::Left if ctrl => Direction::WordLeft,
@@ -752,17 +763,17 @@ impl ProseUiState {
             ProseKey::Enter => return self.split(send),
             ProseKey::Escape => {
                 self.escape();
-                return true;
+                return Consumed::Yes;
             }
             ProseKey::SelectAll => {
                 self.select_all();
-                return true;
+                return Consumed::Yes;
             }
             // Taken above, before the caret is asked for.
-            ProseKey::Undo | ProseKey::Redo => return true,
+            ProseKey::Undo | ProseKey::Redo => return Consumed::Yes,
         };
         self.move_cursor(direction, SelectionMode::from_mods(mods));
-        true
+        Consumed::Yes
     }
 
     /// Backspace, or Delete forward: the selection, else the grapheme beside
@@ -771,14 +782,14 @@ impl ProseUiState {
         &mut self,
         direction: StepDirection,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         let forward = direction == StepDirection::Forward;
         if self.selection().is_some() {
             self.take_selection(send);
-            return true;
+            return Consumed::Yes;
         }
         let Some(cursor) = self.cursor else {
-            return false;
+            return Consumed::No;
         };
         let here: Spot = (cursor.block_id, cursor.offset);
         let beside = self.grapheme_beside(here, direction);
@@ -799,7 +810,7 @@ impl ProseUiState {
             ),
             None => {
                 let Some(next) = self.neighbour(here.0, direction) else {
-                    return true;
+                    return Consumed::Yes;
                 };
                 let edge = (
                     next,
@@ -823,7 +834,7 @@ impl ProseUiState {
             self.set_caret(caret);
             self.reveal_caret();
         }
-        true
+        Consumed::Yes
     }
 
     /// The grapheme boundary beside a place, in document offsets, reading the
@@ -844,12 +855,12 @@ impl ProseUiState {
     /// Enter: the selection goes, then the paragraph parts at the caret. The
     /// caret moves when the split confirms, onto the block it minted
     /// (`PROSE-UI-141`).
-    fn split(&mut self, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> bool {
+    fn split(&mut self, send: &mut dyn FnMut(ProseCommand) -> SendResult) -> Consumed {
         if !self.take_selection(send) {
-            return true;
+            return Consumed::Yes;
         }
         let Some(cursor) = self.cursor else {
-            return true;
+            return Consumed::Yes;
         };
         let command = ProseCommand::SplitBlock {
             block_id: cursor.block_id,
@@ -863,7 +874,7 @@ impl ProseUiState {
                 new_block: None,
             });
         }
-        true
+        Consumed::Yes
     }
 
     /// A press on the canvas: a caret, a word, a paragraph or an extension,
@@ -878,10 +889,10 @@ impl ProseUiState {
         mode: SelectionMode,
         now: ambre_core::PageTime,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
-    ) -> bool {
+    ) -> Consumed {
         let layout = &self.shaped.layout;
         if layout.page_count.is_zero() {
-            return false;
+            return Consumed::No;
         }
         if self.shaped.block_count().is_zero() {
             // Nothing to hit: the block comes through the command path, and
@@ -895,10 +906,10 @@ impl ProseUiState {
             if send(command).accepted() {
                 self.awaiting_block = BlockWait::Awaiting;
             }
-            return true;
+            return Consumed::Yes;
         }
         let Some(spot) = self.place_at(at) else {
-            return false;
+            return Consumed::No;
         };
         let clicks = match self.last_press {
             Some(last)
@@ -937,7 +948,7 @@ impl ProseUiState {
             Clicks::Double => self.select_around(spot, SelectUnit::Word),
             Clicks::Triple => self.select_around(spot, SelectUnit::Paragraph),
         }
-        true
+        Consumed::Yes
     }
 
     /// A layout was taken: a caret a press asked a block for goes to the
