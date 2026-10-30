@@ -196,4 +196,13 @@ crate::define_flag! {
         /// This request made the record.
         Created,
     }
+
+    /// Whether a document owes a key rotation: a member left and nobody
+    /// re-keyed since (`SRV-122`, `SYNC-128`).
+    pub enum RotationDebt {
+        /// No rotation is owed.
+        Settled,
+        /// A writer pays a rotation before its next frame.
+        Owed,
+    }
 }

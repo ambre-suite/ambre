@@ -657,7 +657,7 @@ impl SyncState {
                 doc_state.role = role;
                 // A writer pays an owed rotation before its first frame; a
                 // reader sends none, so it owes nothing (`SYNC-128`).
-                if rotation_owed && role.can_write_document() {
+                if rotation_owed == ambre_core::RotationDebt::Owed && role.can_write_document() {
                     doc_state.rekey.found_debt();
                 }
                 // The blob object storage holds is the sealed snapshot. It is
@@ -1116,7 +1116,9 @@ impl SyncState {
                         doc_state.set_signing_keys(signing_keys);
                         doc_state.word = word;
                         // A leave owes a rotation the writer pays (`SYNC-128`).
-                        if rotation_owed && doc_state.role.can_write_document() {
+                        if rotation_owed == ambre_core::RotationDebt::Owed
+                            && doc_state.role.can_write_document()
+                        {
                             doc_state.rekey.found_debt();
                         }
                         true
@@ -1594,7 +1596,7 @@ impl SyncState {
                     return;
                 }
             };
-            if resp.rotation_owed {
+            if resp.rotation_owed == ambre_core::RotationDebt::Owed {
                 let _ = tx.send(SyncEvent::DebtFound { document_id });
                 return;
             }

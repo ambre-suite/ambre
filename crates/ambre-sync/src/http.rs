@@ -1666,7 +1666,7 @@ pub(crate) struct MembersResponse {
     /// The document owes a rotation: a member left and nobody re-keyed since
     /// (`SRV-122`, `SYNC-128`).
     #[serde(default)]
-    pub rotation_owed: bool,
+    pub rotation_owed: ambre_core::RotationDebt,
     /// The membership log, oldest entry first (`SRV-104`).
     #[serde(default)]
     pub log: Vec<ambre_core::EncodedLogEntry>,
@@ -1942,7 +1942,7 @@ pub(crate) struct DocumentMembersResponse {
     pub members: Vec<DocumentMemberEntry>,
     /// The document owes a rotation (`SRV-122`, `SYNC-128`).
     #[serde(default)]
-    pub rotation_owed: bool,
+    pub rotation_owed: ambre_core::RotationDebt,
     /// The membership log, oldest entry first (`SRV-104`).
     #[serde(default)]
     pub log: Vec<ambre_core::EncodedLogEntry>,

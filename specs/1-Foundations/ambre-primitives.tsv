@@ -2294,7 +2294,6 @@ ambre-sync | src/http.rs | crate::http | <HttpError as From<String>>::from(messa
 ambre-sync | src/http.rs | crate::http | <RoutePath as From<&str>>::from(path) | param | &str	newtype-inner	the &str the constructor of RoutePath copies into its text
 ambre-sync | src/http.rs | crate::http | <RoutePath as From<String>>::from(path) | param | String	newtype-inner	the String the constructor of RoutePath wraps
 ambre-sync | src/http.rs | crate::http | ApiRoot.0 | field | String	newtype-inner	newtype field, constructor or accessor
-ambre-sync | src/http.rs | crate::http | DocumentMembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | Failed::local(message) | param | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpBody.0 | field | Vec<u8>	newtype-inner	the newtype's own inside: the bytes of a request or an answer body
@@ -2306,7 +2305,6 @@ ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.reason | field | 
 ambre-sync | src/http.rs | crate::http | HttpError::is() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | HttpError::is_conflict() | ret | bool	generic	predicate
 ambre-sync | src/http.rs | crate::http | MasterKeyResponse::setup_owed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-sync | src/http.rs | crate::http | MembersResponse.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/http.rs | crate::http | Method::as_str() | ret | &'static str	free-text	the method word an HTTP error message names; the request takes gloo_net's own Method
 ambre-sync | src/http.rs | crate::http | QueryKey::as_str() | ret | &'static str	newtype-inner	the parameter name of a closed-set key, as the query string spells it
 ambre-sync | src/http.rs | crate::http | RelayHost.0 | field | String	newtype-inner	newtype field, constructor or accessor
@@ -2334,10 +2332,8 @@ ambre-sync | src/lib.rs | crate | SyncDocumentState::accept_ephemeral_counter() 
 ambre-sync | src/lib.rs | crate | SyncDocumentState::first_arrival() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncDocumentState::quarantine_len() | ret | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/lib.rs | crate | SyncEvent::DebtUnsettled.message | field | String	free-text	free text: message, label, name or report
-ambre-sync | src/lib.rs | crate | SyncEvent::DocumentMembersReady.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::HttpError.message | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentFailed.message | field | String	free-text	free text: message, label, name or report
-ambre-sync | src/lib.rs | crate | SyncEvent::OpenDocumentReady.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::Reauthenticated.ok | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/lib.rs | crate | SyncEvent::WsDisconnected.reason | field | String	free-text	free text: message, label, name or report
 ambre-sync | src/lib.rs | crate | SyncState.inbound_held | field | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -2409,7 +2405,6 @@ ambre-sync | src/rekey.rs | crate::rekey | UNCONFIRMED_LIMIT | const | usize	mat
 ambre-sync | src/sharing.rs | crate::sharing | ROTATION_TRIES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-sync | src/sharing.rs | crate::sharing | api_error(message) | param | String	free-text	free text: message, label, name or report
 ambre-sync | src/sharing.rs | crate::sharing | invitee_keys() | ret | Result<InviteeKeys,(ApiFailure,String)>	free-text	error message text
-ambre-sync | src/updates.rs | crate::updates | OpenedMembers.rotation_owed | field | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::check_held_snapshot() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-sync | src/updates.rs | crate::updates | SyncState::named_key_holds() | ret | Result<(),(OpenFailure,String)>	free-text	free text: message, label, name or report
 ambre-sync | src/updates.rs | crate::updates | SyncState::opened_from_members() | ret | Result<OpenedMembers,(OpenFailure,String)>	free-text	free text: message, label, name or report

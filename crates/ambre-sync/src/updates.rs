@@ -581,7 +581,7 @@ impl SyncState {
                         crate::Existence::LocalOnly,
                         Vec::new(),
                         Role::Owner,
-                        false,
+                        ambre_core::RotationDebt::Settled,
                     ),
                     // A failed request says nothing about the document. Opening it
                     // local-only would mint a throwaway key and edit a copy nobody
@@ -1677,7 +1677,7 @@ pub(crate) struct OpenedMembers {
     pub doc_key: DocumentKey,
     pub signing_keys: Vec<(ambre_core::PublicKey, UserId)>,
     pub role: Role,
-    pub rotation_owed: bool,
+    pub rotation_owed: ambre_core::RotationDebt,
     /// The keys the membership log lets sign a key link (`SYNC-121`).
     /// `None` for a document older than the log.
     pub signers: Option<std::collections::HashSet<ambre_core::PublicKey>>,
@@ -1859,7 +1859,7 @@ mod tests {
                 member_row(me, &my_xk, &peer_xk, &doc_key, ambre_core::Role::Editor),
                 member_row(peer, &peer_xk, &peer_xk, &doc_key, ambre_core::Role::Owner),
             ],
-            rotation_owed: true,
+            rotation_owed: ambre_core::RotationDebt::Owed,
             log: Vec::new(),
         };
         let opened = SyncState::opened_from_members(
@@ -1874,7 +1874,7 @@ mod tests {
         assert_eq!(opened.role, Role::Editor);
         let ids: Vec<UserId> = opened.signing_keys.iter().map(|(_, id)| *id).collect();
         assert_eq!(ids, vec![me, peer]);
-        assert!(opened.rotation_owed);
+        assert_eq!(opened.rotation_owed, ambre_core::RotationDebt::Owed);
     }
 
     /// Holds `SYNC-012`: a key row that does not unwrap fails the open, and no
@@ -1897,7 +1897,7 @@ mod tests {
         row.doc_key_enc = ambre_core::WrappedDocKey::new(raw.to_vec());
         let resp = http::MembersResponse {
             members: vec![row],
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             log: Vec::new(),
         };
         let refused = SyncState::opened_from_members(
@@ -2041,7 +2041,7 @@ mod tests {
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             links,
         });
         let opened = drain(&rx).into_iter().any(
@@ -2414,7 +2414,7 @@ mod tests {
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
         });
 
@@ -2454,7 +2454,7 @@ mod tests {
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
         });
 
@@ -2609,7 +2609,7 @@ mod tests {
             asked: crate::generation::RequestGeneration::nth(1),
             document_id: doc,
             word: Default::default(),
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             members: vec![listed(carol)],
             signing_keys: vec![(PublicKey::from_array([2u8; 32]), carol)],
         });
@@ -2626,7 +2626,7 @@ mod tests {
             asked: crate::generation::RequestGeneration::nth(1),
             document_id: doc,
             word: Default::default(),
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             members: Vec::new(),
             signing_keys: Vec::new(),
         });
@@ -2677,7 +2677,7 @@ mod tests {
             asked: crate::generation::RequestGeneration::nth(2),
             document_id: doc,
             word: Default::default(),
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             members: Vec::new(),
             signing_keys: vec![(PublicKey::from_array([2u8; 32]), carol)],
         });
@@ -2687,7 +2687,7 @@ mod tests {
             asked: crate::generation::RequestGeneration::nth(1),
             document_id: doc,
             word: Default::default(),
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             members: Vec::new(),
             signing_keys: vec![(PublicKey::from_array([1u8; 32]), bob)],
         });
@@ -2736,7 +2736,7 @@ mod tests {
             asked: crate::generation::RequestGeneration::nth(1),
             document_id: doc,
             word: Default::default(),
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             members: vec![listed(carol)],
             signing_keys: vec![(PublicKey::from_array([3u8; 32]), carol)],
         });
@@ -2800,7 +2800,7 @@ mod tests {
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
         });
         let at_open = drain(&rx);
@@ -2866,7 +2866,7 @@ mod tests {
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
         });
         let at_open = drain(&rx);
@@ -2919,7 +2919,7 @@ mod tests {
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Owner,
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
         });
         assert_eq!(
@@ -2959,7 +2959,7 @@ mod tests {
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Viewer,
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
         });
         let _ = drain(&rx);
@@ -2986,7 +2986,7 @@ mod tests {
             existence: crate::Existence::OnRelay,
             signing_keys: Vec::new(),
             role: Role::Editor,
-            rotation_owed: false,
+            rotation_owed: ambre_core::RotationDebt::Settled,
             links: Vec::new(),
         });
         assert_eq!(ready_role(&drain(&rx), doc), Some(Role::Editor));
@@ -3973,7 +3973,7 @@ mod tests {
                 existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),
                 role,
-                rotation_owed: true,
+                rotation_owed: ambre_core::RotationDebt::Owed,
                 links: Vec::new(),
             });
             let _ = drain_ws(&ws_rx);
@@ -4043,7 +4043,7 @@ mod tests {
                 existence: crate::Existence::OnRelay,
                 signing_keys: Vec::new(),
                 role: Role::Owner,
-                rotation_owed: false,
+                rotation_owed: ambre_core::RotationDebt::Settled,
                 links: Vec::new(),
             });
             let sent = drain_ws(&ws_rx);

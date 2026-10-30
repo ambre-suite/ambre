@@ -321,7 +321,7 @@ enum SyncEvent {
         /// the server remains the sole authority.
         role: Role,
         /// The members answer says the document owes a rotation (`SYNC-128`).
-        rotation_owed: bool,
+        rotation_owed: ambre_core::RotationDebt,
         /// The document's key chain, as the relay serves it (`SYNC-117`).
         /// Empty for a local-only open.
         links: Vec<ambre_protocol::KeyLink>,
@@ -523,7 +523,7 @@ enum SyncEvent {
         /// What the walked log says a channel listed in this space must heed.
         word: membership_log::SpaceWord,
         /// Whether the relay says the document owes a rotation (`SYNC-128`).
-        rotation_owed: bool,
+        rotation_owed: ambre_core::RotationDebt,
         members: Vec<MemberInfo>,
         /// Refreshed presence directory (`ambre-spec-membership.md`), harvested from
         /// the same response. Membership just changed often enough for someone to

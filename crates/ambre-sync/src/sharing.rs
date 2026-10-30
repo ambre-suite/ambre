@@ -1318,7 +1318,7 @@ pub(crate) async fn settle_task<H: ShareHttp>(
             Ok(resp) => resp,
             Err(e) => return unsettled(format!("Get members failed: {e}")),
         };
-        if !resp.rotation_owed {
+        if resp.rotation_owed == ambre_core::RotationDebt::Settled {
             let _ = event_tx.send(SyncEvent::DebtGone { document_id });
             return;
         }

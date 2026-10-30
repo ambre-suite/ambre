@@ -143,7 +143,7 @@ pub use media::{
 pub use member_count::{MemberCount, MemberCountError};
 pub use mode::{
     AfterDrop, Availability, CaseMatch, Creation, DocumentScope, FinalizeEnd, HistoryStep,
-    LinkState, PasteForm, StepDirection, ThreadState, Toggle, Visibility, WordMatch,
+    LinkState, PasteForm, RotationDebt, StepDirection, ThreadState, Toggle, Visibility, WordMatch,
 };
 pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,
