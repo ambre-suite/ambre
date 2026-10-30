@@ -2003,7 +2003,6 @@ ambre-prose | src/numbering.rs | crate::numbering | Counters.0 | field | [u32;LE
 ambre-prose | src/numbering.rs | crate::numbering | LEVELS | const | usize	local	the length of the constant array of heading levels, which sizes the private counters
 ambre-prose | src/probe.rs | crate::probe | FrameNumber.0 | field | u64	newtype-inner	how many animation frames began before a moment, held at the top
 ambre-prose | src/probe.rs | crate::probe | lays_out() | ret | bool	generic	whether an event lays the document out again, when a moved caret can first be drawn
-ambre-prose | src/probe.rs | crate::probe | percentiles(samples) | param | &[f64]	math	the samples of one probe series, in milliseconds or frames, that the host hands in
 ambre-prose | src/redact.rs | crate::redact | Redacted.0 | field | &'a str	newtype-inner	document content that Debug prints the length of alone
 ambre-prose | src/redact.rs | crate::redact | optional(text) | param | Option<&String>	free-text	an optional document text, wrapped for a Debug that prints its length alone
 ambre-prose | src/style.rs | crate::style | heading_scale() | ret | f32	math	the scale a heading level is drawn at, local to the cascade
@@ -3090,8 +3089,6 @@ ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple.0 
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::new(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
-ambre-app | src/host/probe.rs | crate::host::probe | Timeline.counts | field | Option<BTreeMap<ProbeName,Vec<f64>>>	math	the frame counts kept per probe, as the f64 samples percentiles takes
-ambre-app | src/host/probe.rs | crate::host::probe | Timeline.samples | field | Option<BTreeMap<ProbeName,Vec<f64>>>	math	the durations kept per probe, in milliseconds, as the f64 samples percentiles takes
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion.0 | field | u64	newtype-inner	the stamp the paginator puts on each layout, which only grows
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::get() | ret | u64	newtype-inner	the stamp the paginator puts on each layout, which only grows
 ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::new(value) | param | u64	newtype-inner	the stamp the paginator puts on each layout, which only grows
@@ -3520,8 +3517,6 @@ ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f
 ambre-core | src/span.rs | crate::span | FrameRate.0 | field | f32	newtype-inner	the inside of the frame-rate newtype
 ambre-core | src/span.rs | crate::span | FrameRate::get() | ret | f32	newtype-inner	the rate unwrapped, for the status text that prints it
 ambre-core | src/span.rs | crate::span | FrameRate::new(per_second) | param | f32	newtype-inner	the constructor of the frame-rate newtype
-ambre-prose | src/probe.rs | crate::probe | Percentiles.median | field | f64	math	a sample of a probe's series, in milliseconds or frames
-ambre-prose | src/probe.rs | crate::probe | Percentiles.p95 | field | f64	math	a sample of a probe's series, in milliseconds or frames
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureName.0 | field | std::borrow::Cow<'static,str>	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::as_str() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::declared(name) | param | &'static str	newtype-inner	the newtype's own inside, accessor or constructor

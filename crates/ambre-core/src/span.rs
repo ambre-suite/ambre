@@ -231,6 +231,13 @@ impl PageMillis {
     pub fn from_duration(duration: Duration) -> Self {
         Self::new(duration.as_secs_f64() * 1000.0)
     }
+
+    /// The total order of IEEE 754 over the two spans, so a list of spans
+    /// sorts whatever it holds.
+    #[must_use]
+    pub fn total_cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.total_cmp(&other.0)
+    }
 }
 
 /// A frame rate: the frames a canvas showed per second of the page clock, as

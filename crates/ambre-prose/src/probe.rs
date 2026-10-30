@@ -255,23 +255,28 @@ impl FrameNumber {
     }
 }
 
-/// The median and the 95th percentile of a set of samples.
+/// The median and the 95th percentile of a set of samples, in the unit the
+/// samples carry.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Percentiles {
+pub struct Percentiles<T> {
     /// The sample at the middle rank.
-    pub median: f64,
+    pub median: T,
     /// The sample at the 95th percentile rank.
-    pub p95: f64,
+    pub p95: T,
 }
 
-/// The median and the 95th percentile of `samples`, or `None` for none.
+/// The median and the 95th percentile of `samples` sorted by `order`, or
+/// `None` for none.
 #[must_use]
-pub fn percentiles(samples: &[f64]) -> Option<Percentiles> {
+pub fn percentiles<T: Copy + Default>(
+    samples: &[T],
+    order: fn(&T, &T) -> std::cmp::Ordering,
+) -> Option<Percentiles<T>> {
     if samples.is_empty() {
         return None;
     }
     let mut sorted = samples.to_vec();
-    sorted.sort_by(f64::total_cmp);
+    sorted.sort_by(order);
     let at = |q: f64| {
         let rank = (q * (sorted.len() - 1) as f64).round() as usize;
         sorted.get(rank).copied().unwrap_or_default()
@@ -521,13 +526,24 @@ mod tests {
 
     #[test]
     fn percentiles_read_the_sorted_samples() {
-        assert_eq!(percentiles(&[]), None);
-        let samples: Vec<f64> = (1..=100).map(f64::from).rev().collect();
+        assert_eq!(percentiles(&[], ambre_core::PageMillis::total_cmp), None);
+        let spans: Vec<ambre_core::PageMillis> = (1..=100)
+            .map(|ms| ambre_core::PageMillis::new(f64::from(ms)))
+            .rev()
+            .collect();
         assert_eq!(
-            percentiles(&samples),
+            percentiles(&spans, ambre_core::PageMillis::total_cmp),
             Some(Percentiles {
-                median: 51.0,
-                p95: 95.0
+                median: ambre_core::PageMillis::new(51.0),
+                p95: ambre_core::PageMillis::new(95.0)
+            })
+        );
+        let frames: Vec<FrameCount> = (1..=100).rev().map(FrameCount::new).collect();
+        assert_eq!(
+            percentiles(&frames, FrameCount::cmp),
+            Some(Percentiles {
+                median: FrameCount::new(51),
+                p95: FrameCount::new(95)
             })
         );
     }

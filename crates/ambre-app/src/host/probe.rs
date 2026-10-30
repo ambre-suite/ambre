@@ -41,9 +41,9 @@ impl ambre_draw::Clock for PageClock {
 /// Where the probes' measures go.
 pub(crate) struct Timeline {
     /// The samples per measure, kept only under `?probes`.
-    samples: Option<BTreeMap<ProbeName, Vec<f64>>>,
+    samples: Option<BTreeMap<ProbeName, Vec<ambre_core::PageMillis>>>,
     /// The samples per count, kept only under `?probes`.
-    counts: Option<BTreeMap<ProbeName, Vec<f64>>>,
+    counts: Option<BTreeMap<ProbeName, Vec<FrameCount>>>,
     last_summary: ambre_core::PageTime,
     /// A sample landed since the last summary.
     fresh: bool,
@@ -75,7 +75,7 @@ impl Timeline {
                 samples
                     .entry(measure.name)
                     .or_default()
-                    .push(measure.duration().get());
+                    .push(measure.duration());
                 self.fresh = true;
             }
         }
@@ -87,7 +87,7 @@ impl Timeline {
         for value in values {
             mark_count(name.as_str(), value);
             if let Some(counts) = self.counts.as_mut() {
-                counts.entry(name).or_default().push(f64::from(value.get()));
+                counts.entry(name).or_default().push(value);
                 self.fresh = true;
             }
         }
@@ -104,7 +104,10 @@ impl Timeline {
         self.last_summary = now;
         self.fresh = false;
         for (name, values) in samples {
-            if let Some(Percentiles { median: p50, p95 }) = percentiles(values) {
+            if let Some(Percentiles { median, p95 }) =
+                percentiles(values, ambre_core::PageMillis::total_cmp)
+            {
+                let (p50, p95) = (median.get(), p95.get());
                 web_sys::console::log_1(&JsValue::from_str(&format!(
                     "{}: n={} p50={p50:.2} ms p95={p95:.2} ms",
                     name.as_str(),
@@ -113,7 +116,8 @@ impl Timeline {
             }
         }
         for (name, values) in self.counts.iter().flatten() {
-            if let Some(Percentiles { median: p50, p95 }) = percentiles(values) {
+            if let Some(Percentiles { median, p95 }) = percentiles(values, FrameCount::cmp) {
+                let (p50, p95) = (median.get(), p95.get());
                 web_sys::console::log_1(&JsValue::from_str(&format!(
                     "{}: n={} p50={p50} frames p95={p95} frames",
                     name.as_str(),
