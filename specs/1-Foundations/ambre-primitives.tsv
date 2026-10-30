@@ -49,7 +49,6 @@ ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::hand
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	generic	fact flag of the probe timeline, selects no mode
-ambre-app | src/host/probe.rs | crate::host::probe | mark(name) | param | &str	free-text	metric name
 ambre-app | src/host/probe.rs | crate::host::probe | mark_count(name) | param | &str	free-text	metric name
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.dirty | field | bool	generic	dirty flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.fatal | field | bool	generic	state flag
@@ -340,6 +339,7 @@ ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	ma
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength.0 | field | usize	newtype-inner	the number of values a backlog holds, as a mark names it
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::new(values) | param | usize	newtype-inner	the number of values a backlog holds, as a mark names it
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity.0 | field | usize	newtype-inner	the number of values a bounded channel holds
+ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::backlog(factor) | param | usize	math	a multiplier of the capacity, not a length
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::get() | ret | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::new(values) | param | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | Doorbell::is_current() | ret | bool	generic	predicate or internal state flag
@@ -501,19 +501,11 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::new(index) 
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSizeKey.0 | field | u32	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload.bytes | field | Vec<u8>	generic	raw texel bytes the GPU copies
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.height | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.pixels | field | Vec<u8>	generic	bytes
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.width | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | build_chain(height) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | build_chain(pixels) | param | &[u8]	generic	generic codec/parser/bytes API
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | build_chain(width) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | level_count() | ret | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | level_count(height) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | level_count(width) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce() | ret | Vec<u8>	generic	generic codec/parser/bytes API
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(h) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(nh) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(nw) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(src) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(w) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | GLYPH_VERTEX_SIZE | const | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | GlyphVertex.color | field | [f32;4]	math	geometry, layout, GPU or count arithmetic
@@ -1492,7 +1484,6 @@ ambre-murmure | src/watchers.rs | crate::watchers | Watchers::owes_typing() | re
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::owes_watching() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::tick() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/watchers.rs | crate::watchers | owed() | ret | bool	generic	state flag/predicate
-ambre-pdf | src/lib.rs | crate | KrillaSurface<'a,'b>::stroke_solid(width) | param | f64	math	geometry, layout, count or size local to the algorithm
 ambre-pdf | src/lib.rs | crate | degenerate_clip_path::EPS | const | f32	math	geometry tolerance local to the algorithm
 ambre-pdf | src/lib.rs | crate | to_u8() | ret | u8	math	geometry, layout, count or size local to the algorithm
 ambre-pdf | src/lib.rs | crate | to_u8(c) | param | f32	math	geometry, layout, count or size local to the algorithm
@@ -2866,8 +2857,6 @@ ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::carries_style
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/find.rs | crate::logic::find | cell_matches(haystack) | param | &str	free-text	the displayed text of a cell; the query is the typed FoldedNeedle and the extent a MatchExtent
-ambre-trame | src/logic/find.rs | crate::logic::find | fold() | ret | String	generic	case-folds any text; a folded query is a FoldedNeedle
-ambre-trame | src/logic/find.rs | crate::logic::find | fold(s) | param | &str	free-text	the query text, which only fold_needle hands it to fold
 ambre-trame | src/logic/find.rs | crate::logic::find | strip_ci_match() | ret | Option<&'a str>	free-text	the raw text of a cell past a match of the query
 ambre-trame | src/logic/find.rs | crate::logic::find | strip_ci_match(hay) | param | &'a str	free-text	the raw text of a cell, scanned for the query; the query is the typed FoldedNeedle
 ambre-trame | src/logic/find.rs | crate::logic::find | replace_ci() | ret | String	free-text	free text: user content, label, message or display string
@@ -2914,10 +2903,6 @@ ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number() | r
 ambre-trame | src/logic/packing.rs | crate::logic::packing | format_number(value) | param | f64	math	the formula number formatted to the cell format
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer.0 | field | String	newtype-inner	the per-sheet root name SheetContainer types
 ambre-trame | src/logic/schema.rs | crate::logic::schema | SheetContainer::as_str() | ret | &str	newtype-inner	the per-sheet root name SheetContainer holds, which the Loro call that opens the root reads
-ambre-trame | src/logic/schema.rs | crate::logic::schema | gate() | ret | Result<Cow<'_,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/schema.rs | crate::logic::schema | gate(payload) | param | &[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/schema.rs | crate::logic::schema | gate_through() | ret | Result<Cow<'a,[u8]>,SchemaError>	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-trame | src/logic/schema.rs | crate::logic::schema | gate_through(payload) | param | &'a[u8]	generic	parser, renderer, lexer or freeze tooling over text or bytes
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::canonical_name_reference(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::hold_default_sheet() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/sheets.rs | crate::logic::sheets | TrameState::name_target(reference) | param | &str	free-text	the A1 reference text a DefineName command carries, before it is parsed; DefineName.reference is free-text

@@ -118,14 +118,14 @@ impl DayOfMonth {
         Self(day)
     }
 
-    /// The last day of a month `length` days long.
-    pub const fn last_of(length: DayCount) -> Self {
-        Self(length.0)
-    }
-
     /// The day's number.
     pub const fn get(self) -> i64 {
         self.0
+    }
+
+    /// The last day of a month that holds `days` days.
+    pub const fn last_of(days: DayCount) -> Self {
+        Self(days.0)
     }
 }
 
