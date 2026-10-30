@@ -108,6 +108,14 @@ define_public_key! {
     ExchangePublicKey
 }
 
+impl PublicKey {
+    /// The key as the relay's JSON spells it.
+    #[must_use]
+    pub fn to_key_hex(&self) -> crate::SigningKeyHex {
+        crate::SigningKeyHex::encode(self.0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
