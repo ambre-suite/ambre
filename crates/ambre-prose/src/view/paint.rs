@@ -513,7 +513,7 @@ impl ProseUiState {
         clip: Rect,
         page_top: SurfacePx,
     ) -> Vec<CellPaint> {
-        let mut cells = Vec::with_capacity(table.cells.len());
+        let mut cells = Vec::with_capacity(table.cells.len().to_usize());
         for cell in &table.cells {
             let Some(cell_box) = cell_frame(table, cell) else {
                 continue;
@@ -525,7 +525,7 @@ impl ProseUiState {
                 left + f64::from(cell_box.x1.get()),
                 top_y + f64::from(cell_box.y1.get()),
             );
-            let mut blocks = Vec::with_capacity(cell.blocks.len());
+            let mut blocks = Vec::with_capacity(cell.blocks.len().to_usize());
             for (block, y, run) in &cell.blocks {
                 let placed = Placed {
                     origin: Point::new(
@@ -1453,7 +1453,8 @@ mod tests {
         );
         shape(&mut ui);
         let run = ui.provisional_run(block).expect("the cell is shaped again");
-        let text_width = laid.cells[0].width - laid.cells[0].style.padding * 2.0;
+        let first = &laid.cells[crate::layout::run::ShapeCell::ZERO];
+        let text_width = first.width - first.style.padding * 2.0;
         assert!(
             run.data().line_count().get() > 1,
             "the draft wraps in its column"

@@ -173,7 +173,7 @@ pub(crate) struct ReactionKey(String);
 impl ReactionKey {
     /// The key of the reaction `user` placed on `target`.
     #[must_use]
-    pub(crate) fn of(target: &crate::logic::model::ElementId, user: &ambre_bus::UserId) -> Self {
+    pub(crate) fn of(target: &ElementId, user: &ambre_bus::UserId) -> Self {
         Self(format!("{}{REACTION_SEPARATOR}{user}", target.as_str()))
     }
 
@@ -183,10 +183,21 @@ impl ReactionKey {
         &self.0
     }
 
-    /// The target id a stored key names, or `None` for a key with no
-    /// separator.
+    /// The target a stored key names, or `None` for a key with no separator.
     #[must_use]
-    pub(crate) fn target_of(key: &str) -> Option<&str> {
+    pub(crate) fn target_of(key: &str) -> Option<ElementId> {
+        Self::target_half(key).map(|target| ElementId(target.to_owned()))
+    }
+
+    /// Whether a stored key names `target`. A scan of every key asks this,
+    /// so it compares in place and builds no id.
+    #[must_use]
+    pub(crate) fn names_target(key: &str, target: &ElementId) -> bool {
+        Self::target_half(key) == Some(target.as_str())
+    }
+
+    /// The target half of a stored key, as Loro hands the key back.
+    fn target_half(key: &str) -> Option<&str> {
         key.split_once(REACTION_SEPARATOR).map(|(target, _)| target)
     }
 }

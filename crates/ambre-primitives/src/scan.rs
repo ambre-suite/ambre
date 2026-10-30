@@ -50,7 +50,7 @@ const WRAPPERS: &[&str] = &["Vec", "Box", "Rc", "Arc", "Cow"];
 /// replaces a metavariable once the body of a `macro_rules!` is read as
 /// Rust, and a parameter of an alias while its target resolves. No source
 /// identifier starts with it.
-const META: &str = "__ambre_meta_";
+pub(crate) const META: &str = "__ambre_meta_";
 
 /// How deep one alias may lead to another. A cycle fails to compile, so the
 /// bound keeps a broken tree from looping. Reaching it fails the scan, since
@@ -2030,10 +2030,10 @@ impl Scan {
 
 /// What a manifest says of its dependencies.
 #[derive(Debug, Default)]
-struct Manifest {
+pub(crate) struct Manifest {
     /// The package of each dependency, in every table whose name ends with
     /// `dependencies`, and in every `[...dependencies.name]` table.
-    packages: BTreeSet<String>,
+    pub(crate) packages: BTreeSet<String>,
     /// Each dependency whose key differs from its `package`: the key as a
     /// path writes it, then the package.
     renamed: BTreeMap<String, String>,
@@ -2048,7 +2048,7 @@ fn package_of(line: &str) -> Option<String> {
 }
 
 /// Reads the dependencies of a manifest, a renamed one under its package.
-fn dependencies(manifest: &str) -> Manifest {
+pub(crate) fn dependencies(manifest: &str) -> Manifest {
     let mut found = Manifest::default();
     let mut table = String::new();
     // The key of a `[...dependencies.name]` table, whose `package` line may
@@ -3912,7 +3912,7 @@ fn deref_impl(
 
 /// The body of each rule of a `macro_rules!`, the group after each `=>`,
 /// with its metavariables made Rust that syn parses (see [`unmeta`]).
-fn rule_bodies(tokens: TokenStream) -> Vec<TokenStream> {
+pub(crate) fn rule_bodies(tokens: TokenStream) -> Vec<TokenStream> {
     let tokens: Vec<TokenTree> = tokens.into_iter().collect();
     tokens
         .windows(4)

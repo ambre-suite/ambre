@@ -774,7 +774,7 @@ fn table_metrics(
                 x,
                 width,
                 rows: RowSpan::new(at.row, last.row.next()),
-                blocks,
+                blocks: blocks.into(),
                 content_height: top,
                 style,
             });
@@ -815,7 +815,13 @@ fn table_metrics(
         line_count: BlockLineCount::of_rows(row_heights.len()),
         line_tops: row_tops.as_slice().to_vec(),
     };
-    (metrics, TableShape { row_tops, cells })
+    (
+        metrics,
+        TableShape {
+            row_tops,
+            cells: cells.into(),
+        },
+    )
 }
 
 /// Each column's width in pixels. The stored widths are points, one per
