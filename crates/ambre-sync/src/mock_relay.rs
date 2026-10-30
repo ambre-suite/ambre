@@ -157,10 +157,10 @@ impl MockBlindRelay {
         &mut self,
         client_rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
     ) -> usize {
-        let mut count = 0;
+        let mut count: usize = 0;
         while let Ok(wire) = client_rx.try_recv() {
             if self.handle_message(&wire) {
-                count += 1;
+                count = count.saturating_add(1);
             }
         }
         count

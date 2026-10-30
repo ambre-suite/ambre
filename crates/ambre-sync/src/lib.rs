@@ -32,6 +32,12 @@
 //   All documents are demultiplexed by document_id on incoming WsServerMsg.
 // ============================================================================
 
+// A length, count, sequence or offset here comes from the relay, a peer or the
+// local store. So an overflow, a wrap or an arithmetic panic is refused. A test
+// asserts by panicking, so the lint stops at its boundary, as the panic lints
+// of `clippy.toml` do (`ARCH-028`).
+#![cfg_attr(not(test), deny(clippy::arithmetic_side_effects))]
+
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;

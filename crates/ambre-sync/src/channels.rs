@@ -1105,7 +1105,7 @@ pub(crate) fn direct_message_request(
         .collect();
     let mut next = membership_log::LogHead::EMPTY;
     let mut root = None;
-    let mut entries = Vec::with_capacity(others.len() + 2);
+    let mut entries = Vec::with_capacity(others.len().saturating_add(2));
     for (member, act, role) in ambre_protocol::ownerless_log(author.user_id, &others) {
         let draft = membership_log::Draft {
             document,
