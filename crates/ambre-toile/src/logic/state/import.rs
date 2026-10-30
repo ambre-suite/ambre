@@ -74,8 +74,8 @@ ambre_core::define_tally! {
 }
 
 /// How many units one slice of an import applies (`TOILE-IO-028`). A slice
-/// size is a bound, not a tally: nothing counts it up, and a running import
-/// only adds it to the units it has applied.
+/// size is a bound, not a tally: nothing counts it up. A running import only
+/// adds it to the units it has applied.
 #[derive(Clone, Copy)]
 pub(super) struct ImportSlice(ImportUnitCount);
 
