@@ -50,7 +50,7 @@ const WRAPPERS: &[&str] = &["Vec", "Box", "Rc", "Arc", "Cow"];
 /// replaces a metavariable once the body of a `macro_rules!` is read as
 /// Rust, and a parameter of an alias while its target resolves. No source
 /// identifier starts with it.
-const META: &str = "__ambre_meta_";
+pub(crate) const META: &str = "__ambre_meta_";
 
 /// How deep one alias may lead to another. A cycle fails to compile, so the
 /// bound keeps a broken tree from looping. Reaching it fails the scan, since
@@ -3912,7 +3912,7 @@ fn deref_impl(
 
 /// The body of each rule of a `macro_rules!`, the group after each `=>`,
 /// with its metavariables made Rust that syn parses (see [`unmeta`]).
-fn rule_bodies(tokens: TokenStream) -> Vec<TokenStream> {
+pub(crate) fn rule_bodies(tokens: TokenStream) -> Vec<TokenStream> {
     let tokens: Vec<TokenTree> = tokens.into_iter().collect();
     tokens
         .windows(4)

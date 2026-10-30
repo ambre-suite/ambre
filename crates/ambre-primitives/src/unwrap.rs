@@ -5,7 +5,8 @@
 //! no type guards it there. The rule unwraps a newtype only at the foreign
 //! call that takes the primitive, or inside the newtype's own impl and
 //! module (`ai/ambre-rust-style.md`). An impl of a conversion trait whose
-//! type argument is the newtype counts as its own.
+//! type argument is the newtype counts as its own. So does a named
+//! conversion, `fn of_row(delta: RowDelta) -> Self`, for its parameter.
 //!
 //! The report reads syn trees, with no type information. What it tracks:
 //!
@@ -33,8 +34,13 @@
 //!   * so do a method whose return std or a dependency fixes, as
 //!     `to_token_stream` does, and a variant of a foreign `enum` in a pattern;
 //!   * a field of an untyped base holds a newtype only when a workspace
-//!     struct holds one under that field name. A field that a macro writes,
-//!     or a generic field, escapes this rule.
+//!     struct holds one under that field name. A generic field escapes this
+//!     rule;
+//!   * the return type of a workspace `fn` types its call, and `?` reads
+//!     the `Ok` or `Some` type. An `Err(e)` pattern and the closure of
+//!     `map_err` bind an error;
+//!   * a type a `macro_rules!` body names as written is catalogued, as
+//!     `loro_fields!` writes `Fields`.
 //!
 //! Each handed unwrap gets one verdict. A callee the workspace defines and
 //! no foreign API names is a refusal. The tuple struct of a newtype is
@@ -42,10 +48,15 @@
 //! On a receiver the report cannot type, an accessor that std shares or
 //! many newtypes share is ambiguous too.
 //!
+//! A method counts as the workspace's only when the caller reaches its
+//! crate through the manifests. A parameter typed `impl Into<T>`, with `T`
+//! foreign, is a boundary: its argument goes to a foreign call.
+//!
 //! The report does not read a macro argument, a closure that returns the
 //! unwrap, a struct literal field or a return value. The primitive gate
-//! holds the last two at the signature. Nor does it read an `into` on a
-//! receiver it cannot type, or a newtype a generic `AsRef` bound takes.
+//! holds the last two at the signature. Nor does it read an `into`, an
+//! `as_ref` or a `borrow` on a receiver it cannot type. A newtype a generic
+//! `AsRef` bound takes escapes it too.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -57,7 +68,8 @@ use syn::visit::Visit;
 
 use crate::allowlist::LineNo;
 use crate::scan::{
-    PRIMITIVES, Scan, Source, Tree, fragments_of, item_attrs, macro_types, test_only,
+    META, PRIMITIVES, Scan, Source, Tree, fragments_of, item_attrs, macro_types, rule_bodies,
+    test_only,
 };
 
 /// The allowlist header: a key, the number of sites it allows, then the
@@ -123,15 +135,30 @@ const RETURNS: &[(&str, &str)] = &[
     ("unraw", "Ident"),
     ("get_ident", "Ident"),
     ("display", "Display"),
+    ("chars", "Chars"),
+    ("trim", "str"),
+    ("trim_start", "str"),
+    ("trim_end", "str"),
+    ("get_map", "LoroMap"),
+    ("get_text", "LoroText"),
+    ("get_list", "LoroList"),
+    ("get_movable_list", "LoroMovableList"),
+    ("oplog_vv", "VersionVector"),
+    ("state_vv", "VersionVector"),
 ];
 
 /// The methods of `RETURNS` that a trait of std fixes, so a workspace
 /// method of the same name returns the same type.
 const STD_RETURNS: &[&str] = &["to_string", "to_vec"];
 
-/// The accessors a std conversion trait writes. Every type has an `into`,
-/// so the report reads one on a typed receiver alone.
-const CONVERSIONS: &[&str] = &["into"];
+/// The accessors the report reads on a typed receiver alone. Every type
+/// has an `into`. An `Option` has an `as_ref` and a `RefCell` a `borrow`,
+/// and neither is an unwrap.
+const CONVERSIONS: &[&str] = &["into", "as_ref", "borrow"];
+
+/// The type an error value takes: the name an `Err(..)` pattern or the
+/// closure of `map_err` binds. No newtype is an error.
+const ERROR: &str = "Error";
 
 /// The most candidates a site names one by one; more print as `*`.
 const FEW: usize = 3;
@@ -465,15 +492,30 @@ struct Catalog {
     consts: BTreeMap<String, String>,
     /// Every struct, enum, union, trait and alias, by name.
     types: BTreeSet<String>,
+    /// The same types, with the crates that declare each.
+    declared: Defs,
+    /// Every name a `use` brings in from a foreign crate, with the crates
+    /// whose files write that `use`.
+    reexports: Defs,
     /// Every free `fn`, by name.
-    fns: BTreeSet<String>,
+    fns: Defs,
     /// Every method of an inherent impl, a workspace trait or a macro.
-    methods: BTreeSet<String>,
+    methods: Defs,
     /// Every method of an impl of a foreign trait.
-    trait_methods: BTreeSet<String>,
+    trait_methods: Defs,
     /// Every method a workspace trait declares: an extension trait reaches
     /// a primitive receiver through one.
-    declared_methods: BTreeSet<String>,
+    declared_methods: Defs,
+    /// The return type of each `fn`, as `name` for a free one and
+    /// `Owner::name` for an associated one. A name with two returns holds
+    /// none.
+    returns: BTreeMap<String, Option<Ret>>,
+    /// The parameters of each `Owner::method` typed `impl Into<T>`. Each
+    /// holds its index, `self` left out, and the name of `T`.
+    boundaries: BTreeMap<String, Vec<(usize, String)>>,
+    /// The crates each crate reaches through its dependencies, itself
+    /// included. A crate absent here reaches every crate.
+    reach: BTreeMap<String, BTreeSet<String>>,
     /// Every name a `use` of the workspace brings in from a foreign crate:
     /// a re-export of `kurbo::Rect` is a foreign type.
     foreign_names: BTreeSet<String>,
@@ -481,6 +523,114 @@ struct Catalog {
     crates: BTreeSet<String>,
     /// Every module name of the workspace.
     modules: BTreeSet<String>,
+}
+
+impl Catalog {
+    /// Files a type the crate `krate` declares.
+    fn declare(&mut self, name: String, krate: &str) {
+        self.declared.add(name.clone(), krate);
+        self.types.insert(name);
+    }
+
+    /// Files the return of the `fn` `key`. Two different returns under one
+    /// key cancel each other.
+    fn returned(&mut self, key: String, ret: Option<Ret>) {
+        let Some(ret) = ret else {
+            return;
+        };
+        self.returns
+            .entry(key)
+            .and_modify(|known| {
+                if known.as_ref() != Some(&ret) {
+                    *known = None;
+                }
+            })
+            .or_insert_with(|| Some(ret.clone()));
+    }
+
+    /// The return the catalog knows for `key`.
+    fn ret(&self, key: &str) -> Option<&Ret> {
+        self.returns.get(key)?.as_ref()
+    }
+}
+
+/// Names the workspace defines, each with the crates that define it.
+#[derive(Debug, Default)]
+struct Defs(BTreeMap<String, BTreeSet<String>>);
+
+impl Defs {
+    fn add(&mut self, name: String, krate: &str) {
+        self.0.entry(name).or_default().insert(krate.to_owned());
+    }
+
+    /// Whether a crate that `reach` holds defines the name. `None` reaches
+    /// every crate.
+    fn within(&self, name: &str, reach: Option<&BTreeSet<String>>) -> bool {
+        self.0.get(name).is_some_and(|crates| {
+            reach.is_none_or(|reach| crates.iter().any(|krate| reach.contains(krate)))
+        })
+    }
+}
+
+/// The return type of a `fn`, as the catalog reads it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Ret {
+    /// The type name, `Self` read as the owner.
+    ty: String,
+    /// The type `?` yields, for a `Result` or an `Option`.
+    tried: Option<String>,
+}
+
+impl Ret {
+    fn of(output: &syn::ReturnType, owner: Option<&str>) -> Option<Self> {
+        let syn::ReturnType::Type(_, ty) = output else {
+            return None;
+        };
+        let own = |name: String| match owner {
+            Some(owner) if name == "Self" => owner.to_owned(),
+            _ => name,
+        };
+        let ty_name = own(shape_name(ty)?);
+        let tried = match &**ty {
+            syn::Type::Path(p) if ty_name == "Result" || ty_name == "Option" => p
+                .path
+                .segments
+                .last()
+                .and_then(first_argument)
+                .and_then(shape_name)
+                .map(own),
+            _ => None,
+        };
+        Some(Self { ty: ty_name, tried })
+    }
+}
+
+/// The index of each parameter, `self` left out, typed `impl Into<T>`,
+/// with the name of `T`.
+fn into_params(sig: &syn::Signature) -> Vec<(usize, String)> {
+    sig.inputs
+        .iter()
+        .filter_map(|input| match input {
+            syn::FnArg::Typed(t) => Some(&*t.ty),
+            syn::FnArg::Receiver(_) => None,
+        })
+        .enumerate()
+        .filter_map(|(index, ty)| {
+            let syn::Type::ImplTrait(bounds) = ty else {
+                return None;
+            };
+            bounds.bounds.iter().find_map(|bound| {
+                let syn::TypeParamBound::Trait(t) = bound else {
+                    return None;
+                };
+                let last = t.path.segments.last()?;
+                if last.ident != "Into" {
+                    return None;
+                }
+                Some((index, type_name(first_argument(last)?)?))
+            })
+        })
+        .collect()
 }
 
 /// A method signature, as the catalog reads it.
@@ -509,6 +659,8 @@ impl Method {
 /// One impl block, as the catalog reads it.
 struct Impl {
     owner: String,
+    /// The crate that writes the impl.
+    krate: String,
     /// The last segment of the trait, `None` for an inherent impl.
     of_trait: Option<String>,
     /// The first type argument of the trait: `T` in `From<T>`.
@@ -841,7 +993,10 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
             }
             syn::Item::Struct(s) => {
                 let name = s.ident.to_string();
-                catalog.types.insert(name.clone());
+                if name.starts_with(META) {
+                    return;
+                }
+                catalog.declare(name.clone(), &self.krate);
                 let fields: Vec<&syn::Field> = s
                     .fields
                     .iter()
@@ -882,28 +1037,31 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                 }
             }
             syn::Item::Enum(e) => {
-                catalog.types.insert(e.ident.to_string());
+                catalog.declare(e.ident.to_string(), &self.krate);
             }
             syn::Item::Union(u) => {
-                catalog.types.insert(u.ident.to_string());
+                catalog.declare(u.ident.to_string(), &self.krate);
             }
             syn::Item::Type(t) => {
-                catalog.types.insert(t.ident.to_string());
+                catalog.declare(t.ident.to_string(), &self.krate);
             }
             syn::Item::Trait(t) => {
-                catalog.types.insert(t.ident.to_string());
+                catalog.declare(t.ident.to_string(), &self.krate);
                 self.raw.traits.insert(t.ident.to_string());
                 for item in &t.items {
                     if let syn::TraitItem::Fn(f) = item
                         && matches!(f.sig.inputs.first(), Some(syn::FnArg::Receiver(_)))
                     {
-                        catalog.methods.insert(f.sig.ident.to_string());
-                        catalog.declared_methods.insert(f.sig.ident.to_string());
+                        catalog.methods.add(f.sig.ident.to_string(), &self.krate);
+                        catalog
+                            .declared_methods
+                            .add(f.sig.ident.to_string(), &self.krate);
                     }
                 }
             }
             syn::Item::Fn(f) => {
-                catalog.fns.insert(f.sig.ident.to_string());
+                catalog.fns.add(f.sig.ident.to_string(), &self.krate);
+                catalog.returned(f.sig.ident.to_string(), Ret::of(&f.sig.output, None));
             }
             syn::Item::Const(c) => {
                 if let Some(ty) = shape_name(&c.ty) {
@@ -916,9 +1074,22 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                 }
             }
             syn::Item::Impl(i) => {
-                let Some(owner) = type_name(&i.self_ty) else {
+                let Some(owner) = type_name(&i.self_ty).filter(|owner| !owner.starts_with(META))
+                else {
                     return;
                 };
+                for item in &i.items {
+                    if let syn::ImplItem::Fn(f) = item
+                        && !test_only(&f.attrs)
+                    {
+                        let key = format!("{owner}::{}", f.sig.ident);
+                        catalog.returned(key.clone(), Ret::of(&f.sig.output, Some(&owner)));
+                        let into = into_params(&f.sig);
+                        if i.trait_.is_none() && !into.is_empty() {
+                            catalog.boundaries.insert(key, into);
+                        }
+                    }
+                }
                 let last = i
                     .trait_
                     .as_ref()
@@ -943,6 +1114,7 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                     .collect();
                 self.raw.impls.push(Impl {
                     owner,
+                    krate: self.krate.clone(),
                     of_trait,
                     argument,
                     inner,
@@ -956,12 +1128,29 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                 };
                 if name == "macro_rules" {
                     if let Some(ident) = &m.ident {
-                        let accessors = macro_methods(m.mac.tokens.clone(), &mut catalog.methods);
+                        let mut methods = BTreeSet::new();
+                        let accessors = macro_methods(m.mac.tokens.clone(), &mut methods);
+                        for method in methods {
+                            catalog.methods.add(method, &self.krate);
+                        }
                         self.raw.macros.insert(ident.to_string(), accessors);
                     }
+                    // A type a transcriber names, as `loro_fields!` writes
+                    // `Fields`, is catalogued as written. A type it names by
+                    // a metavariable is not.
+                    for body in rule_bodies(m.mac.tokens.clone()) {
+                        if let Ok(file) = syn::parse2::<syn::File>(body) {
+                            for item in &file.items {
+                                self.visit_item(item);
+                            }
+                        }
+                    }
                 } else if writes_newtypes(&name) {
-                    let types = macro_types(&m.mac);
-                    catalog.types.extend(types.iter().cloned());
+                    let mut types = macro_types(&m.mac);
+                    types.retain(|ty| !ty.starts_with(META));
+                    for ty in &types {
+                        catalog.declare(ty.clone(), &self.krate);
+                    }
                     let home = self.home();
                     self.raw.invocations.push(Invocation {
                         family: name,
@@ -1003,9 +1192,9 @@ impl Raw {
                     continue;
                 }
                 if own {
-                    catalog.methods.insert(method.name.clone());
+                    catalog.methods.add(method.name.clone(), &imp.krate);
                 } else {
-                    catalog.trait_methods.insert(method.name.clone());
+                    catalog.trait_methods.add(method.name.clone(), &imp.krate);
                 }
             }
             // `impl From<Name> for String`: `name.into()` unwraps `Name`.
@@ -1097,6 +1286,9 @@ struct BodyVisit<'c, 'r> {
     /// For each enclosing impl, the newtypes it may unwrap: its owner and
     /// the type a conversion trait names.
     exempt: Vec<BTreeSet<String>>,
+    /// The type of the parameter of the next closure, as `map_err` gives
+    /// its closure the error.
+    closure_hint: Option<String>,
     env: Vec<BTreeMap<String, Binding>>,
     /// The first segment of the path each `use` of the file imports, by
     /// the name it brings in.
@@ -1192,10 +1384,19 @@ impl BodyVisit<'_, '_> {
                     .find(|(mac, _)| *mac == name)
                     .map(|(_, ty)| (*ty).to_owned())
             }
-            syn::Expr::MethodCall(m) if m.method != "clone" && m.method != "to_owned" => {
+            syn::Expr::MethodCall(m) => {
                 let method = m.method.to_string();
+                match method.as_str() {
+                    "clone" | "to_owned" => return self.infer(&m.receiver),
+                    // `unwrap_or` yields its argument's type.
+                    "unwrap_or" => return m.args.first().and_then(|arg| self.infer(arg)),
+                    _ => {}
+                }
+                if let Some(ret) = self.ret_of(expr) {
+                    return Some(ret.ty.clone());
+                }
                 let fixed = STD_RETURNS.contains(&method.as_str())
-                    || !self.catalog.methods.contains(&method);
+                    || !self.catalog.methods.within(&method, self.reach());
                 RETURNS
                     .iter()
                     .find(|(name, _)| *name == method)
@@ -1206,10 +1407,10 @@ impl BodyVisit<'_, '_> {
             syn::Expr::Paren(p) => self.infer(&p.expr),
             syn::Expr::Group(g) => self.infer(&g.expr),
             syn::Expr::Unary(u) if matches!(u.op, syn::UnOp::Deref(_)) => self.infer(&u.expr),
-            syn::Expr::Try(t) => self.infer(&t.expr),
-            syn::Expr::MethodCall(m) if m.method == "clone" || m.method == "to_owned" => {
-                self.infer(&m.receiver)
-            }
+            syn::Expr::Try(t) => match self.ret_of(&t.expr) {
+                Some(ret) => ret.tried.clone(),
+                None => self.infer(&t.expr),
+            },
             syn::Expr::Struct(s) => {
                 let name = s.path.segments.last()?.ident.to_string();
                 if name == "Self" {
@@ -1227,9 +1428,19 @@ impl BodyVisit<'_, '_> {
                     .iter()
                     .map(|s| s.ident.to_string())
                     .collect();
+                if let Some(ret) = self.ret_of(expr) {
+                    return Some(ret.ty.clone());
+                }
                 let [.., owner, ctor] = segments.as_slice() else {
                     return None;
                 };
+                // An associated `fn` of a foreign type, as
+                // `uuid::Uuid::new_v4`, returns no workspace newtype.
+                if owner.starts_with(|c: char| c.is_ascii_uppercase())
+                    && self.foreign_path(&segments)
+                {
+                    return Some(owner.clone());
+                }
                 let builds = ctor == "new"
                     || ctor.starts_with("from")
                     || ctor.starts_with("try_from")
@@ -1242,11 +1453,76 @@ impl BodyVisit<'_, '_> {
                 if owner == "Self" {
                     return self.owners.last().cloned();
                 }
-                (STD_TYPES.contains(&owner.as_str()) || self.catalog.types.contains(owner))
+                // A constructor of a type a foreign crate exports builds
+                // that foreign type, as `RwSignal::new` does.
+                let foreign = self
+                    .imports
+                    .get(owner)
+                    .is_some_and(|root| !self.workspace_root(root));
+                (STD_TYPES.contains(&owner.as_str())
+                    || self.catalog.types.contains(owner)
+                    || foreign)
                     .then(|| owner.clone())
             }
             _ => None,
         }
+    }
+
+    /// The return the catalog knows for a call or a method call.
+    fn ret_of(&self, expr: &syn::Expr) -> Option<&Ret> {
+        match expr {
+            syn::Expr::Call(c) => {
+                let syn::Expr::Path(p) = &*c.func else {
+                    return None;
+                };
+                let segments: Vec<String> = p
+                    .path
+                    .segments
+                    .iter()
+                    .map(|s| s.ident.to_string())
+                    .collect();
+                match segments.as_slice() {
+                    [name] if self.lookup(name).is_none() => self.catalog.ret(name),
+                    [.., owner, name] if owner.starts_with(|c: char| c.is_ascii_uppercase()) => {
+                        let owner = match owner.as_str() {
+                            "Self" => self.owners.last()?,
+                            _ => owner,
+                        };
+                        self.catalog.ret(&format!("{owner}::{name}"))
+                    }
+                    [.., name] if !self.foreign_path(&segments) => self.catalog.ret(name),
+                    _ => None,
+                }
+            }
+            syn::Expr::MethodCall(m) => {
+                let owner = self.infer(&m.receiver)?;
+                self.catalog.ret(&format!("{owner}::{}", m.method))
+            }
+            _ => None,
+        }
+    }
+
+    /// The newtype a named conversion takes. Such a conversion is an
+    /// associated `fn` that returns `Self` or the impl owner. Its one
+    /// parameter is a workspace newtype, by value or by reference.
+    fn named_conversion(&self, sig: &syn::Signature) -> Option<String> {
+        let mut inputs = sig.inputs.iter();
+        let (Some(syn::FnArg::Typed(input)), None) = (inputs.next(), inputs.next()) else {
+            return None;
+        };
+        let syn::ReturnType::Type(_, ret) = &sig.output else {
+            return None;
+        };
+        let returned = self.hint(ret)?;
+        if self.owners.last() != Some(&returned) {
+            return None;
+        }
+        type_name(&input.ty).filter(|name| self.catalog.newtypes.contains_key(name))
+    }
+
+    /// The crates the current crate reaches, `None` for all of them.
+    fn reach(&self) -> Option<&BTreeSet<String>> {
+        self.catalog.reach.get(&self.krate)
     }
 
     /// Whether the site may unwrap the newtype: the current module declares
@@ -1459,10 +1735,12 @@ impl BodyVisit<'_, '_> {
         match owner {
             Some(owner) if owner == "Self" => Callee::Workspace,
             Some(owner) if owner.starts_with(|c: char| c.is_ascii_uppercase()) => {
-                self.type_callee(owner)
+                self.type_callee(owner, &segments)
             }
             Some(_) => Callee::Workspace,
-            None if self.lookup(first).is_none() && self.catalog.fns.contains(first) => {
+            None if self.lookup(first).is_none()
+                && self.catalog.fns.within(first, self.reach()) =>
+            {
                 Callee::Workspace
             }
             None => Callee::Foreign,
@@ -1485,16 +1763,45 @@ impl BodyVisit<'_, '_> {
         };
         match name {
             Some(name) if !variant && self.catalog.newtypes.contains_key(name) => {
-                self.type_callee(name)
+                self.type_callee(name, segments)
             }
             _ => Callee::Constructor,
         }
     }
 
+    /// The crate a path takes its type `owner` from. That is the crate the
+    /// path starts at, or the crate a `use` imports it from. Otherwise it
+    /// is the current crate.
+    fn owner_crate(&self, owner: &str, segments: &[String]) -> Option<String> {
+        let first = segments.first()?;
+        let root = match self.imports.get(owner) {
+            Some(root) => root,
+            None if first != owner => first,
+            None => return Some(self.krate.clone()),
+        };
+        if ["crate", "self", "super"].contains(&root.as_str()) {
+            return Some(self.krate.clone());
+        }
+        self.catalog
+            .crates
+            .contains(root)
+            .then(|| root.replace('_', "-"))
+    }
+
     /// How the report reads an associated `fn` of the type `owner`. A
-    /// foreign type the workspace re-exports is foreign; a name both a
+    /// foreign type the workspace re-exports is foreign. When the path or a
+    /// `use` names the crate, that crate decides. Otherwise, a name both a
     /// workspace type and such a re-export carry is ambiguous.
-    fn type_callee(&self, owner: &str) -> Callee {
+    fn type_callee(&self, owner: &str, segments: &[String]) -> Callee {
+        if let Some(krate) = self.owner_crate(owner, segments) {
+            let only = Some(BTreeSet::from([krate]));
+            if self.catalog.declared.within(owner, only.as_ref()) {
+                return Callee::Workspace;
+            }
+            if self.catalog.reexports.within(owner, only.as_ref()) {
+                return Callee::Foreign;
+            }
+        }
         let declared = self.catalog.types.contains(owner);
         let reexported = self.catalog.foreign_names.contains(owner);
         match (declared, reexported) {
@@ -1506,7 +1813,7 @@ impl BodyVisit<'_, '_> {
 
     /// How the report reads a method on a receiver.
     fn method_callee(&self, receiver: &syn::Expr, method: &str) -> Callee {
-        let workspace = self.catalog.methods.contains(method);
+        let workspace = self.catalog.methods.within(method, self.reach());
         if let Some(ty) = self.infer(receiver) {
             return if workspace && self.catalog.types.contains(&ty) {
                 Callee::Workspace
@@ -1516,7 +1823,8 @@ impl BodyVisit<'_, '_> {
         }
         if !workspace {
             Callee::Foreign
-        } else if foreign_method(method) || self.catalog.trait_methods.contains(method) {
+        } else if foreign_method(method) || self.catalog.trait_methods.within(method, self.reach())
+        {
             Callee::Ambiguous
         } else {
             Callee::Workspace
@@ -1600,11 +1908,30 @@ impl<'ast> Visit<'ast> for PatNames<'_, '_, '_> {
             .map(|s| s.ident.to_string())
             .collect();
         let outer = self.within.clone();
-        if self.visit.foreign_path(&segments) {
+        if segments == ["Err"] {
+            self.within = Some(ERROR.to_owned());
+        } else if self.visit.foreign_path(&segments) {
             self.within = Some(segments.join("::"));
         }
         for elem in &p.elems {
             self.visit_pat(elem);
+        }
+        self.within = outer;
+    }
+
+    fn visit_pat_struct(&mut self, p: &'ast syn::PatStruct) {
+        let segments: Vec<String> = p
+            .path
+            .segments
+            .iter()
+            .map(|s| s.ident.to_string())
+            .collect();
+        let outer = self.within.clone();
+        if self.visit.foreign_path(&segments) {
+            self.within = Some(segments.join("::"));
+        }
+        for field in &p.fields {
+            self.visit_pat(&field.pat);
         }
         self.within = outer;
     }
@@ -1694,7 +2021,15 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
         self.owners.push(owner.clone());
         self.scope.push(owner);
         for item in &i.items {
+            // A named conversion, `fn of_row(delta: RowDelta) -> Self`,
+            // unwraps its one newtype freely, as `From<RowDelta>` does.
+            let named = match item {
+                syn::ImplItem::Fn(f) if i.trait_.is_none() => self.named_conversion(&f.sig),
+                _ => None,
+            };
+            self.exempt.push(named.into_iter().collect());
             self.visit_impl_item(item);
+            self.exempt.pop();
         }
         self.scope.pop();
         self.owners.pop();
@@ -1736,9 +2071,19 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
     }
 
     fn visit_expr_closure(&mut self, c: &'ast syn::ExprClosure) {
+        let hint = self.closure_hint.take();
         self.env.push(BTreeMap::new());
         for input in &c.inputs {
-            self.bind_pattern(input, None);
+            match (input, &hint) {
+                (syn::Pat::Ident(p), Some(ty)) => self.bind(
+                    p.ident.to_string(),
+                    Binding {
+                        ty: Some(ty.clone()),
+                        unwrap: None,
+                    },
+                ),
+                _ => self.bind_pattern(input, None),
+            }
         }
         self.visit_expr(&c.body);
         self.env.pop();
@@ -1757,7 +2102,17 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
     fn visit_expr_for_loop(&mut self, f: &'ast syn::ExprForLoop) {
         self.visit_expr(&f.expr);
         self.env.push(BTreeMap::new());
-        self.bind_pattern(&f.pat, None);
+        // A loop over `chars()` binds a `char`.
+        match (&*f.pat, &*f.expr) {
+            (syn::Pat::Ident(p), syn::Expr::MethodCall(m)) if m.method == "chars" => self.bind(
+                p.ident.to_string(),
+                Binding {
+                    ty: Some("char".to_owned()),
+                    unwrap: None,
+                },
+            ),
+            _ => self.bind_pattern(&f.pat, None),
+        }
         self.visit_block(&f.body);
         self.env.pop();
     }
@@ -1795,9 +2150,28 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
             self.report.sites = self.report.sites.incremented();
         }
         let callee = self.method_callee(&m.receiver, &method);
-        for arg in &m.args {
+        // A parameter typed `impl Into<T>`, with `T` foreign, hands its
+        // argument to the foreign type at once: a boundary, as the
+        // `insert` of `loro_fields!` is.
+        let boundaries: Vec<usize> = self
+            .infer(&m.receiver)
+            .and_then(|owner| self.catalog.boundaries.get(&format!("{owner}::{method}")))
+            .map(|params| {
+                params
+                    .iter()
+                    .filter(|(_, target)| !self.catalog.types.contains(target))
+                    .map(|(index, _)| *index)
+                    .collect()
+            })
+            .unwrap_or_default();
+        for (index, arg) in m.args.iter().enumerate() {
             if let Some(unwrap) = self.unwrap_of(arg) {
                 let line = LineNo(arg.span().start().line);
+                let callee = if boundaries.contains(&index) {
+                    Callee::Foreign
+                } else {
+                    callee
+                };
                 self.record(unwrap, callee, format!(".{method}"), line);
             }
         }
@@ -1813,7 +2187,8 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
             && !accessor
             && let Some(unwrap) = self.unwrap_of(&m.receiver)
         {
-            let own = self.catalog.declared_methods.contains(&method) && !foreign_method(&method);
+            let own = self.catalog.declared_methods.within(&method, self.reach())
+                && !foreign_method(&method);
             let callee = if own {
                 Callee::Workspace
             } else {
@@ -1822,7 +2197,14 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
             let line = LineNo(m.method.span().start().line);
             self.record(unwrap, callee, format!(".{method}"), line);
         }
-        syn::visit::visit_expr_method_call(self, m);
+        self.visit_expr(&m.receiver);
+        for arg in &m.args {
+            // The closure `map_err` takes reads the error.
+            if method == "map_err" && matches!(arg, syn::Expr::Closure(_)) {
+                self.closure_hint = Some(ERROR.to_owned());
+            }
+            self.visit_expr(arg);
+        }
     }
 
     fn visit_expr_field(&mut self, f: &'ast syn::ExprField) {
@@ -1831,6 +2213,67 @@ impl<'ast> Visit<'ast> for BodyVisit<'_, '_> {
         }
         syn::visit::visit_expr_field(self, f);
     }
+}
+
+/// The crates each crate reaches through the dependencies its manifest
+/// names, itself included. A method of a crate it does not reach cannot be
+/// the callee. A crate whose manifest, or a dependency's, does not parse
+/// is left out, so it reaches every crate.
+fn reach(tree: &impl Tree, files: &[(&Source, syn::File)]) -> BTreeMap<String, BTreeSet<String>> {
+    let mut direct: BTreeMap<String, Option<BTreeSet<String>>> = BTreeMap::new();
+    for (source, _) in files {
+        if direct.contains_key(&source.krate) {
+            continue;
+        }
+        let depth = std::path::Path::new(&source.file).components().count();
+        let deps = source
+            .path
+            .ancestors()
+            .nth(depth)
+            .and_then(|dir| tree.read(&dir.join("Cargo.toml")))
+            .and_then(|text| text.parse::<toml::Table>().ok())
+            .map(|manifest| dependencies(&manifest));
+        direct.insert(source.krate.clone(), deps);
+    }
+    let mut reach = BTreeMap::new();
+    for krate in direct.keys() {
+        let mut seen = BTreeSet::from([krate.clone()]);
+        let mut next = vec![krate.clone()];
+        let mut whole = true;
+        while let Some(at) = next.pop() {
+            match direct.get(&at) {
+                Some(Some(deps)) => {
+                    for dep in deps.iter().filter(|dep| direct.contains_key(*dep)) {
+                        if seen.insert(dep.clone()) {
+                            next.push(dep.clone());
+                        }
+                    }
+                }
+                _ => whole = false,
+            }
+        }
+        if whole {
+            reach.insert(krate.clone(), seen);
+        }
+    }
+    reach
+}
+
+/// The dependency names of a manifest, its target tables included.
+fn dependencies(manifest: &toml::Table) -> BTreeSet<String> {
+    let keys = |table: Option<&toml::Value>| -> Vec<String> {
+        table
+            .and_then(toml::Value::as_table)
+            .map(|deps| deps.keys().cloned().collect())
+            .unwrap_or_default()
+    };
+    let mut names: BTreeSet<String> = keys(manifest.get("dependencies")).into_iter().collect();
+    if let Some(targets) = manifest.get("target").and_then(toml::Value::as_table) {
+        for target in targets.values() {
+            names.extend(keys(target.get("dependencies")));
+        }
+    }
+    names
 }
 
 /// The report over every file the scan read outside test code.
@@ -1866,20 +2309,22 @@ pub fn report(tree: &impl Tree, scan: &Scan) -> Report {
     raw.catalog.modules.remove("crate");
     let mut catalog = raw.close();
     let mut foreign = BTreeSet::new();
-    for (_, file) in &files {
+    let mut reexports = Defs::default();
+    for (source, file) in &files {
         let mut uses = BTreeMap::new();
         imports(&file.items, &mut uses);
-        foreign.extend(
-            uses.into_iter()
-                .filter(|(_, root)| {
-                    !["crate", "self", "super"].contains(&root.as_str())
-                        && !catalog.crates.contains(root)
-                        && !catalog.modules.contains(root)
-                })
-                .map(|(name, _)| name),
-        );
+        for (name, _) in uses.into_iter().filter(|(_, root)| {
+            !["crate", "self", "super"].contains(&root.as_str())
+                && !catalog.crates.contains(root)
+                && !catalog.modules.contains(root)
+        }) {
+            reexports.add(name.clone(), &source.krate);
+            foreign.insert(name);
+        }
     }
     catalog.foreign_names = foreign;
+    catalog.reexports = reexports;
+    catalog.reach = reach(tree, &files);
     report.newtypes = Tally::new(catalog.newtypes.len());
     for (source, file) in &files {
         let mut found = BTreeMap::new();
@@ -1892,6 +2337,7 @@ pub fn report(tree: &impl Tree, scan: &Scan) -> Report {
             scope: Vec::new(),
             owners: Vec::new(),
             exempt: Vec::new(),
+            closure_hint: None,
             env: vec![BTreeMap::new()],
             imports: found,
             report: &mut report,

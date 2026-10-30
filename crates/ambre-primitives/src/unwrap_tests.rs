@@ -32,12 +32,17 @@ const CRATES: &str = "/w/crates";
 
 /// The report over one crate `demo` whose `src/lib.rs` is `lib`.
 fn run(lib: &str) -> Report {
+    run_crates(&[("demo", "", lib)])
+}
+
+/// The report over crates, each a name, a manifest and a `src/lib.rs`.
+fn run_crates(crates: &[(&str, &str, &str)]) -> Report {
     let mut tree = BTreeMap::new();
-    tree.insert(PathBuf::from(CRATES).join("demo/Cargo.toml"), String::new());
-    tree.insert(
-        PathBuf::from(CRATES).join("demo/src/lib.rs"),
-        lib.to_owned(),
-    );
+    for (name, manifest, lib) in crates {
+        let dir = PathBuf::from(CRATES).join(name);
+        tree.insert(dir.join("Cargo.toml"), (*manifest).to_owned());
+        tree.insert(dir.join("src/lib.rs"), (*lib).to_owned());
+    }
     let tree = Memory(tree);
     let scanned = scan(&tree, Path::new(CRATES));
     assert!(scanned.errors.is_empty(), "{:?}", scanned.errors);
@@ -621,4 +626,172 @@ fn a_field_no_workspace_struct_holds_as_a_newtype_holds_none() {
         ambiguous(&report),
         ["demo | src/lib.rs:19 | Name::as_str -> store"]
     );
+}
+
+/// Each finding as its newtype, accessor and callee, the line left out.
+fn shapes(findings: &[Finding]) -> Vec<String> {
+    findings
+        .iter()
+        .map(|f| format!("{}::{} -> {}", f.newtype, f.accessor, f.callee))
+        .collect()
+}
+
+/// Two counts in their own module, each with its accessor.
+const DELTAS: &str = "pub mod delta {\n\
+    pub struct RowDelta(i64);\n\
+    impl RowDelta { pub fn get(self) -> i64 { self.0 } }\n\
+    pub struct ColDelta(i64);\n\
+    impl ColDelta { pub fn get(self) -> i64 { self.0 } }\n\
+}\n\
+use delta::{ColDelta, RowDelta};\n";
+
+#[test]
+fn a_named_conversion_unwraps_its_one_newtype_freely() {
+    let lib = format!(
+        "{DELTAS}pub struct Term(i64);\n\
+         impl Term {{\n\
+         pub fn of_row(delta: RowDelta) -> Self {{ Self(delta.get()) }}\n\
+         pub fn of_col(delta: &ColDelta) -> Term {{ Term(delta.get()) }}\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+}
+
+#[test]
+fn a_two_parameter_fn_or_a_method_is_no_named_conversion() {
+    let lib = format!(
+        "{DELTAS}pub struct Term(i64);\n\
+         impl Term {{\n\
+         pub fn of_both(row: RowDelta, col: ColDelta) -> Self {{ Self(row.get()) }}\n\
+         pub fn shifted(&self, delta: RowDelta) -> Self {{ Self(delta.get()) }}\n\
+         }}\n"
+    );
+    assert_eq!(
+        shapes(&run(&lib).refusals),
+        ["RowDelta::get -> Self", "RowDelta::get -> Self"]
+    );
+}
+
+/// A `macro_rules!` that writes a typed handle over a foreign map, as
+/// `loro_fields!` does.
+const FIELDS: &str = "macro_rules! fields {\n\
+    ($vis:vis) => {\n\
+        $vis struct Fields { map: ::loro::LoroMap }\n\
+        impl Fields {\n\
+            $vis fn of(map: ::loro::LoroMap) -> Self { Self { map } }\n\
+            $vis fn insert(&self, key: u8, value: impl Into<::loro::LoroValue>) {}\n\
+            $vis fn label(&self, key: u8, text: &str) {}\n\
+        }\n\
+    };\n\
+}\n\
+fields!(pub);\n";
+
+#[test]
+fn an_impl_into_foreign_parameter_is_a_boundary() {
+    let lib = format!(
+        "{NAME}{FIELDS}pub fn save(name: &Name, map: Map) {{\n\
+         let fields = Fields::of(map);\n\
+         fields.insert(1, name.as_str());\n\
+         fields.label(1, name.as_str());\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert_eq!(shapes(&report.refusals), ["Name::as_str -> .label"]);
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.foreign, Tally::new(1));
+}
+
+#[test]
+fn a_return_type_types_the_value_a_call_returns() {
+    let lib = format!(
+        "{NAME}pub fn named() -> Name {{ make() }}\n\
+         pub fn parsed() -> Option<Name> {{ make() }}\n\
+         pub fn save() -> Option<()> {{\n\
+         store(named().as_str());\n\
+         store(parsed()?.as_str());\n\
+         None\n\
+         }}\n"
+    );
+    assert_eq!(
+        shapes(&run(&lib).refusals),
+        ["Name::as_str -> store", "Name::as_str -> store"]
+    );
+}
+
+#[test]
+fn a_method_of_a_crate_out_of_reach_is_foreign() {
+    let tool = "pub struct Visit;\n\
+        impl Visit { pub fn bind(&mut self, text: &str) {} }\n";
+    let lib = format!("{NAME}pub fn save(name: &Name) {{ make().bind(name.as_str()); }}\n");
+    let apart = run_crates(&[("demo", "", &lib), ("tool", "", tool)]);
+    assert!(apart.refusals.is_empty(), "{:?}", refusals(&apart));
+    assert!(apart.ambiguous.is_empty(), "{:?}", ambiguous(&apart));
+    assert_eq!(apart.foreign, Tally::new(1));
+    let manifest = "[dependencies]\ntool = { path = \"../tool\" }\n";
+    let reached = run_crates(&[("demo", manifest, &lib), ("tool", "", tool)]);
+    assert_eq!(shapes(&reached.ambiguous), ["Name::as_str -> .bind"]);
+}
+
+#[test]
+fn the_crate_a_path_names_decides_its_type() {
+    let draw = "pub use kurbo::Size;\n";
+    let lib = format!(
+        "{NAME}pub struct Size(u32);\n\
+         impl Size {{ pub fn new(text: &str) -> Self {{ Self(0) }} }}\n\
+         pub fn save(name: &Name) {{\n\
+         draw::Size::new(name.as_str());\n\
+         Size::new(name.as_str());\n\
+         }}\n"
+    );
+    let report = run_crates(&[
+        ("demo", "[dependencies]\ndraw = \"1\"\n", &lib),
+        ("draw", "", draw),
+    ]);
+    assert_eq!(shapes(&report.refusals), ["Name::as_str -> Size::new"]);
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+}
+
+#[test]
+fn option_as_ref_and_refcell_borrow_on_an_untyped_receiver_are_no_unwrap() {
+    let lib = "pub mod blob {\n\
+        pub struct Blob(Vec<u8>);\n\
+        impl AsRef<[u8]> for Blob { fn as_ref(&self) -> &[u8] { &self.0 } }\n\
+        impl std::borrow::Borrow<[u8]> for Blob { fn borrow(&self) -> &[u8] { &self.0 } }\n\
+    }\n\
+    pub fn keep(bytes: &[u8]) {}\n\
+    pub fn save() { keep(make().as_ref()); keep(cell().borrow()); }\n";
+    let report = run(lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.sites, Tally::new(0));
+}
+
+#[test]
+fn an_error_value_is_no_newtype() {
+    let lib = format!(
+        "{SHOWN}pub fn save() -> Result<(), String> {{\n\
+         if let Err(error) = make() {{ store(&error.to_string()); }}\n\
+         make().map_err(|e| store(&e.to_string()))\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+}
+
+#[test]
+fn std_and_foreign_values_type_their_receiver() {
+    let lib = format!(
+        "{SHOWN}pub fn save(text: &str) {{\n\
+         store(&uuid::Uuid::new_v4().to_string());\n\
+         store(&text.trim().to_string());\n\
+         store(&make().unwrap_or(\"x\").to_string());\n\
+         for c in text.chars() {{ store(&c.to_string()); }}\n\
+         if let pulldown_cmark::Tag::Link {{ dest_url, .. }} = make() {{ store(&dest_url.to_string()); }}\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
 }
