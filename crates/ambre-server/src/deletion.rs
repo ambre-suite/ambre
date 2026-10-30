@@ -103,10 +103,10 @@ async fn finish_one(
     state: &AppState,
     document_id: &ambre_core::DocumentId,
     sweep_due: ambre_core::UnixSeconds,
-    rows_left: bool,
+    rows_left: crate::db::DocumentRows,
 ) -> Result<(), AppError> {
     let now = crate::s3::unix_now();
-    if rows_left {
+    if rows_left == crate::db::DocumentRows::Left {
         empty_document(state, document_id, sweep_due).await?;
         tracing::info!(document_id = %document_id, "an unfinished delete completed");
     }

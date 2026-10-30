@@ -4087,8 +4087,9 @@ mod tests {
             .await
             .expect("drop")
             .expect("pending");
-        assert!(
-            !ignored.refinalize,
+        assert_eq!(
+            ignored.after,
+            ambre_core::AfterDrop::Keep,
             "another snapshot leaves the segment final"
         );
         assert_eq!(
@@ -4100,7 +4101,7 @@ mod tests {
             .await
             .expect("drop")
             .expect("pending");
-        assert!(dropped.refinalize);
+        assert_eq!(dropped.after, ambre_core::AfterDrop::Refinalize);
         let (word, finalized): (String, bool) = sqlx::query_as(
             "SELECT state, finalized_at IS NOT NULL FROM channel_documents WHERE document_id = $1",
         )

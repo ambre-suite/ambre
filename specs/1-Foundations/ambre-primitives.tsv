@@ -2117,8 +2117,6 @@ ambre-protocol | src/ws.rs | crate::ws | WireFrame::new(bytes) | param | Vec<u8>
 ambre-server | src/compaction.rs | crate::compaction | past_threshold() | ret | bool	generic	predicate result
 ambre-server | src/compaction.rs | crate::compaction | should_ask() | ret | bool	generic	predicate result
 ambre-server | src/compaction.rs | crate::compaction | is_checked() | ret | bool	generic	predicate result
-ambre-server | src/db/channels.rs | crate::db::channels | CommitRow.live | field | bool	generic	named state or style flag, local
-ambre-server | src/db/channels.rs | crate::db::channels | FoldCommitRow.live | field | bool	generic	named state or style flag, local
 ambre-server | src/db/channels.rs | crate::db::channels | add_channel_member_if_absent() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/channels.rs | crate::db::channels | decode_kind(word) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/channels.rs | crate::db::channels | finalizable() | ret | bool	generic	predicate result
@@ -2126,14 +2124,12 @@ ambre-server | src/db/channels.rs | crate::db::channels | segment_locked() | ret
 ambre-server | src/db/content.rs | crate::db::content | DeltaCount.0 | field | u64	newtype-inner	DeltaCount newtype
 ambre-server | src/db/content.rs | crate::db::content | DeltaCount::from_i64(stored) | param | i64	newtype-inner	DeltaCount storage conversion
 ambre-server | src/db/content.rs | crate::db::content | DeltaCount::to_i64_saturating() | ret | i64	newtype-inner	DeltaCount storage conversion
-ambre-server | src/db/content.rs | crate::db::content | DroppedSnapshot.refinalize | field | bool	generic	named state or style flag, local
 ambre-server | src/db/content.rs | crate::db::content | SNAPSHOT_COLUMNS | const | &str	free-text	SQL column list
 ambre-server | src/db/content.rs | crate::db::content | Trim.rows | field | u64	math	row count
 ambre-server | src/db/content.rs | crate::db::content | attach_wire() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | document_holds_media() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/content.rs | crate::db::content | parse_status(text) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/content.rs | crate::db::content | point_rows_at_batch() | ret | Result<u64,AppError>	math	row count
-ambre-server | src/db/documents.rs | crate::db::documents | PendingDeletion.rows_left | field | bool	generic	named state or style flag, local
 ambre-server | src/db/members.rs | crate::db::members | MemberWithUserRow.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/db/members.rs | crate::db::members | rotation_owed() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/mod.rs | crate::db | PgId.0 | field | uuid::Uuid	newtype-inner	newtype inner, accessor or constructor
@@ -2178,7 +2174,6 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal::get() | ret | i16	
 ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareTotal as TryFrom<i16>>::try_from(count) | param | i16	newtype-inner	the smallint the fallible constructor of ShareTotal validates, as a row or a request body carries it
 ambre-server | src/db/users.rs | crate::db::users | UserInfoRow.email_verified | field | bool	generic	named state or style flag, local
 ambre-server | src/db/users.rs | crate::db::users | UserRow.email_verified | field | bool	generic	named state or style flag, local
-ambre-server | src/deletion.rs | crate::deletion | finish_one(rows_left) | param | bool	generic	named state or style flag, local
 ambre-server | src/error.rs | crate::error | AppError::BadRequest.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Conflict.detail | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Internal.0 | field | String	free-text	user text or error message

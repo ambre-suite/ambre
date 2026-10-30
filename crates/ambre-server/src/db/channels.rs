@@ -692,6 +692,17 @@ struct LeaseRow {
     lease_left: Option<std::time::Duration>,
 }
 
+ambre_core::define_flag! {
+    /// Whether a segment's lease still runs, as the database clock reads it.
+    enum LeaseClock {
+        /// No lease, or one whose time ran out.
+        Expired,
+        /// A lease whose time has not run out.
+        Live,
+    }
+}
+ambre_core::define_flag!(@sqlx LeaseClock);
+
 /// What a finalize commit reads of a segment.
 #[derive(sqlx::FromRow)]
 struct CommitRow {
@@ -700,7 +711,7 @@ struct CommitRow {
     /// The live or expired lease, if any.
     #[sqlx(try_from = "PgOptId")]
     held: Option<ambre_core::LeaseId>,
-    live: bool,
+    live: LeaseClock,
     #[sqlx(try_from = "PgOptSeq")]
     horizon: Option<ambre_core::Seq>,
     #[sqlx(try_from = "PgOptId")]
@@ -784,7 +795,7 @@ pub async fn commit_finalization(
     if !finalizable(state, final_snapshot) {
         return Err(not_closing());
     }
-    if held != Some(lease_id) || !live {
+    if held != Some(lease_id) || live == LeaseClock::Expired {
         return Err(conflict("the caller holds no live lease"));
     }
     let covered = covered_seq_of(&mut tx, snapshot_id, segment.document_id()).await?;
@@ -946,7 +957,7 @@ struct FoldCommitRow {
     state: Option<ambre_core::SegmentState>,
     #[sqlx(try_from = "PgOptId")]
     held: Option<ambre_core::LeaseId>,
-    live: bool,
+    live: LeaseClock,
     #[sqlx(try_from = "PgOptSeq")]
     horizon: Option<ambre_core::Seq>,
     #[sqlx(try_from = "PgOptId")]
@@ -1007,7 +1018,7 @@ pub async fn commit_fold(
     if row.final_snapshot.is_none() {
         return Err(conflict("the segment is not finalized"));
     }
-    if row.held != Some(lease_id) || !row.live {
+    if row.held != Some(lease_id) || row.live == LeaseClock::Expired {
         return Err(conflict("the caller holds no live lease"));
     }
     if row.folded_by.is_some()

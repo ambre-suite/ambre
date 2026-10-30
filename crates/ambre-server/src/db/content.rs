@@ -265,9 +265,9 @@ pub async fn confirm_snapshot(
 pub struct DroppedSnapshot {
     /// Its object key, for the caller to delete.
     pub s3_key: ambre_core::ObjectKey,
-    /// Whether it was the final snapshot of a segment, which is then to be
-    /// finalized again.
-    pub refinalize: bool,
+    /// [`ambre_core::AfterDrop::Refinalize`] when it was the final snapshot
+    /// of a segment, which is then to be finalized again.
+    pub after: ambre_core::AfterDrop,
 }
 
 /// Drops a snapshot nobody confirmed yet (`SRV-133`). A confirmed one stays,
@@ -294,7 +294,7 @@ pub async fn drop_pending_snapshot(
     let Some(s3_key) = key else {
         return Ok(None);
     };
-    let refinalize = sqlx::query(
+    let cleared = sqlx::query(
         "UPDATE channel_documents SET final_snapshot = NULL, finalized_at = NULL \
          WHERE document_id = $1 AND final_snapshot = $2",
     )
@@ -302,12 +302,15 @@ pub async fn drop_pending_snapshot(
     .bind(sid)
     .execute(&mut *tx)
     .await?
-    .rows_affected()
-        == 1;
+    .rows_affected();
     tx.commit().await?;
     Ok(Some(DroppedSnapshot {
         s3_key: ambre_core::ObjectKey(s3_key),
-        refinalize,
+        after: if cleared == 1 {
+            ambre_core::AfterDrop::Refinalize
+        } else {
+            ambre_core::AfterDrop::Keep
+        },
     }))
 }
 

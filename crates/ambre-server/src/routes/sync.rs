@@ -186,11 +186,7 @@ pub async fn report_snapshot(
                 snapshot_id: snap_id,
                 author,
                 reporter: auth.signing_pubkey,
-                after: if dropped.refinalize {
-                    ambre_core::AfterDrop::Refinalize
-                } else {
-                    ambre_core::AfterDrop::Keep
-                },
+                after: dropped.after,
             },
         );
         let _ = crate::redis_ops::doc_broadcast(&state.redis, &doc_id, &shown).await;

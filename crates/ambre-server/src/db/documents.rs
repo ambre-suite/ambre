@@ -211,7 +211,17 @@ pub struct PendingDeletion {
     pub sweep_due: ambre_core::UnixSeconds,
     /// Whether the document row is still there: the delete stopped before its
     /// last step.
-    pub rows_left: bool,
+    pub rows_left: DocumentRows,
+}
+
+ambre_core::define_flag! {
+    /// Whether the rows of a document whose delete is marked are still there.
+    pub enum DocumentRows {
+        /// The document row is gone: only the second sweep is left.
+        Gone,
+        /// The document row is there: the delete stopped before its last step.
+        Left,
+    }
 }
 
 /// Marks a document as being deleted, before anything of it goes (`SRV-165`).
@@ -280,7 +290,7 @@ pub async fn pending_deletions(
             document_id: uuid_row_to_id(id),
             // A negative mark, which no relay writes, is due at once.
             sweep_due: ambre_core::UnixSeconds(u64::try_from(sweep_due).unwrap_or(0)),
-            rows_left,
+            rows_left: DocumentRows::from_bool(rows_left),
         })
         .collect())
 }
