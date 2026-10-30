@@ -147,7 +147,7 @@ of ours.
 
 Both use a shelf packer, a one-pixel pad against bilinear bleed, and LRU compaction that re-queues
 retained bitmaps rather than calling Swash again (`CANVAS-021`). Two pipelines share the
-`GlyphVertex` layout and the same blending; `draw_glyphs` routes each glyph by `slot.is_color`, so
+`GlyphVertex` layout and the same blending; `draw_glyphs` routes each glyph by `slot.atlas`, so
 one layout paints digits and emoji correctly.
 
 **The emoji face is a bitmap build.** Noto Color Emoji in its CBDT form, because swash 0.2.7 does

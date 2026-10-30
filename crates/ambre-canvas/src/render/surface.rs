@@ -132,7 +132,10 @@ struct GlyphPlacement {
 /// alpha batch in the run's colour (`CANVAS-019`). An axis-aligned glyph
 /// straddling the clip is trimmed, its UVs remapped, never drawn whole.
 fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) {
-    let tint = (!slot.is_color).then_some(at.color);
+    let tint = match slot.atlas {
+        AtlasKind::Mask => Some(at.color),
+        AtlasKind::Color => None,
+    };
     let GlyphBox {
         left_bearing: bl,
         top_bearing: bt,
@@ -708,9 +711,9 @@ mod tests {
     }
 
     /// A 10x10 slot standing on the baseline, a mask glyph or a colour one.
-    fn glyph(is_color: bool) -> AtlasSlot {
+    fn glyph(atlas: AtlasKind) -> AtlasSlot {
         AtlasSlot {
-            is_color,
+            atlas,
             ..slot(0, 10, 10, 10)
         }
     }
@@ -731,14 +734,14 @@ mod tests {
             color: red,
         };
         let mut batches = Batches::default();
-        emit_glyph(&mut batches, &glyph(false), &at(None));
-        emit_glyph(&mut batches, &glyph(true), &at(None));
+        emit_glyph(&mut batches, &glyph(AtlasKind::Mask), &at(None));
+        emit_glyph(&mut batches, &glyph(AtlasKind::Color), &at(None));
         let tints: Vec<_> = batches.quads.iter().map(|q| q.1).collect();
         assert_eq!(tints, vec![Some(red), None]);
 
         let turned = Some(Affine::rotate(0.5));
-        emit_glyph(&mut batches, &glyph(false), &at(turned));
-        emit_glyph(&mut batches, &glyph(true), &at(turned));
+        emit_glyph(&mut batches, &glyph(AtlasKind::Mask), &at(turned));
+        emit_glyph(&mut batches, &glyph(AtlasKind::Color), &at(turned));
         assert_eq!(batches.corners, vec![Some(red), None]);
     }
 
@@ -754,8 +757,8 @@ mod tests {
             color: Color::BLACK,
         };
         let mut batches = Batches::default();
-        emit_glyph(&mut batches, &glyph(false), &at(10.0));
-        emit_glyph(&mut batches, &glyph(false), &at(20.0));
+        emit_glyph(&mut batches, &glyph(AtlasKind::Mask), &at(10.0));
+        emit_glyph(&mut batches, &glyph(AtlasKind::Mask), &at(20.0));
         assert_eq!(batches.quads.len(), 1, "the glyph past the clip is dropped");
         let quad = batches.quads[0].0;
         assert_eq!(
@@ -806,7 +809,7 @@ mod tests {
             pixel_height: h,
             bearing_left: left,
             bearing_top: top,
-            is_color: false,
+            atlas: AtlasKind::Mask,
         }
     }
 

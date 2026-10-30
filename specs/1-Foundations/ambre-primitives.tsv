@@ -473,7 +473,6 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | ATLAS_PAD | const | 
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | ATLAS_SIZE | const | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.bearing_left | field | i32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.bearing_top | field | i32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.is_color | field | bool	generic	named state or style flag, local
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.pixel_height | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.pixel_width | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.uv_max | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
@@ -494,7 +493,6 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache::compact:
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphCache::new(size) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.data | field | Vec<u8>	generic	bytes
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.h | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.is_color | field | bool	generic	named state or style flag, local
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.left | field | i32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.top | field | i32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Raster.w | field | u32	math	geometry, layout, GPU or count arithmetic

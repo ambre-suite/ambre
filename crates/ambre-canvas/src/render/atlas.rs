@@ -8,7 +8,7 @@
 // Color glyphs (for example the CBDT bitmap Noto Color Emoji) come back from
 // Swash as `Content::Color` (straight-alpha RGBA) and are packed into the color
 // atlas. Everything else stays on the alpha-mask path with no extra memory cost.
-// Which atlas a glyph lives in is recorded on its `AtlasSlot::is_color`, so the
+// Which atlas a glyph lives in is recorded on its `AtlasSlot::atlas`, so the
 // draw path can route it to the matching pipeline. Keeping two atlases (rather
 // than one RGBA atlas for all glyphs) avoids paying 4x texture memory for text,
 // which dominates the working set.
@@ -119,7 +119,7 @@ impl GlyphKey {
 /// Retained bitmap for a packed glyph, kept so the atlas can repack its working
 /// set on overflow (LRU compaction) without re-rasterizing through Swash.
 /// Invisible glyphs (space) have no bitmap. Whether the bytes are R8 coverage
-/// or RGBA color is carried by the owning slot's `is_color`. The compaction
+/// or RGBA color is carried by the owning slot's `atlas`. The compaction
 /// path reads it to re-queue into the matching atlas.
 struct GlyphBitmap {
     w: u32,
@@ -147,9 +147,19 @@ pub struct AtlasSlot {
     /// Vertical offset from the glyph origin (baseline) to the bitmap top (px).
     /// Positive = above baseline. Apply as: `screen_y = origin_y - bearing_top`.
     pub bearing_top: i32,
-    /// `true` if this glyph lives in the RGBA color atlas (color emoji) rather
-    /// than the R8 coverage-mask atlas. Routes the draw to the color pipeline.
-    pub is_color: bool,
+    /// The atlas this glyph lives in. Routes the draw to the matching
+    /// pipeline.
+    pub atlas: AtlasKind,
+}
+
+ambre_core::define_flag! {
+    /// Which atlas a glyph lives in (`CANVAS-019`).
+    pub enum AtlasKind {
+        /// The R8 coverage-mask atlas, drawn in the run's colour.
+        Mask,
+        /// The RGBA colour atlas (colour emoji), drawn untinted.
+        Color,
+    }
 }
 
 struct ShelfPacker {
@@ -244,7 +254,7 @@ pub(super) struct Raster {
     /// Vertical offset from the baseline to the bitmap's top edge.
     pub(super) top: i32,
     /// Whether the bytes are RGBA colour rather than an R8 coverage mask.
-    pub(super) is_color: bool,
+    pub(super) atlas: AtlasKind,
     /// The bitmap, one byte per pixel for a mask and four for colour.
     pub(super) data: Vec<u8>,
 }
@@ -349,7 +359,7 @@ impl GlyphCache {
                 }
                 Some(bmp) => {
                     // Re-pack into the atlas matching the glyph's format.
-                    let (packer, pending) = if cached.slot.is_color {
+                    let (packer, pending) = if cached.slot.atlas == AtlasKind::Color {
                         (&mut self.color_packer, &mut self.color_pending)
                     } else {
                         (&mut self.packer, &mut self.pending)
@@ -391,9 +401,10 @@ impl GlyphCache {
             h,
             left,
             top,
-            is_color,
+            atlas,
             data,
         } = raster;
+        let is_color = atlas == AtlasKind::Color;
         // Invisible glyph (for example space): cache a zero-size slot, no upload.
         if w == 0 || h == 0 || data.is_empty() {
             let slot = AtlasSlot {
@@ -403,7 +414,7 @@ impl GlyphCache {
                 pixel_height: 0,
                 bearing_left: left,
                 bearing_top: top,
-                is_color,
+                atlas,
             };
             self.cache.insert(
                 key,
@@ -445,7 +456,7 @@ impl GlyphCache {
             pixel_height: h,
             bearing_left: left,
             bearing_top: top,
-            is_color,
+            atlas,
         };
 
         pending.push(Upload {
@@ -626,7 +637,10 @@ pub(super) fn rasterize(
         h: image.placement.height,
         left: image.placement.left,
         top: image.placement.top,
-        is_color: matches!(image.content, swash::scale::image::Content::Color),
+        atlas: match image.content {
+            swash::scale::image::Content::Color => AtlasKind::Color,
+            _ => AtlasKind::Mask,
+        },
         data: image.data,
     })
 }
@@ -700,7 +714,7 @@ mod tests {
             h: side,
             left: 1,
             top: 2,
-            is_color: false,
+            atlas: AtlasKind::Mask,
             data: vec![fill; (side * side) as usize],
         }
     }
@@ -738,7 +752,7 @@ mod tests {
     fn a_dense_raster_has_the_physical_resolution() {
         let logical = raster_of("NotoSans-Regular.ttf", 'H', 14.0);
         let dense = raster_of("NotoSans-Regular.ttf", 'H', 28.0);
-        assert!(logical.h > 0 && !logical.is_color);
+        assert!(logical.h > 0 && logical.atlas == AtlasKind::Mask);
         assert!(
             dense.h.abs_diff(2 * logical.h) <= 1,
             "{} vs {}",
@@ -758,7 +772,7 @@ mod tests {
     #[test]
     fn an_emoji_rasterizes_to_colour_and_a_letter_to_a_mask() {
         let emoji = raster_of("NotoColorEmoji.ttf", '\u{1F44D}', 28.0);
-        assert!(emoji.is_color && emoji.h > 0);
+        assert!(emoji.atlas == AtlasKind::Color && emoji.h > 0);
         assert_eq!(emoji.data.len(), (emoji.w * emoji.h * 4) as usize, "RGBA");
         let letter = raster_of("NotoSans-Regular.ttf", 'a', 28.0);
         assert_eq!(letter.data.len(), (letter.w * letter.h) as usize, "R8");
@@ -878,7 +892,7 @@ mod tests {
         }
         assert!(!cache.color_atlas_due(), "no colour glyph, no colour atlas");
         let emoji = Raster {
-            is_color: true,
+            atlas: AtlasKind::Color,
             data: vec![5; 4 * 4 * 4],
             ..mask(4, 0)
         };
@@ -919,7 +933,7 @@ mod tests {
         let mut cache = GlyphCache::new(32);
         cache.begin_frame();
         let emoji = || Raster {
-            is_color: true,
+            atlas: AtlasKind::Color,
             data: vec![5; 4 * 4 * 4],
             ..mask(4, 0)
         };
@@ -927,7 +941,7 @@ mod tests {
         assert!(cache.color_wanted, "the first sighting asks for the atlas");
         cache.color_ready = true;
         let slot = cache.insert(key(1), emoji()).expect("the atlas is grown");
-        assert!(slot.is_color);
+        assert_eq!(slot.atlas, AtlasKind::Color);
         assert_eq!(origin(slot, 32), (0, 0));
         let mask_slot = cache.insert(key(2), mask(4, 1)).expect("a mask fits");
         assert_eq!(origin(mask_slot, 32), (0, 0), "each atlas packs alone");
