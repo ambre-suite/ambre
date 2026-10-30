@@ -221,6 +221,14 @@ impl BlockLine {
     }
 }
 
+/// The rows of a table block are its lines, so a count of rows is a count of
+/// its lines.
+impl From<ambre_bus::app::grid::RowCount> for BlockLineCount {
+    fn from(rows: ambre_bus::app::grid::RowCount) -> Self {
+        Self::from_len(rows.to_usize())
+    }
+}
+
 /// What one block's text measures, once broken to a width.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextMetrics {
