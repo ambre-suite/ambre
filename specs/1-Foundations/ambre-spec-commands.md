@@ -101,7 +101,7 @@ pub struct Command {
 pub struct Modifiers(u8);
 
 /// Runtime state, derived from the application's state on each query and never stored.
-pub struct CommandState { pub enabled: bool, pub visible: bool, pub toggled: bool }
+pub struct CommandState { pub enabled: Availability, pub visible: Listing, pub toggled: Toggle }
 
 /// What an application implements so the chrome lists commands without knowing which
 /// application it is.

@@ -126,19 +126,29 @@ pub mod shared {
 /// view of the registry.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct CommandState {
-    pub enabled: bool,
-    pub visible: bool,
-    pub toggled: bool,
+    pub enabled: ambre_core::Availability,
+    pub visible: Listing,
+    pub toggled: ambre_core::Toggle,
+}
+
+ambre_core::define_flag! {
+    /// Whether the views of the registry list a command now.
+    pub enum Listing {
+        /// No view lists the command.
+        Hidden,
+        /// The menus, the palette and the toolbars list the command.
+        Listed,
+    }
 }
 
 impl Default for CommandState {
-    /// Enabled and visible, not toggled -- the neutral default for a command
+    /// Enabled and listed, not toggled -- the neutral default for a command
     /// with no contextual constraints.
     fn default() -> Self {
         Self {
-            enabled: true,
-            visible: true,
-            toggled: false,
+            enabled: ambre_core::Availability::Enabled,
+            visible: Listing::Listed,
+            toggled: ambre_core::Toggle::Off,
         }
     }
 }
@@ -505,6 +515,8 @@ mod tests {
     #[test]
     fn command_state_default_is_enabled_visible_untoggled() {
         let s = CommandState::default();
-        assert!(s.enabled && s.visible && !s.toggled);
+        assert_eq!(s.enabled, ambre_core::Availability::Enabled);
+        assert_eq!(s.visible, Listing::Listed);
+        assert_eq!(s.toggled, ambre_core::Toggle::Off);
     }
 }

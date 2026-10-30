@@ -714,9 +714,6 @@ ambre-commands | src/keybinding.rs | crate::keybinding | Key::from_dom(name) | p
 ambre-commands | src/lib.rs | crate | Command.title | field | fn(&Locale)->String	free-text	text, label or user content
 ambre-commands | src/lib.rs | crate | CommandCategory.0 | field | &'static str	newtype-inner	newtype inner
 ambre-commands | src/lib.rs | crate | CommandId.0 | field | &'static str	newtype-inner	newtype inner
-ambre-commands | src/lib.rs | crate | CommandState.enabled | field | bool	generic	state flag/predicate
-ambre-commands | src/lib.rs | crate | CommandState.toggled | field | bool	generic	state flag/predicate
-ambre-commands | src/lib.rs | crate | CommandState.visible | field | bool	generic	state flag/predicate
 ambre-commands | src/lib.rs | crate | IconId.0 | field | &'static str	newtype-inner	newtype inner
 ambre-commands | src/lib.rs | crate | Keymap::is_empty() | ret | bool	generic	state flag/predicate
 ambre-commands | src/lib.rs | crate | Keymap::len() | ret | usize	math	local count/index/counter
