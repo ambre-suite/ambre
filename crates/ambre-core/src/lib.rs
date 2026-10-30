@@ -169,7 +169,7 @@ pub use secret::{
     AccessToken, OidcCode, OidcState, Passphrase, PresignedUrl, RefreshToken, Secret, SecretBytes,
     SecretString,
 };
-pub use seq::Seq;
+pub use seq::{DeltaCount, Seq};
 pub use span::{
     FailureCount, FrameRate, LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds,
     Timestamp, UnixMillis, UnixSeconds,
