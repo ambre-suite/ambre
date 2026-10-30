@@ -71,11 +71,7 @@ impl ProseState {
     pub fn canonical_dump(&self) -> String {
         let tree = doc::blocks(&self.doc);
         let order = self.dump_order(&tree);
-        let names: HashMap<String, String> = order
-            .iter()
-            .enumerate()
-            .map(|(i, id)| (id.to_string(), format!("#{i}")))
-            .collect();
+        let names = PlaceNames::of(&order);
 
         let mut out = String::from("prose\n");
         for (i, id) in order.iter().enumerate() {
@@ -83,7 +79,7 @@ impl ProseState {
                 .map(|node| node.map().get_deep_value())
                 .unwrap_or(LoroValue::Null);
             let parent = match tree.parent(*id) {
-                Some(loro::TreeParentId::Node(parent)) => rename(&parent.to_string(), &names),
+                Some(loro::TreeParentId::Node(parent)) => names.rename(&parent.to_string()),
                 _ => "root".to_owned(),
             };
             out.push_str(&format!("[{i}] under {parent} {}\n", render(&meta, &names)));
@@ -100,7 +96,10 @@ impl ProseState {
         let annots = match doc::annots(&self.doc).get_deep_value() {
             LoroValue::Map(map) => map
                 .iter()
-                .map(|(k, v)| (k.clone(), render(v, &names)))
+                .map(|(k, v)| Annotation {
+                    id: k.clone(),
+                    body: render(v, &names),
+                })
                 .collect::<Vec<_>>(),
             _ => Vec::new(),
         };
@@ -163,22 +162,46 @@ fn push_subtree(tree: &LoroTree, root: TreeID, order: &mut Vec<TreeID>) {
     }
 }
 
-/// A block id by its place, or the string unchanged.
-fn rename(value: &str, names: &HashMap<String, String>) -> String {
-    names
-        .get(value)
-        .cloned()
-        .unwrap_or_else(|| format!("{value:?}"))
+/// The place label of each block a dump names, keyed by its id as a
+/// string. The first block of the walk is `#0`.
+struct PlaceNames(HashMap<String, String>);
+
+impl PlaceNames {
+    /// Each block of `order` named by its index in it.
+    fn of(order: &[TreeID]) -> Self {
+        Self(
+            order
+                .iter()
+                .enumerate()
+                .map(|(i, id)| (id.to_string(), format!("#{i}")))
+                .collect(),
+        )
+    }
+
+    /// A block id by its place, or any other string quoted.
+    fn rename(&self, value: &str) -> String {
+        self.0
+            .get(value)
+            .cloned()
+            .unwrap_or_else(|| format!("{value:?}"))
+    }
+}
+
+/// One annotation of a dump: its id as the store keys it, and its rendered
+/// body.
+struct Annotation {
+    id: String,
+    body: String,
 }
 
 /// Name every annotation by its first mention in `dump`, then list them.
 ///
 /// An annotation id is a UUID, so a plain substring replacement cannot hit
 /// anything but itself. One nobody mentions is listed last, by content.
-fn rename_annotations(mut dump: String, annots: Vec<(String, String)>) -> String {
+fn rename_annotations(mut dump: String, annots: Vec<Annotation>) -> String {
     let mut mentioned: Vec<(usize, String, String)> = Vec::new();
     let mut silent: Vec<String> = Vec::new();
-    for (id, body) in annots {
+    for Annotation { id, body } in annots {
         match dump.find(id.as_str()) {
             Some(at) => mentioned.push((at, id, body)),
             None => silent.push(body),
@@ -204,7 +227,7 @@ fn rename_annotations(mut dump: String, annots: Vec<(String, String)>) -> String
 }
 
 /// One text body as its runs, each with its marks in key order.
-fn render_delta(delta: &[TextDelta], names: &HashMap<String, String>) -> String {
+fn render_delta(delta: &[TextDelta], names: &PlaceNames) -> String {
     let runs: Vec<String> = delta
         .iter()
         .filter_map(|span| match span {
@@ -230,14 +253,14 @@ fn render_delta(delta: &[TextDelta], names: &HashMap<String, String>) -> String 
 }
 
 /// One decoded CRDT value as canonical text, map keys sorted.
-fn render(value: &LoroValue, names: &HashMap<String, String>) -> String {
+fn render(value: &LoroValue, names: &PlaceNames) -> String {
     match value {
         LoroValue::Null => "null".to_owned(),
         LoroValue::Bool(b) => b.to_string(),
         LoroValue::Double(d) => format!("{d}"),
         LoroValue::I64(i) => i.to_string(),
         LoroValue::Binary(bytes) => format!("{} bytes", bytes.len()),
-        LoroValue::String(s) => rename(s.as_str(), names),
+        LoroValue::String(s) => names.rename(s.as_str()),
         LoroValue::List(items) => {
             let rendered: Vec<String> = items.iter().map(|v| render(v, names)).collect();
             format!("[{}]", rendered.join(", "))

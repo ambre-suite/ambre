@@ -15,7 +15,7 @@ use html5ever::tokenizer::states::RawKind;
 use html5ever::tokenizer::{
     BufferQueue, TagKind, Token, TokenSink, TokenSinkResult, Tokenizer, TokenizerOpts,
 };
-use html5ever::{Attribute, LocalName, ParseOpts, ns, parse_document};
+use html5ever::{Attribute, LocalName, ParseOpts, local_name, ns, parse_document};
 
 use ambre_bus::app::prose::{CodeLang, HeadingLevel, OrderedStyle};
 
@@ -25,47 +25,69 @@ use crate::mark::{self, MarkRoot, MarkValue};
 use ambre_bus::app::prose::MarkKey;
 
 /// Elements whose whole subtree carries nothing a paste keeps.
-const SKIPPED: [&str; 14] = [
-    "head", "script", "style", "template", "noscript", "iframe", "object", "embed", "title",
-    "select", "textarea", "button", "canvas", "video",
+const SKIPPED: [LocalName; 14] = [
+    local_name!("head"),
+    local_name!("script"),
+    local_name!("style"),
+    local_name!("template"),
+    local_name!("noscript"),
+    local_name!("iframe"),
+    local_name!("object"),
+    local_name!("embed"),
+    local_name!("title"),
+    local_name!("select"),
+    local_name!("textarea"),
+    local_name!("button"),
+    local_name!("canvas"),
+    local_name!("video"),
 ];
 
 /// Elements that close the block before them and open one of their own.
-const BLOCKS: [&str; 29] = [
-    "p",
-    "div",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "li",
-    "pre",
-    "blockquote",
-    "section",
-    "article",
-    "header",
-    "footer",
-    "main",
-    "aside",
-    "nav",
-    "figure",
-    "figcaption",
-    "address",
-    "dt",
-    "dd",
-    "table",
-    "tr",
-    "td",
-    "th",
-    "caption",
-    "center",
+const BLOCKS: [LocalName; 29] = [
+    local_name!("p"),
+    local_name!("div"),
+    local_name!("h1"),
+    local_name!("h2"),
+    local_name!("h3"),
+    local_name!("h4"),
+    local_name!("h5"),
+    local_name!("h6"),
+    local_name!("li"),
+    local_name!("pre"),
+    local_name!("blockquote"),
+    local_name!("section"),
+    local_name!("article"),
+    local_name!("header"),
+    local_name!("footer"),
+    local_name!("main"),
+    local_name!("aside"),
+    local_name!("nav"),
+    local_name!("figure"),
+    local_name!("figcaption"),
+    local_name!("address"),
+    local_name!("dt"),
+    local_name!("dd"),
+    local_name!("table"),
+    local_name!("tr"),
+    local_name!("td"),
+    local_name!("th"),
+    local_name!("caption"),
+    local_name!("center"),
 ];
 
 /// The block elements an empty instance of which still makes a paragraph.
-const KEPT_EMPTY: [&str; 11] = [
-    "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "pre", "td", "th",
+const KEPT_EMPTY: [LocalName; 11] = [
+    local_name!("p"),
+    local_name!("h1"),
+    local_name!("h2"),
+    local_name!("h3"),
+    local_name!("h4"),
+    local_name!("h5"),
+    local_name!("h6"),
+    local_name!("li"),
+    local_name!("pre"),
+    local_name!("td"),
+    local_name!("th"),
 ];
 
 /// Read `html` into blocks. A document with no text reads as no block, and
@@ -92,10 +114,38 @@ const DEPTH_MAX: usize = 128;
 
 /// The elements the tree builder closes on its own, and the void ones: none
 /// of them deepens the tree.
-const UNCOUNTED: [&str; 31] = [
-    "p", "li", "dt", "dd", "tr", "td", "th", "thead", "tbody", "tfoot", "option", "optgroup", "rb",
-    "rt", "rp", "colgroup", "caption", "area", "base", "br", "col", "embed", "hr", "img", "input",
-    "link", "meta", "param", "source", "track", "wbr",
+const UNCOUNTED: [LocalName; 31] = [
+    local_name!("p"),
+    local_name!("li"),
+    local_name!("dt"),
+    local_name!("dd"),
+    local_name!("tr"),
+    local_name!("td"),
+    local_name!("th"),
+    local_name!("thead"),
+    local_name!("tbody"),
+    local_name!("tfoot"),
+    local_name!("option"),
+    local_name!("optgroup"),
+    local_name!("rb"),
+    local_name!("rt"),
+    local_name!("rp"),
+    local_name!("colgroup"),
+    local_name!("caption"),
+    local_name!("area"),
+    local_name!("base"),
+    local_name!("br"),
+    local_name!("col"),
+    local_name!("embed"),
+    local_name!("hr"),
+    local_name!("img"),
+    local_name!("input"),
+    local_name!("link"),
+    local_name!("meta"),
+    local_name!("param"),
+    local_name!("source"),
+    local_name!("track"),
+    local_name!("wbr"),
 ];
 
 /// Counts the nesting of `html` in one pass of the tokenizer, which is
@@ -123,21 +173,26 @@ impl TokenSink for Depth {
         let Token::TagToken(tag) = token else {
             return TokenSinkResult::Continue;
         };
-        let name = &*tag.name;
         let mut open = self.open.borrow_mut();
         match tag.kind {
             TagKind::StartTag => {
-                let raw = match name {
-                    "script" => Some(RawKind::ScriptData),
-                    "style" | "xmp" | "iframe" | "noembed" | "noframes" => Some(RawKind::Rawtext),
-                    "title" | "textarea" => Some(RawKind::Rcdata),
+                let raw = match tag.name {
+                    local_name!("script") => Some(RawKind::ScriptData),
+                    local_name!("style")
+                    | local_name!("xmp")
+                    | local_name!("iframe")
+                    | local_name!("noembed")
+                    | local_name!("noframes") => Some(RawKind::Rawtext),
+                    local_name!("title") | local_name!("textarea") => Some(RawKind::Rcdata),
                     _ => None,
                 };
                 // `/>` closes an element inside SVG and MathML alone: an HTML
                 // `<div/>` opens a `div`.
-                let foreign = open.iter().any(|n| &**n == "svg" || &**n == "math");
+                let foreign = open
+                    .iter()
+                    .any(|n| *n == local_name!("svg") || *n == local_name!("math"));
                 let closed = tag.self_closing && foreign;
-                if raw.is_none() && !closed && !UNCOUNTED.contains(&name) {
+                if raw.is_none() && !closed && !UNCOUNTED.contains(&tag.name) {
                     if open.len() >= DEPTH_MAX {
                         self.reach.set(Reach::Exceeded);
                     } else {
@@ -244,28 +299,85 @@ struct Reader {
     pre: usize,
 }
 
-fn attr<'a>(attrs: &'a [Attribute], name: &str) -> Option<&'a str> {
+fn attr<'a>(attrs: &'a [Attribute], name: &LocalName) -> Option<&'a str> {
     attrs
         .iter()
-        .find(|a| a.name.ns == ns!() && &*a.name.local == name)
+        .find(|a| a.name.ns == ns!() && a.name.local == *name)
         .map(|a| &*a.value)
 }
 
-/// The declarations of a style attribute, each name lower-cased.
-fn declarations(style: &str) -> impl Iterator<Item = (String, &str)> {
-    style.split(';').filter_map(|declaration| {
-        let (name, value) = declaration.split_once(':')?;
-        let value = value.trim();
-        let value = value.strip_suffix("!important").unwrap_or(value).trim();
-        Some((name.trim().to_ascii_lowercase(), value))
-    })
+/// The style properties a paste reads. Any other is kept as `Other` and
+/// read by nothing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CssProperty {
+    Display,
+    MsoList,
+    FontWeight,
+    FontStyle,
+    /// `text-decoration` or `text-decoration-line`.
+    TextDecoration,
+    VerticalAlign,
+    Color,
+    /// `background-color` or `background`.
+    Background,
+    FontSize,
+    FontFamily,
+    Other,
 }
 
-fn hidden(style: &str) -> bool {
-    declarations(style).any(|(name, value)| {
-        let value = value.to_ascii_lowercase();
-        (name == "display" && value == "none") || (name == "mso-list" && value == "ignore")
-    })
+impl CssProperty {
+    /// The property a declaration names, its case ignored.
+    fn of(name: &str) -> Self {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "display" => Self::Display,
+            "mso-list" => Self::MsoList,
+            "font-weight" => Self::FontWeight,
+            "font-style" => Self::FontStyle,
+            "text-decoration" | "text-decoration-line" => Self::TextDecoration,
+            "vertical-align" => Self::VerticalAlign,
+            "color" => Self::Color,
+            "background-color" | "background" => Self::Background,
+            "font-size" => Self::FontSize,
+            "font-family" => Self::FontFamily,
+            _ => Self::Other,
+        }
+    }
+}
+
+/// The declarations of an element's style attribute, parsed once: each
+/// property with its value, `!important` and the spaces around it dropped.
+struct Declarations<'a>(Vec<(CssProperty, &'a str)>);
+
+impl<'a> Declarations<'a> {
+    /// The declarations `style` holds, in their order.
+    fn of(style: &'a str) -> Self {
+        Self(
+            style
+                .split(';')
+                .filter_map(|declaration| {
+                    let (name, value) = declaration.split_once(':')?;
+                    let value = value.trim();
+                    let value = value.strip_suffix("!important").unwrap_or(value).trim();
+                    Some((CssProperty::of(name), value))
+                })
+                .collect(),
+        )
+    }
+
+    /// Whether the style hides the element: `display: none`, or Word's
+    /// `mso-list: Ignore` on a list marker it draws as text.
+    fn hidden(&self) -> bool {
+        self.0.iter().any(|(property, value)| {
+            let value = value.to_ascii_lowercase();
+            (*property == CssProperty::Display && value == "none")
+                || (*property == CssProperty::MsoList && value == "ignore")
+        })
+    }
+
+    /// Whether the style names `property` at all.
+    fn names(&self, property: CssProperty) -> bool {
+        self.0.iter().any(|(named, _)| *named == property)
+    }
 }
 
 impl Reader {
@@ -291,18 +403,18 @@ impl Reader {
                     if name.ns != ns!(html) {
                         continue;
                     }
-                    let tag = &*name.local;
-                    let style = attr(attrs, "style").unwrap_or("");
-                    if SKIPPED.contains(&tag) || hidden(style) {
+                    let tag = &name.local;
+                    let style = Declarations::of(attr(attrs, &local_name!("style")).unwrap_or(""));
+                    if SKIPPED.contains(tag) || style.hidden() {
                         continue;
                     }
                     // A block that holds blocks is a page's theme, not formatting an
                     // author chose for this text: its style sets no mark.
-                    let themed = BLOCKS.contains(&tag)
+                    let themed = BLOCKS.contains(tag)
                         && node.children.iter().any(|child| {
                             nodes.get(*child).is_some_and(|child| {
                                 matches!(&child.data, Data::Element { name, .. }
-                                    if BLOCKS.contains(&&*name.local))
+                                    if BLOCKS.contains(&name.local))
                             })
                         });
                     let origin = if themed {
@@ -310,7 +422,7 @@ impl Reader {
                     } else {
                         StyleOrigin::Author
                     };
-                    let frame = self.enter(tag, attrs, style, origin);
+                    let frame = self.enter(tag, attrs, &style, origin);
                     self.frames.push(frame);
                     steps.push(Step::Leave);
                     steps.extend(node.children.iter().rev().map(|c| Step::Enter(*c)));
@@ -327,29 +439,39 @@ impl Reader {
 
     /// The kind a block element opens: its own, or that of the list item or
     /// heading around it. A paragraph inside a list item takes the item's.
-    fn block_kind(&self, tag: &str, attrs: &[Attribute], style: &str) -> ClipKind {
-        let heading = tag
-            .strip_prefix('h')
-            .and_then(|level| level.parse::<u8>().ok())
-            .and_then(HeadingLevel::new);
+    fn block_kind(
+        &self,
+        tag: &LocalName,
+        attrs: &[Attribute],
+        style: &Declarations<'_>,
+    ) -> ClipKind {
+        let heading = match *tag {
+            local_name!("h1") => Some(HeadingLevel::H1),
+            local_name!("h2") => Some(HeadingLevel::H2),
+            local_name!("h3") => Some(HeadingLevel::H3),
+            local_name!("h4") => Some(HeadingLevel::H4),
+            local_name!("h5") => Some(HeadingLevel::H5),
+            local_name!("h6") => Some(HeadingLevel::H6),
+            _ => None,
+        };
         if let Some(level) = heading {
             return ClipKind::Heading(level);
         }
-        match tag {
-            "li" => {
-                if attr(attrs, "role") == Some("checkbox") {
+        match *tag {
+            local_name!("li") => {
+                if attr(attrs, &local_name!("role")) == Some("checkbox") {
                     return ClipKind::Todo(crate::events::TodoMark::done_if(
-                        attr(attrs, "aria-checked") == Some("true"),
+                        attr(attrs, &local_name!("aria-checked")) == Some("true"),
                     ));
                 }
                 self.lists.last().cloned().unwrap_or(ClipKind::Bullet)
             }
-            "pre" => ClipKind::Code(language(attrs)),
+            local_name!("pre") => ClipKind::Code(language(attrs)),
             _ => {
                 // Word writes a list item as a paragraph carrying `mso-list`.
-                let word_item = attr(attrs, "class")
+                let word_item = attr(attrs, &local_name!("class"))
                     .is_some_and(|c| c.starts_with("MsoListParagraph"))
-                    || declarations(style).any(|(name, _)| name == "mso-list");
+                    || style.names(CssProperty::MsoList);
                 if word_item {
                     return ClipKind::Bullet;
                 }
@@ -361,10 +483,16 @@ impl Reader {
         }
     }
 
-    fn enter(&mut self, tag: &str, attrs: &[Attribute], style: &str, origin: StyleOrigin) -> Frame {
+    fn enter(
+        &mut self,
+        tag: &LocalName,
+        attrs: &[Attribute],
+        style: &Declarations<'_>,
+        origin: StyleOrigin,
+    ) -> Frame {
         let mut frame = Frame::default();
-        match tag {
-            "br" => {
+        match *tag {
+            local_name!("br") => {
                 if self.pre > 0 {
                     self.push_str("\n");
                 } else {
@@ -377,20 +505,21 @@ impl Reader {
                     });
                 }
             }
-            "hr" => {
+            local_name!("hr") => {
                 self.flush(EmptyBlock::Drop);
             }
-            "ul" | "ol" => {
+            local_name!("ul") | local_name!("ol") => {
                 self.flush(EmptyBlock::Drop);
-                self.lists.push(if tag == "ol" {
-                    ClipKind::Ordered(ordered_style(attr(attrs, "type")))
+                self.lists.push(if *tag == local_name!("ol") {
+                    ClipKind::Ordered(ordered_style(attr(attrs, &local_name!("type"))))
                 } else {
                     ClipKind::Bullet
                 });
                 frame.opened = Opened::List;
             }
-            "input" => {
-                if attr(attrs, "type").is_some_and(|t| t.eq_ignore_ascii_case("checkbox"))
+            local_name!("input") => {
+                if attr(attrs, &local_name!("type"))
+                    .is_some_and(|t| t.eq_ignore_ascii_case("checkbox"))
                     && let Some(open) = self.open.last_mut()
                     && matches!(
                         open.kind,
@@ -398,11 +527,11 @@ impl Reader {
                     )
                 {
                     open.kind = ClipKind::Todo(crate::events::TodoMark::done_if(
-                        attr(attrs, "checked").is_some(),
+                        attr(attrs, &local_name!("checked")).is_some(),
                     ));
                 }
             }
-            "code" if self.pre > 0 => {
+            local_name!("code") if self.pre > 0 => {
                 if let Some(Open {
                     kind: ClipKind::Code(lang),
                     ..
@@ -412,12 +541,12 @@ impl Reader {
                     *lang = language(attrs);
                 }
             }
-            _ if BLOCKS.contains(&tag) => {
+            _ if BLOCKS.contains(tag) => {
                 let kind = self.block_kind(tag, attrs, style);
                 self.flush(EmptyBlock::Drop);
                 self.open.push(Open {
                     kind,
-                    empty: if KEPT_EMPTY.contains(&tag) {
+                    empty: if KEPT_EMPTY.contains(tag) {
                         EmptyBlock::Keep
                     } else {
                         EmptyBlock::Drop
@@ -425,7 +554,7 @@ impl Reader {
                     touched: Touched::Untouched,
                 });
                 frame.opened = Opened::Block;
-                if tag == "pre" {
+                if *tag == local_name!("pre") {
                     self.pre += 1;
                     frame.opened = Opened::Pre;
                 }
@@ -576,7 +705,7 @@ impl Reader {
 
 /// The language a code block names through a `language-` or `lang-` class.
 fn language(attrs: &[Attribute]) -> Option<CodeLang> {
-    attr(attrs, "class")
+    attr(attrs, &local_name!("class"))
         .into_iter()
         .flat_map(str::split_ascii_whitespace)
         .find_map(|class| {
@@ -624,16 +753,24 @@ fn on(key: MarkRoot) -> Option<Change> {
 }
 
 /// The marks an element's name stands for.
-fn tag_marks(tag: &str, attrs: &[Attribute], flow: Flow) -> Vec<Change> {
-    let change = match tag {
-        "b" | "strong" => on(MarkRoot::Bold),
-        "i" | "em" | "cite" | "dfn" | "var" => on(MarkRoot::Italic),
-        "u" | "ins" => on(MarkRoot::Underline),
-        "s" | "strike" | "del" => on(MarkRoot::Strike),
-        "sup" => on(MarkRoot::Superscript),
-        "sub" => on(MarkRoot::Subscript),
-        "code" | "kbd" | "samp" | "tt" if flow == Flow::Normal => on(MarkRoot::Code),
-        "a" => attr(attrs, "href")
+fn tag_marks(tag: &LocalName, attrs: &[Attribute], flow: Flow) -> Vec<Change> {
+    let change = match *tag {
+        local_name!("b") | local_name!("strong") => on(MarkRoot::Bold),
+        local_name!("i")
+        | local_name!("em")
+        | local_name!("cite")
+        | local_name!("dfn")
+        | local_name!("var") => on(MarkRoot::Italic),
+        local_name!("u") | local_name!("ins") => on(MarkRoot::Underline),
+        local_name!("s") | local_name!("strike") | local_name!("del") => on(MarkRoot::Strike),
+        local_name!("sup") => on(MarkRoot::Superscript),
+        local_name!("sub") => on(MarkRoot::Subscript),
+        local_name!("code") | local_name!("kbd") | local_name!("samp") | local_name!("tt")
+            if flow == Flow::Normal =>
+        {
+            on(MarkRoot::Code)
+        }
+        local_name!("a") => attr(attrs, &local_name!("href"))
             .map(str::trim)
             .and_then(|href| set(MarkRoot::Link, href)),
         _ => None,
@@ -644,12 +781,12 @@ fn tag_marks(tag: &str, attrs: &[Attribute], flow: Flow) -> Vec<Change> {
 /// The marks a style attribute's declarations stand for. Black ink and a
 /// white or transparent background are the page's defaults. The author did
 /// not choose them, so they clear the mark rather than set it.
-fn style_marks(style: &str) -> Vec<Change> {
+fn style_marks(style: &Declarations<'_>) -> Vec<Change> {
     let mut changes = Vec::new();
-    for (name, value) in declarations(style) {
+    for &(property, value) in &style.0 {
         let lower = value.to_ascii_lowercase();
-        match name.as_str() {
-            "font-weight" => {
+        match property {
+            CssProperty::FontWeight => {
                 let bold = match lower.as_str() {
                     "bold" | "bolder" => Some(true),
                     "normal" | "lighter" => Some(false),
@@ -663,12 +800,12 @@ fn style_marks(style: &str) -> Vec<Change> {
                     });
                 }
             }
-            "font-style" => match lower.as_str() {
+            CssProperty::FontStyle => match lower.as_str() {
                 "italic" | "oblique" => changes.extend(on(MarkRoot::Italic)),
                 "normal" => changes.push(Change::Clear(MarkRoot::Italic)),
                 _ => {}
             },
-            "text-decoration" | "text-decoration-line" => {
+            CssProperty::TextDecoration => {
                 if lower.contains("none") {
                     changes.extend([
                         Change::Clear(MarkRoot::Underline),
@@ -682,7 +819,7 @@ fn style_marks(style: &str) -> Vec<Change> {
                     changes.extend(on(MarkRoot::Strike));
                 }
             }
-            "vertical-align" => match lower.as_str() {
+            CssProperty::VerticalAlign => match lower.as_str() {
                 "super" => changes.extend(on(MarkRoot::Superscript)),
                 "sub" => changes.extend(on(MarkRoot::Subscript)),
                 "baseline" => changes.extend([
@@ -691,7 +828,7 @@ fn style_marks(style: &str) -> Vec<Change> {
                 ]),
                 _ => {}
             },
-            "color" => {
+            CssProperty::Color => {
                 if let Some(color) = css_color(&lower) {
                     changes.extend(if ink(color) {
                         Some(Change::Clear(MarkRoot::Ink))
@@ -700,7 +837,7 @@ fn style_marks(style: &str) -> Vec<Change> {
                     });
                 }
             }
-            "background-color" | "background" => {
+            CssProperty::Background => {
                 if lower == "transparent" {
                     changes.push(Change::Clear(MarkRoot::Highlight));
                 } else if let Some(color) = css_color(&lower) {
@@ -712,19 +849,19 @@ fn style_marks(style: &str) -> Vec<Change> {
                     });
                 }
             }
-            "font-size" => {
+            CssProperty::FontSize => {
                 if let Some(points) =
                     font_size(&lower).and_then(|size| mark::canonical_number(size.points()))
                 {
                     changes.extend(set(MarkRoot::FontSize, &points));
                 }
             }
-            "font-family" => {
+            CssProperty::FontFamily => {
                 if let Some(family) = font_family(value) {
-                    changes.extend(set(MarkRoot::FontFamily, &family));
+                    changes.push(Change::Set(MarkRoot::FontFamily, family));
                 }
             }
-            _ => {}
+            CssProperty::Display | CssProperty::MsoList | CssProperty::Other => {}
         }
     }
     changes
@@ -753,7 +890,7 @@ fn font_size(value: &str) -> Option<ambre_core::FontSize> {
 
 /// The first family a font stack names, when it names one rather than a
 /// generic family or a platform alias.
-fn font_family(value: &str) -> Option<String> {
+fn font_family(value: &str) -> Option<MarkValue> {
     let first = value
         .split(',')
         .next()?
@@ -772,7 +909,10 @@ fn font_family(value: &str) -> Option<String> {
         "unset",
     ];
     let usable = !first.starts_with('-') && !generic.contains(&first.to_ascii_lowercase().as_str());
-    usable.then(|| first.to_owned())
+    if !usable {
+        return None;
+    }
+    super::pasted(MarkRoot::FontFamily, Some(first))
 }
 
 /// A colour read from hexadecimal, `rgb()`, `rgba()`, or one of the sixteen
