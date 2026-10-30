@@ -505,6 +505,17 @@ macro_rules! define_index {
                 self.0.iter()
             }
 
+            /// The item at the first position, `None` when the list is empty.
+            pub fn first(&self) -> Option<&T> {
+                self.0.first()
+            }
+
+            /// The items in order, each one writable in place. The positions
+            /// stay as they are: nothing is added or removed.
+            pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {
+                self.0.iter_mut()
+            }
+
             /// Each item beside its position, in order.
             pub fn iter_enumerated(&self) -> impl Iterator<Item = ($pos, &T)> + '_ {
                 self.0.iter().enumerate().map(|(index, item)| {
@@ -568,6 +579,15 @@ macro_rules! define_index {
 
             fn into_iter(self) -> Self::IntoIter {
                 self.0.iter()
+            }
+        }
+
+        impl<'a, T> IntoIterator for &'a mut $vec<T> {
+            type Item = &'a mut T;
+            type IntoIter = std::slice::IterMut<'a, T>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.0.iter_mut()
             }
         }
 

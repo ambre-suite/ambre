@@ -2448,7 +2448,10 @@ ambre-toile | src/logic/state/names.rs | crate::logic::state::names | EntrySchem
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | REACTION_SEPARATOR | const | char	generic	the character ReactionKey writes between the target and the user of a reactions map key
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey.0 | field | String	newtype-inner	the reactions map key ReactionKey types
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::as_str() | ret | &str	newtype-inner	the accessor of ReactionKey, read by the Loro call that reads or writes the key
-ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_of() | ret | Option<&str>	foreign-api	the target id half of a key Loro hands back from the reactions map
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::names_target() | ret | bool	generic	whether a reactions map key names the target asked about
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::names_target(key) | param | &str	foreign-api	a reactions map key as Loro hands it back
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_half() | ret | Option<&str>	foreign-api	the target id half of a key Loro hands back from the reactions map
+ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_half(key) | param | &str	foreign-api	a reactions map key as Loro hands it back
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | ReactionKey::target_of(key) | param | &str	foreign-api	a reactions map key as Loro hands it back
 ambre-toile | src/logic/state/presence.rs | crate::logic::state::presence | ToileState::expire_peers() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation | ToileState::drop_slides() | ret | bool	generic	predicate or handled-flag result

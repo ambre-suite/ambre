@@ -134,7 +134,7 @@ impl ToileState {
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
         {
             for (k, value) in entries.iter() {
-                if ReactionKey::target_of(k) != Some(target.as_str()) {
+                if !ReactionKey::names_target(k, target) {
                     continue;
                 }
                 let LoroValue::Binary(bytes) = value else {
@@ -170,7 +170,6 @@ impl ToileState {
                 let Some(target) = ReactionKey::target_of(k) else {
                     continue;
                 };
-                let target = ElementId(target.to_string());
                 if !visible.contains(&target) {
                     continue;
                 }
