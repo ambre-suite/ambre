@@ -1403,9 +1403,9 @@ pub fn main() {
                     let keeper = draft_keeper.clone();
                     wasm_bindgen_futures::spawn_local(async move {
                         keeper.written().await;
-                        signin::leave_session(|url| {
+                        signin::leave_session(|| {
                             if let Some(window) = web_sys::window() {
-                                let _ = window.location().replace(url);
+                                let _ = window.location().replace("/");
                             }
                         });
                     });
@@ -1417,7 +1417,7 @@ pub fn main() {
                 } => {
                     signin::follow_address(url, state, |url| {
                         if let Some(window) = web_sys::window() {
-                            let _ = window.location().set_href(url);
+                            let _ = window.location().set_href(url.as_str());
                         }
                     });
                 }

@@ -75,7 +75,7 @@ pub(crate) fn is_followable(url: &ambre_core::ProviderUrl) -> bool {
 pub(crate) fn follow_address(
     url: &ambre_core::ProviderUrl,
     state: &ambre_core::OidcState,
-    navigate: impl FnOnce(&str),
+    navigate: impl FnOnce(&ambre_core::ProviderUrl),
 ) -> bool {
     if !is_followable(url) {
         tracing::warn!("Sign-in: the relay answered an address that is not https");
@@ -90,7 +90,7 @@ pub(crate) fn follow_address(
     {
         return false;
     }
-    navigate(url.as_str());
+    navigate(url);
     true
 }
 
@@ -119,13 +119,13 @@ pub(crate) fn take_boot_return() -> Option<ProviderReturn> {
 
 /// The page's part of a sign-out the Sync worker confirmed (`CHROME-107`,
 /// `CHROME-108`). What would sign someone in at the next boot is forgotten,
-/// then `reload` replaces the page with a fresh boot of `/`. A new page holds
+/// then `reload` replaces the page with a fresh boot of home. A new page holds
 /// nothing of the session the old one showed, which no list of signals to
 /// reset could promise.
-pub(crate) fn leave_session(reload: impl FnOnce(&str)) {
+pub(crate) fn leave_session(reload: impl FnOnce()) {
     crate::platform::forget_dev_user();
     let _ = take_pending_state();
-    reload("/");
+    reload();
 }
 
 fn session_storage() -> Option<web_sys::Storage> {
@@ -222,7 +222,7 @@ mod tests {
         let mut went = None;
         let address = "https://accounts.example.org/o/oauth2/auth?state=st9";
         let url = ambre_core::ProviderUrl::new(address.to_owned());
-        assert!(follow_address(&url, &state("st9"), |u| went = Some(u.to_owned())));
+        assert!(follow_address(&url, &state("st9"), |u| went = Some(u.as_str().to_owned())));
         assert_eq!(went.as_deref(), Some(address));
         assert_eq!(text(take_pending_state()).as_deref(), Some("st9"));
         assert!(take_pending_state().is_none(), "a state serves one return");
@@ -256,9 +256,9 @@ mod tests {
             .unwrap()
             .set_item(PENDING_STATE_KEY, "st1")
             .unwrap();
-        let mut went = None;
-        leave_session(|u| went = Some(u.to_owned()));
-        assert_eq!(went.as_deref(), Some("/"));
+        let mut reloaded = false;
+        leave_session(|| reloaded = true);
+        assert!(reloaded, "the page boots afresh");
         assert_eq!(crate::platform::stored_dev_user(), None);
         assert!(take_pending_state().is_none());
     }

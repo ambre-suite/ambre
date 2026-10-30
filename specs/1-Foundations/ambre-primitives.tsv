@@ -103,11 +103,9 @@ ambre-app | src/shell/mod.rs | crate::shell | mount_shell(presenter_notes) | par
 ambre-app | src/signin.rs | crate::signin | PENDING_STATE_KEY | const | &str	free-text	single session-storage key literal
 ambre-app | src/signin.rs | crate::signin | RETURN_PREFIX | const | &str	free-text	path prefix literal
 ambre-app | src/signin.rs | crate::signin | follow_address() | ret | bool	generic	predicate result
-ambre-app | src/signin.rs | crate::signin | follow_address(navigate) | param | impl FnOnce(&str)	foreign-api	the address the closure hands Location::set_href, which takes &str
 ambre-app | src/signin.rs | crate::signin | is_followable() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_return_path() | ret | bool	generic	predicate result
 ambre-app | src/signin.rs | crate::signin | is_return_path(path) | param | &str	generic	path parser
-ambre-app | src/signin.rs | crate::signin | leave_session(reload) | param | impl FnOnce(&str)	foreign-api	the address the closure hands Location::replace, which takes &str
 ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
 ambre-bus | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	serde mirror of ambre-core ActivityAnchor; to_sealed applies the bound
