@@ -228,8 +228,10 @@
   is an unwrap too.
 
   The module of the newtype is exempt. So is its own impl, and an impl of a conversion trait that
-  names it. Such an impl still refuses the unwrap of any other newtype. The tuple struct of a
-  newtype is a workspace call, as `T::new` is, so the report refuses `DocOffset(run.get())`.
+  names it. A named conversion, an associated `fn` of one newtype parameter that returns `Self`,
+  is exempt for that parameter. Such an impl still refuses the unwrap of any other newtype. The
+  tuple struct of a newtype is a workspace call, as `T::new` is, so the report refuses
+  `DocOffset(run.get())`.
 
   The report reads no type. On a receiver whose type it knows, an accessor or a callee that std
   shares is refused. On a receiver it cannot type, that name is ambiguous, never refused. So is an
