@@ -744,7 +744,7 @@ impl ChannelState {
         me: UserId,
     ) -> Result<UnreadCount, MurmureError> {
         self.count_in(segment.document_id(), read, me, |_| true)
-            .map(|count| UnreadCount(count.get()))
+            .map(MessageCount::unread)
     }
 
     /// The messages [`ChannelState::unread`] counts that mention `me` or the
@@ -793,7 +793,7 @@ impl ChannelState {
             content_of(message)
                 .is_some_and(|content| mention::names(&mention::read(&content, channel), me))
         })
-        .map(|count| MentionCount(count.get()))
+        .map(MessageCount::mentions)
     }
 
     /// The messages of a held segment or thread past `read`, written by

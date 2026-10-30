@@ -296,6 +296,12 @@ impl ViewPx {
     pub fn on_page(self, canvas_origin: CssPx) -> CssPx {
         CssPx(canvas_origin.0 + self.0)
     }
+
+    /// The same length in CSS pixels: a view pixel is a CSS pixel in size.
+    #[must_use]
+    pub const fn to_css_px(self) -> CssPx {
+        CssPx(self.0)
+    }
 }
 
 impl CssPx {
