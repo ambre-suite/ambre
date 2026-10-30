@@ -32,35 +32,11 @@ impl Consumed {
     pub const fn is_yes(self) -> bool {
         matches!(self, Self::Yes)
     }
-
-    /// This answer when it is [`Consumed::Yes`], else the answer of the next
-    /// handler. The next handler runs only when this one left the event.
-    pub fn or_else(self, next: impl FnOnce() -> Self) -> Self {
-        match self {
-            Self::Yes => Self::Yes,
-            Self::No => next(),
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::Consumed;
-
-    #[test]
-    fn or_else_runs_the_next_handler_only_when_the_event_is_left() {
-        let mut ran = false;
-        assert_eq!(
-            Consumed::Yes.or_else(|| {
-                ran = true;
-                Consumed::No
-            }),
-            Consumed::Yes
-        );
-        assert!(!ran);
-        assert_eq!(Consumed::No.or_else(|| Consumed::Yes), Consumed::Yes);
-        assert_eq!(Consumed::No.or_else(|| Consumed::No), Consumed::No);
-    }
 
     #[test]
     fn yes_if_and_is_yes_round_trip() {
