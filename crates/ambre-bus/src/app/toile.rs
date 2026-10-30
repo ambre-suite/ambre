@@ -2745,7 +2745,9 @@ pub struct SelectionStats {
     pub kind: StatsRequestKind,
 }
 
-#[derive(Clone, Debug)]
+/// `Debug` prints the length alone of the speaker notes and of an import
+/// failure, which may quote the foreign file. Every other text is the engine's.
+#[derive(Clone)]
 pub enum ToileEvent {
     ViewportData(DisplayViewport),
     /// Decoded pixels for one media address (`toile-media`), answering a
@@ -2910,6 +2912,92 @@ pub enum ToileEvent {
         skipped: Vec<String>,
     },
     Error(ToileError),
+}
+
+impl fmt::Debug for ToileEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ambre_core::char_len;
+        macro_rules! tuple {
+            ($name:literal, $value:expr) => {
+                f.debug_tuple($name).field($value).finish()
+            };
+        }
+        match self {
+            Self::ViewportData(viewport) => tuple!("ViewportData", viewport),
+            Self::MediaDecoded { hash, size, pixels } => f
+                .debug_struct("MediaDecoded")
+                .field("hash", hash)
+                .field("size", size)
+                .field("pixels", pixels)
+                .finish(),
+            Self::ElementCreated { id, correlate } => f
+                .debug_struct("ElementCreated")
+                .field("id", id)
+                .field("correlate", correlate)
+                .finish(),
+            Self::Clipboard(payload) => tuple!("Clipboard", payload),
+            Self::SelectionStats(stats) => tuple!("SelectionStats", stats),
+            Self::BoardChanged => f.write_str("BoardChanged"),
+            Self::SelectionData {
+                elements,
+                framed,
+                missing,
+            } => f
+                .debug_struct("SelectionData")
+                .field("elements", elements)
+                .field("framed", framed)
+                .field("missing", missing)
+                .finish(),
+            Self::BoardIds(ids) => tuple!("BoardIds", ids),
+            Self::FindResults(results) => tuple!("FindResults", results),
+            Self::DanglingConnector(id) => tuple!("DanglingConnector", id),
+            Self::ArrowsGone(ids) => tuple!("ArrowsGone", ids),
+            Self::PeerPresence(peers) => tuple!("PeerPresence", peers),
+            Self::UndoState { undo, redo } => f
+                .debug_struct("UndoState")
+                .field("undo", undo)
+                .field("redo", redo)
+                .finish(),
+            Self::SlideChanged(change) => tuple!("SlideChanged", change),
+            Self::PresentModeChanged(mode) => tuple!("PresentModeChanged", mode),
+            Self::PresentBroadcastChanged(broadcast) => {
+                tuple!("PresentBroadcastChanged", broadcast)
+            }
+            Self::FollowingChanged(user) => tuple!("FollowingChanged", user),
+            Self::ReactionsUpdated(target) => tuple!("ReactionsUpdated", target),
+            Self::CommentsUpdated(thread) => tuple!("CommentsUpdated", thread),
+            Self::CommentThreadOpened(thread) => tuple!("CommentThreadOpened", thread),
+            Self::CommentList(threads) => tuple!("CommentList", threads),
+            Self::CommentThreadData(thread) => tuple!("CommentThreadData", thread),
+            Self::DeckData(deck) => tuple!("DeckData", deck),
+            Self::DeckChanged => f.write_str("DeckChanged"),
+            Self::NotesChanged { frame, notes } => f
+                .debug_struct("NotesChanged")
+                .field("frame", frame)
+                .field("notes", &char_len(notes))
+                .finish(),
+            Self::ImportReport { imported, skipped } => f
+                .debug_struct("ImportReport")
+                .field("imported", imported)
+                .field("skipped", skipped)
+                .finish(),
+            Self::ImportFailed(reason) => tuple!("ImportFailed", &char_len(reason)),
+            Self::DocumentRefused(reason) => tuple!("DocumentRefused", reason),
+            Self::UndecodableRecords => f.write_str("UndecodableRecords"),
+            Self::ExportFailed(reason) => tuple!("ExportFailed", reason),
+            Self::ExportComplete {
+                filename,
+                data,
+                skipped,
+            } => f
+                .debug_struct("ExportComplete")
+                .field("filename", filename)
+                .field("data", data)
+                .field("skipped", skipped)
+                .finish(),
+            Self::Error(error) => tuple!("Error", error),
+        }
+    }
 }
 
 // =============================================================================
@@ -3216,6 +3304,14 @@ mod tests {
                     ..SlideChange::default()
                 })
             ),
+            format!(
+                "{:?}",
+                ToileEvent::NotesChanged {
+                    frame: id.clone(),
+                    notes: secret.clone(),
+                }
+            ),
+            format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
             format!("{:?}", DisplayGeom::Sticky(secret.clone())),
             format!("{:?}", DisplayGeom::Text(secret.clone())),
             format!("{:?}", DisplayGeom::Frame(secret.clone())),
