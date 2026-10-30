@@ -74,7 +74,7 @@ pub struct Decoration {
 }
 
 use ambre_bus::CellValueKind;
-use ambre_core::{Slant, Weight, WordBreak};
+use ambre_core::{Slant, SurfacePx, Weight, WordBreak};
 pub use ambre_core::{Strikethrough, Underline};
 
 impl Decoration {
@@ -108,28 +108,50 @@ pub(super) fn cell_alignment(h: ambre_bus::HAlign, numeric: CellValueKind) -> Al
     }
 }
 
-/// Vertical text offset inside a box of height `box_h` for a text block of height
-/// `text_h`, honouring the cell's [`VAlign`](ambre_bus::VAlign). Clamped to `>= 0`
-/// so oversized text never lifts above the box top.
-pub(super) fn cell_v_offset(v: ambre_bus::VAlign, box_h: f64, text_h: f64) -> f64 {
+/// The two heights a vertical alignment places a text block by. Named
+/// fields, so the box and the text cannot trade places.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct TextFit {
+    /// The height of the box the text sits in.
+    pub(super) box_height: SurfacePx,
+    /// The height of the laid-out text block.
+    pub(super) text_height: SurfacePx,
+}
+
+/// Vertical text offset of a text block inside its box, honouring the cell's
+/// [`VAlign`](ambre_bus::VAlign). Clamped to `>= 0` so oversized text never
+/// lifts above the box top.
+pub(super) fn cell_v_offset(v: ambre_bus::VAlign, fit: TextFit) -> SurfacePx {
+    let room = fit.box_height - fit.text_height;
     match v {
-        ambre_bus::VAlign::Top => 0.0,
-        ambre_bus::VAlign::Middle => ((box_h - text_h) / 2.0).max(0.0),
-        ambre_bus::VAlign::Bottom => (box_h - text_h).max(0.0),
+        ambre_bus::VAlign::Top => SurfacePx::ZERO,
+        ambre_bus::VAlign::Middle => (room / 2.0).max(SurfacePx::ZERO),
+        ambre_bus::VAlign::Bottom => room.max(SurfacePx::ZERO),
     }
 }
 
-/// Resolve a [`BorderStyle`] into a stroke `(width, dash_period)`; `dash_period`
-/// of `0.0` means a solid stroke. `Double` is handled by the caller (two passes).
-fn border_stroke(style: ambre_bus::BorderStyle) -> (f64, f64) {
+/// The stroke a [`BorderStyle`] draws with. `Double` is handled by the
+/// caller (two passes).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct BorderStroke {
+    width: SurfacePx,
+    /// The length of one dash and its gap; zero draws a solid stroke.
+    dash_period: SurfacePx,
+}
+
+/// Resolve a [`BorderStyle`] into the stroke it draws with.
+fn border_stroke(style: ambre_bus::BorderStyle) -> BorderStroke {
     use ambre_bus::BorderStyle as Bs;
-    match style {
-        Bs::Solid => (1.0, 0.0),
+    let (width, dash_period) = match style {
+        Bs::Solid | Bs::Double => (1.0, 0.0),
         Bs::Dashed => (1.0, 6.0),
         Bs::Dotted => (1.0, 2.5),
         Bs::Medium => (2.0, 0.0),
         Bs::Thick => (3.0, 0.0),
-        Bs::Double => (1.0, 0.0),
+    };
+    BorderStroke {
+        width: SurfacePx::new(width),
+        dash_period: SurfacePx::new(dash_period),
     }
 }
 
@@ -145,7 +167,9 @@ fn styled_segment<S: DrawSurface>(
 ) {
     use ambre_bus::BorderStyle as Bs;
     let (x0, y0, x1, y1) = (segment.p0.x, segment.p0.y, segment.p1.x, segment.p1.y);
-    let (width, period) = border_stroke(style);
+    let stroke = border_stroke(style);
+    // The surface draws in bare f64: the period unwraps once, here.
+    let period = stroke.dash_period.get();
     if style == Bs::Double {
         // Two 1px lines offset by 1px on each side of the edge.
         let (dx, dy) = if (y1 - y0).abs() < f64::EPSILON {
@@ -169,7 +193,7 @@ fn styled_segment<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((x0, y0), (x1, y1)),
             color,
-            ambre_core::SurfacePx::new(width),
+            stroke.width,
         );
         return;
     }
@@ -187,7 +211,7 @@ fn styled_segment<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((x0 + ux * s, y0 + uy * s), (x0 + ux * e, y0 + uy * e)),
             color,
-            ambre_core::SurfacePx::new(width),
+            stroke.width,
         );
         t += period;
     }

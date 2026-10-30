@@ -4,7 +4,7 @@
 // Submodule of `render`; reaches sibling helpers, constants and imports through
 // the `use super::*` glob (the parent re-exports every renderer item).
 
-use super::content::{cell_alignment, cell_v_offset, rgb};
+use super::content::{TextFit, cell_alignment, cell_v_offset, rgb};
 use super::*;
 use ambre_core::SurfacePx;
 
@@ -118,7 +118,11 @@ where
         );
         let text_h = layout_text.height() as f64;
         let text_w = layout_text.width() as f64;
-        let y_off = cell_v_offset(content.v_align, row_h, text_h);
+        let fit = TextFit {
+            box_height: SurfacePx::new(row_h),
+            text_height: SurfacePx::new(text_h),
+        };
+        let y_off = cell_v_offset(content.v_align, fit).get();
         let avail = cell_max_width as f64;
         // A non-wrapped single line wider than its column spills into empty
         // neighbour cells (`trame-cell-rendering`); wrapped or multi-line text is

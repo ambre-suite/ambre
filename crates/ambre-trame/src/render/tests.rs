@@ -580,13 +580,23 @@ fn text_taller_than_its_row_is_cut_at_the_row() {
 #[test]
 fn a_vertical_alignment_never_lifts_text_above_the_top() {
     // `TRAME-UI-099`: text taller than the box sits at the top for every align.
-    use super::content::cell_v_offset;
+    use super::content::{TextFit, cell_v_offset};
     use ambre_bus::VAlign;
+    let fit = |box_h: f64, text_h: f64| TextFit {
+        box_height: SurfacePx::new(box_h),
+        text_height: SurfacePx::new(text_h),
+    };
     for v in [VAlign::Top, VAlign::Middle, VAlign::Bottom] {
-        assert_eq!(cell_v_offset(v, 20.0, 50.0), 0.0, "{v:?}");
-        assert!(cell_v_offset(v, 20.0, 10.0) >= 0.0, "{v:?}");
+        assert_eq!(cell_v_offset(v, fit(20.0, 50.0)), SurfacePx::ZERO, "{v:?}");
+        assert!(
+            cell_v_offset(v, fit(20.0, 10.0)) >= SurfacePx::ZERO,
+            "{v:?}"
+        );
     }
-    assert_eq!(cell_v_offset(VAlign::Bottom, 20.0, 10.0), 10.0);
+    assert_eq!(
+        cell_v_offset(VAlign::Bottom, fit(20.0, 10.0)),
+        SurfacePx::new(10.0)
+    );
 }
 
 #[test]

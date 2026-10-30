@@ -4,7 +4,7 @@
 // Submodule of `render`; reaches sibling helpers, constants and imports through
 // the `use super::*` glob (the parent re-exports every renderer item).
 
-use super::content::{cell_alignment, cell_v_offset, rgb};
+use super::content::{TextFit, cell_alignment, cell_v_offset, rgb};
 use super::*;
 
 // -----------------------------------------------------------------------------
@@ -83,7 +83,11 @@ where
             );
             let text_h = layout_text.height() as f64;
             let text_w = layout_text.width() as f64;
-            let y_off = cell_v_offset(content.v_align, rect.height(), text_h);
+            let fit = TextFit {
+                box_height: ambre_core::SurfacePx::new(rect.height()),
+                text_height: ambre_core::SurfacePx::new(text_h),
+            };
+            let y_off = cell_v_offset(content.v_align, fit).get();
             let x_off = match cell_alignment(content.h_align, content.numeric) {
                 Alignment::Center => ((avail - text_w) / 2.0).max(0.0),
                 Alignment::End | Alignment::Right => (avail - text_w).max(0.0),
