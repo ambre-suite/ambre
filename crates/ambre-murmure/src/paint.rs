@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{Attachment, Emoji, MediaRef, MessageId, TextStyle, Timestamp, UserId};
+use ambre_bus::{Attachment, ContentHash, Emoji, MessageId, TextStyle, Timestamp, UserId};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_core::{
@@ -64,7 +64,7 @@ impl std::fmt::Debug for Pictured<'_> {
 /// next frame of one is due.
 #[derive(Debug, Default)]
 struct Played {
-    files: Vec<MediaRef>,
+    files: Vec<ContentHash>,
     next: Option<ambre_core::PageTime>,
 }
 
@@ -174,7 +174,7 @@ pub struct Painted {
     pub file: Option<Attachment>,
     /// The files whose preview this paint drew, decoded or not. Only these
     /// are on screen, so only these play (`MURMURE-131`).
-    pub pictures: Vec<MediaRef>,
+    pub pictures: Vec<ContentHash>,
     /// When the next frame of a picture on screen is due, `None` when none
     /// plays.
     pub next_frame: Option<ambre_core::PageTime>,
@@ -1442,10 +1442,10 @@ pub(crate) mod tests {
     /// ink of a link. A click on one names its file.
     #[test]
     fn the_files_paint_as_chips_a_click_names() {
-        use ambre_bus::{Attachment, ByteSize, MediaRef, MediaType};
+        use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType};
         let ada = UserId::new();
         let file = Attachment {
-            media_ref: MediaRef::parse(&"0".repeat(64)).expect("an address"),
+            media_ref: ContentHash::parse(&"0".repeat(64)).expect("an address"),
             name: "a.png".to_owned(),
             media_type: MediaType("image/png".to_owned()),
             size: ByteSize(2048),
@@ -1497,7 +1497,7 @@ pub(crate) mod tests {
         use ambre_bus::{Attachment, ByteSize, MediaType, Picture, PictureFrame};
         let ada = UserId::new();
         let file = Attachment {
-            media_ref: MediaRef::parse(&"a".repeat(64)).expect("an address"),
+            media_ref: ContentHash::parse(&"a".repeat(64)).expect("an address"),
             name: "a.gif".to_owned(),
             media_type: MediaType("image/gif".to_owned()),
             size: ByteSize(2048),

@@ -28,7 +28,7 @@ use ambre_bus::CharSpan;
 use std::collections::BTreeSet;
 
 use ambre_bus::{
-    Attachment, ByteSize, MediaRef, MediaType, Mention, MentionTarget, MessageDraft,
+    Attachment, ByteSize, ContentHash, MediaType, Mention, MentionTarget, MessageDraft,
     SealedChannelKey, StyleMark, TextStyle, Timestamp, Topic,
 };
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
@@ -214,7 +214,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
     }
     // The first message carries a file, by its address alone.
     let file = Attachment {
-        media_ref: MediaRef::parse(&"ab".repeat(32)).expect("an address"),
+        media_ref: ContentHash::parse(&"ab".repeat(32)).expect("an address"),
         name: "plan.pdf".to_owned(),
         media_type: MediaType("application/pdf".to_owned()),
         size: ByteSize(2_048),
