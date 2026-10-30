@@ -89,7 +89,8 @@ pub fn FindPanel(
             },
         };
         on_find.run(FindRequest {
-            query: FindQuery::new(query.get_untracked(), options),
+            query: ambre_bus::app::find::FindText::new(query.get_untracked())
+                .map(|text| FindQuery::new(text, options)),
             from,
             direction,
         });

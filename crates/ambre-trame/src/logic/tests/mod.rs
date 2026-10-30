@@ -133,6 +133,15 @@ fn seed_col_a(state: &mut TrameState, values: &[&str]) {
     }
 }
 
+/// The query a find panel sends for the typed `text`: none when it is empty.
+fn find_query(
+    text: String,
+    options: crate::FindOptions,
+) -> Option<ambre_bus::app::trame::FindQuery> {
+    ambre_bus::app::find::FindText::new(text)
+        .map(|text| ambre_bus::app::trame::FindQuery::new(text, options))
+}
+
 /// Seed a few cells on the active sheet for the find/replace tests.
 fn seed_find(state: &mut TrameState) {
     state.handle_command(TrameCommand::SetCellText {

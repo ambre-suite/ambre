@@ -52,10 +52,10 @@ pub struct FindQuery<O> {
 }
 
 impl<O> FindQuery<O> {
-    /// The query for `text` under `options`; `None` when `text` is empty.
+    /// The query for `text` under `options`.
     #[must_use]
-    pub fn new(text: String, options: O) -> Option<Self> {
-        FindText::new(text).map(|text| Self { text, options })
+    pub fn new(text: FindText, options: O) -> Self {
+        Self { text, options }
     }
 }
 
@@ -87,8 +87,8 @@ mod tests {
     #[test]
     fn an_empty_text_is_no_query() {
         assert_eq!(FindText::new(String::new()), None);
-        assert_eq!(FindQuery::new(String::new(), ()), None);
-        let query = FindQuery::new("a".to_owned(), ()).expect("a query");
+        let text = FindText::new("a".to_owned()).expect("a text");
+        let query = FindQuery::new(text, ());
         assert_eq!(query.text.as_str(), "a");
     }
 

@@ -268,7 +268,8 @@ mod tests {
     use ambre_bus::app::prose::DocOffset;
 
     fn query(text: &str) -> Option<FindQuery> {
-        FindQuery::new(text.to_owned(), crate::events::FindOptions::default())
+        ambre_bus::app::find::FindText::new(text.to_owned())
+            .map(|text| FindQuery::new(text, crate::events::FindOptions::default()))
     }
 
     /// The query for a non-empty `text`, for the scan alone.

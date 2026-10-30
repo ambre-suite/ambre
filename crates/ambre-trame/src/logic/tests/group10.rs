@@ -281,7 +281,7 @@ fn a_workbook_replace_keeps_the_active_sheet() {
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
-        query: ambre_bus::app::trame::FindQuery::new(
+        query: find_query(
             "foo".to_owned(),
             crate::FindOptions {
                 sheets: crate::SheetScope::All,

@@ -128,9 +128,9 @@ fn style_applied_mirrors_into_style_state() {
 /// request holds its length alone.
 #[wasm_bindgen_test]
 fn a_replace_request_prints_the_replacement_length_alone() {
-    let query = chrome::FindQuery::new("q".to_owned(), Default::default());
+    let text = ambre_bus::app::find::FindText::new("q".to_owned());
     let request = chrome::ReplaceRequest {
-        query: query.expect("a test query is not empty"),
+        query: chrome::FindQuery::new(text.expect("a test query is not empty"), Default::default()),
         replacement: "salary".to_owned(),
     };
     let printed = format!("{request:?}");

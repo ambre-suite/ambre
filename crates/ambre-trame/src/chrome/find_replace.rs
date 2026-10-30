@@ -147,8 +147,12 @@ pub fn FindReplace(
     // Emit a find request with the current query and options. An empty field
     // sends no query, the "clear" signal: the Logic thread replies with an empty
     // `FindResult`, which wipes the canvas highlight and the counter.
+    let typed_query = move || {
+        ambre_bus::app::find::FindText::new(query.get_untracked())
+            .map(|text| FindQuery::new(text, options()))
+    };
     let emit_find = move || {
-        on_find.run(FindQuery::new(query.get_untracked(), options()));
+        on_find.run(typed_query());
     };
 
     let close = move || {
@@ -163,7 +167,7 @@ pub fn FindReplace(
 
     // An empty query replaces nothing, so it sends no request.
     let replace_request = move || {
-        FindQuery::new(query.get_untracked(), options()).map(|query| ReplaceRequest {
+        typed_query().map(|query| ReplaceRequest {
             query,
             replacement: replacement.get_untracked(),
         })

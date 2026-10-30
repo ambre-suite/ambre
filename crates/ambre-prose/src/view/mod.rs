@@ -453,10 +453,9 @@ pub(crate) mod tests {
         step(
             &mut ui,
             ProseCommand::FindStart {
-                query: crate::events::FindQuery::new(
-                    "needle".to_owned(),
-                    crate::events::FindOptions::default(),
-                ),
+                query: ambre_bus::app::find::FindText::new("needle".to_owned()).map(|text| {
+                    crate::events::FindQuery::new(text, crate::events::FindOptions::default())
+                }),
             },
         );
         assert_eq!(
