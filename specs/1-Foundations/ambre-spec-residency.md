@@ -127,6 +127,9 @@ pub enum MentionScope { Named, All }   // `define_flag!`: the seal keeps its fla
 pub struct ActivityAnchor(Vec<u8>);     // opaque to the foundation, typed by the application
 ```
 
+`ActivityAnchor::new` bounds an anchor to `MAX_ANCHOR_LEN` bytes. Serde reads an anchor with no
+bound, so the seal checks it again and drops one past the bound.
+
 The Sync worker reads the summary with no Loro document and advances the counters (`RESID-014`).
 A member can lie in a summary. The lie costs one false badge, and the document corrects it on open
 (`RESID-011`).

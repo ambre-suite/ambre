@@ -41,9 +41,6 @@ pub async fn media_upload_url(
     if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
     }
-    if !s3::is_valid_content_hash(&req.content_hash) {
-        return Err(AppError::BadRequest("invalid content_hash".into()));
-    }
     // Reject an oversized blob before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
@@ -88,9 +85,6 @@ pub async fn media_download_url(
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !s3::is_valid_content_hash(&req.content_hash) {
-        return Err(AppError::BadRequest("invalid content_hash".into()));
-    }
     // A link is signed only for an object the media index records in this
     // document, never for any well-formed address the caller supplies (`SRV-058`).
     if !db::document_holds_media(&state.db, &doc_id, &req.content_hash).await? {
@@ -135,9 +129,6 @@ pub async fn media_confirm_upload(
     // upload flow would disagree on who may add media.
     if !m.role.can_write_document() {
         return Err(AppError::Forbidden);
-    }
-    if !s3::is_valid_content_hash(&req.content_hash) {
-        return Err(AppError::BadRequest("invalid content_hash".into()));
     }
     // Mirror the upload-url cap so a recorded `media` row can never claim a size
     // the upload path would have refused.
@@ -186,9 +177,6 @@ pub async fn media_erase(
     db::get_document_member(&state.db, &doc_id, &s.user_id)
         .await?
         .ok_or(AppError::Forbidden)?;
-    if !s3::is_valid_content_hash(&content_hash) {
-        return Err(AppError::BadRequest("invalid content_hash".into()));
-    }
     let mut tx = state.db.begin().await?;
     match db::erase_media_claim(&mut tx, &doc_id, &s.user_id, &content_hash).await? {
         db::MediaErase::NotUploader => return Err(AppError::Forbidden),

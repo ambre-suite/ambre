@@ -2476,7 +2476,7 @@ fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
     let b = DisplayElement {
         locked: ambre_bus::app::toile::LockState::Locked,
         style: ElementStyle {
-            stroke_w: ambre_bus::app::toile::StyleLength::new(4.0),
+            stroke_w: ambre_core::StoredBoardLength::new(4.0),
             ..ElementStyle::default()
         },
         ..sticky("b", B)
@@ -2953,18 +2953,19 @@ fn a_dropped_media_request_is_offered_again() {
     rig.view.update();
     let mut picture = sticky("p", Rect::new(0.0, 0.0, 100.0, 100.0));
     picture.kind = ElementKind::Image;
-    picture.geom = ambre_bus::app::toile::DisplayGeom::Image("h".into());
+    let hash = "f".repeat(64);
+    picture.geom = ambre_bus::app::toile::DisplayGeom::Image(ambre_core::ContentHash::parse(&hash));
     rig.show(vec![DisplayNode::Element(picture)]);
     let asks = |sent: &[ToileCommand]| {
         sent.iter()
-            .filter(|c| matches!(c, ToileCommand::RequestMedia { hashes } if hashes.len() == 1 && hashes[0].as_str() == "h"))
+            .filter(|c| matches!(c, ToileCommand::RequestMedia { hashes } if hashes.len() == 1 && hashes[0].as_str() == hash))
             .count()
     };
     assert_eq!(asks(&rig.drain()), 0, "the full queue took the request");
     assert!(rig.view.media_requested.is_empty());
     rig.view.update();
     assert_eq!(asks(&rig.drain()), 1);
-    assert!(rig.view.media_requested.contains("h"));
+    assert!(rig.view.media_requested.contains(hash.as_str()));
     rig.view.update();
     assert_eq!(asks(&rig.drain()), 0, "a request in flight is asked once");
 }
