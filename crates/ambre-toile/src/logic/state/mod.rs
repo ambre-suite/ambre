@@ -703,7 +703,7 @@ impl ToileState {
     /// (`TOILE-092`), and return the display events to repaint. A remote
     /// import is never re-broadcast.
     pub fn apply_remote(&mut self, update: &ambre_core::DeltaBytes) -> Vec<ToileEvent> {
-        self.import_remote(update.as_bytes())
+        self.import_remote(update.into())
     }
 
     /// A snapshot whose contents are trusted, merged the way a remote delta
@@ -714,17 +714,17 @@ impl ToileState {
         &mut self,
         snapshot: &ambre_core::SnapshotBytes,
     ) -> Vec<ToileEvent> {
-        self.import_remote(snapshot.as_bytes())
+        self.import_remote(snapshot.into())
     }
 
     /// The tail of [`apply_remote`](Self::apply_remote): `doc.import` reads a
     /// delta and a snapshot alike.
-    fn import_remote(&mut self, update: &[u8]) -> Vec<ToileEvent> {
+    fn import_remote(&mut self, payload: ambre_core::LoroPayloadRef<'_>) -> Vec<ToileEvent> {
         let deck_before = self.slide_order();
         let notes_before = self.active_notes();
         let dangling_before = self.dangling_connectors();
         self.forget_touched();
-        if let Err(e) = self.doc.import(update) {
+        if let Err(e) = self.doc.import(payload.as_bytes()) {
             tracing::warn!("Toile: remote import failed: {e}");
             return vec![ToileEvent::Error(ToileError::RemoteImportFailed)];
         }

@@ -9,6 +9,8 @@ use loro::{LoroDoc, LoroMap};
 
 use ambre_core::crdt::FieldKey;
 
+use crate::logic::model::{ConnectorId, ElementId, ThreadId};
+
 ambre_core::loro_fields!(pub(crate));
 
 ambre_core::crdt_names! {
@@ -115,11 +117,47 @@ pub(crate) fn config(doc: &LoroDoc) -> Fields<ConfigKey> {
     Fields::of(root_map(doc, Root::PresentationConfig))
 }
 
-/// The entry `id` of the dictionary `dict`, read as a map of the schema `K`.
-/// An absent entry, or one that holds no map, reads as `None`.
+/// A map schema that a root dictionary holds one entry of per id. The id type
+/// then names the schema, so an element id never reads a connector map.
+pub(crate) trait EntrySchema: FieldKey {
+    /// The id that keys one entry.
+    type Id;
+    /// The root dictionary that holds the entries.
+    const ROOT: Root;
+    /// The spelling the dictionary stores the entry of `id` under.
+    fn key(id: &Self::Id) -> &str;
+}
+
+impl EntrySchema for ElementKey {
+    type Id = ElementId;
+    const ROOT: Root = Root::Elements;
+    fn key(id: &ElementId) -> &str {
+        id.as_str()
+    }
+}
+
+impl EntrySchema for ConnectorKey {
+    type Id = ConnectorId;
+    const ROOT: Root = Root::Connectors;
+    fn key(id: &ConnectorId) -> &str {
+        id.as_str()
+    }
+}
+
+impl EntrySchema for ThreadKey {
+    type Id = ThreadId;
+    const ROOT: Root = Root::Comments;
+    fn key(id: &ThreadId) -> &str {
+        id.as_str()
+    }
+}
+
+/// The entry `id` of the root dictionary of `K`, read as a map of the schema
+/// `K`. An absent entry, or one that holds no map, reads as `None`.
 #[must_use]
-pub(crate) fn entry<K: FieldKey>(dict: &LoroMap, id: &str) -> Option<Fields<K>> {
-    dict.get(id)?
+pub(crate) fn entry<K: EntrySchema>(doc: &LoroDoc, id: &K::Id) -> Option<Fields<K>> {
+    root_map(doc, K::ROOT)
+        .get(K::key(id))?
         .into_container()
         .ok()?
         .into_map()
