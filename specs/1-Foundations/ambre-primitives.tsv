@@ -1991,17 +1991,16 @@ ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_all(r
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_one(replacement) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_range(replacement) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/find.rs | crate::logic::find | match_offsets(hay) | param | &str	free-text	text content / label / parser input
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | Annotation.body | field | String	free-text	an annotation's stored map rendered as the canonical text of a fixture dump
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | Annotation.id | field | String	free-text	an annotation id as the store keys it, which the dump replaces by its first mention
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | PlaceNames.0 | field | HashMap<String,String>	newtype-inner	each block id of a dump as its string, mapped to its place label
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | PlaceNames::rename() | ret | String	free-text	a value of a fixture dump, a block id renamed to its place
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | PlaceNames::rename(value) | param | &str	free-text	a value of a fixture dump, which may name a block id
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | ProseState::canonical_dump() | ret | String	free-text	the canonical text dump of a fixture document, a whole document a reader diffs
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename() | ret | String	free-text	a value of a fixture dump, a block id renamed to its place
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename(value) | param | &str	free-text	a value of a fixture dump, which may name a block id
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename_annotations() | ret | String	free-text	the canonical text dump of a fixture document, its annotation ids renamed to stable labels
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename_annotations(annots) | param | Vec<(String,String)>	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | rename_annotations(dump) | param | String	free-text	the canonical text dump of a fixture document, before its annotation ids are renamed
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render() | ret | String	free-text	one decoded CRDT value as the canonical text of a fixture dump
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta() | ret | String	free-text	the text delta of a body, rendered for the canonical dump of a fixture document
-ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | render_delta(names) | param | &HashMap<String,String>	generic	fixtures feature, test support
 ambre-prose | src/logic/ids.rs | crate::logic::ids | IdSequence.0 | field | u64	newtype-inner	the place of an id in a pinned peer's sequence, held under 2^62
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack() | ret | Uuid	generic	the id of a pinned peer's place, before mint wraps it in the annotation kind its caller names
 ambre-prose | src/logic/ids.rs | crate::logic::ids | pack::VARIANT | const | u128	generic	UUID bit layout constants
