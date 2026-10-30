@@ -60,7 +60,7 @@ pub struct Highlight {
 /// peers' positions. Those lists and the layout in force count the text it
 /// holds, so the number carries over. The local draft is not in either.
 pub(crate) const fn answered(offset: DocOffset) -> RunOffset {
-    RunOffset::new(offset.get())
+    RunOffset::from_doc(offset)
 }
 
 /// The span `start..end` the Logic thread answered, on the laid run of its

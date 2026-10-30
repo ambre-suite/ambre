@@ -75,7 +75,7 @@ impl HitOffset {
     /// counts.
     fn of(ui: &ProseUiState, block: BlockId, offset: RunOffset) -> Self {
         if ui.provisional_run(block).is_some() {
-            Self::Drawn(DocOffset::new(offset.get()))
+            Self::Drawn(offset.as_doc())
         } else {
             Self::Laid(offset)
         }
@@ -347,7 +347,7 @@ impl ProseUiState {
                 let drawn = chosen.provisional == PieceRuns::Provisional
                     && self.drawn_provisional_run(id).is_some();
                 let offset = if drawn {
-                    HitOffset::Drawn(DocOffset::new(offset.get()))
+                    HitOffset::Drawn(offset.as_doc())
                 } else {
                     HitOffset::Laid(offset)
                 };
@@ -365,7 +365,7 @@ impl ProseUiState {
             None => RunOffset::ZERO,
         };
         let offset = if chosen.provisional == PieceRuns::Provisional {
-            HitOffset::Drawn(DocOffset::new(offset.get()))
+            HitOffset::Drawn(offset.as_doc())
         } else {
             HitOffset::Laid(offset)
         };
@@ -413,7 +413,7 @@ mod tests {
         // Scroll to a far block no paint ever reached.
         let far = ui.shaped.layout.blocks.len() - 2;
         let page = ui.shaped.layout.blocks[far].page_start;
-        ui.viewport.scroll_y = DocPx::new(ui.column.page_top_y(page).get());
+        ui.viewport.scroll_y = ui.column.page_top_y(page);
         assert_eq!(ui.runs.built(), crate::view::cache::BuildCount::ZERO);
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);

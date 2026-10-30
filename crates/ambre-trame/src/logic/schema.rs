@@ -13,6 +13,8 @@
 
 use std::borrow::Cow;
 
+use ambre_core::SnapshotBytes;
+
 use loro::{ExportMode, LoroDoc, LoroValue};
 use serde::{Deserialize, Serialize};
 
@@ -328,7 +330,7 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
 ///   bytes.
 /// * [`SchemaError::DocumentTooNew`] when a newer client wrote the workbook.
 /// * A migration variant when the chain cannot carry an older workbook.
-pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
+pub fn gate(payload: &SnapshotBytes) -> Result<Cow<'_, SnapshotBytes>, SchemaError> {
     gate_through(MIGRATIONS, payload)
 }
 
@@ -336,10 +338,10 @@ pub fn gate(payload: &[u8]) -> Result<Cow<'_, [u8]>, SchemaError> {
 /// the walk stays proved while [`MIGRATIONS`] holds none.
 fn gate_through<'a>(
     steps: &[SchemaMigration<LoroDoc>],
-    payload: &'a [u8],
-) -> Result<Cow<'a, [u8]>, SchemaError> {
+    payload: &'a SnapshotBytes,
+) -> Result<Cow<'a, SnapshotBytes>, SchemaError> {
     let scratch = LoroDoc::new();
-    scratch.import(payload).map_err(|e| {
+    scratch.import(payload.as_bytes()).map_err(|e| {
         tracing::warn!("[Trame] snapshot rejected by the CRDT engine: {e:?}");
         SchemaError::PayloadRejected
     })?;
@@ -377,7 +379,7 @@ fn gate_through<'a>(
                         to: SCHEMA_VERSION,
                         reason: format!("re-exporting the migrated workbook failed: {e:?}"),
                     })?;
-            Ok(Cow::Owned(bytes))
+            Ok(Cow::Owned(SnapshotBytes::new(bytes)))
         }
     }
 }
@@ -424,7 +426,7 @@ mod tests {
     /// A snapshot of a workbook carrying `version` in its register. A `None`
     /// version writes no register at all, which is every workbook written
     /// before `ARCH P8`.
-    fn snapshot_at(version: Option<SchemaVersion>) -> Vec<u8> {
+    fn snapshot_at(version: Option<SchemaVersion>) -> SnapshotBytes {
         let doc = LoroDoc::new();
         doc.get_map(Root::Sheets.as_str())
             .insert(default_sheet().as_str(), "Sheet1")
@@ -438,7 +440,7 @@ mod tests {
                 .expect("stamp");
         }
         doc.commit();
-        doc.export(ExportMode::Snapshot).expect("snapshot")
+        SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"))
     }
 
     #[test]
@@ -451,7 +453,7 @@ mod tests {
         let bytes = snapshot_at(Some(SCHEMA_VERSION));
         let gated = gate(&bytes).expect("current");
         assert!(matches!(gated, Cow::Borrowed(_)));
-        assert_eq!(&*gated, &bytes[..]);
+        assert_eq!(&*gated, &bytes);
     }
 
     /// The `0 -> 1` step a test registry holds: it stamps the number and
@@ -473,7 +475,7 @@ mod tests {
         let gated = gate_through(&steps, &bytes).expect("version 0 migrates");
         let migrated = LoroDoc::new();
         migrated
-            .import(&gated)
+            .import(gated.as_bytes())
             .expect("the migrated snapshot imports");
         assert_eq!(
             read_version(&migrated).expect("the migrated register reads"),
@@ -527,7 +529,7 @@ mod tests {
         let before = st.export_snapshot();
 
         let err = st
-            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION.next())).into())
+            .import_snapshot(&snapshot_at(Some(SCHEMA_VERSION.next())))
             .expect_err("refused");
 
         assert_eq!(
@@ -625,7 +627,7 @@ mod tests {
             .insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), "two")
             .expect("a register a newer client might have written");
         doc.commit();
-        let bytes = doc.export(ExportMode::Snapshot).expect("snapshot");
+        let bytes = SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"));
         assert!(matches!(
             gate(&bytes).expect_err("refused"),
             SchemaError::VersionUnreadable { .. }
@@ -641,7 +643,7 @@ mod tests {
     #[test]
     fn bytes_the_crdt_engine_refuses_never_reach_the_version_check() {
         assert!(matches!(
-            gate(&[0xFF, 0x00, 0xFF]).expect_err("refused"),
+            gate(&SnapshotBytes::new(vec![0xFF, 0x00, 0xFF])).expect_err("refused"),
             SchemaError::PayloadRejected
         ));
     }
@@ -649,7 +651,7 @@ mod tests {
     #[test]
     fn bytes_the_engine_will_not_read_are_told_apart_from_a_version_refusal() {
         assert_eq!(
-            gate(b"not a loro snapshot").expect_err("rejected"),
+            gate(&SnapshotBytes::new(b"not a loro snapshot".to_vec())).expect_err("rejected"),
             SchemaError::PayloadRejected
         );
     }
