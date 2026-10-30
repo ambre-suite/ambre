@@ -69,8 +69,8 @@ One identity type serves rows, columns and sheets.
 * A cell key joins two halves with `:`: `"{row_uid}:{col_uid}"`, 51 characters, fixed length.
 * A key or a line element reads back from that spelling alone. Another spelling of one uid
   would give it a second key, so a reader refuses it and says so (`TRAME-248`, in the engine
-  feature). A stored
-  formula writes its line uids in compact hex, a separate spelling its own parser reads.
+  feature). A stored formula writes its line uids in compact hex, a separate spelling its own
+  parser reads.
 * A `sheet_id` uses the same rendering, minted from the document `PeerID` and a sheet counter, an
   `IdCounter` too. The implicit first sheet is the constant `"s0"`.
 * `crates/ambre-trame/src/model/sheet_index.rs` holds the type and the parser.

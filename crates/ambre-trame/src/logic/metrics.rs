@@ -99,7 +99,12 @@ impl TrameState {
             .get_value()
         {
             for (key, value) in widths.iter() {
-                let (Some(uid), LoroValue::Double(w)) = (Uid::parse(key), value) else {
+                let Some(uid) = Uid::parse(key) else {
+                    // A key no build writes is said (`TRAME-248`).
+                    self.note_unreadable_key();
+                    continue;
+                };
+                let LoroValue::Double(w) = value else {
                     continue;
                 };
                 if let Some(pos) = self.index.col_pos(&uid) {
@@ -113,7 +118,12 @@ impl TrameState {
             .get_value()
         {
             for (key, value) in heights.iter() {
-                let (Some(uid), LoroValue::Double(h)) = (Uid::parse(key), value) else {
+                let Some(uid) = Uid::parse(key) else {
+                    // A key no build writes is said (`TRAME-248`).
+                    self.note_unreadable_key();
+                    continue;
+                };
+                let LoroValue::Double(h) = value else {
                     continue;
                 };
                 if let Some(pos) = self.index.row_pos(&uid) {
