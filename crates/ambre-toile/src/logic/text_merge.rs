@@ -312,51 +312,155 @@ fn hunks(steps: Vec<Step>, head: CharCount, tag: Side) -> Vec<Hunk> {
     out
 }
 
-/// The entry of a Myers frontier for diagonal `k`.
-fn reach(v: &[isize], k: isize, offset: isize) -> Option<isize> {
-    v.get(usize::try_from(k + offset).ok()?).copied()
+/// A diagonal of the Myers edit graph: the base offset less the side offset
+/// of every point on it, `x - y`. A deletion moves a path one diagonal up,
+/// and an insertion one down. A path of depth `d` thus sits on a diagonal of
+/// `-d..=d`, and a diagonal is signed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Diagonal(isize);
+
+/// A character offset into one text of the Myers edit graph: `x` into the
+/// base, `y` into the side. It is signed because the search subtracts a
+/// diagonal from it. A path past the end of a text holds one too, so the
+/// search reads it as an index only below the text's length.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct GraphOffset(isize);
+
+impl GraphOffset {
+    /// The offset one character further on.
+    fn next(self) -> Self {
+        Self(self.0 + 1)
+    }
+
+    /// The offset as a position of the text it counts into, `None` before
+    /// its start.
+    fn char_offset(self) -> Option<CharOffset> {
+        CharOffset::from_index(usize::try_from(self.0).ok()?)
+    }
 }
 
-/// Whether the path to diagonal `k` at depth `d` comes down from `k + 1`, an
-/// insertion, rather than across from `k - 1`, a deletion.
-fn comes_down(v: &[isize], k: isize, d: isize, offset: isize) -> Option<bool> {
-    if k == -d {
-        return Some(true);
+impl Diagonal {
+    /// The diagonal through base offset `x` and side offset `y`.
+    fn through(x: GraphOffset, y: GraphOffset) -> Self {
+        Self(x.0 - y.0)
     }
-    if k == d {
-        return Some(false);
+
+    /// The diagonal an insertion onto this one leaves.
+    fn before_insert(self) -> Self {
+        Self(self.0 + 1)
     }
-    Some(reach(v, k - 1, offset)? < reach(v, k + 1, offset)?)
+
+    /// The diagonal a deletion onto this one leaves.
+    fn before_delete(self) -> Self {
+        Self(self.0 - 1)
+    }
+
+    /// The side offset of the point on this diagonal at base offset `x`.
+    fn side_at(self, x: GraphOffset) -> GraphOffset {
+        GraphOffset(x.0 - self.0)
+    }
+}
+
+/// The depth of a Myers search: how many edit steps a path has taken. It
+/// never falls below zero.
+#[derive(Clone, Copy)]
+struct Depth(isize);
+
+impl Depth {
+    /// The depths from zero up to `cap`, in order.
+    fn up_to(cap: Self) -> impl Iterator<Item = Self> {
+        (0..=cap.0).map(Self)
+    }
+
+    /// The lowest diagonal a step to this depth reads, `-d - 1`.
+    fn lowest_read(self) -> Diagonal {
+        Diagonal(-self.0 - 1)
+    }
+
+    /// The diagonals a path of this depth can end on, `-d..=d` by twos.
+    fn diagonals(self) -> impl Iterator<Item = Diagonal> {
+        (-self.0..=self.0).step_by(2).map(Diagonal)
+    }
+}
+
+/// The step that last brought a path onto its diagonal.
+#[derive(Clone, Copy)]
+enum Move {
+    /// Down from the diagonal above: the next side character comes in.
+    Insert,
+    /// Across from the diagonal below: the next base character goes.
+    Delete,
+}
+
+/// The furthest base offset a path has reached on diagonal `k` of frontier
+/// `v`, whose first entry is diagonal `lowest`. The search keeps one
+/// frontier from below its cap, and the trace one per depth `d`, from
+/// diagonal `-d - 1`.
+fn reach(v: &[GraphOffset], k: Diagonal, lowest: Diagonal) -> Option<GraphOffset> {
+    v.get(usize::try_from(k.0 - lowest.0).ok()?).copied()
+}
+
+/// The step that brings the furthest path of depth `d` onto diagonal `k` of
+/// frontier `v`: down from `k + 1`, or across from `k - 1`.
+fn last_move(v: &[GraphOffset], k: Diagonal, d: Depth, lowest: Diagonal) -> Option<Move> {
+    if k.0 == -d.0 {
+        return Some(Move::Insert);
+    }
+    if k.0 == d.0 {
+        return Some(Move::Delete);
+    }
+    let across = reach(v, k.before_delete(), lowest)?;
+    let down = reach(v, k.before_insert(), lowest)?;
+    Some(if across < down {
+        Move::Insert
+    } else {
+        Move::Delete
+    })
+}
+
+/// Where the furthest path of depth `d` lands on diagonal `k` of frontier
+/// `v` by its last step, before the run of shared characters. It applies
+/// [`last_move`] and reads each frontier entry once.
+fn first_reach(v: &[GraphOffset], k: Diagonal, d: Depth, lowest: Diagonal) -> Option<GraphOffset> {
+    if k.0 == -d.0 {
+        return reach(v, k.before_insert(), lowest);
+    }
+    let across = reach(v, k.before_delete(), lowest)?.next();
+    if k.0 == d.0 {
+        return Some(across);
+    }
+    Some(across.max(reach(v, k.before_insert(), lowest)?))
 }
 
 /// The shortest edit script from `a` to `b` (Myers, 1986), or `None` past
 /// [`EDIT_CAP`] steps.
+///
+/// The search stays a function of its own. Inlined into [`diff`], it costs
+/// about 6% more instructions at the cap, which the `body_commit_at_cap`
+/// bound of `scripts/instructions.py` counts.
+#[inline(never)]
 fn myers(a: &[char], b: &[char]) -> Option<Vec<Step>> {
-    let n = isize::try_from(a.len()).ok()?;
-    let m = isize::try_from(b.len()).ok()?;
-    let max = isize::try_from((a.len() + b.len()).min(EDIT_CAP)).ok()?;
-    let offset = max + 1;
-    let mut v = vec![0_isize; usize::try_from(2 * max + 3).ok()?];
+    let n = GraphOffset(isize::try_from(a.len()).ok()?);
+    let m = GraphOffset(isize::try_from(b.len()).ok()?);
+    let cap = Depth(isize::try_from((a.len() + b.len()).min(EDIT_CAP)).ok()?);
+    let mut v = vec![GraphOffset(0); usize::try_from(2 * cap.0 + 3).ok()?];
+    let lowest = cap.lowest_read();
     let mut trace = Vec::new();
-    for d in 0..=max {
+    for d in Depth::up_to(cap) {
         // Depth `d` reads diagonals `-d - 1..=d + 1` only, so the trace keeps
         // that window and not the whole frontier. The copy grows with the depth
         // reached, not with the cap.
-        let window =
-            usize::try_from(offset - d - 1).ok()?..=usize::try_from(offset + d + 1).ok()?;
+        let window = usize::try_from(d.lowest_read().0 - lowest.0).ok()?
+            ..=usize::try_from(d.0 + 1 - lowest.0).ok()?;
         trace.push(v.get(window)?.to_vec());
-        for k in (-d..=d).step_by(2) {
-            let mut x = if comes_down(&v, k, d, offset)? {
-                reach(&v, k + 1, offset)?
-            } else {
-                reach(&v, k - 1, offset)? + 1
-            };
-            let mut y = x - k;
-            while x < n && y < m && a.get(x.unsigned_abs()) == b.get(y.unsigned_abs()) {
-                x += 1;
-                y += 1;
+        for k in d.diagonals() {
+            let mut x = first_reach(&v, k, d, lowest)?;
+            let mut y = k.side_at(x);
+            while x < n && y < m && a.get(x.0.unsigned_abs()) == b.get(y.0.unsigned_abs()) {
+                x = x.next();
+                y = y.next();
             }
-            *v.get_mut(usize::try_from(k + offset).ok()?)? = x;
+            *v.get_mut(usize::try_from(k.0 - lowest.0).ok()?)? = x;
             if x >= n && y >= m {
                 return backtrack(&trace, b, n, m);
             }
@@ -366,26 +470,32 @@ fn myers(a: &[char], b: &[char]) -> Option<Vec<Step>> {
 }
 
 /// Walk the frontiers back from the end of both texts to the script. The
-/// frontier kept at depth `d` starts at diagonal `-d - 1`.
-fn backtrack(trace: &[Vec<isize>], b: &[char], n: isize, m: isize) -> Option<Vec<Step>> {
+/// frontier kept at depth `d` starts at diagonal `-d - 1`. Depth zero adds no
+/// step: its path is the run both texts share from the start.
+fn backtrack(
+    trace: &[Vec<GraphOffset>],
+    b: &[char],
+    n: GraphOffset,
+    m: GraphOffset,
+) -> Option<Vec<Step>> {
     let (mut x, mut y) = (n, m);
     let mut steps = Vec::new();
-    for (d, v) in trace.iter().enumerate().rev() {
-        let d = isize::try_from(d).ok()?;
-        let offset = d + 1;
-        let k = x - y;
-        let down = comes_down(v, k, d, offset)?;
-        let prev_k = if down { k + 1 } else { k - 1 };
-        let prev_x = reach(v, prev_k, offset)?;
-        let prev_y = prev_x - prev_k;
-        if d > 0 {
-            let at = CharOffset::from_usize(usize::try_from(prev_x).ok()?);
-            steps.push(if down {
-                Step::Insert(at, *b.get(usize::try_from(prev_y).ok()?)?)
-            } else {
-                Step::Delete(at)
-            });
-        }
+    for (d, v) in trace.iter().enumerate().skip(1).rev() {
+        let d = Depth(isize::try_from(d).ok()?);
+        let k = Diagonal::through(x, y);
+        let lowest = d.lowest_read();
+        let step = last_move(v, k, d, lowest)?;
+        let prev_k = match step {
+            Move::Insert => k.before_insert(),
+            Move::Delete => k.before_delete(),
+        };
+        let prev_x = reach(v, prev_k, lowest)?;
+        let prev_y = prev_k.side_at(prev_x);
+        let at = prev_x.char_offset()?;
+        steps.push(match step {
+            Move::Insert => Step::Insert(at, *b.get(prev_y.char_offset()?.to_usize())?),
+            Move::Delete => Step::Delete(at),
+        });
         x = prev_x;
         y = prev_y;
     }
@@ -483,7 +593,38 @@ mod tests {
         assert!(merged.ends_with(&typed), "the typed text was lost");
     }
 
+    /// The length of the longest common subsequence of `a` and `b`.
+    fn common_subsequence(a: &[char], b: &[char]) -> usize {
+        let mut row = vec![0_usize; b.len() + 1];
+        for x in a {
+            let mut diagonal = 0;
+            for (j, y) in b.iter().enumerate() {
+                let above = row[j + 1];
+                row[j + 1] = if x == y {
+                    diagonal + 1
+                } else {
+                    above.max(row[j])
+                };
+                diagonal = above;
+            }
+        }
+        row[b.len()]
+    }
+
     proptest::proptest! {
+        /// Under the cap the search finds a script, and the shortest one. It
+        /// deletes and inserts every character outside a longest common
+        /// subsequence, and no other.
+        #[test]
+        fn the_search_finds_the_shortest_script(a in "[abc]{1,40}", b in "[abc]{1,40}") {
+            let a: Vec<char> = a.chars().collect();
+            let b: Vec<char> = b.chars().collect();
+            let steps = myers(&a, &b);
+            proptest::prop_assert!(steps.is_some(), "no script under the cap");
+            let shortest = a.len() + b.len() - 2 * common_subsequence(&a, &b);
+            proptest::prop_assert_eq!(steps.map_or(0, |s| s.len()), shortest);
+        }
+
         /// A diff applied to its base rebuilds the other text exactly, on a
         /// small alphabet, so the texts share many characters.
         #[test]

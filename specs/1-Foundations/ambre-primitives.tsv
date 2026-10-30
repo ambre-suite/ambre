@@ -2724,20 +2724,15 @@ ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentatio
 ambre-toile | src/logic/state/reactions.rs | crate::logic::state::reactions | encode() | ret | Result<Vec<u8>,ToileError>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | SEGMENTS_PER_SPAN | const | usize	local	the line segments each spline span is cut into, the loop bound and divisor of one function
 ambre-toile | src/logic/stroke.rs | crate::logic::stroke | catmull_rom(t) | param | f64	math	the spline parameter in 0..1, raised to the polynomial weights
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Depth.0 | field | isize	newtype-inner	the edit steps a Myers path has taken, signed so that the diagonals -d..=d negate it
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Diagonal.0 | field | isize	newtype-inner	a Myers diagonal, the base offset less the side offset, negative below the main diagonal
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | EDIT_CAP | const | usize	local	the most edit steps the Myers search walks before it gives up, read once by that search
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Edit.insert | field | String	free-text	user text being merged
+ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | GraphOffset.0 | field | isize	newtype-inner	a character offset into one text of the Myers edit graph, signed because a diagonal is subtracted from it
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Hunk.text | field | String	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Merge.text | field | String	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | Step::Insert.1 | field | char	free-text	the user character an insertion step adds
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(b) | param | &[char]	free-text	the changed user text as chars, read to fill each insertion
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(m) | param | isize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(n) | param | isize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | backtrack(trace) | param | &[Vec<isize>]	math	the Myers frontier history: the x position reached per diagonal, one row per edit distance
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down() | ret | Option<bool>	local	private Myers step: whether the path comes down (an insertion), read by the two diff loops
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(d) | param | isize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(k) | param | isize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(offset) | param | isize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | comes_down(v) | param | &[isize]	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends(base) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends(stored) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | common_ends(typed) | param | &str	free-text	user text being merged
@@ -2757,10 +2752,6 @@ ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_text(st
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | merge_text(typed) | param | &str	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | myers(a) | param | &[char]	free-text	the source user text as chars
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | myers(b) | param | &[char]	free-text	the target user text as chars
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach() | ret | Option<isize>	math	the x position the Myers frontier reached on one diagonal
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach(k) | param | isize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach(offset) | param | isize	math	diff/merge algorithm index, codepoints throughout
-ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | reach(v) | param | &[isize]	math	diff/merge algorithm index, codepoints throughout
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region() | ret | Option<String>	free-text	user text being merged
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | region(base) | param | &[char]	free-text	the base user text as chars, which a side's hunks apply to
 ambre-toile | src/logic/text_merge.rs | crate::logic::text_merge | run() | ret | &[char]	free-text	a slice of the base user text, copied into the merge
