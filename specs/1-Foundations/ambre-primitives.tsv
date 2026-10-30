@@ -919,6 +919,9 @@ ambre-core | src/search.rs | crate::search | UserSearch.0 | field | String	newty
 ambre-core | src/search.rs | crate::search | UserSearch::as_str() | ret | &str	newtype-inner	the trimmed search text of UserSearch
 ambre-core | src/search.rs | crate::search | UserSearch::new(text) | param | &str	newtype-inner	the query text the fallible constructor of UserSearch trims and checks
 ambre-core | src/seq.rs | crate::seq | <Seq as TryFrom<i64>>::try_from(value) | param | i64	newtype-inner	the i64 the fallible constructor of Seq validates
+ambre-core | src/seq.rs | crate::seq | DeltaCount.0 | field | u64	newtype-inner	DeltaCount newtype
+ambre-core | src/seq.rs | crate::seq | DeltaCount::from_i64(stored) | param | i64	newtype-inner	DeltaCount storage conversion
+ambre-core | src/seq.rs | crate::seq | DeltaCount::to_i64_saturating() | ret | i64	newtype-inner	DeltaCount storage conversion
 ambre-core | src/seq.rs | crate::seq | Seq.0 | field | u64	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/seq.rs | crate::seq | Seq::to_i64_saturating() | ret | i64	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/serde_enums.rs | crate::serde_enums | read_word(parse) | param | impl FnOnce(&str)->Option<T>	generic	generic serde helper
@@ -2038,9 +2041,6 @@ ambre-server | src/db/channels.rs | crate::db::channels | add_channel_member_if_
 ambre-server | src/db/channels.rs | crate::db::channels | decode_kind(word) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/channels.rs | crate::db::channels | finalizable() | ret | bool	generic	predicate result
 ambre-server | src/db/channels.rs | crate::db::channels | segment_locked() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/db/content.rs | crate::db::content | DeltaCount.0 | field | u64	newtype-inner	DeltaCount newtype
-ambre-server | src/db/content.rs | crate::db::content | DeltaCount::from_i64(stored) | param | i64	newtype-inner	DeltaCount storage conversion
-ambre-server | src/db/content.rs | crate::db::content | DeltaCount::to_i64_saturating() | ret | i64	newtype-inner	DeltaCount storage conversion
 ambre-server | src/db/content.rs | crate::db::content | SNAPSHOT_COLUMNS | const | &str	free-text	SQL column list
 ambre-server | src/db/content.rs | crate::db::content | Trim.rows | field | u64	math	row count
 ambre-server | src/db/content.rs | crate::db::content | attach_wire() | ret | Result<bool,AppError>	generic	predicate result

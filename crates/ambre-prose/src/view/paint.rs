@@ -643,7 +643,7 @@ impl ProseUiState {
         // The local selection counts the document, draft included, as the
         // local caret does. A peer's counts what the Logic thread answered.
         let laid = |(at, offset): Spot| (at, self.to_laid(at, offset));
-        let answered = |(at, offset): Spot| (at, crate::view::answered(offset));
+        let answered = |(at, offset): Spot| (at, RunOffset::from_doc(offset));
         if block.local == LocalCaret::Shown
             && let Some((first, last)) = self
                 .cursor
@@ -708,7 +708,7 @@ impl ProseUiState {
             let colour = ambre_draw::peer_color(&peer.user_id);
             let caret = to_rect(
                 placed,
-                &data.caret_box(crate::view::answered(peer.position.offset)),
+                &data.caret_box(RunOffset::from_doc(peer.position.offset)),
             );
             surface.fill_rect(
                 Rect::new(caret.x0, caret.y0, caret.x0 + CARET_WIDTH.get(), caret.y1),

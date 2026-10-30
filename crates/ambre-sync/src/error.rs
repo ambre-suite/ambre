@@ -95,8 +95,6 @@ pub(crate) enum Part {
     SealedChannelKey,
     /// The join head of a public channel, which names no last entry.
     JoinHead,
-    /// The address of a media blob.
-    MediaAddress,
 }
 
 impl std::fmt::Display for Part {
@@ -107,7 +105,6 @@ impl std::fmt::Display for Part {
             Self::WrappedKey => "the wrapped key",
             Self::SealedChannelKey => "the sealed channel key",
             Self::JoinHead => "the join head",
-            Self::MediaAddress => "the media address",
         })
     }
 }

@@ -53,9 +53,51 @@ impl TryFrom<i64> for Seq {
     }
 }
 
+impl Seq {
+    /// The deltas the relay numbered after `earlier`, up to this number. Zero
+    /// when this number is not past `earlier`.
+    #[must_use]
+    pub const fn since(self, earlier: Self) -> DeltaCount {
+        DeltaCount(self.0.saturating_sub(earlier.0))
+    }
+}
+
+/// A number of deltas of one document: the rows of its inline tail, or the
+/// updates the relay numbered past a snapshot.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub struct DeltaCount(pub u64);
+
+impl DeltaCount {
+    /// The count as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
+    pub fn to_i64_saturating(self) -> i64 {
+        i64::try_from(self.0).unwrap_or(i64::MAX)
+    }
+
+    /// A count Postgres returned. A negative value, which no `COUNT` returns,
+    /// reads as zero.
+    pub fn from_i64(stored: i64) -> Self {
+        Self(u64::try_from(stored).unwrap_or(0))
+    }
+
+    /// The count with one more row, saturating at `u64::MAX`.
+    #[must_use]
+    pub const fn plus_one(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Seq;
+    use super::{DeltaCount, Seq};
+
+    /// The history past a horizon counts the deltas after it, and a horizon
+    /// ahead of the number reads as no history rather than wrapping.
+    #[test]
+    fn the_deltas_since_a_number_saturate_at_zero() {
+        assert_eq!(Seq(532).since(Seq(32)), DeltaCount(500));
+        assert_eq!(Seq(7).since(Seq(7)), DeltaCount(0));
+        assert_eq!(Seq(3).since(Seq(9)), DeltaCount(0));
+    }
 
     #[test]
     fn the_number_before_the_start_is_the_start() {

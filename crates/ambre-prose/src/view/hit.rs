@@ -317,9 +317,7 @@ impl ProseUiState {
             let x = x_in_page - layout.margin_left - run.indent();
             return Some((
                 new_block,
-                HitOffset::Drawn(DocOffset::new(
-                    run.offset_at(DocPoint::new(x, y_body - at.top)).get(),
-                )),
+                HitOffset::Drawn(run.offset_at(DocPoint::new(x, y_body - at.top)).as_doc()),
             ));
         }
         let mut chosen: Option<&crate::view::provisional::Piece> = None;

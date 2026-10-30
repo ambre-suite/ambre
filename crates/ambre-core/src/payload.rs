@@ -109,6 +109,15 @@ define_payload! {
     SnapshotBytes
 }
 
+impl SnapshotBytes {
+    /// The state as the plaintext a vault seals. The bytes move into the
+    /// wrapper that wipes them, and no copy stays behind.
+    #[must_use]
+    pub fn into_secret(self) -> crate::SecretBytes {
+        crate::SecretBytes::new(self.into_bytes())
+    }
+}
+
 define_payload! {
     /// One peer's presence as the engine encodes it, kept by nothing after
     /// delivery.

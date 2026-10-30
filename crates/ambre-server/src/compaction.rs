@@ -33,7 +33,7 @@ pub fn past_threshold(
     horizon: ambre_core::Seq,
     threshold: db::DeltaCount,
 ) -> bool {
-    db::DeltaCount(seq.0.saturating_sub(horizon.0)) >= threshold
+    seq.since(horizon) >= threshold
 }
 
 /// Whether delta `seq` is one the write path compares to the threshold: one

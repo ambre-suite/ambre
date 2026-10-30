@@ -66,12 +66,17 @@ impl MediaAddress {
         ContentHash(hex::encode(self.0))
     }
 
-    /// Reads an address back from its hex spelling, or `None` when `hash` is
-    /// no address of this width.
+    /// Reads an address back from its hex spelling. A [`ContentHash`] holds
+    /// sixty-four lowercase hex characters by construction, so every hash
+    /// spells exactly one address.
     #[must_use]
-    pub fn parse(hash: &ContentHash) -> Option<Self> {
-        let bytes: [u8; MEDIA_ADDRESS_LEN] = hex::decode(hash.as_str()).ok()?.try_into().ok()?;
-        Some(Self(bytes))
+    pub fn of_hash(hash: &ContentHash) -> Self {
+        let mut bytes = [0u8; MEDIA_ADDRESS_LEN];
+        // The decode fails only on a wrong length or a non-hex byte, and the
+        // check of `ContentHash` refuses both before a hash exists.
+        let decoded = hex::decode_to_slice(&hash.0, &mut bytes);
+        debug_assert!(decoded.is_ok(), "a ContentHash spells an address");
+        Self(bytes)
     }
 }
 
@@ -268,7 +273,7 @@ mod tests {
         let address = MediaAddress::from_array([0xab; 32]);
         let hash = address.content_hash();
         assert_eq!(hash.as_str(), "ab".repeat(32));
-        assert_eq!(MediaAddress::parse(&hash), Some(address));
+        assert_eq!(MediaAddress::of_hash(&hash), address);
     }
 
     /// The constructor and serde refuse an uppercase spelling and a wrong

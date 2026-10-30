@@ -321,7 +321,7 @@ impl CssPx {
     /// CSS pixel in size (`CANVAS-032`), so a length crosses one for one. A
     /// coordinate takes [`CssPx::in_canvas`] instead.
     #[must_use]
-    pub fn view_length(self) -> ViewPx {
+    pub const fn view_length(self) -> ViewPx {
         ViewPx(self.0)
     }
 }
@@ -338,7 +338,7 @@ impl SurfacePx {
     /// so a length carries over as it is. A coordinate goes through
     /// [`Self::in_view`] instead.
     #[must_use]
-    pub fn view_length(self) -> ViewPx {
+    pub const fn view_length(self) -> ViewPx {
         ViewPx(self.0 as f32)
     }
 }

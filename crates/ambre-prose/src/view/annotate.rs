@@ -12,11 +12,11 @@ use ambre_core::{CommentId, DocPoint, DocPx, SuggestionId, ViewPoint, ViewPx};
 use crate::events::{
     BlockId, CommentThread, LinkSpan, PageIndex, ProseCommand, SuggestionKind, tree_id,
 };
-use crate::layout::run::RunSpan;
+use crate::layout::run::{RunOffset, RunSpan};
 use crate::ui::ProseUiState;
+use crate::view::answered_span;
 use crate::view::column::DocPos;
 use crate::view::hit::{Fragment, fragment};
-use crate::view::{answered, answered_span};
 
 /// A rectangle on the canvas, in pixels of the view.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -384,7 +384,7 @@ impl ProseUiState {
                     .blocks
                     .get(&layout.block_id)?
                     .data()
-                    .caret_box(answered(thread.anchor_start));
+                    .caret_box(RunOffset::from_doc(thread.anchor_start));
                 let top = DocPx::new(caret.y0 as f32);
                 let (page, piece) = self.fragment_at(block, top)?;
                 let at = self.to_screen(block, page, piece, DocPoint::new(DocPx::ZERO, top));

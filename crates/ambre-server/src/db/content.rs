@@ -76,28 +76,7 @@ ambre_core::define_tally! {
     pub struct SnapshotCount;
 }
 
-/// A number of delta rows in a document's inline tail.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DeltaCount(pub u64);
-
-impl DeltaCount {
-    /// The count as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
-    pub fn to_i64_saturating(self) -> i64 {
-        i64::try_from(self.0).unwrap_or(i64::MAX)
-    }
-
-    /// A count Postgres returned. A negative value, which no `COUNT` returns,
-    /// reads as zero.
-    pub fn from_i64(stored: i64) -> Self {
-        Self(u64::try_from(stored).unwrap_or(0))
-    }
-
-    /// The count with one more row, saturating at `u64::MAX`.
-    #[must_use]
-    pub const fn plus_one(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
-}
+pub use ambre_core::DeltaCount;
 
 /// The bounds of a document's inline tail (`SRV-150`).
 #[derive(Debug, Clone, Copy)]
