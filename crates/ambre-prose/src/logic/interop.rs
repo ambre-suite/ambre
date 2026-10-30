@@ -499,7 +499,7 @@ impl ProseState {
         data: &ambre_core::FileBytes,
     ) -> ProseOutcome {
         let ImportFormat::Markdown = format;
-        let (ir, report) = match markdown_read::read(data.as_bytes()) {
+        let (ir, report) = match markdown_read::read(data) {
             Ok(read) => read,
             Err(e) => return ProseOutcome::refused(ProseRefusal::Interop(e)),
         };

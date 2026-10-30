@@ -30,19 +30,19 @@ pub const MAX_LIST_DEPTH: ListDepth = ListDepth::new(16);
 
 pub use crate::numbering::ListDepth;
 
-/// Read `bytes` as Markdown.
+/// Read the bytes of `file` as Markdown.
 ///
 /// # Errors
 ///
 /// [`InteropError::TooLarge`] past [`MAX_SIZE`], and
 /// [`InteropError::ParseFailed`] for bytes that are not UTF-8. Every string of
 /// text is some Markdown document, so nothing else fails.
-pub fn read(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
-    let size = ambre_core::ByteSize::of_len(bytes.len());
+pub fn read(file: &ambre_core::FileBytes) -> Result<(ProseIr, ConversionReport), InteropError> {
+    let size = file.size();
     if size > MAX_SIZE {
         return Err(InteropError::TooLarge(size));
     }
-    let text = std::str::from_utf8(bytes)
+    let text = std::str::from_utf8(file.as_bytes())
         .map_err(|e| InteropError::ParseFailed(format!("the file is not UTF-8 text: {e}")))?;
     let options = Options::ENABLE_TABLES
         | Options::ENABLE_STRIKETHROUGH
@@ -476,8 +476,13 @@ mod tests {
     use crate::interop::markdown_write;
     use ambre_bus::app::prose::{ConversionWarning, MarkdownFlavor};
 
+    /// [`read`] over a file of `bytes`.
+    fn read_bytes(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
+        read(&ambre_core::FileBytes::new(bytes.to_vec()))
+    }
+
     fn blocks(markdown: &str) -> Vec<IrBlock> {
-        read(markdown.as_bytes()).expect("reads").0.blocks
+        read_bytes(markdown.as_bytes()).expect("reads").0.blocks
     }
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
@@ -561,7 +566,8 @@ mod tests {
     /// quote's text is kept.
     #[test]
     fn an_unknown_element_is_reported_and_its_text_kept() {
-        let (ir, report) = read(b"> quoted\n\n<div>raw</div>\n\n![alt](x.png)\n").expect("reads");
+        let (ir, report) =
+            read_bytes(b"> quoted\n\n<div>raw</div>\n\n![alt](x.png)\n").expect("reads");
         assert_eq!(ir.blocks, vec![para(vec![IrRun::plain("quoted")])]);
         let dropped: Vec<_> = report
             .warnings
@@ -579,11 +585,11 @@ mod tests {
     #[test]
     fn bytes_that_are_not_text_fail_typed() {
         assert!(matches!(
-            read(&[0xff, 0xfe, 0x00]),
+            read_bytes(&[0xff, 0xfe, 0x00]),
             Err(InteropError::ParseFailed(_))
         ));
         assert!(matches!(
-            read(&vec![b'a'; MAX_SIZE.as_len() + 1]),
+            read_bytes(&vec![b'a'; MAX_SIZE.as_len() + 1]),
             Err(InteropError::TooLarge(_))
         ));
     }
@@ -596,7 +602,7 @@ mod tests {
             markdown.push_str(&"  ".repeat(depth));
             markdown.push_str("- x\n");
         }
-        let (ir, report) = read(markdown.as_bytes()).expect("reads");
+        let (ir, report) = read_bytes(markdown.as_bytes()).expect("reads");
         fn depth(blocks: &[IrBlock]) -> usize {
             blocks
                 .iter()
@@ -620,7 +626,7 @@ mod tests {
     #[test]
     fn what_the_writer_writes_the_reader_reads_back() {
         let source = "## Plan\n\nA *b* **c** ~~d~~ `e` [f](https://g.org)\n\n1. one\n   - two\n\n- [ ] three\n\n| h | i |\n| --- | --- |\n| j | k |\n\n```\ncode\n```\n\n---\n";
-        let (ir, _) = read(source.as_bytes()).expect("reads");
+        let (ir, _) = read_bytes(source.as_bytes()).expect("reads");
         let (written, _) = markdown_write::write(&ir, MarkdownFlavor::Gfm);
         assert_eq!(written, source);
     }
