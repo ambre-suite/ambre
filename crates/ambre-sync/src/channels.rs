@@ -1015,13 +1015,11 @@ pub(crate) fn unseal_channel_key(
     sealed: &SealedChannelKey,
     keys: &crate::chain::Keyring,
 ) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), SyncError> {
-    let short = SyncError::Malformed(Part::SealedChannelKey);
-    let key_id = sealed.key_id().ok_or(short)?;
-    let space_key = keys.find(key_id).ok_or(SyncError::KeyOutOfReach)?;
-    let space_key = &space_key;
-    let (_, nonce, ciphertext) = sealed
+    let (key_id, nonce, ciphertext) = sealed
         .split()
         .ok_or(SyncError::Malformed(Part::SealedChannelKey))?;
+    let space_key = keys.find(key_id).ok_or(SyncError::KeyOutOfReach)?;
+    let space_key = &space_key;
     let (key, anchor) = ambre_crypto::aead::open_anchored_key(
         &nonce,
         &ciphertext,

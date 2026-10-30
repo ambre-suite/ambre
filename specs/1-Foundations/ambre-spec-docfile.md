@@ -230,7 +230,7 @@ pub fn read_ambre_plaintext_as(expected: DocType, file: &PlaintextContainer)
     -> Result<AmbreHeader, DocFileError>;
 
 /// The strict layout parse: current version only, no recovery. Used by the two
-/// above and by anything reading raw bytes -- a header dump, a migration step
+/// above and by any reader of one container -- a header dump, a migration step
 /// checking its own output.
 pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError>;
 

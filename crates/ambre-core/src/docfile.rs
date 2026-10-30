@@ -385,7 +385,7 @@ pub fn write_ambre_plaintext(
 /// Parse the header at the current version exactly, with no recovery: an older
 /// file earns [`DocFileError::UnsupportedVersion`] rather than a migration.
 ///
-/// The container half of the read path, for callers that inspect raw bytes -- a
+/// The container half of the read path, for any reader of one container -- a
 /// header dump, a migration step validating its own output. The ordinary entry
 /// points are [`read_ambre_plaintext`] and [`read_ambre_plaintext_as`].
 ///
@@ -1086,6 +1086,26 @@ mod tests {
         assert_eq!(
             read_ambre_plaintext(&plain(&future)),
             Err(DocFileError::SealedFile)
+        );
+    }
+
+    #[test]
+    fn a_picked_file_takes_the_role_its_version_byte_names() {
+        let plaintext = sample(DocType::Trame);
+        assert_eq!(
+            picked(&plaintext).into_lineage(),
+            crate::PickedFile::Plaintext(plain(&plaintext))
+        );
+        let sealed_bytes = sealed_sample();
+        assert_eq!(
+            picked(&sealed_bytes).into_lineage(),
+            crate::PickedFile::Sealed(sealed(&sealed_bytes))
+        );
+        // Bytes classify refuses go on as plaintext, whose reader names the
+        // refusal.
+        assert_eq!(
+            picked(b"AMB").into_lineage(),
+            crate::PickedFile::Plaintext(plain(b"AMB"))
         );
     }
 

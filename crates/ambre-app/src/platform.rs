@@ -707,16 +707,12 @@ fn read_ambre_file(
         // needs a passphrase this thread must ask for, and a key the Sync
         // worker derives. So the bytes go to the caller's prompt, and the
         // plaintext path below resumes on what comes back (`DOCFILE-015`).
-        if matches!(
-            ambre_core::classify(&picked),
-            Ok(ambre_core::ContainerKind::Sealed(_))
-        ) {
-            on_sealed.run(picked.into_sealed());
-            return;
+        match picked.into_lineage() {
+            ambre_core::PickedFile::Sealed(file) => on_sealed.run(file),
+            // The per-frame relay holds the store's seal, and resumes from
+            // here (`RESID-025`).
+            ambre_core::PickedFile::Plaintext(file) => opened.set(Some(OpenedFile(file))),
         }
-        // The per-frame relay holds the store's seal, and resumes from here
-        // (`RESID-025`).
-        opened.set(Some(OpenedFile(picked.into_plaintext())));
     });
 }
 

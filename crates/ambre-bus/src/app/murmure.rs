@@ -1124,8 +1124,25 @@ pub enum SpaceEvent {
 
 #[cfg(test)]
 mod tests {
-    use super::{MurmureCommand, Topic};
-    use ambre_core::SegmentId;
+    use super::{MurmureCommand, SealedChannelKey, Topic};
+    use ambre_core::{Ciphertext, KeyId, Nonce, SegmentId};
+
+    /// A split gives back the parts a join wrote. Bytes too short to hold a
+    /// key id and a nonce give nothing.
+    #[test]
+    fn a_sealed_channel_key_splits_into_the_parts_it_joined() {
+        let (key_id, nonce) = (KeyId::from_array([3; 16]), Nonce([7; 24]));
+        let ciphertext = Ciphertext(b"sealed".to_vec());
+        let sealed = SealedChannelKey::from_parts(key_id, &nonce, &ciphertext);
+        assert_eq!(sealed.key_id(), Some(key_id));
+        assert_eq!(sealed.split(), Some((key_id, nonce, ciphertext)));
+        let empty = SealedChannelKey::from_parts(key_id, &nonce, &Ciphertext(Vec::new()));
+        assert_eq!(empty.split(), Some((key_id, nonce, Ciphertext(Vec::new()))));
+        let short = SealedChannelKey::from_bytes(vec![3; 39]);
+        assert_eq!(short.key_id(), Some(key_id));
+        assert_eq!(short.split(), None);
+        assert_eq!(SealedChannelKey::from_bytes(vec![3; 15]).key_id(), None);
+    }
 
     /// A retry fetches again what the channel already holds: it writes no
     /// document, so a read-only member sends it too.
