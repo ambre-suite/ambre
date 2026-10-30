@@ -23,7 +23,6 @@ use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
 use crate::doc::{self, StoredLevel};
 use crate::events::{BlockId, ProseEvent, ProseOutcome, block_id, tree_id};
-use crate::link::HREF_MAX;
 use crate::mark::{self, FORMATTING_KEYS, MarkRoot};
 use ambre_bus::app::prose::{BlockType, MarkKey};
 
@@ -181,7 +180,7 @@ fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
 /// that runs.
 fn safe_link(href: &str) -> bool {
     let lower = href.get(..8).unwrap_or(href).to_ascii_lowercase();
-    ambre_core::ByteSize::of_len(href.len()) <= HREF_MAX
+    crate::link::within_href_max(ambre_core::ByteSize::of_len(href.len()))
         && ["http://", "https://", "mailto:"]
             .iter()
             .any(|scheme| lower.starts_with(scheme))
@@ -480,6 +479,7 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockInit, ProseCommand};
+    use crate::link::HREF_MAX;
     use crate::view::tests::append;
     use ambre_bus::app::prose::OrderedStyle;
     use ambre_bus::app::prose::{DocOffset, DocSpan};

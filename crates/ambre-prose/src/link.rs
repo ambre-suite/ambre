@@ -92,10 +92,11 @@ impl OpenableScheme {
 /// bytes (`PROSE-UI-234`, `PROSE-IO-069`).
 pub(crate) const HREF_MAX: ambre_core::ByteSize = ambre_core::ByteSize(2048);
 
-/// Whether a link's target fits [`HREF_MAX`]. A writer writes a longer one as
-/// its text alone.
-pub(crate) fn within_href_max(url: &ambre_core::LinkUrl) -> bool {
-    url.size() <= HREF_MAX
+/// Whether a link's target of `size` fits [`HREF_MAX`]. A writer writes a
+/// longer one as its text alone. A paste, a copy and an export all ask here,
+/// so the three cannot drift apart.
+pub(crate) fn within_href_max(size: ambre_core::ByteSize) -> bool {
+    size <= HREF_MAX
 }
 
 /// Whether a link's target may be handed to the host (`PROSE-UI-186`).

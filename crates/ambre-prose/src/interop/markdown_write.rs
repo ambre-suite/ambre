@@ -361,7 +361,7 @@ impl Writer {
         if let Some(url) = run
             .link
             .as_ref()
-            .filter(|url| crate::link::openable(url) && crate::link::within_href_max(url))
+            .filter(|url| crate::link::openable(url) && crate::link::within_href_max(url.size()))
         {
             wanted.push(Delimiter::Link(url.clone()));
         }
