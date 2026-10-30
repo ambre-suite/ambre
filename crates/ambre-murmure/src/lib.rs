@@ -31,6 +31,7 @@ pub mod markers;
 mod members;
 mod mention;
 pub mod mention_list;
+pub mod notices;
 mod opening;
 pub mod paint;
 pub mod pictures;

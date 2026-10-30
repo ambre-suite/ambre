@@ -26,7 +26,7 @@
 | `murmure-attachments` | A member drops a file or an image into a message. | partial | 14 |  |
 | `murmure-channels` | A few people talk where nobody else reads: a private channel of a space, or a direct message between two or more members. | partial | 54 |  |
 | `murmure-emoji` | A member writes an emoji in a message, or reacts with one, from a picker. | partial | 14 |  |
-| `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 27 |  |
+| `murmure-layout` | Murmure shows the channels, the conversation and a thread side by side on a desktop, and one of them at a time on a phone. | partial | 28 |  |
 | `murmure-members` | A member sees who else belongs to the space, who is online, and writes to any of them in one gesture. | partial | 23 |  |
 | `murmure-message-list` | The conversation of a channel, newest at the bottom. | partial | 39 |  |
 | `murmure-notifications` | A member learns that someone mentioned them or wrote to them directly. | partial | 19 |  |
@@ -44,4 +44,4 @@
 | `murmure-pins` | A member pins a message for every member of the channel: a decision, a link, the rules of the room. | design-only | 10 |  |
 | `murmure-sidebar` | Each member arranges the channel list for themselves: groups and order of their own, channels muted or hidden, and messages bookmarked. | design-only | 16 |  |
 
-**28 features: 8 implemented, 11 partial, 9 design-only. 557 contract rows, 0 loose.**
+**28 features: 8 implemented, 11 partial, 9 design-only. 558 contract rows, 0 loose.**
