@@ -74,7 +74,8 @@ impl MediaAddress {
         let mut bytes = [0u8; MEDIA_ADDRESS_LEN];
         // The decode fails only on a wrong length or a non-hex byte, and the
         // check of `ContentHash` refuses both before a hash exists.
-        let _ = hex::decode_to_slice(&hash.0, &mut bytes);
+        let decoded = hex::decode_to_slice(&hash.0, &mut bytes);
+        debug_assert!(decoded.is_ok(), "a ContentHash spells an address");
         Self(bytes)
     }
 }

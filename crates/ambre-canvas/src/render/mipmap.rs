@@ -27,7 +27,13 @@ pub struct MipLevel {
 
 /// The bytes level 0 of an image of `size` holds: four per pixel, RGBA8.
 pub fn level0_size(size: ImageSize) -> ByteSize {
-    ByteSize::of_len((size.width.get() as usize) * (size.height.get() as usize) * 4)
+    // In `u64` and saturating: a `usize` product wraps on wasm32 for a large
+    // declared size, and a wrapped size would admit a short buffer.
+    ByteSize(
+        u64::from(size.width.get())
+            .saturating_mul(u64::from(size.height.get()))
+            .saturating_mul(4),
+    )
 }
 
 /// Build the levels *below* level 0 by repeated 2x2 box reduction, stopping at
