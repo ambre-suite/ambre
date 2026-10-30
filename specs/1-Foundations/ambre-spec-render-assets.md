@@ -34,6 +34,8 @@ status values are normative in `ambre-spec-template.md`. The prefix is `CANVAS`,
 | `CANVAS-051` | `INV` | A font MUST be fetched from the same origin. | this spec section 3; `UI-THREAD-004` | `ambre_canvas::fonts::tests::every_face_is_fetched_from_the_page_origin` -- every base and lazy face path, refused a scheme or a host | none | verified |
 | `CANVAS-019` | `OBS` | A layout mixing text and colour emoji MUST paint both: a colour glyph through the colour atlas, a mask glyph through the alpha atlas. | this spec section 2 | `ambre_canvas::render::atlas::tests::an_emoji_rasterizes_to_colour_and_a_letter_to_a_mask` -- the raster; `ambre_canvas::render::surface::tests::a_mask_glyph_and_a_colour_glyph_land_in_their_own_batch` -- the batch each one is drawn through | none | verified |
 | `CANVAS-020` | `INV` | The colour atlas MUST NOT be allocated at full size before the first colour glyph appears. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_canvas::render::atlas::tests::the_color_atlas_is_grown_only_for_a_color_glyph` -- no request without a colour glyph, one with the first | none | verified |
+| `CANVAS-087` | `INV` | A glyph whose raster size exceeds the atlas side MUST NOT reach Swash, and the atlas MUST allocate nothing for it. | this spec section 2; `ambre-spec-budgets.md section 6` | `ambre_canvas::render::atlas::tests::a_raster_past_the_atlas_side_is_refused_before_swash` -- one pixel past the side, a million, infinity and NaN give no raster, and the side itself rasterizes | none | verified |
+| `CANVAS-088` | `INV` | A stored font size past the cap MUST read as the cap, never as a decode error. | this spec section 2; `PROSE-FEAT-022` | `ambre_core::font::tests::a_size_past_the_cap_reads_as_the_cap` -- a million points decode as the cap, and an in-range size keeps its bytes; `ambre_bus::app::toile::tests::a_size_choice_past_the_cap_reads_as_the_cap` -- the same for a Toile text size | none | verified |
 | `CANVAS-007` | `INV` | Every decoded image MUST pass through one bounded cache, whichever application decoded it. | this spec section 2; `ambre-spec-budgets.md section 6` | not built | unbuilt -- lands with the `One media cache` Story (`ambre-roadmap.md` E8). Toile holds a `MediaCache` in its own Logic module, and Murmure a shelf of its own in the view | unimplemented |
 | `CANVAS-023` | `INV` | An icon MUST stay a vector buffer: it MUST NOT be rasterized into a bitmap atlas. | this spec section 2 | not built | unbuilt -- lands with the `The icon pipeline` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `CANVAS-024` | `INV` | An icon MUST be tessellated at build time, never on the frame path. | this spec section 2 | not built | unbuilt -- lands with the `The icon pipeline` Story (`ambre-roadmap.md` E6) | unimplemented |
@@ -68,7 +70,7 @@ keep the allocation where it is.
 * **Boundary.** the font fetch is the one network path this layer opens, same-origin by
   `CANVAS-018` and the single exception `UI-THREAD-004` names to the UI thread's ban. This layer
   holds no key and reaches no relay.
-* **Verification.** 18 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven on
+* **Verification.** 20 `verified`, 3 `unimplemented`. The atlases and the layout cache are driven on
   the host past their capacity, and what survives is compared with what it drew before. The font
   fetch and its origin are read from the paths, and a source gate refuses an embedded face. The send
   of a late face runs in the browser tier, through the function the boot send calls.
@@ -137,7 +139,10 @@ of ours.
    A hit costs nothing; a miss shapes (`CANVAS-022`).
 2. every string the cache shapes is offered to the lazy loader. It fetches a face the first time it
    sees a codepoint the base faces cannot cover (`CANVAS-006`).
-3. Swash rasterizes each glyph, keyed on the font blob id, the glyph id and the size.
+3. Swash rasterizes each glyph, keyed on the font blob id, the glyph id and the size. A peer
+   writes the size, so `FontSize` reads a stored size past 1638 points as 1638 (`CANVAS-088`).
+   A zoom can still multiply that size, so the atlas refuses a raster past its side before Swash
+   allocates the mask (`CANVAS-087`).
 4. the glyph lands in one of two atlases, and its slot records which (`CANVAS-019`).
 
 | Atlas | Format | Size | Holds | Allocation |

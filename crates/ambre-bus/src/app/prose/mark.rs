@@ -99,7 +99,7 @@ const COLOR_KEYS: [MarkRoot; 2] = [MarkRoot::Ink, MarkRoot::Highlight];
 /// The smallest font size a mark may carry.
 const FONT_SIZE_MIN: FontSize = FontSize::from_whole_points(1);
 /// The largest font size the office formats round-trip.
-const FONT_SIZE_MAX: FontSize = FontSize::from_whole_points(1638);
+const FONT_SIZE_MAX: FontSize = FontSize::MAX;
 
 /// Why a mark value was refused before the document was touched
 /// (`PROSE-FEAT-022`).
@@ -163,9 +163,12 @@ pub fn canonical_color(rgba: Rgba) -> String {
 pub fn parse_font_size(raw: &str) -> Result<FontSize, MarkValueError> {
     let bad = || MarkValueError::BadFontSize(raw.to_owned());
     let points = raw.parse::<f32>().map_err(|_| bad())?;
-    FontSize::new(points)
-        .filter(|size| (FONT_SIZE_MIN..=FONT_SIZE_MAX).contains(size))
-        .ok_or_else(bad)
+    // `FontSize::new` reads a size past the cap as the cap, so the range is
+    // checked on the typed number: a command is refused, never cut.
+    if !(FONT_SIZE_MIN.points()..=FONT_SIZE_MAX.points()).contains(&points) {
+        return Err(bad());
+    }
+    FontSize::new(points).ok_or_else(bad)
 }
 
 /// A mark value in the one spelling the grammar of its key allows. It is the

@@ -564,6 +564,7 @@ impl GlyphAtlas {
     /// Look up a glyph in the cache. If absent, rasterize it via Swash and
     /// queue the bitmap for upload. Returns `None` for invisible glyphs (for example
     /// whitespace) or if the atlas just became full (will clear next frame).
+    /// A size past the atlas side also gives `None` (`CANVAS-087`).
     pub fn get_or_rasterize(
         &mut self,
         font_data: &parley::FontData,
@@ -608,6 +609,10 @@ impl GlyphAtlas {
 /// The caller passes the logical size times the density (`CANVAS-033`). A
 /// colour glyph comes back as straight-alpha RGBA, anything else as an R8
 /// coverage mask.
+///
+/// A size whose em exceeds the atlas side, or is not a number, gives `None`
+/// before Swash runs (`CANVAS-087`). Swash allocates a mask of about the size
+/// squared, and such a glyph could not be packed anyway.
 pub(super) fn rasterize(
     scale_cx: &mut swash::scale::ScaleContext,
     font: swash::FontRef<'_>,
@@ -615,6 +620,9 @@ pub(super) fn rasterize(
     normalized_coords: &[swash::NormalizedCoord],
     glyph: GlyphId,
 ) -> Option<Raster> {
+    if size.get().is_nan() || size.get() > ATLAS_SIZE as f32 {
+        return None;
+    }
     // Source order: an embedded colour bitmap (CBDT emoji), then a colour
     // outline (COLR), then the plain outline. `Format::Alpha` only governs how
     // outlines are rasterized; it never flattens a colour bitmap to a mask.
@@ -765,6 +773,23 @@ mod tests {
             dense.w,
             logical.w
         );
+    }
+
+    /// A raster whose em cannot fit the atlas side is refused before Swash
+    /// allocates its mask, so `get_or_rasterize` returns `None` (`CANVAS-087`).
+    #[test]
+    fn a_raster_past_the_atlas_side_is_refused_before_swash() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
+        let bytes = std::fs::read(format!("{dir}NotoSans-Regular.ttf")).expect("a shipped face");
+        let font = swash::FontRef::from_index(&bytes, 0).expect("a parsable face");
+        let glyph = GlyphId::new(font.charmap().map('H'));
+        let mut scale_cx = swash::scale::ScaleContext::new();
+        for size in [ATLAS_SIZE as f32 + 1.0, 1.0e6, f32::INFINITY, f32::NAN] {
+            let raster = rasterize(&mut scale_cx, font, RasterSize::new(size), &[], glyph);
+            assert!(raster.is_none(), "{size}");
+        }
+        let at_side = raster_of("NotoSans-Regular.ttf", 'H', ATLAS_SIZE as f32);
+        assert!(at_side.h > 0);
     }
 
     /// An emoji rasterizes to colour and a letter to a mask, which is what

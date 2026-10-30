@@ -3342,6 +3342,21 @@ mod tests {
         assert_eq!(FontSizeChoice::AUTO.whole_points(), None);
     }
 
+    /// A size a peer stored past the cap reads as the cap, and the style
+    /// still decodes (`CANVAS-088`).
+    #[test]
+    fn a_size_choice_past_the_cap_reads_as_the_cap() {
+        let huge = postcard::to_allocvec(&1.0e6_f32).expect("encodes");
+        assert_eq!(
+            postcard::from_bytes::<FontSizeChoice>(&huge),
+            Ok(FontSizeChoice::fixed(FontSize::MAX).expect("a named size"))
+        );
+        assert_eq!(
+            FontSizeChoice::from_whole_points(Some(u16::MAX)).whole_points(),
+            Some(1638)
+        );
+    }
+
     /// `TOILE-UI-071`: a register carrying a layout this build does not know is
     /// reported, never silently reset to the default.
     #[test]
