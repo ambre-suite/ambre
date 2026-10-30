@@ -78,6 +78,14 @@ ambre_core::define_index! {
     pub struct CellBlockVec;
 }
 
+impl RunCount {
+    /// The code points `text` holds, as a run counts them.
+    #[must_use]
+    pub fn of(text: &str) -> Self {
+        Self::from_len(text.chars().count())
+    }
+}
+
 /// The side of a wrap point a caret stands on. One offset at a soft wrap
 /// is both the end of one line and the start of the next.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

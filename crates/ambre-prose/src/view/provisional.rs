@@ -20,9 +20,9 @@ use crate::input::ProseInput;
 use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
 use crate::layout::run::LayoutVersion;
 use ambre_bus::app::prose::DocOffset;
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, DocPx, char_len, char_to_byte};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, DocPx, char_to_byte};
 
-use crate::layout::run::{RunOffset, ShapedRun, TableShape};
+use crate::layout::run::{RunCount, RunOffset, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::hit::{Fragment, fragment};
 
@@ -306,7 +306,7 @@ impl ProseUiState {
                                 },
                             );
                         }
-                        let caret = RunOffset::new(char_len(&held).get());
+                        let caret = RunCount::of(&held).as_end();
                         (format!("{held}{tail}"), ghost_marks, Some(caret))
                     }
                 };
