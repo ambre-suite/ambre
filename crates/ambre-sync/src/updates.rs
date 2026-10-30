@@ -1757,7 +1757,7 @@ mod tests {
 
     #[test]
     fn a_failed_members_request_is_not_an_absent_document() {
-        let lost = crate::http::HttpError::from("GET /members: timeout");
+        let lost = crate::http::HttpError::Local("GET /members: timeout".into());
         let failed = MembersAnswer::<()>::classify(Err(lost.clone()));
         assert_eq!(failed, MembersAnswer::Failed(lost));
         assert_eq!(
@@ -1787,7 +1787,7 @@ mod tests {
             members_failure_message(&refused),
             format!("the relay refused the members request: {refused}")
         );
-        let lost = crate::http::HttpError::from("GET /members: timeout");
+        let lost = crate::http::HttpError::Local("GET /members: timeout".into());
         assert_eq!(
             members_failure_message(&lost),
             "the server could not be reached: GET /members: timeout"
@@ -1820,7 +1820,7 @@ mod tests {
             None,
         );
         assert_eq!(members_failure_cause(&down), OpenFailure::Transient);
-        let lost = crate::http::HttpError::from("GET /members: timeout");
+        let lost = crate::http::HttpError::Local("GET /members: timeout".into());
         assert_eq!(members_failure_cause(&lost), OpenFailure::Transient);
     }
 

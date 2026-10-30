@@ -994,7 +994,7 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
     let meta = crate::channels::channel_documents(&listed.documents)
         .into_iter()
         .find(|d| d.kind == ChannelDocumentKind::Meta)
-        .ok_or("the channel has no meta document")?
+        .ok_or_else(|| http::HttpError::Local("the channel has no meta document".into()))?
         .document_id;
     leave_document(http, meta, &p.author, scheme, base, &p.exchange_key)
         .await
@@ -1402,7 +1402,7 @@ async fn rotate_channel<H: ShareHttp>(
     let head = http
         .get_json::<http::JoinHeadResponse>(&base.route(format!("/channels/{}/join", p.channel_id)))
         .await
-        .map_err(|e| format!("Get the join head failed: {e}"))?;
+        .map_err(|e| http::HttpError::Local(format!("Get the join head failed: {e}")))?;
     let meta = head.meta_id.document_id();
     let members_url = base.route(format!("/documents/{meta}/members"));
     let rotate_url = base.route(format!("/documents/{meta}/rotate-key"));
@@ -1414,7 +1414,7 @@ async fn rotate_channel<H: ShareHttp>(
         let resp = http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
-            .map_err(|e| format!("Get members failed: {e}"))?;
+            .map_err(|e| http::HttpError::Local(format!("Get members failed: {e}")))?;
         let (keys, unwrapped) =
             rotate_entries_for(&p.exchange_key, &new_key, Some(p.anchor), &resp.members);
         if !unwrapped.is_empty() {
@@ -1437,7 +1437,7 @@ async fn rotate_channel<H: ShareHttp>(
             }) => break,
             // A member joined since the read (`SYNC-143`): read them again.
             Err(e) if e.is(RefusalCode::MembersChanged) && tries < ROTATION_TRIES => {}
-            Err(e) => return Err(format!("Rotate key failed: {e}").into()),
+            Err(e) => return Err(http::HttpError::Local(format!("Rotate key failed: {e}"))),
         }
     }
     crate::channels::seal_channel_key(p.channel_id, &new_key, &p.space_key, p.anchor)
@@ -1711,7 +1711,7 @@ mod tests {
         ) -> Result<T, http::HttpError> {
             self.calls.borrow_mut().push(Call::Get(url.to_string()));
             let v = self.next()?;
-            serde_json::from_value(v).map_err(|e| http::HttpError::from(e.to_string()))
+            serde_json::from_value(v).map_err(|e| http::HttpError::Local(e.to_string()))
         }
         async fn post_json<B: Serialize, R: DeserializeOwned>(
             &self,
@@ -1723,7 +1723,7 @@ mod tests {
                 .borrow_mut()
                 .push(Call::Post(url.to_string(), bv));
             let v = self.next()?;
-            serde_json::from_value(v).map_err(|e| http::HttpError::from(e.to_string()))
+            serde_json::from_value(v).map_err(|e| http::HttpError::Local(e.to_string()))
         }
         async fn delete<B: Serialize>(
             &self,
@@ -1957,7 +1957,7 @@ mod tests {
     #[tokio::test]
     async fn invite_search_failure_emits_500() {
         let (my_xk, _) = keypair(1);
-        let http = FakeHttp::new(vec![Err("network down".into())]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local("network down".into()))]);
         let (etx, _erx, sink, lrx) = channels();
         invite_task(
             &http,
@@ -2131,7 +2131,7 @@ mod tests {
             "signing_pubkey": "00".repeat(32),
             "exchange_pubkey": "ab".repeat(31),
         });
-        for answer in [Err("404".into()), Ok(malformed)] {
+        for answer in [Err(http::HttpError::Local("404".into())), Ok(malformed)] {
             let http = FakeHttp::new(vec![answer]);
             let (etx, erx, sink, lrx) = channels();
             fetch_member_key_task(&http, member_key_params(UserId::new()), &etx, &sink).await;
@@ -2479,8 +2479,11 @@ mod tests {
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
         };
-        let http = FakeHttp::new(vec![Err("404".into())]);
-        assert_eq!(leave_channel_task(&http, params()).await, Err("404".into()));
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local("404".into()))]);
+        assert_eq!(
+            leave_channel_task(&http, params()).await,
+            Err(http::HttpError::Local("404".into()))
+        );
 
         let no_meta = serde_json::json!({ "documents": [
             { "document_id": DocumentId::new().to_string(), "kind": "segment" },
@@ -2495,7 +2498,7 @@ mod tests {
         let http = FakeHttp::new(vec![
             Ok(listing),
             Ok(serde_json::json!({ "members": [] })),
-            Err("HTTP 403".into()),
+            Err(http::HttpError::Local("HTTP 403".into())),
         ]);
         assert!(leave_channel_task(&http, params()).await.is_err());
         assert_eq!(http.calls().len(), 3, "a refusal is not tried again");
@@ -2565,9 +2568,12 @@ mod tests {
             assert!(url.ends_with(&format!("/documents/{}", mine.document_id())));
         }
 
-        let http = FakeHttp::new(vec![Ok(created), Err("HTTP 500".into())]);
+        let http = FakeHttp::new(vec![
+            Ok(created),
+            Err(http::HttpError::Local("HTTP 500".into())),
+        ]);
         let failed = close_segment_task(&http, close_params(mine)).await;
-        assert_eq!(failed, Err("HTTP 500".into()));
+        assert_eq!(failed, Err(http::HttpError::Local("HTTP 500".into())));
         assert_eq!(http.calls().len(), 2, "a failed close deletes nothing");
     }
 
@@ -2658,9 +2664,12 @@ mod tests {
             assert!(url.ends_with(&format!("/documents/{mine}")));
         }
 
-        let http = FakeHttp::new(vec![Ok(created), Err("HTTP 409".into())]);
+        let http = FakeHttp::new(vec![
+            Ok(created),
+            Err(http::HttpError::Local("HTTP 409".into())),
+        ]);
         let failed = amendments_task(&http, amendments_params(mine)).await;
-        assert_eq!(failed, Err("HTTP 409".into()));
+        assert_eq!(failed, Err(http::HttpError::Local("HTTP 409".into())));
         assert_eq!(
             http.calls().len(),
             2,
@@ -2722,9 +2731,12 @@ mod tests {
             assert!(url.ends_with(&format!("/documents/{mine}")));
         }
 
-        let http = FakeHttp::new(vec![Ok(created), Err("HTTP 404".into())]);
+        let http = FakeHttp::new(vec![
+            Ok(created),
+            Err(http::HttpError::Local("HTTP 404".into())),
+        ]);
         let failed = thread_task(&http, thread_params(mine)).await;
-        assert_eq!(failed, Err("HTTP 404".into()));
+        assert_eq!(failed, Err(http::HttpError::Local("HTTP 404".into())));
         assert_eq!(
             http.calls().len(),
             2,
@@ -2742,7 +2754,7 @@ mod tests {
             Ok(serde_json::json!({ "members": [
                 member_row("11111111-1111-1111-1111-111111111111", "A", a_pub.as_str()),
             ] })),
-            Err("HTTP 500".into()),
+            Err(http::HttpError::Local("HTTP 500".into())),
         ]);
         let (etx, erx, sink, lrx) = channels();
         revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
@@ -2973,7 +2985,7 @@ mod tests {
         }
 
         // A refusal ends the rotation with its error.
-        let http = FakeHttp::new(vec![Err("HTTP 404".into())]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local("HTTP 404".into()))]);
         let params = RotateChannelParams {
             space_id,
             channel_id,
@@ -3008,7 +3020,7 @@ mod tests {
 
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "rotation_owed": true, "members": [] })),
-            Err("HTTP 403".into()),
+            Err(http::HttpError::Local("HTTP 403".into())),
         ]);
         settle_task(&http, settle_params(&my_xk), &etx).await;
         assert!(matches!(
@@ -3078,7 +3090,7 @@ mod tests {
     #[tokio::test]
     async fn revoke_stops_when_the_members_cannot_be_read() {
         let (my_xk, _) = keypair(1);
-        let http = FakeHttp::new(vec![Err("403".into())]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local("403".into()))]);
         let (etx, erx, sink, lrx) = channels();
         revoke_task(&http, revoke_params(&my_xk), &etx, &sink).await;
 
@@ -3128,7 +3140,7 @@ mod tests {
         }
 
         // Failure -> HttpError.
-        let http = FakeHttp::new(vec![Err("boom".into())]);
+        let http = FakeHttp::new(vec![Err(http::HttpError::Local("boom".into()))]);
         let (etx, erx, _sink, _lrx) = channels();
         list_members_task(&http, list_params(), &etx).await;
         assert!(matches!(

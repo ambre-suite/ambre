@@ -2268,8 +2268,6 @@ ambre-sync | src/fuzz.rs | crate::fuzz | open_relayed_update() | ret | Result<Ve
 ambre-sync | src/fuzz.rs | crate::fuzz | open_relayed_update(bytes) | param | &[u8]	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot() | ret | Result<Vec<u8>,PipelineError>	generic	generic byte/text API or codec
 ambre-sync | src/fuzz.rs | crate::fuzz | open_stored_snapshot(bytes) | param | &[u8]	generic	generic byte/text API or codec
-ambre-sync | src/http.rs | crate::http | <HttpError as From<&str>>::from(message) | param | &str	trait	signature fixed by the trait
-ambre-sync | src/http.rs | crate::http | <HttpError as From<String>>::from(message) | param | String	trait	signature fixed by the trait
 ambre-sync | src/http.rs | crate::http | <RoutePath as From<&str>>::from(path) | param | &str	newtype-inner	the &str the constructor of RoutePath copies into its text
 ambre-sync | src/http.rs | crate::http | <RoutePath as From<String>>::from(path) | param | String	newtype-inner	the String the constructor of RoutePath wraps
 ambre-sync | src/http.rs | crate::http | ApiRoot.0 | field | String	newtype-inner	newtype field, constructor or accessor

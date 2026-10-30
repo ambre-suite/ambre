@@ -600,7 +600,7 @@ mod tests {
         fn step(&self, name: &'static str) -> Result<(), http::HttpError> {
             self.steps.borrow_mut().push(name);
             if name == self.fail {
-                return Err(format!("{name} refused").into());
+                return Err(http::HttpError::Local(format!("{name} refused")));
             }
             Ok(())
         }
@@ -630,7 +630,7 @@ mod tests {
             let answer = serde_json::json!({
                 "upload_url": "put", "download_url": "get", "s3_key": "k", "status": "confirmed",
             });
-            serde_json::from_value(answer).map_err(|e| http::HttpError::from(e.to_string()))
+            serde_json::from_value(answer).map_err(|e| http::HttpError::Local(e.to_string()))
         }
         async fn put_sealed(
             &self,

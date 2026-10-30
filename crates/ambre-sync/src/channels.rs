@@ -540,7 +540,10 @@ impl SyncState {
             return self.channel_answered(channel_id, Err(SyncError::NoRelay.into()));
         };
         let (Some(author), Some(exchange_key)) = (self.author(), self.exchange_key.clone()) else {
-            return self.channel_answered(channel_id, Err("not signed in".into()));
+            return self.channel_answered(
+                channel_id,
+                Err(crate::http::HttpError::Local("not signed in".into())),
+            );
         };
         let params = crate::sharing::ChannelLeaveParams {
             channel_id,
@@ -1459,7 +1462,7 @@ pub(crate) mod tests {
         state.handle_delete_channel(channel_id);
         state.handle_sync_event(SyncEvent::ChannelDeleted {
             channel_id,
-            result: Err("403".into()),
+            result: Err(crate::http::HttpError::Local("403".into())),
         });
         state.handle_sync_event(SyncEvent::ChannelDeleted {
             channel_id,
@@ -1504,7 +1507,7 @@ pub(crate) mod tests {
         state.handle_leave_channel(channel_id);
         state.handle_sync_event(SyncEvent::ChannelLeft {
             channel_id,
-            result: Err("409".into()),
+            result: Err(crate::http::HttpError::Local("409".into())),
         });
         state.handle_sync_event(SyncEvent::ChannelLeft {
             channel_id,
@@ -1575,7 +1578,10 @@ pub(crate) mod tests {
         let body = format!(r#"{{"channels":["{channel_id}"]}}"#);
         let answer: http::SpaceChannelsResponse = serde_json::from_str(&body).expect("decodes");
         state.space_channels_listed(space_id, Ok(answer.channels));
-        state.space_channels_listed(space_id, Err("HTTP 500".into()));
+        state.space_channels_listed(
+            space_id,
+            Err(crate::http::HttpError::Local("HTTP 500".into())),
+        );
         let events: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(
             matches!(
@@ -1703,7 +1709,7 @@ pub(crate) mod tests {
         );
         state.member_channels_listed(
             crate::generation::RequestGeneration::nth(2),
-            Err("HTTP 500".into()),
+            Err(crate::http::HttpError::Local("HTTP 500".into())),
         );
         let events: Vec<_> = rx
             .try_iter()

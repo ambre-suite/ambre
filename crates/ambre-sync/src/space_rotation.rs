@@ -298,7 +298,11 @@ mod tests {
 
         let rotation = state.space_rotations.get_mut(&document_id).unwrap();
         rotation.in_flight.insert(current);
-        state.channel_rotated(space_id, current, Err("HTTP 403".into()));
+        state.channel_rotated(
+            space_id,
+            current,
+            Err(crate::http::HttpError::Local("HTTP 403".into())),
+        );
         assert!(rx.try_recv().is_err(), "a failure tells Logic nothing");
         let rotation = state.space_rotations.get(&document_id).unwrap();
         assert!(rotation.in_flight.is_empty(), "the next drive tries again");

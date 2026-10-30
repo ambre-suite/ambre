@@ -821,21 +821,6 @@ impl Reported for Failed {
     }
 }
 
-/// A failure on this device with text alone: a step that read no answer, or
-/// a scripted failure of a fake transport.
-impl From<&str> for HttpError {
-    fn from(message: &str) -> Self {
-        Self::Local(message.to_owned())
-    }
-}
-
-/// A failure on this device, as a step that read no answer words it.
-impl From<String> for HttpError {
-    fn from(message: String) -> Self {
-        Self::Local(message)
-    }
-}
-
 /// The error a refused answer reads as, or `Ok` for a success. The relay's
 /// code is read from the body only on the statuses that may carry one.
 fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), HttpError> {
