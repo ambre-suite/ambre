@@ -4699,7 +4699,7 @@ impl<'a> FileVisit<'a> {
                 continue;
             }
             for i in &walk.impls {
-                let of_trait = i
+                let of_trait: Option<TraitPath> = i
                     .trait_
                     .as_ref()
                     .map(|(_, path, _)| trait_path(path, &self.unrename(path)));
@@ -4890,7 +4890,7 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
         let ty = normalise(&i.self_ty.to_token_stream().to_string());
         let self_ty = type_name(&i.self_ty);
         let self_full = ty.clone();
-        let of_trait = i
+        let of_trait: Option<TraitPath> = i
             .trait_
             .as_ref()
             .map(|(_, path, _)| trait_path(path, &self.unrename(path)));
