@@ -174,7 +174,7 @@ override at all, which is what stops a fade half-way (`TOILE-UI-085`).
   `ambre-spec-budgets.md section 2` have no bench: the board paint at 2 000 elements, the pan and
   zoom latency, the presence overlay. The idle board is a rule with no figure at all.
   The plan is held by host tests that drive the view, not by a timing.
-* **The heavy-path budget is a design, not code.** A pathological path is described as tessellated
+* **The heavy-path plan is a design, not code.** A pathological path is described as tessellated
   across frames behind a bounding-box placeholder, with a cache keyed by geometry and tolerance.
   Nothing caps the work a single frame does, so one dense import can stall it.
 * **The tessellation cache is the canvas layer's, and unmeasured here.** The tolerance bucketing this

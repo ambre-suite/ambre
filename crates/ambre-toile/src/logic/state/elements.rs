@@ -516,13 +516,13 @@ impl ToileState {
         }
         // Drop the id from every list that names it, a frame's as a group's
         // (`TOILE-271`). The removal is a document write, so a peer that
-        // refreshes the container unlinks the id too. The parent cache names
+        // refreshes the list unlinks the id too. The parent cache names
         // each list once per entry, so a list holding the id twice loses both.
         // A deleted frame keeps its members on the board, and the cache drops
         // the links its list held.
         for id in &expanded {
-            for container in self.parents_of(id).to_vec() {
-                self.remove_child(&container, id);
+            for parent in self.parents_of(id).to_vec() {
+                self.remove_child(&parent, id);
             }
             self.forget_links(id);
         }

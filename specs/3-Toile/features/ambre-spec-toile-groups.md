@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-398` | `INV` | A click on a member of a membership cycle MUST resolve to one element. | this spec section 3; `TOILE-UI-119` | `ambre_toile::ui::tool::tests::a_click_into_a_group_cycle_ends` -- two groups that name each other as parent: an unscoped click picks the last group of the chain, and a scoped click the member | none | verified |
 | `TOILE-150` | `INV` | A group MUST carry no coordinates of its own. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_group_takes_no_box_from_a_resize_or_a_rotation` -- a resize aimed at a group writes no change, and a rotation leaves no box of its own in the caches. The group seed writes a kind, a rotation, a lock flag and a style register, and no x, y, width or height | none | verified |
 | `TOILE-054` | `INV` | A group left with no member MUST be removed, so the caches stay equal to a rebuild. | this spec section 3; `TOILE-004` | `ambre_toile::logic::structure_tests::a_group_left_with_no_member_is_removed` -- one member deleted and the last framed away: the group gone from the board and the order, and the caches equal to a rebuild | none | verified |
-| `TOILE-056` | `INV` | Reading which container an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 3 | `ambre_toile::logic::convergence_tests::a_container_read_walks_no_board` -- a selection read and a camera move resolve the element map zero times, and still name each member's group and frame. `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` holds the cache equal to a rebuild | none | verified |
+| `TOILE-056` | `INV` | Reading which group or frame an element belongs to MUST NOT cost a walk of the whole board. | `ambre-spec-budgets.md section 1`; this spec section 3 | `ambre_toile::logic::convergence_tests::a_parent_read_walks_no_board` -- a selection read and a camera move resolve the element map zero times, and still name each member's group and frame. `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` holds the cache equal to a rebuild | none | verified |
 | `TOILE-UI-119` | `OBS` | Every painted element MUST name its immediate enclosing group, or none when it has no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::derive_populates_the_group_edge_on_members` -- it reads the edge off the derived viewport for both members and for the group itself, three assertions for both cases | none | verified |
 | `TOILE-266` | `CONC` | When concurrent binds put one element in two groups, every peer MUST name the same enclosing group, the one with the smallest id. | this spec section 3; `TOILE-UI-119` | `ambre_toile::logic::convergence_tests::an_element_bound_into_two_groups_names_one_on_both_peers` | none | verified |
 | `TOILE-UI-120` | `OBS` | A group MUST paint nothing of its own: no fill, no border, no title. | this spec section 4 | `ambre_toile::ui::render::tests::a_derived_group_paints_nothing_of_its_own` -- the group node the engine derives, painted alone, draws what an empty board draws | none | verified |
@@ -79,7 +79,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Verification.** 30 `verified`. What holds is each gesture, and the two refusals a chord over a
   single element or a non-group answers. A mixed ungroup unbinds its groups in silence. A resize
   aimed at a group writes nothing, and a rotation leaves its box derived, even with a member a peer
-  deleted. The binding filter, the nested cases and the one-container rule are driven by hand.
+  deleted. The binding filter, the nested cases and the one-parent rule are driven by hand.
 
 ---
 
@@ -150,8 +150,8 @@ box recomputation runs at most one pass more than the groups it walks (`TOILE-27
 A cycle keeps its stale box on the incremental path, and that box can differ from a rebuild. This is
 the one exception `TOILE-186` names.
 
-**How the parent is found.** The Logic thread keeps a derived map from each element to the containers
-whose membership list names it, one entry per occurrence. Each write to a membership list updates
+**How the parent is found.** The Logic thread keeps a derived map from each element to the groups and
+frames whose membership list names it, one entry per occurrence. Each write to a membership list updates
 the map in the same step. A remote change, an undo and an import reseed it in the pass that
 rebuilds the boxes, at no walk of its own.
 
@@ -192,9 +192,9 @@ the user sees is one selection box around the union of the members, with the han
 | :--- | :--- | :--- |
 | A group's box is derived, never stored | storing the union, refreshed on every member change | two peers writing a box for the same group would race for a value that is a function of other values, and the loser's box would contradict the members it is supposed to contain. Deriving it makes the contradiction unrepresentable |
 | An element's parent is a derived map | storing the parent in each element, as a field | it is a format change, and two peers binding one element at once would race on a register the membership lists already settle. The lists stay the truth; the map mirrors them, and a rebuild reseeds it |
-| A group reuses the frame's membership machinery | a second container model for groups | the two differ in what they paint and in what a delete does, not in how a set of children is held. One list type, one detach rule, one ordering helper |
+| A group reuses the frame's membership machinery | a second parent model for groups | the two differ in what they paint and in what a delete does, not in how a set of children is held. One list type, one detach rule, one ordering helper |
 | A group enters the order below its lowest member | inserting the group above the selection | it reverses the members, and they must keep painting in the order they had; a group that paints nothing has no reason to be anywhere else |
-| An empty group is deleted | keeping it, as a container a user could refill | a rebuild from the document would never materialize it, so the incremental caches would disagree with a rebuild. A group is created with two members and only shrinks; one with none is meaningless |
+| An empty group is deleted | keeping it, as a parent a user could refill | a rebuild from the document would never materialize it, so the incremental caches would disagree with a rebuild. A group is created with two members and only shrinks; one with none is meaningless |
 | Deleting a group deletes its members | detaching the members | it turns one gesture into a silent ungroup. The binding is the object the user selected, so a delete on it is a delete on what it holds -- a frame is the opposite, because a frame is a region |
 | An ancestor selected with its own descendant loses | refusing the whole request | the request is contradictory but the user's intent is not, and answering nothing leaves them to find the offending pair themselves. Keeping the ancestor is what cannot be done: it would empty during the detach and be pruned mid-operation, leaving the new group holding an id nobody has |
 

@@ -205,7 +205,7 @@ resolve and are tested like every other menu entry
   difference.
 * **The facilitation layer is a design** (`TOILE-FEAT-024`, `TOILE-FEAT-025`). A shared timer and a
   facilitated vote session are shared intent, so they are CRDT and their containers are declared. The
-  Story that would build them is the last one of its epic. A vote budget can only be advisory, like
+  Story that would build them is the last one of its epic. A vote cap can only be advisory, like
   a lock: a modified client can
   overspend, and the relay cannot arbitrate (`features/ambre-spec-toile-engine.md section 3`).
 * **A reaction carries a timestamp nothing writes** (`ts`). The picker sends zero, because the UI

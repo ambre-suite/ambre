@@ -80,14 +80,14 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 paste writes them (`ambre-spec-toile-schema.md section 3`).
 
 **The payload** (`ambre-bus`) is self-contained and identity-free. Elements are referenced by slot,
-arrows have two ends that are slots, and container membership is parent and child slots. The source
+arrows have two ends that are slots, and a membership is parent and child slots. The source
 box is carried too, so a paste can be placed:
 
 ```rust
 pub struct ClipboardPayload {
     pub elements:   Vec<ClipElement>,   // slot-indexed; no source identity leaks
     pub connectors: Vec<ClipConnector>, // both ends remapped to slots
-    pub membership: Vec<ClipMembership>, // container slot -> child slots
+    pub membership: Vec<ClipMembership>, // parent slot -> child slots
     pub origin:     kurbo::Rect,        // source box, for placement
 }
 ```
@@ -104,7 +104,7 @@ into one undo item. Cut is not a command: the surface sends a copy and then a de
 3. capture each element's scalar fields, container fields excluded, and union the boxes into the
    source box (`TOILE-133`). A frame's speaker notes travel beside those fields, as their text, because
    they are a shared container and not a scalar (`TOILE-137`);
-4. remap each container's membership to child slots, keeping only children in the set;
+4. remap each group's and frame's membership to child slots, keeping only children in the set;
 5. keep an arrow only when both of its ends are in the set (`TOILE-134`);
 6. answer with the payload, having written nothing (`TOILE-067`).
 
@@ -118,7 +118,7 @@ into one undo item. Cut is not a command: the surface sends a copy and then a de
 4. push each onto the top of the paint order. A frame is given the two containers it is born with.
    Its membership list, so the copy takes an element (`TOILE-138`), and its notes text, seeded with
    what was captured (`TOILE-137`, `TOILE-051`);
-5. rebuild each container's membership list with the new identities (`TOILE-071`);
+5. rebuild each group's and frame's membership list with the new identities (`TOILE-071`);
 6. write each arrow with its ends remapped (`TOILE-136`);
 7. commit once, reseed the derived caches, and answer with the new elements
    (`TOILE-070`).

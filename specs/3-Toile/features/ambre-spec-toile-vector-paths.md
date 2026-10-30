@@ -146,7 +146,7 @@ claim is withdrawn here rather than turned into an unbuilt row (section 5, secti
 | A finished path is an ordinary element | a path element with its own commands | as an ordinary element it moves, resizes, rotates, restyles, groups and deletes with everything else, so the pen adds a tool and no lifecycle |
 | Node editing is not part of the product | a node-editing mode, which three sections of the earlier design described | reshaping a curve node by node is an illustration tool's job, and this application is a whiteboard. Naming it in the spec while nothing built it made the corpus describe a competitor |
 | The combinators stay in the tree, frozen | removing them | it would drop working geometry that exists, passes and costs nothing to keep |
-| The combinators stay in the tree, frozen | giving them a surface and a promise | stabilizing them would spend an MVP budget on the wrong product |
+| The combinators stay in the tree, frozen | giving them a surface and a promise | stabilizing them would spend MVP time on the wrong product |
 | Curves are flattened to combine | an exact boolean | the geometry library has no path booleans, and an exact curve-boolean implementation is a project of its own |
 | Curves are flattened to combine | no combinators at all | a whiteboard reads a flattened outline as the same shape, so dropping the operation would cost a tool to avoid a difference nobody on this surface can see |
 | Subtract takes the first selection as the subject | the paint order | the user did not choose it; the selection order is the one signal they gave, and it is the only ordering they can predict |

@@ -134,7 +134,7 @@ pub struct CtxScope {
 (`TOILE-UI-134`). The same reply names the selected ids a frame's children list holds, which no box
 tells. The Logic thread announces each board change, local or a peer's, and the view then asks for that
 data again. A camera move is no change, so a pan never re-reads the selection. The re-read costs the
-selection, not the board: containers come from a derived parent map (`TOILE-056`).
+selection, not the board: groups and frames come from a derived parent map (`TOILE-056`).
 
 **The dispatch, in steps:**
 

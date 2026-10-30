@@ -2387,11 +2387,11 @@ fn a_member_framed_out_of_its_group_shrinks_the_group() {
     assert_eq!(st.bounds_of(&g), st.bounds_of(&a));
 }
 
-/// `TOILE-056`: reading which container an element belongs to walks no board.
-/// The selection's data names each member's group and frame, and a camera move
-/// derives the visible set, without resolving the element map once.
+/// `TOILE-056`: reading which group or frame an element belongs to walks no
+/// board. The selection's data names each member's group and frame, and a
+/// camera move derives the visible set, without resolving the element map once.
 #[test]
-fn a_container_read_walks_no_board() {
+fn a_parent_read_walks_no_board() {
     let mut st = ToileState::new();
     for i in 0..20 {
         create_rect(
@@ -2421,7 +2421,7 @@ fn a_container_read_walks_no_board() {
     assert_eq!(
         st.board_walks(),
         before,
-        "a container read walked the board"
+        "a parent read walked the board"
     );
     match out.display.as_slice() {
         [

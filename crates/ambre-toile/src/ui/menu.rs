@@ -520,8 +520,8 @@ pub fn resolve_menu_command(
         ALIGN_BOTTOM => align(selection, AlignOp::Bottom),
         DISTRIBUTE_H => align(selection, AlignOp::DistributeH),
         DISTRIBUTE_V => align(selection, AlignOp::DistributeV),
-        // Frame membership. Add targets the geometric container of the
-        // selection. Remove names no frame: the display carries no parent-frame
+        // Frame membership. Add targets the frame that geometrically
+        // holds the selection. Remove names no frame: the display carries no parent-frame
         // edge, so Logic takes each element out of the frame that really holds
         // it (`TOILE-UI-149`).
         ADD_TO_FRAME => add_to_frame(selection, selected, display),
