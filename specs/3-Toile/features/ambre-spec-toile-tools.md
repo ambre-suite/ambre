@@ -27,6 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-039` | `OBS` | The canvas cursor MUST say what the armed tool will do. | this spec section 3 | `ambre_toile::ui::palette::tests::cursor_reflects_the_active_tool` -- it reads the note cursor, the crosshair, the grab hand and the arrow | none | verified |
 | `TOILE-UI-245` | `OBS` | Over a single selection, the cursor MUST follow the hovered handle and tilt with the element. | this spec section 3 | `ambre_toile::ui::palette::tests::resize_cursor_uses_native_keywords_when_axis_aligned` -- the upright case; `ambre_toile::ui::palette::tests::resize_cursor_rotates_continuously_when_the_element_is_rotated` -- the exact angle; `ambre_toile::ui::tool::tests::hover_handle_follows_the_element_rotation` -- the handle the hover picks | none | verified |
 | `TOILE-UI-246` | `OBS` | An in-flight drag MUST keep one cursor for the whole gesture, wherever the pointer wanders. | this spec section 3 | `ambre_toile::ui::tool::tests::gesture_cursor_reflects_the_in_flight_drag` -- it reads the cursor each drag opens with; structural -- that it then holds is the construction, since the handle is captured at press and read back unchanged | none | verified |
+| `TOILE-UI-410` | `INV` | The note swatches MUST be distinct opaque colours, the default colour first. | this spec section 3 | `ambre_toile::ui::palette::tests::sticky_swatches_lead_with_the_default_and_are_distinct` -- the first swatch is the default fill, no two swatches share a colour, and every alpha is full | none | verified |
 
 ### 1.2 Pick a tool
 
@@ -38,6 +39,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-040` | `FAIL` | A bare-key tool chord MUST NOT be taken while the user is typing into a field. | this spec section 3 | `ambre_toile::ui::palette::tests::editable_tag_guards_text_entry` -- it holds the decision for a text field and a contenteditable host; `ambre_app::platform::tests::a_key_typed_into_a_field_reads_as_typing` -- a real `keydown` in the browser reaches the reader through its target | none | verified |
 | `TOILE-UI-393` | `POST` | Given the board's keyboard pipe holds the focus and no editor is open, a bare tool key MUST arm its tool. | this spec section 3; `ambre-spec-text-input.md`, `CHROME-102` | `ambre_toile::ui::view::view_tests::the_pipe_is_typed_text_only_while_an_editor_is_open` -- the board marks its pipe as typed text only while an editor is open, and `CHROME-103` gives a key on that pipe to the keymap | none | verified |
 | `TOILE-UI-394` | `POST` | A tool armed by a key MUST apply to the next press on the board, however soon that press comes. | this spec section 3 | `ambre_belt::toile::tests::a_tool_key_arms_the_press_that_follows_it` -- the key and a drag dispatched in one task, so no frame runs between them, and the drag draws a rectangle | none | verified |
+| `TOILE-UI-408` | `POST` | A palette button MUST arm the tool it names. | this spec section 2 | `ambre_toile::tests::chrome_ui::tool_palette_click_switches_active_tool` -- wasm tier: a click on the Pen button writes the Pen tool into the active-tool signal the canvas view reads | none | verified |
+| `TOILE-UI-409` | `FAIL` | Given a command id that names no tool, the palette MUST NOT arm a tool. | this spec section 2 | `ambre_toile::ui::palette::tests::tool_for_command_rejects_non_tool_ids` -- the Find opener and an unknown id each resolve to no tool | none | verified |
 
 ### 1.3 Drag on the board
 
@@ -51,6 +54,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-252` | `FAIL` | A press on a transform handle that moves nothing MUST emit no command. | this spec section 2 | `ambre_toile::ui::tool::tests::press_on_a_resize_handle_without_movement_emits_no_command` -- the resize; `ambre_toile::ui::tool::tests::press_on_the_rotate_handle_without_movement_emits_no_command` -- the rotate | none | verified |
 | `TOILE-UI-253` | `FAIL` | A connector released anywhere but on a second element MUST emit nothing. | this spec section 2 | `ambre_toile::ui::tool::tests::connector_release_on_empty_emits_nothing` | none | verified |
 | `TOILE-UI-254` | `FAIL` | A pen path of fewer than two nodes MUST emit nothing. | this spec section 2 | `ambre_toile::ui::tool::tests::a_pen_finish_on_one_node_emits_nothing` -- the finishing double-click lands a duplicate node, and the count is taken after it is dropped | none | verified |
+| `TOILE-UI-407` | `POST` | Resizing a rotated element MUST hold the corner opposite the dragged handle fixed in world space. | this spec section 2 | `ambre_toile::ui::tool::tests::resize_rotated_pins_the_opposite_corner_in_world_space` -- a corner drag at 30 degrees leaves the opposite corner where it was, and at no rotation matches the upright resize | none | verified |
 
 ### 1.4 Hold `Space` to pan
 
@@ -91,9 +95,10 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** none: the machine is view state on the UI thread, where `UI-THREAD-004` bans a
   network, crypto or persistence path. What it emits is a command; what it streams mid-gesture is
   presence, sealed by the Sync worker like any other frame (`ZK-005`).
-* **Verification.** 32 `verified`. What holds is the machine: the modes, the transitions and the
+* **Verification.** 36 `verified`. What holds is the machine: the modes, the transitions and the
   command each gesture ends in. A `Space` drag pans on the host view, and a placed note or text
-  reverts the tool. The browser tier holds the release of `Space` and a press right after a tool key.
+  reverts the tool. The browser tier holds the release of `Space` and a press right after a tool
+  key.
 ---
 
 ## 2. MODEL

@@ -708,8 +708,9 @@ mod tests {
         );
     }
 
-    /// A clock that reads no number never yields an alpha outside the unit
-    /// range: the age reads as none, so the segment reads as fresh.
+    /// `TOILE-UI-403`: a clock that reads no number never yields an alpha
+    /// outside the unit range. The age reads as none, so the segment reads as
+    /// fresh.
     #[test]
     fn a_laser_alpha_stays_in_range_on_a_nan_clock() {
         let nan = ambre_bus::PageTime(f64::NAN);

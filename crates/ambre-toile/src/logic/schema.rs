@@ -390,12 +390,4 @@ mod tests {
             SchemaError::PayloadRejected
         ));
     }
-
-    #[test]
-    fn bytes_the_engine_will_not_read_are_told_apart_from_a_version_refusal() {
-        assert_eq!(
-            gate(&b"not a loro snapshot".to_vec().into()).expect_err("rejected"),
-            SchemaError::PayloadRejected
-        );
-    }
 }

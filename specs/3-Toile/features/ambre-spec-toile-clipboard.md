@@ -49,6 +49,7 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 | `TOILE-139` | `FRAME` | A paste MUST NOT touch what is already on the board. | this spec section 3 | structural -- every write of a paste goes under an identity minted from the peer and a counter that only grows, so no path reaches an element the board already holds | none | verified |
 | `TOILE-260` | `POST` | A plain paste MUST land the plain text as one text element at the pointer, whatever payload the clipboard or this tab's own copy holds. | this spec section 4; `PROSE-UI-227` | not built | unbuilt -- lands with the `Paste as plain text in Toile` Story (`ambre-roadmap.md` E6). A paste with no payload returns before it writes anything, so text from outside lands nowhere | unimplemented |
 | `TOILE-140` | `FRAME` | A paste of an empty payload MUST write nothing and reach nobody. | this spec section 3 | `ambre_toile::logic::convergence_tests::an_empty_paste_writes_nothing` -- no delta, no create, and the same history | none | verified |
+| `TOILE-281` | `FRAME` | A paste MUST NOT write a key the board's schema does not name. | this spec section 3 | `ambre_toile::logic::state::clipboard::tests::a_paste_writes_only_the_keys_the_schema_names` -- a stray key in the clipboard bytes is absent from the pasted element's map | none | verified |
 
 * **Budget.** the paste under 1 ms, the transform-command row of
   `ambre-spec-budgets.md section 1`. A paste reseeds every derived cache from the document rather
@@ -56,9 +57,9 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 * **Boundary.** the payload leaves the client. It is written to the operating system clipboard under
   a private type, outside the sealed path (`ZK-001`), by the user's own copy gesture. The plain-text
   half is left empty, so nothing readable by another application leaves.
-* **Verification.** 17 `verified`, 1 `unimplemented`. What holds is the round trip, the pasted box,
-  and what a pasted set is bound to. Tests read back a pasted group's members, a pasted arrow's ends,
-  and a frame copied with and without its member.
+* **Verification.** 18 `verified`, 1 `unimplemented`. What holds is the round trip, the pasted box,
+  and what a pasted set is bound to. Tests read back a pasted group's members, a pasted arrow's
+  ends, and a frame copied with and without its member.
 
 ---
 
@@ -80,14 +81,14 @@ status values are normative in `ambre-spec-template.md`. The transport half is
 paste writes them (`ambre-spec-toile-schema.md section 3`).
 
 **The payload** (`ambre-bus`) is self-contained and identity-free. Elements are referenced by slot,
-arrows have two ends that are slots, and container membership is parent and child slots. The source
+arrows have two ends that are slots, and a membership is parent and child slots. The source
 box is carried too, so a paste can be placed:
 
 ```rust
 pub struct ClipboardPayload {
     pub elements:   Vec<ClipElement>,   // slot-indexed; no source identity leaks
     pub connectors: Vec<ClipConnector>, // both ends remapped to slots
-    pub membership: Vec<ClipMembership>, // container slot -> child slots
+    pub membership: Vec<ClipMembership>, // parent slot -> child slots
     pub origin:     kurbo::Rect,        // source box, for placement
 }
 ```
@@ -104,7 +105,7 @@ into one undo item. Cut is not a command: the surface sends a copy and then a de
 3. capture each element's scalar fields, container fields excluded, and union the boxes into the
    source box (`TOILE-133`). A frame's speaker notes travel beside those fields, as their text, because
    they are a shared container and not a scalar (`TOILE-137`);
-4. remap each container's membership to child slots, keeping only children in the set;
+4. remap each group's and frame's membership to child slots, keeping only children in the set;
 5. keep an arrow only when both of its ends are in the set (`TOILE-134`);
 6. answer with the payload, having written nothing (`TOILE-067`).
 
@@ -118,7 +119,7 @@ into one undo item. Cut is not a command: the surface sends a copy and then a de
 4. push each onto the top of the paint order. A frame is given the two containers it is born with.
    Its membership list, so the copy takes an element (`TOILE-138`), and its notes text, seeded with
    what was captured (`TOILE-137`, `TOILE-051`);
-5. rebuild each container's membership list with the new identities (`TOILE-071`);
+5. rebuild each group's and frame's membership list with the new identities (`TOILE-071`);
 6. write each arrow with its ends remapped (`TOILE-136`);
 7. commit once, reseed the derived caches, and answer with the new elements
    (`TOILE-070`).

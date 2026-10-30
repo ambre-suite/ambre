@@ -240,7 +240,7 @@ mod tests {
         assert!(thumb.width() <= edge && thumb.height() <= edge);
     }
 
-    /// A picture smaller than the thumbnail edge keeps its own size: the
+    /// `TOILE-IO-102`: a picture smaller than the thumbnail edge keeps its own size: the
     /// placeholder never holds more pixels than the picture.
     #[test]
     fn a_small_picture_is_not_inflated() {

@@ -3304,9 +3304,6 @@ mod tests {
                     notes: secret.clone(),
                 }
             ),
-            format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
-            format!("{:?}", ToileEvent::ExportFailed(secret.clone())),
-            format!("{:?}", ToileError::WriteFailed(secret.clone())),
             format!("{:?}", DisplayGeom::Sticky(secret.clone())),
             format!("{:?}", DisplayGeom::Text(secret.clone())),
             format!("{:?}", DisplayGeom::Frame(secret.clone())),
@@ -3331,6 +3328,19 @@ mod tests {
             assert!(!line.contains("Q3 layoffs"), "{line}");
         }
         assert_eq!(format!("{address:?}"), "WebAddress(17 chars)");
+        // A failure reason prints as `Variant(N chars)`.
+        assert_eq!(
+            format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
+            "ImportFailed(10 chars)"
+        );
+        assert_eq!(
+            format!("{:?}", ToileEvent::ExportFailed(secret.clone())),
+            "ExportFailed(10 chars)"
+        );
+        assert_eq!(
+            format!("{:?}", ToileError::WriteFailed(secret.clone())),
+            "WriteFailed(10 chars)"
+        );
         assert_eq!(format!("{:?}", ToileCommand::Undo), "Undo");
     }
 

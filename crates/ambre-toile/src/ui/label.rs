@@ -148,7 +148,8 @@ mod tests {
         assert!(a.y.abs() < 0.5, "y was {}", a.y);
     }
 
-    /// An empty path has no caption anchor: nothing is routed, nothing is placed.
+    /// `TOILE-UI-400`: an empty path has no caption anchor: nothing is routed,
+    /// nothing is placed.
     #[test]
     fn an_empty_path_anchors_nothing() {
         assert!(label_anchor(&BezPath::new()).is_none());

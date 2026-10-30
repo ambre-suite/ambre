@@ -108,14 +108,13 @@ pub struct ToileState {
     bounds: HashMap<ElementId, Rect>,
     /// Materialized paint order, mirrored from the `layers` list.
     layers: Vec<NodeId>,
-    /// The containers (groups and frames) whose `children` list names each
-    /// element, one entry per occurrence, in discovery order. Derived, never
-    /// authoritative: a read skips an entry whose container the board no longer
-    /// holds, so finding an element's container never walks the board
-    /// (`TOILE-056`).
+    /// The groups and frames whose `children` list names each element, one
+    /// entry per occurrence, in discovery order. Derived, never authoritative:
+    /// a read skips an entry whose parent the board no longer holds, so
+    /// finding an element's parent never walks the board (`TOILE-056`).
     parents: HashMap<ElementId, Vec<ElementId>>,
-    /// The reverse of `parents`: what each container's `children` list names.
-    /// A remote change to a list relinks its container from it (`TOILE-092`).
+    /// The reverse of `parents`: what each parent's `children` list names.
+    /// A remote change to a list relinks its parent from it (`TOILE-092`).
     members: HashMap<ElementId, Vec<ElementId>>,
     /// What the document was written since the caches last read it, noted by
     /// the subscription below.

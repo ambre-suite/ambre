@@ -19,6 +19,7 @@ use ambre_draw::{BundledFamily, ParleyBrush, ScriptSet};
 use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
+use crate::events::grid::RowCount;
 use crate::layout::fonts;
 use crate::layout::run::{
     LocalLineCount, ParleyRunData, Resume, RunLine, RunLineCount, RunLineSpan, RunSegmentCount,
@@ -218,6 +219,14 @@ impl BlockLine {
     #[must_use]
     pub const fn lines_before(self) -> BlockLineCount {
         self.count_from(Self::ZERO)
+    }
+}
+
+impl BlockLineCount {
+    /// The lines of a table block: the paginator cuts a table at its rows.
+    #[must_use]
+    pub fn of_rows(rows: RowCount) -> Self {
+        Self::from_len(rows.to_usize())
     }
 }
 
