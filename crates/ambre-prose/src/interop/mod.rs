@@ -184,7 +184,7 @@ impl std::fmt::Debug for IrBlock {
                 .finish(),
             Self::CodeBlock { lang, text } => f
                 .debug_struct("CodeBlock")
-                .field("lang", lang)
+                .field("lang", &lang.as_ref().map(|lang| Redacted(lang.as_str())))
                 .field("text", &Redacted(text))
                 .finish(),
             Self::Image { alt } => f
