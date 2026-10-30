@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3784 rows: 3228 shipped, of which 9 loose. 556 unbuilt.**
+**3787 rows: 3231 shipped, of which 9 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 917 | 450 | 824 | 611 | 417 | 3219 |
+| `verified` | 917 | 450 | 824 | 614 | 417 | 3222 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 7 |  |  |  |  | 7 |
@@ -136,7 +136,7 @@
 | `ambre-spec-toile-viewport.md` | 35 | 33 | 33 |  | 2 |
 | `ambre-spec-toile-z-order.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-schema.md` | 26 | 26 | 26 |  |  |
-| `ambre-spec-prose-clipboard.md` | 24 | 22 | 22 |  | 2 |
+| `ambre-spec-prose-clipboard.md` | 25 | 23 | 23 |  | 2 |
 | `ambre-spec-prose-comments.md` | 38 | 38 | 38 |  |  |
 | `ambre-spec-prose-cross-references.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-engine.md` | 43 | 42 | 42 |  | 1 |
@@ -144,7 +144,7 @@
 | `ambre-spec-prose-footnotes.md` | 16 | 16 | 16 |  |  |
 | `ambre-spec-prose-headers-footers.md` | 27 | 27 | 27 |  |  |
 | `ambre-spec-prose-headings.md` | 8 | 8 | 8 |  |  |
-| `ambre-spec-prose-import-export.md` | 49 | 33 | 33 |  | 16 |
+| `ambre-spec-prose-import-export.md` | 51 | 35 | 35 |  | 16 |
 | `ambre-spec-prose-inline-styles.md` | 28 | 26 | 26 |  | 2 |
 | `ambre-spec-prose-lists.md` | 17 | 17 | 17 |  |  |
 | `ambre-spec-prose-page-rendering.md` | 23 | 21 | 21 |  | 2 |
@@ -250,7 +250,7 @@
 | `ambre-spec-presence.md` | PRESENCE-001..015 |
 | `ambre-spec-profile.md` | PROFILE-001..009 |
 | `ambre-spec-prose-accessibility.md` | PROSE-UI-066..069,077..081 |
-| `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112,219..227,234 |
+| `ambre-spec-prose-clipboard.md` | PROSE-UI-013,040..044,105..112,219..227,234..235 |
 | `ambre-spec-prose-comments.md` | PROSE-FEAT-001,009,075..081,185..204,279,295..297; PROSE-UI-049..050,144,231..232 |
 | `ambre-spec-prose-cross-references.md` | PROSE-FEAT-014,072..074,128..135; PROSE-UI-048,084..086 |
 | `ambre-spec-prose-engine.md` | PROSE-001,003..004,023..026,043..048,050..063,098,104..106,126,129..130; PROSE-FEAT-005..006; PROSE-IO-042; PROSE-UI-001..002,010,015,149..150 |
@@ -259,7 +259,7 @@
 | `ambre-spec-prose-headers-footers.md` | PROSE-006; PROSE-FEAT-063..068,160..172,281..285; PROSE-UI-047,133 |
 | `ambre-spec-prose-headings.md` | PROSE-FEAT-029..031,090..094 |
 | `ambre-spec-prose-images.md` | PROSE-FEAT-052..059,205..226,286; PROSE-IO-007..008,040..041; PROSE-UI-046,145..146 |
-| `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..066 |
+| `ambre-spec-prose-import-export.md` | PROSE-IO-001..006,009..014,016..028,043..068 |
 | `ambre-spec-prose-inline-styles.md` | PROSE-FEAT-007..008,020..025,173..184,287..288,290,298..299,309..311 |
 | `ambre-spec-prose-lists.md` | PROSE-005; PROSE-FEAT-002,026..028,136..146,278 |
 | `ambre-spec-prose-page-rendering.md` | PROSE-UI-006,014,016..020,113..122,172..173,205,207,209..210 |

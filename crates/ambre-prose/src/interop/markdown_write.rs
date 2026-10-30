@@ -355,7 +355,9 @@ impl Writer {
     /// so a mark change inside a link does not break it.
     fn delimiters(&self, run: &IrRun) -> Vec<Delimiter> {
         let mut wanted = Vec::new();
-        if let Some(url) = &run.link {
+        // A peer writes a target straight into the document, so one that
+        // could run code is exported as its text alone (`PROSE-IO-067`).
+        if let Some(url) = run.link.as_ref().filter(|url| crate::link::openable(url)) {
             wanted.push(Delimiter::Link(url.clone()));
         }
         if run.bold == Weight::Bold {
@@ -420,14 +422,24 @@ impl Delimiter {
     }
 }
 
-/// A link destination, in angle brackets when it holds a space or a paren.
+/// A link destination, in angle brackets when it holds a paren.
+///
+/// A space, a control character, an angle bracket and a backslash are
+/// percent-encoded. A stored target thus cannot end the destination, the
+/// paragraph or the block it sits in (`PROSE-IO-068`).
 fn link_target(url: &ambre_core::LinkUrl) -> String {
-    let url = url.as_str();
-    if url.contains([' ', '(', ')', '<', '>']) {
-        let inner = url.replace('<', "%3C").replace('>', "%3E");
+    let mut inner = String::with_capacity(url.as_str().len());
+    for c in url.as_str().chars() {
+        if c <= ' ' || matches!(c, '\u{7f}' | '<' | '>' | '\\') {
+            let _ = write!(inner, "%{:02X}", u32::from(c));
+        } else {
+            inner.push(c);
+        }
+    }
+    if inner.contains(['(', ')']) {
         format!("<{inner}>")
     } else {
-        url.to_owned()
+        inner
     }
 }
 
@@ -513,6 +525,50 @@ mod tests {
         ProseIr {
             blocks,
             ..ProseIr::default()
+        }
+    }
+
+    /// `PROSE-IO-067`: a target that could run code is exported as its text
+    /// alone, and a web or mail target as a link.
+    #[test]
+    fn a_link_that_could_run_code_exports_as_its_text() {
+        let link = |url: &str, text: &str| IrRun {
+            link: Some(url.into()),
+            ..IrRun::plain(text)
+        };
+        let doc = ir(vec![para(vec![
+            link("javascript:alert(1)", "run"),
+            IrRun::plain(" "),
+            link(" data:text/html,x", "data"),
+            IrRun::plain(" "),
+            link("mailto:a@example.org", "mail"),
+        ])]);
+        let (text, _) = write(&doc, MarkdownFlavor::Gfm);
+        assert_eq!(text, "run data [mail](mailto:a@example.org)\n");
+    }
+
+    /// `PROSE-IO-068`: a target the gate lets through still cannot end the
+    /// destination, the paragraph or the block it sits in.
+    #[test]
+    fn a_link_target_cannot_break_out_of_its_destination() {
+        let cases = [
+            (
+                "https://a\n\n[x](javascript:alert(1))",
+                "[t](<https://a%0A%0A[x](javascript:alert(1))>)\n",
+            ),
+            ("https://a\n\n# H", "[t](https://a%0A%0A#%20H)\n"),
+            ("https://a/)b", "[t](<https://a/)b>)\n"),
+            ("https://a/<b>", "[t](https://a/%3Cb%3E)\n"),
+            ("https://a/\\", "[t](https://a/%5C)\n"),
+            ("https://a/\u{7f}\tb", "[t](https://a/%7F%09b)\n"),
+        ];
+        for (url, expected) in cases {
+            let doc = ir(vec![para(vec![IrRun {
+                link: Some(url.into()),
+                ..IrRun::plain("t")
+            }])]);
+            let (text, _) = write(&doc, MarkdownFlavor::Gfm);
+            assert_eq!(text, expected, "{url:?}");
         }
     }
 
