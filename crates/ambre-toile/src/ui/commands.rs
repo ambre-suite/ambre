@@ -24,7 +24,8 @@
 // ============================================================================
 
 use ambre_commands::{
-    Command, CommandCategory, CommandId, IconId, Key, KeyBinding, Locale, Modifiers, shared,
+    Command, CommandCategory, CommandId, IconId, Key, KeyBinding, KeyChar, Locale, Modifiers,
+    shared,
 };
 
 use crate::ui::find::FIND;
@@ -84,8 +85,8 @@ const GENERAL: CommandCategory = CommandCategory("general");
 const DEL: KeyBinding = KeyBinding::new(Modifiers::NONE, Key::Delete);
 
 /// A bare letter, the de-facto whiteboard tool chord (`toile-tools`).
-const fn letter(c: char) -> KeyBinding {
-    KeyBinding::new(Modifiers::NONE, Key::char(c))
+const fn letter(c: KeyChar) -> KeyBinding {
+    KeyBinding::new(Modifiers::NONE, Key::Char(c))
 }
 
 /// Open the command palette. A UI-only intent the launcher intercepts, and the
@@ -101,10 +102,10 @@ describe! {
     CUT: menu::CUT, "Cut", Some(IconId("content-cut")), shared::CUT_CHORDS, CLIPBOARD;
     COPY: menu::COPY, "Copy", Some(IconId("content-copy")), shared::COPY_CHORDS, CLIPBOARD;
     PASTE: menu::PASTE, "Paste", Some(IconId("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
-    DUPLICATE: menu::DUPLICATE, "Duplicate", Some(IconId("content-duplicate")), &[KeyBinding::primary('d')], CLIPBOARD;
+    DUPLICATE: menu::DUPLICATE, "Duplicate", Some(IconId("content-duplicate")), &[KeyBinding::primary(KeyChar::D)], CLIPBOARD;
     DELETE: menu::DELETE, "Delete", Some(IconId("delete")), &[DEL], CLIPBOARD;
-    GROUP: menu::GROUP, "Group", Some(IconId("group")), &[KeyBinding::primary('g')], OBJECT;
-    UNGROUP: menu::UNGROUP, "Ungroup", Some(IconId("ungroup")), &[KeyBinding::primary_shift('g')], OBJECT;
+    GROUP: menu::GROUP, "Group", Some(IconId("group")), &[KeyBinding::primary(KeyChar::G)], OBJECT;
+    UNGROUP: menu::UNGROUP, "Ungroup", Some(IconId("ungroup")), &[KeyBinding::primary_shift(KeyChar::G)], OBJECT;
     BRING_FRONT: menu::BRING_FRONT, "Bring to front", Some(IconId("arrange-bring-to-front")), &[], OBJECT;
     FORWARD: menu::FORWARD, "Bring forward", Some(IconId("arrange-bring-forward")), &[], OBJECT;
     BACKWARD: menu::BACKWARD, "Send backward", Some(IconId("arrange-send-backward")), &[], OBJECT;
@@ -121,7 +122,7 @@ describe! {
     DISTRIBUTE_V: menu::DISTRIBUTE_V, "Distribute vertically", Some(IconId("align-vertical-distribute")), &[], OBJECT;
     ADD_TO_FRAME: menu::ADD_TO_FRAME, "Add to frame", Some(IconId("image-frame")), &[], OBJECT;
     REMOVE_FROM_FRAME: menu::REMOVE_FROM_FRAME, "Remove from frame", Some(IconId("selection-drag")), &[], OBJECT;
-    SELECT_ALL: menu::SELECT_ALL, "Select all", Some(IconId("select-all")), &[KeyBinding::primary('a')], SELECTION;
+    SELECT_ALL: menu::SELECT_ALL, "Select all", Some(IconId("select-all")), &[KeyBinding::primary(KeyChar::A)], SELECTION;
     REACT_THUMBSUP: menu::REACT_THUMBSUP, "React: thumbs up", Some(IconId("thumb-up")), &[], REACTION;
     REACT_HEART: menu::REACT_HEART, "React: heart", Some(IconId("heart")), &[], REACTION;
     REACT_CHECK: menu::REACT_CHECK, "React: check", Some(IconId("check")), &[], REACTION;
@@ -148,19 +149,19 @@ describe! {
     EXPORT_SVG: menu_bar::EXPORT_SVG, "Export as SVG", Some(IconId("file-export-outline")), &[], FILE;
     EXPORT_PDF: menu_bar::EXPORT_PDF, "Export deck as PDF", Some(IconId("file-pdf-box")), &[], FILE;
     PRESENT_DECK: menu_bar::DECK, "Order the deck", Some(IconId("view-carousel-outline")), &[], PRESENT;
-    TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(IconId("cursor-default")), &[letter('v')], TOOL;
-    TOOL_PEN: palette::TOOL_PEN, "Pen", Some(IconId("vector-polyline")), &[letter('p')], TOOL;
-    TOOL_SHAPE: palette::TOOL_SHAPE, "Shape", Some(IconId("shape-outline")), &[letter('r')], TOOL;
-    TOOL_CONNECTOR: palette::TOOL_CONNECTOR, "Connector", Some(IconId("vector-line")), &[letter('c')], TOOL;
-    TOOL_DRAW: palette::TOOL_DRAW, "Draw", Some(IconId("draw")), &[letter('d')], TOOL;
-    TOOL_STICKY: palette::TOOL_STICKY, "Sticky note", Some(IconId("note-outline")), &[letter('n')], TOOL;
-    TOOL_TEXT: palette::TOOL_TEXT, "Text", Some(IconId("format-text")), &[letter('t')], TOOL;
-    TOOL_COMMENT: palette::TOOL_COMMENT, "Comment", Some(IconId("comment-outline")), &[letter('m')], TOOL;
-    TOOL_LASER: palette::TOOL_LASER, "Highlighter", Some(IconId("cursor-pointer")), &[letter('l')], TOOL;
-    TOOL_HAND: palette::TOOL_HAND, "Hand", Some(IconId("hand-back-right")), &[letter('h')], TOOL;
-    FIND_OPEN: FIND, "Find", None, &[KeyBinding::primary('f')], FIND_REPLACE;
+    TOOL_SELECT: palette::TOOL_SELECT, "Select", Some(IconId("cursor-default")), &[letter(KeyChar::V)], TOOL;
+    TOOL_PEN: palette::TOOL_PEN, "Pen", Some(IconId("vector-polyline")), &[letter(KeyChar::P)], TOOL;
+    TOOL_SHAPE: palette::TOOL_SHAPE, "Shape", Some(IconId("shape-outline")), &[letter(KeyChar::R)], TOOL;
+    TOOL_CONNECTOR: palette::TOOL_CONNECTOR, "Connector", Some(IconId("vector-line")), &[letter(KeyChar::C)], TOOL;
+    TOOL_DRAW: palette::TOOL_DRAW, "Draw", Some(IconId("draw")), &[letter(KeyChar::D)], TOOL;
+    TOOL_STICKY: palette::TOOL_STICKY, "Sticky note", Some(IconId("note-outline")), &[letter(KeyChar::N)], TOOL;
+    TOOL_TEXT: palette::TOOL_TEXT, "Text", Some(IconId("format-text")), &[letter(KeyChar::T)], TOOL;
+    TOOL_COMMENT: palette::TOOL_COMMENT, "Comment", Some(IconId("comment-outline")), &[letter(KeyChar::M)], TOOL;
+    TOOL_LASER: palette::TOOL_LASER, "Highlighter", Some(IconId("cursor-pointer")), &[letter(KeyChar::L)], TOOL;
+    TOOL_HAND: palette::TOOL_HAND, "Hand", Some(IconId("hand-back-right")), &[letter(KeyChar::H)], TOOL;
+    FIND_OPEN: FIND, "Find", None, &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE;
     COMMENTS_OPEN: menu_bar::COMMENTS, "Comments", Some(IconId("comment-multiple-outline")), &[], VIEW;
-    PALETTE_OPEN: PALETTE, "Command palette", None, &[KeyBinding::primary('k')], GENERAL;
+    PALETTE_OPEN: PALETTE, "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Toile does
@@ -264,7 +265,7 @@ mod tests {
     fn redo_announces_both_chords() {
         let redo = ambre_commands::find(COMMANDS, menu_bar::REDO).expect("described");
         assert_eq!(redo.keybindings, shared::REDO_CHORDS);
-        assert_eq!(redo.chord(), Some(KeyBinding::primary_shift('z')));
+        assert_eq!(redo.chord(), Some(KeyBinding::primary_shift(KeyChar::Z)));
     }
 
     /// Every identity the three surfaces expose is described. An identity with

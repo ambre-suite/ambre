@@ -6,7 +6,9 @@
 //! table names them. Undo and redo are described here for their menu rows,
 //! and the view decodes their chords too: the shell binds none of them.
 
-use ambre_commands::{Command, CommandCategory, CommandId, IconId, KeyBinding, Keymap, Locale};
+use ambre_commands::{
+    Command, CommandCategory, CommandId, IconId, KeyBinding, KeyChar, Keymap, Locale,
+};
 
 use crate::mark::MarkRoot;
 
@@ -145,35 +147,35 @@ pub const COMMANDS: &[Command] = &[
         id: BOLD,
         title: bold_title,
         icon: Some(IconId("format-bold")),
-        keybindings: &[KeyBinding::primary('b')],
+        keybindings: &[KeyBinding::primary(KeyChar::B)],
         category: FORMAT,
     },
     Command {
         id: ITALIC,
         title: italic_title,
         icon: Some(IconId("format-italic")),
-        keybindings: &[KeyBinding::primary('i')],
+        keybindings: &[KeyBinding::primary(KeyChar::I)],
         category: FORMAT,
     },
     Command {
         id: UNDERLINE,
         title: underline_title,
         icon: Some(IconId("format-underline")),
-        keybindings: &[KeyBinding::primary('u')],
+        keybindings: &[KeyBinding::primary(KeyChar::U)],
         category: FORMAT,
     },
     Command {
         id: STRIKETHROUGH,
         title: strikethrough_title,
         icon: Some(IconId("format-strikethrough")),
-        keybindings: &[KeyBinding::primary_shift('x')],
+        keybindings: &[KeyBinding::primary_shift(KeyChar::X)],
         category: FORMAT,
     },
     Command {
         id: CODE,
         title: code_title,
         icon: Some(IconId("code-tags")),
-        keybindings: &[KeyBinding::primary('e')],
+        keybindings: &[KeyBinding::primary(KeyChar::E)],
         category: FORMAT,
     },
     Command {
@@ -243,7 +245,7 @@ pub const COMMANDS: &[Command] = &[
         id: PALETTE,
         title: palette_title,
         icon: None,
-        keybindings: &[KeyBinding::primary('k')],
+        keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: GENERAL,
     },
 ];
@@ -279,7 +281,10 @@ mod tests {
         }
         let mut keymap = Keymap::new();
         bind_keys(&mut keymap);
-        assert_eq!(keymap.resolve(KeyBinding::primary('k')), Some(PALETTE));
+        assert_eq!(
+            keymap.resolve(KeyBinding::primary(KeyChar::K)),
+            Some(PALETTE)
+        );
     }
 
     /// `PROSE-UI-056`: each control's chord resolves to the control's own

@@ -701,9 +701,6 @@ ambre-chrome | src/toast.rs | crate::toast | Toasts::info(message) | param | imp
 ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
-ambre-commands | src/keybinding.rs | crate::keybinding | Key::char(c) | param | char	free-text	the printable character a chord names, which KeyChar::new types and lowercases here
-ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary(c) | param | char	free-text	the printable character a Primary chord names, handed to Key::char
-ambre-commands | src/keybinding.rs | crate::keybinding | KeyBinding::primary_shift(c) | param | char	free-text	the printable character a Primary+Shift chord names, handed to Key::char
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.0 | field | u8	newtype-inner	the private bit set of the three named members, built only from the named constants
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::contains() | ret | bool	generic	whether the set holds a named member, a predicate answer
@@ -2559,7 +2556,6 @@ ambre-toile | src/ui/a11y.rs | crate::ui::a11y | element_text() | ret | Option<&
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | kind_name() | ret | &'static str	free-text	label, message or user text
 ambre-toile | src/ui/a11y.rs | crate::ui::a11y | selection_announcement() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/arrow.rs | crate::ui::arrow | holds_element() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/commands.rs | crate::ui::commands | letter(c) | param | char	generic	generic parser/reader/formatter over text
 ambre-toile | src/ui/commands.rs | crate::ui::commands | title() | ret | Option<String>	free-text	label, message or user text
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Post.0 | field | String	free-text	the comment body the user typed in the panel
 ambre-toile | src/ui/comments.rs | crate::ui::comments | CommentIntent::Reply.body | field | String	free-text	label, message or user text

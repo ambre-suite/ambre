@@ -1391,7 +1391,7 @@ fn a_style_takes_the_chord_prose_binds_to_its_mark() {
         let command = COMMANDS.iter().find(|c| c.id == id).unwrap();
         assert_eq!(
             command.keybindings,
-            &[KeyBinding::primary(key.get())],
+            &[KeyBinding::primary(key)],
             "{style:?} takes another chord than Prose"
         );
     }

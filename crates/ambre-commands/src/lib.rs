@@ -74,7 +74,7 @@ impl Command {
 /// the chords the universal operations answer (`ambre-spec-commands.md`,
 /// `UI-THREAD-011`).
 pub mod shared {
-    use super::{CommandId, Key, KeyBinding, Modifiers};
+    use super::{CommandId, Key, KeyBinding, KeyChar, Modifiers};
 
     /// The clipboard identities. One intent, one identity, in every
     /// application: a menu entry, a toolbar button and the browser's own event
@@ -95,30 +95,36 @@ pub mod shared {
     pub const BROWSER_SERVICED: [CommandId; 4] = [CUT, COPY, PASTE, PASTE_PLAIN];
 
     /// Undo answers one chord.
-    pub const UNDO_CHORDS: &[KeyBinding] = &[KeyBinding::primary('z')];
+    pub const UNDO_CHORDS: &[KeyBinding] = &[KeyBinding::primary(KeyChar::Z)];
 
     /// Redo answers two: Ctrl+Shift+Z, and Ctrl+Y after Excel and Sheets. Both
     /// reach the same identity, in every application.
-    pub const REDO_CHORDS: &[KeyBinding] =
-        &[KeyBinding::primary_shift('z'), KeyBinding::primary('y')];
+    pub const REDO_CHORDS: &[KeyBinding] = &[
+        KeyBinding::primary_shift(KeyChar::Z),
+        KeyBinding::primary(KeyChar::Y),
+    ];
 
     /// Cut: the modern chord, then the legacy one.
-    pub const CUT_CHORDS: &[KeyBinding] =
-        &[KeyBinding::primary('x'), KeyBinding::shift(Key::Delete)];
+    pub const CUT_CHORDS: &[KeyBinding] = &[
+        KeyBinding::primary(KeyChar::X),
+        KeyBinding::shift(Key::Delete),
+    ];
 
     /// Copy: the modern chord, then the legacy one.
     pub const COPY_CHORDS: &[KeyBinding] = &[
-        KeyBinding::primary('c'),
+        KeyBinding::primary(KeyChar::C),
         KeyBinding::new(Modifiers::PRIMARY, Key::Insert),
     ];
 
     /// Paste: the modern chord, then the legacy one.
-    pub const PASTE_CHORDS: &[KeyBinding] =
-        &[KeyBinding::primary('v'), KeyBinding::shift(Key::Insert)];
+    pub const PASTE_CHORDS: &[KeyBinding] = &[
+        KeyBinding::primary(KeyChar::V),
+        KeyBinding::shift(Key::Insert),
+    ];
 
     /// Paste as plain text: the chord Chrome, Edge, Firefox, Word and Google
     /// Docs share.
-    pub const PASTE_PLAIN_CHORDS: &[KeyBinding] = &[KeyBinding::primary_shift('v')];
+    pub const PASTE_PLAIN_CHORDS: &[KeyBinding] = &[KeyBinding::primary_shift(KeyChar::V)];
 }
 
 /// Runtime state of a command, derived from app state on each interrogation
@@ -321,14 +327,14 @@ mod tests {
             id: CommandId("prose.format.bold"),
             title: bold_title,
             icon: Some(IconId("bold")),
-            keybindings: &[KeyBinding::primary('b')],
+            keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: FORMAT,
         },
         Command {
             id: CommandId("prose.format.italic"),
             title: italic_title,
             icon: Some(IconId("italic")),
-            keybindings: &[KeyBinding::primary('i')],
+            keybindings: &[KeyBinding::primary(KeyChar::I)],
             category: FORMAT,
         },
     ];
@@ -373,28 +379,31 @@ mod tests {
         let km = Keymap::from_commands([COMMANDS]);
         assert_eq!(km.len(), 2);
         assert_eq!(
-            km.resolve(KeyBinding::primary('b')),
+            km.resolve(KeyBinding::primary(KeyChar::B)),
             Some(CommandId("prose.format.bold"))
         );
         // Shift state matters: Ctrl+Shift+B is not bound.
-        assert_eq!(km.resolve(KeyBinding::primary_shift('b')), None);
-        assert_eq!(km.resolve(KeyBinding::primary('z')), None);
+        assert_eq!(km.resolve(KeyBinding::primary_shift(KeyChar::B)), None);
+        assert_eq!(km.resolve(KeyBinding::primary(KeyChar::Z)), None);
     }
 
     #[test]
     fn rebinding_reports_the_displaced_command() {
         let mut km = Keymap::from_commands([COMMANDS]);
-        let displaced = km.bind(KeyBinding::primary('b'), CommandId("prose.format.italic"));
+        let displaced = km.bind(
+            KeyBinding::primary(KeyChar::B),
+            CommandId("prose.format.italic"),
+        );
         assert_eq!(displaced, Some(CommandId("prose.format.bold")));
         assert_eq!(
-            km.resolve(KeyBinding::primary('b')),
+            km.resolve(KeyBinding::primary(KeyChar::B)),
             Some(CommandId("prose.format.italic"))
         );
         assert_eq!(
-            km.unbind(KeyBinding::primary('b')),
+            km.unbind(KeyBinding::primary(KeyChar::B)),
             Some(CommandId("prose.format.italic"))
         );
-        assert!(km.resolve(KeyBinding::primary('b')).is_none());
+        assert!(km.resolve(KeyBinding::primary(KeyChar::B)).is_none());
     }
 
     /// A rebinding reaches its own chord and no other: every chord it did not
@@ -406,16 +415,22 @@ mod tests {
             .iter()
             .chain(EDITING)
             .flat_map(|c| c.keybindings.iter().copied())
-            .chain([KeyBinding::primary('q'), KeyBinding::primary_shift('b')])
+            .chain([
+                KeyBinding::primary(KeyChar::Q),
+                KeyBinding::primary_shift(KeyChar::B),
+            ])
             .collect();
         let before: Vec<Option<CommandId>> = chords.iter().map(|&kb| km.resolve(kb)).collect();
 
-        let rebound = KeyBinding::primary('b');
+        let rebound = KeyBinding::primary(KeyChar::B);
         km.bind(rebound, CommandId("prose.format.italic"));
-        km.bind(KeyBinding::primary('q'), CommandId("prose.format.bold"));
+        km.bind(
+            KeyBinding::primary(KeyChar::Q),
+            CommandId("prose.format.bold"),
+        );
 
         for (kb, was) in chords.iter().zip(before) {
-            if *kb == rebound || *kb == KeyBinding::primary('q') {
+            if *kb == rebound || *kb == KeyBinding::primary(KeyChar::Q) {
                 continue;
             }
             assert_eq!(km.resolve(*kb), was, "{kb} moved");
@@ -442,7 +457,7 @@ mod tests {
 
         let bold = CommandId("prose.format.bold");
         let other = CommandId("prose.format.other");
-        const CHORD: &[KeyBinding] = &[KeyBinding::primary('b')];
+        const CHORD: &[KeyBinding] = &[KeyBinding::primary(KeyChar::B)];
         let broken = [
             Command {
                 id: bold,
@@ -474,7 +489,7 @@ mod tests {
                 TableDefect::Ungrouped(bold),
                 TableDefect::BlankIcon(bold),
                 TableDefect::Unlabelled(other, Locale::Fr),
-                TableDefect::SharedChord(KeyBinding::primary('b'), bold, other),
+                TableDefect::SharedChord(KeyBinding::primary(KeyChar::B), bold, other),
                 TableDefect::DescribedTwice(bold),
             ]
         );
@@ -484,8 +499,8 @@ mod tests {
     fn both_redo_chords_reach_the_same_command() {
         let km = Keymap::from_commands([EDITING]);
         let redo = Some(CommandId("prose.history.redo"));
-        assert_eq!(km.resolve(KeyBinding::primary_shift('z')), redo);
-        assert_eq!(km.resolve(KeyBinding::primary('y')), redo);
+        assert_eq!(km.resolve(KeyBinding::primary_shift(KeyChar::Z)), redo);
+        assert_eq!(km.resolve(KeyBinding::primary(KeyChar::Y)), redo);
     }
 
     #[test]
@@ -507,9 +522,9 @@ mod tests {
     #[test]
     fn a_command_announces_the_first_chord_it_declares() {
         let redo = find(EDITING, CommandId("prose.history.redo")).unwrap();
-        assert_eq!(redo.chord(), Some(KeyBinding::primary_shift('z')));
+        assert_eq!(redo.chord(), Some(KeyBinding::primary_shift(KeyChar::Z)));
         let bold = find(COMMANDS, CommandId("prose.format.bold")).unwrap();
-        assert_eq!(bold.chord(), Some(KeyBinding::primary('b')));
+        assert_eq!(bold.chord(), Some(KeyBinding::primary(KeyChar::B)));
     }
 
     #[test]

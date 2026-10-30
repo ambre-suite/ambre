@@ -778,7 +778,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_key_a_character_a_composition_and_a_wheel_reach_the_child_verbatim() {
         let key = InputEvent::Key {
-            key: Key::char('a'),
+            key: Key::Char(KeyChar::A),
             mods: Modifiers::PRIMARY_SHIFT,
         };
         assert!(matches!(

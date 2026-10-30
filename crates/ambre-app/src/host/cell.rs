@@ -571,6 +571,7 @@ mod tests {
     use super::*;
     use crate::host::{MurmureView, THREAD_CANVAS};
     use ambre_canvas::ThemeControl;
+    use ambre_chrome::commands::KeyChar;
     use ambre_core::WholePx;
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -932,7 +933,7 @@ mod tests {
         assert!(!content.takes_text(), "the content's field let them go");
         assert_eq!(cells.route(&typed), Some(true), "the cell takes the text");
         let key = InputEvent::Key {
-            key: Key::char('a'),
+            key: Key::Char(KeyChar::A),
             mods: Modifiers::NONE,
         };
         assert!(cells.route(&key).is_some(), "and the keys");

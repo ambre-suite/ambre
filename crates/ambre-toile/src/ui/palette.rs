@@ -301,7 +301,7 @@ mod tests {
     use super::*;
     // The chord types are the tests' business now: the module itself reads
     // every binding from the registry.
-    use ambre_commands::{Key, KeyBinding, Modifiers};
+    use ambre_commands::{Key, KeyBinding, KeyChar, Modifiers};
 
     #[test]
     fn tool_for_command_maps_every_tool_id() {
@@ -349,7 +349,7 @@ mod tests {
             ('h', TOOL_HAND, Tool::Hand),
         ];
         for (c, id, tool) in cases {
-            let chord = KeyBinding::new(Modifiers::NONE, Key::char(c));
+            let chord = KeyBinding::new(Modifiers::NONE, Key::Char(KeyChar::new(c)));
             assert_eq!(keymap.resolve(chord), Some(id), "chord {c} -> command");
             assert_eq!(tool_for_command(id), Some(tool), "command {c} -> tool");
         }
@@ -363,7 +363,9 @@ mod tests {
         bind_tool_keys(&mut keymap);
         let mut ids: Vec<CommandId> = ['v', 'p', 'r', 'c', 'd', 'n', 't', 'm', 'l', 'h']
             .into_iter()
-            .filter_map(|c| keymap.resolve(KeyBinding::new(Modifiers::NONE, Key::char(c))))
+            .filter_map(|c| {
+                keymap.resolve(KeyBinding::new(Modifiers::NONE, Key::Char(KeyChar::new(c))))
+            })
             .collect();
         assert_eq!(ids.len(), TOOL_COMMANDS.len());
         ids.sort_by_key(|id| id.0);

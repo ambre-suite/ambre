@@ -19,7 +19,7 @@ use ambre_bus::{
     RestCommand, RestEvent, Role, SearchMatch, SpaceEvent, Timestamp, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteKey, PaletteRow, ShellAction};
-use ambre_commands::{KeyBinding, Locale};
+use ambre_commands::{KeyBinding, KeyChar, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId, ViewPoint, ViewPx};
 use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
@@ -1301,7 +1301,7 @@ fn found(query: &str, budget: ChannelId, zeta: ChannelId) -> UiEvent {
 fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     let (_owner, relay, [budget, zeta, _]) = three_named();
     let binding = COMMANDS.iter().find(|c| c.id == SEARCH).unwrap();
-    assert_eq!(binding.keybindings, [KeyBinding::primary('f')]);
+    assert_eq!(binding.keybindings, [KeyBinding::primary(KeyChar::F)]);
     let (handler, sent) = handler(relay);
     assert!(matches!(
         handler.on_key(SEARCH, ambre_chrome::KeyTarget::TextField),

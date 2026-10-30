@@ -268,7 +268,7 @@ pub fn CommandPalette(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_commands::{CommandCategory, IconId, KeyBinding};
+    use ambre_commands::{CommandCategory, IconId, KeyBinding, KeyChar};
 
     fn bold(_: &Locale) -> String {
         "Bold".into()
@@ -285,7 +285,7 @@ mod tests {
             id: CommandId("t.format.bold"),
             title: bold,
             icon: Some(IconId("format-bold")),
-            keybindings: &[KeyBinding::primary('b')],
+            keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: CommandCategory("format"),
         },
         Command {

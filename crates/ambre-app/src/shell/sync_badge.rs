@@ -23,7 +23,7 @@ pub(super) fn SyncBadge(status: Signal<ChromeStatus>) -> impl IntoView {
 mod tests {
     use super::*;
     use ambre_chrome::Kbd;
-    use ambre_chrome::commands::KeyBinding;
+    use ambre_chrome::commands::{KeyBinding, KeyChar};
     use leptos::mount::mount_to;
     use leptos::wasm_bindgen::JsCast;
     use wasm_bindgen_test::wasm_bindgen_test;
@@ -90,7 +90,7 @@ mod tests {
         mount_to(inner.body().unwrap(), move || {
             view! {
                 <SyncBadge status=status />
-                <Kbd binding=KeyBinding::primary('k') />
+                <Kbd binding=KeyBinding::primary(KeyChar::K) />
             }
         })
         .forget();

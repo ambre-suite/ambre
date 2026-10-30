@@ -265,12 +265,6 @@ pub enum Key {
 }
 
 impl Key {
-    /// Build a character key, lowercasing ASCII letters so 'B' and 'b' chord
-    /// identically (the shift state, if any, lives in `Modifiers`).
-    pub const fn char(c: char) -> Self {
-        Self::Char(KeyChar::new(c))
-    }
-
     /// The key a DOM `KeyboardEvent.key` names, `None` for a key the set does
     /// not model: a dead key, an IME composition, an unknown named key. The
     /// caller treats it as no chord.
@@ -303,7 +297,7 @@ impl Key {
                 if chars.next().is_some() {
                     return None; // multi-char named key we don't model
                 }
-                Self::char(c)
+                Self::Char(KeyChar::new(c))
             }
         })
     }
@@ -321,19 +315,19 @@ impl KeyBinding {
         Self { mods, key }
     }
 
-    /// `Primary + <char>` convenience for the common accelerator shape.
-    pub const fn primary(c: char) -> Self {
+    /// `Primary + <key>` convenience for the common accelerator shape.
+    pub const fn primary(key: KeyChar) -> Self {
         Self {
             mods: Modifiers::PRIMARY,
-            key: Key::char(c),
+            key: Key::Char(key),
         }
     }
 
-    /// `Primary + Shift + <char>` convenience.
-    pub const fn primary_shift(c: char) -> Self {
+    /// `Primary + Shift + <key>` convenience.
+    pub const fn primary_shift(key: KeyChar) -> Self {
         Self {
             mods: Modifiers::PRIMARY_SHIFT,
-            key: Key::char(c),
+            key: Key::Char(key),
         }
     }
 
@@ -394,18 +388,23 @@ mod tests {
 
     #[test]
     fn char_key_lowercases_ascii_letters() {
-        assert_eq!(Key::char('B'), Key::Char(KeyChar::B));
-        assert_eq!(Key::char('b'), Key::Char(KeyChar::B));
+        assert_eq!(KeyChar::new('B'), KeyChar::B);
+        assert_eq!(KeyChar::new('b'), KeyChar::B);
         assert_eq!(KeyChar::new('/').get(), '/');
-        assert_eq!(Key::char('/'), Key::Char(KeyChar::new('/')));
     }
 
     #[test]
     fn chords_are_shift_state_independent_in_the_key() {
         // The only difference between these two is the modifier set, never the
         // case of the key, so they hash and compare distinctly but cleanly.
-        assert_eq!(KeyBinding::primary('B'), KeyBinding::primary('b'));
-        assert_ne!(KeyBinding::primary('b'), KeyBinding::primary_shift('b'));
+        assert_eq!(
+            KeyBinding::primary(KeyChar::new('B')),
+            KeyBinding::primary(KeyChar::B)
+        );
+        assert_ne!(
+            KeyBinding::primary(KeyChar::B),
+            KeyBinding::primary_shift(KeyChar::B)
+        );
     }
 
     #[test]
@@ -454,8 +453,11 @@ mod tests {
 
     #[test]
     fn display_uses_fixed_modifier_order() {
-        assert_eq!(KeyBinding::primary_shift('b').to_string(), "Ctrl+Shift+B");
-        assert_eq!(KeyBinding::primary('s').to_string(), "Ctrl+S");
+        assert_eq!(
+            KeyBinding::primary_shift(KeyChar::B).to_string(),
+            "Ctrl+Shift+B"
+        );
+        assert_eq!(KeyBinding::primary(KeyChar::S).to_string(), "Ctrl+S");
         assert_eq!(KeyBinding::shift(Key::Insert).to_string(), "Shift+Insert");
         assert_eq!(
             KeyBinding::new(Modifiers::NONE, Key::Escape).to_string(),
@@ -495,9 +497,9 @@ mod tests {
 
     #[test]
     fn single_printable_char_maps() {
-        assert_eq!(Key::from_dom("a"), Some(Key::char('a')));
-        assert_eq!(Key::from_dom("A"), Some(Key::char('A')));
-        assert_eq!(Key::from_dom("="), Some(Key::char('=')));
+        assert_eq!(Key::from_dom("a"), Some(Key::Char(KeyChar::A)));
+        assert_eq!(Key::from_dom("A"), Some(Key::Char(KeyChar::A)));
+        assert_eq!(Key::from_dom("="), Some(Key::Char(KeyChar::new('='))));
     }
 
     #[test]

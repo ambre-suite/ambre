@@ -253,7 +253,7 @@ pub fn on_menu_keydown(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_commands::FunctionKey;
+    use ambre_commands::{FunctionKey, KeyChar};
 
     const ITEMS: [char; 4] = ['c', 'p', 'c', 'd'];
 
@@ -306,19 +306,19 @@ mod tests {
     #[test]
     fn a_letter_jumps_to_the_next_item_it_starts() {
         assert_eq!(
-            menu_key(Key::char('c'), Modifiers::NONE, 0, &ITEMS),
+            menu_key(Key::Char(KeyChar::C), Modifiers::NONE, 0, &ITEMS),
             MenuKey::Focus(2)
         );
         assert_eq!(
-            menu_key(Key::char('C'), Modifiers::NONE, 2, &ITEMS),
+            menu_key(Key::Char(KeyChar::new('C')), Modifiers::NONE, 2, &ITEMS),
             MenuKey::Focus(0)
         );
         assert_eq!(
-            menu_key(Key::char('d'), Modifiers::NONE, 0, &ITEMS),
+            menu_key(Key::Char(KeyChar::D), Modifiers::NONE, 0, &ITEMS),
             MenuKey::Focus(3)
         );
         assert_eq!(
-            menu_key(Key::char('z'), Modifiers::NONE, 0, &ITEMS),
+            menu_key(Key::Char(KeyChar::Z), Modifiers::NONE, 0, &ITEMS),
             MenuKey::Pass
         );
     }

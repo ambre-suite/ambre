@@ -688,11 +688,12 @@ mod tests {
     /// (`MURMURE-431`).
     #[test]
     fn a_chord_names_its_style() {
-        assert_eq!(chord_style(Key::char('b')), Some(TextStyle::Bold));
-        assert_eq!(chord_style(Key::char('I')), Some(TextStyle::Italic));
-        assert_eq!(chord_style(Key::char('e')), Some(TextStyle::Code));
+        assert_eq!(chord_style(Key::Char(KeyChar::B)), Some(TextStyle::Bold));
+        let upper = Key::Char(KeyChar::new('I'));
+        assert_eq!(chord_style(upper), Some(TextStyle::Italic));
+        assert_eq!(chord_style(Key::Char(KeyChar::E)), Some(TextStyle::Code));
         for key in [
-            Key::char('x'),
+            Key::Char(KeyChar::X),
             Key::Space,
             Key::Enter,
             Key::F(ambre_commands::FunctionKey::F2),

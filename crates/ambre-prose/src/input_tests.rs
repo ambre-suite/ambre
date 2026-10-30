@@ -2135,14 +2135,14 @@ fn a_copy_leaves_the_document_unchanged() {
 /// to the text path.
 #[test]
 fn a_printable_character_is_not_a_key() {
-    use ambre_commands::Key;
+    use ambre_commands::{Key, KeyChar};
     for key in [
-        Key::char('a'),
-        Key::char('Z'),
-        Key::char('é'),
+        Key::Char(KeyChar::A),
+        Key::Char(KeyChar::new('Z')),
+        Key::Char(KeyChar::new('é')),
         Key::Space,
-        Key::char('1'),
-        Key::char('='),
+        Key::Char(KeyChar::new('1')),
+        Key::Char(KeyChar::new('=')),
     ] {
         assert_eq!(
             ProseKey::from_key(key, ambre_commands::Modifiers::NONE),

@@ -1887,7 +1887,7 @@ mod tests {
     use ambre_draw::testing::RecordingSurface;
 
     use super::*;
-    use ambre_commands::KeyState;
+    use ambre_commands::{KeyChar, KeyState};
 
     /// The pointer at `x`, `y` of the view.
     fn pointer(x: impl Into<f64>, y: impl Into<f64>) -> ViewPoint {
@@ -2549,7 +2549,7 @@ mod tests {
         );
         assert!(key(
             &mut page,
-            Key::char(';'),
+            Key::Char(KeyChar::new(';')),
             Modifiers::PRIMARY,
             ambre_bus::PageTime(0.0)
         ));
@@ -2817,7 +2817,7 @@ mod tests {
         );
         assert!(!key(
             &mut paged,
-            Key::char('a'),
+            Key::Char(KeyChar::A),
             Modifiers::NONE,
             ambre_bus::PageTime(30.0)
         ));
@@ -4215,7 +4215,7 @@ mod tests {
         assert!(
             key(
                 &mut page,
-                Key::char('a'),
+                Key::Char(KeyChar::A),
                 Modifiers::PRIMARY,
                 ambre_bus::PageTime(0.0)
             ),
@@ -4279,7 +4279,7 @@ mod tests {
         }
         frame_with_fonts(&mut page.view);
         assert!(
-            command(&mut page, Key::char('b')),
+            command(&mut page, Key::Char(KeyChar::B)),
             "the composer takes Cmd+B"
         );
         frame_with_fonts(&mut page.view);
@@ -4292,13 +4292,13 @@ mod tests {
             ambre_bus::PageTime(0.0),
         );
         assert!(
-            command(&mut page, Key::char('z')),
+            command(&mut page, Key::Char(KeyChar::Z)),
             "the composer takes Cmd+Z"
         );
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
 
         assert!(
-            command(&mut page, Key::char(';')),
+            command(&mut page, Key::Char(KeyChar::new(';'))),
             "the composer takes Cmd+;"
         );
         assert_eq!(*page.asked_emoji.borrow(), [Region::Channel]);
@@ -4328,21 +4328,25 @@ mod tests {
         press_composer(&mut page);
         type_slowly(&mut page, "hi yo");
         assert!(
-            chord(&mut page, Key::char('z'), Modifiers::PRIMARY),
+            chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY),
             "the composer takes the chord"
         );
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
-        chord(&mut page, Key::char('z'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
         assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
-        chord(&mut page, Key::char('z'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
         assert_eq!(
             painted(&mut page, channel).as_deref(),
             Some(""),
             "nothing left to undo"
         );
-        assert!(chord(&mut page, Key::char('z'), Modifiers::PRIMARY_SHIFT));
+        assert!(chord(
+            &mut page,
+            Key::Char(KeyChar::Z),
+            Modifiers::PRIMARY_SHIFT
+        ));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
-        assert!(chord(&mut page, Key::char('y'), Modifiers::PRIMARY));
+        assert!(chord(&mut page, Key::Char(KeyChar::Y), Modifiers::PRIMARY));
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yo"));
 
         for _ in 0..2 {
@@ -4355,7 +4359,7 @@ mod tests {
             frame_with_fonts(&mut page.view);
         }
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi "));
-        chord(&mut page, Key::char('z'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
         assert_eq!(
             painted(&mut page, channel).as_deref(),
             Some("hi yo"),
@@ -4364,10 +4368,10 @@ mod tests {
 
         page.view.paste("there");
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yothere"));
-        chord(&mut page, Key::char('z'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
         assert_eq!(painted(&mut page, channel).as_deref(), Some("hi yo"));
         type_slowly(&mut page, "x");
-        chord(&mut page, Key::char('z'), Modifiers::PRIMARY_SHIFT);
+        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY_SHIFT);
         assert_eq!(
             painted(&mut page, channel).as_deref(),
             Some("hi yox"),
@@ -4391,9 +4395,9 @@ mod tests {
         );
         frame_with_fonts(&mut page.view);
         assert_eq!(sent(&page).len(), 1);
-        chord(&mut page, Key::char('z'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
         assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
-        chord(&mut page, Key::char('z'), Modifiers::PRIMARY_SHIFT);
+        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY_SHIFT);
         assert_eq!(painted(&mut page, channel).as_deref(), Some(""));
         assert!(sent(&page).is_empty(), "no undo reaches the sent message");
     }
@@ -4486,7 +4490,7 @@ mod tests {
         frame_with_fonts(&mut page.view);
         key(
             &mut page,
-            Key::char('a'),
+            Key::Char(KeyChar::A),
             Modifiers::PRIMARY,
             ambre_bus::PageTime(0.0),
         );
@@ -4842,7 +4846,7 @@ mod tests {
         shift_key(&mut page, Key::ArrowLeft);
         key(
             &mut page,
-            Key::char('a'),
+            Key::Char(KeyChar::A),
             Modifiers::PRIMARY,
             ambre_bus::PageTime(0.0),
         );
@@ -4870,7 +4874,7 @@ mod tests {
         assert_eq!(samples(&page).0, 1, "a paste");
         key(
             &mut page,
-            Key::char('a'),
+            Key::Char(KeyChar::A),
             Modifiers::PRIMARY,
             ambre_bus::PageTime(0.0),
         );
@@ -5781,7 +5785,7 @@ mod tests {
         assert_eq!(painted(&mut page, channel).as_deref(), Some("say done"));
         assert_eq!(page.view.composer().styles(channel), [styled(Bold, 4..8)]);
 
-        chord(&mut page, Key::char('z'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
         assert_eq!(painted(&mut page, channel).as_deref(), Some("say **done**"));
         assert_eq!(page.view.composer().styles(channel), []);
         key(
@@ -6073,7 +6077,7 @@ mod tests {
         press_composer(&mut page);
         type_slowly(&mut page, "one two");
         assert!(
-            chord(&mut page, Key::char('b'), Modifiers::PRIMARY),
+            chord(&mut page, Key::Char(KeyChar::B), Modifiers::PRIMARY),
             "no selection: the chord is taken"
         );
         frame_with_fonts(&mut page.view);
@@ -6082,18 +6086,18 @@ mod tests {
             shift_key(&mut page, Key::ArrowLeft);
         }
         frame_with_fonts(&mut page.view);
-        chord(&mut page, Key::char('b'), Modifiers::PRIMARY);
-        chord(&mut page, Key::char('i'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::B), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::I), Modifiers::PRIMARY);
         frame_with_fonts(&mut page.view);
         assert_eq!(
             page.view.composer().styles(channel),
             [styled(Bold, 4..7), styled(Italic, 4..7)]
         );
-        chord(&mut page, Key::char('b'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::B), Modifiers::PRIMARY);
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().styles(channel), [styled(Italic, 4..7)]);
         assert!(
-            !chord(&mut page, Key::char('q'), Modifiers::PRIMARY),
+            !chord(&mut page, Key::Char(KeyChar::Q), Modifiers::PRIMARY),
             "no style takes `q`"
         );
         key(
@@ -6207,7 +6211,7 @@ mod tests {
         shift_key(&mut page, Key::ArrowLeft);
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("e, selected"));
-        chord(&mut page, Key::char('z'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::Z), Modifiers::PRIMARY);
         frame_with_fonts(&mut page.view);
         assert_eq!(last(&page).as_deref(), Some("one two"));
         let count = page.said.borrow().len();
@@ -6396,8 +6400,8 @@ mod tests {
 
         edit(&page);
         frame_with_fonts(&mut page.view);
-        chord(&mut page, Key::char('a'), Modifiers::PRIMARY);
-        chord(&mut page, Key::char('b'), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::A), Modifiers::PRIMARY);
+        chord(&mut page, Key::Char(KeyChar::B), Modifiers::PRIMARY);
         key(
             &mut page,
             Key::Enter,

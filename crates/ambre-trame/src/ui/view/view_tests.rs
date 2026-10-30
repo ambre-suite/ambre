@@ -4,7 +4,7 @@
 //! reads a clock the test moves.
 
 use ambre_canvas::PointerButton;
-use ambre_commands::{FunctionKey, Key, Modifiers};
+use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers};
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -228,23 +228,23 @@ fn pasted(sent: &[TrameCommand]) -> Option<&ambre_bus::ClipboardPayload> {
 fn a_printable_key_is_not_consumed() {
     let mut rig = Rig::new();
     for key in [
-        Key::char('a'),
-        Key::char('z'),
-        Key::char('é'),
+        Key::Char(KeyChar::A),
+        Key::Char(KeyChar::Z),
+        Key::Char(KeyChar::new('é')),
         Key::Space,
-        Key::char('1'),
-        Key::char('='),
+        Key::Char(KeyChar::new('1')),
+        Key::Char(KeyChar::new('=')),
     ] {
         assert!(!rig.key(key), "{key:?} was consumed on the grid");
     }
     rig.type_text("x");
     for key in [
-        Key::char('a'),
-        Key::char('z'),
-        Key::char('é'),
+        Key::Char(KeyChar::A),
+        Key::Char(KeyChar::Z),
+        Key::Char(KeyChar::new('é')),
         Key::Space,
-        Key::char('1'),
-        Key::char('='),
+        Key::Char(KeyChar::new('1')),
+        Key::Char(KeyChar::new('=')),
     ] {
         assert!(!rig.key(key), "{key:?} was consumed in the editor");
     }
@@ -757,7 +757,7 @@ fn an_open_session_writes_nothing_and_holds_the_grid() {
         rig.key(key);
     }
     rig.chord(Key::ArrowLeft, Modifiers::SHIFT);
-    rig.chord(Key::char('a'), Modifiers::PRIMARY);
+    rig.chord(Key::Char(KeyChar::A), Modifiers::PRIMARY);
     rig.frame();
     let sent = rig.sent();
     assert!(!writes(&sent), "the open session wrote: {sent:?}");

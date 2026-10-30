@@ -114,7 +114,7 @@ pub const COMMANDS: &[Command] = &[
         id: PALETTE,
         title: palette_title,
         icon: None,
-        keybindings: &[KeyBinding::primary('k')],
+        keybindings: &[KeyBinding::primary(KeyChar::K)],
         category: GENERAL,
     },
     Command {
@@ -144,7 +144,7 @@ pub const COMMANDS: &[Command] = &[
         id: SEARCH,
         title: search_title,
         icon: None,
-        keybindings: &[KeyBinding::primary('f')],
+        keybindings: &[KeyBinding::primary(KeyChar::F)],
         category: SEARCH_CATEGORY,
     },
     // No chord: the keymap matches the character a key types, and Ctrl+/
@@ -618,7 +618,7 @@ const fn region_key(keys: KeyBinding, action: &'static str, place: KeyPlace) -> 
 
 /// The key that, with the primary modifier, opens the emoji picker on the
 /// composer (`MURMURE-139`).
-pub const EMOJI_KEY: KeyBinding = KeyBinding::primary(';');
+pub const EMOJI_KEY: KeyBinding = KeyBinding::primary(KeyChar::new(';'));
 
 /// The keys inside a conversation, one row each (the Murmure keyboard spec).
 pub const REGION_KEYS: &[RegionKey] = &[
@@ -1043,7 +1043,7 @@ mod tests {
         let chords = COMMANDS.iter().flat_map(|c| c.keybindings).count();
         assert_eq!(list.len(), chords + REGION_KEYS.len());
         let palette = KeyRow {
-            keys: KeyBinding::primary('k'),
+            keys: KeyBinding::primary(KeyChar::K),
             action: "Command palette".to_owned(),
             place: KeyPlace::Anywhere,
         };
@@ -1080,12 +1080,12 @@ mod tests {
     fn no_chord_is_one_the_browser_services() {
         let reserved = [
             KeyBinding::shift(Key::Escape),
-            KeyBinding::primary('w'),
-            KeyBinding::primary('t'),
-            KeyBinding::primary('n'),
-            KeyBinding::primary_shift('w'),
-            KeyBinding::primary_shift('t'),
-            KeyBinding::primary_shift('n'),
+            KeyBinding::primary(KeyChar::W),
+            KeyBinding::primary(KeyChar::T),
+            KeyBinding::primary(KeyChar::N),
+            KeyBinding::primary_shift(KeyChar::W),
+            KeyBinding::primary_shift(KeyChar::T),
+            KeyBinding::primary_shift(KeyChar::N),
             KeyBinding::new(Modifiers::PRIMARY, Key::Tab),
         ];
         let serviced: Vec<KeyBinding> = [
