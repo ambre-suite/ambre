@@ -591,6 +591,11 @@ impl SheetId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The name of a sheet whose document holds none: its id, verbatim.
+    pub fn bare_name(&self) -> SheetName {
+        SheetName::stored(self.0.clone())
+    }
 }
 
 /// A map keyed by sheet id answers a lookup by the bare text, as a map keyed

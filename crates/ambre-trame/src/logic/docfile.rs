@@ -96,7 +96,7 @@ impl TrameState {
         // payload is a separate gate and it runs before any container is used
         // (`SCHEMA-006`). A file this build cannot read leaves the workbook
         // alone.
-        let payload = schema::gate(header.payload.as_bytes()).map_err(|e| match e {
+        let payload = schema::gate(&header.payload).map_err(|e| match e {
             // Bytes the engine will not read already have a name in the
             // container taxonomy; the gate only happens to be where they were
             // discovered.
@@ -104,7 +104,7 @@ impl TrameState {
             other => DocFileError::PayloadSchema(other),
         })?;
         let order = self.sheet_order_ids();
-        self.doc.import(&payload).map_err(|e| {
+        self.doc.import(payload.as_bytes()).map_err(|e| {
             tracing::warn!("[Trame] .ambre payload rejected by the CRDT engine: {e:?}");
             DocFileError::PayloadRejected
         })?;

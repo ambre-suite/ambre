@@ -303,6 +303,12 @@ impl UnixMillis {
         Self(self.0.saturating_add(span.0))
     }
 
+    /// The span from `earlier` to this instant, zero when `earlier` is later.
+    #[must_use]
+    pub const fn since(self, earlier: Self) -> Millis {
+        Millis(self.0.saturating_sub(earlier.0))
+    }
+
     /// The whole second the instant falls in.
     pub const fn to_unix_seconds(self) -> UnixSeconds {
         UnixSeconds(self.0 / 1000)

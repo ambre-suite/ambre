@@ -130,9 +130,9 @@ impl Timeline {
 
 /// One `performance.mark(name)` at the page's current time. Always on, like
 /// the measures.
-pub(crate) fn mark(name: &str) {
+pub(crate) fn mark(name: ProbeName) {
     if let Some(performance) = web_sys::window().and_then(|w| w.performance()) {
-        let _ = performance.mark(name);
+        let _ = performance.mark(name.as_str());
     }
 }
 
