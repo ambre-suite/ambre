@@ -1252,7 +1252,9 @@ pub fn read_defaults(doc: &LoroDoc) -> DocDefaults {
         font_size: read_f32(&defaults, DefaultsKey::FontSizePt)
             .filter(|number| *number > 0.0)
             .and_then(FontSize::new)
-            .unwrap_or(fallback.font_size),
+            .map_or(fallback.font_size, |size| {
+                size.at_most(crate::mark::FONT_SIZE_MAX)
+            }),
         line_height: read_f32(&defaults, DefaultsKey::LineHeight)
             .and_then(LineSpacingMultiple::new)
             .unwrap_or(fallback.line_height),
@@ -1803,6 +1805,21 @@ mod tests {
         let format = read_page_format(&doc);
         assert_eq!(format.width, PageFormat::default().width);
         assert_eq!(format.margin_left, Mm::new(5.0));
+    }
+
+    /// A default size a peer stored past the cap reads as the cap
+    /// (`CANVAS-088`).
+    #[test]
+    fn a_default_size_past_the_cap_reads_as_the_cap() {
+        let doc = LoroDoc::new();
+        seed(&doc);
+        let defaults = map_at(&meta(&doc), MetaKey::Defaults)
+            .map(Fields::<DefaultsKey>::of)
+            .expect("seed writes the defaults register");
+        defaults
+            .insert(DefaultsKey::FontSizePt, 1.0e6)
+            .expect("the register takes a double");
+        assert_eq!(read_defaults(&doc).font_size, crate::mark::FONT_SIZE_MAX);
     }
 
     #[test]

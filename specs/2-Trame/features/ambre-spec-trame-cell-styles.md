@@ -25,6 +25,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-186` | `INV` | A cell the toolbar calls a number MUST be a cell the grid aligns as one. | this spec section 6 | `ambre_trame::logic::tests::group1::a_formatted_number_aligns_as_a_number_everywhere` | none | verified |
 | `TRAME-239` | `INV` | A top-N percentage MUST lie between 0 and 100 inclusive. | this spec section 3 | `ambre_bus::app::trame::features::tests::a_percentage_runs_from_zero_to_a_hundred` -- both bounds pass, while NaN, both infinities and a value past either bound are refused | none | verified |
 | `TRAME-240` | `INV` | A top-N percentage MUST keep the value it was given, with no rounding. | this spec section 3 | `ambre_bus::app::trame::features::tests::a_percentage_runs_from_zero_to_a_hundred` -- `12.5` and `33.333_33` read back bit for bit | none | verified |
+| `TRAME-259` | `INV` | A cell font size MUST read as at most 409 points, the spreadsheet cap: a stored or received size past it reads as 409. | this spec section 3; `CANVAS-088` | `ambre_bus::app::trame::style::tests::a_cell_size_past_the_cap_reads_as_the_cap` -- a stored 4000 decodes as 409, and a size in range keeps its bytes | none | verified |
 | `TRAME-095` | `IO` | A style MUST survive a reload. | this spec section 3 | `ambre_trame::logic::tests::group1::formatting_survives_snapshot_roundtrip`; `::set_cell_style_round_trips_and_formats_numbers` | none | verified |
 | `TRAME-187` | `IO` | A stored style a reload cannot read MUST NOT come back as the default style with no notice. | this spec section 6 | `ambre_trame::logic::schema::tests::a_register_that_cannot_be_decoded_reaches_the_user` | none | verified |
 | `TRAME-097` | `OBS` | The toolbar MUST report the style of the active cell. | this spec section 4 | `ambre_trame::logic::tests::group1::bold_stays_on_the_cell_not_the_selection`; `ambre_trame::tests::chrome_ui::style_applied_mirrors_into_style_state` -- the chrome half | none | verified |
@@ -45,6 +46,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-098` | `FRAME` | A cell a merge covers MUST NOT take a style of its own. | this spec section 3 | `ambre_trame::logic::tests::group13::a_covered_cell_takes_no_style` | none | verified |
 | `TRAME-191` | `FRAME` | Styling a selection MUST NOT change the value of any cell in it. | this spec section 2 | `ambre_trame::logic::tests::group13::styling_keeps_every_value` | none | verified |
 | `TRAME-192` | `FRAME` | Styling a selection MUST NOT move the cursor or change what is selected. | this spec section 4 | `ambre_trame::logic::tests::group13::styling_keeps_the_selection` | none | verified |
+| `TRAME-260` | `FAIL` | Given a size outside 1 to 409 points, a formatting gesture MUST be refused whole, MUST write nothing, and MUST tell the user. | this spec section 3; `TRAME-259` | `ambre_trame::logic::tests::group1::a_cell_size_outside_the_range_is_refused_at_the_command` -- 410, 4000 and half a point write nothing and raise one notice, and 409 is written | none | verified |
 | `TRAME-193` | `FAIL` | Given a cell the document cannot hold, a formatting gesture MUST tell the user, and MUST NOT draw a style it did not store. | this spec section 6 | `ambre_trame::logic::tests::group1::style_beyond_the_cap_is_refused_and_not_drawn` | none | verified |
 
 ### 1.3 Recolour a cell from a rule
@@ -61,7 +63,7 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md section 6`.
 * **Boundary.** none of its own: a style is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 20 `verified`, 4 `unimplemented`. What holds is the single-register model: where
+* **Verification.** 22 `verified`, 4 `unimplemented`. What holds is the single-register model: where
   a style lives, how it undoes, how it broadcasts, how it reloads and what the toolbar reads. The
   gesture around it is held too. Each preset reaches its own edges over a 3x3 range, a covered cell
   takes no style, and a run keeps every value and the selection. A top-N percentage is held to its

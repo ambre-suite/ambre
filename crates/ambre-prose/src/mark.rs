@@ -12,8 +12,8 @@ use loro::{ExpandType, LoroDoc, StyleConfig, StyleConfigMap};
 
 // The value grammar lives on the bus, so a command carries a checked value.
 pub use ambre_bus::app::prose::mark::{
-    MarkRoot, MarkValue, MarkValueError, canonical_color, canonical_number, canonical_value,
-    parse_color, parse_font_size, validate_value,
+    FONT_SIZE_MAX, MarkRoot, MarkValue, MarkValueError, canonical_color, canonical_number,
+    canonical_value, parse_color, parse_font_size, read_font_size, validate_value,
 };
 
 ambre_core::define_flag! {

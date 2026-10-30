@@ -206,6 +206,7 @@ ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number(v
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | read_font_size(raw) | param | &str	free-text	text content / label / parser input
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate
@@ -473,6 +474,7 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | ATLAS_SIZE | const |
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.bearing_left | field | i32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.bearing_top | field | i32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.pixel_height | field | u32	math	geometry, layout, GPU or count arithmetic
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.texel_scale | field | f32	math	device pixels per atlas texel, a bare ratio the quad multiplies by
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.pixel_width | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.uv_max | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | AtlasSlot.uv_min | field | [f32;2]	math	geometry, layout, GPU or count arithmetic
@@ -3065,6 +3067,7 @@ ambre-canvas | src/density.rs | crate::density | DevicePx::new(value) | param | 
 ambre-canvas | src/density.rs | crate::density | DevicePx::unsigned_abs() | ret | u32	newtype-inner	the magnitude of a shift, in the unsigned texel coordinate wgpu takes
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize.0 | field | f32	newtype-inner	the inside of the glyph raster size, in device pixels
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::get() | ret | f32	newtype-inner	the raster size unwrapped for Swash, which takes the float, and for the atlas key
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::texel_scale() | ret | f32	math	device pixels per atlas texel, a bare ratio of the size to the raster cap
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::new(device_px) | param | f32	newtype-inner	the constructor of the glyph raster size, in device pixels
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(font_size) | param | f32	newtype-inner	the constructor of the glyph raster size: the font size parley's glyph run returns, in the units of its layout
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(scale) | param | f64	newtype-inner	the constructor of the glyph raster size: the scale of the drawing transform, a bare ratio

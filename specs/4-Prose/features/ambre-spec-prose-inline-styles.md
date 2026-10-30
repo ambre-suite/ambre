@@ -30,6 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `PROSE-FEAT-176` | `CONC` | Two authors setting two different properties of one paragraph MUST both keep their property: neither MUST overwrite the other's. | this spec section 3 | `ambre_prose::logic::convergence_tests::two_peers_setting_two_paragraph_properties_both_keep_theirs` | none | verified |
 | `PROSE-FEAT-175` | `INV` | Two spellings of one colour MUST be stored as one: the bytes a peer writes for a colour MUST depend on the colour alone. | this spec section 3; `PROSE-008` | `ambre_prose::logic::marks::tests::a_colour_reaches_the_document_in_one_spelling`; `ambre_prose::style::tests::two_spellings_of_one_colour_resolve_to_one_value` | none | verified |
 | `PROSE-FEAT-023` | `IO` | Reading a stored colour and writing it back MUST leave the bytes unchanged. | this spec section 3; `PROSE-008` | `ambre_prose::logic::marks::tests::a_stored_colour_written_back_leaves_the_bytes_unchanged` | none | verified |
+| `PROSE-FEAT-313` | `INV` | A font size MUST read as at most 1638 points, the word-processing cap: a stored, received or pasted size past it reads as 1638. | this spec section 3; `CANVAS-088`; `PROSE-FEAT-022` | `ambre_prose::style::tests::a_stored_size_past_the_prose_cap_reads_as_the_cap` -- a mark of a million points, and a typed 1639 refused; `ambre_prose::doc::tests::a_default_size_past_the_cap_reads_as_the_cap` -- the document default; `ambre_prose::logic::clipboard::tests::a_crafted_payload_writes_only_the_marks_a_typed_mark_may` -- an own-bytes paste; `ambre_prose::logic::clipboard::html_read::tests::colours_and_sizes_land_canonical` -- an HTML paste | none | verified |
 | `PROSE-FEAT-309` | `OBS` | A paragraph's first line MUST start at its first-line indent, counted from its left indent, and every later line at the left indent. | this spec section 3 | `ambre_prose::layout::run::tests::the_first_line_starts_at_its_indent` | none | verified |
 | `PROSE-FEAT-310` | `OBS` | A negative first-line indent MUST start the first line that far left of the left indent. | this spec section 3 | not built | unbuilt -- lands with the `Hanging indents` Story (`ambre-roadmap.md` E5) | unimplemented |
 
@@ -72,10 +73,10 @@ status values are normative in `ambre-spec-template.md`.
   pagination path rather than beside it.
 * **Boundary.** none of its own: a mark is a document write, and `ZK-001` seals every payload
   before it leaves the client.
-* **Verification.** 26 `verified`, 0 `untested`, 2 `unimplemented`. `PROSE-FEAT-311` holds the
-  three levels of the cascade that resolve today. `PROSE-FEAT-020` is the named paragraph style,
-  the fourth level: no command writes one yet. `PROSE-FEAT-310` is the hanging indent. The layout carries
-  the first-line indent as a box ahead of the text, and a box has no negative width.
+* **Verification.** 27 `verified`, 2 `unimplemented`. `PROSE-FEAT-311` holds the three levels of the
+  cascade that resolve today. `PROSE-FEAT-020` is the named paragraph style, the fourth level: no
+  command writes one yet. `PROSE-FEAT-310` is the hanging indent. The layout carries the first-line
+  indent as a box ahead of the text, and a box has no negative width.
 
   `PROSE-FEAT-021`, `PROSE-FEAT-008`, `PROSE-FEAT-184` and `PROSE-FEAT-176` are the four the
   two-peer table below is written for. The four `FRAME` rows are each held by the same test as

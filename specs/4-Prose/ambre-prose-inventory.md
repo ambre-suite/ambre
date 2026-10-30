@@ -32,7 +32,7 @@
 | `prose-clipboard` | Copy, cut and paste. | partial | 25 |  |
 | `prose-engine` | An author types a word and every collaborator reads it. | partial | 43 |  |
 | `prose-import-export` | A user opens a document that came from Word, from a web page or from a Markdown file. | partial | 51 |  |
-| `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | partial | 28 |  |
+| `prose-inline-styles` | Bold, italic, colour, size, links: formatting applied to a range of text, and the paragraph settings underneath it. | partial | 29 |  |
 | `prose-page-rendering` | What a page looks like on the canvas. | partial | 23 |  |
 | `prose-pagination` | A document becomes a sequence of measured pages. | partial | 51 |  |
 | `prose-slash-command` | Type a slash at the start of an empty line and a short list appears: a heading, a list, a table, a page break. | partial | 20 |  |
@@ -44,4 +44,4 @@
 | `prose-pdf-export` | Prose's half of the shared PDF export (`ambre-spec-pdf-export.md`): the pagination the file reuses, the links it carries, and the language it declares. | design-only | 8 |  |
 | `prose-spell-check` | Misspelled words underlined as the document is written, with suggestions, checked on the reader's own machine. | design-only | 15 |  |
 
-**28 features: 14 implemented, 10 partial, 4 design-only. 697 contract rows, 0 loose.**
+**28 features: 14 implemented, 10 partial, 4 design-only. 698 contract rows, 0 loose.**
