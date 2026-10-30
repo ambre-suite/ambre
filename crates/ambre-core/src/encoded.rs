@@ -140,6 +140,16 @@ define_encoded! {
     lengths: [NONCE_LEN + KEY_LEN + TAG_LEN, NONCE_LEN + KEY_LEN + ANCHOR_LEN + TAG_LEN]
 }
 
+impl WrappedDocKey {
+    /// The wire form of a wrapped key: its nonce, then its ciphertext.
+    pub fn from_parts(nonce: &crate::Nonce, ciphertext: &crate::Ciphertext) -> Self {
+        let mut bytes = Vec::with_capacity(nonce.0.len() + ciphertext.0.len());
+        bytes.extend_from_slice(&nonce.0);
+        bytes.extend_from_slice(&ciphertext.0);
+        Self(bytes)
+    }
+}
+
 define_encoded! {
     /// A document or channel name sealed under its document key: the object
     /// header, the name, the tag.
@@ -302,6 +312,18 @@ mod tests {
         assert_eq!(WrappedMasterKey::LENGTHS, [72]);
         assert_eq!(MasterKeySalt::LEN, 32);
         assert!(reads::<SealedName>(0) && reads::<SealedName>(SealedName::MAX_LEN));
+    }
+
+    /// A wrapped key joins its nonce and its ciphertext in that order, at a
+    /// length the wire reads back.
+    #[test]
+    fn a_wrapped_key_is_its_nonce_then_its_ciphertext() {
+        let nonce = crate::Nonce([1; 24]);
+        let ciphertext = crate::Ciphertext(vec![2; 48]);
+        let key = WrappedDocKey::from_parts(&nonce, &ciphertext);
+        assert_eq!(&key.as_bytes()[..24], &[1; 24]);
+        assert_eq!(&key.as_bytes()[24..], &[2; 48][..]);
+        assert!(WrappedDocKey::LENGTHS.contains(&key.as_bytes().len()));
     }
 
     /// A salt of any width but its own is refused when it is built, so a

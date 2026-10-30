@@ -2471,7 +2471,7 @@ pub struct Judgement {
     pub over: Tally,
     /// The lines whose key has fewer sites than the count, none included.
     pub stale: Tally,
-    /// One message per line that is over or stale.
+    /// One message per key no line names, and per line over or stale.
     pub problems: Vec<String>,
 }
 
@@ -2501,7 +2501,13 @@ pub fn judge(
     };
     for (key, found) in &sites {
         match rows.get(key) {
-            None => judgement.unlisted = judgement.unlisted.incremented(),
+            // The message names the key, so the line can be written from it.
+            None => {
+                judgement.unlisted = judgement.unlisted.incremented();
+                judgement.problems.push(format!(
+                    "no line names the key, the report finds {found}\n  {key}"
+                ));
+            }
             Some(row) if *found > row.count => {
                 judgement.over = judgement.over.incremented();
                 judgement.problems.push(format!(

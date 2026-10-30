@@ -467,11 +467,17 @@ fn two_sites() -> (Report, String) {
 
 #[test]
 fn report_mode_passes_on_refusals_and_strict_mode_fails() {
-    let (report, _) = two_sites();
+    let (report, key) = two_sites();
     let empty = allowlist(&[]);
     let lenient = judge(&report, Some(&empty), Strictness::Report).unwrap();
     assert_eq!(lenient.outcome, Outcome::Pass);
     assert_eq!(lenient.unlisted, Tally::new(1));
+    assert_eq!(
+        lenient.problems,
+        [format!(
+            "no line names the key, the report finds 2\n  {key}"
+        )]
+    );
     let strict = judge(&report, Some(&empty), Strictness::Strict).unwrap();
     assert_eq!(strict.outcome, Outcome::Fail);
 }

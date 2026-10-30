@@ -54,9 +54,10 @@ pub(crate) fn wrap_anchored_b64(
     // Fails if the peer public key is non-contributory (low-order): we refuse to
     // wrap under a predictable KEK rather than hand out a forgeable share.
     let wrapped = ambre_crypto::ecdh::wrap_anchored(my_xk, peer_pub, doc_key, anchor.as_ref())?;
-    let mut enc = wrapped.nonce.0.to_vec();
-    enc.extend_from_slice(&wrapped.ciphertext.0);
-    Ok(ambre_core::WrappedDocKey::new(enc.to_vec()))
+    Ok(ambre_core::WrappedDocKey::from_parts(
+        &wrapped.nonce,
+        &wrapped.ciphertext,
+    ))
 }
 
 /// Unwraps our own copy of the key among `rows`, given as `(exchange key,
