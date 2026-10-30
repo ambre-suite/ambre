@@ -42,6 +42,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-FEAT-034` | `PRE` | The rows MUST be tested on their computed value, never on their text. | this spec section 3 | `ambre_trame::logic::tests::group13::a_filter_reads_the_computed_value` | none | verified |
 | `TRAME-FEAT-032` | `POST` | Applying a filter MUST replace the previous one, never add to it. | this spec section 3 | `ambre_trame::logic::tests::group13::a_second_filter_replaces_the_first` | none | verified |
+| `TRAME-256` | `POST` | A condition MUST compare text whatever its case. | this spec section 3 | `ambre_trame::logic::tests::group5::a_condition_compares_text_whatever_its_case` -- equality, the order and the substring tests | none | verified |
 | `TRAME-FEAT-045` | `POST` | Applying a filter MUST hide every row that fails the test and no other. | this spec section 3 | `ambre_trame::logic::tests::group4::shared_filter_by_values_hides_nonmatching`; `::shared_filter_condition_greater_than` -- both assert the hidden mark row by row, one per filter kind | none | verified |
 | `TRAME-FEAT-033` | `POST` | Applying a filter MUST report the number of rows it hid. | this spec section 4 | `ambre_trame::logic::tests::group4::shared_filter_by_values_hides_nonmatching`; `::shared_filter_condition_greater_than` -- both match `FilterApplied { hidden_row_count }` against the rows they hid | none | verified |
 | `TRAME-FEAT-007` | `POST` | An undo MUST remove a filter in one step, like any other change to the sheet. | this spec section 2, row 6 | `ambre_trame::logic::tests::group5::shared_filter_is_undoable`; `ambre_trame::logic::tests::group2::filtered_column_edit_is_one_undo_item` | none | verified |
@@ -65,6 +66,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TRAME-FEAT-026` | `POST` | The values offered for a column MUST hold each distinct visible value once. | this spec section 4 | `ambre_trame::logic::tests::group4::active_column_values_are_distinct_sorted_and_visible` | none | verified |
 | `TRAME-FEAT-041` | `POST` | The values MUST be ordered as the column reads them, not as text. | this spec section 4 | `ambre_trame::logic::tests::group5::filter_values_are_ordered_as_the_column_reads` | none | verified |
+| `TRAME-257` | `POST` | Two values that differ in case alone MUST each be listed once, next to each other. | this spec section 4 | `ambre_trame::logic::tests::group5::filter_values_list_each_case_once_and_together` | none | verified |
 | `TRAME-FEAT-042` | `FRAME` | Listing the values MUST reach no collaborator. | this spec section 3 | type-level -- the handler returns `TrameOutcome::display_only`, which builds `update: None`, so a read-only query cannot carry a delta | none | verified |
 
 ### 1.5 Keep a filter of one's own
@@ -79,7 +81,7 @@ status values are normative in `ambre-spec-template.md`.
   `ambre-spec-budgets.md` budgets no filter.
 * **Boundary.** none of its own: the filter is shared, so its definition is a document write, and
   `ZK-001` seals every payload before it leaves the client.
-* **Verification.** 32 `verified`, 3 `unimplemented`. The definition is
+* **Verification.** 34 `verified`, 3 `unimplemented`. The definition is
   one register, so a concurrent race converges whole (`TRAME-FEAT-025`) and a filter by values reads
   back and re-tests correctly (`TRAME-FEAT-004`, `TRAME-FEAT-009`, `TRAME-FEAT-031`). The remaining
   gaps are stated once in section 6.
@@ -129,7 +131,8 @@ Two peers, one sheet. The last column joins the example to the test that holds i
 * `FilterKind::Values(Vec<String>)` -- the listed values are the visible ones;
 * `FilterKind::Condition { op: FilterOp, value }` -- one operator over one operand;
 * `FilterOp` covers `eq`, `ne`, `gt`, `lt`, `gte`, `lte`, `contains`, `not_contains`,
-  `starts_with`, `is_empty` and `is_not_empty` (`TRAME-FEAT-009`).
+  `starts_with`, `is_empty` and `is_not_empty` (`TRAME-FEAT-009`). A comparison and a substring
+  test read text whatever its case, through the fold the formula operators read (`TRAME-256`).
 
 **Engine state.** One field of `TrameState`, and its mirror on the UI side:
 

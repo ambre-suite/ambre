@@ -511,18 +511,16 @@ pub(crate) fn concat_fn(args: &[CellValue]) -> CellValue {
 }
 
 /// Resolve the optional character-count argument shared by `LEFT`/`RIGHT`.
-/// Returns the count as `usize`, or `#NUM!` for a negative value. A bare `as
-/// usize` cast wraps a negative `f64` to a gigantic length. Excel returns an
-/// error here rather than silently taking the whole string.
+/// It reads as MID's counts read: a blank is 0, a numeric text its number,
+/// and an error passes through. A negative, infinite or NaN count is `#NUM!`.
+/// A bare `as usize` cast wraps a negative `f64` to a gigantic length. Excel
+/// returns an error here rather than silently taking the whole string.
 fn str_count_arg(args: &[CellValue], default: CharCount) -> Result<CharCount, FormulaError> {
     if args.len() < 2 {
         return Ok(default);
     }
-    let n = flatten_numeric(one(args, ArgIndex::new(1)))
-        .first()
-        .copied()
-        .unwrap_or(f64::from(default.get()));
-    if n < 0.0 || !n.is_finite() {
+    let n = arg(args, ArgIndex::new(1)).as_number()?;
+    if !(n >= 0.0 && n.is_finite()) {
         return Err(FormulaError::NumError);
     }
     // The float truncates and saturates, as `as` does.

@@ -3,6 +3,7 @@
 // ordering, filter predicates, and filter-op string round-trips.
 
 use super::*;
+use crate::formula::text::{fold_char, fold_cmp};
 
 /// Convert a resolved name-definition expression into a [`NameTarget`]. Only a
 /// bare cell or range is a valid named-range body; anything else (an arithmetic
@@ -16,7 +17,9 @@ pub(crate) fn expr_to_name_target(expr: Expr) -> Option<NameTarget> {
 }
 
 /// Order two cell values for sorting (`trame-sort`). Within a type the natural
-/// order applies. Across types the precedence is `Number < Text < Boolean <
+/// order applies; text reads whatever its case, through the fold the formula
+/// operators share (`TRAME-255`). Two texts that fold equal compare equal, so
+/// a stable sort keeps their order. Across types the precedence is `Number < Text < Boolean <
 /// Error < Empty`, so blanks sink to the bottom. Errors group just above them,
 /// matching the spec. `Range` only ever appears on the VM stack, never in the
 /// cache, so it is treated as `Empty` defensively.
@@ -39,7 +42,7 @@ pub(crate) fn compare_cell_values(a: &CellValue, b: &CellValue) -> std::cmp::Ord
         (CellValue::Number(x), CellValue::Number(y)) if !x.is_nan() && !y.is_nan() => {
             x.partial_cmp(y).unwrap_or(Equal)
         }
-        (CellValue::Text(x), CellValue::Text(y)) => x.cmp(y),
+        (CellValue::Text(x), CellValue::Text(y)) => fold_cmp(x, y),
         (CellValue::Boolean(x), CellValue::Boolean(y)) => x.cmp(y),
         _ => rank(a).cmp(&rank(b)),
     }
@@ -70,10 +73,14 @@ pub(crate) fn filter_pass(kind: &FilterKind, value: &CellValue) -> bool {
 }
 
 /// Evaluate a single [`FilterOp`] against a cell value and a comparison operand.
-/// Comparisons are numeric when both sides parse as numbers, lexicographic on the
-/// display text otherwise; the unary operators ignore `operand`.
+/// Comparisons are numeric when both sides parse as numbers. Otherwise they
+/// read the display text whatever its case, through the fold the formula
+/// operators share (`TRAME-256`). The unary operators ignore `operand`.
 pub(crate) fn condition_pass(op: FilterOp, value: &CellValue, operand: &str) -> bool {
     use std::cmp::Ordering;
+    // The substring tests need no offset back into the text, so a folded copy
+    // of each side serves them.
+    let folded = |s: &str| s.chars().flat_map(fold_char).collect::<String>();
     let text = value.to_display();
     // A numeric comparison applies only when *both* operands are numeric.
     let nums = match (
@@ -87,11 +94,11 @@ pub(crate) fn condition_pass(op: FilterOp, value: &CellValue, operand: &str) -> 
     // but Empty->0.0 surprises): require the value to be a real Number.
     let order = match (matches!(value, CellValue::Number(_)), nums) {
         (true, Some((a, b))) => a.partial_cmp(&b).unwrap_or(Ordering::Equal),
-        _ => text.as_str().cmp(operand),
+        _ => fold_cmp(&text, operand),
     };
     let eq = match (matches!(value, CellValue::Number(_)), nums) {
         (true, Some((a, b))) => a == b,
-        _ => text.as_str() == operand,
+        _ => fold_cmp(&text, operand).is_eq(),
     };
     match op {
         FilterOp::Eq => eq,
@@ -100,9 +107,9 @@ pub(crate) fn condition_pass(op: FilterOp, value: &CellValue, operand: &str) -> 
         FilterOp::Lt => order == Ordering::Less,
         FilterOp::Gte => order != Ordering::Less,
         FilterOp::Lte => order != Ordering::Greater,
-        FilterOp::Contains => text.contains(operand),
-        FilterOp::NotContains => !text.contains(operand),
-        FilterOp::StartsWith => text.starts_with(operand),
+        FilterOp::Contains => folded(&text).contains(&folded(operand)),
+        FilterOp::NotContains => !folded(&text).contains(&folded(operand)),
+        FilterOp::StartsWith => folded(&text).starts_with(&folded(operand)),
         FilterOp::IsEmpty => text.is_empty(),
         FilterOp::IsNotEmpty => !text.is_empty(),
     }
@@ -122,7 +129,9 @@ mod tests {
             CellValue::Number(2.0),
             CellValue::Number(f64::NEG_INFINITY),
             CellValue::Text("a".into()),
+            CellValue::Text("A".into()),
             CellValue::Text("b".into()),
+            CellValue::Text("B".into()),
             CellValue::Boolean(false),
             CellValue::Boolean(true),
             CellValue::Error(FormulaError::NumError),

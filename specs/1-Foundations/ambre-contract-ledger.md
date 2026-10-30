@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3776 rows: 3220 shipped, of which 9 loose. 556 unbuilt.**
+**3782 rows: 3226 shipped, of which 9 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 917 | 442 | 824 | 611 | 417 | 3211 |
+| `verified` | 917 | 448 | 824 | 611 | 417 | 3217 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 7 |  |  |  |  | 7 |
@@ -90,7 +90,7 @@
 | `ambre-spec-trame-engine.md` | 19 | 19 | 19 |  |  |
 | `ambre-spec-trame-find-replace.md` | 6 | 6 | 6 |  |  |
 | `ambre-spec-trame-formula-engine.md` | 47 | 47 | 47 |  |  |
-| `ambre-spec-trame-function-library.md` | 34 | 27 | 27 |  | 7 |
+| `ambre-spec-trame-function-library.md` | 37 | 30 | 30 |  | 7 |
 | `ambre-spec-trame-grid-viewport.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-trame-headers.md` | 9 | 9 | 9 |  |  |
 | `ambre-spec-trame-import-export.md` | 41 | 28 | 28 |  | 13 |
@@ -100,9 +100,9 @@
 | `ambre-spec-trame-resize.md` | 10 | 10 | 10 |  |  |
 | `ambre-spec-trame-rows-and-columns.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-trame-selection.md` | 11 | 10 | 10 |  | 1 |
-| `ambre-spec-trame-shared-filter.md` | 35 | 32 | 32 |  | 3 |
+| `ambre-spec-trame-shared-filter.md` | 37 | 34 | 34 |  | 3 |
 | `ambre-spec-trame-sheets.md` | 23 | 23 | 23 |  |  |
-| `ambre-spec-trame-sort.md` | 24 | 24 | 24 |  |  |
+| `ambre-spec-trame-sort.md` | 25 | 25 | 25 |  |  |
 | `ambre-spec-trame-status-bar.md` | 13 | 13 | 13 |  |  |
 | `ambre-spec-trame-undo.md` | 6 | 2 | 2 |  | 4 |
 | `ambre-spec-toile-schema.md` | 11 | 11 | 11 |  |  |
@@ -328,7 +328,7 @@
 | `ambre-spec-trame-engine.md` | TRAME-001..002,015,023..024,166..169,231,243,248; TRAME-FEAT-001; TRAME-UI-001..002,006,014,141..142 |
 | `ambre-spec-trame-find-replace.md` | TRAME-UI-077..080,083,138 |
 | `ambre-spec-trame-formula-engine.md` | TRAME-005..009,011..013,021,032..048,208..220,226..230,233,245,252 |
-| `ambre-spec-trame-function-library.md` | TRAME-014,049..061,194..207,244,246..247,249..251 |
+| `ambre-spec-trame-function-library.md` | TRAME-014,049..061,194..207,244,246..247,249..251,253..254,258 |
 | `ambre-spec-trame-grid-viewport.md` | TRAME-UI-004..005,007,012..013,024..029,049,143..149,175 |
 | `ambre-spec-trame-headers.md` | TRAME-UI-043..048,121..123 |
 | `ambre-spec-trame-import-export.md` | TRAME-IO-001..015,017..019,025..030,033..049 |
@@ -339,9 +339,9 @@
 | `ambre-spec-trame-rows-and-columns.md` | TRAME-080..091,170..177 |
 | `ambre-spec-trame-schema.md` | TRAME-003,010,016,025,221..222,242 |
 | `ambre-spec-trame-selection.md` | TRAME-UI-019,030..035,129..132 |
-| `ambre-spec-trame-shared-filter.md` | TRAME-FEAT-002..009,014..016,025..027,029..046; TRAME-UI-008,154,173 |
+| `ambre-spec-trame-shared-filter.md` | TRAME-256..257; TRAME-FEAT-002..009,014..016,025..027,029..046; TRAME-UI-008,154,173 |
 | `ambre-spec-trame-sheets.md` | TRAME-022,070..079,159..165,232,234..236,241 |
-| `ambre-spec-trame-sort.md` | TRAME-004,111..115,178..185; TRAME-FEAT-010..013; TRAME-UI-101..102,150..153 |
+| `ambre-spec-trame-sort.md` | TRAME-004,111..115,178..185,255; TRAME-FEAT-010..013; TRAME-UI-101..102,150..153 |
 | `ambre-spec-trame-status-bar.md` | TRAME-UI-103..110,135..136,172,178..179 |
 | `ambre-spec-trame-undo.md` | TRAME-017,123..124,151,153..154 |
 | `ambre-spec-ui.md` | UI-THREAD-001..005,012..013,015..017,020..021,048..052,058..060 |

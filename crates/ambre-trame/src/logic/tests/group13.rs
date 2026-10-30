@@ -417,6 +417,16 @@ fn equal_keys_keep_their_order() {
     assert_eq!(read_col(&mut state, 1, 3, 82), vec!["x", "y", "w", "z"]);
 }
 
+/// A sort orders text whatever its case, as Excel does. Two texts that fold
+/// equal keep the order they had (`TRAME-255`, `TRAME-180`).
+#[test]
+fn a_sort_orders_text_whatever_its_case() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["b", "A", "C", "a"]);
+    sort(&mut state, (0, 3), 0, true);
+    assert_eq!(read_col(&mut state, 0, 3, 85), vec!["A", "a", "b", "C"]);
+}
+
 /// Values of different types order by the type rank: numbers, then text,
 /// then booleans, then errors, then blanks (`TRAME-111`).
 #[test]
