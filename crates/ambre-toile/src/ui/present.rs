@@ -36,7 +36,7 @@ pub struct Transition {
 
 /// The camera + content state for one transition frame, returned by
 /// [`Transition::advance`]. `overrides` are the Smart Animate elements to paint
-/// this frame; `phase` is `Done` once the eased phase reaches its end.
+/// this frame; `phase` is `Done` once the raw [`Phase`] reaches its end.
 pub struct TransitionFrame {
     pub cam: ViewportTransform,
     pub overrides: Vec<AnimatedElement>,
@@ -44,7 +44,9 @@ pub struct TransitionFrame {
 }
 
 ambre_core::define_flag! {
-    /// Whether a transition still runs or has reached its end.
+    /// Whether a transition still runs or has reached its end. How far it has
+    /// come is a [`Phase`], a factor in `0..=1`; this flag only reads whether
+    /// that factor is at its end.
     pub enum TransitionPhase {
         Running,
         Done,

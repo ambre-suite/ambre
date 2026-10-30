@@ -32,6 +32,9 @@ pub use ambre_bus::app::toile::{FrameSnapshot, SnapElement};
 
 /// A transition phase, in `0.0 ..= 1.0`: `START` shows the source, `END` the
 /// target. It is never NaN, so no interpolation it weights turns NaN.
+///
+/// It says how far a transition has come. `TransitionPhase` in the UI says
+/// only whether it still runs, and reads `Done` once this phase is `END`.
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct Phase(f64);
 

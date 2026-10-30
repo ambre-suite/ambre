@@ -17,9 +17,9 @@ ambre_core::define_tally! {
     pub struct ImportDepth;
 }
 
-/// The symmetric bound an imported coordinate is clamped to, per axis. Finite
-/// and not negative: with a NaN or a negative bound, the old `f64::clamp`
-/// panicked, since its range was empty or undefined.
+/// The symmetric bound an imported coordinate is clamped to, per axis. It is
+/// finite and not negative, so the range `-bound..=bound` it clamps to is
+/// never empty and never NaN.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CoordBound(BoardLength);
 
