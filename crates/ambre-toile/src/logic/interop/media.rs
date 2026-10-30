@@ -226,8 +226,9 @@ impl MediaCache {
 mod tests {
     use super::*;
 
+    /// The hash that repeats the hex digit `s` sixty-four times.
     fn h(s: &str) -> ContentHash {
-        ContentHash(s.to_owned())
+        ContentHash::parse(&s.repeat(64)).expect("a hex digit")
     }
 
     #[test]

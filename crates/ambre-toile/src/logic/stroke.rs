@@ -65,8 +65,8 @@ mod tests {
 
     fn sp(x: f32, y: f32) -> StrokePoint {
         StrokePoint::full_pressure(
-            ambre_core::StrokeCoord::new(x),
-            ambre_core::StrokeCoord::new(y),
+            ambre_core::StoredBoardLength::new(x),
+            ambre_core::StoredBoardLength::new(y),
         )
     }
 

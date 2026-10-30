@@ -536,7 +536,7 @@ fn an_arrow_carries_its_own_style() {
     let two = create_connector(&mut st);
     let red = ElementStyle {
         stroke: Some(Rgba::from_bits(0xCC22_22FF)),
-        stroke_w: ambre_bus::app::toile::StyleLength::new(6.0),
+        stroke_w: ambre_core::StoredBoardLength::new(6.0),
         ..Default::default()
     };
 
@@ -712,12 +712,12 @@ fn commit_stroke_creates_drawing() {
     let out = st.handle_command(ToileCommand::CommitStroke {
         points: vec![
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(0.0),
-                ambre_core::StrokeCoord::new(0.0),
+                ambre_core::StoredBoardLength::new(0.0),
+                ambre_core::StoredBoardLength::new(0.0),
             ),
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(10.0),
-                ambre_core::StrokeCoord::new(5.0),
+                ambre_core::StoredBoardLength::new(10.0),
+                ambre_core::StoredBoardLength::new(5.0),
             ),
         ],
         style: ElementStyle::default(),
@@ -1416,13 +1416,13 @@ fn a_stroke_in_flight_reaches_the_other_users() {
     let mut drawer = ToileState::new();
     let tail = vec![
         StrokePoint {
-            x: ambre_core::StrokeCoord::new(10.0),
-            y: ambre_core::StrokeCoord::new(10.0),
+            x: ambre_core::StoredBoardLength::new(10.0),
+            y: ambre_core::StoredBoardLength::new(10.0),
             pressure: ambre_bus::app::toile::UnitFraction::HALF,
         },
         StrokePoint {
-            x: ambre_core::StrokeCoord::new(12.0),
-            y: ambre_core::StrokeCoord::new(14.0),
+            x: ambre_core::StoredBoardLength::new(12.0),
+            y: ambre_core::StoredBoardLength::new(14.0),
             pressure: ambre_bus::app::toile::UnitFraction::new(0.6)
                 .expect("a pressure inside 0 ..= 1"),
         },
@@ -1646,8 +1646,8 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
         cursor: Some(Point::new(7.0, 8.0)),
         selection: Vec::new(),
         live_stroke: Some(vec![StrokePoint::full_pressure(
-            ambre_core::StrokeCoord::new(1.0),
-            ambre_core::StrokeCoord::new(2.0),
+            ambre_core::StoredBoardLength::new(1.0),
+            ambre_core::StoredBoardLength::new(2.0),
         )]),
         laser: None,
         present_slide: None,
@@ -4765,6 +4765,40 @@ fn a_peers_unsafe_web_address_never_reaches_a_frame() {
     }
 }
 
+/// A hostile peer writes a path traversal as the address of a picture. The
+/// reader's board derives no address from it, so it never reaches the media
+/// URL of the relay, and the picture paints its placeholder.
+#[test]
+fn a_peers_traversal_in_a_picture_address_derives_no_address() {
+    let mut peer = ToileState::new();
+    let hash = ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash");
+    let out = peer.handle_command(ToileCommand::CreateElement {
+        kind: ElementKind::Image,
+        at: Point::ZERO,
+        size: Size::new(100.0, 100.0),
+        fill: None,
+        content: InitContent::Image(crate::logic::command::MediaRef::Stored(hash)),
+        correlate: None,
+    });
+    let id = created_id(&out);
+    peer.debug_set_element_field(&id, crate::logic::state::ElementKey::Hash, "../documents/X");
+
+    let mut reader = ToileState::new();
+    reader.apply_remote_snapshot(&peer.export_snapshot());
+    let geom = reader
+        .debug_viewport()
+        .nodes
+        .into_iter()
+        .find_map(|n| match n {
+            DisplayNode::Element(e) => Some(e.geom),
+            _ => None,
+        });
+    assert!(
+        matches!(geom, Some(DisplayGeom::Image(None))),
+        "expected a picture with no address, got {geom:?}"
+    );
+}
+
 /// `TOILE-085` and `TOILE-226`: a pasted embed is a second reference to the
 /// same document. The copy and the paste ask the service plane for nothing,
 /// so no second document comes into being.
@@ -6173,12 +6207,12 @@ fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<ambre_core::DeltaByte
         PeerOp::Stroke { x, y } => st.handle_command(ToileCommand::CommitStroke {
             points: vec![
                 StrokePoint::full_pressure(
-                    ambre_core::StrokeCoord::new(*x as f32),
-                    ambre_core::StrokeCoord::new(*y as f32),
+                    ambre_core::StoredBoardLength::new(*x as f32),
+                    ambre_core::StoredBoardLength::new(*y as f32),
                 ),
                 StrokePoint::full_pressure(
-                    ambre_core::StrokeCoord::new(*x as f32 + 10.0),
-                    ambre_core::StrokeCoord::new(*y as f32 + 5.0),
+                    ambre_core::StoredBoardLength::new(*x as f32 + 10.0),
+                    ambre_core::StoredBoardLength::new(*y as f32 + 5.0),
                 ),
             ],
             style: ElementStyle::default(),
@@ -6842,7 +6876,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: Some(Rgba::from_bits(0xFF00_00FF)),
             stroke: None,
-            stroke_w: ambre_bus::app::toile::StyleLength::new(4.0),
+            stroke_w: ambre_core::StoredBoardLength::new(4.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
             text_color: Some(Rgba::from_bits(0x00FF_00FF)),
             ..ElementStyle::default()
@@ -6853,7 +6887,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
         style: ElementStyle {
             fill: None,
             stroke: Some(Rgba::from_bits(0x0000_FFFF)),
-            stroke_w: ambre_bus::app::toile::StyleLength::new(1.5),
+            stroke_w: ambre_core::StoredBoardLength::new(1.5),
             opacity: ambre_core::Opacity::new(0.25).unwrap(),
             text_color: None,
             ..ElementStyle::default()
@@ -7288,8 +7322,8 @@ fn an_empty_combine_is_refused() {
 
 fn sample(x: f32, y: f32) -> StrokePoint {
     StrokePoint::full_pressure(
-        ambre_core::StrokeCoord::new(x),
-        ambre_core::StrokeCoord::new(y),
+        ambre_core::StoredBoardLength::new(x),
+        ambre_core::StoredBoardLength::new(y),
     )
 }
 

@@ -325,7 +325,7 @@ mod tests {
         el.style = ElementStyle {
             fill: Some(Rgba::from_bits(0x3366_CCFF)),
             stroke: Some(Rgba::from_bits(0x0000_00FF)),
-            stroke_w: ambre_bus::app::toile::StyleLength::new(2.0),
+            stroke_w: ambre_core::StoredBoardLength::new(2.0),
             ..ElementStyle::default()
         };
         el
@@ -442,7 +442,8 @@ mod tests {
     #[test]
     fn a_picture_leaves_with_its_pixels() {
         let mut el = ExportElement::new(ElementKind::Image, Rect::new(0.0, 0.0, 8.0, 8.0));
-        el.media_hash = Some(ambre_core::ContentHash::from("b2b0ffee"));
+        el.media_hash =
+            Some(ambre_core::ContentHash::parse(&"b2b0ffee".repeat(8)).expect("a hash"));
         el.image_png = Some(ambre_core::ThumbnailPng::new(vec![0x89, 0x50, 0x4E, 0x47]));
         let export = export_svg(&[el]);
         assert!(
@@ -463,7 +464,8 @@ mod tests {
     #[test]
     fn a_picture_without_pixels_is_reported() {
         let mut el = ExportElement::new(ElementKind::Image, Rect::new(0.0, 0.0, 8.0, 8.0));
-        el.media_hash = Some(ambre_core::ContentHash::from("b2b0ffee"));
+        el.media_hash =
+            Some(ambre_core::ContentHash::parse(&"b2b0ffee".repeat(8)).expect("a hash"));
         let export = export_svg(&[el]);
         assert!(!export.document.contains("<image"));
         assert_eq!(export.skipped.len(), 1, "{:?}", export.skipped);

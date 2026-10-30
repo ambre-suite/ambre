@@ -16,7 +16,7 @@ use ambre_bus::app::toile::{
     Anchor, CommentAnchor, ConnectorId, DisplayGeom, DisplayNode, DisplayViewport, ElementId,
     ElementKind, EndCaps, InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
-use ambre_core::{BoardLength, Rgba, StrokeCoord};
+use ambre_core::{BoardLength, Rgba, StoredBoardLength};
 use ambre_draw::{Affine, BezPath, Point, Rect, Size};
 use kurbo::Shape;
 
@@ -983,8 +983,8 @@ fn map_select(out: SelectOutcome) -> ToolOutcome {
 /// A world point as a full-pressure stroke sample.
 fn stroke_point(world: Point) -> StrokePoint {
     StrokePoint::full_pressure(
-        StrokeCoord::new(world.x as f32),
-        StrokeCoord::new(world.y as f32),
+        StoredBoardLength::new(world.x as f32),
+        StoredBoardLength::new(world.y as f32),
     )
 }
 
@@ -993,7 +993,7 @@ fn draw_style() -> ambre_bus::app::toile::ElementStyle {
     ambre_bus::app::toile::ElementStyle {
         fill: None,
         stroke: Some(Rgba::from_bits(0x3333_33FF)),
-        stroke_w: ambre_bus::app::toile::StyleLength::new(2.0),
+        stroke_w: StoredBoardLength::new(2.0),
         ..Default::default()
     }
 }
@@ -2029,7 +2029,7 @@ mod tests {
             panic!("rect_elem builds an element")
         };
         e.geom = DisplayGeom::Path(line);
-        e.style.stroke_w = ambre_bus::app::toile::StyleLength::new(0.5);
+        e.style.stroke_w = StoredBoardLength::new(0.5);
         let disp = viewport(vec![DisplayNode::Element(e)]);
         let mut cam = cam();
         cam.zoom = ambre_core::ZoomFactor::positive(4.0);

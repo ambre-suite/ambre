@@ -755,14 +755,26 @@ mod tests {
         st.apply_import(batch);
         assert_eq!(st.media_count(), MediaEntryCount::new(1));
         assert_eq!(
-            st.media_meta("img-hash"),
+            st.media_meta(&hx("img-hash")),
             Some((32, 32, "image/png".to_owned()))
         );
     }
 
+    /// The address a test names `label`: the hex of its bytes, padded with
+    /// zeros to sixty-four characters. Two labels give two addresses.
+    fn hx(label: &str) -> String {
+        let hex: String = label.bytes().map(|b| format!("{b:02x}")).collect();
+        format!("{hex:0<64}")
+    }
+
+    /// The address `label` names, as Sync hands it back.
+    fn hash_of(label: &str) -> ContentHash {
+        ContentHash::parse(&hx(label)).expect("a label of at most 32 bytes")
+    }
+
     fn blob(hash: &str, w: u32, h: u32, mime: &str) -> MediaBlob {
         MediaBlob {
-            media: MediaRef::Stored(ContentHash(hash.to_owned())),
+            media: MediaRef::Stored(hash_of(hash)),
             plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from(mime),
             size: ambre_core::ImageSize::new(
@@ -780,7 +792,7 @@ mod tests {
         assert_eq!(n, MediaEntryCount::new(1));
         assert_eq!(st.media_count(), MediaEntryCount::new(1));
         assert_eq!(
-            st.media_meta("abc"),
+            st.media_meta(&hx("abc")),
             Some((640, 480, "image/png".to_owned()))
         );
     }
@@ -810,9 +822,14 @@ mod tests {
     #[test]
     fn seed_media_skips_unresolved_hash() {
         let mut st = ToileState::new();
-        // An empty hash means Sync has not returned the blake2b yet: never seed a
-        // placeholder key collaborators could not resolve.
-        let n = st.seed_media(&[blob("", 10, 10, "image/png")]);
+        // An empty text spells no address, so no blob can carry one as a key.
+        // A blob Sync has not answered yet carries its pending slot instead.
+        assert_eq!(ContentHash::parse(""), None);
+        let pending = MediaBlob {
+            media: MediaRef::Pending(ImportSlot::ZERO),
+            ..blob("unused", 10, 10, "image/png")
+        };
+        let n = st.seed_media(&[pending]);
         assert_eq!(n, MediaEntryCount::ZERO);
         assert_eq!(st.media_count(), MediaEntryCount::ZERO);
     }
@@ -1020,7 +1037,7 @@ mod tests {
             id,
             RestEvent::MediaUploaded {
                 document_id: DocumentId::new(),
-                content_hash: ambre_core::ContentHash("realhash".to_owned()),
+                content_hash: hash_of("realhash"),
             },
         );
         assert!(has_report(&done));
@@ -1030,7 +1047,7 @@ mod tests {
         );
         assert_eq!(st.element_count(), ElementCount::new(1));
         assert_eq!(st.media_count(), MediaEntryCount::new(1));
-        assert!(st.media_meta("realhash").is_some());
+        assert!(st.media_meta(&hx("realhash")).is_some());
         assert_eq!(st.pending_import_count(), PendingImportCount::ZERO);
         // One Undo removes the whole (now-resolved) import.
         st.handle_command(ToileCommand::Undo);
@@ -1057,7 +1074,7 @@ mod tests {
             first_upload_id(&out),
             RestEvent::MediaUploaded {
                 document_id: DocumentId::new(),
-                content_hash: ambre_core::ContentHash("realhash".to_owned()),
+                content_hash: hash_of("realhash"),
             },
         );
         let pages = st.pdf_pages(crate::logic::interop::PageSize::default());
@@ -1097,7 +1114,7 @@ mod tests {
             first_upload_id(&out),
             RestEvent::MediaUploaded {
                 document_id: DocumentId::new(),
-                content_hash: ambre_core::ContentHash("realhash".to_owned()),
+                content_hash: hash_of("realhash"),
             },
         );
         assert_eq!(
@@ -1114,7 +1131,7 @@ mod tests {
             (st.element_count(), st.media_count()),
             (ElementCount::new(1), MediaEntryCount::new(1))
         );
-        assert!(st.media_meta("realhash").is_some());
+        assert!(st.media_meta(&hx("realhash")).is_some());
     }
 
     #[test]
@@ -1154,7 +1171,7 @@ mod tests {
             RequestId::next(),
             RestEvent::MediaUploaded {
                 document_id: DocumentId::new(),
-                content_hash: ambre_core::ContentHash("orphan".to_owned()),
+                content_hash: hash_of("orphan"),
             },
         );
         assert!(out.display.is_empty());

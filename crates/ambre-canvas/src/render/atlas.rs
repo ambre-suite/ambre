@@ -19,6 +19,7 @@ use rustc_hash::FxHashMap;
 use ambre_core::{PixelSize, WholePx};
 
 use crate::density::DevicePixelRatio;
+use crate::text_cache::LayoutPx;
 
 // ============================================================================
 // GlyphAtlas
@@ -74,8 +75,8 @@ impl RasterSize {
     /// The raster of a glyph run whose layout gives it `font_size`, in the
     /// units of that layout. The run is drawn under a transform of `scale`, on
     /// a screen of `density`.
-    pub(crate) fn of_layout(font_size: f32, scale: f64, density: DevicePixelRatio) -> Self {
-        Self((f64::from(font_size) * scale) as f32 * density.get() as f32)
+    pub(crate) fn of_layout(font_size: LayoutPx, scale: f64, density: DevicePixelRatio) -> Self {
+        Self((f64::from(font_size.get()) * scale) as f32 * density.get() as f32)
     }
 
     /// A raster `device_px` device pixels high.

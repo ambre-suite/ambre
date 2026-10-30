@@ -40,7 +40,7 @@ elements/*/doc_id = "01010101-0101-0101-0101-010101010101" => embeds Toile docum
 elements/*/doc_type = "Toile" => embeds Toile document 01010101-0101-0101-0101-010101010101
 elements/*/h = 1 => 1 px tall
 elements/*/h = 10 => 10 px tall
-elements/*/hash = "h" => draws media "h"
+elements/*/hash = "0000000000000000000000000000000000000000000000000000000000000000" => draws media "0000000000000000000000000000000000000000000000000000000000000000"
 elements/*/link = 001768747470733a2f2f6578616d706c652e696e76616c6964 => links to "https://example.invalid"
 elements/*/locked = false => unlocked
 elements/*/locked = true => locked
