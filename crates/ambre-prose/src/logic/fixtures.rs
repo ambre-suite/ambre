@@ -398,8 +398,8 @@ fn root_after(state: &ProseState, after: TreeID) -> Result<TreeID, FixtureError>
 }
 
 fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> {
-    let mut state = ProseState::with_peer(ambre_core::PeerId(seed.get()))
-        .ok_or(FixtureError::Missing("no document"))?;
+    let mut state =
+        ProseState::with_peer(seed.peer()).ok_or(FixtureError::Missing("no document"))?;
     state.set_user_id(UserId::from_uuid(seeded_document_id(AUTHOR_SEED).into()));
     state.set_display_name(
         ambre_core::DisplayName::new("Fixture Author").map_err(FixtureError::Name)?,

@@ -68,11 +68,11 @@ impl<'a, 'b> KrillaSurface<'a, 'b> {
     /// Stroke the given krilla path with a solid color and width. `cap`/`join`
     /// default to the krilla defaults (butt/miter); callers needing round joins
     /// go through `stroke_path`.
-    fn stroke_solid(&mut self, path: &krilla::geom::Path, color: Color, width: f64) {
+    fn stroke_solid(&mut self, path: &krilla::geom::Path, color: Color, width: SurfacePx) {
         let (paint, opacity) = paint_and_opacity(color);
         self.surface.set_stroke(Some(KStroke {
             paint,
-            width: width as f32,
+            width: width.get() as f32,
             opacity,
             ..KStroke::default()
         }));
@@ -89,7 +89,7 @@ impl DrawSurface for KrillaSurface<'_, '_> {
 
     fn stroke_rect(&mut self, rect: Rect, color: Color, width: SurfacePx) {
         if let Some(path) = rect_path(rect) {
-            self.stroke_solid(&path, color, width.get());
+            self.stroke_solid(&path, color, width);
         }
     }
 
@@ -98,7 +98,7 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         pb.move_to(line.p0.x as f32, line.p0.y as f32);
         pb.line_to(line.p1.x as f32, line.p1.y as f32);
         if let Some(path) = pb.finish() {
-            self.stroke_solid(&path, color, width.get());
+            self.stroke_solid(&path, color, width);
         }
     }
 

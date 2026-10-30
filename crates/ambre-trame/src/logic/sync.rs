@@ -201,12 +201,8 @@ impl TrameState {
         // Before a single container is used (`SCHEMA-006`). What comes back is
         // the payload itself at the current version, or a migrated snapshot.
         // A gate that keeps the bytes hands back the payload itself.
-        let migrated = match schema::gate(payload.as_bytes())? {
-            std::borrow::Cow::Borrowed(_) => None,
-            std::borrow::Cow::Owned(bytes) => Some(ambre_core::SnapshotBytes::new(bytes)),
-        };
-        let snapshot = migrated.as_ref().unwrap_or(payload);
-        Ok(self.import_and_reseed(LoroPayloadRef::Snapshot(snapshot), MergeOrigin::Import))
+        let snapshot = schema::gate(payload)?;
+        Ok(self.import_and_reseed(LoroPayloadRef::Snapshot(&snapshot), MergeOrigin::Import))
     }
 
     /// Resolve a sheet name to its stable sheet id (for example `"Sheet1"` -> `"s0"`).

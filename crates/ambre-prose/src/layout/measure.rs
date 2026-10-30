@@ -19,6 +19,7 @@ use ambre_draw::{BundledFamily, ParleyBrush, ScriptSet};
 use loro::{LoroDoc, LoroText, LoroTree, LoroValue, TextDelta, TreeID};
 
 use crate::doc;
+use crate::events::grid::RowCount;
 use crate::layout::fonts;
 use crate::layout::run::{
     LocalLineCount, ParleyRunData, Resume, RunLine, RunLineCount, RunLineSpan, RunSegmentCount,
@@ -221,10 +222,10 @@ impl BlockLine {
     }
 }
 
-/// The rows of a table block are its lines, so a count of rows is a count of
-/// its lines.
-impl From<ambre_bus::app::grid::RowCount> for BlockLineCount {
-    fn from(rows: ambre_bus::app::grid::RowCount) -> Self {
+impl BlockLineCount {
+    /// The lines of a table block: the paginator cuts a table at its rows.
+    #[must_use]
+    pub fn of_rows(rows: RowCount) -> Self {
         Self::from_len(rows.to_usize())
     }
 }
