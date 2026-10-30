@@ -3191,8 +3191,7 @@ ambre-trame | src/formula/types.rs | crate::formula::types | FunctionName::parse
 ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::Near.0 | field | String	free-text	the formula text where parsing stopped, echoed in the message
 ambre-trame | src/formula/types.rs | crate::formula::types | ParseError::TrailingInput.0 | field | String	free-text	the formula text left unread, echoed in the message
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName.0 | field | String	newtype-inner	the text of a sheet display name
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::FORBIDDEN | const | [char;7]	newtype-inner	the characters the SheetName rule refuses
-ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::MAX_CHARS | const | usize	newtype-inner	the character count the SheetName rule caps
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::FORBIDDEN | const | [char;7]	generic	the characters the SheetName parser refuses, which it reads one by one
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::as_str() | ret | &str	newtype-inner	enum/newtype own accessor or constructor
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::free_variant(taken) | param | impl Fn(&SheetNameKey)->bool	generic	predicate over typed keys
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::new(text) | param | &str	newtype-inner	the fallible constructor that checks the Excel rule

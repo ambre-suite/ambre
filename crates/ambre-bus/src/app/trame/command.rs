@@ -107,7 +107,7 @@ pub struct SheetNameKey(String);
 
 impl SheetName {
     /// The most characters a sheet name holds.
-    pub const MAX_CHARS: usize = 31;
+    pub const MAX_CHARS: ambre_core::CharCount = ambre_core::CharCount::new(31);
 
     /// The characters a sheet name cannot hold. A `:` or a bracket would read
     /// as reference syntax, and the rest are Excel's.
@@ -123,7 +123,7 @@ impl SheetName {
         if text.is_empty() {
             return Err(SheetNameRefusal::Empty);
         }
-        if text.chars().count() > Self::MAX_CHARS {
+        if ambre_core::char_len(text) > Self::MAX_CHARS {
             return Err(SheetNameRefusal::TooLong);
         }
         if let Some(c) = text.chars().find(|c| Self::FORBIDDEN.contains(c)) {
@@ -172,8 +172,8 @@ impl SheetName {
         (2_u64..)
             .map(|n| {
                 let suffix = format!(" ({n})");
-                let room = Self::MAX_CHARS.saturating_sub(suffix.len());
-                let base: String = self.0.chars().take(room).collect();
+                let room = Self::MAX_CHARS.saturating_sub(ambre_core::char_len(&suffix));
+                let base: String = self.0.chars().take(room.to_usize()).collect();
                 Self(format!("{}{suffix}", base.trim_end()))
             })
             .find(|candidate| !taken(&candidate.key()))
@@ -1054,6 +1054,20 @@ mod tests {
         let variant = long.free_variant(|key| *key == long.key());
         assert_eq!(variant.as_str(), format!("{} (2)", "x".repeat(27)));
         assert_eq!(SheetName::new(variant.as_str()).as_ref(), Ok(&variant));
+        Ok(())
+    }
+
+    /// The cap counts characters, not bytes: a name of 31 accented letters
+    /// is a name, and its variant keeps 27 of them.
+    #[test]
+    fn the_cap_counts_characters_not_bytes() -> Result<(), SheetNameRefusal> {
+        let accented = SheetName::new(&"\u{e9}".repeat(31))?;
+        assert_eq!(
+            SheetName::new(&"\u{e9}".repeat(32)),
+            Err(SheetNameRefusal::TooLong)
+        );
+        let variant = accented.free_variant(|key| *key == accented.key());
+        assert_eq!(variant.as_str(), format!("{} (2)", "\u{e9}".repeat(27)));
         Ok(())
     }
 
