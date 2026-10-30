@@ -1931,38 +1931,27 @@ ambre-prose | src/link.rs | crate::link | openable() | ret | bool	generic	predic
 ambre-prose | src/logic/bands.rs | crate::logic::bands | FIELD_CHAR | const | char	generic	the carrier a band field occupies in a band's text, doc::CARRIER
 ambre-prose | src/logic/blocks.rs | crate::logic::blocks | ProseState::parentages_are_declared() | ret | bool	generic	independent flag or predicate
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | <Depth as TokenSink>::process_token(_line) | param | u64	trait	signature fixed by foreign trait
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | BLOCKS | const | [&str;29]	free-text	text content / label / parser input
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | CssProperty::of(name) | param | &str	free-text	a property name as a pasted style spells it; the match returns a CssProperty
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | DEPTH_MAX | const | usize	local	the most counted elements a paste may hold open, compared with the length of that stack alone
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | KEPT_EMPTY | const | [&str;11]	free-text	text content / label / parser input
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations.0 | field | Vec<(CssProperty,&'a str)>	newtype-inner	each property of a pasted style with its value as the paste spells it
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::hidden() | ret | bool	generic	whether a pasted style hides its element, which the reader then skips
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::names() | ret | bool	generic	whether a pasted style names a property, whatever its value
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Declarations<'a>::of(style) | param | &'a str	free-text	a pasted element's style attribute, parsed once into its declarations
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader.pre | field | usize	local	how many preformatted elements the private reader is inside
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(style) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::block_kind(tag) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::ends_blank() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::enter(style) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::enter(tag) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::flush() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::push_str(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::text(text) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | SKIPPED | const | [&str;14]	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | UNCOUNTED | const | [&str;31]	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr() | ret | Option<&'a str>	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr(name) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | css_color(value) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | declarations() | ret | impl Iterator<Item=(String,&str)>	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | declarations(style) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family() | ret | Option<String>	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	free-text	text content / label / parser input
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::ends_blank() | ret | bool	generic	whether the text read so far ends on a space, so the next collapsed white space adds none
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::flush() | ret | bool	generic	whether closing the block wrote one, which marks its parent as written
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::push_str(text) | param | &str	free-text	pasted text after white space collapsed, appended to the current run
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | Reader::text(text) | param | &str	free-text	a text node of the pasted HTML, before its white space collapses
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr() | ret | Option<&'a str>	free-text	an attribute value as the pasted HTML spells it
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | css_color(value) | param | &str	free-text	a colour value of a pasted style; the parse returns an Rgba
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	free-text	a font-family list of a pasted style; its first usable name becomes a MarkValue
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	free-text	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through DocPx
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | hidden() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | hidden(style) | param | &str	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	predicate result
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	text content / label / parser input
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	free-text	the type attribute of a pasted ordered list; the match returns an OrderedStyle
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	the HTML a paste carries
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | set(raw) | param | &str	free-text	a candidate mark value read off pasted HTML; pasted turns it into a MarkValue or drops it
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | style_marks(style) | param | &str	generic	CSS style parser over &str
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | tag_marks(tag) | param | &str	free-text	text content / label / parser input
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	independent flag or predicate
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep(html) | param | &str	free-text	text content / label / parser input
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep() | ret | bool	generic	whether the pasted HTML holds more counted elements open than DEPTH_MAX
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | too_deep(html) | param | &str	free-text	the HTML a paste carries, scanned before any tree is built
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ELEMENTS | const | [(MarkRoot,&str);7]	free-text	text content / label / parser input
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::close() | ret | &'static str	generic	the closing tag of a list element, spelled from the enum that carries its style
 ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write | ListElement::open() | ret | &'static str	generic	the opening tag of a list element, spelled from the enum that carries its style
