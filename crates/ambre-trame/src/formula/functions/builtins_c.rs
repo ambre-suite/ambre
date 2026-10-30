@@ -725,7 +725,7 @@ fn last_day(date: DateParts) -> DayOfMonth {
 pub(crate) fn shift_month(date: DateParts, months: MonthCount) -> DateParts {
     DateParts::of_months(
         date.year,
-        MonthCount::new(date.month.get() - 1).plus(months),
+        MonthCount::new(i64::from(date.month.get()) - 1).plus(months),
         date.day,
     )
 }

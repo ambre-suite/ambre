@@ -117,21 +117,6 @@ pub fn format_s3_delta_key(
     ))
 }
 
-/// Validates a client-supplied media `content_hash` before it is interpolated
-/// into an S3 object key.
-///
-/// The spec mandates a BLAKE2b-256 digest rendered as 64 lowercase hex chars.
-/// Enforcing that shape rejects path-traversal payloads (`../`, absolute keys)
-/// that would otherwise let a caller read/write objects outside the document's
-/// own media prefix.
-pub fn is_valid_content_hash(content_hash: &ambre_core::ContentHash) -> bool {
-    let content_hash = content_hash.as_str();
-    content_hash.len() == 64
-        && content_hash
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-}
-
 /// Validates that a client-supplied snapshot `s3_key` actually belongs to the
 /// document the caller is authorized on. The check runs before the key is
 /// persisted and later handed back as a presigned download URL.
@@ -750,9 +735,10 @@ mod tests {
     #[test]
     fn media_key_content_addressed() {
         let doc_id = DocumentId::from_bytes([3u8; 16]);
-        let hash = "abc123def456";
-        let key = format_s3_media_key(&env("dev"), &doc_id, &ambre_core::ContentHash::from(hash));
-        assert!(key.as_str().ends_with("media/abc123def456"));
+        let hash = "abc123def456".repeat(5) + "abcd";
+        let content_hash = ambre_core::ContentHash::parse(&hash).expect("a hash");
+        let key = format_s3_media_key(&env("dev"), &doc_id, &content_hash);
+        assert!(key.as_str().ends_with(&format!("media/{hash}")));
         assert!(key.as_str().contains("/documents/"));
     }
 
@@ -882,36 +868,28 @@ mod tests {
         assert!(short.contains("X-Amz-Expires=60"), "{short}");
     }
 
+    /// A client names a blob by a `ContentHash`, which the request body and
+    /// the route path read through its check. Nothing but sixty-four
+    /// lowercase hex characters reaches an object key, so a traversal never
+    /// leaves the document's media prefix (`SRV-054`).
     #[test]
     fn content_hash_validation() {
-        let valid = "a".repeat(64);
-        assert!(is_valid_content_hash(&ambre_core::ContentHash::from(
-            valid.as_str()
-        )));
-        assert!(is_valid_content_hash(&ambre_core::ContentHash(
-            "0123456789abcdef".repeat(4)
-        )));
-
-        // Path traversal payloads and non-canonical shapes are rejected.
-        assert!(!is_valid_content_hash(&ambre_core::ContentHash::from(
-            "../../snapshots/x"
-        )));
-        assert!(!is_valid_content_hash(&ambre_core::ContentHash(format!(
-            "../{}",
-            "a".repeat(60)
-        ))));
-        assert!(!is_valid_content_hash(&ambre_core::ContentHash(
-            "A".repeat(64)
-        ))); // uppercase
-        assert!(!is_valid_content_hash(&ambre_core::ContentHash(
-            "g".repeat(64)
-        ))); // non-hex
-        assert!(!is_valid_content_hash(&ambre_core::ContentHash(
-            "a".repeat(63)
-        ))); // too short
-        assert!(!is_valid_content_hash(&ambre_core::ContentHash(
-            "a".repeat(65)
-        ))); // too long
-        assert!(!is_valid_content_hash(&ambre_core::ContentHash::from("")));
+        let read = |text: &str| {
+            serde_json::from_value::<ambre_core::ContentHash>(serde_json::json!(text)).is_ok()
+        };
+        assert!(read(&"a".repeat(64)));
+        assert!(read(&"0123456789abcdef".repeat(4)));
+        for refused in [
+            "../../snapshots/x".to_owned(),
+            format!("../{}", "a".repeat(60)),
+            "A".repeat(64),
+            "g".repeat(64),
+            "a".repeat(63),
+            "a".repeat(65),
+            String::new(),
+        ] {
+            assert!(!read(&refused), "{refused}");
+            assert_eq!(ambre_core::ContentHash::parse(&refused), None, "{refused}");
+        }
     }
 }

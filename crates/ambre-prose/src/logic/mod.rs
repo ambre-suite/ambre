@@ -1082,23 +1082,19 @@ impl ProseState {
         self.media_cache.get(content_hash)
     }
 
-    /// Mint an image block addressing `content_hash`, for a test that binds the
-    /// answer rather than the gesture.
+    /// Mint an image block that stores `stored` as its address, for a test
+    /// that binds the answer rather than the gesture. Any text, as a peer may
+    /// write one.
     ///
     /// Test-only: `InsertImage` lands with the `Images` Story
     /// (`ambre-roadmap.md` E5).
     #[cfg(test)]
-    fn image_for_test(
-        &mut self,
-        content_hash: &ambre_core::ContentHash,
-    ) -> Option<crate::events::BlockId> {
+    fn image_for_test(&mut self, stored: &str) -> Option<crate::events::BlockId> {
         let id = doc::create_block(&self.doc, None, crate::events::BlockType::Image)?;
         let tree = doc::blocks(&self.doc);
         let node = doc::node_of(&tree, &id)?;
         let attrs = doc::attrs_at(&node)?;
-        attrs
-            .insert(doc::AttrKey::ContentHash, content_hash.as_str())
-            .ok()?;
+        attrs.insert(doc::AttrKey::ContentHash, stored).ok()?;
         self.doc.commit();
         Some(crate::events::block_id(id))
     }
@@ -1734,18 +1730,35 @@ mod tests {
     fn a_picture_arriving_writes_nothing_to_the_document() {
         let mut state = ProseState::new().expect("a document is built");
         let before = state.export_snapshot();
-        let events = state.on_media_downloaded(
-            ambre_core::ContentHash("abc".to_owned()),
-            ambre_core::MediaBytes::new(vec![1, 2, 3]),
-        );
+        let events =
+            state.on_media_downloaded(hash_of('a'), ambre_core::MediaBytes::new(vec![1, 2, 3]));
         assert_eq!(
             state
-                .cached_media(&"abc".into())
+                .cached_media(&hash_of('a'))
                 .map(ambre_core::MediaBytes::as_bytes),
             Some(&[1u8, 2, 3][..])
         );
         assert_eq!(events.len(), 1);
         assert_eq!(state.export_snapshot().len(), before.len());
+    }
+
+    /// A peer may store any text as the address of an image. A text that
+    /// spells no address, here a path traversal, reads as none, so it never
+    /// reaches the media URL of the relay.
+    #[test]
+    fn a_stored_traversal_reads_as_no_address() {
+        let mut state = ProseState::new().expect("a document is built");
+        state
+            .image_for_test("../documents/X")
+            .expect("an image block");
+        let tree = doc::blocks(&state.doc);
+        let images: Vec<TreeID> = tree
+            .nodes()
+            .into_iter()
+            .filter(|id| doc::block_type_of(&tree, id) == Some(crate::events::BlockType::Image))
+            .collect();
+        assert_eq!(images.len(), 1);
+        assert_eq!(state.image_hash(&images[0]), None);
     }
 
     /// `PROSE-060`: the picture arriving names what showed it.
@@ -1757,16 +1770,13 @@ mod tests {
     fn a_picture_arriving_names_every_block_that_shows_it() {
         let mut state = ProseState::new().expect("a document is built");
         let shown = state
-            .image_for_test(&"a-content-hash".into())
+            .image_for_test(hash_of('c').as_str())
             .expect("an image block");
         let other = state
-            .image_for_test(&"another-hash".into())
+            .image_for_test(hash_of('d').as_str())
             .expect("an image block");
 
-        let events = state.on_media_downloaded(
-            ambre_core::ContentHash("a-content-hash".to_owned()),
-            ambre_core::MediaBytes::new(vec![9]),
-        );
+        let events = state.on_media_downloaded(hash_of('c'), ambre_core::MediaBytes::new(vec![9]));
         let named = events
             .iter()
             .find_map(|e| match e {
@@ -1798,11 +1808,8 @@ mod tests {
             text: "same text".to_owned(),
         });
         let before = state.export_snapshot();
-        state.on_media_downloaded(
-            ambre_core::ContentHash("a-hash".to_owned()),
-            ambre_core::MediaBytes::new(vec![1, 2, 3, 4]),
-        );
-        assert!(state.cached_media(&"a-hash".into()).is_some());
+        state.on_media_downloaded(hash_of('e'), ambre_core::MediaBytes::new(vec![1, 2, 3, 4]));
+        assert!(state.cached_media(&hash_of('e')).is_some());
         // The cache is session state: the bytes the document exports are the
         // ones it exported before the picture arrived.
         assert_eq!(state.export_snapshot(), before);
@@ -1819,7 +1826,12 @@ mod tests {
             "a restored stack retracts nothing"
         );
         assert_eq!(restored.text_of(&block).as_deref(), Some("same text"));
-        assert!(restored.cached_media(&"a-hash".into()).is_none());
+        assert!(restored.cached_media(&hash_of('e')).is_none());
+    }
+
+    /// The address that repeats the hex `digit` sixty-four times.
+    fn hash_of(digit: char) -> ambre_core::ContentHash {
+        ambre_core::ContentHash::parse(&digit.to_string().repeat(64)).expect("a hex digit")
     }
 
     /// The history state each command reports, if any.

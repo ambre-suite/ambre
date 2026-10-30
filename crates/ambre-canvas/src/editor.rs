@@ -35,7 +35,7 @@ use ambre_draw::{
 use parley::{Affinity, AlignmentOptions, Cursor, Layout, Selection};
 
 use crate::registered_family_name;
-use crate::text_cache::{SpanShape, break_indented, push_shape};
+use crate::text_cache::{SpanShape, TextLength, break_indented, push_shape};
 
 /// Caret bar width in screen pixels.
 pub const CARET_WIDTH: ViewPx = ViewPx::new(1.5);
@@ -646,7 +646,7 @@ impl TextEditor {
             };
             let placed = push_shape(&mut builder, &text, &shape);
             if placed && span.indent > DocPx::ZERO {
-                indents.push((shape.range, span.indent.zoomed(self.zoom).get()));
+                indents.push((shape.range, span.indent.zoomed(self.zoom).layout_units()));
             }
             if let Some(color) = span.color.filter(|_| placed) {
                 builder.push(
@@ -659,7 +659,7 @@ impl TextEditor {
             builder.push(StyleProperty::Underline(true), compose);
         }
         let mut layout = builder.build(&text);
-        break_indented(&mut layout, &text, self.wrap_w.get(), &indents);
+        break_indented(&mut layout, &text, self.wrap_w.layout_units(), &indents);
         layout.align(self.align, AlignmentOptions::default());
         self.styled = Some(Styled { text, layout });
     }
