@@ -597,7 +597,7 @@ mod tests {
             "00000000-0000-0000-0000-000000000001"
         );
         assert_eq!(resp.email, ambre_core::Email::from("user@test.com"));
-        assert_eq!(resp.display_name, "Test User");
+        assert_eq!(resp.display_name.as_str(), "Test User");
         assert_eq!(resp.role, Role::Admin);
         assert_eq!(resp.has_shamir_share, RecoveryShare::Held);
         assert_eq!(

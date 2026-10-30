@@ -83,18 +83,6 @@ impl Name {
     }
 }
 
-impl PartialEq<str> for Name {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl PartialEq<&str> for Name {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
-    }
-}
-
 impl fmt::Display for Name {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -178,18 +166,6 @@ impl TryFrom<String> for DisplayName {
 
     fn try_from(text: String) -> Result<Self, Self::Error> {
         Self::new(&text)
-    }
-}
-
-impl PartialEq<str> for DisplayName {
-    fn eq(&self, other: &str) -> bool {
-        self.0 == other
-    }
-}
-
-impl PartialEq<&str> for DisplayName {
-    fn eq(&self, other: &&str) -> bool {
-        self.0 == *other
     }
 }
 

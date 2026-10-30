@@ -2010,7 +2010,7 @@ mod tests {
         });
         let (_, catalogue) = last_catalogue(&drain(&ui)).expect("the catalogue");
         assert_eq!(catalogue.len(), 1);
-        assert_eq!(catalogue[0].name, "general");
+        assert_eq!(catalogue[0].name.as_str(), "general");
     }
 
     #[test]

@@ -902,15 +902,7 @@ ambre-core | src/media.rs | crate::media | MediaAddress::as_bytes() | ret | &[u8
 ambre-core | src/media.rs | crate::media | MediaAddress::from_array(bytes) | param | [u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
 ambre-core | src/media.rs | crate::media | MediaType.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
-ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<&str>>::eq() | ret | bool	trait	signature fixed by the trait
-ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<&str>>::eq(other) | param | &&str	trait	signature fixed by the trait
-ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<str>>::eq() | ret | bool	trait	signature fixed by the trait
-ambre-core | src/name.rs | crate::name | <DisplayName as PartialEq<str>>::eq(other) | param | &str	trait	signature fixed by the trait
 ambre-core | src/name.rs | crate::name | <DisplayName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of DisplayName validates
-ambre-core | src/name.rs | crate::name | <Name as PartialEq<&str>>::eq() | ret | bool	trait	signature fixed by the trait
-ambre-core | src/name.rs | crate::name | <Name as PartialEq<&str>>::eq(other) | param | &&str	trait	signature fixed by the trait
-ambre-core | src/name.rs | crate::name | <Name as PartialEq<str>>::eq() | ret | bool	trait	signature fixed by the trait
-ambre-core | src/name.rs | crate::name | <Name as PartialEq<str>>::eq(other) | param | &str	trait	signature fixed by the trait
 ambre-core | src/name.rs | crate::name | DisplayName.0 | field | String	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | DisplayName::as_str() | ret | &str	newtype-inner	Name/DisplayName newtype
 ambre-core | src/name.rs | crate::name | DisplayName::cut_to_fit(text) | param | &str	newtype-inner	DisplayName constructor input

@@ -628,7 +628,7 @@ mod tests {
         let s = only(&state);
         assert_eq!(s.kind, SuggestionKind::Insertion);
         assert_eq!(s.user_id, ALICE);
-        assert_eq!(s.author.clone().unwrap(), "user 1");
+        assert_eq!(s.author.clone().unwrap().as_str(), "user 1");
         assert_eq!(spans(&s), vec![(5, 11)]);
     }
 

@@ -1500,7 +1500,7 @@ fn the_outbound_sample_carries_the_session_display_name() {
     let mut rx = ToileState::new();
     let peers = live_set(rx.apply_ephemeral(UserId::new(), &frame));
     assert_eq!(peers.len(), 1);
-    assert_eq!(peers[0].presence.name.as_ref().unwrap(), "Ada");
+    assert_eq!(peers[0].presence.name.as_ref().unwrap().as_str(), "Ada");
 
     // A session with no name yet sends none, and the receiver falls back to the
     // short handle rather than paint an empty chip.

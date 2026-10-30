@@ -2823,7 +2823,11 @@ mod tests {
                     .0
                     .channels
                     .into_iter()
-                    .map(|c| (c.channel_id, c.peers))
+                    .map(|c| {
+                        let names: Vec<String> =
+                            c.peers.iter().map(|p| p.as_str().to_owned()).collect();
+                        (c.channel_id, names)
+                    })
                     .collect::<std::collections::HashMap<_, _>>()
             }
         };

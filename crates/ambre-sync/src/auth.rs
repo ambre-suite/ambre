@@ -555,7 +555,7 @@ mod provider_tests {
                     ..
                 },
                 ..
-            } if display_name == "Ada"
+            } if display_name.as_str() == "Ada"
         )));
         let heard = format!("{told:?}");
         assert!(!heard.contains("s3cr3t"), "a token reached Logic: {heard}");

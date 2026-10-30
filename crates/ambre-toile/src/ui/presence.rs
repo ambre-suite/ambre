@@ -727,7 +727,7 @@ mod tests {
     fn the_label_is_the_name_the_sample_carried() {
         let id = user(42);
         let ada = DisplayName::new("Ada").unwrap();
-        assert_eq!(peer_label(&id, Some(&ada)), "Ada");
+        assert_eq!(peer_label(&id, Some(&ada)).as_str(), "Ada");
         assert_eq!(peer_label(&id, None), DisplayName::handle_of(&id));
         assert_eq!(DisplayName::handle_of(&id).as_str().len(), 8);
     }

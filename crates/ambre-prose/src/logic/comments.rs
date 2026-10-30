@@ -541,7 +541,7 @@ mod tests {
         let id = open(&mut state, block, (0, 5), "Mine.");
         let head = thread(&state, id).replies.remove(0);
         assert_eq!(head.user_id, ALICE);
-        assert_eq!(head.author.unwrap(), "user 1");
+        assert_eq!(head.author.unwrap().as_str(), "user 1");
         assert_eq!(head.created_at, ambre_bus::Timestamp(10));
     }
 

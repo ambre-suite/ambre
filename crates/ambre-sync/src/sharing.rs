@@ -1830,7 +1830,9 @@ mod tests {
 
         // Success event, no error.
         match erx.try_recv().expect("InviteSent emitted") {
-            SyncEvent::InviteSent { display_name, .. } => assert_eq!(display_name, "Invitee"),
+            SyncEvent::InviteSent { display_name, .. } => {
+                assert_eq!(display_name.as_str(), "Invitee")
+            }
             _ => panic!("unexpected event (want InviteSent)"),
         }
         assert!(lrx.try_recv().is_err(), "no ApiError on success");

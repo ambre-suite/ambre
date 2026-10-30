@@ -589,7 +589,7 @@ fn choosing_a_member_fetches_their_key_then_shows_the_direct_message() {
         "{fetched:?}"
     );
     assert_eq!(relay.pane.get_untracked().shown_channel(), Some(general));
-    assert_eq!(relay.member_name(bob).unwrap(), "Bob");
+    assert_eq!(relay.member_name(bob).unwrap().as_str(), "Bob");
 
     let direct = ChannelId::new();
     let after = relay.absorb(&UiEvent::DirectMessage {
