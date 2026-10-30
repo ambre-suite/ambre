@@ -20,7 +20,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-149` | `INV` | An element MUST belong to at most one group or frame. | this spec section 3 | `ambre_toile::logic::structure_tests::an_element_sits_in_one_group_or_frame_at_most` -- a member framed out of its group, then grouped out of its frame, then two members of one frame grouped into a group that takes their place in it, each list read back and the caches equal to a rebuild; `ambre_toile::logic::state::groups::cache_tests::a_refused_group_leaves_each_member_where_it_was` -- a detached board refuses the group, and the framed member's list and caches read back unchanged | none | verified |
+| `TOILE-149` | `INV` | An element MUST belong to at most one group or frame. | this spec section 3 | `ambre_toile::logic::structure_tests::an_element_sits_in_one_group_or_frame_at_most` -- a member framed out of its group, then grouped out of its frame, then two members of one frame grouped into a group that takes their place in it, each list read back and the caches equal to a rebuild | none | verified |
 | `TOILE-009` | `INV` | A group's box MUST be the union of its members' boxes. | this spec section 3 | `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- the union of two corner rects; `ambre_toile::logic::convergence_tests::moving_a_group_translates_its_members` -- the same union again after a translation; `ambre_toile::logic::convergence_tests::a_member_framed_out_of_its_group_shrinks_the_group` -- the union shrinks when a frame takes a member | none | verified |
 | `TOILE-150` | `INV` | A group MUST carry no coordinates of its own. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_group_takes_no_box_from_a_resize_or_a_rotation` -- a resize aimed at a group writes no change, and a rotation leaves no box of its own in the caches. The group seed writes a kind, a rotation, a lock flag and a style register, and no x, y, width or height | none | verified |
 | `TOILE-054` | `INV` | A group left with no member MUST be removed, so the caches stay equal to a rebuild. | this spec section 3; `TOILE-004` | `ambre_toile::logic::structure_tests::a_group_left_with_no_member_is_removed` -- one member deleted and the last framed away: the group gone from the board and the order, and the caches equal to a rebuild | none | verified |
@@ -39,6 +39,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-246` | `POST` | The enclosed elements of such a selection MUST be bound. | this spec section 3; section 5 | `ambre_toile::logic::structure_tests::a_binding_keeps_what_it_can_hold_and_moves_nobody` -- the selected member of that group read back in the binding | none | verified |
 | `TOILE-153` | `FRAME` | Binding a group MUST NOT move any member. | this spec section 3 | `ambre_toile::logic::structure_tests::a_binding_keeps_what_it_can_hold_and_moves_nobody` -- every member's box read back after the binding, equal to its box before | none | verified |
 | `TOILE-055` | `FAIL` | A binding left with fewer than two distinct members MUST create no group. | this spec section 3 | `ambre_toile::logic::convergence_tests::a_group_of_one_answers_an_error` -- one member yields a `GroupNeedsTwo` error and no group | none | verified |
+| `TOILE-273` | `FAIL` | A group the board refuses to write MUST leave every member in the group or frame that held it. | this spec section 3 | `ambre_toile::logic::state::groups::cache_tests::a_refused_group_leaves_each_member_where_it_was` -- a detached board refuses the group, and the framed member's list and caches read back unchanged | none | verified |
 
 ### 1.3 Move a group
 
@@ -72,10 +73,10 @@ status values are normative in `ambre-spec-template.md`.
   group still walks the board, section 6, and no bench measures it.
 * **Boundary.** none of its own: the binding lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). The group box is derived and never persisted.
-* **Verification.** 26 `verified`, 0 `untested`. What holds is each gesture, and the two refusals a
-  chord over a single element or a non-group answers. A mixed ungroup unbinds its groups in silence.
-  A resize aimed at a group writes nothing, and a rotation leaves its box derived, even with a member
-  a peer deleted. The binding filter, the nested cases and the one-container rule are driven by hand.
+* **Verification.** 27 `verified`. What holds is each gesture, and the two refusals a chord over a
+  single element or a non-group answers. A mixed ungroup unbinds its groups in silence. A resize
+  aimed at a group writes nothing, and a rotation leaves its box derived, even with a member a peer
+  deleted. The binding filter, the nested cases and the one-container rule are driven by hand.
 
 ---
 
@@ -109,13 +110,14 @@ the derived bounds cache and the spatial index (`TOILE-009`).
 2. drop any id that is an ancestor of another id in the set, keeping the descendants
    (`TOILE-152`);
 3. stop when fewer than two members survive (`TOILE-055`);
-4. detach each member from its current container (`TOILE-149`), then prune anything the detach
-   emptied (`TOILE-054`);
-5. take the lowest place any member holds in the paint order;
-6. mint the group, write its membership list, and insert the group at that place
-   (`TOILE-052`). When every member sat in one frame, the group joins that frame in their place, so
-   the frame keeps what it held (`TOILE-149`);
-7. commit once, then recompute every group's box to a fixed point.
+4. mint the group and write its membership list. A board that refuses either write refuses the
+   group, with every member where it was (`TOILE-273`);
+5. detach each member the list holds from the group or frame it sat in (`TOILE-149`), then prune
+   anything the detach emptied (`TOILE-054`);
+6. take the lowest place any member holds in the paint order;
+7. insert the group at that place (`TOILE-052`). When every member sat in one frame, the group
+   joins that frame in their place, so the frame keeps what it held (`TOILE-149`);
+8. commit once, then recompute every group's box to a fixed point.
 
 **Steps, when groups are unbound:** for each listed group, remove the group element. Every list that
 names the group drops it, so no frame keeps a dead entry. The group's own parent then takes its

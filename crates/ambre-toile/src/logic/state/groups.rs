@@ -47,8 +47,8 @@ impl ToileState {
     }
 
     /// Bind `ids` into a fresh group element **without** committing, returning the
-    /// group id. Each refusal leaves every member where it was. The refusal
-    /// is [`ToileError::GroupNeedsTwo`] when fewer than two distinct members
+    /// group id. Each refusal leaves every member where it was (`TOILE-273`).
+    /// The refusal is [`ToileError::GroupNeedsTwo`] when fewer than two distinct members
     /// survive filtering. It is [`ToileError::IdsExhausted`] when the session
     /// has no fresh id, and [`ToileError::WriteFailed`] when the board refuses
     /// the group's map or its list.
@@ -775,7 +775,7 @@ mod cache_tests {
         frame
     }
 
-    /// `TOILE-149`: a board that refuses the group's map refuses the group, and
+    /// `TOILE-273`: a board that refuses the group's map refuses the group, and
     /// each member stays in the frame it sat in. The group was once written
     /// after the detach, so the cache dropped the frame link the board kept.
     #[test]
