@@ -20,7 +20,36 @@ use ambre_bus::app::prose::MarkKey;
 use crate::mark::{self, InlineCode, MarkRoot, Script};
 
 /// The marks one run carries, key to stored value.
-pub type MarkSet = BTreeMap<MarkKey, String>;
+pub type MarkSet = BTreeMap<MarkKey, StoredMarkValue>;
+
+/// A mark value as the document holds it, never checked. A peer on another
+/// build may have written any text, and [`resolve`] parses each one it reads
+/// and drops what fails. A value may be a link or a family the user typed, so
+/// `Debug` prints its length alone.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct StoredMarkValue(String);
+
+impl StoredMarkValue {
+    /// The value `text` the document holds.
+    #[must_use]
+    pub fn new(text: impl Into<String>) -> Self {
+        Self(text.into())
+    }
+
+    /// The value as stored, for the parse that reads it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for StoredMarkValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("StoredMarkValue")
+            .field(&crate::redact::Redacted(&self.0))
+            .finish()
+    }
+}
 
 /// The block a run sits in, which is the level between the mark and the
 /// document defaults.
@@ -112,7 +141,7 @@ fn block_defaults(context: BlockContext, defaults: &DocDefaults) -> ResolvedStyl
 pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -> ResolvedStyle {
     let mut resolved = block_defaults(context, defaults);
     let has = |root: MarkRoot| marks.contains_key(root.as_str());
-    let get = |root: MarkRoot| marks.get(root.as_str());
+    let get = |root: MarkRoot| marks.get(root.as_str()).map(StoredMarkValue::as_str);
     if has(MarkRoot::Bold) {
         resolved.bold = Weight::Bold;
     }
@@ -148,8 +177,7 @@ pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -
     }
     resolved.link = get(MarkRoot::Link)
         .filter(|url| !url.is_empty())
-        .cloned()
-        .map(ambre_core::LinkUrl::new);
+        .map(|url| ambre_core::LinkUrl::new(url.to_owned()));
     resolved
 }
 
@@ -157,10 +185,19 @@ pub fn resolve(marks: &MarkSet, context: BlockContext, defaults: &DocDefaults) -
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_stored_mark_value_prints_its_length_alone() {
+        let value = StoredMarkValue::new("https://private.example/page");
+        assert!(crate::redact::tests::hides(
+            &value,
+            "https://private.example/page"
+        ));
+    }
+
     fn marks(pairs: &[(&str, &str)]) -> MarkSet {
         pairs
             .iter()
-            .map(|(key, value)| (MarkKey::from(*key), (*value).to_owned()))
+            .map(|(key, value)| (MarkKey::from(*key), StoredMarkValue::new(*value)))
             .collect()
     }
 

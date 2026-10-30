@@ -18,7 +18,7 @@ use crate::events::{
     ActiveMarks, BlockId, BlockType, ProseEvent, ProseOutcome, ProseRefusal, TriState, tree_id,
 };
 use crate::mark::{self, MarkRoot};
-use crate::style::{BlockContext, MarkSet, ResolvedStyle, resolve};
+use crate::style::{BlockContext, MarkSet, ResolvedStyle, StoredMarkValue, resolve};
 
 use super::ProseState;
 
@@ -350,8 +350,7 @@ impl MarkFold {
         }
         let this = marks
             .get(MarkRoot::Link.as_str())
-            .cloned()
-            .map(ambre_core::LinkUrl::new);
+            .map(|url| ambre_core::LinkUrl::new(url.as_str().to_owned()));
         self.link = match self.link.take() {
             None => Some(this),
             Some(held) if held == this => Some(held),
@@ -407,8 +406,8 @@ fn marks_of_run(fields: &LoroValue) -> MarkSet {
         .iter()
         .map(|(key, value)| {
             let stored = match value {
-                LoroValue::String(text) => text.to_string(),
-                _ => String::new(),
+                LoroValue::String(text) => StoredMarkValue::new(text.to_string()),
+                _ => StoredMarkValue::default(),
             };
             (MarkKey::new(key.clone()), stored)
         })
