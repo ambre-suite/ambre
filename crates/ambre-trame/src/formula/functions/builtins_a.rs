@@ -567,11 +567,11 @@ pub(crate) fn mid(args: &[CellValue]) -> CellValue {
         (Ok(start), Ok(n)) => (start, n),
         (Err(e), _) | (_, Err(e)) => return CellValue::Error(e),
     };
-    // A start below the first char or a negative length is refused, as Excel
-    // refuses it with `#VALUE!`; the floats truncate first, as there. The
+    // A start below the first char or a negative length is out of domain,
+    // `#NUM!` as for LEFT, RIGHT and REPT; the floats truncate first. The
     // negated test refuses a NaN too, before the cast below meets it.
     if !(start >= 1.0 && n >= 0.0) {
-        return CellValue::Error(FormulaError::TypeError);
+        return CellValue::Error(FormulaError::NumError);
     }
     // The float saturates as `as` does: a start past the text takes nothing.
     let start = CharOffset::from_usize(start as usize - 1);

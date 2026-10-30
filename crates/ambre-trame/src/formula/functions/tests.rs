@@ -626,12 +626,13 @@ fn search_counts_the_chars_of_the_text_it_was_given() {
     ));
 }
 
-/// MID refuses a start below 1 and a negative length, as Excel does with
-/// `#VALUE!`, which reads `#TYPE!` here. Both were clamped and answered text.
+/// MID refuses a start below 1 and a negative length with `#NUM!`, as LEFT,
+/// RIGHT and REPT refuse an out-of-domain count. Both were clamped and
+/// answered text.
 #[test]
 fn mid_refuses_a_start_below_one_and_a_negative_length() {
     let refused =
-        |args: &[CellValue]| matches!(mid(args), CellValue::Error(FormulaError::TypeError));
+        |args: &[CellValue]| matches!(mid(args), CellValue::Error(FormulaError::NumError));
     assert!(refused(&[txt("abc"), num(0.0), num(2.0)]));
     assert!(refused(&[txt("abc"), num(-1.0), num(2.0)]));
     assert!(refused(&[txt("abc"), num(1.0), num(-1.0)]));
@@ -651,7 +652,7 @@ fn mid_reads_a_blank_count_as_zero() {
     );
     assert!(matches!(
         mid(&[txt("abc"), CellValue::Empty, num(1.0)]),
-        CellValue::Error(FormulaError::TypeError)
+        CellValue::Error(FormulaError::NumError)
     ));
     assert_eq!(mid(&[txt("abc"), txt("2"), num(1.0)]).to_display(), "b");
     assert!(matches!(
