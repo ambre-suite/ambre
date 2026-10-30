@@ -2476,7 +2476,7 @@ fn a_panel_restyle_names_every_member_and_keeps_the_selection() {
     let b = DisplayElement {
         locked: ambre_bus::app::toile::LockState::Locked,
         style: ElementStyle {
-            stroke_w: ambre_bus::app::toile::StyleLength::new(4.0),
+            stroke_w: ambre_core::StoredBoardLength::new(4.0),
             ..ElementStyle::default()
         },
         ..sticky("b", B)

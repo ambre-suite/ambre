@@ -362,7 +362,7 @@ fn fill_and_stroke<S: DrawSurface>(surface: &mut S, path: &BezPath, style: &Elem
         surface.fill_path(path, &Brush::Solid(style_color(fill, style.opacity)));
     }
     if let Some(stroke) = style.stroke
-        && style.stroke_w > ambre_bus::app::toile::StyleLength::ZERO
+        && style.stroke_w > ambre_core::StoredBoardLength::ZERO
     {
         surface.stroke_path(
             path,

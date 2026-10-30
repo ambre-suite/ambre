@@ -80,7 +80,7 @@ pub enum StyleEdit {
     /// Stroke colour (`None` == no stroke). The panel alone emits it.
     Stroke(Option<Rgba>),
     /// Stroke width in world px, floored at zero. The panel alone emits it.
-    StrokeWidth(ambre_bus::app::toile::StyleLength),
+    StrokeWidth(ambre_core::StoredBoardLength),
     /// Opacity. The panel alone emits it.
     Opacity(ambre_core::Opacity),
     /// Text (foreground ink) colour (`None` == the kind default ink).
@@ -112,7 +112,7 @@ impl StyleEdit {
             StyleEdit::Fill(c) => style.fill = c,
             StyleEdit::Stroke(c) => style.stroke = c,
             StyleEdit::StrokeWidth(w) => {
-                style.stroke_w = w.max(ambre_bus::app::toile::StyleLength::ZERO)
+                style.stroke_w = w.max(ambre_core::StoredBoardLength::ZERO)
             }
             StyleEdit::Opacity(o) => style.opacity = o,
             StyleEdit::TextColor(c) => style.text_color = c,
@@ -575,9 +575,9 @@ mod tests {
         let base = ElementStyle {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             stroke: Some(Rgba::from_bits(0x4455_66ff)),
-            stroke_w: ambre_bus::app::toile::StyleLength::new(3.0),
+            stroke_w: ambre_core::StoredBoardLength::new(3.0),
             opacity: ambre_core::Opacity::new(0.5).unwrap(),
-            corner: ambre_bus::app::toile::StyleLength::new(7.0),
+            corner: ambre_core::StoredBoardLength::new(7.0),
             text_color: Some(Rgba::from_bits(0x7788_99ff)),
             font: FontSpec {
                 family: Some(FontFamily::Other("Comic Sans MS".to_owned())),
@@ -604,9 +604,9 @@ mod tests {
                 },
             ),
             (
-                StyleEdit::StrokeWidth(ambre_bus::app::toile::StyleLength::new(-2.0)),
+                StyleEdit::StrokeWidth(ambre_core::StoredBoardLength::new(-2.0)),
                 ElementStyle {
-                    stroke_w: ambre_bus::app::toile::StyleLength::ZERO,
+                    stroke_w: ambre_core::StoredBoardLength::ZERO,
                     ..base.clone()
                 },
             ),

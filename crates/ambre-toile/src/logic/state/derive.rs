@@ -36,8 +36,8 @@ use super::names::{BoardKey, ConnectorKey, ElementKey, Fields, board};
 /// pressure thus loses no stroke over a field the board never draws.
 #[derive(serde::Deserialize)]
 struct StoredPoint {
-    x: ambre_core::StrokeCoord,
-    y: ambre_core::StrokeCoord,
+    x: ambre_core::StoredBoardLength,
+    y: ambre_core::StoredBoardLength,
     #[serde(deserialize_with = "clamped_pressure")]
     pressure: UnitFraction,
 }
@@ -469,8 +469,8 @@ mod tests {
         let mut st = ToileState::new();
         let sample = |x: f32| {
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(x),
-                ambre_core::StrokeCoord::new(x),
+                ambre_core::StoredBoardLength::new(x),
+                ambre_core::StoredBoardLength::new(x),
             )
         };
         let id = st

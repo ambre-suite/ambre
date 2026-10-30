@@ -246,9 +246,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
     let style = ElementStyle {
         fill: Some(Rgba::from_bits(0x0203_0401)),
         stroke: Some(Rgba::from_bits(0x0607_0805)),
-        stroke_w: ambre_bus::app::toile::StyleLength::new(1.5),
+        stroke_w: ambre_core::StoredBoardLength::new(1.5),
         opacity: ambre_core::Opacity::new(0.25).unwrap(),
-        corner: ambre_bus::app::toile::StyleLength::new(3.5),
+        corner: ambre_core::StoredBoardLength::new(3.5),
         font: FontSpec {
             family: Some(ambre_bus::app::toile::FontFamily::Other("f".to_owned())),
             size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),
@@ -259,9 +259,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
         },
         shadow: Some(Shadow {
             color: Rgba::from_bits(0x0a0b_0c09),
-            dx: ambre_bus::app::toile::StyleLength::new(11.5),
-            dy: ambre_bus::app::toile::StyleLength::new(12.5),
-            blur: ambre_bus::app::toile::StyleLength::new(13.5),
+            dx: ambre_core::StoredBoardLength::new(11.5),
+            dy: ambre_core::StoredBoardLength::new(12.5),
+            blur: ambre_core::StoredBoardLength::new(13.5),
         }),
         text_color: Some(Rgba::from_bits(0x0e0f_100d)),
     };
@@ -278,8 +278,8 @@ fn postcard_layouts() -> Vec<(String, String)> {
         sizing: Sizing::Fill,
     };
     let points = vec![StrokePoint {
-        x: ambre_core::StrokeCoord::new(1.5),
-        y: ambre_core::StrokeCoord::new(2.5),
+        x: ambre_core::StoredBoardLength::new(1.5),
+        y: ambre_core::StoredBoardLength::new(2.5),
         pressure: ambre_bus::app::toile::UnitFraction::HALF,
     }];
     vec![
@@ -581,12 +581,12 @@ pub(super) fn board_of_every_key() -> ToileState {
     st.handle_command(ToileCommand::CommitStroke {
         points: vec![
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(0.0),
-                ambre_core::StrokeCoord::new(0.0),
+                ambre_core::StoredBoardLength::new(0.0),
+                ambre_core::StoredBoardLength::new(0.0),
             ),
             StrokePoint::full_pressure(
-                ambre_core::StrokeCoord::new(1.0),
-                ambre_core::StrokeCoord::new(1.0),
+                ambre_core::StoredBoardLength::new(1.0),
+                ambre_core::StoredBoardLength::new(1.0),
             ),
         ],
         style: ElementStyle::default(),

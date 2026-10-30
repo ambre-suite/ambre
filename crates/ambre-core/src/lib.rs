@@ -184,7 +184,7 @@ pub use text_offset::{
 };
 pub use unit::{
     BoardLength, CssPoint, CssPx, CssVector, DocPoint, DocPx, ImagePx, ImageSize, Mm, PX_PER_MM,
-    PixelSize, Point, Pt, Radians, Size, StrokeCoord, SurfacePx, Vector, ViewPoint, ViewPx,
+    PixelSize, Point, Pt, Radians, Size, StoredBoardLength, SurfacePx, Vector, ViewPoint, ViewPx,
     ViewSize, ViewSpeed, ViewSpeedVector, ViewVector, WholePx,
 };
 pub use uuid::Uuid;

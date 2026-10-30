@@ -238,9 +238,6 @@ ambre-bus | src/app/toile.rs | crate::app::toile | PresentMode::is_presenting() 
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::from_tag(s) | param | &str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ShapeKind::tag() | ret | &'static str	newtype-inner	closed-set enum tag codec
 ambre-bus | src/app/toile.rs | crate::app::toile | SlideChange.notes | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength.0 | field | f32	newtype-inner	StyleLength newtype: the board length a style stores
-ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength::get() | ret | f32	newtype-inner	StyleLength newtype: the board length a style stores
-ambre-bus | src/app/toile.rs | crate::app::toile | StyleLength::new(units) | param | f32	newtype-inner	StyleLength newtype: the board length a style stores
 ambre-bus | src/app/toile.rs | crate::app::toile | TextDelta.insert | field | String	free-text	inserted text of the splice
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::CreateComment.body | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | ToileCommand::EditNotes.base | field | String	free-text	user text

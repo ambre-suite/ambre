@@ -325,7 +325,7 @@ mod tests {
         el.style = ElementStyle {
             fill: Some(Rgba::from_bits(0x3366_CCFF)),
             stroke: Some(Rgba::from_bits(0x0000_00FF)),
-            stroke_w: ambre_bus::app::toile::StyleLength::new(2.0),
+            stroke_w: ambre_core::StoredBoardLength::new(2.0),
             ..ElementStyle::default()
         };
         el
