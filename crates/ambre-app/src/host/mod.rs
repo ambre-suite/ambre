@@ -405,7 +405,7 @@ impl AppView {
             AppView::Trame(v) => v.handle_input(ev),
             AppView::Toile(v) => v.handle_input(ev),
             AppView::Prose(v) => v.handle_input(ev),
-            AppView::Murmure(v) => v.handle_input(ev),
+            AppView::Murmure(v) => v.handle_input(ev).is_yes(),
         }
     }
 

@@ -1286,15 +1286,11 @@ ambre-murmure | src/composer.rs | crate::composer | Composer::close_with(found) 
 ambre-murmure | src/composer.rs | crate::composer | Composer::compose(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::cut() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::draft() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::drag_to() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::editing() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::focused() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::has_files() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::key() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/composer.rs | crate::composer | Composer::list_key() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::on_also() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::paint(typing) | param | Option<&str>	free-text	text, label or user content
-ambre-murmure | src/composer.rs | crate::composer | Composer::release() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::restore() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/composer.rs | crate::composer | Composer::selected() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/composer.rs | crate::composer | Composer::show_chords() | ret | bool	generic	state flag/predicate
@@ -1483,11 +1479,9 @@ ambre-murmure | src/uploads.rs | crate::uploads | size_label() | ret | String	fr
 ambre-murmure | src/view.rs | crate::view | AT_FRACTION | const | f32	math	a ratio: where in the viewport a named message rests, a fraction of the list height
 ambre-murmure | src/view.rs | crate::view | MurmureView::clipboard() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | MurmureView::close_thread() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::composer_input() | ret | Option<bool>	generic	None leaves an event to the list; Some answers whether the composer prevents its default, the bool handle_input returns
 ambre-murmure | src/view.rs | crate::view | MurmureView::copy() | ret | Option<String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | MurmureView::drags_text() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::finger_down() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/view.rs | crate::view | MurmureView::handle_input() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::in_composer() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::mark_shown_read() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::on_jump() | ret | bool	generic	state flag/predicate
