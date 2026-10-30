@@ -64,6 +64,11 @@ pub const ROW_HEIGHT: DocPx = DocPx::new(20.0);
 pub const MIN_COL_WIDTH: DocPx = DocPx::new(24.0);
 /// The shortest a resize leaves a row.
 pub const MIN_ROW_HEIGHT: DocPx = DocPx::new(12.0);
+/// The widest a column gets, from a local resize or from a peer. The bound
+/// keeps the sum of every width finite.
+pub const MAX_COL_WIDTH: DocPx = DocPx::new(4096.0);
+/// The tallest a row gets, from a local resize or from a peer.
+pub const MAX_ROW_HEIGHT: DocPx = DocPx::new(2048.0);
 
 /// Total number of rows in a Trame grid (0-based indices `0..TOTAL_ROWS`).
 pub const TOTAL_ROWS: RowCount = RowCount::new(100_000);

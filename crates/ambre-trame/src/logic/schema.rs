@@ -186,7 +186,9 @@ pub(crate) struct FilterRecord {
     pub kind: FilterKind,
 }
 
-pub(crate) use crate::{COL_WIDTH, MIN_COL_WIDTH, MIN_ROW_HEIGHT, ROW_HEIGHT};
+pub(crate) use crate::{
+    COL_WIDTH, MAX_COL_WIDTH, MAX_ROW_HEIGHT, MIN_COL_WIDTH, MIN_ROW_HEIGHT, ROW_HEIGHT,
+};
 
 /// Which axis a structural op targets. Lets [`TrameState::insert_axis`] /
 /// [`delete_axis`](TrameState::delete_axis) share one body across rows/columns.

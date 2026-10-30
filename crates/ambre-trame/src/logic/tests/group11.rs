@@ -4,7 +4,8 @@
 
 use super::*;
 use crate::logic::schema::{
-    MATERIALIZE_ROWS, MIN_COL_WIDTH, SheetContainer, SheetRoot, default_sheet,
+    COL_WIDTH, MATERIALIZE_ROWS, MAX_COL_WIDTH, MAX_ROW_HEIGHT, MIN_COL_WIDTH, MIN_ROW_HEIGHT,
+    ROW_HEIGHT, SheetContainer, SheetRoot, default_sheet,
 };
 use crate::model::CellKey;
 use crate::{FillMode, SelectionKind};
@@ -436,6 +437,60 @@ fn a_column_is_never_narrower_than_its_minimum() {
     }
     let (widths, _) = metrics(&mut state, 3);
     assert_eq!(widths, [MIN_COL_WIDTH.get(); 3]);
+}
+
+/// A peer writes sizes no resize gives. Each reads clamped into its range,
+/// or as the default when it is no finite number (`TRAME-UI-181`).
+#[test]
+fn a_peer_size_out_of_range_reads_clamped_or_default() {
+    let mut peer = TrameState::new();
+    let sheet_id = peer.active_sheet.clone();
+    for line in 0..4 {
+        peer.handle_command(TrameCommand::ResizeCol {
+            version: ambre_bus::ViewportVersion(1),
+            sheet_id: sheet_id.clone(),
+            col: Col::new(line),
+            width: ambre_core::DocPx::new(100.0),
+        });
+        peer.handle_command(TrameCommand::ResizeRow {
+            version: ambre_bus::ViewportVersion(1),
+            sheet_id: sheet_id.clone(),
+            row: Row::new(line),
+            height: ambre_core::DocPx::new(30.0),
+        });
+    }
+    let mut local = TrameState::new();
+    local
+        .import_snapshot(&peer.export_snapshot())
+        .expect("a snapshot this build wrote");
+    peer.flush_delta();
+    let hostile = [-1e30, f64::NAN, f64::INFINITY, 1e30];
+    for root in [SheetRoot::ColWidths, SheetRoot::RowHeights] {
+        let map = peer
+            .doc
+            .get_map(SheetContainer::of(root, &sheet_id).as_str());
+        let LoroValue::Map(sizes) = map.get_value() else {
+            panic!("the sizes map");
+        };
+        let mut keys: Vec<String> = sizes.keys().cloned().collect();
+        // Key order follows the line order: the uids count up as lines pin.
+        keys.sort();
+        for (key, size) in keys.iter().zip(hostile) {
+            map.insert(key, size).expect("a crafted size");
+        }
+    }
+    peer.doc.commit();
+    let delta = peer.flush_delta().expect("the crafted sizes");
+    local.apply_remote(&delta);
+    let (widths, heights) = metrics(&mut local, 4);
+    assert_eq!(
+        widths,
+        [MIN_COL_WIDTH, COL_WIDTH, COL_WIDTH, MAX_COL_WIDTH].map(|w| w.get())
+    );
+    assert_eq!(
+        heights,
+        [MIN_ROW_HEIGHT, ROW_HEIGHT, ROW_HEIGHT, MAX_ROW_HEIGHT].map(|h| h.get())
+    );
 }
 
 /// A write ten thousand lines past the used range is refused with no
