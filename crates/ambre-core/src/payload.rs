@@ -148,6 +148,38 @@ define_payload! {
     PickedContainer
 }
 
+impl MediaBytes {
+    /// Wipes the bytes now: a media file its reader refuses and drops
+    /// (`ARCH-046`).
+    pub fn wipe(self) {
+        crate::Secret::wipe(self.0);
+    }
+}
+
+/// A picked file under the role its version byte names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PickedFile {
+    /// A plaintext container, or bytes [`crate::classify`] refuses.
+    Plaintext(PlaintextContainer),
+    /// A passphrase-sealed container.
+    Sealed(SealedContainer),
+}
+
+impl PickedContainer {
+    /// The file under the role [`crate::classify`] names (`DOCFILE-010`).
+    /// Bytes it refuses go on as plaintext, and the plaintext reader names
+    /// the refusal. Each reader validates the bytes again.
+    #[must_use]
+    pub fn into_lineage(self) -> PickedFile {
+        match crate::classify(&self) {
+            Ok(crate::ContainerKind::Sealed(_)) => PickedFile::Sealed(SealedContainer(self.0)),
+            Ok(crate::ContainerKind::Plaintext(_)) | Err(_) => {
+                PickedFile::Plaintext(PlaintextContainer(self.0))
+            }
+        }
+    }
+}
+
 define_payload! {
     /// A whole passphrase-sealed `.ambre` container, header included, as it
     /// sits on the user's disk (`DOCFILE-010`). Only the Sync worker opens it,
