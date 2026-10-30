@@ -100,7 +100,7 @@ const DIRTY_VEIL_ALPHA: f32 = 0.5;
 
 /// Leg length, in logical pixels, of the right-triangle error marker drawn in
 /// a cell's top-right corner.
-const ERROR_MARK_SIZE: f64 = 7.0;
+const ERROR_MARK_SIZE: SurfacePx = SurfacePx::new(7.0);
 
 /// The half-open rows and columns covering a repaint strip. Bundling both
 /// spans keeps the per-cell helpers' argument lists short.
@@ -771,7 +771,7 @@ mod tests {
         let contours = super::mdi_filter_polygon();
         assert!(contours.iter().any(|c| c.len() >= 3));
         for c in contours {
-            for &(x, y) in c {
+            for &kurbo::Point { x, y } in c {
                 assert!((-1e-6..=1.0 + 1e-6).contains(&x), "x out of unit box: {x}");
                 assert!((-1e-6..=1.0 + 1e-6).contains(&y), "y out of unit box: {y}");
             }

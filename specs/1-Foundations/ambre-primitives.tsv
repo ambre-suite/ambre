@@ -3058,7 +3058,7 @@ ambre-trame | src/chrome/status.rs | crate::chrome::status | fmt_num() | ret | S
 ambre-trame | src/columns.rs | crate::columns | alpha_to_col(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | col_to_alpha() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/columns.rs | crate::columns | row_label() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	math	count, length, local index, limit or calendar/arith helper
+ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache.compiles | field | u64	local	private: the formulas compiled since construction, which only its own impl writes and only a test reads
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::compiled_from() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/cache.rs | crate::formula::cache | BytecodeCache::is_empty() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/formula/engine.rs | crate::formula::engine | FormulaEngine::evaluated_text() | ret | Option<String>	free-text	free text: user content, label, message or display string
@@ -3290,7 +3290,6 @@ ambre-trame | src/render/content.rs | crate::render::content | CellContent.text 
 ambre-trame | src/render/content.rs | crate::render::content | CellContent<'a>::plain(text) | param | &'a str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/content.rs | crate::render::content | has_border() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/render/layout.rs | crate::render::layout | GridLayout<'_>::is_hidden() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/render/merges.rs | crate::render::merges | draw_merges_on() | ret | u32	math	count, length, local index, limit or calendar/arith helper
 ambre-trame | src/render/text.rs | crate::render::text | col_label() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | draw_text(text) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/render/text.rs | crate::render::text | row_label() | ret | String	free-text	free text: user content, label, message or display string
@@ -3304,8 +3303,6 @@ ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::commit_command(
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::follow() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::new(text) | param | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | CellEditor::selected_text() | ret | String	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILL_HANDLE_SIZE | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | FILTER_BUTTON_SIZE | const | f64	math	local geometry / pixel arithmetic
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::band_contains() | ret | bool	generic	predicate result
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/grid/mod.rs | crate::ui::grid | Selection::contains_col() | ret | bool	generic	predicate or did-it-change return
@@ -3318,35 +3315,8 @@ ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::set_
 ambre-trame | src/ui/grid/state.rs | crate::ui::grid::state | TrameUiState::snap_active_to_master() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/renderer/edit.rs | crate::ui::renderer::edit | draw_edit(caret_visible) | param | bool	generic	fact passed in (state predicate), not a mode selector
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | ERROR_MARK_SIZE | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | BADGE_RADIUS | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHING_DASH | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHING_GAP | const | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MARCHING_PERIOD | const | f64	math	local geometry / pixel arithmetic
+ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	foreign-api	the alpha of the dirty-cell veil, which peniko's Color::with_alpha alone reads
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MDI_FILTER_PATH | const | &str	foreign-api	the SVG path data of the MDI filter icon, which kurbo::BezPath::from_svg alone reads
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_h(phase) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | dashed_v(phase) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(bx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(by) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(h) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_chevron(w) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_funnel(bx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_funnel(by) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_funnel(h) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_funnel(w) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_insert_badge(cx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | draw_insert_badge(cy) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_disc(cx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_disc(cy) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_disc(r) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(bx) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(by) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(contours) | param | &[Vec<(f64,f64)>]	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(h) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | fill_unit_polygon(w) | param | f64	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | mdi_filter_polygon() | ret | &'static Vec<Vec<(f64,f64)>>	math	local geometry / pixel arithmetic
-ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | mdi_filter_polygon::POLY | static | std::sync::OnceLock<Vec<Vec<(f64,f64)>>>	math	a value local to one algorithm
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::handle_input() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoom() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::apply_cursor_move() | ret | bool	generic	predicate or did-it-change return

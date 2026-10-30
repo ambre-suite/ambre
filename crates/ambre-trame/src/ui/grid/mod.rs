@@ -586,12 +586,12 @@ pub struct TrameUiState {
 
 /// Side of the square autofill handle drawn at the selection's bottom-right
 /// corner, in device pixels (`trame-autofill`).
-pub const FILL_HANDLE_SIZE: f64 = 7.0;
+pub const FILL_HANDLE_SIZE: SurfacePx = SurfacePx::new(7.0);
 
 /// Side of the square Excel-style autofilter button drawn at the right edge of
 /// each current-region header cell, in device pixels at 100% zoom
 /// (`trame-shared-filter`). Scaled by the grid zoom in [`filter_button_rect`].
-pub const FILTER_BUTTON_SIZE: f64 = 13.0;
+pub const FILTER_BUTTON_SIZE: SurfacePx = SurfacePx::new(13.0);
 
 #[cfg(test)]
 mod tests;

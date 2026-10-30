@@ -178,10 +178,12 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
             continue;
         }
         let rect = layout.cell_rect(at);
+        // The surface draws in bare f64: the leg unwraps once, here.
+        let leg = ERROR_MARK_SIZE.get();
         let mut dy = 0.0;
-        while dy < ERROR_MARK_SIZE {
+        while dy < leg {
             // Row `dy` from the top spans the hypotenuse to the right edge.
-            let x0 = rect.x1 - (ERROR_MARK_SIZE - dy);
+            let x0 = rect.x1 - (leg - dy);
             let y = rect.y0 + dy + 0.5;
             surface.stroke_line(
                 ambre_draw::Line::new((x0, y), (rect.x1, y)),

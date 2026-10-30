@@ -6,22 +6,28 @@ use crate::CellPos;
 
 /// Marching-ants dash geometry (logical px): 6px dash + 4px gap. The animation
 /// crawls the dashes by advancing a phase across this period each frame.
-const MARCHING_DASH: f64 = 6.0;
+const MARCHING_DASH: SurfacePx = SurfacePx::new(6.0);
 
-const MARCHING_GAP: f64 = 4.0;
+const MARCHING_GAP: SurfacePx = SurfacePx::new(4.0);
 
-const MARCHING_PERIOD: f64 = MARCHING_DASH + MARCHING_GAP;
+const MARCHING_PERIOD: SurfacePx = SurfacePx::new(MARCHING_DASH.get() + MARCHING_GAP.get());
 
-/// Draw a small filled "+" badge centred on `(cx, cy)`: the inline-insert
-/// affordance shown on a hovered header boundary (`trame-headers`).
 /// Radius of the inline insert pill (`trame-headers`).
-const BADGE_RADIUS: f64 = 7.5;
+const BADGE_RADIUS: SurfacePx = SurfacePx::new(7.5);
 
-/// Fill a disc of radius `r` centred on `(cx, cy)` with solid `color`. It is
-/// painted as 1px-tall horizontal `fill_rect` spans, since the GPU surface only
-/// fills axis-aligned quads, so the circle is reproduced scanline by scanline.
-/// The half-pixel span height keeps the rim from looking ragged at small radii.
-pub(crate) fn fill_disc<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, r: f64, color: Color) {
+/// Fill a disc of radius `radius` centred on `center` with solid `color`. It
+/// is painted as 1px-tall horizontal `fill_rect` spans, since the GPU surface
+/// only fills axis-aligned quads, so the circle is reproduced scanline by
+/// scanline. The half-pixel span height keeps the rim from looking ragged at
+/// small radii.
+pub(crate) fn fill_disc<S: DrawSurface>(
+    s: &mut S,
+    center: kurbo::Point,
+    radius: SurfacePx,
+    color: Color,
+) {
+    // The surface draws in bare f64: the lengths unwrap once, here.
+    let (cx, cy, r) = (center.x, center.y, radius.get());
     if r <= 0.0 {
         return;
     }
@@ -43,8 +49,7 @@ pub(crate) fn fill_disc<S: DrawSurface>(s: &mut S, cx: f64, cy: f64, r: f64, col
 /// the neighbouring labels.
 pub(crate) fn draw_insert_badge<S: DrawSurface>(
     s: &mut S,
-    cx: f64,
-    cy: f64,
+    center: kurbo::Point,
     fill: Color,
     glyph: Color,
 ) {
@@ -52,9 +57,10 @@ pub(crate) fn draw_insert_badge<S: DrawSurface>(
     // Halo: a slightly larger disc in the glyph colour gives the pill a crisp
     // outline against the header. The pill then floats rather than smearing
     // into it.
-    fill_disc(s, cx, cy, r + 1.0, glyph);
-    fill_disc(s, cx, cy, r, fill);
+    fill_disc(s, center, r + SurfacePx::new(1.0), glyph);
+    fill_disc(s, center, r, fill);
     // The "+" sign, in the contrasting glyph colour.
+    let (cx, cy) = (center.x, center.y);
     let arm = 4.0;
     let t = 1.0;
     s.fill_rect(Rect::new(cx - arm, cy - t, cx + arm, cy + t), glyph);
@@ -70,22 +76,22 @@ const MDI_FILTER_PATH: &str = "M14,12V19.88C14.04,20.18 13.94,20.5 13.71,20.71C1
 
 /// The `MdiFilter` outline, flattened to polylines and normalized into the unit box
 /// `[0,1]^2` (aspect-preserving, centred), computed once. Each inner `Vec` is one closed
-/// contour as `(x, y)` points. The GPU surface has no `fill_path`, so the glyph is
-/// reproduced by scanline-filling these contours (`trame-shared-filter`).
-pub(crate) fn mdi_filter_polygon() -> &'static Vec<Vec<(f64, f64)>> {
-    static POLY: std::sync::OnceLock<Vec<Vec<(f64, f64)>>> = std::sync::OnceLock::new();
+/// contour as points of the unit box. The GPU surface has no `fill_path`, so the
+/// glyph is reproduced by scanline-filling these contours (`trame-shared-filter`).
+pub(crate) fn mdi_filter_polygon() -> &'static Vec<Vec<kurbo::Point>> {
+    static POLY: std::sync::OnceLock<Vec<Vec<kurbo::Point>>> = std::sync::OnceLock::new();
     POLY.get_or_init(|| {
         // The path is a constant a host test parses; a failure paints no glyph.
         let Ok(path) = kurbo::BezPath::from_svg(MDI_FILTER_PATH) else {
             return Vec::new();
         };
         // Flatten curves to line segments, grouping into contours at each MoveTo.
-        let mut contours: Vec<Vec<(f64, f64)>> = Vec::new();
+        let mut contours: Vec<Vec<kurbo::Point>> = Vec::new();
         kurbo::flatten(path.iter(), 0.05, |el| match el {
-            kurbo::PathEl::MoveTo(p) => contours.push(vec![(p.x, p.y)]),
+            kurbo::PathEl::MoveTo(p) => contours.push(vec![p]),
             kurbo::PathEl::LineTo(p) => {
                 if let Some(c) = contours.last_mut() {
-                    c.push((p.x, p.y));
+                    c.push(p);
                 }
             }
             // The scanline fill closes each contour implicitly; nothing to do.
@@ -98,27 +104,25 @@ pub(crate) fn mdi_filter_polygon() -> &'static Vec<Vec<(f64, f64)>> {
         let (cx, cy) = (bb.center().x, bb.center().y);
         for contour in &mut contours {
             for p in contour.iter_mut() {
-                p.0 = 0.5 + (p.0 - cx) / scale;
-                p.1 = 0.5 + (p.1 - cy) / scale;
+                p.x = 0.5 + (p.x - cx) / scale;
+                p.y = 0.5 + (p.y - cy) / scale;
             }
         }
         contours
     })
 }
 
-/// Scanline-fill the unit-box `contours` into the box `(bx, by, w, h)` with solid
+/// Scanline-fill the unit-box `contours` into the box `bounds` with solid
 /// `color`, using 1px-tall horizontal `fill_rect` spans (even-odd rule). The GPU
 /// surface only fills axis-aligned quads, so an arbitrary silhouette is painted
 /// row by row. `MdiFilter` is a single hole-less contour, so even-odd == nonzero.
 pub(crate) fn fill_unit_polygon<S: DrawSurface>(
     s: &mut S,
-    contours: &[Vec<(f64, f64)>],
-    bx: f64,
-    by: f64,
-    w: f64,
-    h: f64,
+    contours: &[Vec<kurbo::Point>],
+    bounds: Rect,
     color: Color,
 ) {
+    let (bx, by, w, h) = (bounds.x0, bounds.y0, bounds.width(), bounds.height());
     if w <= 0.0 || h <= 0.0 {
         return;
     }
@@ -130,7 +134,8 @@ pub(crate) fn fill_unit_polygon<S: DrawSurface>(
         for contour in contours {
             // Each point pairs with the next; the cycle wraps = implicit close.
             let next = contour.iter().cycle().skip(1);
-            for (&(x0, y0), &(x1, y1)) in contour.iter().zip(next) {
+            for (a, b) in contour.iter().zip(next) {
+                let (x0, y0, x1, y1) = (a.x, a.y, b.x, b.y);
                 // Half-open crossing test avoids double-counting shared vertices.
                 if (y0 <= uy && y1 > uy) || (y1 <= uy && y0 > uy) {
                     let t = (uy - y0) / (y1 - y0);
@@ -155,16 +160,19 @@ pub(crate) fn fill_unit_polygon<S: DrawSurface>(
 /// the "filter active" cue (`trame-shared-filter`). A faithful reproduction of the DOM
 /// `icondata::MdiFilter`, fitted aspect-preserving into a centred square so the
 /// proportions hold regardless of the box aspect.
-pub(crate) fn draw_funnel<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h: f64, c: Color) {
+pub(crate) fn draw_funnel<S: DrawSurface>(s: &mut S, bounds: Rect, c: Color) {
+    let (bx, by, w, h) = (bounds.x0, bounds.y0, bounds.width(), bounds.height());
     let side = w.min(h);
     let ox = bx + (w - side) / 2.0;
     let oy = by + (h - side) / 2.0;
-    fill_unit_polygon(s, mdi_filter_polygon(), ox, oy, side, side, c);
+    let square = Rect::new(ox, oy, ox + side, oy + side);
+    fill_unit_polygon(s, mdi_filter_polygon(), square, c);
 }
 
-/// Stroke a downward chevron inside the box `(bx, by, w, h)`: the "filter
-/// available, none active" cue on an autofilter button (`trame-shared-filter`).
-pub(crate) fn draw_chevron<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, h: f64, c: Color) {
+/// Stroke a downward chevron inside the box `bounds`: the "filter available,
+/// none active" cue on an autofilter button (`trame-shared-filter`).
+pub(crate) fn draw_chevron<S: DrawSurface>(s: &mut S, bounds: Rect, c: Color) {
+    let (bx, by, w, h) = (bounds.x0, bounds.y0, bounds.width(), bounds.height());
     let cx = bx + w / 2.0;
     s.stroke_line(
         ambre_draw::Line::new((bx, by), (cx, by + h)),
@@ -180,12 +188,17 @@ pub(crate) fn draw_chevron<S: DrawSurface>(s: &mut S, bx: f64, by: f64, w: f64, 
 
 /// Stroke the horizontal `line` dashed, left to right, the dashes offset left
 /// by `phase` (the marching-ants crawl, `trame-clipboard`).
-pub(crate) fn dashed_h<S: DrawSurface>(s: &mut S, line: ambre_draw::Line, c: Color, phase: f64) {
+pub(crate) fn dashed_h<S: DrawSurface>(
+    s: &mut S,
+    line: ambre_draw::Line,
+    c: Color,
+    phase: SurfacePx,
+) {
     let (x0, x1, y) = (line.p0.x, line.p1.x, line.p0.y);
-    let mut t = x0 - phase;
+    let mut t = x0 - phase.get();
     while t < x1 {
         let a = t.max(x0);
-        let b = (t + MARCHING_DASH).min(x1);
+        let b = (t + MARCHING_DASH.get()).min(x1);
         if b > a {
             s.stroke_line(
                 ambre_draw::Line::new((a, y), (b, y)),
@@ -193,17 +206,22 @@ pub(crate) fn dashed_h<S: DrawSurface>(s: &mut S, line: ambre_draw::Line, c: Col
                 ambre_core::SurfacePx::new(1.0),
             );
         }
-        t += MARCHING_PERIOD;
+        t += MARCHING_PERIOD.get();
     }
 }
 
 /// Stroke the vertical `line` dashed, top to bottom (see [`dashed_h`]).
-pub(crate) fn dashed_v<S: DrawSurface>(s: &mut S, line: ambre_draw::Line, c: Color, phase: f64) {
+pub(crate) fn dashed_v<S: DrawSurface>(
+    s: &mut S,
+    line: ambre_draw::Line,
+    c: Color,
+    phase: SurfacePx,
+) {
     let (y0, y1, x) = (line.p0.y, line.p1.y, line.p0.x);
-    let mut t = y0 - phase;
+    let mut t = y0 - phase.get();
     while t < y1 {
         let a = t.max(y0);
-        let b = (t + MARCHING_DASH).min(y1);
+        let b = (t + MARCHING_DASH.get()).min(y1);
         if b > a {
             s.stroke_line(
                 ambre_draw::Line::new((x, a), (x, b)),
@@ -211,7 +229,7 @@ pub(crate) fn dashed_v<S: DrawSurface>(s: &mut S, line: ambre_draw::Line, c: Col
                 ambre_core::SurfacePx::new(1.0),
             );
         }
-        t += MARCHING_PERIOD;
+        t += MARCHING_PERIOD.get();
     }
 }
 
@@ -283,7 +301,11 @@ pub fn draw_overlay<S: DrawSurface>(
         let h = 7.0 * z;
         let bx = (cell.x1 - w - 3.0 * z).max(cell.x0 + 2.0);
         let by = layout.top.get() + (layout.header_height.get() - h) / 2.0;
-        draw_funnel(surface, bx, by, w, h, palette.selection);
+        draw_funnel(
+            surface,
+            Rect::new(bx, by, bx + w, by + h),
+            palette.selection,
+        );
     }
 
     // -- 1b'. Excel-style autofilter buttons on the current region's header row
@@ -309,9 +331,14 @@ pub fn draw_overlay<S: DrawSurface>(
             let gw = (bw - 2.0 * pad).max(0.0);
             let gh = (bh - 2.0 * pad).max(0.0);
             if state.filtered_col == Some(col) {
-                draw_funnel(surface, gx, gy, gw, gh, palette.selection);
+                draw_funnel(
+                    surface,
+                    Rect::new(gx, gy, gx + gw, gy + gh),
+                    palette.selection,
+                );
             } else {
-                draw_chevron(surface, gx, gy, gw, gh * 0.7, palette.header_text);
+                let chevron = Rect::new(gx, gy, gx + gw, gy + gh * 0.7);
+                draw_chevron(surface, chevron, palette.header_text);
             }
         }
     }
@@ -417,7 +444,7 @@ pub fn draw_overlay<S: DrawSurface>(
         && let Some(range) = state.range_pixel_rect(rect)
     {
         let (x, y, w, ht) = (range.x0, range.y0, range.width(), range.height());
-        let phase = (clock.now().0 / 40.0) % MARCHING_PERIOD;
+        let phase = SurfacePx::new((clock.now().0 / 40.0) % MARCHING_PERIOD.get());
         let c = palette.selection;
         dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, phase);
         dashed_h(
@@ -448,19 +475,25 @@ pub fn draw_overlay<S: DrawSurface>(
     {
         let (x, y, w, ht) = (range.x0, range.y0, range.width(), range.height());
         let c = palette.selection;
-        dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, 0.0);
+        let still = SurfacePx::ZERO;
+        dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, still);
         dashed_h(
             surface,
             ambre_draw::Line::new((x, y + ht), (x + w, y + ht)),
             c,
-            0.0,
+            still,
         );
-        dashed_v(surface, ambre_draw::Line::new((x, y), (x, y + ht)), c, 0.0);
+        dashed_v(
+            surface,
+            ambre_draw::Line::new((x, y), (x, y + ht)),
+            c,
+            still,
+        );
         dashed_v(
             surface,
             ambre_draw::Line::new((x + w, y), (x + w, y + ht)),
             c,
-            0.0,
+            still,
         );
     }
     if let Some(r) = state.fill_handle_rect() {
@@ -520,15 +553,17 @@ pub fn draw_overlay<S: DrawSurface>(
             let bx = state.col_x(i).get();
             // At the top of the column separator: the pill hugs the header's top
             // edge rather than floating in its centre.
-            let cy = layout.top.get() + BADGE_RADIUS + 1.0;
-            draw_insert_badge(surface, bx, cy, palette.selection, palette.content_bg);
+            let cy = layout.top.get() + BADGE_RADIUS.get() + 1.0;
+            let center = kurbo::Point::new(bx, cy);
+            draw_insert_badge(surface, center, palette.selection, palette.content_bg);
         }
         Some(grid::HeaderHit::RowInsert(i)) => {
             let by = state.row_y(i).get();
             // At the left of the row separator: the pill hugs the row header's
             // left edge.
-            let cx = BADGE_RADIUS + 1.0;
-            draw_insert_badge(surface, cx, by, palette.selection, palette.content_bg);
+            let cx = BADGE_RADIUS.get() + 1.0;
+            let center = kurbo::Point::new(cx, by);
+            draw_insert_badge(surface, center, palette.selection, palette.content_bg);
         }
         _ => {}
     }
