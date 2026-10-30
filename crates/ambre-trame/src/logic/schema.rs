@@ -167,7 +167,11 @@ ambre_core::crdt_names! {
 pub(crate) const MATERIALIZE_ROWS: RowCount = RowCount::new(10_000);
 
 /// The same cap on the columns: one limit holds on both axes.
-pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(MATERIALIZE_ROWS.get());
+pub(crate) const MATERIALIZE_COLS: ColCount = ColCount::new(10_000);
+
+// A row count and a column count are two types, so the build compares the
+// two caps: a change to one alone fails to compile.
+const _: () = assert!(MATERIALIZE_COLS.get() == MATERIALIZE_ROWS.get());
 
 /// The whole shared-filter definition as one CRDT record
 /// (`trame-shared-filter`). postcard-encoded into the single `filters_{sheet}`

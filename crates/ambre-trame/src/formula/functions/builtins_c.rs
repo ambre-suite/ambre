@@ -717,7 +717,7 @@ pub(crate) fn days_in_month(date: DateParts) -> DayCount {
 
 /// The last day of the month of `date`.
 fn last_day(date: DateParts) -> DayOfMonth {
-    DayOfMonth::new(days_in_month(date).get())
+    DayOfMonth::last_of(days_in_month(date))
 }
 
 /// Shift the month of `date` by `months`, normalizing into a valid month. The

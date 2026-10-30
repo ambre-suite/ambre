@@ -149,6 +149,11 @@ impl DayOfMonth {
     pub const fn get(self) -> i64 {
         self.0
     }
+
+    /// The last day of a month that holds `days` days.
+    pub const fn last_of(days: DayCount) -> Self {
+        Self(days.0)
+    }
 }
 
 /// A date and a time of day: whole days from the epoch, and the time of day
