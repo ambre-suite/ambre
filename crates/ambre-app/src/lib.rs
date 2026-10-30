@@ -36,7 +36,7 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
-use ambre_bus::conduit::{self, BacklogLength, ChannelCapacity, Marks};
+use ambre_bus::conduit::{self, ChannelCapacity, Marks};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
     AppCommand, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand, Role,
@@ -100,13 +100,11 @@ const CHANNEL_CAPACITY: ChannelCapacity = ChannelCapacity::new(1024);
 /// worth, it starts again (`ambre-spec-budgets.md section 6`, `SYNC-059`).
 /// The match runs at compile time. A low mark that is not below the high one
 /// is thus a build error.
-const SYNC_INBOX_MARKS: Marks = match Marks::new(
-    BacklogLength::new(4 * CHANNEL_CAPACITY.get()),
-    BacklogLength::new(CHANNEL_CAPACITY.get()),
-) {
-    Some(marks) => marks,
-    None => panic!("the inbox marks are a pair"),
-};
+const SYNC_INBOX_MARKS: Marks =
+    match Marks::new(CHANNEL_CAPACITY.backlog(4), CHANNEL_CAPACITY.backlog(1)) {
+        Some(marks) => marks,
+        None => panic!("the inbox marks are a pair"),
+    };
 
 /// The child fan-out registry: every live view of a nested document, by
 /// document. A list rather than a slot -- two embeds of one document are two
@@ -1289,7 +1287,7 @@ pub fn main() {
         while let Ok(ev) = logic_to_ui_rx.try_recv() {
             if !relayed {
                 relayed = true;
-                host::mark(ambre_prose::probe::ProbeName::Relay.as_str());
+                host::mark(ambre_prose::probe::ProbeName::Relay);
             }
             // Fan a nested child's stream out to its own view queues, and skip
             // every top-level chrome mirror below. A child's events must not

@@ -49,7 +49,6 @@ ambre-app | src/host/pipe.rs | crate::host::pipe | <FrameHost as PipeHost>::hand
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::clip_published() | ret | Rc<std::cell::Cell<bool>>	generic	flag cell
 ambre-app | src/host/pipe.rs | crate::host::pipe | PipeHost::handle_input() | ret | bool	generic	consumed answer
 ambre-app | src/host/probe.rs | crate::host::probe | Timeline.fresh | field | bool	generic	fact flag of the probe timeline, selects no mode
-ambre-app | src/host/probe.rs | crate::host::probe | mark(name) | param | &str	free-text	metric name
 ambre-app | src/host/probe.rs | crate::host::probe | mark_count(name) | param | &str	free-text	metric name
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.dirty | field | bool	generic	dirty flag
 ambre-app | src/host/prose.rs | crate::host::prose | ProseView.fatal | field | bool	generic	state flag
@@ -353,6 +352,7 @@ ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	ma
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength.0 | field | usize	newtype-inner	the number of values a backlog holds, as a mark names it
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::new(values) | param | usize	newtype-inner	the number of values a backlog holds, as a mark names it
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity.0 | field | usize	newtype-inner	the number of values a bounded channel holds
+ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::backlog(factor) | param | usize	math	a multiplier of the capacity, not a length
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::get() | ret | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | ChannelCapacity::new(values) | param | usize	newtype-inner	the number of values a bounded channel holds
 ambre-bus | src/conduit.rs | crate::conduit | Doorbell::is_current() | ret | bool	generic	predicate or internal state flag
