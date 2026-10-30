@@ -749,6 +749,22 @@ mod tests {
         assert_eq!(tx.try_send(1), Ok(()));
     }
 
+    #[test]
+    fn a_backlog_counts_full_channels_and_holds_at_the_top() {
+        assert_eq!(
+            ChannelCapacity::new(1024).backlog(4),
+            BacklogLength::new(4096)
+        );
+        assert_eq!(
+            ChannelCapacity::new(1024).backlog(1),
+            BacklogLength::new(1024)
+        );
+        assert_eq!(
+            ChannelCapacity::new(usize::MAX).backlog(2),
+            BacklogLength::new(usize::MAX)
+        );
+    }
+
     /// A pair of marks whose low one does not sit below the high one would
     /// hold its source for good, and is refused.
     #[test]

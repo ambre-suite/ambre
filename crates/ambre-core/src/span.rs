@@ -343,7 +343,7 @@ impl UnixSeconds {
 
 #[cfg(test)]
 mod tests {
-    use super::{LamportStamp, Millis, Seconds, Timestamp, UnixSeconds};
+    use super::{LamportStamp, Millis, Seconds, Timestamp, UnixMillis, UnixSeconds};
     use std::time::Duration;
 
     #[test]
@@ -438,6 +438,13 @@ mod tests {
         assert_eq!(UnixSeconds(100).since(UnixSeconds(40)), Seconds(60));
         assert_eq!(UnixSeconds(40).since(UnixSeconds(100)), Seconds(0));
         assert_eq!(UnixSeconds(u64::MAX).to_i64_saturating(), i64::MAX);
+    }
+
+    #[test]
+    fn a_relay_instant_measures_the_span_since_another_and_never_goes_below_zero() {
+        assert_eq!(UnixMillis(1_000).since(UnixMillis(250)), Millis(750));
+        assert_eq!(UnixMillis(250).since(UnixMillis(1_000)), Millis(0));
+        assert_eq!(UnixMillis(7).since(UnixMillis(7)), Millis(0));
     }
 }
 
