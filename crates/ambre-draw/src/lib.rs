@@ -82,7 +82,7 @@ pub struct ImageSource<'a> {
 pub struct ImageKey(pub u64);
 
 impl ImageKey {
-    /// Fold the leading bytes of a content address (its hex digest) into a
+    /// Fold the leading bytes of a content address, its hex digest, into a
     /// key. Two different addresses collide only if their first bytes do.
     pub fn from_address(address: &ambre_core::ContentHash) -> Self {
         let mut acc = 0u64;
