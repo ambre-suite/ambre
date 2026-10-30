@@ -135,7 +135,8 @@ impl TrameView {
                 if let Some(i) = active
                     && let Some(&at) = i.to_index().and_then(|i| matches.get(i))
                 {
-                    self.nav_goto(at, ambre_commands::SelectionMode::Move);
+                    // No input event rides this move, so nothing reads the answer.
+                    let _ = self.nav_goto(at, ambre_commands::SelectionMode::Move);
                 }
             }
             // Wholesale content change: a local snapshot restore (DataReset) or a
@@ -563,7 +564,7 @@ impl TrameView {
                 PendingCommit::Stay => self.commit_edit(),
                 PendingCommit::Nav(dr, dc) => {
                     self.commit_edit();
-                    self.nav_move(dr, dc, ambre_commands::SelectionMode::Move);
+                    let _ = self.nav_move(dr, dc, ambre_commands::SelectionMode::Move);
                 }
             }
         }
@@ -598,13 +599,13 @@ impl TrameView {
         self.state.zoom
     }
 
-    pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+    pub fn handle_input(&mut self, ev: &InputEvent) -> ambre_draw::Consumed {
         // The outbox holds a command the Logic thread has not taken, so the grid
         // stops accepting input until the queue drains (`BUS-016`). Consuming
         // the event is what makes the refusal visible: a key that fell through
         // to the browser would scroll the page under a frozen grid.
         if self.is_busy() {
-            return true;
+            return ambre_draw::Consumed::Yes;
         }
         // Wheel / two-finger touchpad scroll pans the viewport in any mode and
         // never disturbs the cursor or an open editor.

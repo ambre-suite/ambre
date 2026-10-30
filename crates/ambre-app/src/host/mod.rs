@@ -402,7 +402,7 @@ impl AppView {
     /// Handle an input event; returns `true` to `preventDefault()`.
     fn handle_input(&mut self, ev: &InputEvent) -> bool {
         match self {
-            AppView::Trame(v) => v.handle_input(ev),
+            AppView::Trame(v) => v.handle_input(ev).is_yes(),
             AppView::Toile(v) => v.handle_input(ev),
             AppView::Prose(v) => v.handle_input(ev),
             AppView::Murmure(v) => v.handle_input(ev).is_yes(),

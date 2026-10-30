@@ -398,7 +398,8 @@ impl TrameView {
         self.edit_dirty = true;
         self.needs_full = true;
         let mv = self.state.move_to(at, ambre_commands::SelectionMode::Move);
-        self.apply_cursor_move(mv);
+        // A peer's follow moves the cursor, and no input event waits on it.
+        let _ = self.apply_cursor_move(mv);
     }
 
     /// Commit the current edit into the CRDT (via Logic) and update the local
@@ -574,14 +575,14 @@ impl TrameView {
                 self.commit_edit();
                 match dir {
                     CommitDirection::Down => {
-                        self.nav_move(
+                        let _ = self.nav_move(
                             RowDelta::new(1),
                             ColDelta::ZERO,
                             ambre_commands::SelectionMode::Move,
                         );
                     }
                     CommitDirection::Right => {
-                        self.nav_move(
+                        let _ = self.nav_move(
                             RowDelta::ZERO,
                             ColDelta::new(1),
                             ambre_commands::SelectionMode::Move,

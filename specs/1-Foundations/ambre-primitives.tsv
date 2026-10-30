@@ -2986,19 +2986,11 @@ ambre-trame | src/ui/renderer/edit.rs | crate::ui::renderer::edit | draw_edit(ca
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | CellSpan::contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/renderer/mod.rs | crate::ui::renderer | DIRTY_VEIL_ALPHA | const | f32	foreign-api	the alpha of the dirty-cell veil, which peniko's Color::with_alpha alone reads
 ambre-trame | src/ui/renderer/overlay.rs | crate::ui::renderer::overlay | MDI_FILTER_PATH | const | &str	foreign-api	the SVG path data of the MDI filter icon, which kurbo::BezPath::from_svg alone reads
-ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::handle_input() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/frame.rs | crate::ui::view::frame | TrameView::set_zoom() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::apply_cursor_move() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::clear_active_cell() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_input_nav() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::handle_wheel() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_goto() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/ui/view/input.rs | crate::ui::view::input | TrameView::nav_move() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::axis_sel_contains() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::copy_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::cut_selection() | ret | Option<String>	free-text	free text: user content, label, message or display string
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::grid_paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
-ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::handle_input_editing() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::is_editing() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/interact.rs | crate::ui::view::interact | TrameView::pointer_in_editor() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/lifecycle.rs | crate::ui::view::lifecycle | TrameView::active_cell_ref() | ret | String	free-text	free text: user content, label, message or display string
