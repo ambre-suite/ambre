@@ -11,7 +11,7 @@ use ambre_bus::app::prose::{HeadingLevel, OrderedStyle};
 use ambre_core::Rgba;
 use html5ever::{LocalName, local_name};
 
-use super::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_link};
+use super::{ClipBlock, ClipKind, ClipRun, ClipValue, safe_family, safe_link};
 use crate::mark::{self, MarkRoot};
 
 /// The flag marks, in the order their elements nest, each with its element.
@@ -180,7 +180,9 @@ fn runs(html: &mut String, block: &[ClipRun]) {
         {
             let _ = write!(style, "font-size:{size}pt;");
         }
-        if let Some(family) = value(run, MarkRoot::FontFamily) {
+        // A family passes the paste's own check, then loses what would close
+        // the quoted name.
+        if let Some(family) = value(run, MarkRoot::FontFamily).filter(|name| safe_family(name)) {
             let family: String = family
                 .chars()
                 .filter(|c| !matches!(c, '\'' | '"' | ';' | '<' | '>' | '\\'))

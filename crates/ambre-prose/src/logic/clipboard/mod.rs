@@ -880,7 +880,9 @@ mod tests {
         let block = append(&mut state, BlockInit::Paragraph, "link ink mark size");
         let body = crate::doc::get_block_text(&state.doc, &crate::events::tree_id(block));
         let long = format!("https://example.org/{}", "a".repeat(HREF_MAX.as_len()));
+        let family = "A".repeat(FAMILY_MAX.as_len() + 1);
         for (range, key, value) in [
+            (0..4, "ff", family.as_str()),
             (0..4, "a", "javascript:alert(1)"),
             (5..8, "a", long.as_str()),
             (5..8, "fg", "red;background:url(https://evil/beacon)"),

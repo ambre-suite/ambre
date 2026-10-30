@@ -7904,6 +7904,8 @@
   {"edge": "cites-section", "from": "PROSE-IO-067", "section": "3", "to": "4-Prose/features/ambre-spec-prose-import-export.md"},
   {"edge": "cites-rule", "from": "PROSE-IO-067", "to": "PROSE-UI-186"},
   {"edge": "verified-by", "from": "PROSE-IO-067", "to": "ambre_prose::interop::markdown_write::tests::a_link_that_could_run_code_exports_as_its_text"},
+  {"edge": "cites-section", "from": "PROSE-IO-068", "section": "3", "to": "4-Prose/features/ambre-spec-prose-import-export.md"},
+  {"edge": "verified-by", "from": "PROSE-IO-068", "to": "ambre_prose::interop::markdown_write::tests::a_link_target_cannot_break_out_of_its_destination"},
   {"edge": "cites-section", "from": "PROSE-IO-016", "section": "3", "to": "4-Prose/features/ambre-spec-prose-import-export.md"},
   {"edge": "cites-rule", "from": "PROSE-IO-016", "to": "ZK-001"},
   {"edge": "lands-with", "from": "PROSE-IO-016", "to": "HTML interop"},
