@@ -300,9 +300,11 @@ impl ViewPx {
         CssPx(canvas_origin.0 + self.0)
     }
 
-    /// The same length in CSS pixels: a view pixel is a CSS pixel in size.
+    /// The same length in CSS pixels. A view pixel is a CSS pixel in size, so
+    /// a length carries over as it is. A coordinate goes through
+    /// [`Self::on_page`] instead.
     #[must_use]
-    pub const fn to_css_px(self) -> CssPx {
+    pub const fn css_length(self) -> CssPx {
         CssPx(self.0)
     }
 }
@@ -322,6 +324,14 @@ impl SurfacePx {
     #[must_use]
     pub fn in_view(self, view_origin: SurfacePx) -> ViewPx {
         ViewPx((self.0 - view_origin.0) as f32)
+    }
+
+    /// The same length in view pixels. A surface pixel is a view pixel in size,
+    /// so a length carries over as it is. A coordinate goes through
+    /// [`Self::in_view`] instead.
+    #[must_use]
+    pub fn view_length(self) -> ViewPx {
+        ViewPx(self.0 as f32)
     }
 }
 

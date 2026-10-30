@@ -102,12 +102,12 @@ impl ProseUiState {
     /// How many code points a block holds, the draft typed into it counted.
     pub(crate) fn block_len(&self, block: BlockId) -> DocCount {
         if let Some(run) = self.provisional_run(block) {
-            return DocCount::new(run.data().len().get());
+            return run.data().len().as_doc();
         }
         let laid = self
             .run_of(block)
             .map_or(RunCount::ZERO, ParleyRunData::len);
-        let end = DocOffset::new(laid.get()) + self.draft.delta(block);
+        let end = laid.as_end().as_doc() + self.draft.delta(block);
         end.count_from(DocOffset::ZERO)
     }
 
@@ -116,7 +116,7 @@ impl ProseUiState {
     /// holds it.
     pub(crate) fn to_laid(&self, block: BlockId, offset: DocOffset) -> RunOffset {
         if self.provisional_run(block).is_some() {
-            return RunOffset::new(offset.get());
+            return RunOffset::from_doc(offset);
         }
         self.draft.to_laid(block, offset)
     }
@@ -124,7 +124,7 @@ impl ProseUiState {
     /// An offset of the run [`Self::run_of`] gives, as the document counts it.
     pub(crate) fn to_doc(&self, block: BlockId, laid: RunOffset) -> DocOffset {
         if self.provisional_run(block).is_some() {
-            return DocOffset::new(laid.get());
+            return laid.as_doc();
         }
         self.draft.to_doc(block, laid)
     }
