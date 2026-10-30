@@ -52,6 +52,26 @@ pub fn char_len(text: &str) -> CharCount {
     CharCount::from_len(text.chars().count())
 }
 
+/// The `Debug` form of a text a log must not carry: its length alone, spelled
+/// `N chars`. Every hand-written redacted `Debug` hands its text here, so each
+/// one prints the same spelling, `Variant(N chars)`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct RedactedChars(CharCount);
+
+impl RedactedChars {
+    /// The length of `text`, in code points.
+    #[must_use]
+    pub fn of(text: &str) -> Self {
+        Self(char_len(text))
+    }
+}
+
+impl std::fmt::Debug for RedactedChars {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} chars", self.0.get())
+    }
+}
+
 /// The byte where code point `at` of `text` starts. An offset past the last
 /// code point gives the end of `text`.
 pub fn char_to_byte(text: &str, at: CharOffset) -> ByteOffset {
@@ -121,6 +141,12 @@ mod tests {
 
     fn bytes(at: usize) -> ByteOffset {
         ByteOffset::new(at)
+    }
+
+    /// A redacted text prints its code-point count, spelled `N chars`.
+    #[test]
+    fn a_redacted_text_prints_its_length_in_chars() {
+        assert_eq!(format!("{:?}", RedactedChars::of(MIXED)), "5 chars");
     }
 
     #[test]

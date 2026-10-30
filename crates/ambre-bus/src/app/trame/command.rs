@@ -976,7 +976,7 @@ pub enum TrameCommand {
 // `Debug`. A log of a command carries none of the sheet's text.
 impl std::fmt::Debug for TrameCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ambre_core::char_len;
+        use ambre_core::RedactedChars;
         macro_rules! fields {
             ($name:literal $(, $field:ident)*) => {
                 f.debug_struct($name)$(.field(stringify!($field), $field))*.finish()
@@ -1017,7 +1017,7 @@ impl std::fmt::Debug for TrameCommand {
                 .debug_struct("SetCellText")
                 .field("row", row)
                 .field("col", col)
-                .field("text", &char_len(text))
+                .field("text", &RedactedChars::of(text))
                 .finish(),
             Self::BeginCellEdit { session, row, col } => {
                 fields!("BeginCellEdit", session, row, col)
@@ -1025,7 +1025,7 @@ impl std::fmt::Debug for TrameCommand {
             Self::CommitCellEdit { session, text } => f
                 .debug_struct("CommitCellEdit")
                 .field("session", session)
-                .field("text", &char_len(text))
+                .field("text", &RedactedChars::of(text))
                 .finish(),
             Self::EndCellEdit { session } => fields!("EndCellEdit", session),
             Self::SetCellsBatch { cells } => f
@@ -1034,7 +1034,7 @@ impl std::fmt::Debug for TrameCommand {
                     "cells",
                     &cells
                         .iter()
-                        .map(|(pos, text)| (pos, char_len(text)))
+                        .map(|(pos, text)| (pos, RedactedChars::of(text)))
                         .collect::<Vec<_>>(),
                 )
                 .finish(),
@@ -1091,7 +1091,7 @@ impl std::fmt::Debug for TrameCommand {
             } => fields!("PasteRange", target_row, target_col, payload),
             Self::PasteText { text } => f
                 .debug_struct("PasteText")
-                .field("text", &char_len(text))
+                .field("text", &RedactedChars::of(text))
                 .finish(),
             Self::PasteClipboardAtActive { payload } => {
                 fields!("PasteClipboardAtActive", payload)
@@ -1106,19 +1106,19 @@ impl std::fmt::Debug for TrameCommand {
             Self::ReplaceAll { query, replacement } => f
                 .debug_struct("ReplaceAll")
                 .field("query", query)
-                .field("replacement", &char_len(replacement))
+                .field("replacement", &RedactedChars::of(replacement))
                 .finish(),
             Self::ReplaceOne { query, replacement } => f
                 .debug_struct("ReplaceOne")
                 .field("query", query)
-                .field("replacement", &char_len(replacement))
+                .field("replacement", &RedactedChars::of(replacement))
                 .finish(),
             Self::Undo => f.write_str("Undo"),
             Self::Redo => f.write_str("Redo"),
             Self::DefineName { name, reference } => f
                 .debug_struct("DefineName")
                 .field("name", name)
-                .field("reference", &char_len(reference))
+                .field("reference", &RedactedChars::of(reference))
                 .finish(),
             Self::DeleteName { name } => fields!("DeleteName", name),
             Self::ActivateSheet { sheet_id } => fields!("ActivateSheet", sheet_id),
@@ -1172,7 +1172,7 @@ impl std::fmt::Debug for TrameCommand {
                 kind,
             } => f
                 .debug_struct("SaveFilterView")
-                .field("name", &char_len(name))
+                .field("name", &RedactedChars::of(name))
                 .field("sheet_id", sheet_id)
                 .field("filter_col", filter_col)
                 .field("kind", kind)
@@ -1220,7 +1220,7 @@ impl std::fmt::Debug for TrameCommand {
                 .field("range", range)
                 .field("kind", kind)
                 .field("on_invalid", on_invalid)
-                .field("message", &char_len(message))
+                .field("message", &RedactedChars::of(message))
                 .finish(),
             Self::RemoveValidation { sheet_id, range } => {
                 fields!("RemoveValidation", sheet_id, range)
@@ -1235,7 +1235,7 @@ impl std::fmt::Debug for TrameCommand {
                 .field("sheet_id", sheet_id)
                 .field("range", range)
                 .field("allowed_user_ids", allowed_user_ids)
-                .field("description", &char_len(description))
+                .field("description", &RedactedChars::of(description))
                 .finish(),
             Self::RemoveProtection { sheet_id, range } => {
                 fields!("RemoveProtection", sheet_id, range)

@@ -228,7 +228,7 @@ pub struct MessageDraft {
 impl std::fmt::Debug for MessageDraft {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MessageDraft")
-            .field("text", &ambre_core::char_len(&self.text))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
             .field("mentions", &self.mentions)
             .field("styles", &self.styles)
             .finish()
@@ -308,7 +308,7 @@ impl std::fmt::Debug for Attachment {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Attachment")
             .field("media_ref", &self.media_ref)
-            .field("name", &ambre_core::char_len(&self.name))
+            .field("name", &ambre_core::RedactedChars::of(&self.name))
             .field("media_type", &self.media_type)
             .field("size", &self.size)
             .finish()
@@ -600,7 +600,7 @@ impl std::fmt::Debug for MessageView {
             .field("id", &self.id)
             .field("author", &self.author)
             .field("ts", &self.ts)
-            .field("text", &ambre_core::char_len(&self.text))
+            .field("text", &ambre_core::RedactedChars::of(&self.text))
             .field("mentions", &self.mentions)
             .field("styles", &self.styles)
             .field("attachments", &self.attachments)
@@ -1193,7 +1193,7 @@ mod tests {
             format!("{view:?}"),
             format!("{edit:?}"),
         ] {
-            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(line.contains("10 chars"), "{line}");
             assert!(!line.contains(secret), "{line}");
         }
     }

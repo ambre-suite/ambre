@@ -13,7 +13,7 @@ pub struct Email(pub String);
 impl std::fmt::Debug for Email {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Email")
-            .field(&crate::char_len(&self.0))
+            .field(&crate::RedactedChars::of(&self.0))
             .finish()
     }
 }
@@ -51,6 +51,6 @@ mod tests {
     #[test]
     fn an_address_prints_its_length_and_none_of_its_text() {
         let printed = format!("{:?}", Email::from("ada@example.org"));
-        assert_eq!(printed, "Email(CharCount(15))");
+        assert_eq!(printed, "Email(15 chars)");
     }
 }

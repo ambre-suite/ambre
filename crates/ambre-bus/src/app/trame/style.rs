@@ -36,16 +36,21 @@ pub enum FilterKind {
 // A kept value and an operand are cell text, and print their length alone.
 impl std::fmt::Debug for FilterKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ambre_core::char_len;
+        use ambre_core::RedactedChars;
         match self {
             Self::Values(values) => f
                 .debug_tuple("Values")
-                .field(&values.iter().map(|text| char_len(text)).collect::<Vec<_>>())
+                .field(
+                    &values
+                        .iter()
+                        .map(|text| RedactedChars::of(text))
+                        .collect::<Vec<_>>(),
+                )
                 .finish(),
             Self::Condition { op, value } => f
                 .debug_struct("Condition")
                 .field("op", op)
-                .field("value", &char_len(value))
+                .field("value", &RedactedChars::of(value))
                 .finish(),
         }
     }
@@ -137,7 +142,7 @@ impl std::fmt::Debug for CellFormat {
             Self::Custom(pattern) => {
                 return f
                     .debug_tuple("Custom")
-                    .field(&ambre_core::char_len(pattern))
+                    .field(&ambre_core::RedactedChars::of(pattern))
                     .finish();
             }
         })

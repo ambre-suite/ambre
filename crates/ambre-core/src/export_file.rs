@@ -73,7 +73,7 @@ pub struct ExportFilename(String);
 impl std::fmt::Debug for ExportFilename {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("ExportFilename")
-            .field(&crate::char_len(&self.0))
+            .field(&crate::RedactedChars::of(&self.0))
             .finish()
     }
 }
@@ -506,6 +506,6 @@ mod tests {
     #[test]
     fn a_file_name_prints_its_length_alone() {
         let name = ExportFilename::new("Q3 layoffs.pdf").expect("a valid name");
-        assert_eq!(format!("{name:?}"), "ExportFilename(CharCount(14))");
+        assert_eq!(format!("{name:?}"), "ExportFilename(14 chars)");
     }
 }

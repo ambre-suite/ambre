@@ -952,7 +952,7 @@ impl std::fmt::Debug for ClipValue {
             Self::Bool(value) => f.debug_tuple("Bool").field(value).finish(),
             Self::Str(text) => f
                 .debug_tuple("Str")
-                .field(&ambre_core::char_len(text))
+                .field(&ambre_core::RedactedChars::of(text))
                 .finish(),
             Self::Bin(bytes) => f.debug_tuple("Bin").field(bytes).finish(),
         }
@@ -1113,7 +1113,10 @@ impl std::fmt::Debug for ClipElement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClipElement")
             .field("fields", &self.fields)
-            .field("notes", &self.notes.as_deref().map(ambre_core::char_len))
+            .field(
+                "notes",
+                &self.notes.as_deref().map(ambre_core::RedactedChars::of),
+            )
             .finish()
     }
 }
@@ -1218,7 +1221,7 @@ impl fmt::Debug for InitContent {
                 .finish(),
             Self::Text(text) => f
                 .debug_tuple("Text")
-                .field(&ambre_core::char_len(text))
+                .field(&ambre_core::RedactedChars::of(text))
                 .finish(),
         }
     }
@@ -1336,7 +1339,7 @@ impl fmt::Debug for TextDelta {
         f.debug_struct("TextDelta")
             .field("at", &self.at)
             .field("delete", &self.delete)
-            .field("insert", &ambre_core::char_len(&self.insert))
+            .field("insert", &ambre_core::RedactedChars::of(&self.insert))
             .finish()
     }
 }
@@ -1515,7 +1518,7 @@ impl fmt::Debug for CommentMessage {
         f.debug_struct("CommentMessage")
             .field("author", &self.author)
             .field("ts", &self.ts)
-            .field("body", &ambre_core::char_len(&self.body))
+            .field("body", &ambre_core::RedactedChars::of(&self.body))
             .finish()
     }
 }
@@ -1570,7 +1573,7 @@ impl fmt::Debug for CommentSummary {
             .field("anchor", &self.anchor)
             .field("resolved", &self.resolved)
             .field("messages", &self.messages)
-            .field("preview", &ambre_core::char_len(&self.preview))
+            .field("preview", &ambre_core::RedactedChars::of(&self.preview))
             .finish()
     }
 }
@@ -1593,7 +1596,7 @@ impl fmt::Debug for DeckFrame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DeckFrame")
             .field("id", &self.id)
-            .field("name", &ambre_core::char_len(&self.name))
+            .field("name", &ambre_core::RedactedChars::of(&self.name))
             .finish()
     }
 }
@@ -1927,7 +1930,7 @@ impl fmt::Debug for SlideChange {
             .field("to", &self.to)
             .field("to_rect", &self.to_rect)
             .field("frame", &self.frame)
-            .field("notes", &ambre_core::char_len(&self.notes))
+            .field("notes", &ambre_core::RedactedChars::of(&self.notes))
             .field("transition", &self.transition)
             .finish()
     }
@@ -2462,8 +2465,8 @@ impl fmt::Debug for ToileCommand {
             Self::SetText { id, base, text } => f
                 .debug_struct("SetText")
                 .field("id", id)
-                .field("base", &ambre_core::char_len(base))
-                .field("text", &ambre_core::char_len(text))
+                .field("base", &ambre_core::RedactedChars::of(base))
+                .field("text", &ambre_core::RedactedChars::of(text))
                 .finish(),
             Self::LockElements { ids, lock } => fields!("LockElements", ids, lock),
             Self::Reorder { node, to } => fields!("Reorder", node, to),
@@ -2476,7 +2479,7 @@ impl fmt::Debug for ToileCommand {
             Self::RenameFrame { frame, name } => f
                 .debug_struct("RenameFrame")
                 .field("frame", frame)
-                .field("name", &ambre_core::char_len(name))
+                .field("name", &ambre_core::RedactedChars::of(name))
                 .finish(),
             Self::SetSlideOrder { order } => fields!("SetSlideOrder", order),
             Self::NextSlide => f.write_str("NextSlide"),
@@ -2489,7 +2492,7 @@ impl fmt::Debug for ToileCommand {
             Self::EditNotes { frame, base, delta } => f
                 .debug_struct("EditNotes")
                 .field("frame", frame)
-                .field("base", &ambre_core::char_len(base))
+                .field("base", &ambre_core::RedactedChars::of(base))
                 .field("delta", delta)
                 .finish(),
             Self::SetAutoLayout { frame, layout } => fields!("SetAutoLayout", frame, layout),
@@ -2497,13 +2500,13 @@ impl fmt::Debug for ToileCommand {
             Self::CreateComment { anchor, body, ts } => f
                 .debug_struct("CreateComment")
                 .field("anchor", anchor)
-                .field("body", &ambre_core::char_len(body))
+                .field("body", &ambre_core::RedactedChars::of(body))
                 .field("ts", ts)
                 .finish(),
             Self::ReplyComment { thread, body, ts } => f
                 .debug_struct("ReplyComment")
                 .field("thread", thread)
-                .field("body", &ambre_core::char_len(body))
+                .field("body", &ambre_core::RedactedChars::of(body))
                 .field("ts", ts)
                 .finish(),
             Self::EditComment {
@@ -2545,8 +2548,8 @@ impl fmt::Debug for ToileCommand {
             Self::SetConnectorLabel { id, base, text } => f
                 .debug_struct("SetConnectorLabel")
                 .field("id", id)
-                .field("base", &ambre_core::char_len(base))
-                .field("text", &ambre_core::char_len(text))
+                .field("base", &ambre_core::RedactedChars::of(base))
+                .field("text", &ambre_core::RedactedChars::of(text))
                 .finish(),
             Self::CommitStroke { points, style } => fields!("CommitStroke", points, style),
             Self::CopyElements { ids } => fields!("CopyElements", ids),
@@ -2920,7 +2923,7 @@ pub enum ToileEvent {
 
 impl fmt::Debug for ToileEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use ambre_core::char_len;
+        use ambre_core::{RedactedChars, char_len};
         macro_rules! tuple {
             ($name:literal, $value:expr) => {
                 f.debug_tuple($name).field($value).finish()
@@ -2978,7 +2981,7 @@ impl fmt::Debug for ToileEvent {
             Self::NotesChanged { frame, notes } => f
                 .debug_struct("NotesChanged")
                 .field("frame", frame)
-                .field("notes", &char_len(notes))
+                .field("notes", &RedactedChars::of(notes))
                 .finish(),
             Self::ImportReport { imported, skipped } => f
                 .debug_struct("ImportReport")
@@ -3124,17 +3127,17 @@ impl fmt::Debug for DisplayGeom {
             Self::Path(path) => f.debug_tuple("Path").field(path).finish(),
             Self::Sticky(text) => f
                 .debug_tuple("Sticky")
-                .field(&ambre_core::char_len(text))
+                .field(&ambre_core::RedactedChars::of(text))
                 .finish(),
             Self::Text(text) => f
                 .debug_tuple("Text")
-                .field(&ambre_core::char_len(text))
+                .field(&ambre_core::RedactedChars::of(text))
                 .finish(),
             Self::Image(hash) => f.debug_tuple("Image").field(hash).finish(),
             Self::Stroke(points) => f.debug_tuple("Stroke").field(points).finish(),
             Self::Frame(title) => f
                 .debug_tuple("Frame")
-                .field(&ambre_core::char_len(title))
+                .field(&ambre_core::RedactedChars::of(title))
                 .finish(),
             Self::Group => f.write_str("Group"),
             Self::Embed(address) => f.debug_tuple("Embed").field(address).finish(),
@@ -3172,7 +3175,7 @@ impl fmt::Debug for DisplayConnector {
             .field("path", &self.path)
             .field("style", &self.style)
             .field("arrows", &self.arrows)
-            .field("label", &ambre_core::char_len(&self.label))
+            .field("label", &ambre_core::RedactedChars::of(&self.label))
             .finish()
     }
 }
@@ -3315,7 +3318,6 @@ mod tests {
                     notes: secret.clone(),
                 }
             ),
-            format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
             format!("{:?}", DisplayGeom::Sticky(secret.clone())),
             format!("{:?}", DisplayGeom::Text(secret.clone())),
             format!("{:?}", DisplayGeom::Frame(secret.clone())),
@@ -3336,9 +3338,13 @@ mod tests {
         .into_iter()
         .chain(commands.iter().map(|command| format!("{command:?}")));
         for line in printed {
-            assert!(line.contains("CharCount(10)"), "{line}");
+            assert!(line.contains("10 chars"), "{line}");
             assert!(!line.contains("Q3 layoffs"), "{line}");
         }
+        // The failure variants keep their own spelling until their catalogue
+        // lands; the content stays out all the same.
+        let failed = format!("{:?}", ToileEvent::ImportFailed(secret.clone()));
+        assert!(!failed.contains("Q3 layoffs"), "{failed}");
         assert_eq!(format!("{address:?}"), "WebAddress(17 chars)");
         assert_eq!(format!("{:?}", ToileCommand::Undo), "Undo");
     }
