@@ -2249,7 +2249,6 @@ ambre-sync | src/http.rs | crate::http | Failed.message | field | String	free-te
 ambre-sync | src/http.rs | crate::http | Failed::local(message) | param | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpBody.0 | field | Vec<u8>	newtype-inner	the newtype's own inside: the bytes of a request or an answer body
 ambre-sync | src/http.rs | crate::http | HttpBody::as_bytes() | ret | &[u8]	newtype-inner	the newtype's own accessor
-ambre-sync | src/http.rs | crate::http | HttpBody::into_bytes() | ret | Vec<u8>	newtype-inner	the newtype's own accessor, moving the bytes out
 ambre-sync | src/http.rs | crate::http | HttpBody::new(bytes) | param | Vec<u8>	newtype-inner	the newtype's own constructor
 ambre-sync | src/http.rs | crate::http | HttpError::Local.0 | field | String	free-text	error message text
 ambre-sync | src/http.rs | crate::http | HttpError::Unreadable.reason | field | String	free-text	error message text

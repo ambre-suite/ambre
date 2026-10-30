@@ -94,7 +94,7 @@ impl SyncState {
             doc_key,
             signing_key,
         )?;
-        Ok(ambre_core::SealedName::new(sealed.into_bytes()))
+        Ok(sealed.into_name())
     }
 
     /// The document a create answer names, refused unless the client minted
@@ -508,7 +508,7 @@ mod tests {
                 &signing_key,
             )
             .unwrap();
-            ambre_core::SealedName::new(sealed.into_bytes())
+            sealed.into_name()
         };
         let at_cap = "a".repeat(ambre_core::NAME_MAX_CHARS);
         let past = "a".repeat(ambre_core::NAME_MAX_CHARS + 1);

@@ -643,10 +643,16 @@ impl SealedBlob {
         &self.0
     }
 
-    /// The sealed bytes, moved out, for the role that stores them: a
-    /// document name or a key link.
+    /// The sealed bytes, moved out, for the role that stores them: a key
+    /// link.
     pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.0
+    }
+
+    /// The sealed bytes as the name of a document, which the relay stores
+    /// and never opens.
+    pub(crate) fn into_name(self) -> ambre_core::SealedName {
+        ambre_core::SealedName::new(self.0)
     }
 
     /// The size the relay is told, which is the sealed size.

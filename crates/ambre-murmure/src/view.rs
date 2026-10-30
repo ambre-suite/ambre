@@ -1134,9 +1134,9 @@ impl MurmureView {
         };
         if over != ViewPx::ZERO {
             let now = (self.reads.now)();
-            let step = self
-                .kinetic
-                .wheel(down(CssPx::new(over.get())), WheelDeltaMode::Page, now);
+            let step =
+                self.kinetic
+                    .wheel(down(over.on_page(CssPx::ZERO)), WheelDeltaMode::Page, now);
             self.scroll_by(step);
         }
     }
