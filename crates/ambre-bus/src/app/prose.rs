@@ -675,13 +675,14 @@ pub enum LineHeight {
 
 impl LineHeight {
     /// The setting a stored mode and number read as. `None` for a multiple
-    /// that is not finite and above zero.
+    /// that is not finite and above zero, and for a height that is not finite.
     #[must_use]
     pub fn from_stored(mode: LineHeightMode, value: f32) -> Option<Self> {
+        let height = || Some(Pt::new(value)).filter(|points| points.is_finite());
         Some(match mode {
             LineHeightMode::Multiple => Self::Multiple(LineSpacingMultiple::new(value)?),
-            LineHeightMode::Exact => Self::Exact(Pt::new(value)),
-            LineHeightMode::AtLeast => Self::AtLeast(Pt::new(value)),
+            LineHeightMode::Exact => Self::Exact(height()?),
+            LineHeightMode::AtLeast => Self::AtLeast(height()?),
         })
     }
 
@@ -2882,6 +2883,10 @@ pub enum ProseRefusal {
     /// The position holds no cross reference to follow.
     #[error("no cross reference sits there")]
     NoCrossRef,
+    /// A paragraph length or line height that is not a finite number. The
+    /// store never receives one.
+    #[error("a paragraph length must be a finite number")]
+    NonFiniteLength,
     /// A write the CRDT engine itself refused.
     #[error("the document engine could not write the change: {0}")]
     WriteFailed(String),
@@ -2927,6 +2932,7 @@ impl fmt::Debug for ProseRefusal {
             Self::NoIdentity => f.write_str("NoIdentity"),
             Self::NotWhileSuggesting => f.write_str("NotWhileSuggesting"),
             Self::NoCrossRef => f.write_str("NoCrossRef"),
+            Self::NonFiniteLength => f.write_str("NonFiniteLength"),
             Self::WriteFailed(why) => tuple!("WriteFailed", why),
             Self::Interop(error) => tuple!("Interop", error),
         }
