@@ -315,8 +315,12 @@ impl TrameState {
             return;
         };
         for (key, value) in entries.iter() {
+            let Some(uid) = Uid::parse(key) else {
+                // A key no build writes is said (`TRAME-248`).
+                self.note_unreadable_key();
+                continue;
+            };
             if matches!(value, LoroValue::Bool(true))
-                && let Some(uid) = Uid::parse(key)
                 && let Some(pos) = self.index.row_pos(&uid)
             {
                 self.hidden_rows.insert(pos);

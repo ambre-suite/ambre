@@ -378,6 +378,46 @@ fn a_cell_key_in_a_non_canonical_spelling_is_refused_and_said() {
     }
 }
 
+/// A non-canonical key in each map keyed by a cell or a line is refused and
+/// said. The style, merge, width, height and filter readers each meet one
+/// (`TRAME-248`).
+#[test]
+fn a_non_canonical_key_in_every_keyed_map_is_said() {
+    let canonical = "00000000000000ab_00000002";
+    let cell_key = format!("{}:{canonical}", canonical.to_uppercase());
+    let line_key = canonical.to_uppercase();
+    let crafted: [(SheetRoot, &str, LoroValue); 5] = [
+        (SheetRoot::CellStyle, &cell_key, LoroValue::from(vec![0u8])),
+        (
+            SheetRoot::Merges,
+            &cell_key,
+            LoroValue::from(format!("{canonical}:{canonical}")),
+        ),
+        (SheetRoot::ColWidths, &line_key, LoroValue::from(80.0)),
+        (SheetRoot::RowHeights, &line_key, LoroValue::from(20.0)),
+        (SheetRoot::FilterHidden, &line_key, LoroValue::from(true)),
+    ];
+    for (root, key, value) in crafted {
+        let source = TrameState::new();
+        source
+            .doc
+            .get_map(SheetContainer::of(root, &crate::logic::default_sheet()).as_str())
+            .insert(key, value)
+            .expect("a crafted key");
+        source.doc.commit();
+        let mut opened = TrameState::new();
+        let events = opened
+            .import_snapshot(&source.export_snapshot())
+            .expect("the workbook still opens");
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, TrameEvent::UndecodableRecords)),
+            "{root:?}"
+        );
+    }
+}
+
 /// A line element in a spelling no build writes is skipped, and said.
 #[test]
 fn a_line_element_in_a_non_canonical_spelling_is_refused_and_said() {

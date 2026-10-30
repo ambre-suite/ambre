@@ -626,17 +626,55 @@ fn search_counts_the_chars_of_the_text_it_was_given() {
     ));
 }
 
-/// MID refuses a start below 1 and a negative length, as Excel does with
-/// `#VALUE!`, which reads `#TYPE!` here. Both were clamped and answered text.
+/// MID refuses a start below 1 and a negative length with `#NUM!`, as LEFT,
+/// RIGHT and REPT refuse an out-of-domain count. Both were clamped and
+/// answered text.
 #[test]
 fn mid_refuses_a_start_below_one_and_a_negative_length() {
     let refused =
-        |args: &[CellValue]| matches!(mid(args), CellValue::Error(FormulaError::TypeError));
+        |args: &[CellValue]| matches!(mid(args), CellValue::Error(FormulaError::NumError));
     assert!(refused(&[txt("abc"), num(0.0), num(2.0)]));
     assert!(refused(&[txt("abc"), num(-1.0), num(2.0)]));
     assert!(refused(&[txt("abc"), num(1.0), num(-1.0)]));
     assert_eq!(mid(&[txt("abc"), num(1.0), num(0.0)]).to_display(), "");
     assert_eq!(mid(&[txt("abc"), num(2.0), num(5.0)]).to_display(), "bc");
+    assert!(refused(&[txt("abc"), num(f64::NAN), num(1.0)]));
+    assert!(refused(&[txt("abc"), num(1.0), num(f64::NAN)]));
+}
+
+/// MID reads a blank count as 0 and a numeric text as its number, as Excel
+/// does (`TRAME-250`).
+#[test]
+fn mid_reads_a_blank_count_as_zero() {
+    assert_eq!(
+        mid(&[txt("abc"), num(1.0), CellValue::Empty]).to_display(),
+        ""
+    );
+    assert!(matches!(
+        mid(&[txt("abc"), CellValue::Empty, num(1.0)]),
+        CellValue::Error(FormulaError::NumError)
+    ));
+    assert_eq!(mid(&[txt("abc"), txt("2"), num(1.0)]).to_display(), "b");
+    assert!(matches!(
+        mid(&[txt("abc"), txt("x"), num(1.0)]),
+        CellValue::Error(FormulaError::TypeError)
+    ));
+}
+
+/// MID answers an error given as a count unchanged, as Excel does
+/// (`TRAME-251`). It used to answer `#TYPE!` in its place.
+#[test]
+fn mid_passes_an_error_count_through() {
+    let div = CellValue::Error(FormulaError::DivisionByZero);
+    for args in [
+        [txt("abc"), div.clone(), num(1.0)],
+        [txt("abc"), num(1.0), div.clone()],
+    ] {
+        assert!(matches!(
+            mid(&args),
+            CellValue::Error(FormulaError::DivisionByZero)
+        ));
+    }
 }
 
 #[test]

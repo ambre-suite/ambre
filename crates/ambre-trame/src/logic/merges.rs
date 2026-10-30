@@ -224,8 +224,14 @@ impl TrameState {
                 let LoroValue::String(extent_key) = value else {
                     return None;
                 };
-                let (mr, mc) = parse_cell_key(master_key)?;
-                let (er, ec) = parse_cell_key(extent_key)?;
+                // A key no build writes is said, never read in silence
+                // (`TRAME-248`).
+                let (Some((mr, mc)), Some((er, ec))) =
+                    (parse_cell_key(master_key), parse_cell_key(extent_key))
+                else {
+                    self.note_unreadable_key();
+                    return None;
+                };
                 let rect = CellRect::spanning(index.pos_of(&mr, &mc)?, index.pos_of(&er, &ec)?);
                 // A peer may write an entry of one cell. It is no merge
                 // (`TRAME-128`), so it masks nothing and draws no block.

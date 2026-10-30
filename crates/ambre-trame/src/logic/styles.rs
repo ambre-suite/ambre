@@ -271,7 +271,13 @@ impl TrameState {
             return;
         };
         for (key, value) in entries.iter() {
-            let (Some((rl, cl)), LoroValue::Binary(bytes)) = (parse_cell_key(key), value) else {
+            let Some((rl, cl)) = parse_cell_key(key) else {
+                // A key no build writes is said, never read in silence
+                // (`TRAME-248`).
+                self.note_unreadable_key();
+                continue;
+            };
+            let LoroValue::Binary(bytes) = value else {
                 continue;
             };
             let Some(cell) = self.index.pos_of(&rl, &cl) else {

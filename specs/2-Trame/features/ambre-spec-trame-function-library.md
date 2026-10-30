@@ -45,6 +45,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-202` | `POST` | An exact lookup MUST match a text key whatever its case. | this spec section 3 | `ambre_trame::formula::functions::tests::an_exact_lookup_ignores_case`; `::an_exact_lookup_folds_a_final_sigma_as_the_find_does` -- the fold the find and `SEARCH` read, a criterion too | none | verified |
 | `TRAME-246` | `POST` | A search that ignores case MUST answer a position in the characters of the text it was given. | this spec section 3 | `ambre_trame::formula::functions::tests::search_counts_the_chars_of_the_text_it_was_given` -- a capital I with a dot, which lowercases to two chars, and a final sigma | none | verified |
 | `TRAME-247` | `POST` | An annuity function MUST read a type argument other than zero as a payment at the start of each period. | this spec section 3 | `ambre_trame::formula::functions::tests::an_annuity_type_other_than_zero_reads_as_the_start` -- `PMT`, `FV`, `PV`, `NPER` and `RATE` given a type of 2 and of -1 | none | verified |
+| `TRAME-250` | `POST` | `MID` MUST read a blank count as 0, a numeric text as its number. | this spec section 3 | `ambre_trame::formula::functions::tests::mid_reads_a_blank_count_as_zero` -- a blank length and start, a numeric and a non-numeric text start | none | verified |
 | `TRAME-057` | `POST` | A function given a range MUST be able to answer a reference into it, not only a value. | this spec section 5 | not built | unbuilt -- lands with the `Functions that answer a reference` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-058` | `POST` | A lookup MUST be expressible without counting columns from the key. | this spec section 5 | not built | unbuilt -- lands with the `Functions that answer a reference` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TRAME-059` | `POST` | A user MUST be able to name a formula of their own and call it. | this spec section 5 | not built | unbuilt -- lands with the `User-defined functions` Story (`ambre-roadmap.md` E6) | unimplemented |
@@ -54,7 +55,8 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-049` | `FAIL` | A name the library does not know MUST read as an error, never as a blank. | this spec section 3 | `ambre_trame::logic::tests::group12::an_unknown_function_reads_as_an_error` | none | verified |
 | `TRAME-205` | `FAIL` | An exact lookup that finds no key MUST answer an error, and MUST NOT answer a neighbour. | this spec section 3 | `ambre_trame::formula::functions::tests::vlookup_exact_and_approx` -- its exact miss asserts `#N/A` | none | verified |
 | `TRAME-244` | `FAIL` | A call or an operator whose result is not a finite number MUST answer `#NUM!`, and so MUST an average whose total is past the largest number. | this spec section 2; section 3 | `ambre_trame::formula::functions::tests::a_result_that_is_not_finite_answers_num` -- a total past the largest number either way, an average of such a total, a sum of squares, a product, a deviation, an exponential, and a maximum given an infinity; `ambre_trame::formula::vm::tests::an_operator_whose_result_is_not_finite_answers_num` -- a quotient and a product past the largest number, an infinity negated or divided, and the `IFERROR` and `ISERROR` that see the error | none | verified |
-| `TRAME-249` | `FAIL` | `MID` given a start below 1 or a negative length MUST answer `#TYPE!`, the error Excel writes `#VALUE!`. | this spec section 3; `ambre-spec-trame-formula-engine.md` | `ambre_trame::formula::functions::tests::mid_refuses_a_start_below_one_and_a_negative_length` -- a start of 0 and of -1, a length of -1 | none | verified |
+| `TRAME-249` | `FAIL` | `MID` given a start below 1, a negative length or a NaN MUST answer `#NUM!`, as `LEFT`, `RIGHT` and `REPT` answer a count out of their domain. | this spec section 3; `ambre-spec-trame-formula-engine.md section 4` | `ambre_trame::formula::functions::tests::mid_refuses_a_start_below_one_and_a_negative_length` -- a start of 0 and of -1, a length of -1, and a NaN in either | none | verified |
+| `TRAME-251` | `FAIL` | `MID` given an error as a count MUST answer that error unchanged. | this spec section 3; `ambre-spec-trame-formula-engine.md section 4` | `ambre_trame::formula::functions::tests::mid_passes_an_error_count_through` -- `#DIV/0!` as the start and as the length | none | verified |
 
 ### 1.3 Spill a result across the cells beside it
 
@@ -69,7 +71,7 @@ status values are normative in `ambre-spec-template.md`.
   `features/ambre-spec-trame-formula-engine.md` owns.
 * **Boundary.** none: a function reads cells and returns a value in the Logic thread. It opens no
   path, and `ZK-001` seals what the document sends.
-* **Verification.** 25 `verified`, 7 `unimplemented`. What holds is the arithmetic core and the
+* **Verification.** 27 `verified`, 7 `unimplemented`. What holds is the arithmetic core and the
   edges of the library. A total is rounded once from an exact sum, so its order cannot change it
   (`TRAME-199`), and one past the largest number reads `#NUM!` (`TRAME-244`). A lookup refuses keys
   out of order, and no function can read the clock for itself. The seven unimplemented rows are
