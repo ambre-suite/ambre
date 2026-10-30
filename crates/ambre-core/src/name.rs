@@ -81,6 +81,13 @@ impl Name {
     pub fn into_string(self) -> String {
         self.0
     }
+
+    /// The UTF-8 bytes of the name, as the plaintext its seal takes. A
+    /// document's name is sealed for the relay.
+    #[must_use]
+    pub fn to_plaintext(&self) -> crate::SecretBytes {
+        crate::SecretBytes::new(self.0.as_bytes().to_vec())
+    }
 }
 
 impl fmt::Display for Name {
