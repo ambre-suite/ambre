@@ -210,6 +210,7 @@ mod tests {
         roster.set_members([(UserId::new(), name)]);
         let shown = format!("{roster:?}");
         assert!(!shown.contains("Secretary"), "{shown}");
+        assert!(shown.contains("members: 1"), "{shown}");
     }
 
     const T0: Timestamp = Timestamp(1_700_000_000_000);

@@ -173,7 +173,7 @@ mod tests {
         let found = offers("sec", &members, None);
         let shown = format!("{found:?}");
         assert!(!shown.contains("Secretary"), "{shown}");
-        assert!(shown.contains('9'), "{shown}");
+        assert!(shown.contains("name: ByteCount(9)"), "{shown}");
         let list = MentionList {
             entries: found.iter().map(Offer::written).collect(),
             chosen: OfferIndex::ZERO,
@@ -182,6 +182,7 @@ mod tests {
         };
         let shown = format!("{list:?}");
         assert!(!shown.contains("Secretary"), "{shown}");
+        assert!(shown.contains("entries: OfferCount(1)"), "{shown}");
     }
 
     /// An `@` opens a query only where it starts a word, and the query runs

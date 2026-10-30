@@ -23,7 +23,7 @@ use ambre_commands::{KeyBinding, Locale};
 use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId, ViewPoint, ViewPx};
 use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
-    MurmureHandler, MurmureRelay, PageVisibility, SearchBox, coverage,
+    MurmureHandler, MurmureRelay, Notice, PageVisibility, SearchBox, coverage,
 };
 use ambre_murmure::commands::{
     COMMANDS, COPY_TEXT, DELETE, EDIT, KEYS, MARK_ALL_READ, MARK_UNREAD, MessageTarget,
@@ -1340,11 +1340,15 @@ fn the_find_chord_opens_the_search_and_its_answer_lists_the_matches() {
     assert_eq!(groups[0].coverage, "1 of 2 segments");
     // The debug forms count the matches and measure the query: no message
     // text and no typed word shows.
-    for shown in [
-        format!("{:?}", groups[0]),
-        format!("{:?}", relay.search.get_untracked()),
+    for (shown, length) in [
+        (format!("{:?}", groups[0]), "matches: 1"),
+        (
+            format!("{:?}", relay.search.get_untracked()),
+            "query: ByteCount(6)",
+        ),
     ] {
         assert!(!shown.contains("May") && !shown.contains("bud"), "{shown}");
+        assert!(shown.contains(length), "{shown}");
     }
     let channels = relay.search.get_untracked().channels;
     assert_eq!(
@@ -1437,6 +1441,20 @@ fn a_notice_opens_its_channel_at_its_message() {
     assert_eq!(closed.at, None);
     assert!(relay.open_at(direct, closed.at).is_none());
     assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
+}
+
+/// The debug form of a notice names the length of its title, never the
+/// channel or the member the title names.
+#[wasm_bindgen_test]
+fn a_notice_debugs_its_title_length_alone() {
+    let notice = Notice {
+        channel_id: ChannelId::new(),
+        at: None,
+        title: "New message from Secretary".to_owned(),
+    };
+    let shown = format!("{notice:?}");
+    assert!(!shown.contains("Secretary"), "{shown}");
+    assert!(shown.contains("title: ByteCount(26)"), "{shown}");
 }
 
 /// A click on a notice opens its own channel and asks nothing of another

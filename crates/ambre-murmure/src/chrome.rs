@@ -514,7 +514,10 @@ pub fn coverage(channels: &[ChannelMatches]) -> String {
 /// A system notification the view asks the page to raise (the Murmure
 /// notifications spec). It names the channel and why, never what was
 /// written: the summary it comes from holds no text.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of the title alone: it names a channel or a
+/// member.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Notice {
     /// The channel a click opens.
     pub channel_id: ChannelId,
@@ -523,6 +526,16 @@ pub struct Notice {
     pub at: Option<MessageRef>,
     /// What the notification says.
     pub title: String,
+}
+
+impl std::fmt::Debug for Notice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Notice")
+            .field("channel_id", &self.channel_id)
+            .field("at", &self.at)
+            .field("title", &ambre_core::ByteCount::from_len(self.title.len()))
+            .finish()
+    }
 }
 
 impl Default for MurmureRelay {

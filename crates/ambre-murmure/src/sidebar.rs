@@ -92,7 +92,10 @@ struct Catalogue {
 }
 
 /// The state the sidebar is drawn from.
-#[derive(Debug, Clone, Default)]
+///
+/// `Debug` counts the peers of each direct message alone: each one is the
+/// name a member chose, which `DisplayName` prints whole.
+#[derive(Clone, Default)]
 pub struct Sidebar {
     members: Vec<MemberChannel>,
     /// The spaces in the order the user's channels first named them.
@@ -110,6 +113,26 @@ pub struct Sidebar {
     /// The spaces whose open failed. The next listing naming one opens it
     /// anew (`MURMURE-550`).
     unopened: Vec<SpaceId>,
+}
+
+impl std::fmt::Debug for Sidebar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let peers: HashMap<&ChannelId, usize> = self
+            .peers
+            .iter()
+            .map(|(channel, names)| (channel, names.len()))
+            .collect();
+        f.debug_struct("Sidebar")
+            .field("members", &self.members)
+            .field("spaces", &self.spaces)
+            .field("catalogues", &self.catalogues)
+            .field("activity", &self.activity)
+            .field("names", &self.names)
+            .field("hints", &self.hints)
+            .field("peers", &peers)
+            .field("unopened", &self.unopened)
+            .finish()
+    }
 }
 
 impl Sidebar {
@@ -478,6 +501,25 @@ fn push(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The debug form of the sidebar counts the peers of a direct message,
+    /// and names none of them.
+    #[test]
+    fn the_sidebar_debugs_its_peer_count_alone() {
+        let mut sidebar = Sidebar::default();
+        let names = vec![
+            ambre_core::DisplayName::new("Secretary").expect("a name"),
+            ambre_core::DisplayName::new("Treasurer").expect("a name"),
+        ];
+        let channel_id = ChannelId::new();
+        sidebar.set_peers(&[DirectPeers { channel_id, names }]);
+        let shown = format!("{sidebar:?}");
+        assert!(
+            !shown.contains("Secretary") && !shown.contains("Treasurer"),
+            "{shown}"
+        );
+        assert!(shown.contains(&format!("{channel_id:?}: 2")), "{shown}");
+    }
 
     fn public(space: SpaceId) -> (ChannelId, MemberChannel) {
         let channel_id = ChannelId::new();

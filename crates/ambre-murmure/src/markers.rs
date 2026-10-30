@@ -732,14 +732,16 @@ mod tests {
         };
         let shown = format!("{edit:?}");
         assert!(!shown.contains("secret"), "{shown}");
-        assert!(shown.contains("12") && shown.contains('6'), "{shown}");
+        assert!(shown.contains("before: ByteCount(12)"), "{shown}");
+        assert!(shown.contains("after: ByteCount(6)"), "{shown}");
         let unmarked = Unmarked {
             between: "a **secret".to_owned(),
             after: "a secret".to_owned(),
         };
         let shown = format!("{unmarked:?}");
         assert!(!shown.contains("secret"), "{shown}");
-        assert!(shown.contains("10") && shown.contains('8'), "{shown}");
+        assert!(shown.contains("between: ByteCount(10)"), "{shown}");
+        assert!(shown.contains("after: ByteCount(8)"), "{shown}");
     }
 
     /// A chord puts its style on the selection, and takes it off a

@@ -128,13 +128,28 @@ impl std::fmt::Debug for Pending {
 }
 
 /// What an answer did to the draft it belonged to.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Debug` prints the length of a failed file's name alone.
+#[derive(Clone, PartialEq, Eq)]
 pub enum Uploaded {
     /// The file joined the draft.
     Ready(DraftOf),
     /// The upload failed, so the draft carries nothing of it. The view tells
     /// the user, naming the file.
     Failed { of: DraftOf, name: String },
+}
+
+impl std::fmt::Debug for Uploaded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ready(of) => f.debug_tuple("Ready").field(of).finish(),
+            Self::Failed { of, name } => f
+                .debug_struct("Failed")
+                .field("of", of)
+                .field("name", &ByteCount::from_len(name.len()))
+                .finish(),
+        }
+    }
 }
 
 /// The uploads of every draft, keyed by the request that carries each.
@@ -309,12 +324,28 @@ mod tests {
         };
         let shown = format!("{picked:?}");
         assert!(!shown.contains("secret"), "{shown}");
-        assert!(shown.contains("10"), "{shown}");
+        assert!(shown.contains("name: ByteCount(10)"), "{shown}");
+        assert!(shown.contains("MediaBytes(6 bytes)"), "{shown}");
         let mut uploads = Uploads::default();
         assert!(begin(&mut uploads, 1, channel(), "secret.pdf"));
         uploads.restore(channel(), vec![received("secret.txt")]);
         let shown = format!("{uploads:?}");
         assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains("name: ByteCount(10)"), "{shown}");
+        assert!(shown.contains("ready: 1"), "{shown}");
+    }
+
+    /// The debug form of a failed upload names the length of the file's
+    /// name, never a char of it.
+    #[test]
+    fn a_failed_upload_debugs_its_name_length_alone() {
+        let failed = Uploaded::Failed {
+            of: channel(),
+            name: "secret.pdf".to_owned(),
+        };
+        let shown = format!("{failed:?}");
+        assert!(!shown.contains("secret"), "{shown}");
+        assert!(shown.contains("name: ByteCount(10)"), "{shown}");
     }
 
     /// A fetched file named `name`.

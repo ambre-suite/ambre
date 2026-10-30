@@ -206,7 +206,7 @@ mod tests {
         let query = Query::parse("secret budget").expect("two words");
         let shown = format!("{query:?}");
         assert!(!shown.contains("secret"), "{shown}");
-        assert!(shown.contains('2'), "{shown}");
+        assert!(shown.contains("words: 2"), "{shown}");
     }
 
     /// The words fold to lowercase without their diacritics, composed or

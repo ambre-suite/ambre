@@ -738,13 +738,16 @@ mod tests {
             styles: Vec::new(),
         };
         let shown = [
-            format!("{target:?}"),
-            format!("{edit:?}"),
-            format!("{:?}", MessageAction::Copy(target.text.clone())),
+            (format!("{target:?}"), "text: ByteCount(12)"),
+            (format!("{edit:?}"), "text: ByteCount(12)"),
+            (
+                format!("{:?}", MessageAction::Copy(target.text.clone())),
+                "Copy(ByteCount(12))",
+            ),
         ];
-        for shown in shown {
+        for (shown, length) in shown {
             assert!(!shown.contains("secret"), "{shown}");
-            assert!(shown.contains("12"), "{shown}");
+            assert!(shown.contains(length), "{shown}");
         }
     }
 

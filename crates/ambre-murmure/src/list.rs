@@ -5,9 +5,6 @@
 //! header and the words of each row. Pure, so the host tests hold it. The painter in
 //! `paint` lays the rows out and draws them.
 
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec, ViewPx};
-
-use crate::MessageCount;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use ambre_bus::{
@@ -15,6 +12,9 @@ use ambre_bus::{
     MurmureCommand, MurmureEvent, Notice, Reaction, Revision, SegmentId, TextStyle, Timestamp,
     UiEvent, Unreadable, UserId,
 };
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec, ViewPx};
+
+use crate::MessageCount;
 
 ambre_core::define_index! {
     /// A row of a message list, counted from zero at the oldest. A key
@@ -1117,7 +1117,8 @@ pub(crate) mod tests {
             !shown.contains("secret") && !shown.contains("Ada"),
             "{shown}"
         );
-        assert!(shown.contains("11"), "{shown}");
+        assert!(shown.contains("body: ByteCount(11)"), "{shown}");
+        assert!(shown.contains("author: ByteCount(3)"), "{shown}");
     }
 
     /// A deleted message shows a muted line in place of its body
