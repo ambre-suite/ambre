@@ -387,7 +387,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn char_key_lowercases_ascii_letters() {
+    fn a_key_char_folds_an_ascii_letter_to_its_lower_case() {
         assert_eq!(KeyChar::new('B'), KeyChar::B);
         assert_eq!(KeyChar::new('b'), KeyChar::B);
         assert_eq!(KeyChar::new('/').get(), '/');

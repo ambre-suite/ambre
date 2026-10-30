@@ -234,6 +234,7 @@ impl std::fmt::Debug for MessageDraft {
             .finish()
     }
 }
+
 /// One emoji a member reacts with, as the view picked it. The engine
 /// refuses a value that is not one emoji, and this type keeps the value
 /// apart from free text. A table compiled into the client borrows its text,
