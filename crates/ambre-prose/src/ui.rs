@@ -1029,7 +1029,7 @@ mod tests {
         for secret in ["word", "unseen", "composed", "drafted"] {
             assert!(!printed.contains(secret), "{secret} in {printed}");
         }
-        assert!(printed.contains("<8 bytes>"), "{printed}");
+        assert!(printed.contains("8 chars"), "{printed}");
     }
 
     #[test]

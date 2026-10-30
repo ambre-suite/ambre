@@ -7,12 +7,13 @@
 
 use std::fmt;
 
-/// Text that a `Debug` impl prints by its length in bytes alone.
+/// Text that a `Debug` impl prints by its length alone, in the workspace
+/// spelling `N chars` that [`ambre_core::RedactedChars`] owns.
 pub(crate) struct Redacted<'a>(pub(crate) &'a str);
 
 impl fmt::Debug for Redacted<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<{} bytes>", self.0.len())
+        ambre_core::RedactedChars::of(self.0).fmt(f)
     }
 }
 
@@ -27,12 +28,12 @@ pub(crate) mod tests {
     /// its length instead.
     pub(crate) fn hides(value: &impl std::fmt::Debug, secret: &str) -> bool {
         let printed = format!("{value:?}");
-        !printed.contains(secret) && printed.contains(&format!("<{} bytes>", secret.len()))
+        !printed.contains(secret) && printed.contains(&format!("{} chars", secret.chars().count()))
     }
 
     #[test]
     fn redacted_text_prints_its_length_alone() {
-        assert_eq!(format!("{:?}", super::Redacted("secret")), "<6 bytes>");
+        assert_eq!(format!("{:?}", super::Redacted("secret")), "6 chars");
         assert!(hides(&super::Redacted("secret"), "secret"));
     }
 
