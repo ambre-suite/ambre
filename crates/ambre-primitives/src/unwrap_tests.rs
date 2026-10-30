@@ -506,3 +506,119 @@ fn strict_mode_holds_each_line_to_its_count() {
     let lenient = judge(&report, Some(&gone), Strictness::Report).unwrap();
     assert_eq!(lenient.outcome, Outcome::Pass);
 }
+
+/// A newtype whose `Display` prints its text, so `to_string` unwraps it,
+/// and a workspace type whose `push` and `contains` std shares.
+const SHOWN: &str = "pub mod name {\n\
+    pub struct Name(String);\n\
+    impl Name { pub fn as_str(&self) -> &str { &self.0 } }\n\
+    impl std::fmt::Display for Name {\n\
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(&self.0) }\n\
+    }\n\
+    pub struct Bag;\n\
+    impl Bag {\n\
+        pub fn push(&mut self, text: &str) {}\n\
+        pub fn contains(&self, text: &str) -> bool { false }\n\
+    }\n\
+}\n\
+use name::Name;\n\
+pub fn store(text: &str) {}\n";
+
+/// Each ambiguous site, as the report prints it.
+fn ambiguous(report: &Report) -> Vec<String> {
+    report.ambiguous.iter().map(ToString::to_string).collect()
+}
+
+#[test]
+fn a_name_a_foreign_variant_binds_holds_a_foreign_value() {
+    let lib = format!(
+        "{SHOWN}use proc_macro2::TokenTree;\n\
+         pub fn words(tree: Tree) {{\n\
+         if let TokenTree::Ident(ident) = make() {{ store(&ident.to_string()); }}\n\
+         if let syn::Pat::Ident(p) = make() {{ store(&p.to_string()); }}\n\
+         if let Some(other) = make() {{ store(&other.to_string()); }}\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(
+        ambiguous(&report),
+        ["demo | src/lib.rs:19 | Name::to_string -> store"]
+    );
+}
+
+#[test]
+fn a_const_types_its_receiver() {
+    let lib = format!(
+        "{SHOWN}const WORDS: &[&str] = &[\"a\"];\n\
+         const SEED: Name = make();\n\
+         pub fn check(name: &Name) {{\n\
+         WORDS.contains(&name.as_str());\n\
+         store(SEED.as_str());\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert_eq!(
+        refusals(&report),
+        ["demo | src/lib.rs:19 | Name::as_str -> store"]
+    );
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.foreign, Tally::new(1));
+}
+
+#[test]
+fn a_std_constructor_a_macro_an_array_and_a_tuple_field_type_their_receiver() {
+    let lib = format!(
+        "{SHOWN}pub struct Pair(Vec<String>, u32);\n\
+         impl Pair {{\n\
+         pub fn fill(&mut self, name: &Name) {{\n\
+         let mut out = Vec::new();\n\
+         out.push(name.as_str());\n\
+         let mut text = format!(\"x\");\n\
+         text.push(name.as_str());\n\
+         [\"a\"].contains(&name.as_str());\n\
+         self.0.push(name.as_str());\n\
+         }}\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert!(report.ambiguous.is_empty(), "{:?}", ambiguous(&report));
+    assert_eq!(report.foreign, Tally::new(4));
+}
+
+#[test]
+fn a_method_whose_return_std_or_a_dependency_fixes_types_its_value() {
+    let lib = format!(
+        "{SHOWN}pub fn spell(ty: Ty, path: Path) {{\n\
+         store(&ty.to_token_stream().to_string());\n\
+         store(&path.display().to_string());\n\
+         let text = make().to_string();\n\
+         store(text.as_str());\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(
+        ambiguous(&report),
+        ["demo | src/lib.rs:19 | Name::to_string -> store"]
+    );
+}
+
+#[test]
+fn a_field_no_workspace_struct_holds_as_a_newtype_holds_none() {
+    let lib = format!(
+        "{SHOWN}pub struct Doc {{ title: Name }}\n\
+         pub fn spell() {{\n\
+         let f = make();\n\
+         store(&f.ident.to_string());\n\
+         store(f.title.as_str());\n\
+         }}\n"
+    );
+    let report = run(&lib);
+    assert!(report.refusals.is_empty(), "{:?}", refusals(&report));
+    assert_eq!(
+        ambiguous(&report),
+        ["demo | src/lib.rs:19 | Name::as_str -> store"]
+    );
+}

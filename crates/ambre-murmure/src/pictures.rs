@@ -236,7 +236,7 @@ pub fn frame(picture: &Picture, index: FrameIndex) -> Option<&ambre_bus::Picture
 /// The key of frame `index` of `media_ref`: one texture per frame, so a
 /// frame played again is drawn from what the renderer already holds.
 pub fn frame_key(media_ref: &ContentHash, index: FrameIndex) -> ImageKey {
-    let ImageKey(base) = ImageKey::from_address(media_ref.as_str());
+    let ImageKey(base) = ImageKey::from_address(media_ref);
     ImageKey(base ^ u64::from(index.get()).rotate_right(16))
 }
 

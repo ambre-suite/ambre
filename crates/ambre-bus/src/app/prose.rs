@@ -2338,10 +2338,13 @@ pub enum InteropError {
 impl std::fmt::Debug for InteropError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ParseFailed(reason) => f
-                .debug_tuple("ParseFailed")
-                .field(&ambre_core::char_len(reason))
-                .finish(),
+            Self::ParseFailed(reason) => {
+                write!(
+                    f,
+                    "ParseFailed({} chars)",
+                    ambre_core::char_len(reason).get()
+                )
+            }
             Self::TooLarge(size) => f.debug_tuple("TooLarge").field(size).finish(),
         }
     }
@@ -2982,7 +2985,7 @@ mod tests {
     #[test]
     fn a_parse_failure_prints_the_length_of_its_reason_alone() {
         let failed = InteropError::ParseFailed("near 'Q3 layoffs'".to_owned());
-        assert_eq!(format!("{failed:?}"), "ParseFailed(CharCount(17))");
+        assert_eq!(format!("{failed:?}"), "ParseFailed(17 chars)");
         let large = InteropError::TooLarge(ambre_core::ByteSize(9));
         assert_eq!(
             format!("{large:?}"),
