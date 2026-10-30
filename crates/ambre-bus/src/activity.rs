@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::UserId;
 
-pub use sealed::{Activity, MentionScope};
+pub use sealed::{Activity, ActivityAnchor, ActivityKind, MentionScope};
 
 /// What one update holds, readable with no Loro document.
 ///
@@ -30,23 +30,6 @@ pub struct ActivitySummary {
     pub anchor: Option<ActivityAnchor>,
 }
 
-/// The kinds of change a summary distinguishes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ActivityKind {
-    /// New content, a message for example.
-    Content,
-    /// A reaction on existing content.
-    Reaction,
-    /// An edit of existing content.
-    Edit,
-    /// Anything else, which moves no counter.
-    Other,
-}
-
-/// An application key, opaque to the foundation and typed by the application.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ActivityAnchor(pub Vec<u8>);
-
 impl ActivitySummary {
     /// The summary as the seal carries it. Past [`sealed::MAX_MENTIONS`] it
     /// names the channel instead, and an anchor past its bound is dropped,
@@ -59,18 +42,10 @@ impl ActivitySummary {
             (self.mentions.clone(), self.mentions_all)
         };
         sealed::ActivitySummary {
-            kind: match self.kind {
-                ActivityKind::Content => sealed::ActivityKind::Content,
-                ActivityKind::Reaction => sealed::ActivityKind::Reaction,
-                ActivityKind::Edit => sealed::ActivityKind::Edit,
-                ActivityKind::Other => sealed::ActivityKind::Other,
-            },
+            kind: self.kind,
             mentions,
             mentions_all,
-            anchor: self
-                .anchor
-                .as_ref()
-                .and_then(|anchor| sealed::ActivityAnchor::new(anchor.0.clone())),
+            anchor: self.anchor.clone().and_then(ActivityAnchor::within_bound),
         }
     }
 }
@@ -78,17 +53,10 @@ impl ActivitySummary {
 impl From<sealed::ActivitySummary> for ActivitySummary {
     fn from(summary: sealed::ActivitySummary) -> Self {
         Self {
-            kind: match summary.kind {
-                sealed::ActivityKind::Content => ActivityKind::Content,
-                sealed::ActivityKind::Reaction => ActivityKind::Reaction,
-                sealed::ActivityKind::Edit => ActivityKind::Edit,
-                sealed::ActivityKind::Other => ActivityKind::Other,
-            },
+            kind: summary.kind,
             mentions: summary.mentions,
             mentions_all: summary.mentions_all,
-            anchor: summary
-                .anchor
-                .map(|anchor| ActivityAnchor(anchor.as_bytes().to_vec())),
+            anchor: summary.anchor,
         }
     }
 }
@@ -105,12 +73,12 @@ mod tests {
             kind: ActivityKind::Edit,
             mentions: vec![UserId::from_bytes([1; 16])],
             mentions_all: crate::MentionScope::Named,
-            anchor: Some(ActivityAnchor(vec![9; 8])),
+            anchor: ActivityAnchor::new(vec![9; 8]),
         };
         assert_eq!(ActivitySummary::from(within.to_sealed()), within);
         let past = ActivitySummary {
             mentions: vec![UserId::from_bytes([1; 16]); sealed::MAX_MENTIONS + 1],
-            anchor: Some(ActivityAnchor(vec![9; sealed::MAX_ANCHOR_LEN + 1])),
+            anchor: Some(long_anchor()),
             ..within
         };
         let sealed = past.to_sealed();
@@ -118,5 +86,23 @@ mod tests {
         assert_eq!(sealed.mentions_all, MentionScope::All);
         assert_eq!(sealed.anchor, None);
         assert!(sealed.encode().is_ok());
+    }
+
+    /// An anchor past the seal's bound, as the postcard hop carries it.
+    fn long_anchor() -> ActivityAnchor {
+        let bytes = postcard::to_allocvec(&vec![9_u8; sealed::MAX_ANCHOR_LEN + 1]).unwrap();
+        postcard::from_bytes(&bytes).unwrap()
+    }
+
+    /// The postcard hop writes an anchor as its bare bytes, and reads one past
+    /// the seal's bound with no refusal.
+    #[test]
+    fn an_anchor_crosses_the_hop_as_its_bare_bytes_whatever_its_length() {
+        let anchor = ActivityAnchor::new(vec![1, 2]).unwrap();
+        assert_eq!(
+            postcard::to_allocvec(&anchor).unwrap(),
+            postcard::to_allocvec(&vec![1_u8, 2]).unwrap()
+        );
+        assert_eq!(long_anchor().as_bytes().len(), sealed::MAX_ANCHOR_LEN + 1);
     }
 }

@@ -37,8 +37,9 @@ crate::define_flag! {
     }
 }
 
-/// What kind of activity an update is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What kind of activity an update is. Its serde form crosses the postcard
+/// hop between workers; the seal carries one byte of its own instead.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActivityKind {
     /// New content, such as a message.
     Content,
@@ -74,7 +75,13 @@ impl ActivityKind {
 }
 
 /// An application key a summary points at, opaque to the foundation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// [`ActivityAnchor::new`] holds the bound of [`MAX_ANCHOR_LEN`] bytes. The
+/// serde form reads any length, because the postcard hop between workers
+/// refuses nothing it carried before. The seal drops an anchor past the
+/// bound, so a summary never costs its update.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ActivityAnchor(Vec<u8>);
 
 impl ActivityAnchor {
@@ -82,6 +89,13 @@ impl ActivityAnchor {
     #[must_use]
     pub fn new(bytes: Vec<u8>) -> Option<Self> {
         (bytes.len() <= MAX_ANCHOR_LEN).then_some(Self(bytes))
+    }
+
+    /// The anchor itself when it holds the seal's bound, `None` past it. A
+    /// decoded anchor skipped [`ActivityAnchor::new`], so the seal asks again.
+    #[must_use]
+    pub fn within_bound(self) -> Option<Self> {
+        (self.0.len() <= MAX_ANCHOR_LEN).then_some(self)
     }
 
     /// The application key.
@@ -131,8 +145,9 @@ impl ActivitySummary {
     ///
     /// # Errors
     ///
-    /// [`SummaryError::TooManyMentions`] past [`MAX_MENTIONS`]. The anchor is
-    /// bounded by its own type.
+    /// [`SummaryError::TooManyMentions`] past [`MAX_MENTIONS`], and
+    /// [`SummaryError::LongAnchor`] past [`MAX_ANCHOR_LEN`]: an anchor that
+    /// serde decoded skipped its bound.
     pub fn encode(&self) -> Result<Vec<u8>, SummaryError> {
         let count = u8::try_from(self.mentions.len())
             .ok()
@@ -142,7 +157,10 @@ impl ActivitySummary {
             .anchor
             .as_ref()
             .map_or(&[][..], ActivityAnchor::as_bytes);
-        let anchor_len = u8::try_from(anchor.len()).map_err(|_| SummaryError::LongAnchor)?;
+        let anchor_len = u8::try_from(anchor.len())
+            .ok()
+            .filter(|len| usize::from(*len) <= MAX_ANCHOR_LEN)
+            .ok_or(SummaryError::LongAnchor)?;
         let mut out = Vec::with_capacity(4 + 16 * self.mentions.len() + anchor.len());
         out.push(self.kind.byte());
         out.push(if self.mentions_all == MentionScope::All {

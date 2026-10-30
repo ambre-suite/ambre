@@ -108,7 +108,6 @@ ambre-app | src/signin.rs | crate::signin | is_return_path() | ret | bool	generi
 ambre-app | src/signin.rs | crate::signin | is_return_path(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	generic	path parser
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
-ambre-bus | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	serde mirror of ambre-core ActivityAnchor; to_sealed applies the bound
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of Topic validates
