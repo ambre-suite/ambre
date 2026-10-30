@@ -55,18 +55,13 @@ pub struct Highlight {
     pub span: RunSpan,
 }
 
-/// Where an offset the Logic thread answered falls on the laid run of its
+/// The span `start..end` the Logic thread answered, on the laid run of its
 /// block. It answers the comments, suggestions, links, find matches and
 /// peers' positions. Those lists and the layout in force count the text it
-/// holds, so the number carries over. The local draft is not in either.
-pub(crate) const fn answered(offset: DocOffset) -> RunOffset {
-    RunOffset::from_doc(offset)
-}
-
-/// The span `start..end` the Logic thread answered, on the laid run of its
-/// block (see [`answered`]).
+/// holds, so [`RunOffset::from_doc`] carries each end over. The local draft
+/// is not in either.
 pub(crate) const fn answered_span(start: DocOffset, end: DocOffset) -> RunSpan {
-    RunSpan::new(answered(start), answered(end))
+    RunSpan::new(RunOffset::from_doc(start), RunOffset::from_doc(end))
 }
 
 impl ProseUiState {
