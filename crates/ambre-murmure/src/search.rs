@@ -24,9 +24,11 @@ impl std::fmt::Debug for Query {
 }
 
 impl Query {
-    /// The words of `text`, or `None` when it holds no word.
-    pub fn parse(text: &str) -> Option<Self> {
-        let words = folded_words(text);
+    /// The words of `query`, or `None` when it holds no word.
+    pub fn parse(query: &ambre_core::SearchQuery) -> Option<Self> {
+        // The text leaves the newtype at the foreign word cutter, not at a
+        // workspace helper, so the unwrap report has nothing to refuse.
+        let words: Vec<String> = query.as_str().unicode_words().map(fold).collect();
         (!words.is_empty()).then_some(Self { words })
     }
 
@@ -200,10 +202,15 @@ fn is_mark(c: char) -> bool {
 mod tests {
     use super::*;
 
+    /// The query `text` parses to, typed as a member types a search.
+    fn parse(text: &str) -> Option<Query> {
+        Query::parse(&ambre_core::SearchQuery::new(text.to_owned()).expect("not blank"))
+    }
+
     /// The debug form of a query counts its words, never a char of them.
     #[test]
     fn a_query_debugs_its_word_count_alone() {
-        let query = Query::parse("secret budget").expect("two words");
+        let query = parse("secret budget").expect("two words");
         let shown = format!("{query:?}");
         assert!(!shown.contains("secret"), "{shown}");
         assert!(shown.contains("words: 2"), "{shown}");
@@ -213,7 +220,7 @@ mod tests {
     /// decomposed, so either spelling finds the other.
     #[test]
     fn a_query_matches_its_words_with_diacritics_folded() {
-        let query = Query::parse("Éte bud").expect("two words");
+        let query = parse("Éte bud").expect("two words");
         assert!(query.matches("the budget for the été"));
         assert!(query.matches("ETE: BUDGET"));
         assert!(
@@ -223,7 +230,7 @@ mod tests {
         assert!(!query.matches("the budget alone"), "every word is needed");
         assert!(!query.matches("debud ete"), "a word matches from its start");
         assert_eq!(fold("Œuvre Straße Łódź"), "oeuvre strasse lodz");
-        assert_eq!(Query::parse(" ,;! "), None, "no word, no query");
+        assert_eq!(parse(" ,;! "), None, "no word, no query");
     }
 
     /// Past Latin-1, each script folds its precomposed letters to their base
@@ -244,7 +251,7 @@ mod tests {
             assert_eq!(fold(typed), folded, "{typed}");
         }
         assert_eq!(fold("йод"), "йод", "й is a letter, not an и");
-        let query = Query::parse("Ελλαδα").expect("a word");
+        let query = parse("Ελλαδα").expect("a word");
         assert!(query.matches("η Ελλάδα"));
     }
 }

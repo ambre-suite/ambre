@@ -13,13 +13,15 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use ambre_core::{ByteCount, ByteDelta, ByteOffset, ByteSpan, DocPoint, DocPx, FootnoteId};
+use ambre_core::{
+    ByteCount, ByteDelta, ByteOffset, ByteSpan, CharCount, DocPoint, DocPx, FootnoteId,
+};
 use ambre_draw::{BoundingBox, Layout, ParleyBrush};
 use loro::TreeID;
 use parley::{Affinity as ParleyAffinity, Cursor, Selection};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::layout::measure::{EffectiveStyle, MarkedSpan};
+use crate::layout::measure::{BlockLine, EffectiveStyle, MarkedSpan};
 use crate::layout::pass::PageLayout;
 use crate::layout::place::BlockLayout;
 
@@ -62,6 +64,13 @@ impl RunCount {
     #[must_use]
     pub const fn as_doc(self) -> DocCount {
         DocCount::new(self.get())
+    }
+
+    /// The same number of code points as a run counts them, for a text the
+    /// run holds whole.
+    #[must_use]
+    pub const fn from_chars(count: CharCount) -> Self {
+        Self::new(count.get())
     }
 }
 
@@ -166,6 +175,15 @@ ambre_core::define_index! {
     pub struct RunLineSpan;
     /// A list indexed by line of one run.
     pub struct RunLineVec;
+}
+
+impl RunLine {
+    /// The line of the block whose whole text this run shapes. A text block
+    /// is one run, so the paginator cuts it at the run's own lines.
+    #[must_use]
+    pub(crate) fn in_block(self) -> BlockLine {
+        BlockLine::from_usize(self.to_usize())
+    }
 }
 
 ambre_core::define_index! {
