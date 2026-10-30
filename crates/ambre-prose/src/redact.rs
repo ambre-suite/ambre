@@ -28,7 +28,13 @@ pub(crate) mod tests {
     /// its length instead.
     pub(crate) fn hides(value: &impl std::fmt::Debug, secret: &str) -> bool {
         let printed = format!("{value:?}");
-        !printed.contains(secret) && printed.contains(&format!("{} chars", secret.chars().count()))
+        // A delimiter, or the start of the form, before the count keeps
+        // `6 chars` from matching `16 chars`.
+        let length = format!("{} chars", secret.chars().count());
+        !printed.contains(secret)
+            && (printed.starts_with(&length)
+                || printed.contains(&format!("({length}"))
+                || printed.contains(&format!(" {length}")))
     }
 
     #[test]

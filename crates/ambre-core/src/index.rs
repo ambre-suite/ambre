@@ -505,6 +505,11 @@ macro_rules! define_index {
                 self.0.iter()
             }
 
+            /// The item at the first position, `None` when the list is empty.
+            pub fn first(&self) -> Option<&T> {
+                self.0.first()
+            }
+
             /// The items in order, each one writable in place. The positions
             /// stay as they are: nothing is added or removed.
             pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {

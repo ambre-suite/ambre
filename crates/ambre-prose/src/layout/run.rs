@@ -1181,25 +1181,20 @@ impl ShapedLayout {
         let cells = tables
             .iter()
             .flat_map(|(table, shape)| {
-                shape
-                    .cells
-                    .iter()
-                    .enumerate()
-                    .flat_map(move |(cell, held)| {
-                        held.blocks
-                            .iter()
-                            .enumerate()
-                            .map(move |(block, (id, _, _))| {
-                                (
-                                    *id,
-                                    CellAt {
-                                        table: *table,
-                                        cell: ShapeCell::from_usize(cell),
-                                        block: CellBlock::from_usize(block),
-                                    },
-                                )
-                            })
-                    })
+                shape.cells.iter_enumerated().flat_map(move |(cell, held)| {
+                    held.blocks
+                        .iter_enumerated()
+                        .map(move |(block, (id, _, _))| {
+                            (
+                                *id,
+                                CellAt {
+                                    table: *table,
+                                    cell,
+                                    block,
+                                },
+                            )
+                        })
+                })
             })
             .collect();
         Self {
