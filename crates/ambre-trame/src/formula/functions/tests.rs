@@ -496,6 +496,19 @@ fn an_annuity_type_other_than_zero_reads_as_the_start() {
     assert_eq!(at(2.0), at(1.0));
     assert_eq!(at(-1.0), at(1.0));
     assert_ne!(at(1.0), at(0.0));
+    // RATE recovers the rate of a start-of-period annuity, whatever type
+    // other than zero names it.
+    let rate_at = |kind: f64| {
+        rate(&[
+            num(10.0),
+            num(-123.337_69),
+            num(1000.0),
+            num(0.0),
+            num(kind),
+        ])
+    };
+    approx(rate_at(1.0), 0.05);
+    approx(rate_at(2.0), 0.05);
 }
 
 #[test]

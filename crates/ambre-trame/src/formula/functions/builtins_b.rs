@@ -3,7 +3,7 @@
 // resolve through the module glob mesh.
 
 use super::*;
-use crate::formula::types::ArgIndex;
+use crate::formula::types::{ArgIndex, ValueIndex};
 
 /// PROPER(text) -- capitalize the first letter of each word, lowercase the rest.
 pub(crate) fn proper(args: &[CellValue]) -> CellValue {
@@ -599,27 +599,20 @@ pub(crate) fn criteria_pairs(args: &[CellValue]) -> Option<Vec<(Vec<CellValue>, 
     )
 }
 
-/// The place of a value among the values of a range argument, from zero. Its
-/// own type, so the place of an argument in the call cannot take it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ValueIndex(usize);
-
-impl ValueIndex {
-    /// The value at this place of `values`, `None` past their end.
-    fn of(self, values: &[CellValue]) -> Option<&CellValue> {
-        values.get(self.0)
-    }
+/// The value at place `at` of `values`, `None` past their end.
+fn value_at(values: &[CellValue], at: ValueIndex) -> Option<&CellValue> {
+    at.to_index().and_then(|i| values.get(i))
 }
 
 /// Positions where every criterion in `pairs` matches (ranges paired by index).
 pub(crate) fn matching_indices(pairs: &[(Vec<CellValue>, Criterion)]) -> Vec<ValueIndex> {
     let len = pairs.iter().map(|(v, _)| v.len()).min().unwrap_or(0);
     (0..len)
-        .map(ValueIndex)
+        .filter_map(ValueIndex::from_index)
         .filter(|&i| {
             pairs
                 .iter()
-                .all(|(vals, crit)| i.of(vals).is_some_and(|v| crit.matches(v)))
+                .all(|(vals, crit)| value_at(vals, i).is_some_and(|v| crit.matches(v)))
         })
         .collect()
 }
@@ -627,7 +620,7 @@ pub(crate) fn matching_indices(pairs: &[(Vec<CellValue>, Criterion)]) -> Vec<Val
 /// The numbers of `src` at the places `idx`.
 fn numbers_at(src: &[CellValue], idx: &[ValueIndex]) -> Vec<f64> {
     idx.iter()
-        .filter_map(|i| i.of(src).and_then(|v| v.as_number().ok()))
+        .filter_map(|&i| value_at(src, i).and_then(|v| v.as_number().ok()))
         .collect()
 }
 
@@ -651,7 +644,7 @@ pub(crate) fn averageif(args: &[CellValue]) -> CellValue {
         .iter()
         .enumerate()
         .filter(|(_, v)| crit.matches(v))
-        .map(|(i, _)| ValueIndex(i))
+        .filter_map(|(i, _)| ValueIndex::from_index(i))
         .collect();
     average_at(&avg_src, &idx)
 }

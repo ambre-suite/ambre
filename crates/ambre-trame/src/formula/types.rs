@@ -686,6 +686,20 @@ ambre_core::define_index! {
     pub struct ArgVec;
 }
 
+ambre_core::define_index! {
+    /// The place of a value among the values of a range argument, from zero.
+    /// Its own type, so the place of an argument in the call cannot take it.
+    pub struct ValueIndex(u32);
+    /// How many values a range argument holds.
+    pub struct ValueCount;
+    /// The signed gap between two value places.
+    pub struct ValueDelta(i64);
+    /// A run of value places.
+    pub struct ValueSpan;
+    /// A list indexed by value place.
+    pub struct ValueVec;
+}
+
 // -----------------------------------------------------------------------------
 // CellBytecode -- compiled formula for one cell
 // -----------------------------------------------------------------------------

@@ -3073,7 +3073,6 @@ ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::b
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_numeric_inner(out) | param | &mut Vec<f64>	math	the accumulator of the flattened formula numbers
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | flatten_total() | ret | Result<Vec<f64>,CellValue>	math	the flattened formula numbers, or the first error value
 ambre-trame | src/formula/functions/builtins_a.rs | crate::formula::functions::builtins_a | is_truthy() | ret | bool	generic	predicate or did-it-change return
-ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | ValueIndex.0 | field | usize	newtype-inner	the place of a value among the values of a range argument, from zero
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | group_thousands(s) | param | &str	free-text	free text: user content, label, message or display string
 ambre-trame | src/formula/functions/builtins_b.rs | crate::formula::functions::builtins_b | keys_ascending() | ret | bool	generic	predicate or did-it-change return
