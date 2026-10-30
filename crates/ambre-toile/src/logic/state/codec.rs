@@ -5,12 +5,14 @@
 //! is stateless and shared by both the mutation and derivation impls via `use
 //! super::codec::*`.
 
+use ambre_core::BoardLength;
 use ambre_core::crdt::FieldKey;
 use kurbo::{Affine, BezPath, Point, Rect, Vec2};
 use loro::{Container, LoroText, LoroValue, ValueOrContainer};
 
 use crate::logic::command::{ClipBytes, ClipValue, InitContent, MediaRef};
 use crate::logic::connector::Connector;
+use crate::logic::interop::Limits;
 use crate::logic::model::{
     Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind,
     StrokePoint, UnitFraction,
@@ -201,7 +203,7 @@ pub(super) fn path_of(em: &Fields<ElementKey>) -> Option<BezPath> {
 /// coordinate or a size the map lacks reads as zero, so an element written
 /// in part still draws at the origin.
 pub(super) fn stored_rect(em: &Fields<ElementKey>) -> Rect {
-    let read = |key| f64_of(em, key).unwrap_or(0.0);
+    let read = |key| on_board(BoardLength::new(f64_of(em, key).unwrap_or(0.0))).get();
     let (x, y) = (read(ElementKey::X), read(ElementKey::Y));
     Rect::new(x, y, x + read(ElementKey::W), y + read(ElementKey::H))
 }
@@ -209,7 +211,27 @@ pub(super) fn stored_rect(em: &Fields<ElementKey>) -> Rect {
 /// The rotation an element map stores, in radians. A map that holds none is
 /// not rotated.
 pub(super) fn rotation_of(em: &Fields<ElementKey>) -> ambre_core::Radians {
-    ambre_core::Radians::new(f64_of(em, ElementKey::Rot).unwrap_or(0.0))
+    turn(ambre_core::Radians::new(
+        f64_of(em, ElementKey::Rot).unwrap_or(0.0),
+    ))
+}
+
+/// One coordinate or size of a stored box, as the geometry reads it. A peer
+/// can store any number there. A value that is not finite reads as zero, and
+/// a finite one is held inside the import world bound (`TOILE-274`). The
+/// spatial index and the group bounds then never see a NaN.
+fn on_board(v: BoardLength) -> BoardLength {
+    Limits::default().clamp_coord(v)
+}
+
+/// A stored rotation, as the geometry reads it: one that is not finite reads
+/// as no rotation (`TOILE-274`).
+fn turn(rot: ambre_core::Radians) -> ambre_core::Radians {
+    if rot.is_finite() {
+        rot
+    } else {
+        ambre_core::Radians::ZERO
+    }
 }
 
 /// Whether an element map's type tag is the tag of `kind`. Every shape kind
@@ -455,10 +477,11 @@ pub(super) fn map_str<K: FieldKey>(m: FieldValues<'_, K>, k: K) -> Option<String
 
 /// [`stored_rect`] and [`rotation_of`], for an element map read whole.
 pub(super) fn map_placement(fields: FieldValues<'_, ElementKey>) -> (Rect, ambre_core::Radians) {
-    let read = |key| map_f64(fields, key).unwrap_or(0.0);
+    let read = |key| on_board(BoardLength::new(map_f64(fields, key).unwrap_or(0.0))).get();
     let (x, y) = (read(ElementKey::X), read(ElementKey::Y));
     let rect = Rect::new(x, y, x + read(ElementKey::W), y + read(ElementKey::H));
-    (rect, ambre_core::Radians::new(read(ElementKey::Rot)))
+    let rot = ambre_core::Radians::new(map_f64(fields, ElementKey::Rot).unwrap_or(0.0));
+    (rect, turn(rot))
 }
 
 #[cfg(test)]

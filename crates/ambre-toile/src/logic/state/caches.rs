@@ -139,8 +139,12 @@ impl ToileState {
             }
             stack.extend(self.parents_of(&id).iter().cloned());
         }
+        // A chain of n groups settles in n + 1 passes. The cap ends the loop
+        // when a box never compares equal to itself, as a NaN box does
+        // (`TOILE-275`).
         let mut changed = true;
-        while changed {
+        let mut passes = 0..=groups.len();
+        while changed && passes.next().is_some() {
             changed = false;
             for g in &groups {
                 let kids = self.members.get(g).map_or(&[][..], Vec::as_slice);
@@ -398,4 +402,126 @@ fn keys_under(change: &ContainerDiff<'_>, root: Root) -> Option<Option<Vec<Strin
         Some((_, Index::Key(key))) => Some(vec![key.to_string()]),
         _ => None,
     })
+}
+
+/// Geometry a hostile or broken peer can store, which no command of ours
+/// writes.
+#[cfg(test)]
+mod peer_geometry_tests {
+    use kurbo::{Point, Rect, Size};
+    use loro::ExportMode;
+
+    use crate::logic::command::{InitContent, ToileCommand, ToileEvent};
+    use crate::logic::model::{ElementId, ElementKind, ShapeKind};
+
+    use super::super::ToileState;
+    use super::super::names::ElementKey;
+
+    fn create(st: &mut ToileState) -> ElementId {
+        let out = st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Shape(ShapeKind::Rect),
+            at: Point::ZERO,
+            size: Size::new(10.0, 10.0),
+            content: InitContent::None,
+            fill: None,
+            correlate: None,
+        });
+        out.display
+            .iter()
+            .find_map(|e| match e {
+                ToileEvent::ElementCreated { id, .. } => Some(id.clone()),
+                _ => None,
+            })
+            .expect("a create names its element")
+    }
+
+    /// Write `value` under `key` of `id`'s map on `author`, behind the engine,
+    /// and return the delta a peer receives.
+    fn forge(
+        author: &mut ToileState,
+        id: &ElementId,
+        key: ElementKey,
+        value: f64,
+    ) -> ambre_core::DeltaBytes {
+        let before = author.doc.oplog_vv();
+        let em = author.element_map(id).expect("the board holds it");
+        em.insert(key, value).expect("a number field");
+        author.doc.commit();
+        ambre_core::DeltaBytes::new(
+            author
+                .doc
+                .export(ExportMode::updates(&before))
+                .expect("a delta"),
+        )
+    }
+
+    fn board_of_eight() -> (ToileState, Vec<ElementId>) {
+        let mut st = ToileState::new();
+        let ids = (0..8).map(|_| create(&mut st)).collect();
+        (st, ids)
+    }
+
+    /// `TOILE-274`: a peer stores NaN, an infinity and a huge number in the
+    /// box of one element of eight. The delta, a reopen and an undo panic
+    /// nothing, and every box reads finite inside the world bound.
+    #[test]
+    fn a_peer_nan_coordinate_panics_no_index() {
+        let (mut author, ids) = board_of_eight();
+        let mut victim = ToileState::new();
+        victim.apply_remote_snapshot(&author.export_snapshot());
+        let hit = ids.get(3).expect("eight elements");
+        for (key, value) in [
+            (ElementKey::X, f64::NAN),
+            (ElementKey::Y, f64::INFINITY),
+            (ElementKey::W, f64::MAX),
+            (ElementKey::Rot, f64::NAN),
+        ] {
+            victim.apply_remote(&forge(&mut author, hit, key, value));
+        }
+        let mut reopened = ToileState::new();
+        reopened
+            .import_snapshot(&author.export_snapshot())
+            .expect("a bad value never refuses the board");
+        for st in [&victim, &reopened] {
+            let rect = st
+                .bounds
+                .get(hit)
+                .copied()
+                .expect("the element keeps a box");
+            assert!(rect.is_finite(), "{rect:?}");
+            assert_eq!((rect.x0, rect.y0), (0.0, 0.0), "NaN and inf read as zero");
+            assert_eq!(rect.x1, 1_000_000.0, "a huge width is held at the bound");
+            assert_eq!(st.index.len(), ambre_core::ElementCount::new(8));
+        }
+        victim.handle_command(ToileCommand::MoveElements {
+            ids: vec![hit.clone()],
+            delta: kurbo::Vec2::new(5.0, 5.0),
+        });
+        assert!(victim.bounds.get(hit).is_some_and(|r| r.is_finite()));
+    }
+
+    /// `TOILE-275`: a group whose member a peer moved to NaN settles, on the
+    /// delta and on a rebuild. A NaN box forged straight into the caches, which
+    /// never compares equal to itself, still ends the fixpoint.
+    #[test]
+    fn a_group_over_a_nan_member_settles() {
+        let (mut author, ids) = board_of_eight();
+        author.handle_command(ToileCommand::GroupElements {
+            ids: ids.iter().take(2).cloned().collect(),
+        });
+        let mut victim = ToileState::new();
+        victim.apply_remote_snapshot(&author.export_snapshot());
+        let first = ids.first().expect("eight elements");
+        victim.apply_remote(&forge(&mut author, first, ElementKey::X, f64::NAN));
+        victim.rebuild_caches();
+        assert!(victim.bounds.values().all(Rect::is_finite));
+
+        let nan = Rect::new(f64::NAN, 0.0, 1.0, 1.0);
+        for id in ids.iter().take(2) {
+            victim.bounds.insert(id.clone(), nan);
+        }
+        victim.recompute_groups();
+        let touched = ids.iter().take(2).cloned().collect();
+        victim.refresh_groups(&touched);
+    }
 }

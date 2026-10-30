@@ -24,6 +24,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `TOILE-186` | `INV` | Every cache the board derives -- the paint order, the bounds and the spatial index -- MUST equal what a rebuild from the document alone produces. | this spec section 3 | proptest -- `ambre_toile::logic::convergence_tests::caches_match_a_full_rebuild` draws a random operation sequence and compares the three caches against a rebuild | none | verified |
 | `TOILE-033` | `INV` | A locked element MUST NOT be changed by any command but the lock itself. | this spec section 3 | `ambre_toile::logic::convergence_tests::locked_element_ignores_move` -- the move alone (`TOILE-012`); `ambre_toile::logic::structure_tests::a_locked_element_refuses_every_command_but_the_lock` -- the resize, the rotate, the restyle, the body overwrite, the delete and the reorder, each writing nothing, a group holding the locked element kept whole by a delete, then the unlock that lets the delete through; `ambre_toile::logic::convergence_tests::two_peers_converge` -- the lock drawn among the operations two peers interleave | none | verified |
+| `TOILE-274` | `INV` | A box value or a rotation a peer stores that is not finite MUST read as zero, and a finite one MUST read held inside the world bound. | this spec section 3; `TOILE-186` | `ambre_toile::logic::state::caches::peer_geometry_tests::a_peer_nan_coordinate_panics_no_index` -- a NaN, an infinity and a huge size on one element of eight, through a delta and a reopen: no panic, each box finite, eight leaves indexed, and a move after it | none | verified |
 | `TOILE-187` | `CONC` | Two peers that applied different operations to one board MUST hold the same elements, the same box per element and the same paint order. | this spec section 2 | proptest -- `ambre_toile::logic::convergence_tests::two_peers_converge` draws two operation sequences and compares the elements, the boxes and the paint order | none | verified |
 
 ### 1.2 Place an element on the board
@@ -93,7 +94,7 @@ status values are normative in `ambre-spec-template.md`.
   multiplier (`features/ambre-spec-toile-tools.md`).
 * **Boundary.** none of its own: an element lives in the Logic thread's document and leaves as bytes
   the Sync worker seals (`ZK-001`). No lifecycle command opens a socket or holds a key.
-* **Verification.** 34 `verified`. Align and distribute holds through nine tests over the pure
+* **Verification.** 35 `verified`. Align and distribute holds through nine tests over the pure
   geometry and five over the handler. A place in the 2-peer property strategy lets `TOILE-037` claim
   convergence rather than assert it. The lock is driven through every command it binds. A birth is
   held on its box, its seed and its style.
@@ -170,6 +171,12 @@ kind is that document's field table.
 **The rotation-expanded box.** The bounds cache holds the axis-aligned box of the *rotated* element,
 which is larger than its own rectangle. The index therefore over-approximates on purpose: the exact
 geometry is tested on the UI thread (`features/ambre-spec-toile-selection.md`).
+
+**A stored box is read, never trusted.** A peer can store any number in a coordinate, a size or a
+rotation. The R-tree panics on a NaN corner, and a NaN box never settles a group fixpoint. So the
+field readers read a value that is not finite as zero, and hold a finite one inside the import world
+bound (`TOILE-274`). The board still loads: a bad value never refuses the document. The index also
+reads a box that is not finite as the empty box at the origin, for any other caller.
 
 **Code:**
 
