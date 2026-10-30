@@ -687,6 +687,24 @@ fn mid_reads_a_blank_count_as_zero() {
     ));
 }
 
+/// MID given a count that is no number answers `#TYPE!`: a text that spells
+/// none, or a range. A range used to give its first number (`TRAME-258`).
+#[test]
+fn mid_refuses_a_count_that_is_no_number() {
+    let block = || range(2, 1, vec![num(2.0), num(3.0)]);
+    for args in [
+        [txt("abc"), txt("x"), num(1.0)],
+        [txt("abc"), num(1.0), txt("x")],
+        [txt("abc"), block(), num(1.0)],
+        [txt("abc"), num(1.0), block()],
+    ] {
+        assert!(matches!(
+            mid(&args),
+            CellValue::Error(FormulaError::TypeError)
+        ));
+    }
+}
+
 /// MID answers an error given as a count unchanged, as Excel does
 /// (`TRAME-251`). It used to answer `#TYPE!` in its place.
 #[test]

@@ -58,6 +58,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-244` | `FAIL` | A call or an operator whose result is not a finite number MUST answer `#NUM!`, and so MUST an average whose total is past the largest number. | this spec section 2; section 3 | `ambre_trame::formula::functions::tests::a_result_that_is_not_finite_answers_num` -- a total past the largest number either way, an average of such a total, a sum of squares, a product, a deviation, an exponential, and a maximum given an infinity; `ambre_trame::formula::vm::tests::an_operator_whose_result_is_not_finite_answers_num` -- a quotient and a product past the largest number, an infinity negated or divided, and the `IFERROR` and `ISERROR` that see the error | none | verified |
 | `TRAME-249` | `FAIL` | `MID` given a start below 1, a negative length or a NaN MUST answer `#NUM!`, as `LEFT`, `RIGHT` and `REPT` answer a count out of their domain. | this spec section 3; `ambre-spec-trame-formula-engine.md section 4` | `ambre_trame::formula::functions::tests::mid_refuses_a_start_below_one_and_a_negative_length` -- a start of 0 and of -1, a length of -1, and a NaN in either | none | verified |
 | `TRAME-254` | `FAIL` | `LEFT` and `RIGHT` given an error as a count MUST answer that error unchanged. | this spec section 3; `ambre-spec-trame-formula-engine.md section 4` | `ambre_trame::formula::functions::tests::left_and_right_read_their_count_as_mid_does` -- `#DIV/0!` as the count | none | verified |
+| `TRAME-258` | `FAIL` | `MID` given a count that is no number, a text that spells none or a range, MUST answer `#TYPE!`. | this spec section 3; `ambre-spec-trame-formula-engine.md section 4` | `ambre_trame::formula::functions::tests::mid_refuses_a_count_that_is_no_number` -- a non-numeric text and a two-cell range, as the start and as the length | none | verified |
 | `TRAME-251` | `FAIL` | `MID` given an error as a count MUST answer that error unchanged. | this spec section 3; `ambre-spec-trame-formula-engine.md section 4` | `ambre_trame::formula::functions::tests::mid_passes_an_error_count_through` -- `#DIV/0!` as the start and as the length | none | verified |
 
 ### 1.3 Spill a result across the cells beside it
@@ -73,7 +74,7 @@ status values are normative in `ambre-spec-template.md`.
   `features/ambre-spec-trame-formula-engine.md` owns.
 * **Boundary.** none: a function reads cells and returns a value in the Logic thread. It opens no
   path, and `ZK-001` seals what the document sends.
-* **Verification.** 29 `verified`, 7 `unimplemented`. What holds is the arithmetic core and the
+* **Verification.** 30 `verified`, 7 `unimplemented`. What holds is the arithmetic core and the
   edges of the library. A total is rounded once from an exact sum, so its order cannot change it
   (`TRAME-199`), and one past the largest number reads `#NUM!` (`TRAME-244`). A lookup refuses keys
   out of order, and no function can read the clock for itself. The seven unimplemented rows are
