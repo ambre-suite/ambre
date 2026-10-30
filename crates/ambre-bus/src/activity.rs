@@ -99,10 +99,8 @@ mod tests {
     #[test]
     fn an_anchor_crosses_the_hop_as_its_bare_bytes_whatever_its_length() {
         let anchor = ActivityAnchor::new(vec![1, 2]).unwrap();
-        assert_eq!(
-            postcard::to_allocvec(&anchor).unwrap(),
-            postcard::to_allocvec(&vec![1_u8, 2]).unwrap()
-        );
+        // A length byte, then the bytes: the layout the bus copy wrote.
+        assert_eq!(postcard::to_allocvec(&anchor).unwrap(), [2, 1, 2]);
         assert_eq!(long_anchor().as_bytes().len(), sealed::MAX_ANCHOR_LEN + 1);
     }
 }

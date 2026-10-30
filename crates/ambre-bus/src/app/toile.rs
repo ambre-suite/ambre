@@ -2646,7 +2646,9 @@ pub struct PresenceUpdate {
 // Errors
 // =============================================================================
 
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+/// Why the board refused a command. The reason of a failed write may quote
+/// the board, so `Debug` prints its length alone.
+#[derive(Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ToileError {
     #[error("element {} not found", .0.as_str())]
     NoSuchElement(ElementId),
@@ -2675,6 +2677,30 @@ pub enum ToileError {
     /// mints under a new PeerID.
     #[error("this session has no fresh id left; reopen the board to create more")]
     IdsExhausted,
+}
+
+impl fmt::Debug for ToileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NoSuchElement(id) => f.debug_tuple("NoSuchElement").field(id).finish(),
+            Self::NoSuchConnector(id) => f.debug_tuple("NoSuchConnector").field(id).finish(),
+            Self::NotCreatable { kind } => {
+                f.debug_struct("NotCreatable").field("kind", kind).finish()
+            }
+            Self::ContentKindMismatch => f.write_str("ContentKindMismatch"),
+            Self::UnusableSize => f.write_str("UnusableSize"),
+            Self::GroupNeedsTwo => f.write_str("GroupNeedsTwo"),
+            Self::NotAGroup(id) => f.debug_tuple("NotAGroup").field(id).finish(),
+            Self::RemoteImportFailed => f.write_str("RemoteImportFailed"),
+            Self::BooleanNeedsTwo => f.write_str("BooleanNeedsTwo"),
+            Self::BooleanEmpty => f.write_str("BooleanEmpty"),
+            Self::WriteFailed(reason) => f
+                .debug_tuple("WriteFailed")
+                .field(&ambre_core::char_len(reason))
+                .finish(),
+            Self::IdsExhausted => f.write_str("IdsExhausted"),
+        }
+    }
 }
 
 // =============================================================================
@@ -2946,7 +2972,7 @@ impl fmt::Debug for ToileEvent {
             Self::ImportFailed(reason) => tuple!("ImportFailed", &char_len(reason)),
             Self::DocumentRefused(reason) => tuple!("DocumentRefused", reason),
             Self::UndecodableRecords => f.write_str("UndecodableRecords"),
-            Self::ExportFailed(reason) => tuple!("ExportFailed", reason),
+            Self::ExportFailed(reason) => tuple!("ExportFailed", &char_len(reason)),
             Self::ExportComplete {
                 filename,
                 data,
@@ -3276,6 +3302,8 @@ mod tests {
                 }
             ),
             format!("{:?}", ToileEvent::ImportFailed(secret.clone())),
+            format!("{:?}", ToileEvent::ExportFailed(secret.clone())),
+            format!("{:?}", ToileError::WriteFailed(secret.clone())),
             format!("{:?}", DisplayGeom::Sticky(secret.clone())),
             format!("{:?}", DisplayGeom::Text(secret.clone())),
             format!("{:?}", DisplayGeom::Frame(secret.clone())),

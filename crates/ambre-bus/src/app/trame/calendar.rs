@@ -51,6 +51,7 @@ impl DaySerial {
         let mp = (5 * doy + 2) / 153;
         let day = doy - (153 * mp + 2) / 5 + 1;
         let month = if mp < 10 { mp + 3 } else { mp - 9 };
+        debug_assert!(matches!(month, 1..=12), "civil_from_days gives a month");
         DateParts {
             year: Year::new(if month <= 2 { y + 1 } else { y }),
             // The arithmetic keeps the month in 1 to 12; January stands in
@@ -176,6 +177,10 @@ impl DateParts {
     /// `EDATE` read a month out of range. Twelve months after January 2024
     /// is January 2025.
     pub const fn of_months(year: Year, months: MonthCount, day: DayOfMonth) -> Self {
+        debug_assert!(
+            matches!(months.0.rem_euclid(12) + 1, 1..=12),
+            "a remainder of twelve gives a month"
+        );
         Self {
             year: Year::new(year.get() + months.0.div_euclid(12)),
             // The remainder keeps the month in 1 to 12. A count of months

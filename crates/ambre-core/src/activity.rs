@@ -278,6 +278,40 @@ impl ActivityCounters {
 mod tests {
     use super::*;
 
+    /// An anchor of `len` bytes, read through serde as the postcard hop reads
+    /// one: no bound is checked on the way in.
+    fn decoded_anchor(len: usize) -> ActivityAnchor {
+        let bytes = postcard::to_allocvec(&vec![7_u8; len]).unwrap();
+        postcard::from_bytes(&bytes).unwrap()
+    }
+
+    /// An anchor at the bound passes the seal's check, and one byte past it
+    /// does not.
+    #[test]
+    fn an_anchor_of_the_bound_passes_and_one_past_it_does_not() {
+        let at = decoded_anchor(MAX_ANCHOR_LEN);
+        assert_eq!(at.clone().within_bound(), Some(at));
+        assert_eq!(decoded_anchor(MAX_ANCHOR_LEN + 1).within_bound(), None);
+    }
+
+    /// An anchor past the bound that serde let in is refused at encode, so
+    /// the seal never writes bytes that decode would refuse.
+    #[test]
+    fn encoding_a_decoded_anchor_past_the_bound_is_refused() {
+        let summary = ActivitySummary {
+            kind: ActivityKind::Content,
+            mentions: Vec::new(),
+            mentions_all: MentionScope::Named,
+            anchor: Some(decoded_anchor(MAX_ANCHOR_LEN + 1)),
+        };
+        assert_eq!(summary.encode(), Err(SummaryError::LongAnchor));
+        let at = ActivitySummary {
+            anchor: Some(decoded_anchor(MAX_ANCHOR_LEN)),
+            ..summary
+        };
+        assert!(at.encode().is_ok());
+    }
+
     fn user(byte: u8) -> UserId {
         UserId::from_bytes([byte; 16])
     }
