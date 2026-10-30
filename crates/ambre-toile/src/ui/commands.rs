@@ -256,6 +256,9 @@ mod tests {
         let redo = ambre_commands::find(COMMANDS, menu_bar::REDO).expect("described");
         assert_eq!(redo.keybindings, shared::REDO_CHORDS);
         assert_eq!(redo.chord(), Some(KeyBinding::primary_shift(KeyChar::Z)));
+        // The chip beside the Undo entry prints the chord the user presses.
+        let undo = chord(menu_bar::UNDO).map(|k| k.to_string());
+        assert_eq!(undo.as_deref(), Some("Ctrl+Z"));
     }
 
     /// Every identity the three surfaces expose is described. An identity with

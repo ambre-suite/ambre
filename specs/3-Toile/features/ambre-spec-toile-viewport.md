@@ -30,7 +30,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-UI-281` | `INV` | The rectangle the UI hands over for culling MUST carry a zoom the Logic thread can divide by. | this spec section 2 | `ambre_bus::app::toile::tests::any_zoom_culls_a_finite_rect` | none | verified |
 | `TOILE-UI-025` | `INV` | While the board asks for snapping, every committed geometry MUST sit on a multiple of the grid step. | this spec section 3; section 5 | not built | unbuilt -- lands with the `Snap to the board grid` Story (`ambre-roadmap.md` E6) | unimplemented |
 | `TOILE-UI-030` | `INV` | The minimap MUST NOT write to the document: dragging its rectangle moves the camera alone. | this spec section 5 | not built | unbuilt -- lands with the `The facilitation layer` Story (`ambre-roadmap.md` post-V1) | unimplemented |
-| `TOILE-UI-421` | `INV` | A snapped world point MUST sit on a multiple of the grid step on each axis. | this spec section 3; `TOILE-UI-025` | `ambre_toile::ui::grid::tests::snap_quantizes_to_step` -- (23, -31) on a step of 20 lands on (20, -40) | none | verified |
+| `TOILE-UI-421` | `INV` | Snapping MUST move a world point to the nearest multiple of the grid step on each axis. | this spec section 3; `TOILE-UI-025` | `ambre_toile::ui::grid::tests::snap_quantizes_to_step` -- on a step of 20, (23, -31) lands on (20, -40) and (31, 9) on (40, 0) | none | verified |
 
 ### 1.2 Drag the board around
 

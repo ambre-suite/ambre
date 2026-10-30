@@ -2576,6 +2576,7 @@ fn frame_snapshot_captures_declared_children_props() {
         vec![a.clone(), b.clone()]
     );
     let sa = snap.by_id(&a).expect("a captured");
+    assert_eq!(snap.by_id(&ElementId("absent".to_owned())), None);
     assert_eq!(sa.bounds, Rect::new(10.0, 20.0, 40.0, 60.0));
     assert_eq!(sa.rotation, ambre_core::Radians::new(1.0));
     assert_eq!(sa.opacity.get(), 0.5);

@@ -160,20 +160,28 @@ mod tests {
         assert_eq!(out[1].width(), 10.0);
     }
 
-    /// `TOILE-278`: a second bottom alignment leaves every box where the first
-    /// one put it.
+    /// `TOILE-278`: an alignment run a second time leaves every box where the
+    /// first run put it.
     #[test]
     fn aligning_is_idempotent() {
         let boxes = [r(10.0, 0.0, 20.0, 10.0), r(50.0, 40.0, 5.0, 10.0)];
-        let once = moved(&boxes, AlignOp::Bottom);
-        let twice = moved(&once, AlignOp::Bottom);
-        assert_eq!(once, twice);
-        // And the pass that changes nothing says so.
-        assert!(
-            align_deltas(&once, AlignOp::Bottom)
-                .iter()
-                .all(|d| *d == Vec2::ZERO)
-        );
+        let alignments = [
+            AlignOp::Left,
+            AlignOp::HCenter,
+            AlignOp::Right,
+            AlignOp::Top,
+            AlignOp::VCenter,
+            AlignOp::Bottom,
+        ];
+        for op in alignments {
+            let once = moved(&boxes, op);
+            assert_eq!(moved(&once, op), once, "{op:?} moved a box twice");
+            // And the pass that changes nothing says so.
+            assert!(
+                align_deltas(&once, op).iter().all(|d| *d == Vec2::ZERO),
+                "{op:?} answered a translation on its second run"
+            );
+        }
     }
 
     /// `TOILE-279`: a distribution equalizes the gaps, and the two extreme boxes
