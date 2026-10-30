@@ -64,8 +64,9 @@ mod tests {
 
     #[test]
     fn yes_if_and_is_yes_round_trip() {
-        assert!(Consumed::yes_if(true).is_yes());
-        assert!(!Consumed::yes_if(false).is_yes());
+        for taken in [Consumed::No, Consumed::Yes].map(Consumed::is_yes) {
+            assert_eq!(Consumed::yes_if(taken).is_yes(), taken);
+        }
         assert_eq!(Consumed::default(), Consumed::No);
     }
 }

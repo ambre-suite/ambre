@@ -1062,6 +1062,8 @@ ambre-crypto | src/signature.rs | crate::signature | push_framed(field) | param 
 ambre-crypto | src/signature.rs | crate::signature | push_framed(msg) | param | &mut Vec<u8>	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | sign_message(message) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/signature.rs | crate::signature | verify_message(message) | param | &[u8]	generic	generic byte/text API or codec
+ambre-draw | src/consumed.rs | crate::consumed | Consumed::is_yes() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
+ambre-draw | src/consumed.rs | crate::consumed | Consumed::yes_if(taken) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::moving() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/kinetic.rs | crate::kinetic | Kinetic::pressed() | ret | bool	generic	predicate or handled-flag result
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.held | field | bool	generic	local state flag or value, not a mode selector
