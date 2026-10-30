@@ -109,9 +109,16 @@ pub struct InvalidDisplayName;
 
 /// The name an account shows to other members, as its owner sets it: trimmed,
 /// never blank, at most [`NAME_MAX_CHARS`] characters. It travels as its text,
-/// and a read of one that breaks the rule is refused.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// and a read of one that breaks the rule is refused. `Debug` prints the
+/// length alone, so a log carries none of the text.
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct DisplayName(String);
+
+impl fmt::Debug for DisplayName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "DisplayName({} chars)", self.0.chars().count())
+    }
+}
 
 impl DisplayName {
     /// The display name `text` is once trimmed.
@@ -198,6 +205,13 @@ mod tests {
         let name = Name::new("Ada's plan").unwrap();
         assert_eq!(format!("{name:?}"), "Name(10 chars)");
         assert_eq!(format!("{:?}", Some(&name)), "Some(Name(10 chars))");
+    }
+
+    /// A display name's `Debug` form holds none of its text either.
+    #[test]
+    fn a_display_name_prints_its_length_and_none_of_its_text() {
+        let name = DisplayName::new(" Ada Lovelace ").unwrap();
+        assert_eq!(format!("{name:?}"), "DisplayName(12 chars)");
     }
 
     #[test]

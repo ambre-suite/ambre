@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 /// or any other text a peer wrote. Nothing checks a target when a peer
 /// writes it, so it is untrusted. Each application checks it by its own
 /// rule before the host opens it. A distinct type keeps it apart from the
-/// text the link covers. `Debug` prints the bare text, as the `String` it
-/// replaced did, so the readings that quote a target keep their words.
+/// text the link covers. A peer typed the target, so `Debug` prints its
+/// length alone, and a log carries none of it.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct LinkUrl(String);
@@ -45,6 +45,18 @@ impl std::fmt::Display for LinkUrl {
 
 impl std::fmt::Debug for LinkUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Debug::fmt(&self.0, f)
+        write!(f, "LinkUrl({} chars)", self.0.chars().count())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A target's `Debug` form holds none of its text, so a log carries none.
+    #[test]
+    fn a_target_prints_its_length_and_none_of_its_text() {
+        let url = LinkUrl::from("https://a.example");
+        assert_eq!(format!("{url:?}"), "LinkUrl(17 chars)");
     }
 }

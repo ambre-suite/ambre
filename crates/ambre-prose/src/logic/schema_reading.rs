@@ -588,7 +588,7 @@ fn formatting(style: &ResolvedStyle, mark: &str) -> Option<String> {
         "bg" => format!("highlight {}", colour((*background)?)),
         "fs" => format!("{font_size} pt"),
         "ff" => format!("set in {:?}", font_family.as_ref()?.label()),
-        "a" => format!("links to {:?}", link.as_ref()?),
+        "a" => format!("links to {:?}", link.as_ref()?.as_str()),
         _ => return None,
     })
 }

@@ -250,7 +250,7 @@ fn style_reading(style: &ElementStyle) -> String {
 /// Where a link leads.
 fn link_reading(link: &LinkTarget) -> String {
     match link {
-        LinkTarget::Url(url) => format!("links to {url:?}"),
+        LinkTarget::Url(url) => format!("links to {:?}", url.as_str()),
         LinkTarget::Frame(frame) => format!("links to frame {}", frame.as_str()),
         LinkTarget::Document {
             document_id,

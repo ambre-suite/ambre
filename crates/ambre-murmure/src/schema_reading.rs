@@ -532,7 +532,7 @@ fn style_reading(stored: &Stored, styles: &[StyleMark]) -> Option<String> {
         .find(|run| Some(style::key(&run.style)) == Mark::parse(mark))?;
     let words = match &run.style {
         TextStyle::Link(address) if stored.string() == Some(address.as_str()) => {
-            format!("a link to {address:?}")
+            format!("a link to {:?}", address.as_str())
         }
         TextStyle::Link(_) => return None,
         _ if stored.value == LoroValue::Bool(true) => mark.to_owned(),
