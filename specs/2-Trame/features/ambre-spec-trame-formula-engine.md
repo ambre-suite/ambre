@@ -35,6 +35,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-038` | `INV` | A cell holding plain text MUST hold no compiled formula and no dependency. | audit `H7`; this spec section 3 | `ambre_trame::formula::cache::tests::non_formula_clears_cache`; `ambre_trame::formula::dag::tests::clear_deps_drops_the_formula_and_its_now_orphan_node` | none | verified |
 | `TRAME-046` | `INV` | An empty cell MUST compare as the zero of whatever it is compared with. | this spec section 4 | `ambre_trame::formula::vm::tests::an_empty_operand_compares_at_its_peer_zero`; `::booleans_order_false_before_true` | none | verified |
 | `TRAME-047` | `INV` | Two numbers MUST compare on a relative tolerance, never an absolute one. | this spec section 5 | `ambre_trame::formula::vm::tests::equality_is_relative_not_absolute` | none | verified |
+| `TRAME-252` | `INV` | Two texts MUST compare whatever their case, through the fold that search and lookup share. | this spec section 4 | `ambre_trame::formula::vm::tests::text_compares_whatever_its_case` -- each of the six operators, and a final sigma against a plain one | none | verified |
 | `TRAME-044` | `INV` | A range too large to hold in memory MUST read `#REF!`. | this spec section 3 | `ambre_trame::formula::vm::tests::eval_range_over_cell_cap_yields_ref_error` | none | verified |
 | `TRAME-209` | `INV` | A range over that cap MUST NOT be materialized. | this spec section 3 | type-level -- the range buffer is sized by a `RangeGrant`, which only `grant_range` makes, after both caps; `ambre_trame::formula::vm::tests::a_range_over_the_cap_is_granted_nothing` | none | verified |
 | `TRAME-210` | `INV` | The cells a single recompute materializes for ranges MUST be bounded across the whole pass, not one range at a time. | this spec section 6 | `ambre_trame::formula::vm::tests::ranges_of_one_pass_share_one_budget` | none | verified |
@@ -93,7 +94,7 @@ status values are normative in `ambre-spec-template.md`.
   **None of the four has a mechanism**: no recipe runs a Trame benchmark.
 * **Boundary.** none of its own. `TRAME-010` keeps computed values out of the document, so only
   the raw source travels, and `ZK-001` seals it before it leaves the client.
-* **Verification.** 46 `verified`. What holds is the graph and its recompute, the best-covered
+* **Verification.** 47 `verified`. What holds is the graph and its recompute, the best-covered
   engine of the workspace, and the stored form a structural edit carries. A range buffer is sized by
   a grant that only the caps make, so a range over them allocates nothing.
 
@@ -276,7 +277,8 @@ cell's displayed text (`features/ambre-spec-trame-engine.md`, `TRAME-UI-014`).
 
 **Operators**, tightest first: `^`, then `*` `/`, then `+` `-`, then `&`, then the comparisons
 `=` `<>` `<=` `>=` `<` `>`. Unary minus binds tighter than `^`. Only `^` groups to the right
-(`TRAME-036`, `TRAME-037`).
+(`TRAME-036`, `TRAME-037`). A comparison reads two texts through one case fold, as Excel does, so
+`="abc"="ABC"` is `TRUE` (`TRAME-252`).
 
 **Bounds.** The parser, the compiler and the drop of the tree all recurse. So a formula is refused
 before parsing past 8 192 characters, past 64 levels of parentheses or calls, or past 512

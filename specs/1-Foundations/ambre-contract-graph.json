@@ -4182,6 +4182,8 @@
   {"edge": "verified-by", "from": "TRAME-046", "to": "::booleans_order_false_before_true"},
   {"edge": "cites-section", "from": "TRAME-047", "section": "5", "to": "2-Trame/features/ambre-spec-trame-formula-engine.md"},
   {"edge": "verified-by", "from": "TRAME-047", "to": "ambre_trame::formula::vm::tests::equality_is_relative_not_absolute"},
+  {"edge": "cites-section", "from": "TRAME-252", "section": "4", "to": "2-Trame/features/ambre-spec-trame-formula-engine.md"},
+  {"edge": "verified-by", "from": "TRAME-252", "to": "ambre_trame::formula::vm::tests::text_compares_whatever_its_case"},
   {"edge": "cites-section", "from": "TRAME-044", "section": "3", "to": "2-Trame/features/ambre-spec-trame-formula-engine.md"},
   {"edge": "verified-by", "from": "TRAME-044", "to": "ambre_trame::formula::vm::tests::eval_range_over_cell_cap_yields_ref_error"},
   {"edge": "cites-section", "from": "TRAME-209", "section": "3", "to": "2-Trame/features/ambre-spec-trame-formula-engine.md"},

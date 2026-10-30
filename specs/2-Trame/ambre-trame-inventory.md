@@ -19,7 +19,7 @@
 | `trame-context-menu` | A user right-clicks. | implemented | 10 |  |
 | `trame-engine` | A user types into a cell, and every value that depended on it changes before the next frame. | implemented | 19 |  |
 | `trame-find-replace` | A user looks for a value in a sheet of 100 000 rows. | implemented | 6 |  |
-| `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | implemented | 46 |  |
+| `trame-formula-engine` | A user types `=SUM(A1:A3)*2`. | implemented | 47 |  |
 | `trame-headers` | Two fixed strips name the rows and the columns, show where the selection is, and carry the gestures that act on a whole axis. | implemented | 9 |  |
 | `trame-named-ranges` | A user gives a range a name -- `TOTAL` for `A1:A3` -- and writes `=SUM(TOTAL)` instead of the coordinates. | implemented | 10 |  |
 | `trame-resize` | A user drags the boundary of a column header and the column takes the new width, for everyone. | implemented | 10 |  |
@@ -41,4 +41,4 @@
 | `trame-shared-filter` | A user hides the rows of a column that fail a test. | partial | 35 |  |
 | `trame-undo` | Trame's half of the shared undo model (`ambre-spec-undo.md`): what one item is on a grid, and which caches an undo rebuilds. | partial | 6 |  |
 
-**25 features: 12 implemented, 13 partial, 0 design-only. 491 contract rows, 0 loose.**
+**25 features: 12 implemented, 13 partial, 0 design-only. 492 contract rows, 0 loose.**

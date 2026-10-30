@@ -18,6 +18,7 @@ use ambre_bus::{Col, ColCount, Row, RowCount};
 use super::cache::BytecodeCache;
 use super::compile::SheetIndices;
 use super::functions::call_builtin;
+use super::text::fold_cmp;
 use super::types::{CellId, CellValue, FormulaError, Op, RangeId, RangeValue, nearly_equal};
 use ambre_bus::DateSerial;
 use ambre_core::CellCount;
@@ -381,7 +382,8 @@ fn first_error(a: &CellValue, b: &CellValue) -> Option<CellValue> {
 fn values_equal(a: &CellValue, b: &CellValue) -> bool {
     match (a, b) {
         (CellValue::Number(x), CellValue::Number(y)) => nearly_equal(*x, *y),
-        (CellValue::Text(x), CellValue::Text(y)) => x == y,
+        // Text meets text whatever its case, as Excel compares it (`TRAME-252`).
+        (CellValue::Text(x), CellValue::Text(y)) => fold_cmp(x, y).is_eq(),
         (CellValue::Boolean(x), CellValue::Boolean(y)) => x == y,
         (CellValue::Empty, CellValue::Empty) => true,
         (CellValue::Empty, CellValue::Text(s)) | (CellValue::Text(s), CellValue::Empty) => {
@@ -405,7 +407,7 @@ fn compare_values(a: &CellValue, b: &CellValue) -> Option<std::cmp::Ordering> {
     use std::cmp::Ordering;
     match (a, b) {
         (CellValue::Number(x), CellValue::Number(y)) => x.partial_cmp(y),
-        (CellValue::Text(x), CellValue::Text(y)) => Some(x.cmp(y)),
+        (CellValue::Text(x), CellValue::Text(y)) => Some(fold_cmp(x, y)),
         (CellValue::Boolean(x), CellValue::Boolean(y)) => Some(x.cmp(y)),
         (CellValue::Empty, CellValue::Empty) => Some(Ordering::Equal),
         (CellValue::Empty, CellValue::Number(y)) => 0.0f64.partial_cmp(y),
@@ -557,6 +559,28 @@ mod tests {
         assert_eq!(eval_with_cells("A1=B1", 2, HashMap::new()), "true");
         assert_eq!(eval_with_cells("A1<B1", 2, HashMap::new()), "false");
         assert_eq!(eval_with_cells("A1>=B1", 2, HashMap::new()), "true");
+    }
+
+    /// The operators compare text whatever its case, as Excel does, through
+    /// the fold `FIND`, `SEARCH` and the lookups share (`TRAME-252`).
+    #[test]
+    fn text_compares_whatever_its_case() {
+        for (src, expect) in [
+            ("\"abc\"=\"ABC\"", "true"),
+            ("\"abc\"<>\"ABC\"", "false"),
+            ("\"a\"<\"B\"", "true"),
+            ("\"B\">\"a\"", "true"),
+            ("\"a\"<=\"A\"", "true"),
+            ("\"A\">=\"a\"", "true"),
+            ("\"\u{3C3}\"=\"\u{3C2}\"", "true"),
+            ("\"a\"=\"b\"", "false"),
+        ] {
+            assert_eq!(
+                eval_with_cells(src, 1, HashMap::new()),
+                expect,
+                "formula: ={src}"
+            );
+        }
     }
 
     #[test]
