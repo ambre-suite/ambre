@@ -729,6 +729,7 @@ impl std::fmt::Debug for WebAddress {
         write!(f, "WebAddress({} chars)", self.0.chars().count())
     }
 }
+
 impl std::fmt::Display for WebAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -929,13 +930,29 @@ impl Viewport {
 /// One captured CRDT scalar field value. It covers the four `LoroValue` leaf
 /// kinds an element / connector map stores (`ambre-spec-toile-schema.md`). A
 /// container field, such as a group's `children` list, never travels here: the
-/// capture maps membership onto slots instead.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// capture maps membership onto slots instead. A text field holds board
+/// content, such as a sticky body or a frame name, so `Debug` prints its
+/// length alone.
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum ClipValue {
     F64(f64),
     Bool(bool),
     Str(String),
     Bin(ClipBytes),
+}
+
+impl std::fmt::Debug for ClipValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::F64(value) => f.debug_tuple("F64").field(value).finish(),
+            Self::Bool(value) => f.debug_tuple("Bool").field(value).finish(),
+            Self::Str(text) => f
+                .debug_tuple("Str")
+                .field(&ambre_core::char_len(text))
+                .finish(),
+            Self::Bin(bytes) => f.debug_tuple("Bin").field(bytes).finish(),
+        }
+    }
 }
 
 /// The bytes of one captured binary field, such as a style blob. They travel
@@ -1075,8 +1092,9 @@ where
 /// An element captured id-free: the full scalar field set of its map (type,
 /// geometry, style blob, per-type payload). Referenced elsewhere in the payload
 /// by its **slot** (index in [`ClipboardPayload::elements`]), never by id, so an
-/// old id can never leak into the paste.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// old id can never leak into the paste. `Debug` prints the length of the
+/// notes, and none of their text.
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct ClipElement {
     #[serde(deserialize_with = "known_fields")]
     pub fields: Vec<(ElementKey, ClipValue)>,
@@ -1085,6 +1103,15 @@ pub struct ClipElement {
     /// beside the fields, and are written back into a container of their own.
     /// `None` for every other kind.
     pub notes: Option<String>,
+}
+
+impl std::fmt::Debug for ClipElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClipElement")
+            .field("fields", &self.fields)
+            .field("notes", &self.notes.as_deref().map(ambre_core::char_len))
+            .finish()
+    }
 }
 
 ambre_core::define_index! {
@@ -3055,6 +3082,16 @@ mod tests {
             id: id.clone(),
             name: secret.clone(),
         };
+        // A copied frame carries its notes, and a copied sticky its body.
+        let payload = ClipboardPayload {
+            elements: vec![ClipElement {
+                fields: vec![(ElementKey::Body, ClipValue::Str(secret.clone()))],
+                notes: Some(secret.clone()),
+            }],
+            connectors: Vec::new(),
+            membership: Vec::new(),
+            origin: Rect::ZERO,
+        };
         let commands = [
             ToileCommand::SetText {
                 id: id.clone(),
@@ -3093,6 +3130,10 @@ mod tests {
                 fill: None,
                 correlate: None,
             },
+            ToileCommand::PasteElements {
+                payload: payload.clone(),
+                at: Point::ZERO,
+            },
         ];
         let printed = [
             format!("{delta:?}"),
@@ -3100,6 +3141,7 @@ mod tests {
             format!("{summary:?}"),
             format!("{frame:?}"),
             format!("{:?}", InitContent::Text(secret.clone())),
+            format!("{:?}", ToileEvent::Clipboard(payload)),
         ]
         .into_iter()
         .chain(commands.iter().map(|command| format!("{command:?}")));
