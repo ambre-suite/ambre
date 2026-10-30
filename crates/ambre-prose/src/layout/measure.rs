@@ -222,9 +222,10 @@ impl BlockLine {
     }
 }
 
-/// The lines of a table block: the paginator cuts a table at its rows.
-impl From<RowCount> for BlockLineCount {
-    fn from(rows: RowCount) -> Self {
+impl BlockLineCount {
+    /// The lines of a table block: the paginator cuts a table at its rows.
+    #[must_use]
+    pub fn of_rows(rows: RowCount) -> Self {
         Self::from_len(rows.to_usize())
     }
 }

@@ -65,10 +65,17 @@ impl FixtureSeed {
         Self(seed)
     }
 
-    /// The seed itself, for the mixer and the peer id it pins.
+    /// The seed itself, for the mixer.
     #[must_use]
     pub const fn get(self) -> u64 {
         self.0
+    }
+
+    /// The peer id the seed pins: the seed itself, so a generator writes as
+    /// the same peer on every run.
+    #[must_use]
+    pub const fn peer(self) -> crate::PeerId {
+        crate::PeerId(self.0)
     }
 }
 

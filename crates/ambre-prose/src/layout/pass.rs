@@ -812,7 +812,7 @@ fn table_metrics(
     }
     let metrics = TextMetrics {
         text_height: height,
-        line_count: BlockLineCount::from(row_heights.len()),
+        line_count: BlockLineCount::of_rows(row_heights.len()),
         line_tops: row_tops.as_slice().to_vec(),
     };
     (metrics, TableShape { row_tops, cells })
