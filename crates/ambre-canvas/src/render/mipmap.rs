@@ -20,7 +20,7 @@ use ambre_core::{ImageSize, RgbaPixels};
 
 /// One level of a mip chain: RGBA8 samples and the dimensions they describe.
 pub struct MipLevel {
-    pub pixels: Vec<u8>,
+    pub pixels: RgbaPixels,
     pub width: u32,
     pub height: u32,
 }
@@ -41,11 +41,10 @@ pub fn build_chain(pixels: &RgbaPixels, size: ImageSize) -> Vec<MipLevel> {
     if width == 0 || height == 0 {
         return out;
     }
-    let pixels = pixels.as_bytes();
-    if pixels.len() < (width as usize) * (height as usize) * 4 {
+    if pixels.as_bytes().len() < (width as usize) * (height as usize) * 4 {
         return out;
     }
-    let mut src = pixels.to_vec();
+    let mut src = pixels.clone();
     let (mut w, mut h) = (width, height);
     while w > 1 || h > 1 {
         let (nw, nh) = ((w / 2).max(1), (h / 2).max(1));
@@ -98,7 +97,8 @@ pub fn sampler() -> wgpu::SamplerDescriptor<'static> {
 /// * An odd dimension leaves a final row or column with no partner. Each such
 ///   texel takes the block that starts at its own doubled coordinate, clamped.
 ///   The clamp carries the edge rather than dropping it.
-fn reduce(src: &[u8], w: u32, h: u32, nw: u32, nh: u32) -> Vec<u8> {
+fn reduce(src: &RgbaPixels, w: u32, h: u32, nw: u32, nh: u32) -> RgbaPixels {
+    let src = src.as_bytes();
     let mut dst = vec![0u8; (nw as usize) * (nh as usize) * 4];
     // A texel past the end of `src` reads as zero. The caller sizes `src` as
     // `w * h` texels, so none is; the read stays checked all the same.
@@ -120,7 +120,7 @@ fn reduce(src: &[u8], w: u32, h: u32, nw: u32, nh: u32) -> Vec<u8> {
             *out = ((sum + 2) / 4) as u8;
         }
     }
-    dst
+    RgbaPixels::new(dst)
 }
 
 #[cfg(test)]
@@ -189,7 +189,7 @@ mod tests {
         ];
         let chain = chain_of(px, 2, 2);
         assert_eq!(chain.len(), 1);
-        assert_eq!(chain[0].pixels, vec![128, 128, 128, 255]);
+        assert_eq!(chain[0].pixels.as_bytes(), [128, 128, 128, 255]);
     }
 
     /// An odd dimension carries its last row rather than reading past it
@@ -201,7 +201,7 @@ mod tests {
         let chain = chain_of(px, 3, 1);
         let dims: Vec<(u32, u32)> = chain.iter().map(|l| (l.width, l.height)).collect();
         assert_eq!(dims, vec![(1, 1)]);
-        assert_eq!(chain[0].pixels, vec![200, 200, 200, 200]);
+        assert_eq!(chain[0].pixels.as_bytes(), [200, 200, 200, 200]);
     }
 
     /// A source shorter than its declared size yields no chain. The upload path

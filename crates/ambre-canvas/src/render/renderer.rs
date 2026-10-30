@@ -953,7 +953,12 @@ impl QuadRenderer {
         );
         let mut bytes = ByteSize::of_len(level0);
         for (i, level) in chain.iter().enumerate() {
-            write(i as u32 + 1, &level.pixels, level.width, level.height);
+            write(
+                i as u32 + 1,
+                level.pixels.as_bytes(),
+                level.width,
+                level.height,
+            );
             bytes = bytes.saturating_add(ByteSize::of_len(level.pixels.len()));
         }
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());

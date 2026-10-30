@@ -501,14 +501,11 @@ ambre-canvas | src/render/atlas.rs | crate::render::atlas | GlyphId::new(index) 
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSizeKey.0 | field | u32	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/render/atlas.rs | crate::render::atlas | Upload.bytes | field | Vec<u8>	generic	raw texel bytes the GPU copies
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.height | field | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.pixels | field | Vec<u8>	generic	bytes
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | MipLevel.width | field | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | level_count() | ret | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce() | ret | Vec<u8>	generic	generic codec/parser/bytes API
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(h) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(nh) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(nw) | param | u32	math	geometry, layout, GPU or count arithmetic
-ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(src) | param | &[u8]	generic	generic codec/parser/bytes API
 ambre-canvas | src/render/mipmap.rs | crate::render::mipmap | reduce(w) | param | u32	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | GLYPH_VERTEX_SIZE | const | usize	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/render/mod.rs | crate::render | GlyphVertex.color | field | [f32;4]	math	geometry, layout, GPU or count arithmetic
