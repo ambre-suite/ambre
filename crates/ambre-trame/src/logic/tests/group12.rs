@@ -137,6 +137,24 @@ fn a_series_past_the_largest_number_stops_there() {
     );
 }
 
+/// A series from one number steps by one, even below the spacing of the
+/// floats. So 1e16 two terms on is 1e16 + 2. A step taken as
+/// `(start + 1) - start` read zero there, and the number repeated.
+#[test]
+fn a_series_from_one_large_number_keeps_its_step() {
+    let mut state = TrameState::new();
+    seed_col_a(&mut state, &["10000000000000000"]);
+    let cell = |row| crate::CellPos::new(Row::new(row), Col::new(0));
+    let sheet_id = state.active_sheet.clone();
+    state.handle_command(TrameCommand::FillRange {
+        sheet_id,
+        src: crate::CellRect::spanning(cell(0), cell(0)),
+        dest: crate::CellRect::spanning(cell(0), cell(2)),
+        mode: crate::FillMode::Series,
+    });
+    assert_eq!(read_cell(&mut state, 2, 0), "10000000000000002");
+}
+
 /// A step past the largest number passes it at the first filled cell. The
 /// series stops there and says so, and no cell reads `inf` (`TRAME-UI-180`).
 #[test]

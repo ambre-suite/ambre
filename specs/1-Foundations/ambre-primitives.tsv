@@ -3204,6 +3204,7 @@ ambre-trame | src/formula/vm.rs | crate::formula::vm | finite(n) | param | f64	m
 ambre-trame | src/formula/vm.rs | crate::formula::vm | values_equal() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/logic/cells.rs | crate::logic::cells | TrameState::cell_text() | ret | String	free-text	free text: user content, label, message or display string
 ambre-trame | src/logic/clipboard.rs | crate::logic::clipboard | TrameState::paste_text(text) | param | &str	free-text	free text: user content, label, message or display string
+ambre-trame | src/logic/fill.rs | crate::logic::fill | Series.step | field | f64	math	the step of a fill series: 1 for a lone number, else the difference of two finite sources, infinite past the largest number
 ambre-trame | src/logic/fill.rs | crate::logic::fill | Term.0 | field | i64	newtype-inner	newtype inner field
 ambre-trame | src/logic/fill.rs | crate::logic::fill | TrameState::carries_style() | ret | bool	generic	predicate: whether a cell holds a style a fill carries
 ambre-trame | src/logic/find.rs | crate::logic::find | TrameState::replace_active_cell() | ret | bool	generic	predicate or did-it-change return

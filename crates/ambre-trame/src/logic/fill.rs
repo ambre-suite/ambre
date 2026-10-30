@@ -28,21 +28,22 @@ impl Term {
 }
 
 /// An arithmetic series a fill line extrapolates: the value at the source
-/// origin, and the difference between two neighbours. Both are finite.
+/// origin, finite, and the difference between two neighbours.
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Series {
     start: CellNumber,
-    /// The value one term past the start. The step between the two may pass
-    /// the largest number, and every term but the start then does too.
-    next: CellNumber,
+    /// The step, held as given: `1` for a lone number, so it survives where
+    /// one is below the spacing of the floats. The difference of two finite
+    /// sources may pass the largest number, and every term but the start then
+    /// does too.
+    step: f64,
 }
 
 impl Series {
     /// The value at `term`, `None` past the largest number: the series stops
     /// there (`TRAME-UI-180`).
     fn at(self, term: Term) -> Option<CellNumber> {
-        let step = self.next.get() - self.start.get();
-        CellNumber::new(self.start.get() + term.0 as f64 * step).ok()
+        CellNumber::new(self.start.get() + term.0 as f64 * self.step).ok()
     }
 }
 
@@ -238,13 +239,6 @@ impl TrameState {
         series: Option<Series>,
     ) {
         let master = tile.top_left;
-        // The whole tile needs its lines, its far corner last. A tile short
-        // of them is left as it was, and the refusal is reported once
-        // (`TRAME-243`).
-        if let Err(refused) = self.materialize(tile.bottom_right) {
-            self.write_refusals.push(WriteRefusal::from(refused));
-            return;
-        }
         let text = if let Some(series) = series {
             let Some(value) = series.at(term) else {
                 self.write_refusals.push(WriteRefusal::PastLargestNumber);
@@ -260,6 +254,13 @@ impl TrameState {
         } else {
             src_raw.clone()
         };
+        // The whole tile needs its lines, its far corner last, once the
+        // series is known to reach it. A tile short of them is left as it
+        // was, and the refusal is reported once (`TRAME-243`).
+        if let Err(refused) = self.materialize(tile.bottom_right) {
+            self.write_refusals.push(WriteRefusal::from(refused));
+            return;
+        }
         // Clear the covered cells first: merge_cells/rebuild only accept an empty
         // block, and a previous value there would otherwise be masked.
         for at in tile.cells().filter(|&at| at != master) {
@@ -445,8 +446,10 @@ pub(super) fn merged_tiles<P: Line>(s1: P, s2: P, d1: P, d2: P, block: P::Count)
 ///   progression (this is the [`FillMode::Auto`] trigger).
 /// - [`FillMode::Series`] with a single numeric source: step `1` (Excel/Sheets
 ///   "Fill Series" on a lone number).
-/// - Anything else: `None` (the line is copied). A step past the largest
-///   number is still a series, and it stops at its start (`TRAME-UI-180`).
+/// - Anything else: `None` (the line is copied).
+///
+/// A step past the largest number is still a series. It stops at its first
+/// filled term, with a notice (`TRAME-UI-180`).
 fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
     if mode == FillMode::Copy {
         return None;
@@ -456,10 +459,9 @@ fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
     let nums: Vec<CellNumber> = sources.iter().map(parse_num).collect::<Option<_>>()?;
     match nums.as_slice() {
         [] => None,
-        // One past the largest number adds nothing, so `next` is always finite.
         [only] if mode == FillMode::Series => Some(Series {
             start: *only,
-            next: CellNumber::new(only.get() + 1.0).ok()?,
+            step: 1.0,
         }),
         [_] => None,
         [first, second, rest @ ..] => {
@@ -470,7 +472,7 @@ fn series_params(mode: FillMode, sources: &[FormulaSource]) -> Option<Series> {
                 .all(|(v, prev)| (v.get() - prev.get() - step).abs() < 1e-9);
             arithmetic.then_some(Series {
                 start: *first,
-                next: *second,
+                step,
             })
         }
     }
