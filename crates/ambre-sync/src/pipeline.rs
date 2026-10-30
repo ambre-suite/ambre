@@ -215,7 +215,15 @@ pub fn update_body(
 ) -> Result<UpdateFrame, PipelineError> {
     let summary = summary.map(ActivitySummary::encode).transpose()?;
     let summary_len = summary.as_ref().map_or(0, Vec::len);
-    let mut body = Vec::with_capacity(SessionNonce::SIZE.as_len() + 1 + summary_len + delta.len());
+    // A capacity hint over buffers already in memory: the sum stays below the
+    // bound, and saturating states it.
+    let mut body = Vec::with_capacity(
+        SessionNonce::SIZE
+            .as_len()
+            .saturating_add(1)
+            .saturating_add(summary_len)
+            .saturating_add(delta.len()),
+    );
     body.extend_from_slice(&nonce.0);
     match summary {
         Some(summary) => {
@@ -343,7 +351,7 @@ fn seal_payload(
     // plaintext drops under its wrapper on every path. The zstd encoder's own
     // buffers drop unwiped, out of reach of both.
     let (version, body) = compress(payload);
-    let mut plaintext = Vec::with_capacity(1 + body.len());
+    let mut plaintext = Vec::with_capacity(body.len().saturating_add(1));
     plaintext.push(version.byte());
     plaintext.extend_from_slice(&body);
     ambre_core::Secret::wipe(body);

@@ -21,11 +21,11 @@
   register. `human-review` and `qa-manual` owe none: they are decisions, not debt.
 * How each layer is tested is `ambre-spec-testing.md`.
 
-**3787 rows: 3231 shipped, of which 9 loose. 556 unbuilt.**
+**3790 rows: 3234 shipped, of which 9 loose. 556 unbuilt.**
 
 | Status | Foundations | Trame | Toile | Prose | Murmure | Total |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `verified` | 917 | 450 | 824 | 614 | 417 | 3222 |
+| `verified` | 919 | 450 | 824 | 614 | 418 | 3225 |
 | `failing` |  |  |  |  |  | 0 |
 | `untested` |  |  |  |  |  | 0 |
 | `human-review` | 7 |  |  |  |  | 7 |
@@ -71,9 +71,9 @@
 | `ambre-spec-schema-version.md` | 20 | 20 | 20 |  |  |
 | `ambre-spec-sealed-envelope.md` | 24 | 23 | 23 |  | 1 |
 | `ambre-spec-sequencer.md` | 70 | 70 | 70 |  |  |
-| `ambre-spec-server.md` | 87 | 81 | 80 | 1 | 6 |
+| `ambre-spec-server.md` | 88 | 82 | 81 | 1 | 6 |
 | `ambre-spec-session.md` | 22 | 22 | 22 |  |  |
-| `ambre-spec-sync.md` | 51 | 50 | 50 |  | 1 |
+| `ambre-spec-sync.md` | 52 | 51 | 51 |  | 1 |
 | `ambre-spec-text-editor.md` | 20 | 18 | 18 |  | 2 |
 | `ambre-spec-text-input.md` | 15 | 15 | 15 |  |  |
 | `ambre-spec-ui.md` | 20 | 14 | 14 |  | 6 |
@@ -167,7 +167,7 @@
 | `ambre-spec-murmure-emoji.md` | 14 | 5 | 5 |  | 9 |
 | `ambre-spec-murmure-engine.md` | 14 | 14 | 14 |  |  |
 | `ambre-spec-murmure-keyboard.md` | 21 | 21 | 21 |  |  |
-| `ambre-spec-murmure-layout.md` | 27 | 22 | 22 |  | 5 |
+| `ambre-spec-murmure-layout.md` | 28 | 23 | 23 |  | 5 |
 | `ambre-spec-murmure-members.md` | 23 | 18 | 18 |  | 5 |
 | `ambre-spec-murmure-mentions.md` | 23 | 23 | 23 |  |  |
 | `ambre-spec-murmure-message-list.md` | 39 | 38 | 38 |  | 1 |
@@ -224,7 +224,7 @@
 | `ambre-spec-murmure-forums.md` | MURMURE-355..364,416 |
 | `ambre-spec-murmure-import.md` | MURMURE-365..373,438..439 |
 | `ambre-spec-murmure-keyboard.md` | MURMURE-170..181,213,522,527..529,540..543 |
-| `ambre-spec-murmure-layout.md` | MURMURE-158..169,382..386,428..429,486,488..490,492,549..550,580 |
+| `ambre-spec-murmure-layout.md` | MURMURE-158..169,382..386,428..429,486,488..490,492,549..550,580..581 |
 | `ambre-spec-murmure-link-previews.md` | MURMURE-399..406 |
 | `ambre-spec-murmure-members.md` | MURMURE-440..459,472,519..520 |
 | `ambre-spec-murmure-mentions.md` | MURMURE-098..104,152,229..233,551..560 |
@@ -283,9 +283,9 @@
 | `ambre-spec-schema-version.md` | SCHEMA-001..020 |
 | `ambre-spec-sealed-envelope.md` | SYNC-001,003..005,008..009,018..023,072,088..091,112..114,125,135,138,144 |
 | `ambre-spec-sequencer.md` | SRV-006,032..041,075,080..086,113..120,126..135,147..155,169,184,194..215 |
-| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..239 |
+| `ambre-spec-server.md` | SRV-001,005,007..008,011..021,068..070,093..096,100..101,103..112,122..125,136..137,142..146,156..157,159..160,165,167..168,170..171,173..182,187..193,216..228,230,238..240 |
 | `ambre-spec-session.md` | SRV-003,009,022..031,074,090..092,163,172,232,234..236 |
-| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..179 |
+| `ambre-spec-sync.md` | SYNC-002,011,013,056..071,095..100,133..134,136..137,149,152..160,162..167,169..171,177..180 |
 | `ambre-spec-text-editor.md` | CANVAS-036..042,047..050,077..080,082..083,085; UI-THREAD-014,018 |
 | `ambre-spec-text-input.md` | CHROME-007,016..021,059..064,102..103 |
 | `ambre-spec-toile-auto-layout.md` | TOILE-FEAT-005,009,029..032,038..054,099,102..104 |

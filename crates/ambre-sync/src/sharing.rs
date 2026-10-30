@@ -496,9 +496,10 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         .route(format!("/documents/{}/members", p.document_id));
     let invite_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/share", p.document_id));
-    let mut tries = 0;
+    let mut tries: usize = 0;
     let posted = loop {
-        tries += 1;
+        // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
+        tries = tries.saturating_add(1);
         // The entry takes the place after the log the relay serves now.
         let members = match http
             .get_json::<http::DocumentMembersResponse>(&members_url)
@@ -780,9 +781,10 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
     };
     let revoke_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/revoke", p.document_id));
-    let mut tries = 0;
+    let mut tries: usize = 0;
     let unwrapped = loop {
-        tries += 1;
+        // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
+        tries = tries.saturating_add(1);
         let resp = match http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
@@ -933,9 +935,10 @@ async fn leave_document<H: ShareHttp>(
         .route(format!("/documents/{document_id}/members"));
     let url = crate::http::ApiRoot::of(url_scheme, api_base)
         .route(format!("/documents/{document_id}/share/{me}"));
-    let mut tries = 0;
+    let mut tries: usize = 0;
     loop {
-        tries += 1;
+        // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
+        tries = tries.saturating_add(1);
         let resp = http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await?;
@@ -1211,9 +1214,10 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
         "/documents/{}/members/{}",
         p.document_id, p.user_id
     ));
-    let mut tries = 0;
+    let mut tries: usize = 0;
     loop {
-        tries += 1;
+        // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
+        tries = tries.saturating_add(1);
         let resp = match http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
@@ -1308,9 +1312,10 @@ pub(crate) async fn settle_task<H: ShareHttp>(
         Ok(link) => link,
         Err(e) => return unsettled(e.to_string()),
     };
-    let mut tries = 0;
+    let mut tries: usize = 0;
     loop {
-        tries += 1;
+        // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
+        tries = tries.saturating_add(1);
         let resp = match http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
@@ -1408,9 +1413,10 @@ async fn rotate_channel<H: ShareHttp>(
     let rotate_url = base.route(format!("/documents/{meta}/rotate-key"));
     let new_key = DocumentKey::generate();
     let (_, text) = link_to(meta, &p.previous, &new_key, &p.signing_key)?;
-    let mut tries = 0;
+    let mut tries: usize = 0;
     loop {
-        tries += 1;
+        // Bounded by `ROTATION_TRIES`: the loop gives up at that count.
+        tries = tries.saturating_add(1);
         let resp = http
             .get_json::<http::DocumentMembersResponse>(&members_url)
             .await
