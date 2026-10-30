@@ -355,7 +355,9 @@ impl Writer {
     /// so a mark change inside a link does not break it.
     fn delimiters(&self, run: &IrRun) -> Vec<Delimiter> {
         let mut wanted = Vec::new();
-        if let Some(url) = &run.link {
+        // A peer writes a target straight into the document, so one that
+        // could run code is exported as its text alone (`PROSE-IO-067`).
+        if let Some(url) = run.link.as_ref().filter(|url| crate::link::openable(url)) {
             wanted.push(Delimiter::Link(url.clone()));
         }
         if run.bold == Weight::Bold {
@@ -514,6 +516,25 @@ mod tests {
             blocks,
             ..ProseIr::default()
         }
+    }
+
+    /// `PROSE-IO-067`: a target that could run code is exported as its text
+    /// alone, and a web or mail target as a link.
+    #[test]
+    fn a_link_that_could_run_code_exports_as_its_text() {
+        let link = |url: &str, text: &str| IrRun {
+            link: Some(url.into()),
+            ..IrRun::plain(text)
+        };
+        let doc = ir(vec![para(vec![
+            link("javascript:alert(1)", "run"),
+            IrRun::plain(" "),
+            link(" data:text/html,x", "data"),
+            IrRun::plain(" "),
+            link("mailto:a@example.org", "mail"),
+        ])]);
+        let (text, _) = write(&doc, MarkdownFlavor::Gfm);
+        assert_eq!(text, "run data [mail](mailto:a@example.org)\n");
     }
 
     fn features(report: &ConversionReport) -> Vec<&'static str> {

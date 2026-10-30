@@ -97,6 +97,7 @@ status values are normative in `ambre-spec-template.md`.
 |---|---|---|---|---|---|---|
 | `PROSE-IO-018` | `POST` | A Markdown export MUST report every construct the flavour has no syntax for, the page model included. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::what_markdown_lacks_is_reported_once_each`; `ambre_prose::logic::interop::tests::the_page_model_is_reported` | none | verified |
 | `PROSE-IO-061` | `FRAME` | A Markdown export MUST NOT emit a table, a to-do item or a footnote the chosen flavour has no syntax for. | this spec section 3 | `ambre_prose::interop::markdown_write::tests::commonmark_writes_no_table_todo_or_footnote` | none | verified |
+| `PROSE-IO-067` | `FRAME` | A Markdown export MUST NOT write a link whose target `PROSE-UI-186` holds back from the host: the run exports as its text alone. | this spec section 3; `PROSE-UI-186` | `ambre_prose::interop::markdown_write::tests::a_link_that_could_run_code_exports_as_its_text` -- a `javascript:` and a `data:` link export as text, a `mailto:` link as a link | none | verified |
 
 ### 1.8 Import an HTML file
 
@@ -119,7 +120,7 @@ status values are normative in `ambre-spec-template.md`.
 * **Boundary.** a local file, in both directions, and nothing else. `PROSE-IO-001` keeps every
   conversion in the Logic thread, `PROSE-IO-043` keeps the document off the relay, and `PROSE-
   IO-016` stops an imported file executing or fetching.
-* **Verification.** 33 `verified`, 16 `unimplemented`. The native file and the Markdown pair are
+* **Verification.** 34 `verified`, 16 `unimplemented`. The native file and the Markdown pair are
   built. The Word and HTML pairs are not, and no conversion runs in slices yet. The browser tier
   holds the download and the open from the home screen.
 
@@ -577,6 +578,9 @@ everything else is common:
 Markdown has no superscript, subscript, colour, size, family, comment, suggestion or cross
 reference, and a picture's width, height, alignment and caption have no syntax either. Each one is
 a warning at the drop site, never a silent omission (`PROSE-IO-018`, `PROSE-IO-004`).
+
+A peer writes a link's target straight into the document, unchecked. The writer keeps a link only
+when the host may open its target, and exports any other as its text alone (`PROSE-IO-067`).
 
 **What an HTML file becomes.** A standalone document, with the stylesheet in the head or inline
 (`PROSE-IO-063`), and no script in it at all (`PROSE-IO-064`):

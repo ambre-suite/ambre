@@ -871,6 +871,64 @@ mod tests {
         assert_eq!(shape(&state, middle)[..4], original[..4]);
     }
 
+    /// `PROSE-UI-235`: a peer writes mark values straight into the document,
+    /// unchecked. The HTML half writes no target that could run code and no
+    /// colour or size outside its canonical spelling; the text stays.
+    #[test]
+    fn a_peer_mark_value_reaches_the_html_half_only_when_safe() {
+        let (mut state, _) = document();
+        let block = append(&mut state, BlockInit::Paragraph, "link ink mark size");
+        let body = crate::doc::get_block_text(&state.doc, &crate::events::tree_id(block));
+        for (range, key, value) in [
+            (0..4, "a", "javascript:alert(1)"),
+            (5..8, "fg", "red;background:url(https://evil/beacon)"),
+            (9..13, "bg", "#00ff00\"><img src=x>"),
+            (14..18, "fs", "12pt;background:url(https://evil/beacon)"),
+        ] {
+            body.mark(range, key, value).expect("the peer's mark lands");
+        }
+        state.doc.commit();
+        let ProseEvent::Clipboard { text, html, .. } =
+            clipboard(&mut state, (block, 0), (block, 18))
+        else {
+            panic!("a copy answers with the clipboard");
+        };
+        assert_eq!(text, "link ink mark size");
+        assert!(html.contains("link ink mark size"), "{html}");
+        for unsafe_part in ["href", "url(", "javascript", "<img", "style"] {
+            assert!(!html.contains(unsafe_part), "{unsafe_part} in {html}");
+        }
+    }
+
+    /// `PROSE-UI-235`: a valid peer value is written in its canonical
+    /// spelling.
+    #[test]
+    fn a_peer_mark_value_is_written_canonical() {
+        let (mut state, _) = document();
+        let block = append(&mut state, BlockInit::Paragraph, "link ink");
+        let body = crate::doc::get_block_text(&state.doc, &crate::events::tree_id(block));
+        for (range, key, value) in [
+            (0..4, "a", "HTTPS://example.org/"),
+            (5..8, "fg", "#FF0000"),
+            (5..8, "fs", "12.0"),
+        ] {
+            body.mark(range, key, value).expect("the peer's mark lands");
+        }
+        state.doc.commit();
+        let ProseEvent::Clipboard { html, .. } = clipboard(&mut state, (block, 0), (block, 8))
+        else {
+            panic!("a copy answers with the clipboard");
+        };
+        assert!(
+            html.contains("<a href=\"HTTPS://example.org/\">link</a>"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<span style=\"color:#ff0000;font-size:12pt;\">ink</span>"),
+            "{html}"
+        );
+    }
+
     /// `PROSE-UI-042`: the richest half wins. This application's bytes beat
     /// the HTML, the HTML beats the text, and HTML that reads as no block
     /// leaves the text to land.
