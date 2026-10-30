@@ -293,9 +293,14 @@ mod tests {
         }
     }
 
+    /// `TOILE-UI-421`: snapping moves a world point to the nearest multiple of
+    /// the grid step on each axis.
     #[test]
     fn snap_quantizes_to_step() {
         let s = snap_world(Point::new(23.0, -31.0), BoardLength::new(20.0));
         assert_eq!(s, Point::new(20.0, -40.0));
+        // Past the half step, the point goes up: rounding down would answer 20.
+        let up = snap_world(Point::new(31.0, 9.0), BoardLength::new(20.0));
+        assert_eq!(up, Point::new(40.0, 0.0));
     }
 }

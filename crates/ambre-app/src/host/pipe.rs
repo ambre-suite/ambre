@@ -12,9 +12,9 @@ use super::*;
 /// production implementation. Nothing here names an application: every call
 /// addresses the active view (`UI-THREAD-025`).
 pub(crate) trait PipeHost {
-    /// Forward an input event to the active view. `true` when the view
-    /// consumed it, so the listener prevents the browser default.
-    fn handle_input(&mut self, ev: &InputEvent) -> bool;
+    /// Forward an input event to the active view. `Consumed::Yes` when the
+    /// view took it, so the listener prevents the browser default.
+    fn handle_input(&mut self, ev: &InputEvent) -> Consumed;
     /// Ask the active view for the outcome of a `copy`, or of a `cut`.
     fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome;
     /// Hand a decoded paste to the active view (`UI-THREAD-024`).
@@ -26,7 +26,7 @@ pub(crate) trait PipeHost {
 }
 
 impl PipeHost for FrameHost {
-    fn handle_input(&mut self, ev: &InputEvent) -> bool {
+    fn handle_input(&mut self, ev: &InputEvent) -> Consumed {
         FrameHost::handle_input(self, ev)
     }
 
@@ -120,7 +120,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 });
                 // A key left unconsumed keeps its default, so its character
                 // reaches the buffer (`CHROME-062`).
-                if consumed {
+                if consumed.is_yes() {
                     event.prevent_default();
                 }
             },
@@ -144,7 +144,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                     return;
                 }
                 if let Some(key) = ambre_chrome::commands::Key::from_dom(&event.key()) {
-                    host_c.borrow_mut().handle_input(&InputEvent::KeyUp { key });
+                    let _ = host_c.borrow_mut().handle_input(&InputEvent::KeyUp { key });
                 }
             },
         );
@@ -169,8 +169,10 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
                 return;
             }
             let value = ta_read.value();
+            // The buffer already took the text, so no default is left to
+            // prevent, here or in the two composition listeners below.
             if !value.is_empty() {
-                host_c
+                let _ = host_c
                     .borrow_mut()
                     .handle_input(&InputEvent::Text { text: value });
                 ta_read.set_value("");
@@ -370,7 +372,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
         let cb = Closure::<dyn FnMut(web_sys::CompositionEvent)>::new(
             move |event: web_sys::CompositionEvent| {
                 let text = event.data().unwrap_or_default();
-                host_c
+                let _ = host_c
                     .borrow_mut()
                     .handle_input(&InputEvent::CompositionUpdate { text });
             },
@@ -391,7 +393,7 @@ pub(crate) fn wire_pipe<H: PipeHost + 'static>(
             move |event: web_sys::CompositionEvent| {
                 composing.set(ambre_canvas::Composition::Idle);
                 let text = event.data().unwrap_or_default();
-                host_c
+                let _ = host_c
                     .borrow_mut()
                     .handle_input(&InputEvent::CompositionEnd { text });
                 ta.set_value("");
@@ -433,7 +435,7 @@ mod tests {
     }
 
     impl PipeHost for Recorder {
-        fn handle_input(&mut self, ev: &InputEvent) -> bool {
+        fn handle_input(&mut self, ev: &InputEvent) -> Consumed {
             self.inputs.push(match ev {
                 InputEvent::Key { key, .. } => format!("key {key:?}"),
                 InputEvent::KeyUp { key } => format!("up {key:?}"),
@@ -442,7 +444,7 @@ mod tests {
                 InputEvent::CompositionEnd { text } => format!("commit {text}"),
                 _ => "other".to_owned(),
             });
-            self.consume
+            Consumed::yes_if(self.consume)
         }
 
         fn clipboard_write(&mut self, write: ClipboardWrite) -> ambre_bus::CopyOutcome {

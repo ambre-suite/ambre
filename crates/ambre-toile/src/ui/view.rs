@@ -44,7 +44,7 @@ use ambre_canvas::{
 };
 use ambre_core::{CssPx, CssVector, ViewPx};
 use ambre_draw::kinetic::{Release, ScrollStep};
-use ambre_draw::{FontContext, Point, Rect, Vec2};
+use ambre_draw::{Consumed, FontContext, Point, Rect, Vec2};
 
 use crate::logic::animate::AnimatedElement;
 use crate::logic::text_merge::merge_text;
@@ -1326,7 +1326,7 @@ impl ToileView {
 
     // -- Input handling --------------------------------------------------------
 
-    fn handle_wheel(&mut self, delta: WheelDelta, mods: Modifiers) -> bool {
+    fn handle_wheel(&mut self, delta: WheelDelta, mods: Modifiers) -> Consumed {
         let ctrl_key = mods.primary();
         // A line or page delta moves the board by the pixels it is worth, as
         // in every other view (`KINETIC-015`).
@@ -1362,7 +1362,7 @@ impl ToileView {
             super::kinetic::pan_by_wheel(&mut self.cam, &mut self.kinetic, px, delta.mode(), now);
         }
         self.queue_viewport();
-        true
+        Consumed::Yes
     }
 
     /// Classify the device behind a wheel event while in `Auto` mode, and
@@ -1648,7 +1648,7 @@ impl ToileView {
     /// A finger went down. It stops any motion left. On the empty board with
     /// the select tool, or with the hand, it pans (`TOILE-UI-378`);
     /// otherwise it acts as the mouse.
-    pub fn touch_down(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> bool {
+    pub fn touch_down(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> Consumed {
         self.kinetic.stop();
         let screen = on_screen(at);
         let world = self.cam.screen_to_world() * screen;
@@ -1664,7 +1664,7 @@ impl ToileView {
         if role == FingerRole::Pans {
             self.last_pointer = screen;
             self.kinetic.press(at, now);
-            return true;
+            return Consumed::Yes;
         }
         self.handle_input(&InputEvent::PointerDown {
             at,
@@ -1675,7 +1675,7 @@ impl ToileView {
 
     /// A finger moved: a panning finger drags the board past the tap slop,
     /// any other acts as the mouse.
-    pub fn touch_move(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> bool {
+    pub fn touch_move(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> Consumed {
         match self.finger {
             Some(FingerRole::Pans) => {
                 self.last_pointer = on_screen(at);
@@ -1683,56 +1683,58 @@ impl ToileView {
                     super::kinetic::move_view(&mut self.cam, step);
                     self.queue_viewport();
                 }
-                true
+                Consumed::Yes
             }
             Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerMove { at }),
-            None => false,
+            None => Consumed::No,
         }
     }
 
     /// A finger lifted. A pan released with speed keeps the board moving; a
     /// finger that never left the tap slop is a click where it went down.
-    pub fn touch_up(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> bool {
+    pub fn touch_up(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> Consumed {
         match self.finger.take() {
             Some(FingerRole::Pans) => {
+                // The panning finger is the board's, so the click a tap
+                // replays answers nothing of its own.
                 if let Release::Tap { at } = self.kinetic.release(now) {
-                    self.handle_input(&InputEvent::PointerDown {
+                    let _ = self.handle_input(&InputEvent::PointerDown {
                         at,
                         button: PointerButton::Primary,
                         mods: Modifiers::NONE,
                     });
-                    self.handle_input(&InputEvent::PointerUp {
+                    let _ = self.handle_input(&InputEvent::PointerUp {
                         at,
                         button: PointerButton::Primary,
                         mods: Modifiers::NONE,
                     });
                 }
-                true
+                Consumed::Yes
             }
             Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
                 at,
                 button: PointerButton::Primary,
                 mods: Modifiers::NONE,
             }),
-            None => false,
+            None => Consumed::No,
         }
     }
 
     /// The browser cancelled the finger (`KINETIC-010`). A pan ends with no
     /// click and no flick. A finger acting as the mouse ends its gesture where
     /// it last was, as a release would (`KINETIC-011`).
-    pub fn touch_cancel(&mut self) -> bool {
+    pub fn touch_cancel(&mut self) -> Consumed {
         match self.finger.take() {
             Some(FingerRole::Pans) => {
                 self.kinetic.cancel();
-                true
+                Consumed::Yes
             }
             Some(FingerRole::ActsAsMouse) => self.handle_input(&InputEvent::PointerUp {
                 at: view_point(self.last_pointer),
                 button: PointerButton::Primary,
                 mods: Modifiers::NONE,
             }),
-            None => false,
+            None => Consumed::No,
         }
     }
 
@@ -1747,7 +1749,8 @@ impl ToileView {
         };
         super::kinetic::move_view(&mut self.cam, step);
         self.queue_viewport();
-        self.handle_pointer_move(self.last_pointer);
+        // The pan replays the held gesture, and no input event waits on it.
+        let _ = self.handle_pointer_move(self.last_pointer);
     }
 
     /// Follow the link under a primary press, if any (`toile-links`). The badge
@@ -1785,7 +1788,7 @@ impl ToileView {
     /// The input a presentation still takes (`TOILE-UI-083`). The wheel moves
     /// the camera, a primary press follows a link, and a release or a move
     /// ends what began before. Every other input reaches no board handler.
-    fn present_input(&mut self, ev: &InputEvent) -> bool {
+    fn present_input(&mut self, ev: &InputEvent) -> Consumed {
         match ev {
             InputEvent::Wheel { delta, mods } => self.handle_wheel(*delta, *mods),
             InputEvent::PointerDown { at, button, mods } => {
@@ -1794,16 +1797,16 @@ impl ToileView {
                 if *button == PointerButton::Primary {
                     self.follow_link_under(screen, *mods);
                 }
-                true
+                Consumed::Yes
             }
             InputEvent::PointerMove { at } => self.handle_pointer_move(on_screen(*at)),
             InputEvent::PointerUp { at, .. } => self.handle_pointer_up(on_screen(*at)),
             InputEvent::KeyUp { key } => self.handle_key_up(*key),
-            InputEvent::DoubleClick { .. } => true,
+            InputEvent::DoubleClick { .. } => Consumed::Yes,
             InputEvent::Key { .. }
             | InputEvent::Text { .. }
             | InputEvent::CompositionUpdate { .. }
-            | InputEvent::CompositionEnd { .. } => false,
+            | InputEvent::CompositionEnd { .. } => Consumed::No,
         }
     }
 
@@ -1812,7 +1815,7 @@ impl ToileView {
         screen: Point,
         button: PointerButton,
         mods: Modifiers,
-    ) -> bool {
+    ) -> Consumed {
         self.last_pointer = screen;
         // A press in the canvas returns keyboard focus to the transparent text
         // pipe (Trame parity, `trame-cell-editing`). After the user touches the
@@ -1829,7 +1832,7 @@ impl ToileView {
         if button == PointerButton::Secondary {
             self.select_all_pending = false;
             self.handle_right_click(screen);
-            return true;
+            return Consumed::Yes;
         }
         // Follow a link (`toile-links`), before any gesture. A click on the
         // badge always follows. A click on the element follows only when it
@@ -1837,7 +1840,7 @@ impl ToileView {
         // A plain click with the select tool falls through and selects, which is
         // what keeps a linked element editable (`TOILE-112`).
         if button == PointerButton::Primary && self.follow_link_under(screen, mods) {
-            return true;
+            return Consumed::Yes;
         }
         // Space-drag or Hand tool or middle button: begin a pan.
         if self.space_down
@@ -1845,7 +1848,7 @@ impl ToileView {
             || button == PointerButton::Auxiliary
         {
             self.panning = Some(screen);
-            return true;
+            return Consumed::Yes;
         }
         // A pin answers before the board does (`TOILE-UI-082`): a click on it
         // opens its thread, and the element under it stays unselected
@@ -1860,7 +1863,7 @@ impl ToileView {
         ) {
             self.open_thread(thread);
             self.publish_cursor(screen);
-            return true;
+            return Consumed::Yes;
         }
         let world = self.cam.screen_to_world() * screen;
         // Arm a possible embed focus (`toile-embeds`). Consumes nothing: the
@@ -1879,7 +1882,7 @@ impl ToileView {
         {
             self.publish_cursor(screen);
             self.needs_full = true;
-            return true;
+            return Consumed::Yes;
         }
         // A press that the tool takes changes the selection. A select-all
         // answer that comes after it must not overwrite it (`TOILE-UI-396`).
@@ -1926,7 +1929,7 @@ impl ToileView {
             .flatten();
         self.publish_cursor(screen);
         self.overlay_dirty = true;
-        true
+        Consumed::Yes
     }
 
     // -- The selected arrow (`toile-connectors`) ------------------------------
@@ -2772,7 +2775,7 @@ impl ToileView {
         }
     }
 
-    fn handle_pointer_move(&mut self, screen: Point) -> bool {
+    fn handle_pointer_move(&mut self, screen: Point) -> Consumed {
         self.last_pointer = screen;
         if let Some(prev) = self.panning {
             // A mouse held on the board drags it one for one and leaves no
@@ -2781,13 +2784,13 @@ impl ToileView {
                 .pan_by_screen(ScrollStep::dragged(view_point(prev), view_point(screen)));
             self.panning = Some(screen);
             self.queue_viewport();
-            return true;
+            return Consumed::Yes;
         }
         if self.arrow_drag.is_some() {
             let world = self.cam.screen_to_world() * screen;
             self.drag_arrow_handle(world);
             self.publish_cursor(screen);
-            return true;
+            return Consumed::Yes;
         }
         if self.machine.is_active() {
             let world = self.cam.screen_to_world() * screen;
@@ -2795,21 +2798,21 @@ impl ToileView {
             self.apply_outcome(out);
             self.publish_cursor(screen);
             self.overlay_dirty = true;
-            return true;
+            return Consumed::Yes;
         }
         // At rest: refresh the directional resize cursor from the hovered edge /
         // corner (`toile-tools`). No repaint -- only the DOM
         // cursor changes.
         self.publish_cursor(screen);
-        false
+        Consumed::No
     }
 
-    fn handle_pointer_up(&mut self, screen: Point) -> bool {
+    fn handle_pointer_up(&mut self, screen: Point) -> Consumed {
         self.last_pointer = screen;
         // Consume any click-to-edit arming this release, whatever path is taken.
         let edit_candidate = self.click_edit_candidate.take();
         if self.panning.take().is_some() {
-            return true;
+            return Consumed::Yes;
         }
         // Settle the embed focus armed at press time (`toile-embeds`):
         // a click on an embed enters it, a release anywhere else returns focus to
@@ -2820,16 +2823,16 @@ impl ToileView {
             let world = self.cam.screen_to_world() * screen;
             self.release_arrow_handle(world);
             self.publish_cursor(screen);
-            return true;
+            return Consumed::Yes;
         }
-        let mut consumed = false;
+        let mut consumed = Consumed::No;
         if self.machine.is_active() {
             let world = self.cam.screen_to_world() * screen;
             let out = self.machine.pointer_up(world, &self.display);
             self.apply_outcome(out);
             self.publish_cursor(screen);
             self.overlay_dirty = true;
-            consumed = true;
+            consumed = Consumed::Yes;
         }
         // Click-to-edit (Miro-style, `toile-text-editing`): a press on an
         // already-selected Sticky / Text element released without a drag (a click,
@@ -2843,12 +2846,12 @@ impl ToileView {
         {
             self.open_editor(id);
             self.needs_full = true;
-            return true;
+            return Consumed::Yes;
         }
         consumed
     }
 
-    fn handle_double_click(&mut self, screen: Point) -> bool {
+    fn handle_double_click(&mut self, screen: Point) -> Consumed {
         self.last_pointer = screen;
         let world = self.cam.screen_to_world() * screen;
         // Select tool: a double-click on a Sticky / Text element opens the inline
@@ -2863,16 +2866,16 @@ impl ToileView {
             match edit {
                 Some(super::tool::DoubleClickEdit::FrameTitle(frame)) => {
                     self.open_frame_title_editor(frame);
-                    return true;
+                    return Consumed::Yes;
                 }
                 Some(super::tool::DoubleClickEdit::Body(hit)) => {
                     self.open_editor(hit);
-                    return true;
+                    return Consumed::Yes;
                 }
                 Some(super::tool::DoubleClickEdit::Caption(c)) => {
                     self.open_label_editor(c);
                     self.needs_full = true;
-                    return true;
+                    return Consumed::Yes;
                 }
                 None => {}
             }
@@ -2896,7 +2899,7 @@ impl ToileView {
         }
         self.apply_outcome(out);
         self.needs_full = true;
-        true
+        Consumed::Yes
     }
 
     /// Switch the active tool (driven by the chrome tool palette, `toile-tools`,
@@ -2971,23 +2974,23 @@ impl ToileView {
     /// pan, and the release gives the board back to its tool (`TOILE-UI-256`).
     /// A pan already under the pointer is ended with it, so the drag does not
     /// outlive the key that started it.
-    fn handle_key_up(&mut self, key: Key) -> bool {
+    fn handle_key_up(&mut self, key: Key) -> Consumed {
         if key != Key::Space {
-            return false;
+            return Consumed::No;
         }
         self.space_down = false;
         if self.machine.tool() != Tool::Hand {
             self.panning = None;
         }
-        true
+        Consumed::Yes
     }
 
     /// Keyboard shortcuts (`toile-tools`). Modifiers ride the event:
     /// `ctrl || meta` is the command chord (Ctrl on Windows/Linux, Cmd on macOS).
     /// Ctrl+C/X/V are intentionally NOT decoded here -- they ride the native
-    /// clipboard events (Phase A). Returns `true` when the key was consumed (host
-    /// `preventDefault`).
-    fn handle_key(&mut self, key: Key, mods: Modifiers) -> bool {
+    /// clipboard events (Phase A). Answers `Consumed::Yes` for a key it takes
+    /// (host `preventDefault`).
+    fn handle_key(&mut self, key: Key, mods: Modifiers) -> Consumed {
         let cmd = mods.primary();
         let shift = mods.shift();
         // Command chords first, so a bare-key fallthrough never shadows them.
@@ -3028,10 +3031,10 @@ impl ToileView {
                 // Local select-all over every displayed element (connectors are
                 // selected with their endpoints, not directly).
                 Key::Char(KeyChar::A) => self.select_all(),
-                _ => return false,
+                _ => return Consumed::No,
             }
             self.needs_full = true;
-            return true;
+            return Consumed::Yes;
         }
         // Type-to-edit: with a single sticky/text selected and no editor open, a
         // printable character enters edit and REPLACES the body (Trame-cell
@@ -3044,12 +3047,12 @@ impl ToileView {
         {
             self.open_editor(id);
             self.push_intent(EditIntent::SelectAll);
-            return false;
+            return Consumed::No;
         }
         match key {
             Key::Space => {
                 self.space_down = true;
-                true
+                Consumed::Yes
             }
             Key::Escape => {
                 // Leaving a focused embed is the whole action: the board's
@@ -3061,7 +3064,7 @@ impl ToileView {
                 // which it hands to this view. Otherwise the key that exits the
                 // child would be swallowed by it.
                 if self.blur_embed() {
-                    return true;
+                    return Consumed::Yes;
                 }
                 // Cancel any in-flight gesture and revert an armed creation tool
                 // to Select so it stops silently placing elements
@@ -3087,7 +3090,7 @@ impl ToileView {
                 // the next click selects whole groups again.
                 self.group_scope = None;
                 self.needs_full = true;
-                true
+                Consumed::Yes
             }
             Key::Delete | Key::Backspace => {
                 if !self.selection.is_empty() {
@@ -3098,7 +3101,7 @@ impl ToileView {
                     self.send_edit(ToileCommand::DeleteConnector { id });
                     self.needs_full = true;
                 }
-                true
+                Consumed::Yes
             }
             // Nudge the selection by 1 world unit (10 with Shift),
             // `toile-elements`.
@@ -3117,9 +3120,9 @@ impl ToileView {
                     delta,
                 });
                 self.needs_full = true;
-                true
+                Consumed::Yes
             }
-            _ => false,
+            _ => Consumed::No,
         }
     }
 
@@ -3475,19 +3478,19 @@ impl ToileView {
     /// Route an input event to the active editor. Returns `Some(consumed)` when
     /// the editor decides the event's fate, or `None` to let normal handling run
     /// (chords like Ctrl+Z, wheel pan/zoom keep working while editing).
-    fn edit_input(&mut self, ev: &InputEvent) -> Option<bool> {
+    fn edit_input(&mut self, ev: &InputEvent) -> Option<Consumed> {
         match ev {
             InputEvent::Text { text } => {
                 self.push_intent(EditIntent::Insert(text.clone()));
-                Some(true)
+                Some(Consumed::Yes)
             }
             InputEvent::CompositionUpdate { text } => {
                 self.push_intent(EditIntent::Compose(text.clone()));
-                Some(true)
+                Some(Consumed::Yes)
             }
             InputEvent::CompositionEnd { text } => {
                 self.push_intent(EditIntent::ComposeEnd(text.clone()));
-                Some(true)
+                Some(Consumed::Yes)
             }
             InputEvent::Key { key, mods } => Some(self.edit_key(*key, *mods)),
             // The editor holds no key across frames, so a release means nothing
@@ -3502,7 +3505,7 @@ impl ToileView {
                     }
                     None => self.request_close_editor(),
                 }
-                Some(true)
+                Some(Consumed::Yes)
             }
             InputEvent::PointerMove { at } => {
                 self.last_pointer = on_screen(*at);
@@ -3510,21 +3513,21 @@ impl ToileView {
                     && let Some(local) = self.edit_local_point(self.last_pointer)
                 {
                     self.push_intent(EditIntent::PointerDrag(doc_point(local)));
-                    return Some(true);
+                    return Some(Consumed::Yes);
                 }
-                Some(self.edit_pointer_down)
+                Some(Consumed::yes_if(self.edit_pointer_down))
             }
             InputEvent::PointerUp { .. } => {
                 let was = self.edit_pointer_down;
                 self.edit_pointer_down = false;
-                Some(was)
+                Some(Consumed::yes_if(was))
             }
             InputEvent::DoubleClick { at } => {
                 match self.edit_local_point(on_screen(*at)) {
                     Some(local) => self.push_intent(EditIntent::WordAt(doc_point(local))),
                     None => self.request_close_editor(),
                 }
-                Some(true)
+                Some(Consumed::Yes)
             }
             // Wheel pans/zooms the board under the editor (it follows the element
             // each paint); let the normal handler run. A dropped file is the
@@ -3533,10 +3536,10 @@ impl ToileView {
         }
     }
 
-    /// Editing key map. Returns `true` when consumed (host `preventDefault`).
-    /// Character-producing keys return `false` so the browser still emits the
-    /// `input` event that lands as `InputEvent::Text` (the actual insertion).
-    fn edit_key(&mut self, key: Key, mods: Modifiers) -> bool {
+    /// Editing key map. Answers `Consumed::Yes` for a key it takes (host
+    /// `preventDefault`). A character key is left, so the browser still emits
+    /// the `input` event that lands as `InputEvent::Text` (the insertion).
+    fn edit_key(&mut self, key: Key, mods: Modifiers) -> Consumed {
         let cmd = mods.primary();
         let shift = mods.shift();
         // Ctrl/Alt+Arrow jumps by word; Ctrl+A selects all inside the editor.
@@ -3544,11 +3547,11 @@ impl ToileView {
             match key {
                 Key::Char(KeyChar::A) => {
                     self.push_intent(EditIntent::SelectAll);
-                    return true;
+                    return Consumed::Yes;
                 }
                 // Other chords (Ctrl+Z/C/X/V...) are not editor actions: let the
                 // board handler / native clipboard have them.
-                _ => return false,
+                _ => return Consumed::No,
             }
         }
         let word = ambre_canvas::Stride::word_if(mods.alt()); // Alt+Arrow = word motion (Ctrl is reserved for chords).
@@ -3578,11 +3581,11 @@ impl ToileView {
                 select: ambre_canvas::Extend::select_if(shift),
             }),
             // A character key: do NOT consume, so the textarea emits `input` and
-            // the char arrives as `InputEvent::Text`. Returning false also skips
+            // the char arrives as `InputEvent::Text`. Leaving it also skips
             // the board shortcut handler (guarded by `editor.is_some()`).
-            _ => return false,
+            _ => return Consumed::No,
         }
-        true
+        Consumed::Yes
     }
 
     /// Queue an editor intent and mark the overlay dirty.
@@ -4065,7 +4068,7 @@ impl ToileView {
         self.queue_viewport();
     }
 
-    pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+    pub fn handle_input(&mut self, ev: &InputEvent) -> Consumed {
         // Clear the child route first, so a stale value never survives an event
         // the board consumes early, such as an open inline editor below.
         // `FrameHost` reads `child_route()` after every `handle_input`.
@@ -4075,7 +4078,7 @@ impl ToileView {
         // the event is what makes the refusal visible: a gesture that fell
         // through to the browser would scroll the page under a frozen board.
         if self.is_busy() {
-            return true;
+            return Consumed::Yes;
         }
         // The chrome arms a tool and runs a palette command at once, and the
         // board reads both at its next frame. An input that comes first must
@@ -4115,7 +4118,7 @@ impl ToileView {
                 self.last_pointer = on_screen(*at);
             }
             self.child_route = self.focused_child();
-            return true;
+            return Consumed::Yes;
         }
         match ev {
             InputEvent::Wheel { delta, mods } => self.handle_wheel(*delta, *mods),
@@ -4129,7 +4132,7 @@ impl ToileView {
             InputEvent::DoubleClick { at } => self.handle_double_click(on_screen(*at)),
             InputEvent::Text { .. }
             | InputEvent::CompositionUpdate { .. }
-            | InputEvent::CompositionEnd { .. } => false,
+            | InputEvent::CompositionEnd { .. } => Consumed::No,
         }
     }
 

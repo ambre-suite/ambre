@@ -297,7 +297,8 @@ mod tests {
         assert_eq!(first.to_svg(), second.to_svg());
     }
 
-    /// A tolerance that would ask kurbo for unbounded points is refused.
+    /// `TOILE-FEAT-112`: a tolerance that would ask kurbo for unbounded points
+    /// is refused.
     #[test]
     fn a_flatten_tolerance_is_finite_and_positive() {
         for bad in [0.0, -0.25, f64::NAN, f64::INFINITY] {

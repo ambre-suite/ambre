@@ -274,9 +274,9 @@ impl FrameHost {
         Rc::clone(&self.clip_published)
     }
 
-    /// Forward an input event to the view. Returns `true` if the caller should
-    /// `preventDefault()` on the originating DOM event.
-    pub fn handle_input(&mut self, ev: &InputEvent) -> bool {
+    /// Forward an input event to the view. Answers `Consumed::Yes` when the
+    /// caller should `preventDefault()` on the originating DOM event.
+    pub fn handle_input(&mut self, ev: &InputEvent) -> Consumed {
         // A cell beside the content canvas that holds the text pipe takes
         // what the pipe hears (`CANVAS-076`).
         if let Some(consumed) = self.cells.route(ev) {
@@ -293,8 +293,10 @@ impl FrameHost {
         {
             // A positional event the board cannot map is dropped, not handed
             // over unmapped (`TOILE-UI-328`).
+            // The board already answered for the event, so the child's answer
+            // decides nothing.
             if let Some(remapped) = remap_for_child(&self.view, ev) {
-                child.handle_input(&remapped);
+                let _ = child.handle_input(&remapped);
             }
         }
         consumed
@@ -370,13 +372,18 @@ impl FrameHost {
 
     /// Text dropped on the canvas at a point, in canvas pixels. Only Prose
     /// takes it (`PROSE-UI-204`); answers whether it did.
-    pub fn drop_text(&mut self, at: ViewPoint, text: String) -> bool {
+    pub fn drop_text(&mut self, at: ViewPoint, text: String) -> Consumed {
         self.view.drop_text(at, text)
     }
 
     /// A finger on the canvas, in canvas pixels. Only Prose takes a touch
     /// pointer apart (`PROSE-UI-217`); answers whether it did.
-    pub fn touch(&mut self, phase: TouchPhase, at: ViewPoint, now: ambre_core::PageTime) -> bool {
+    pub fn touch(
+        &mut self,
+        phase: TouchPhase,
+        at: ViewPoint,
+        now: ambre_core::PageTime,
+    ) -> Consumed {
         self.view.touch(phase, at, now)
     }
 
