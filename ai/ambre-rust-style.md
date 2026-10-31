@@ -136,8 +136,11 @@
     or `Cow` hand out their element. A generic `Target = T` counts, bound or not: the gate cannot
     see which instance makes `T` a primitive, so it fails closed. The gate refuses such a `Deref`
     whatever the allowlist says.
-  * **Generation.** A family of similar types comes from one macro, as `define_encoded!` does.
-    Hand-written copies drift.
+  * **Generation.** A family of similar types is one generic type over a marker type. The marker
+    carries what differs: an associated type, an associated constant, or a capability trait that
+    enables an `impl` block. Hand-written copies drift, and the gate reads no site a macro writes.
+    A macro writes a type only where a generic cannot, for example an enum whose variants differ
+    per type, as `define_flag!` writes.
 * **The primitive gate holds the rule.** `just primitives` finds every site outside a test whose
   type holds a primitive. Each site is typed, or `specs/1-Foundations/ambre-primitives.tsv` names
   it with a category and a reason (`ambre-spec-testing.md section 2`). A reviewer reads every new
