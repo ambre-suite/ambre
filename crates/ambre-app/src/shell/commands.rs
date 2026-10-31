@@ -3,12 +3,13 @@
 // The shell's half of the command path (`ARCH-018`).
 //
 // A toolbar button, a menu entry, the palette and a chord all resolve to a
-// `CommandId`. The booted application's handler says what the id means. This
+// `StaticKey<Commands>`. The booted application's handler says what the id means. This
 // module only performs the answer. It wraps a command for the routed document,
 // opens an overlay the shell owns, drives the clipboard or opens a picker.
 // Nothing here matches on an application's id.
 // ============================================================================
 
+use ambre_chrome::commands::{Commands, StaticKey};
 use ambre_chrome::{CommandHandler, KeyRoute, ShellAction};
 use ambre_murmure::chrome::MurmureHandler;
 use ambre_prose::chrome::ProseHandler;
@@ -84,7 +85,7 @@ pub(crate) struct CommandPath {
 
 impl CommandPath {
     /// Run the command `id` from a toolbar, a menu or the palette.
-    pub(crate) fn run(&self, id: CommandId) {
+    pub(crate) fn run(&self, id: StaticKey<Commands>) {
         for action in self.handler.get().on_command(id) {
             self.perform(action);
         }
@@ -92,7 +93,7 @@ impl CommandPath {
 
     /// Run the chord that resolved to `id`. `false` when the key yields to the
     /// focused field, whose default must then stand.
-    pub(crate) fn key(&self, id: CommandId, target: ambre_chrome::KeyTarget) -> bool {
+    pub(crate) fn key(&self, id: StaticKey<Commands>, target: ambre_chrome::KeyTarget) -> bool {
         match self.handler.get().on_key(id, target) {
             KeyRoute::Yield => false,
             KeyRoute::Run(actions) => {

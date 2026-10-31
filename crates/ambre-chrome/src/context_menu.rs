@@ -8,12 +8,12 @@
 // flipped if it would overflow, with arrow/Home/End/Enter/Escape keyboard
 // navigation and close on Escape / click-outside.
 //
-// Items are registry commands. Selecting one invokes a `CommandId` through
+// Items are registry commands. Selecting one invokes a `StaticKey<Commands>` through
 // `on_command`, the same path as the toolbar and shortcuts. A right-click
 // "Bold" therefore runs the exact same command, decoupled from the trigger.
 // ============================================================================
 
-use ambre_commands::{Command, CommandId, KeyBinding, Locale};
+use ambre_commands::{Command, Commands, KeyBinding, Locale, StaticKey};
 use ambre_core::{Css, Point, Px, Vector};
 use leptos::html;
 use leptos::prelude::*;
@@ -45,7 +45,7 @@ pub enum MenuEntry {
 /// description, so a menu cannot show a label of its own (`UI-THREAD-036`).
 #[derive(Clone, PartialEq)]
 pub struct MenuItem {
-    command: CommandId,
+    command: StaticKey<Commands>,
     label: String,
     icon: Option<icondata::Icon>,
     shortcut: Option<KeyBinding>,
@@ -55,7 +55,7 @@ pub struct MenuItem {
 impl MenuItem {
     /// The command the row invokes.
     #[must_use]
-    pub const fn command(&self) -> CommandId {
+    pub const fn command(&self) -> StaticKey<Commands> {
         self.command
     }
 
@@ -127,7 +127,7 @@ pub fn ContextMenu(
     /// a header-scoped one between right-clicks (`trame-context-menu`).
     #[prop(into)]
     entries: Signal<Vec<MenuEntry>>,
-    on_command: Callback<CommandId>,
+    on_command: Callback<StaticKey<Commands>>,
 ) -> impl IntoView {
     let menu_ref = NodeRef::<html::Ul>::new();
     let focused = RwSignal::new(0usize);
@@ -254,7 +254,7 @@ pub fn ContextMenu(
         // vectors over them, skipping separators, so keyboard nav and the roving
         // `data-idx` index the items, not the raw rows.
         let rows = entries.get();
-        let cmds: Vec<CommandId> = rows
+        let cmds: Vec<StaticKey<Commands>> = rows
             .iter()
             .filter_map(|e| match e {
                 MenuEntry::Item(item) => Some(item.command),

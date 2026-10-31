@@ -425,7 +425,7 @@ on the transaction's commit, not the request's success: a transaction still open
 aborted, and the file with it.
 
 **Where the user types the passphrase, and where they do not.** The launcher asks in both
-directions, never an application. A passphrase cannot travel in a `CommandId`, so the sealed save
+directions, never an application. A passphrase cannot travel in a `StaticKey<Commands>`, so the sealed save
 is a UI-only intent the launcher intercepts. The shape Find and the column filter already do this.
 One component serves both (`ambre-chrome`): one operation seals a board and a workbook.
 

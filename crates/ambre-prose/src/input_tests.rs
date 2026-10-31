@@ -6,7 +6,7 @@ use crate::layout::run::{Affinity, RunCount, RunOffset};
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::DocOffset;
 use ambre_bus::app::prose::DocSpan;
-use ambre_commands::ClipboardWrite;
+use ambre_commands::{ClipboardWrite, Commands, StaticKey};
 use ambre_core::{Doc, Px, View};
 use ambre_draw::HitTest;
 
@@ -1443,7 +1443,7 @@ impl Rig {
     }
 
     /// Send what a control asks for, then take the new layout.
-    fn format(&mut self, id: ambre_commands::CommandId) -> Option<ProseCommand> {
+    fn format(&mut self, id: StaticKey<Commands>) -> Option<ProseCommand> {
         let command = self.ui.format(id);
         self.take_sent(command.clone().into_iter().collect());
         self.deliver();

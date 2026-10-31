@@ -1,7 +1,7 @@
 // ambre-trame/src/ui/commands.rs
 // ============================================================================
 // Trame's command registry: one `Command` per affordance, and the pure
-// `CommandId -> AppCommand` mapping (`ambre-spec-commands.md`, UI-THREAD-019).
+// `StaticKey<Commands> -> AppCommand` mapping (`ambre-spec-commands.md`, UI-THREAD-019).
 //
 // Host-compiled, like `ambre-toile`'s `ui::menu`, and for the same reason. The
 // description is what every view derives from: the context menu, the toolbar and
@@ -9,7 +9,7 @@
 // half (the `MenuEntry` builders, the command store, the toast mirror) stays in
 // `chrome::commands`.
 //
-// The registry carries `IconId`, a string. `chrome::icons` resolves it to the
+// The registry carries `StaticKey<Icons>`, a string. `chrome::icons` resolves it to the
 // concrete `icondata::Icon`, which keeps `ambre-commands` a leaf with an empty
 // dependency table (UI-THREAD-027). It also keeps Trame's icon set out of the
 // shared crate.
@@ -17,7 +17,7 @@
 
 use ambre_bus::{AppCommand, TrameCommand};
 use ambre_commands::{
-    Command, CommandCategory, CommandId, IconId, KeyBinding, KeyChar, Keymap, Locale, shared,
+    Categories, Command, Commands, Icons, KeyBinding, KeyChar, Keymap, Locale, StaticKey, shared,
 };
 
 use crate::ui::grid::CtxScope;
@@ -32,7 +32,7 @@ use crate::ui::grid::CtxScope;
 /// without a second line here.
 macro_rules! commands {
     ($($name:ident = $id:expr, $label:literal, $icon:expr, $chords:expr, $category:expr;)*) => {
-        $(pub const $name: CommandId = $id;)*
+        $(pub const $name: StaticKey<Commands> = $id;)*
 
         // The generated title functions. Named after the constants, so the
         // module carries the case exemption rather than every call site.
@@ -60,16 +60,16 @@ macro_rules! commands {
     };
 }
 
-const FORMAT: CommandCategory = CommandCategory::new("format");
-const HISTORY: CommandCategory = CommandCategory::new("history");
-const STRUCTURE: CommandCategory = CommandCategory::new("structure");
-const SORT: CommandCategory = CommandCategory::new("sort");
-const FILTER: CommandCategory = CommandCategory::new("filter");
-const FIND_REPLACE: CommandCategory = CommandCategory::new("find");
-const CLIPBOARD: CommandCategory = CommandCategory::new("clipboard");
-const INTEROP: CommandCategory = CommandCategory::new("interop");
+const FORMAT: StaticKey<Categories> = StaticKey::<Categories>::new("format");
+const HISTORY: StaticKey<Categories> = StaticKey::<Categories>::new("history");
+const STRUCTURE: StaticKey<Categories> = StaticKey::<Categories>::new("structure");
+const SORT: StaticKey<Categories> = StaticKey::<Categories>::new("sort");
+const FILTER: StaticKey<Categories> = StaticKey::<Categories>::new("filter");
+const FIND_REPLACE: StaticKey<Categories> = StaticKey::<Categories>::new("find");
+const CLIPBOARD: StaticKey<Categories> = StaticKey::<Categories>::new("clipboard");
+const INTEROP: StaticKey<Categories> = StaticKey::<Categories>::new("interop");
 /// Commands that belong to the application shell rather than the document.
-const GENERAL: CommandCategory = CommandCategory::new("general");
+const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 
 // The labels are the ones the chrome shows today: the context-menu entries of
 // `chrome::commands` and the toolbar `aria-label`s of `chrome::bars`. Those
@@ -80,35 +80,35 @@ const GENERAL: CommandCategory = CommandCategory::new("general");
 // as well (`UI-THREAD-011`). Undo and Redo take the shared chord lists, which
 // is where Ctrl+Y is declared beside Ctrl+Shift+Z.
 commands! {
-    BOLD = CommandId::new("trame.format.bold"), "Bold", Some(IconId::new("format-bold")), &[KeyBinding::primary(KeyChar::B)], FORMAT;
-    ITALIC = CommandId::new("trame.format.italic"), "Italic", Some(IconId::new("format-italic")), &[KeyBinding::primary(KeyChar::I)], FORMAT;
-    UNDO = CommandId::new("trame.history.undo"), "Undo", Some(IconId::new("undo")), shared::UNDO_CHORDS, HISTORY;
-    REDO = CommandId::new("trame.history.redo"), "Redo", Some(IconId::new("redo")), shared::REDO_CHORDS, HISTORY;
-    INSERT_ROW_ABOVE = CommandId::new("trame.row.insert_above"), "Insert row above", Some(IconId::new("table-row-plus-before")), &[], STRUCTURE;
-    INSERT_ROW_BELOW = CommandId::new("trame.row.insert_below"), "Insert row below", Some(IconId::new("table-row-plus-after")), &[], STRUCTURE;
-    INSERT_COL_LEFT = CommandId::new("trame.col.insert_left"), "Insert column left", Some(IconId::new("table-column-plus-before")), &[], STRUCTURE;
-    INSERT_COL_RIGHT = CommandId::new("trame.col.insert_right"), "Insert column right", Some(IconId::new("table-column-plus-after")), &[], STRUCTURE;
-    DELETE_ROWS = CommandId::new("trame.row.delete"), "Delete rows", Some(IconId::new("table-row-remove")), &[], STRUCTURE;
-    DELETE_COLS = CommandId::new("trame.col.delete"), "Delete columns", Some(IconId::new("table-column-remove")), &[], STRUCTURE;
-    MERGE = CommandId::new("trame.merge"), "Merge cells", Some(IconId::new("table-merge-cells")), &[], STRUCTURE;
-    UNMERGE = CommandId::new("trame.unmerge"), "Unmerge cells", Some(IconId::new("table-split-cell")), &[], STRUCTURE;
-    SORT_RANGE_ASC = CommandId::new("trame.sort.range_asc"), "Sort range ascending", Some(IconId::new("sort-ascending")), &[], SORT;
-    SORT_RANGE_DESC = CommandId::new("trame.sort.range_desc"), "Sort range descending", Some(IconId::new("sort-descending")), &[], SORT;
-    SORT_SHEET_ASC = CommandId::new("trame.sort.sheet_asc"), "Sort sheet by column (asc)", Some(IconId::new("sort")), &[], SORT;
-    SORT_SHEET_DESC = CommandId::new("trame.sort.sheet_desc"), "Sort sheet by column (desc)", Some(IconId::new("sort")), &[], SORT;
-    SORT_RANGE_MULTI = CommandId::new("trame.sort.range_multi"), "Sort range...", Some(IconId::new("sort-variant")), &[], SORT;
-    FILTER_COLUMN = CommandId::new("trame.filter.column"), "Filter by column", Some(IconId::new("filter")), &[], FILTER;
-    CLEAR_FILTER = CommandId::new("trame.filter.clear"), "Remove filter", Some(IconId::new("filter-off")), &[], FILTER;
-    FIND = CommandId::new("trame.find.open"), "Find and replace", Some(IconId::new("search")), &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE;
-    REPLACE = CommandId::new("trame.find.replace"), "Replace", None, &[KeyBinding::primary(KeyChar::H)], FIND_REPLACE;
-    COPY = shared::COPY, "Copy", Some(IconId::new("content-copy")), shared::COPY_CHORDS, CLIPBOARD;
-    CUT = shared::CUT, "Cut", Some(IconId::new("content-cut")), shared::CUT_CHORDS, CLIPBOARD;
-    PASTE = shared::PASTE, "Paste", Some(IconId::new("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
-    IMPORT_CSV = CommandId::new("trame.interop.import_csv"), "Import CSV", Some(IconId::new("import")), &[], INTEROP;
-    EXPORT_CSV = CommandId::new("trame.interop.export_csv"), "Export CSV", Some(IconId::new("export")), &[], INTEROP;
-    SAVE_FILE = CommandId::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(IconId::new("content-save")), &[], INTEROP;
-    SAVE_SEALED_FILE = CommandId::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(IconId::new("lock-outline")), &[], INTEROP;
-    PALETTE = CommandId::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
+    BOLD = StaticKey::<Commands>::new("trame.format.bold"), "Bold", Some(StaticKey::<Icons>::new("format-bold")), &[KeyBinding::primary(KeyChar::B)], FORMAT;
+    ITALIC = StaticKey::<Commands>::new("trame.format.italic"), "Italic", Some(StaticKey::<Icons>::new("format-italic")), &[KeyBinding::primary(KeyChar::I)], FORMAT;
+    UNDO = StaticKey::<Commands>::new("trame.history.undo"), "Undo", Some(StaticKey::<Icons>::new("undo")), shared::UNDO_CHORDS, HISTORY;
+    REDO = StaticKey::<Commands>::new("trame.history.redo"), "Redo", Some(StaticKey::<Icons>::new("redo")), shared::REDO_CHORDS, HISTORY;
+    INSERT_ROW_ABOVE = StaticKey::<Commands>::new("trame.row.insert_above"), "Insert row above", Some(StaticKey::<Icons>::new("table-row-plus-before")), &[], STRUCTURE;
+    INSERT_ROW_BELOW = StaticKey::<Commands>::new("trame.row.insert_below"), "Insert row below", Some(StaticKey::<Icons>::new("table-row-plus-after")), &[], STRUCTURE;
+    INSERT_COL_LEFT = StaticKey::<Commands>::new("trame.col.insert_left"), "Insert column left", Some(StaticKey::<Icons>::new("table-column-plus-before")), &[], STRUCTURE;
+    INSERT_COL_RIGHT = StaticKey::<Commands>::new("trame.col.insert_right"), "Insert column right", Some(StaticKey::<Icons>::new("table-column-plus-after")), &[], STRUCTURE;
+    DELETE_ROWS = StaticKey::<Commands>::new("trame.row.delete"), "Delete rows", Some(StaticKey::<Icons>::new("table-row-remove")), &[], STRUCTURE;
+    DELETE_COLS = StaticKey::<Commands>::new("trame.col.delete"), "Delete columns", Some(StaticKey::<Icons>::new("table-column-remove")), &[], STRUCTURE;
+    MERGE = StaticKey::<Commands>::new("trame.merge"), "Merge cells", Some(StaticKey::<Icons>::new("table-merge-cells")), &[], STRUCTURE;
+    UNMERGE = StaticKey::<Commands>::new("trame.unmerge"), "Unmerge cells", Some(StaticKey::<Icons>::new("table-split-cell")), &[], STRUCTURE;
+    SORT_RANGE_ASC = StaticKey::<Commands>::new("trame.sort.range_asc"), "Sort range ascending", Some(StaticKey::<Icons>::new("sort-ascending")), &[], SORT;
+    SORT_RANGE_DESC = StaticKey::<Commands>::new("trame.sort.range_desc"), "Sort range descending", Some(StaticKey::<Icons>::new("sort-descending")), &[], SORT;
+    SORT_SHEET_ASC = StaticKey::<Commands>::new("trame.sort.sheet_asc"), "Sort sheet by column (asc)", Some(StaticKey::<Icons>::new("sort")), &[], SORT;
+    SORT_SHEET_DESC = StaticKey::<Commands>::new("trame.sort.sheet_desc"), "Sort sheet by column (desc)", Some(StaticKey::<Icons>::new("sort")), &[], SORT;
+    SORT_RANGE_MULTI = StaticKey::<Commands>::new("trame.sort.range_multi"), "Sort range...", Some(StaticKey::<Icons>::new("sort-variant")), &[], SORT;
+    FILTER_COLUMN = StaticKey::<Commands>::new("trame.filter.column"), "Filter by column", Some(StaticKey::<Icons>::new("filter")), &[], FILTER;
+    CLEAR_FILTER = StaticKey::<Commands>::new("trame.filter.clear"), "Remove filter", Some(StaticKey::<Icons>::new("filter-off")), &[], FILTER;
+    FIND = StaticKey::<Commands>::new("trame.find.open"), "Find and replace", Some(StaticKey::<Icons>::new("search")), &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE;
+    REPLACE = StaticKey::<Commands>::new("trame.find.replace"), "Replace", None, &[KeyBinding::primary(KeyChar::H)], FIND_REPLACE;
+    COPY = shared::COPY, "Copy", Some(StaticKey::<Icons>::new("content-copy")), shared::COPY_CHORDS, CLIPBOARD;
+    CUT = shared::CUT, "Cut", Some(StaticKey::<Icons>::new("content-cut")), shared::CUT_CHORDS, CLIPBOARD;
+    PASTE = shared::PASTE, "Paste", Some(StaticKey::<Icons>::new("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
+    IMPORT_CSV = StaticKey::<Commands>::new("trame.interop.import_csv"), "Import CSV", Some(StaticKey::<Icons>::new("import")), &[], INTEROP;
+    EXPORT_CSV = StaticKey::<Commands>::new("trame.interop.export_csv"), "Export CSV", Some(StaticKey::<Icons>::new("export")), &[], INTEROP;
+    SAVE_FILE = StaticKey::<Commands>::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(StaticKey::<Icons>::new("content-save")), &[], INTEROP;
+    SAVE_SEALED_FILE = StaticKey::<Commands>::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(StaticKey::<Icons>::new("lock-outline")), &[], INTEROP;
+    PALETTE = StaticKey::<Commands>::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Trame
@@ -116,13 +116,13 @@ commands! {
 ///
 /// The one reader of a command's title. A view that wants a label calls this
 /// and never writes one of its own (`UI-THREAD-019`).
-pub fn title(id: CommandId, locale: &Locale) -> Option<String> {
+pub fn title(id: StaticKey<Commands>, locale: &Locale) -> Option<String> {
     ambre_commands::find(COMMANDS, id).map(|c| (c.title)(locale))
 }
 
 /// The icon handle `id` declares, if it has one. The chrome resolves it to the
 /// asset (`chrome::icons`).
-pub fn icon(id: CommandId) -> Option<IconId> {
+pub fn icon(id: StaticKey<Commands>) -> Option<StaticKey<Icons>> {
     ambre_commands::find(COMMANDS, id).and_then(|c| c.icon)
 }
 
@@ -152,13 +152,13 @@ pub fn bind_keys(keymap: &mut Keymap) {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MenuRow {
     /// A selectable command, shown with the label and icon it declares.
-    Command(CommandId),
+    Command(StaticKey<Commands>),
     /// A divider between two groups.
     Separator,
 }
 
 /// Structural ops of the full cell menu.
-const STRUCTURAL_GROUP: &[CommandId] = &[
+const STRUCTURAL_GROUP: &[StaticKey<Commands>] = &[
     INSERT_ROW_ABOVE,
     INSERT_ROW_BELOW,
     INSERT_COL_LEFT,
@@ -168,10 +168,12 @@ const STRUCTURAL_GROUP: &[CommandId] = &[
 ];
 
 /// Column-only structural ops, for the column-header menu.
-const COLUMN_STRUCTURAL_GROUP: &[CommandId] = &[INSERT_COL_LEFT, INSERT_COL_RIGHT, DELETE_COLS];
+const COLUMN_STRUCTURAL_GROUP: &[StaticKey<Commands>] =
+    &[INSERT_COL_LEFT, INSERT_COL_RIGHT, DELETE_COLS];
 
 /// Row-only structural ops, for the row-header menu.
-const ROW_STRUCTURAL_GROUP: &[CommandId] = &[INSERT_ROW_ABOVE, INSERT_ROW_BELOW, DELETE_ROWS];
+const ROW_STRUCTURAL_GROUP: &[StaticKey<Commands>] =
+    &[INSERT_ROW_ABOVE, INSERT_ROW_BELOW, DELETE_ROWS];
 
 /// Sort group, shared by the cell and the header menus (`trame-sort`).
 ///
@@ -179,7 +181,7 @@ const ROW_STRUCTURAL_GROUP: &[CommandId] = &[INSERT_ROW_ABOVE, INSERT_ROW_BELOW,
 /// selection's first column, and the Logic thread no-ops an empty/single-row
 /// range. Also the whole-sheet sort by the active column: a whole-column
 /// selection sorts the full used range so rows stay aligned.
-const SORT_GROUP: &[CommandId] = &[
+const SORT_GROUP: &[StaticKey<Commands>] = &[
     SORT_RANGE_ASC,
     SORT_RANGE_DESC,
     SORT_SHEET_ASC,
@@ -188,15 +190,15 @@ const SORT_GROUP: &[CommandId] = &[
 ];
 
 /// Clipboard group (`trame-clipboard`): cell-only, driven by the launcher.
-const CLIPBOARD_GROUP: &[CommandId] = &[CUT, COPY, PASTE];
+const CLIPBOARD_GROUP: &[StaticKey<Commands>] = &[CUT, COPY, PASTE];
 
 /// Merge group (`trame-cell-merges`): cell-only. Always listed, and the Logic
 /// thread guards it. A single-cell Merge is a no-op, a covered cell replies
 /// MergeRejected -> toast, and Unmerge outside a merge is a no-op.
-const MERGE_GROUP: &[CommandId] = &[MERGE, UNMERGE];
+const MERGE_GROUP: &[StaticKey<Commands>] = &[MERGE, UNMERGE];
 
 /// Whole-sheet sort, for the corner menu.
-const CORNER_SORT_GROUP: &[CommandId] = &[SORT_SHEET_ASC, SORT_SHEET_DESC];
+const CORNER_SORT_GROUP: &[StaticKey<Commands>] = &[SORT_SHEET_ASC, SORT_SHEET_DESC];
 
 /// Whether the active sheet is filtered (`trame-shared-filter`). The context
 /// menu offers "Clear filter" only on a filtered sheet.
@@ -220,7 +222,7 @@ impl SheetFilter {
 /// popover); with a filter active it offers "Remove filter" (drops it). Never
 /// both -- the user complained the old menu always listed a clear-filter that
 /// did nothing.
-pub fn filter_command(filter: SheetFilter) -> CommandId {
+pub fn filter_command(filter: SheetFilter) -> StaticKey<Commands> {
     match filter {
         SheetFilter::Filtered => CLEAR_FILTER,
         SheetFilter::Unfiltered => FILTER_COLUMN,
@@ -236,7 +238,7 @@ pub fn filter_command(filter: SheetFilter) -> CommandId {
 /// Remove filter).
 pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
     /// Append one group of commands to a layout under construction.
-    fn group(rows: &mut Vec<MenuRow>, ids: &[CommandId]) {
+    fn group(rows: &mut Vec<MenuRow>, ids: &[StaticKey<Commands>]) {
         rows.extend(ids.iter().map(|&id| MenuRow::Command(id)));
     }
 
@@ -280,10 +282,10 @@ pub fn context_layout(scope: CtxScope, filter: SheetFilter) -> Vec<MenuRow> {
     rows
 }
 
-/// Translate a Trame `CommandId` into the `AppCommand` IPC payload the Logic
+/// Translate a Trame `StaticKey<Commands>` into the `AppCommand` IPC payload the Logic
 /// thread expects. `None` for a command Trame does not own, and for one
 /// `chrome::TrameHandler` resolves before the bus.
-pub fn command_to_app(id: CommandId) -> Option<AppCommand> {
+pub fn command_to_app(id: StaticKey<Commands>) -> Option<AppCommand> {
     // The identities are constants of a derived `PartialEq` type, so they are
     // patterns. That means one decision over the identity string, and no
     // literal repeated beside the table that declares it.
@@ -487,7 +489,7 @@ mod tests {
         ));
         // A UI-only intent the launcher intercepts: no bus payload.
         assert!(command_to_app(BOLD).is_none());
-        assert!(command_to_app(CommandId::new("trame.unknown")).is_none());
+        assert!(command_to_app(StaticKey::<Commands>::new("trame.unknown")).is_none());
     }
 
     /// A row menu never offers to filter a row (`TRAME-UI-090`). With a filter

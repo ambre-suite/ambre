@@ -230,7 +230,7 @@ impl SyncState {
         let url_scheme = self.url_scheme;
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
-            let dl_url = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let dl_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}/snapshot/download-url"));
             let body = http::SnapshotDownloadUrlRequest { snapshot_id };
             let blob = match http::post_json_auth::<_, http::SnapshotDownloadUrlResponse>(
@@ -387,7 +387,7 @@ impl SyncState {
             tracing::info!("Sync: snapshot {snapshot_id:?} vouch, no relay (test path)");
             return;
         };
-        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
+        let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             let sent =
@@ -532,8 +532,9 @@ impl SyncState {
             // opens as it is (`AUTHOR-022` reads another user's).
             let own_key = self.author_pub_key();
             wasm_bindgen_futures::spawn_local(async move {
-                let members_url = crate::http::ApiRoot::of(url_scheme, &api_base)
-                    .route(format!("/documents/{doc_id}/members"));
+                let members_url =
+                    crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                        .route(format!("/documents/{doc_id}/members"));
                 // 404 -> the doc does not exist server-side yet (local-only):
                 // generate a fresh key and defer creation to the first update.
                 let mut signers = None;
@@ -637,8 +638,9 @@ impl SyncState {
                 let (snapshot_payload, downloaded_snapshot_id, covered_seq) = if existence
                     == crate::Existence::OnRelay
                 {
-                    let meta_url = crate::http::ApiRoot::of(url_scheme, &api_base)
-                        .route(format!("/documents/{doc_id}/snapshot"));
+                    let meta_url =
+                        crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                            .route(format!("/documents/{doc_id}/snapshot"));
                     match http::get_json_opt_auth::<http::SnapshotMetadataResponse>(
                         &meta_url,
                         auth.clone(),
@@ -1445,7 +1447,8 @@ impl SyncState {
                     }
                 };
 
-            let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/documents");
+            let url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
+                .route("/documents");
             let body = http::CreateDocumentRequest {
                 doc_type,
                 name_enc: None,
@@ -1498,7 +1501,7 @@ impl SyncState {
             );
             return;
         };
-        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base);
+        let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base);
         let auth = self.auth_context();
         wasm_bindgen_futures::spawn_local(async move {
             match upload_snapshot(&http::Fetch, &auth, &base, upload).await {
@@ -1606,7 +1609,7 @@ pub(crate) enum Vouch {
 pub(crate) async fn send_vouch(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &crate::http::ApiRoot,
+    base: &crate::http::Url<crate::http::ApiRoot>,
     document_id: Id<Document>,
     snapshot_id: Id<Snapshot>,
     vouch: &Vouch,
@@ -1650,7 +1653,7 @@ pub(crate) struct SnapshotUpload {
 pub(crate) async fn upload_snapshot(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
-    base: &crate::http::ApiRoot,
+    base: &crate::http::Url<crate::http::ApiRoot>,
     upload: SnapshotUpload,
 ) -> Result<Id<Snapshot>, http::HttpError> {
     let SnapshotUpload {
@@ -1775,10 +1778,10 @@ mod tests {
     use ambre_protocol::SeqUpdate;
 
     /// The root a relay call under test reaches: `https://relay.test/api`.
-    fn root() -> crate::http::ApiRoot {
-        crate::http::ApiRoot::of(
+    fn root() -> crate::http::Url<crate::http::ApiRoot> {
+        crate::http::Url::<crate::http::ApiRoot>::of(
             crate::http::UrlScheme::Https,
-            &crate::http::RelayHost::new("relay.test".to_owned()),
+            &crate::http::Url::<crate::http::RelayHost>::new("relay.test".to_owned()),
         )
     }
 
@@ -1971,7 +1974,10 @@ mod tests {
         Id<Snapshot>,
     ) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let document_id = Id::<Document>::mint();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::generate().derive_signing_key();

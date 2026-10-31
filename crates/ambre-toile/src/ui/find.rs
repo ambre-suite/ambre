@@ -12,7 +12,7 @@
 // ============================================================================
 
 use ambre_bus::app::find::MatchIndex;
-use ambre_commands::CommandId;
+use ambre_commands::{Commands, StaticKey};
 use ambre_core::id::{Element, Id};
 
 /// Open the Find panel. A UI-only intent: the launcher intercepts it to toggle
@@ -22,7 +22,7 @@ use ambre_core::id::{Element, Id};
 /// Declared here rather than in the chrome, which is wasm-only: an identity the
 /// registry describes must be reachable from a host test
 /// (`ambre-spec-commands.md`).
-pub const FIND: CommandId = CommandId::new("toile.find.open");
+pub const FIND: StaticKey<Commands> = StaticKey::<Commands>::new("toile.find.open");
 
 /// Index of `focus` within `hits`, or `None` when there is no focus or it is no
 /// longer a hit. A query change can drop the previously focused element. The

@@ -495,7 +495,7 @@ pub enum TrameCommand {
     // `trame-context-menu`).
     // These carry no geometry: the Logic thread resolves them against the active
     // cell / selection rectangle it tracks (kept current by `SetActiveCell`).
-    // They map one-to-one to a registry `CommandId`, so the DOM context menu, the
+    // They map one-to-one to a registry `StaticKey<Commands>`, so the DOM context menu, the
     // toolbar and the keyboard can all trigger them through the same dispatch.
     /// Insert a blank row just above the active cell's row.
     InsertRowAbove,

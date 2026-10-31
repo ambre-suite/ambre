@@ -202,14 +202,14 @@ The UI holds no rule and cannot derive the change (`TRAME-UI-001`).
 
 | Control | Emits | Reads back from |
 |---|---|---|
-| Bold, Italic | a `CommandId` on the shared command path, toggled against the reported state | `StyleApplied.bold`, `.italic` |
+| Bold, Italic | a `StaticKey<Commands>` on the shared command path, toggled against the reported state | `StyleApplied.bold`, `.italic` |
 | Underline, Strikethrough, Wrap | a `StylePatch` with that one field inverted | the matching `CellStyle` field |
 | font family, font size | a `StylePatch`; the pickers are the shared controls of `ambre-spec-chrome.md`, which Toile's inspector also uses | `CellStyle.font`, `.size` |
 | text colour, fill colour | a `StylePatch` colour, or a reset to the theme default | `CellStyle.fg`, `.bg` |
 | horizontal, vertical alignment | a `StylePatch` alignment, from a popover of the three variants | `CellStyle.h_align`, `.v_align` |
 | number format, decimals | `features/ambre-spec-trame-number-formats.md section 3` | `CellStyle.format`, `.decimals` |
 | borders | a `BorderEdit`: one preset, one pen (style and colour) | nothing; the control is stateless |
-| merge, undo, redo | the shared `CommandId` for each | `StyleApplied.merged`, and the undo stack state |
+| merge, undo, redo | the shared `StaticKey<Commands>` for each | `StyleApplied.merged`, and the undo stack state |
 
 **Border presets, and the edges each takes.** A preset is additive: it sets its own edges and leaves
 the others. `None` is the exception and clears all four.
@@ -239,7 +239,7 @@ segments, because the shared surface carries no dash parameter.
 | One register per cell holds the whole style | eleven per-sheet registers, one per attribute | it is what the code carried: the fan-out tore a border's presence from its colour, and dropped a colour-only cell on reload. One register makes a concurrent restyle race exactly once. The rule is cross-app and normative in `ambre-spec-architecture.md section 2`; Toile's elements follow it. |
 | Concurrency is whole-cell last-writer-wins | faking a per-attribute merge | it would restore the fan-out that was removed. A real per-attribute merge needs a server that can order plaintext content; a blind relay never sees any, so the only ordering available is per-register. |
 | A style is stored, a conditional format is not | writing the computed colour into the cell's style | a rule that recolours on a value must recompute when the value changes; storing its result would make the document depend on evaluation order. |
-| Bold and italic travel as commands | a fourteenth `StylePatch` field for each | it duplicates the command path they already have: they are the two attributes with a keyboard chord and a shared toolbar toggle, so they already carry a `CommandId`. The record still stores them beside the rest. |
+| Bold and italic travel as commands | a fourteenth `StylePatch` field for each | it duplicates the command path they already have: they are the two attributes with a keyboard chord and a shared toolbar toggle, so they already carry a `StaticKey<Commands>`. The record still stores them beside the rest. |
 | The toolbar reflects the active cell | resolving a common state over the selection | it needs a tri-state on every control, for a selection of mixed styles that has no single state to show. Excel and Sheets both answer with the anchor, and one cell is also one lookup. |
 | A covered cell takes no style | styling every cell in the rectangle, master or not | a covered cell renders blank under its master, so a style on it is invisible -- and an `All` border on it would draw edges *inside* the merged block. |
 | A shared style dictionary is refused | a `styles` map with an `"s"` indirection from each cell | deduplication costs a dereference per read and needs a reclamation policy, because Loro never collects an orphaned entry. |

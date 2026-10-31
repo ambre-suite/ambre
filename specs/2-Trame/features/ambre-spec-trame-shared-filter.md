@@ -119,7 +119,7 @@ Two peers, one sheet. The last column joins the example to the test that holds i
 |---|---|---|
 | `TrameCommand::ApplyFilter { sheet_id, col, kind: FilterKind }` | UI to Logic | the target column and the definition |
 | `TrameCommand::ClearFilter { sheet_id }` | UI to Logic | the sheet |
-| `CommandId::FilterColumn` / `ClearFilter` | chrome to Logic | no geometry: the Logic thread resolves the column against the active cell it tracks |
+| `StaticKey<Commands>::FilterColumn` / `ClearFilter` | chrome to Logic | no geometry: the Logic thread resolves the column against the active cell it tracks |
 | `TrameCommand::ApplyFilterToActiveColumn { kind }` / `ClearActiveFilter` | UI to Logic | the definition alone, resolved against the tracked selection |
 | `TrameCommand::RequestActiveColumnValues` | UI to Logic | nothing: a read-only query for the value list |
 | `TrameEvent::ColumnValues { col, values }` | Logic to UI | the distinct visible values (`TRAME-FEAT-026`) |

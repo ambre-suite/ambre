@@ -10,7 +10,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{DisplayNode, DisplayViewport, End, NodeId, ToileCommand, ZTarget};
-use ambre_commands::CommandId;
+use ambre_commands::{Commands, StaticKey};
 use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{Px, View};
 use ambre_draw::{BezPath, Point};
@@ -70,7 +70,7 @@ pub fn retarget_on_release(
 /// locked, reacted to, put in a frame, or copied (its two endpoints would not
 /// travel with it). What is left is the four the story names, minus the restyle
 /// the inspector drives through its own path.
-pub fn arrow_command_for(id: CommandId, arrow: &Id<Connector>) -> Vec<ToileCommand> {
+pub fn arrow_command_for(id: StaticKey<Commands>, arrow: &Id<Connector>) -> Vec<ToileCommand> {
     use super::menu::{BACKWARD, BRING_FRONT, DELETE, FORWARD, SEND_BACK};
     let reorder = |to| {
         vec![ToileCommand::Reorder {

@@ -14,7 +14,7 @@
 // Each control writes its one field through `StyleEdit`, so a field nobody
 // touched keeps the selection's value, a font family the picker cannot name too.
 //
-// The z-order / lock buttons are pure `CommandId`s already resolved by the view
+// The z-order / lock buttons are pure `StaticKey<Commands>`s already resolved by the view
 // against its selection (`ui::menu`). So they reuse the shared `on_command`
 // path verbatim -- identical to the context menu and top menu bar. Values that
 // differ across the selection show a "Mixed" hint (the mask from `ui::style`).
@@ -28,7 +28,7 @@
 use std::time::Duration;
 
 use ambre_bus::app::toile::{ElementStyle, FontFamily, FontSizeChoice};
-use ambre_chrome::commands::CommandId;
+use ambre_chrome::commands::{Commands, StaticKey};
 use ambre_chrome::{ColorPopover, Debouncer, FontPicker, FontSizeSelect, FormatToggle};
 use ambre_core::{FontSize, Rgba};
 use leptos::prelude::*;
@@ -51,7 +51,7 @@ const RESTYLE_DEBOUNCE: Duration = Duration::from_millis(120);
 pub fn StyleInspector(
     model: RwSignal<Option<StyleModel>>,
     scope: RwSignal<CtxScope>,
-    on_command: Callback<CommandId>,
+    on_command: Callback<StaticKey<Commands>>,
     restyle: RwSignal<Option<ElementStyle>>,
 ) -> impl IntoView {
     // The local working copy of the whole style register: seeded from the common
@@ -174,17 +174,18 @@ pub fn StyleInspector(
     let mixed = move || model.get().map(|m| m.mixed).unwrap_or_default();
 
     // A z-order / lock command button routing through the shared sink.
-    let cmd_button = move |command: CommandId, label: &'static str, icon: icondata::Icon| {
-        view! {
-            <button
-                aria-label=label
-                on:mousedown=move |ev| ev.prevent_default()
-                on:click=move |_| on_command.run(command)
-            >
-                <leptos_icons::Icon icon=icon />
-            </button>
-        }
-    };
+    let cmd_button =
+        move |command: StaticKey<Commands>, label: &'static str, icon: icondata::Icon| {
+            view! {
+                <button
+                    aria-label=label
+                    on:mousedown=move |ev| ev.prevent_default()
+                    on:click=move |_| on_command.run(command)
+                >
+                    <leptos_icons::Icon icon=icon />
+                </button>
+            }
+        };
 
     view! {
         // The panel renders only for a non-empty selection.

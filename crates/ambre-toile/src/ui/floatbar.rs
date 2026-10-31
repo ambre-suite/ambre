@@ -10,7 +10,7 @@
 // geometry + flags are host-unit-tested, exactly like `ui::menu`, `ui::style` and
 // `ui::status`. The wasm-only Leptos component that renders it
 // (`chrome::SelectionToolbar`) consumes this model. Its command buttons route
-// through the shared `on_command` path with `ui::menu` `CommandId`s. So the bar is
+// through the shared `on_command` path with `ui::menu` `StaticKey<Commands>`s. So the bar is
 // a strict subset of the context menu and the two never diverge (`toile-menus`).
 //
 // The bar's transient hiding is decided by the view at publish time (`None` ==

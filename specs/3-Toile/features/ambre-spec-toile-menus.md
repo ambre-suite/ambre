@@ -123,7 +123,7 @@ pub enum MenuId { File, Edit, View, Object, Present }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MenuRow {
-    Command(CommandId),   // the label and the chord come from the command it names
+    Command(StaticKey<Commands>),   // the label and the chord come from the command it names
     Separator,
 }
 

@@ -1,7 +1,7 @@
 // ambre-toile/src/ui/menu_bar.rs
 // ============================================================================
 // Command surface for the Toile top menu bar and zoom control
-// (`toile-menus`). The host-visible half: the `CommandId`s that only the menu
+// (`toile-menus`). The host-visible half: the `StaticKey<Commands>`s that only the menu
 // bar contributes, that is Undo / Redo / Present and the five zoom actions.
 // Also the `MenuId` grouping and the pure per-menu layout the DOM builder
 // renders.
@@ -20,7 +20,7 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{PresentFocus, ToileCommand};
-use ambre_commands::CommandId;
+use ambre_commands::{Commands, StaticKey};
 
 use super::menu;
 
@@ -29,79 +29,83 @@ use super::menu;
 // and are re-used below; these are the ids the menu bar introduces.
 
 /// Undo the last board mutation (-> `ToileCommand::Undo`).
-pub const UNDO: CommandId = CommandId::new("toile.edit.undo");
+pub const UNDO: StaticKey<Commands> = StaticKey::<Commands>::new("toile.edit.undo");
 /// Redo the last undone mutation (-> `ToileCommand::Redo`).
-pub const REDO: CommandId = CommandId::new("toile.edit.redo");
+pub const REDO: StaticKey<Commands> = StaticKey::<Commands>::new("toile.edit.redo");
 /// Zoom in one notch about the viewport center (local transform, `toile-menus`).
-pub const ZOOM_IN: CommandId = CommandId::new("toile.view.zoom_in");
+pub const ZOOM_IN: StaticKey<Commands> = StaticKey::<Commands>::new("toile.view.zoom_in");
 /// Zoom out one notch about the viewport center.
-pub const ZOOM_OUT: CommandId = CommandId::new("toile.view.zoom_out");
+pub const ZOOM_OUT: StaticKey<Commands> = StaticKey::<Commands>::new("toile.view.zoom_out");
 /// Reset the zoom to 100% (the `%` readout click).
-pub const ZOOM_RESET: CommandId = CommandId::new("toile.view.zoom_reset");
+pub const ZOOM_RESET: StaticKey<Commands> = StaticKey::<Commands>::new("toile.view.zoom_reset");
 /// Fit the whole board into the viewport (Fit).
-pub const ZOOM_FIT: CommandId = CommandId::new("toile.view.zoom_fit");
+pub const ZOOM_FIT: StaticKey<Commands> = StaticKey::<Commands>::new("toile.view.zoom_fit");
 /// Fit the current selection into the viewport (Zoom-to-selection).
-pub const ZOOM_TO_SELECTION: CommandId = CommandId::new("toile.view.zoom_to_selection");
+pub const ZOOM_TO_SELECTION: StaticKey<Commands> =
+    StaticKey::<Commands>::new("toile.view.zoom_to_selection");
 /// Wheel navigation preference, all view-local: `Auto` detects the device
 /// per event, `Mouse` makes the wheel zoom, `Trackpad` makes it pan (Ctrl/pinch
 /// still zooms).
-pub const POINTER_AUTO: CommandId = CommandId::new("toile.view.pointer_auto");
-pub const POINTER_MOUSE: CommandId = CommandId::new("toile.view.pointer_mouse");
-pub const POINTER_TRACKPAD: CommandId = CommandId::new("toile.view.pointer_trackpad");
+pub const POINTER_AUTO: StaticKey<Commands> = StaticKey::<Commands>::new("toile.view.pointer_auto");
+pub const POINTER_MOUSE: StaticKey<Commands> =
+    StaticKey::<Commands>::new("toile.view.pointer_mouse");
+pub const POINTER_TRACKPAD: StaticKey<Commands> =
+    StaticKey::<Commands>::new("toile.view.pointer_trackpad");
 /// Open the comments panel on the whole board (`toile-comments` section 4). A
 /// UI-only intent: the panel is chrome, and the board keeps no open flag.
-pub const COMMENTS: CommandId = CommandId::new("toile.view.comments");
+pub const COMMENTS: StaticKey<Commands> = StaticKey::<Commands>::new("toile.view.comments");
 /// Enter presentation mode (the deck panel of `toile-presentation`). A stub
 /// here: the panel is owned by that feature, not this surface.
-pub const PRESENT: CommandId = CommandId::new("toile.present.start");
+pub const PRESENT: StaticKey<Commands> = StaticKey::<Commands>::new("toile.present.start");
 /// Open the deck panel: the surface that adds a frame to the presentation,
 /// reorders it and removes it (`TOILE-FEAT-026`). A UI-only intent, like
 /// [`COMMENTS`]: the panel is chrome, and the board keeps no open flag.
-pub const DECK: CommandId = CommandId::new("toile.present.deck");
+pub const DECK: StaticKey<Commands> = StaticKey::<Commands>::new("toile.present.deck");
 /// Bring a file onto the board through a picker (`TOILE-IO-020`). A UI-only
 /// intent: the launcher owns the file dialog, and the board learns of the file
 /// only once its bytes are read.
-pub const IMPORT_FILE: CommandId = CommandId::new("toile.file.import");
+pub const IMPORT_FILE: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.import");
 /// Put a web page on the board (`TOILE-087`). A UI-only intent: the shell owns
 /// the dialog that takes the address, and the board learns of it only once the
 /// address has passed `WebAddress::parse`.
-pub const EMBED_WEB: CommandId = CommandId::new("toile.file.embed_web");
+pub const EMBED_WEB: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.embed_web");
 /// Put another Ambre document on the board (`TOILE-086`). A UI-only intent for
 /// the same reason: only the launcher knows which documents this user may open,
 /// so only it can offer the list.
-pub const EMBED_DOC: CommandId = CommandId::new("toile.file.embed_doc");
+pub const EMBED_DOC: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.embed_doc");
 /// Put a link on the selected element (`TOILE-066`). A UI-only intent: the
 /// shell owns the chooser, because two of the three targets are things only it
 /// can offer. Those are an address it validates like an embed's, and the
 /// documents this user may open.
-pub const LINK_SET: CommandId = CommandId::new("toile.object.link_set");
+pub const LINK_SET: StaticKey<Commands> = StaticKey::<Commands>::new("toile.object.link_set");
 /// Take the link off the selected element (`TOILE-066`). Resolves through the
 /// same intent as the chooser, carrying no target.
-pub const LINK_CLEAR: CommandId = CommandId::new("toile.object.link_clear");
+pub const LINK_CLEAR: StaticKey<Commands> = StaticKey::<Commands>::new("toile.object.link_clear");
 /// Take the board out as an SVG document (`TOILE-IO-021`). Resolves to a board
 /// command: the Logic thread holds the board and serializes it.
-pub const EXPORT_SVG: CommandId = CommandId::new("toile.file.export_svg");
+pub const EXPORT_SVG: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.export_svg");
 /// Take the deck out as a PDF, one page per slide (`TOILE-IO-029`). Resolves to
 /// a board command, like [`EXPORT_SVG`], but the render walk runs on the Logic
 /// thread rather than in the board's own state. The pages are drawn, not
 /// serialized, and the base font faces live there.
-pub const EXPORT_PDF: CommandId = CommandId::new("toile.file.export_pdf");
+pub const EXPORT_PDF: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.export_pdf");
 /// Write the whole board to a native `.ambre` file (`ambre-spec-docfile.md`).
 /// Unlike the two exports above it drops nothing: the payload **is** the
 /// document (`DOCFILE-001`). Unlike them it is also plaintext, which is why its
 /// own label says so (`DOCFILE-009`). Resolves to a board command the Logic
 /// thread serves, because the container's header carries the document's identity
 /// and the board does not know it.
-pub const SAVE_FILE: CommandId = CommandId::new("toile.file.save_file");
+pub const SAVE_FILE: StaticKey<Commands> = StaticKey::<Commands>::new("toile.file.save_file");
 /// Write the whole board to a native `.ambre` file **sealed under a
 /// passphrase** (`ambre-spec-docfile.md section 5`). The same file as
 /// [`SAVE_FILE`], encrypted. A UI-only intent, because the user types the
-/// passphrase into a dialog the launcher owns and no `CommandId` carries it.
-pub const SAVE_SEALED_FILE: CommandId = CommandId::new("toile.file.save_sealed_file");
+/// passphrase into a dialog the launcher owns and no `StaticKey<Commands>` carries it.
+pub const SAVE_SEALED_FILE: StaticKey<Commands> =
+    StaticKey::<Commands>::new("toile.file.save_sealed_file");
 
 /// Every id the menu bar introduces (not shared with `ui::menu`). Used by the
 /// view to recognise the ids it must resolve locally, and by tests.
-pub const MENU_BAR_COMMANDS: &[CommandId] = &[
+pub const MENU_BAR_COMMANDS: &[StaticKey<Commands>] = &[
     UNDO,
     REDO,
     ZOOM_IN,
@@ -154,7 +158,7 @@ pub const TOP_MENUS: &[(MenuId, &str)] = &[
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MenuRow {
     /// A selectable command, shown with the label and chord it declares.
-    Command(CommandId),
+    Command(StaticKey<Commands>),
     /// A divider between two groups.
     Separator,
 }
@@ -244,7 +248,7 @@ pub fn menu_layout(id: MenuId) -> Vec<MenuRow> {
 /// presentation entry point resolve to a `ToileCommand` independent of the
 /// selection or local transform. The zoom ids are local-transform intents and
 /// return `None` (serviced by the view). Pure, so the wiring is host-tested.
-pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
+pub fn menu_bar_edit(id: StaticKey<Commands>) -> Option<ToileCommand> {
     match id {
         UNDO => Some(ToileCommand::Undo),
         REDO => Some(ToileCommand::Redo),
@@ -268,7 +272,7 @@ pub fn menu_bar_edit(id: CommandId) -> Option<ToileCommand> {
 mod tests {
     use super::*;
 
-    fn item_commands(rows: &[MenuRow]) -> Vec<CommandId> {
+    fn item_commands(rows: &[MenuRow]) -> Vec<StaticKey<Commands>> {
         rows.iter()
             .filter_map(|r| match r {
                 MenuRow::Command(command) => Some(*command),

@@ -140,7 +140,7 @@ impl SyncState {
             signing_key,
         };
         wasm_bindgen_futures::spawn_local(async move {
-            let base = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}"));
             upload_media(&GlooHttp { auth }, &base, upload, &tx, &logic_tx).await;
         });
@@ -216,7 +216,7 @@ impl SyncState {
         };
 
         wasm_bindgen_futures::spawn_local(async move {
-            let base = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let base = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}"));
             let http = GlooHttp { auth };
             download_media(&http, &base, id, content_hash, &keyring, &tx, &logic_tx).await;
@@ -244,7 +244,7 @@ impl SyncState {
         };
         let logic_tx = self.logic_tx.clone();
         let auth = self.auth_context();
-        let base = crate::http::ApiRoot::of(self.url_scheme, &self.api_base)
+        let base = crate::http::Url::<crate::http::ApiRoot>::of(self.url_scheme, &self.api_base)
             .route(format!("/documents/{document_id}"));
         wasm_bindgen_futures::spawn_local(async move {
             let http = GlooHttp { auth };
@@ -260,7 +260,7 @@ pub(crate) trait MediaHttp {
     /// An authenticated request to the relay.
     async fn post_json<B: Serialize, R: DeserializeOwned>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
         body: &B,
     ) -> Result<R, http::HttpError>;
     /// A sealed blob to a presigned object-storage link.
@@ -275,14 +275,16 @@ pub(crate) trait MediaHttp {
         url: &ambre_core::Credential<ambre_core::PresignedUrl>,
     ) -> Result<pipeline::FetchedBlob, http::HttpError>;
     /// An authenticated `DELETE` to the relay, answering its status.
-    async fn delete(&self, url: &http::RelayUrl)
-    -> Result<ambre_core::HttpStatus, http::HttpError>;
+    async fn delete(
+        &self,
+        url: &crate::http::Url<http::Route>,
+    ) -> Result<ambre_core::HttpStatus, http::HttpError>;
 }
 
 impl MediaHttp for GlooHttp {
     async fn post_json<B: Serialize, R: DeserializeOwned>(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
         body: &B,
     ) -> Result<R, http::HttpError> {
         http::post_json_auth::<B, R>(url, body, self.auth.clone()).await
@@ -302,7 +304,7 @@ impl MediaHttp for GlooHttp {
     }
     async fn delete(
         &self,
-        url: &http::RelayUrl,
+        url: &crate::http::Url<http::Route>,
     ) -> Result<ambre_core::HttpStatus, http::HttpError> {
         http::delete_status_auth(url, self.auth.clone()).await
     }
@@ -339,7 +341,7 @@ pub(crate) struct Upload {
 /// the success event is never sent.
 async fn upload_media(
     http: &impl MediaHttp,
-    base: &http::RelayUrl,
+    base: &crate::http::Url<http::Route>,
     upload: Upload,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
@@ -374,7 +376,7 @@ async fn upload_media(
 /// byte of the blob is sent.
 async fn download_media(
     http: &impl MediaHttp,
-    base: &http::RelayUrl,
+    base: &crate::http::Url<http::Route>,
     id: Generation<Request>,
     content_hash: ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
@@ -401,7 +403,7 @@ async fn download_media(
 /// answer as erased. Anything else is reported, and the caller retries it.
 async fn erase_media(
     http: &impl MediaHttp,
-    base: &http::RelayUrl,
+    base: &crate::http::Url<http::Route>,
     id: Generation<Request>,
     document_id: Id<Document>,
     content_hash: ambre_core::ContentHash,
@@ -434,7 +436,7 @@ async fn erase_media(
 /// step returns before the next runs, so a failed put confirms nothing.
 async fn upload_leg(
     http: &impl MediaHttp,
-    base: &http::RelayUrl,
+    base: &crate::http::Url<http::Route>,
     content_hash: &ambre_core::ContentHash,
     blob: &pipeline::SealedBlob,
 ) -> Result<(), http::Failed> {
@@ -469,7 +471,7 @@ async fn upload_leg(
 /// failed step returns before any data is built, so nothing half-read leaves.
 async fn download_leg(
     http: &impl MediaHttp,
-    base: &http::RelayUrl,
+    base: &crate::http::Url<http::Route>,
     content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
 ) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, http::Failed> {
@@ -499,7 +501,10 @@ mod tests {
     #[test]
     fn an_upload_is_addressed_under_the_document_key() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let picture = b"one picture, two documents".to_vec();
         let mut addresses = Vec::new();
         for byte in [0x31, 0x32] {
@@ -538,7 +543,10 @@ mod tests {
     #[test]
     fn an_upload_waits_for_its_document_on_the_relay() {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let picture = b"a picture on a new board".to_vec();
         let answered = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| {
             rx.try_iter()
@@ -617,10 +625,10 @@ mod tests {
     }
 
     /// The relay base every media test addresses.
-    fn base() -> crate::http::RelayUrl {
-        crate::http::ApiRoot::of(
+    fn base() -> crate::http::Url<crate::http::Route> {
+        crate::http::Url::<crate::http::ApiRoot>::of(
             crate::http::UrlScheme::Https,
-            &crate::http::RelayHost::new("relay.test".to_owned()),
+            &crate::http::Url::<crate::http::RelayHost>::new("relay.test".to_owned()),
         )
         .route("/documents/d")
     }
@@ -628,7 +636,7 @@ mod tests {
     impl MediaHttp for FakeMedia {
         async fn post_json<B: Serialize, R: DeserializeOwned>(
             &self,
-            url: &crate::http::RelayUrl,
+            url: &crate::http::Url<crate::http::Route>,
             _body: &B,
         ) -> Result<R, http::HttpError> {
             let name = match url.as_str().rsplit('/').next() {
@@ -658,7 +666,7 @@ mod tests {
         }
         async fn delete(
             &self,
-            url: &crate::http::RelayUrl,
+            url: &crate::http::Url<crate::http::Route>,
         ) -> Result<ambre_core::HttpStatus, http::HttpError> {
             assert!(
                 url.as_str()

@@ -13,8 +13,8 @@ use ambre_bus::{
     Timestamp,
 };
 use ambre_commands::{
-    Command, CommandCategory, CommandId, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale,
-    Modifiers,
+    Categories, Command, Commands, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale,
+    Modifiers, StaticKey,
 };
 use ambre_core::ByteCount;
 use ambre_core::id::{Channel, Document, Id, Message, User};
@@ -22,44 +22,48 @@ use ambre_core::id::{Channel, Document, Id, Message, User};
 use crate::{MessageRef, MurmurePane, Region};
 
 /// Commands that belong to the application shell rather than a channel.
-const GENERAL: CommandCategory = CommandCategory::new("general");
+const GENERAL: StaticKey<Categories> = StaticKey::<Categories>::new("general");
 /// Moving from one channel to another.
-const NAVIGATE: CommandCategory = CommandCategory::new("navigate");
+const NAVIGATE: StaticKey<Categories> = StaticKey::<Categories>::new("navigate");
 /// The read state of the channels.
-const UNREAD: CommandCategory = CommandCategory::new("unread");
+const UNREAD: StaticKey<Categories> = StaticKey::<Categories>::new("unread");
 /// Finding a message by its words.
-const SEARCH_CATEGORY: CommandCategory = CommandCategory::new("search");
+const SEARCH_CATEGORY: StaticKey<Categories> = StaticKey::<Categories>::new("search");
 /// The actions of one message, offered in its floating menu.
-const MESSAGE: CommandCategory = CommandCategory::new("message");
+const MESSAGE: StaticKey<Categories> = StaticKey::<Categories>::new("message");
 
 /// Open the command palette, channels first: a UI-only intent the shell
 /// intercepts (`CHROME-008`).
-pub const PALETTE: CommandId = CommandId::new("murmure.palette.open");
+pub const PALETTE: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.palette.open");
 /// Open the next channel with activity, in sidebar order.
-pub const NEXT_ACTIVITY: CommandId = CommandId::new("murmure.navigate.next_activity");
+pub const NEXT_ACTIVITY: StaticKey<Commands> =
+    StaticKey::<Commands>::new("murmure.navigate.next_activity");
 /// Open the previous channel with activity, in sidebar order.
-pub const PREVIOUS_ACTIVITY: CommandId = CommandId::new("murmure.navigate.previous_activity");
+pub const PREVIOUS_ACTIVITY: StaticKey<Commands> =
+    StaticKey::<Commands>::new("murmure.navigate.previous_activity");
 /// Mark every channel of the user read (the Murmure unread spec).
-pub const MARK_ALL_READ: CommandId = CommandId::new("murmure.unread.mark_all_read");
+pub const MARK_ALL_READ: StaticKey<Commands> =
+    StaticKey::<Commands>::new("murmure.unread.mark_all_read");
 /// Open the search over the loaded segments, on the find chord of every
 /// application (the Murmure search spec).
-pub const SEARCH: CommandId = CommandId::new("murmure.search.open");
+pub const SEARCH: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.search.open");
 /// Open the thread of the message the actions are open on.
-pub const REPLY: CommandId = CommandId::new("murmure.message.reply");
+pub const REPLY: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.message.reply");
 /// Show the channel unread from the message on (the Murmure unread spec).
-pub const MARK_UNREAD: CommandId = CommandId::new("murmure.message.mark_unread");
+pub const MARK_UNREAD: StaticKey<Commands> =
+    StaticKey::<Commands>::new("murmure.message.mark_unread");
 /// Put the text of the message on the clipboard.
-pub const COPY_TEXT: CommandId = CommandId::new("murmure.message.copy_text");
+pub const COPY_TEXT: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.message.copy_text");
 /// Load a message of the member into the composer, to send it edited
 /// (`MURMURE-203`).
-pub const EDIT: CommandId = CommandId::new("murmure.message.edit");
+pub const EDIT: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.message.edit");
 /// Delete a message of the member, once a dialog confirms it (`MURMURE-512`).
-pub const DELETE: CommandId = CommandId::new("murmure.message.delete");
+pub const DELETE: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.message.delete");
 /// Open the emoji picker on the message, to react with the emoji picked
 /// (`MURMURE-140`).
-pub const REACT: CommandId = CommandId::new("murmure.message.react");
+pub const REACT: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.message.react");
 /// Open the list of the keys Murmure takes (`MURMURE-540`).
-pub const KEYS: CommandId = CommandId::new("murmure.general.keys");
+pub const KEYS: StaticKey<Commands> = StaticKey::<Commands>::new("murmure.general.keys");
 
 fn palette_title(_: &Locale) -> String {
     "Command palette".into()
@@ -475,7 +479,7 @@ pub fn asked_all_title(members: ambre_core::MemberCount) -> String {
 /// notice takes no reply, a reply takes no thread of its own, and a message
 /// with no text no copy. Only the author deletes or edits a message. A reply
 /// is edited in the composer of its thread (`MURMURE-526`).
-pub fn message_actions(target: &MessageTarget, me: Option<Id<User>>) -> Vec<CommandId> {
+pub fn message_actions(target: &MessageTarget, me: Option<Id<User>>) -> Vec<StaticKey<Commands>> {
     let in_channel = matches!(target.at, MessageAt::Segment(_));
     let by_member = target.writer == Writer::Member;
     let mut ids = Vec::with_capacity(6);
@@ -501,7 +505,7 @@ pub fn message_actions(target: &MessageTarget, me: Option<Id<User>>) -> Vec<Comm
 /// What the action `id` does on `target` for the member `me`. `None` for an
 /// id it does not offer there.
 pub fn message_action(
-    id: CommandId,
+    id: StaticKey<Commands>,
     target: &MessageTarget,
     me: Option<Id<User>>,
 ) -> Option<MessageAction> {

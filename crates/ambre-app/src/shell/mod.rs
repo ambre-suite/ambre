@@ -80,7 +80,9 @@ pub(crate) fn mount_shell(
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
     filter_active: RwSignal<trame_chrome::SheetFilter>,
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
-    toile_menu_cmd: RwSignal<Option<ambre_chrome::commands::CommandId>>,
+    toile_menu_cmd: RwSignal<
+        Option<ambre_chrome::commands::StaticKey<ambre_chrome::commands::Commands>>,
+    >,
     toile_active_tool: RwSignal<ambre_toile::ui::Tool>,
     toile_cursor: RwSignal<Option<ambre_toile::ui::palette::CanvasCursor>>,
     toile_style_model: RwSignal<Option<toile_chrome::StyleModel>>,

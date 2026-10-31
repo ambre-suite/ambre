@@ -6,7 +6,7 @@
 // palette are all *views* of one registry of `Command`s. This keeps the chrome
 // tractable across 5 apps x ~200 commands (ambre-spec-commands.md).
 //
-// Layering: a `Command`/`CommandId` here is a UI *affordance*. It is distinct
+// Layering: a `Command`/`StaticKey<Commands>` here is a UI *affordance*. It is distinct
 // from the `AppCommand`/`LogicCommand` IPC payloads in `ambre-bus`: invoking a
 // `Command` *produces* a `LogicCommand`. This crate never knows about IPC, the
 // renderer, or Leptos -- it is the leaf of the UI-thread crate graph.
@@ -19,25 +19,9 @@ pub use keybinding::{FunctionKey, Key, KeyBinding, KeyChar, KeyState, Modifiers}
 pub use mode::{ClipboardWrite, PasteForm, SelectionMode};
 
 use std::collections::HashMap;
-
-/// Stable, namespaced identifier, for example `CommandId::new("prose.format.bold")`.
-///
-/// The `&'static str` is the identity: two `CommandId`s are equal iff their
-/// strings are equal, which makes them cheap map keys and trivially `Copy`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct CommandId(&'static str);
-
-impl CommandId {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: &'static str) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw text.
-    pub const fn as_str(self) -> &'static str {
-        self.0
-    }
-}
+use std::fmt;
+use std::hash::Hash;
+use std::marker::PhantomData;
 
 /// Locale selector for command labels. Minimal today (the two shipping UI
 /// languages); extend as i18n grows.
@@ -48,54 +32,103 @@ pub enum Locale {
     En,
 }
 
-/// Opaque icon handle. The concrete glyph/asset is resolved by the chrome's
-/// icon set; the registry only carries the reference.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct IconId(&'static str);
+/// The marker of one kind of static key. Sealed: every kind lives in this
+/// module.
+pub trait KeyKind: sealed::Sealed + 'static {
+    /// The name `Debug` prints, as the hand-written type printed its own.
+    const NAME: &'static str;
+}
 
-impl IconId {
+mod sealed {
+    /// Closes [`super::KeyKind`].
+    pub trait Sealed {}
+}
+
+/// A key of the kind `K` that a `const` table names: a command, an icon or a
+/// category.
+///
+/// The `&'static str` is the identity: two keys are equal iff their strings
+/// are equal, which makes them cheap map keys and trivially `Copy`.
+///
+/// `PartialEq` and `Eq` are derived, not written by hand. A handler matches
+/// a key against the `const` keys of its table. Only a derived equality lets
+/// a constant stand in a pattern. The derive bounds the marker, so each
+/// marker derives the same traits.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StaticKey<K: KeyKind> {
+    text: &'static str,
+    kind: PhantomData<fn() -> K>,
+}
+
+impl<K: KeyKind> StaticKey<K> {
     /// Wraps a raw value. The constructor checks nothing.
+    #[must_use]
     pub const fn new(value: &'static str) -> Self {
-        Self(value)
+        Self {
+            text: value,
+            kind: PhantomData,
+        }
     }
 
     /// Returns the raw text.
+    #[must_use]
     pub const fn as_str(self) -> &'static str {
-        self.0
+        self.text
     }
 }
 
+/// `NAME("...")`, as the derived `Debug` of the hand-written type printed
+/// it.
+impl<K: KeyKind> fmt::Debug for StaticKey<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple(K::NAME).field(&self.text).finish()
+    }
+}
+
+/// Stable, namespaced identifier of a command, for example
+/// `StaticKey::<Commands>::new("prose.format.bold")`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Commands {}
+
+impl sealed::Sealed for Commands {}
+impl KeyKind for Commands {
+    const NAME: &'static str = "CommandId";
+}
+
+/// Opaque icon handle. The concrete glyph/asset is resolved by the chrome's
+/// icon set; the registry only carries the reference.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Icons {}
+
+impl sealed::Sealed for Icons {}
+impl KeyKind for Icons {
+    const NAME: &'static str = "IconId";
+}
+
 /// Grouping key for the command palette and for ribbon tabs (one category =
-/// one tab), for example `CommandCategory::new("format")`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct CommandCategory(&'static str);
+/// one tab), for example `StaticKey::<Categories>::new("format")`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Categories {}
 
-impl CommandCategory {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: &'static str) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw text.
-    pub const fn as_str(self) -> &'static str {
-        self.0
-    }
+impl sealed::Sealed for Categories {}
+impl KeyKind for Categories {
+    const NAME: &'static str = "CommandCategory";
 }
 
 /// Static description of a command. Apps build `const` tables of these and
 /// expose them through [`CommandSource`].
 pub struct Command {
-    pub id: CommandId,
+    pub id: StaticKey<Commands>,
     /// Localized label. A function (not a string) so labels stay i18n-driven
     /// without the registry owning a translation table.
     pub title: fn(&Locale) -> String,
-    pub icon: Option<IconId>,
+    pub icon: Option<StaticKey<Icons>>,
     /// Every chord the command answers, the announced one first. A slice and
     /// not one chord, because a command may answer two. Redo takes
     /// Ctrl+Shift+Z and Ctrl+Y, and each clipboard intent takes a modern chord
     /// and a legacy one. Empty for a command no chord triggers.
     pub keybindings: &'static [KeyBinding],
-    pub category: CommandCategory,
+    pub category: StaticKey<Categories>,
 }
 
 impl Command {
@@ -110,17 +143,19 @@ impl Command {
 /// the chords the universal operations answer (`ambre-spec-commands.md`,
 /// `UI-THREAD-011`).
 pub mod shared {
-    use super::{CommandId, Key, KeyBinding, KeyChar, Modifiers};
+    use super::StaticKey;
+    use super::{Commands, Key, KeyBinding, KeyChar, Modifiers};
 
     /// The clipboard identities. One intent, one identity, in every
     /// application: a menu entry, a toolbar button and the browser's own event
     /// name the same command. A paste is one operation whichever raised it.
     /// They carry no application prefix because they belong to no application.
-    pub const CUT: CommandId = CommandId("clipboard.cut");
-    pub const COPY: CommandId = CommandId("clipboard.copy");
-    pub const PASTE: CommandId = CommandId("clipboard.paste");
+    pub const CUT: StaticKey<Commands> = StaticKey::<Commands>::new("clipboard.cut");
+    pub const COPY: StaticKey<Commands> = StaticKey::<Commands>::new("clipboard.copy");
+    pub const PASTE: StaticKey<Commands> = StaticKey::<Commands>::new("clipboard.paste");
     /// Paste the plain text alone, whatever richer half the clipboard holds.
-    pub const PASTE_PLAIN: CommandId = CommandId("clipboard.paste_plain");
+    pub const PASTE_PLAIN: StaticKey<Commands> =
+        StaticKey::<Commands>::new("clipboard.paste_plain");
 
     /// The identities the browser services itself. It raises `cut`, `copy` and
     /// `paste` with the clipboard attached, on the modern and the legacy chords
@@ -128,7 +163,7 @@ pub mod shared {
     /// (`ambre-spec-text-input.md`, `CHROME-021`).
     /// The plain paste rides the same `paste` event. The host notes its chord
     /// on the keydown, then strips the richer halves from the event.
-    pub const BROWSER_SERVICED: [CommandId; 4] = [CUT, COPY, PASTE, PASTE_PLAIN];
+    pub const BROWSER_SERVICED: [StaticKey<Commands>; 4] = [CUT, COPY, PASTE, PASTE_PLAIN];
 
     /// Undo answers one chord.
     pub const UNDO_CHORDS: &[KeyBinding] = &[KeyBinding::primary(KeyChar::Z)];
@@ -209,16 +244,16 @@ pub trait CommandSource {
     fn commands(&self) -> &[Command];
 
     /// Derive a command's runtime state from current app context.
-    fn state(&self, id: CommandId, ctx: &Self::Context) -> CommandState;
+    fn state(&self, id: StaticKey<Commands>, ctx: &Self::Context) -> CommandState;
 
     /// Invoke a command against app context (typically: emit a `LogicCommand`).
-    fn invoke(&self, id: CommandId, ctx: &mut Self::Context);
+    fn invoke(&self, id: StaticKey<Commands>, ctx: &mut Self::Context);
 }
 
 /// Look up a command by id in a table. Linear scan: tables are small and this
 /// runs off the hot path (palette open, menu build), so a map would only add
 /// allocation.
-pub fn find(commands: &[Command], id: CommandId) -> Option<&Command> {
+pub fn find(commands: &[Command], id: StaticKey<Commands>) -> Option<&Command> {
     commands.iter().find(|c| c.id == id)
 }
 
@@ -227,16 +262,16 @@ pub fn find(commands: &[Command], id: CommandId) -> Option<&Command> {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TableDefect {
     /// The table describes the identity twice, so `find` reaches one of them.
-    DescribedTwice(CommandId),
+    DescribedTwice(StaticKey<Commands>),
     /// The command has no label in a locale, so a view has nothing to show.
-    Unlabelled(CommandId, Locale),
+    Unlabelled(StaticKey<Commands>, Locale),
     /// The command belongs to no group, so the palette cannot place it.
-    Ungrouped(CommandId),
+    Ungrouped(StaticKey<Commands>),
     /// The command names an icon with no name, which no icon set resolves.
-    BlankIcon(CommandId),
+    BlankIcon(StaticKey<Commands>),
     /// Two entries declare one default chord. Seeding keeps the last one, so
     /// the first silently leaves the keyboard.
-    SharedChord(KeyBinding, CommandId, CommandId),
+    SharedChord(KeyBinding, StaticKey<Commands>, StaticKey<Commands>),
 }
 
 /// Every defect of `table`, in declaration order. An empty answer is a table
@@ -246,7 +281,7 @@ pub enum TableDefect {
 /// that declares one must declare a usable one.
 pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
     let mut defects = Vec::new();
-    let mut chords: HashMap<KeyBinding, CommandId> = HashMap::new();
+    let mut chords: HashMap<KeyBinding, StaticKey<Commands>> = HashMap::new();
     for (i, cmd) in table.iter().enumerate() {
         if table.iter().take(i).any(|c| c.id == cmd.id) {
             defects.push(TableDefect::DescribedTwice(cmd.id));
@@ -256,10 +291,10 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
                 defects.push(TableDefect::Unlabelled(cmd.id, locale));
             }
         }
-        if cmd.category.0.trim().is_empty() {
+        if cmd.category.as_str().trim().is_empty() {
             defects.push(TableDefect::Ungrouped(cmd.id));
         }
-        if cmd.icon.is_some_and(|icon| icon.0.trim().is_empty()) {
+        if cmd.icon.is_some_and(|icon| icon.as_str().trim().is_empty()) {
             defects.push(TableDefect::BlankIcon(cmd.id));
         }
         for &kb in cmd.keybindings {
@@ -271,13 +306,13 @@ pub fn table_defects(table: &[Command]) -> Vec<TableDefect> {
     defects
 }
 
-/// Resolves keyboard chords to commands: a `HashMap<KeyBinding, CommandId>`.
+/// Resolves keyboard chords to commands: a `HashMap<KeyBinding, StaticKey<Commands>>`.
 ///
 /// Seeded from each command's declared chords; the chrome may later rebind
 /// entries from user preferences via [`Keymap::bind`].
 #[derive(Default)]
 pub struct Keymap {
-    map: HashMap<KeyBinding, CommandId>,
+    map: HashMap<KeyBinding, StaticKey<Commands>>,
 }
 
 impl Keymap {
@@ -315,17 +350,17 @@ impl Keymap {
 
     /// Bind (or rebind) a chord to a command. Returns the command it displaced,
     /// if any -- useful to surface shortcut conflicts to the user.
-    pub fn bind(&mut self, kb: KeyBinding, id: CommandId) -> Option<CommandId> {
+    pub fn bind(&mut self, kb: KeyBinding, id: StaticKey<Commands>) -> Option<StaticKey<Commands>> {
         self.map.insert(kb, id)
     }
 
     /// Remove a binding, returning the command it pointed at.
-    pub fn unbind(&mut self, kb: KeyBinding) -> Option<CommandId> {
+    pub fn unbind(&mut self, kb: KeyBinding) -> Option<StaticKey<Commands>> {
         self.map.remove(&kb)
     }
 
     /// Resolve a chord to the command it triggers, if any.
-    pub fn resolve(&self, kb: KeyBinding) -> Option<CommandId> {
+    pub fn resolve(&self, kb: KeyBinding) -> Option<StaticKey<Commands>> {
         self.map.get(&kb).copied()
     }
 
@@ -356,20 +391,20 @@ mod tests {
         }
     }
 
-    const FORMAT: CommandCategory = CommandCategory("format");
+    const FORMAT: StaticKey<Categories> = StaticKey::<Categories>::new("format");
 
     const COMMANDS: &[Command] = &[
         Command {
-            id: CommandId("prose.format.bold"),
+            id: StaticKey::<Commands>::new("prose.format.bold"),
             title: bold_title,
-            icon: Some(IconId("bold")),
+            icon: Some(StaticKey::<Icons>::new("bold")),
             keybindings: &[KeyBinding::primary(KeyChar::B)],
             category: FORMAT,
         },
         Command {
-            id: CommandId("prose.format.italic"),
+            id: StaticKey::<Commands>::new("prose.format.italic"),
             title: italic_title,
-            icon: Some(IconId("italic")),
+            icon: Some(StaticKey::<Icons>::new("italic")),
             keybindings: &[KeyBinding::primary(KeyChar::I)],
             category: FORMAT,
         },
@@ -380,7 +415,7 @@ mod tests {
     /// table declares once this crate owns them.
     const EDITING: &[Command] = &[
         Command {
-            id: CommandId("prose.history.redo"),
+            id: StaticKey::<Commands>::new("prose.history.redo"),
             title: bold_title,
             icon: None,
             keybindings: shared::REDO_CHORDS,
@@ -404,10 +439,10 @@ mod tests {
 
     #[test]
     fn find_returns_matching_command() {
-        let cmd = find(COMMANDS, CommandId("prose.format.italic")).unwrap();
+        let cmd = find(COMMANDS, StaticKey::<Commands>::new("prose.format.italic")).unwrap();
         assert_eq!((cmd.title)(&Locale::Fr), "Italique");
         assert_eq!((cmd.title)(&Locale::En), "Italic");
-        assert!(find(COMMANDS, CommandId("prose.format.unknown")).is_none());
+        assert!(find(COMMANDS, StaticKey::<Commands>::new("prose.format.unknown")).is_none());
     }
 
     #[test]
@@ -416,7 +451,7 @@ mod tests {
         assert_eq!(km.len(), 2);
         assert_eq!(
             km.resolve(KeyBinding::primary(KeyChar::B)),
-            Some(CommandId("prose.format.bold"))
+            Some(StaticKey::<Commands>::new("prose.format.bold"))
         );
         // Shift state matters: Ctrl+Shift+B is not bound.
         assert_eq!(km.resolve(KeyBinding::primary_shift(KeyChar::B)), None);
@@ -428,16 +463,19 @@ mod tests {
         let mut km = Keymap::from_commands([COMMANDS]);
         let displaced = km.bind(
             KeyBinding::primary(KeyChar::B),
-            CommandId("prose.format.italic"),
+            StaticKey::<Commands>::new("prose.format.italic"),
         );
-        assert_eq!(displaced, Some(CommandId("prose.format.bold")));
+        assert_eq!(
+            displaced,
+            Some(StaticKey::<Commands>::new("prose.format.bold"))
+        );
         assert_eq!(
             km.resolve(KeyBinding::primary(KeyChar::B)),
-            Some(CommandId("prose.format.italic"))
+            Some(StaticKey::<Commands>::new("prose.format.italic"))
         );
         assert_eq!(
             km.unbind(KeyBinding::primary(KeyChar::B)),
-            Some(CommandId("prose.format.italic"))
+            Some(StaticKey::<Commands>::new("prose.format.italic"))
         );
         assert!(km.resolve(KeyBinding::primary(KeyChar::B)).is_none());
     }
@@ -456,13 +494,14 @@ mod tests {
                 KeyBinding::primary_shift(KeyChar::B),
             ])
             .collect();
-        let before: Vec<Option<CommandId>> = chords.iter().map(|&kb| km.resolve(kb)).collect();
+        let before: Vec<Option<StaticKey<Commands>>> =
+            chords.iter().map(|&kb| km.resolve(kb)).collect();
 
         let rebound = KeyBinding::primary(KeyChar::B);
-        km.bind(rebound, CommandId("prose.format.italic"));
+        km.bind(rebound, StaticKey::<Commands>::new("prose.format.italic"));
         km.bind(
             KeyBinding::primary(KeyChar::Q),
-            CommandId("prose.format.bold"),
+            StaticKey::<Commands>::new("prose.format.bold"),
         );
 
         for (kb, was) in chords.iter().zip(before) {
@@ -491,16 +530,16 @@ mod tests {
         assert_eq!(table_defects(COMMANDS), []);
         assert_eq!(table_defects(EDITING), []);
 
-        let bold = CommandId("prose.format.bold");
-        let other = CommandId("prose.format.other");
+        let bold = StaticKey::<Commands>::new("prose.format.bold");
+        let other = StaticKey::<Commands>::new("prose.format.other");
         const CHORD: &[KeyBinding] = &[KeyBinding::primary(KeyChar::B)];
         let broken = [
             Command {
                 id: bold,
                 title: blank,
-                icon: Some(IconId(" ")),
+                icon: Some(StaticKey::<Icons>::new(" ")),
                 keybindings: CHORD,
-                category: CommandCategory(""),
+                category: StaticKey::<Categories>::new(""),
             },
             Command {
                 id: other,
@@ -534,7 +573,7 @@ mod tests {
     #[test]
     fn both_redo_chords_reach_the_same_command() {
         let km = Keymap::from_commands([EDITING]);
-        let redo = Some(CommandId("prose.history.redo"));
+        let redo = Some(StaticKey::<Commands>::new("prose.history.redo"));
         assert_eq!(km.resolve(KeyBinding::primary_shift(KeyChar::Z)), redo);
         assert_eq!(km.resolve(KeyBinding::primary(KeyChar::Y)), redo);
     }
@@ -557,9 +596,9 @@ mod tests {
 
     #[test]
     fn a_command_announces_the_first_chord_it_declares() {
-        let redo = find(EDITING, CommandId("prose.history.redo")).unwrap();
+        let redo = find(EDITING, StaticKey::<Commands>::new("prose.history.redo")).unwrap();
         assert_eq!(redo.chord(), Some(KeyBinding::primary_shift(KeyChar::Z)));
-        let bold = find(COMMANDS, CommandId("prose.format.bold")).unwrap();
+        let bold = find(COMMANDS, StaticKey::<Commands>::new("prose.format.bold")).unwrap();
         assert_eq!(bold.chord(), Some(KeyBinding::primary(KeyChar::B)));
     }
 

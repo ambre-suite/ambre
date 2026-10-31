@@ -27,7 +27,7 @@ use ambre_chrome::{
     FormatToggle, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, StatusBar, ToastHost,
     ToastKind, Toasts, Toolbar, ZoomChip,
 };
-use ambre_commands::CommandId;
+use ambre_commands::{Categories, Commands, StaticKey};
 use ambre_core::FontSize;
 use ambre_core::{Doc, Scale, View};
 use leptos::mount::mount_to;
@@ -45,8 +45,8 @@ fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css
 
 wasm_bindgen_test_configure!(run_in_browser);
 
-const A: CommandId = CommandId("test.a");
-const B: CommandId = CommandId("test.b");
+const A: StaticKey<Commands> = StaticKey::<Commands>::new("test.a");
+const B: StaticKey<Commands> = StaticKey::<Commands>::new("test.b");
 
 // -- Reactive belt: CommandStates (no DOM) -----------------------------------
 
@@ -608,11 +608,11 @@ async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
     owner.set();
     let pos = RwSignal::new(None::<ambre_core::Point<ambre_core::Px<ambre_core::Css>>>);
     let item = ambre_commands::Command {
-        id: CommandId("test.item"),
+        id: StaticKey::<Commands>::new("test.item"),
         title: |_| "Item".to_owned(),
         icon: None,
         keybindings: &[],
-        category: ambre_commands::CommandCategory(""),
+        category: StaticKey::<Categories>::new(""),
     };
     let entries = vec![MenuEntry::command(&item, &ambre_commands::Locale::En)];
     let root = mount_in_container(move || {
@@ -732,25 +732,25 @@ fn shown_title(l: &ambre_commands::Locale) -> String {
 /// `CHROME-008` is about.
 const PALETTE_TABLE: &[ambre_commands::Command] = &[
     ambre_commands::Command {
-        id: CommandId("t.palette.open"),
+        id: StaticKey::<Commands>::new("t.palette.open"),
         title: palette_title,
         icon: None,
         keybindings: &[],
-        category: ambre_commands::CommandCategory("general"),
+        category: StaticKey::<Categories>::new("general"),
     },
     ambre_commands::Command {
-        id: CommandId("t.engine.recalc"),
+        id: StaticKey::<Commands>::new("t.engine.recalc"),
         title: hidden_title,
         icon: None,
         keybindings: &[],
-        category: ambre_commands::CommandCategory("engine"),
+        category: StaticKey::<Categories>::new("engine"),
     },
     ambre_commands::Command {
-        id: CommandId("t.merge"),
+        id: StaticKey::<Commands>::new("t.merge"),
         title: shown_title,
         icon: None,
         keybindings: &[],
-        category: ambre_commands::CommandCategory("structure"),
+        category: StaticKey::<Categories>::new("structure"),
     },
 ];
 
@@ -806,7 +806,7 @@ async fn palette_row_invokes_its_command_and_closes() {
     let owner = Owner::new();
     owner.set();
     let open = RwSignal::new(Openness::Open);
-    let invoked: RwSignal<Option<CommandId>> = RwSignal::new(None);
+    let invoked: RwSignal<Option<StaticKey<Commands>>> = RwSignal::new(None);
     let root = mount_in_container(move || {
         view! {
             <ambre_chrome::CommandPalette
@@ -821,7 +821,10 @@ async fn palette_row_invokes_its_command_and_closes() {
     let last: web_sys::HtmlElement = rows.item(rows.length() - 1).unwrap().dyn_into().unwrap();
     last.click();
 
-    assert_eq!(invoked.get_untracked(), Some(CommandId("t.merge")));
+    assert_eq!(
+        invoked.get_untracked(),
+        Some(StaticKey::<Commands>::new("t.merge"))
+    );
     assert_eq!(
         open.get_untracked(),
         Openness::Closed,
@@ -841,7 +844,7 @@ async fn palette_entry_comes_first_and_hands_back_its_key() {
     owner.set();
     let open = RwSignal::new(Openness::Open);
     let chosen: RwSignal<Option<ambre_chrome::PaletteKey>> = RwSignal::new(None);
-    let invoked: RwSignal<Option<CommandId>> = RwSignal::new(None);
+    let invoked: RwSignal<Option<StaticKey<Commands>>> = RwSignal::new(None);
     let key = ambre_chrome::PaletteKey::Channel(ambre_core::Id::from_bytes([7; 16]));
     let entries = Signal::stored(vec![ambre_chrome::PaletteEntry {
         key,

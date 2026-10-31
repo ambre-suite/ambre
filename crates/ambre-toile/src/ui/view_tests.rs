@@ -7,7 +7,7 @@ use super::*;
 use crate::ui::kinetic::FingerRole;
 use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use ambre_bus::conduit::Receiver;
-use ambre_commands::KeyChar;
+use ambre_commands::{Commands, KeyChar, StaticKey};
 use ambre_core::Px;
 use ambre_core::Rgba;
 use ambre_core::Tally;
@@ -2269,7 +2269,7 @@ fn a_right_click_on_nothing_clears_the_selection() {
 }
 
 /// The key event the keymap binds to `id`, as the host would deliver it.
-fn chord_of(id: CommandId) -> InputEvent {
+fn chord_of(id: StaticKey<Commands>) -> InputEvent {
     let binding = crate::ui::commands::chord(id).expect("the id announces a chord");
     InputEvent::Key {
         key: binding.key,
@@ -2309,7 +2309,7 @@ fn chord_board(selection: &[&str]) -> Rig {
 #[test]
 fn a_shown_shortcut_does_what_its_entry_does() {
     use crate::ui::{menu, menu_bar};
-    let cases: [(CommandId, &[&str]); 7] = [
+    let cases: [(StaticKey<Commands>, &[&str]); 7] = [
         (menu::DUPLICATE, &["a", "b"]),
         (menu::DELETE, &["a", "b"]),
         (menu::GROUP, &["a", "b"]),

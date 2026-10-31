@@ -10,7 +10,6 @@ use ambre_bus::{
     BorderEdit, BorderPreset, BorderStyle, CellFormat, Col, FilterKind, FilterOp, HAlign,
     StylePatch, VAlign,
 };
-use ambre_chrome::commands::CommandId;
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;

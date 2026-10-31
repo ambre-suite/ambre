@@ -22,7 +22,7 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `TRAME-UI-085` | `OBS` | A menu MUST list the entries its scope allows, and no others. | this spec section 3 | `ambre_trame::tests::chrome_ui::cell_menu_has_clipboard_and_merge`; `::column_menu_keeps_column_ops_drops_cell_and_row_ops`; `::row_menu_keeps_row_ops_drops_column_inserts`; `::corner_menu_has_sheet_sort_only` -- four scopes, four entry sets, one wasm test each, asserting presence and absence | none | verified |
-| `TRAME-UI-086` | `INV` | A menu entry MUST carry no geometry of its own. | this spec section 2 | type-level -- an entry holds a parameterless `CommandId`, so there is no field a coordinate could travel in (`ambre-chrome/src/context_menu.rs`) | none | verified |
+| `TRAME-UI-086` | `INV` | A menu entry MUST carry no geometry of its own. | this spec section 2 | type-level -- an entry holds a parameterless `StaticKey<Commands>`, so there is no field a coordinate could travel in (`ambre-chrome/src/context_menu.rs`) | none | verified |
 | `TRAME-UI-090` | `OBS` | A filter entry MUST NOT offer to filter a row. | this spec section 3 | `ambre_trame::ui::commands::tests::a_row_menu_never_offers_to_filter` | none | verified |
 
 ### 1.2 Right-click to open the menu
@@ -37,7 +37,7 @@ status values are normative in `ambre-spec-template.md`.
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TRAME-UI-087` | `POST` | A menu entry MUST dispatch through the same command path as the toolbar and the keyboard. | this spec section 2 | type-level -- the menu emits a `CommandId`, and the only route from there is the shared `on_command` dispatch that the toolbar and the keymap also take | none | verified |
+| `TRAME-UI-087` | `POST` | A menu entry MUST dispatch through the same command path as the toolbar and the keyboard. | this spec section 2 | type-level -- the menu emits a `StaticKey<Commands>`, and the only route from there is the shared `on_command` dispatch that the toolbar and the keymap also take | none | verified |
 | `TRAME-UI-119` | `FRAME` | Choosing an entry MUST NOT change the selection the menu was opened on. | derived | `ambre_trame::ui::view::view_tests::a_menu_entry_leaves_the_selection_alone` -- each entry runs on a Logic state and its answers reach the view | none | verified |
 | `TRAME-UI-089` | `FAIL` | A command the document refuses MUST leave the document untouched and answer with the reason. | this spec section 3 | `ambre_trame::logic::tests::group2::merge_rejected_when_covered_cell_non_empty` -- it asserts the rejection reply, that no document update is emitted, and that the merge span is unchanged | none | verified |
 | `TRAME-UI-120` | `FAIL` | A refusal MUST reach the user as a message, never as silence. | this spec section 3 | `ambre_trame::tests::chrome_ui::a_refusal_reaches_the_user_as_a_toast` | none | verified |
@@ -71,7 +71,7 @@ pub enum MenuEntry {
 #[derive(Clone, PartialEq)]
 pub struct MenuItem {
     // parameterless: no field a coordinate fits in
-    command: CommandId,
+    command: StaticKey<Commands>,
     label: String,
     icon: Option<icondata::Icon>,
     shortcut: Option<KeyBinding>,
@@ -84,7 +84,7 @@ pub struct MenuItem {
 1. The pointer handler resolves the scope and stores it, synchronously, before the browser opens
    the menu.
 2. The menu is built for that scope, with its icons and separators.
-3. A chosen entry emits its `CommandId` into the shared command path.
+3. A chosen entry emits its `StaticKey<Commands>` into the shared command path.
 4. The path turns it into an application command, which reaches the Logic thread.
 5. The Logic thread resolves the geometry against the active cell and the selection rectangle it
    already tracks.

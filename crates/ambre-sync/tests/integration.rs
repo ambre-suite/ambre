@@ -39,8 +39,10 @@ fn setup(
     MockWsTransport,
 ) {
     let (logic_sink, logic_rx) = ambre_sync::LogicSink::channel();
-    let mut state =
-        ambre_sync::SyncState::new(logic_sink, ambre_sync::RelayHost::new(String::new()));
+    let mut state = ambre_sync::SyncState::new(
+        logic_sink,
+        ambre_sync::Url::<ambre_sync::RelayHost>::new(String::new()),
+    );
     let mock = MockWsTransport::new();
     if with_mock {
         state.set_mock_ws(mock.client_tx.clone());

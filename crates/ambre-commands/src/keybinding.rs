@@ -1,6 +1,6 @@
 // ambre-commands/src/keybinding.rs
 // ============================================================================
-// Keyboard chords (KeyBinding) and their pure resolution to a CommandId.
+// Keyboard chords (KeyBinding) and their pure resolution to a StaticKey<Commands>.
 //
 // A KeyBinding is a normalized, hashable chord: a set of modifiers plus a
 // logical key. DOM `KeyboardEvent.key` strings are translated into `Key` at

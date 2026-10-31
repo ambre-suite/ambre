@@ -12,20 +12,19 @@
 //                          `KeyboardEvent` into a `KeyBinding` for `Keymap`
 //                          resolution.
 //
-// State flows one way: trigger -> CommandId -> LogicCommand -> mutation ->
+// State flows one way: trigger -> StaticKey<Commands> -> LogicCommand -> mutation ->
 // UiEvent -> dispatcher -> these signals. The chrome never writes its own
 // toggle state optimistically.
 // ============================================================================
 
+use ambre_commands::{Commands, Key, KeyBinding, KeyState, Modifiers, StaticKey};
+use leptos::prelude::*;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_commands::{Key, KeyBinding, KeyState, Modifiers};
-use leptos::prelude::*;
-
 pub use ambre_core::{Availability, Toggle};
 
-/// Reactive store of command toggle state, keyed by `CommandId`.
+/// Reactive store of command toggle state, keyed by `StaticKey<Commands>`.
 ///
 /// Cheap to clone (an `Rc` to the signal map). Toggle signals are created once
 /// (at mount) and live for the app's lifetime; the dispatcher pushes
@@ -36,11 +35,11 @@ pub use ambre_core::{Availability, Toggle};
 /// [`toggled_signal`]: CommandStates::toggled_signal
 #[derive(Clone)]
 pub struct CommandStates {
-    toggled: Rc<HashMap<ambre_commands::CommandId, RwSignal<Toggle>>>,
+    toggled: Rc<HashMap<StaticKey<Commands>, RwSignal<Toggle>>>,
     /// Per-command availability (for example Undo/Redo), keyed like
     /// `toggled`. Initially `Enabled`: a command is actionable until the Logic
     /// thread reports otherwise (`TrameEvent::UndoState`, ...).
-    enabled: Rc<HashMap<ambre_commands::CommandId, RwSignal<Availability>>>,
+    enabled: Rc<HashMap<StaticKey<Commands>, RwSignal<Availability>>>,
 }
 
 impl CommandStates {
@@ -51,7 +50,7 @@ impl CommandStates {
     /// Takes identities rather than a slice so an app passes them straight from
     /// its command table (`ambre-spec-commands.md`, UI-THREAD-019) without
     /// building a second list beside it.
-    pub fn new(ids: impl IntoIterator<Item = ambre_commands::CommandId>) -> Self {
+    pub fn new(ids: impl IntoIterator<Item = StaticKey<Commands>>) -> Self {
         let ids: Vec<_> = ids.into_iter().collect();
         let toggled = ids
             .iter()
@@ -69,13 +68,13 @@ impl CommandStates {
 
     /// The reactive toggle signal for `id`, for a chrome view to subscribe to
     /// (for example a button's `aria-pressed`). `None` if the id was not registered.
-    pub fn toggled_signal(&self, id: ambre_commands::CommandId) -> Option<RwSignal<Toggle>> {
+    pub fn toggled_signal(&self, id: StaticKey<Commands>) -> Option<RwSignal<Toggle>> {
         self.toggled.get(&id).copied()
     }
 
     /// Push the authoritative toggle state for `id`. Called by the dispatcher
     /// from the inbound `UiEvent` stream -- the single writer.
-    pub fn set_toggled(&self, id: ambre_commands::CommandId, toggle: Toggle) {
+    pub fn set_toggled(&self, id: StaticKey<Commands>, toggle: Toggle) {
         if let Some(sig) = self.toggled.get(&id) {
             sig.set(toggle);
         }
@@ -84,13 +83,13 @@ impl CommandStates {
     /// The reactive enabled signal for `id`, for a chrome view to subscribe to
     /// (for example a button's `disabled` / `aria-disabled`). `None` if the id was not
     /// registered.
-    pub fn enabled_signal(&self, id: ambre_commands::CommandId) -> Option<RwSignal<Availability>> {
+    pub fn enabled_signal(&self, id: StaticKey<Commands>) -> Option<RwSignal<Availability>> {
         self.enabled.get(&id).copied()
     }
 
     /// Push the authoritative enabled state for `id`. Called by the dispatcher
     /// from the inbound `UiEvent` stream -- the single writer.
-    pub fn set_enabled(&self, id: ambre_commands::CommandId, availability: Availability) {
+    pub fn set_enabled(&self, id: StaticKey<Commands>, availability: Availability) {
         if let Some(sig) = self.enabled.get(&id) {
             sig.set(availability);
         }

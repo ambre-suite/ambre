@@ -8,7 +8,7 @@
 //
 // It offers the highest-frequency actions -- quick fill + text formatting (text colour,
 // font, size, bold, italic), duplicate, delete, group / ungroup, lock / unlock. The
-// command buttons (duplicate / delete / group / lock) are `ui::menu` `CommandId`s routed
+// command buttons (duplicate / delete / group / lock) are `ui::menu` `StaticKey<Commands>`s routed
 // through the shared `on_command` path. So the bar is a strict subset of the context
 // menu (`toile-menus`), and the two never diverge. The style controls reuse the shared
 // `ambre_chrome` value controls (`ColorPopover` with its opacity slider, `FontPicker`). They emit a
@@ -25,7 +25,7 @@
 // acts on. ============================================================================
 
 use ambre_bus::app::toile::{FontFamily, FontSizeChoice};
-use ambre_chrome::commands::{CommandId, Locale};
+use ambre_chrome::commands::{Commands, Locale, StaticKey};
 use ambre_core::{FontSize, Rgba};
 
 use super::icons;
@@ -47,7 +47,7 @@ use crate::ui::style::StyleModel;
 pub fn SelectionToolbar(
     bar: RwSignal<Option<FloatBar>>,
     model: RwSignal<Option<StyleModel>>,
-    on_command: Callback<CommandId>,
+    on_command: Callback<StaticKey<Commands>>,
     on_style: Callback<StyleEdit>,
 ) -> impl IntoView {
     // Local working values for the style controls. They are seeded from the
@@ -139,7 +139,7 @@ pub fn SelectionToolbar(
     // / context menu). `prevent_default` on mousedown keeps the canvas focused.
     // The tooltip and the glyph are the ones the command declares
     // (`UI-THREAD-019`), so this bar and the right-click menu never disagree.
-    let cmd_button = move |command: CommandId| {
+    let cmd_button = move |command: StaticKey<Commands>| {
         let label = registry::title(command, &Locale::En).unwrap_or_default();
         let icon = registry::icon(command).and_then(icons::resolve);
         view! {

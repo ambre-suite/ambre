@@ -2,6 +2,7 @@
 // The shared autofilter popover and its state.
 
 use super::*;
+use ambre_commands::{Commands, StaticKey};
 
 /// Open state of the shared filter popover: which grid column it targets and the
 /// viewport (client-space) anchor point under which it is drawn. `None` means
@@ -49,7 +50,7 @@ pub fn FilterPopover(
     state: RwSignal<Option<FilterPopoverState>>,
     values: RwSignal<Vec<String>>,
     on_apply: Callback<FilterKind>,
-    on_command: Callback<CommandId>,
+    on_command: Callback<StaticKey<Commands>>,
 ) -> impl IntoView {
     // true = "by values", false = "by condition".
     let by_values = RwSignal::new(true);

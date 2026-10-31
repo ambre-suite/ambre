@@ -11,7 +11,7 @@
 //   FormatToggle   -- a single pressed-state toolbar button (bold / italic /
 //                     underline / strikethrough), reflecting a `pressed` signal
 //                     and reporting clicks through `on_toggle`. The caller owns
-//                     what a toggle means to its model (a `CommandId`, a style
+//                     what a toggle means to its model (a `StaticKey<Commands>`, a style
 //                     patch, ...): the control never reaches past the DOM.
 //
 //   FormatBar      -- the bar of format controls over a selection. Prose and

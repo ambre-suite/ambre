@@ -82,17 +82,18 @@ and the document schema in one type.
 **The shapes.**
 
 ```rust
-/// Stable namespaced identifier, for example "prose.format.bold".
-pub struct CommandId(&'static str);
+/// A key a `const` table names, for example "prose.format.bold": its kind
+/// is `Commands`, `Icons` or `Categories`.
+pub struct StaticKey<K: KeyKind> { text: &'static str, kind: PhantomData<fn() -> K> }
 
 /// The description every view of a command derives from (`UI-THREAD-019`).
 pub struct Command {
-    pub id: CommandId,
+    pub id: StaticKey<Commands>,
     pub title: fn(&Locale) -> String,
-    pub icon: Option<IconId>,
+    pub icon: Option<StaticKey<Icons>>,
     /// Every chord it answers, the announced one first (`UI-THREAD-011`).
     pub keybindings: &'static [KeyBinding],
-    pub category: CommandCategory,
+    pub category: StaticKey<Categories>,
 }
 
 /// A set of three named members, `PRIMARY`, `ALT` and `SHIFT`. One accelerator member, and no
@@ -170,7 +171,7 @@ flowchart TD
 * `crates/ambre-trame/src/ui/commands.rs` -- Trame's descriptions and its context-menu layouts,
   host-compiled so a test reaches a label without a browser;
 * `crates/ambre-trame/src/chrome/commands.rs` -- the menu rows built from them, the chord bindings
-  and the inbound event mirrors. `crates/ambre-trame/src/chrome/icons.rs` -- `IconId` to the icon
+  and the inbound event mirrors. `crates/ambre-trame/src/chrome/icons.rs` -- `StaticKey<Icons>` to the icon
   asset, which keeps one application's icon set out of the shared crate;
 * `crates/ambre-toile/src/ui/commands.rs` -- Toile's descriptions, over the identities that stay
   beside the resolver of each surface (`ui::menu`, `ui::menu_bar`, `ui::palette`, `ui::find`).

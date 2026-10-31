@@ -9,6 +9,7 @@
 // one `AnnotationIntent`: the DOM holds no command channel.
 // ============================================================================
 
+use ambre_commands::{Commands, StaticKey};
 use std::collections::HashMap;
 
 use ambre_core::id::{Comment, Id};
@@ -23,7 +24,6 @@ pub use menu::context_entries;
 pub use notify::notify_event;
 
 use ambre_chrome::{FormatBar, FormatControl, Pressed};
-use ambre_commands::CommandId;
 
 use crate::events::{SuggestionKind, TriState};
 use crate::ui::ProseUiState;
@@ -70,7 +70,7 @@ pub struct ProseSignals {
     pub toolbar: RwSignal<ToolbarState>,
     /// A formatting command a control or a chord invoked, until the view
     /// drains it. Both write the same id here (`PROSE-UI-056`).
-    pub format: RwSignal<Option<CommandId>>,
+    pub format: RwSignal<Option<StaticKey<Commands>>>,
     /// The slash menu, its anchor in CSS pixels (`PROSE-UI-090`).
     pub slash: RwSignal<SlashMenuState>,
     /// The menu item picked with the pointer, until the view drains it.
@@ -347,7 +347,7 @@ pub fn ProseFormatBar(signals: ProseSignals) -> impl IntoView {
 }
 
 /// One control, announced by its command's title.
-fn control(signals: ProseSignals, id: CommandId, pressed: Pressed) -> FormatControl {
+fn control(signals: ProseSignals, id: StaticKey<Commands>, pressed: Pressed) -> FormatControl {
     let label = ambre_commands::find(crate::commands::COMMANDS, id)
         .map(|command| (command.title)(&ambre_commands::Locale::En))
         .unwrap_or_default();

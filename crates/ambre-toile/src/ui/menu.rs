@@ -1,8 +1,8 @@
 // ambre-toile/src/ui/menu.rs
 // ============================================================================ Command surface for
 // the Toile right-click context menu (`toile-menus`). The host-visible half is three things. The
-// `CommandId`s the menu contributes, and the pure selection scope descriptor the canvas view
-// publishes to the DOM chrome. Then the pure `CommandId -> Vec<ToileCommand>` resolver the view
+// `StaticKey<Commands>`s the menu contributes, and the pure selection scope descriptor the canvas view
+// publishes to the DOM chrome. Then the pure `StaticKey<Commands> -> Vec<ToileCommand>` resolver the view
 // applies against its local selection.
 //
 // Kept in the always-compiled `ui` module (not the wasm-only `chrome`) so it is host-unit-tested,
@@ -11,8 +11,8 @@
 //
 // Trame's context commands are parameterless, because the Logic thread tracks the active cell.
 // Toile selection instead is UI-only state living in `ToileView` (`toile-selection`, and
-// `ambre-spec-ui.md`). The Logic thread never sees it, so a menu `CommandId` cannot be turned into
-// a `ToileCommand { ids: .. }` in the DOM shell. The shell forwards the bare `CommandId` into the
+// `ambre-spec-ui.md`). The Logic thread never sees it, so a menu `StaticKey<Commands>` cannot be turned into
+// a `ToileCommand { ids: .. }` in the DOM shell. The shell forwards the bare `StaticKey<Commands>` into the
 // view, which calls [`resolve_menu_command`] with its selection to build the real command(s).
 //
 // Everything here is pure and `cfg`-agnostic (no Leptos, no wasm), so it is host-unit-tested per
@@ -24,7 +24,7 @@ use ambre_bus::app::toile::{
     AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementKind, Elements, LockState,
     NodeId, Reaction, ReactionKind, ToileCommand, ZTarget,
 };
-use ambre_commands::CommandId;
+use ambre_commands::{Commands, StaticKey};
 use ambre_core::Tally;
 use ambre_core::id::{Element, Id};
 use kurbo::{Rect, Vec2};
@@ -50,31 +50,31 @@ pub(crate) fn duplicate_delta() -> Vec2 {
 // (`ambre-spec-commands.md`, `UI-THREAD-011`).
 
 /// Cut the selection (copy + delete).
-pub const CUT: CommandId = ambre_commands::shared::CUT;
+pub const CUT: StaticKey<Commands> = ambre_commands::shared::CUT;
 /// Copy the selection to the shared clipboard.
-pub const COPY: CommandId = ambre_commands::shared::COPY;
+pub const COPY: StaticKey<Commands> = ambre_commands::shared::COPY;
 /// Paste the clipboard at the cursor / viewport center.
-pub const PASTE: CommandId = ambre_commands::shared::PASTE;
+pub const PASTE: StaticKey<Commands> = ambre_commands::shared::PASTE;
 /// Duplicate the selection in place with a small nudge.
-pub const DUPLICATE: CommandId = CommandId::new("toile.edit.duplicate");
+pub const DUPLICATE: StaticKey<Commands> = StaticKey::<Commands>::new("toile.edit.duplicate");
 /// Delete the selection.
-pub const DELETE: CommandId = CommandId::new("toile.edit.delete");
+pub const DELETE: StaticKey<Commands> = StaticKey::<Commands>::new("toile.edit.delete");
 /// Bind the selection into a group.
-pub const GROUP: CommandId = CommandId::new("toile.group.group");
+pub const GROUP: StaticKey<Commands> = StaticKey::<Commands>::new("toile.group.group");
 /// Drop the selected group's binding.
-pub const UNGROUP: CommandId = CommandId::new("toile.group.ungroup");
+pub const UNGROUP: StaticKey<Commands> = StaticKey::<Commands>::new("toile.group.ungroup");
 /// Raise the selection to the top of the z-order.
-pub const BRING_FRONT: CommandId = CommandId::new("toile.z.front");
+pub const BRING_FRONT: StaticKey<Commands> = StaticKey::<Commands>::new("toile.z.front");
 /// Lower the selection to the bottom of the z-order.
-pub const SEND_BACK: CommandId = CommandId::new("toile.z.back");
+pub const SEND_BACK: StaticKey<Commands> = StaticKey::<Commands>::new("toile.z.back");
 /// Raise the selection one step.
-pub const FORWARD: CommandId = CommandId::new("toile.z.forward");
+pub const FORWARD: StaticKey<Commands> = StaticKey::<Commands>::new("toile.z.forward");
 /// Lower the selection one step.
-pub const BACKWARD: CommandId = CommandId::new("toile.z.backward");
+pub const BACKWARD: StaticKey<Commands> = StaticKey::<Commands>::new("toile.z.backward");
 /// Lock the selection (skips hit-test / handles).
-pub const LOCK: CommandId = CommandId::new("toile.lock.lock");
+pub const LOCK: StaticKey<Commands> = StaticKey::<Commands>::new("toile.lock.lock");
 /// Unlock the selection.
-pub const UNLOCK: CommandId = CommandId::new("toile.lock.unlock");
+pub const UNLOCK: StaticKey<Commands> = StaticKey::<Commands>::new("toile.lock.unlock");
 
 // -- Align and distribute (`toile-elements section 1.7`) ----------------
 // Eight one-shot batches over the selection: six put every box on an edge or
@@ -83,42 +83,44 @@ pub const UNLOCK: CommandId = CommandId::new("toile.lock.unlock");
 // coordinates are what converges.
 
 /// Put every selected box on the left edge of the selection.
-pub const ALIGN_LEFT: CommandId = CommandId::new("toile.align.left");
+pub const ALIGN_LEFT: StaticKey<Commands> = StaticKey::<Commands>::new("toile.align.left");
 /// Centre every selected box on the vertical mid-line of the selection.
-pub const ALIGN_HCENTER: CommandId = CommandId::new("toile.align.hcenter");
+pub const ALIGN_HCENTER: StaticKey<Commands> = StaticKey::<Commands>::new("toile.align.hcenter");
 /// Put every selected box on the right edge of the selection.
-pub const ALIGN_RIGHT: CommandId = CommandId::new("toile.align.right");
+pub const ALIGN_RIGHT: StaticKey<Commands> = StaticKey::<Commands>::new("toile.align.right");
 /// Put every selected box on the top edge of the selection.
-pub const ALIGN_TOP: CommandId = CommandId::new("toile.align.top");
+pub const ALIGN_TOP: StaticKey<Commands> = StaticKey::<Commands>::new("toile.align.top");
 /// Centre every selected box on the horizontal mid-line of the selection.
-pub const ALIGN_VCENTER: CommandId = CommandId::new("toile.align.vcenter");
+pub const ALIGN_VCENTER: StaticKey<Commands> = StaticKey::<Commands>::new("toile.align.vcenter");
 /// Put every selected box on the bottom edge of the selection.
-pub const ALIGN_BOTTOM: CommandId = CommandId::new("toile.align.bottom");
+pub const ALIGN_BOTTOM: StaticKey<Commands> = StaticKey::<Commands>::new("toile.align.bottom");
 /// Equalize the horizontal gaps between three or more selected boxes.
-pub const DISTRIBUTE_H: CommandId = CommandId::new("toile.align.distribute_h");
+pub const DISTRIBUTE_H: StaticKey<Commands> =
+    StaticKey::<Commands>::new("toile.align.distribute_h");
 /// Equalize the vertical gaps between three or more selected boxes.
-pub const DISTRIBUTE_V: CommandId = CommandId::new("toile.align.distribute_v");
+pub const DISTRIBUTE_V: StaticKey<Commands> =
+    StaticKey::<Commands>::new("toile.align.distribute_v");
 /// Add the selection to the frame that contains it.
-pub const ADD_TO_FRAME: CommandId = CommandId::new("toile.frame.add");
+pub const ADD_TO_FRAME: StaticKey<Commands> = StaticKey::<Commands>::new("toile.frame.add");
 /// Remove the selection from its containing frame.
-pub const REMOVE_FROM_FRAME: CommandId = CommandId::new("toile.frame.remove");
+pub const REMOVE_FROM_FRAME: StaticKey<Commands> = StaticKey::<Commands>::new("toile.frame.remove");
 /// Select every element on the board (local, never synced).
-pub const SELECT_ALL: CommandId = CommandId::new("toile.selection.all");
+pub const SELECT_ALL: StaticKey<Commands> = StaticKey::<Commands>::new("toile.selection.all");
 
 // -- Reactions ----------------------------------------------------------
 // A minimal, fixed emoji set for the reaction affordance: each id sets the local
 // user's reaction on every selected element (one `React` per target, LWW on the
 // user's own key). `REACT_CLEAR` removes it. The picker is intentionally small
 // and hardcoded for the MVP; a full emoji browser is a later concern.
-pub const REACT_THUMBSUP: CommandId = CommandId::new("toile.react.thumbsup");
-pub const REACT_HEART: CommandId = CommandId::new("toile.react.heart");
-pub const REACT_CHECK: CommandId = CommandId::new("toile.react.check");
-pub const REACT_PARTY: CommandId = CommandId::new("toile.react.party");
+pub const REACT_THUMBSUP: StaticKey<Commands> = StaticKey::<Commands>::new("toile.react.thumbsup");
+pub const REACT_HEART: StaticKey<Commands> = StaticKey::<Commands>::new("toile.react.heart");
+pub const REACT_CHECK: StaticKey<Commands> = StaticKey::<Commands>::new("toile.react.check");
+pub const REACT_PARTY: StaticKey<Commands> = StaticKey::<Commands>::new("toile.react.party");
 /// Remove the local user's own reaction from the selection.
-pub const REACT_CLEAR: CommandId = CommandId::new("toile.react.clear");
+pub const REACT_CLEAR: StaticKey<Commands> = StaticKey::<Commands>::new("toile.react.clear");
 
 /// The fixed emoji entries of the reaction picker, id + glyph, in display order.
-pub const REACTION_EMOJI: &[(CommandId, ambre_bus::Emoji)] = &[
+pub const REACTION_EMOJI: &[(StaticKey<Commands>, ambre_bus::Emoji)] = &[
     (REACT_THUMBSUP, ambre_bus::Emoji::from_static("\u{1F44D}")), // thumbs up
     (
         REACT_HEART,
@@ -129,7 +131,7 @@ pub const REACTION_EMOJI: &[(CommandId, ambre_bus::Emoji)] = &[
 ];
 
 /// Every command the Toile context menu contributes to the registry.
-pub const COMMANDS: &[CommandId] = &[
+pub const COMMANDS: &[StaticKey<Commands>] = &[
     CUT,
     COPY,
     PASTE,
@@ -339,8 +341,8 @@ fn containing_frame(
 /// separator. Pure and host-tested; the wasm entry builder maps each id to an
 /// iconed `MenuEntry`. A locked selection omits the entries that would move or
 /// remove it (`TOILE-UI-126`): cut, delete, duplicate and the four z-order moves.
-pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
-    let mut ids: Vec<Option<CommandId>> = Vec::new();
+pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<StaticKey<Commands>>> {
+    let mut ids: Vec<Option<StaticKey<Commands>>> = Vec::new();
 
     if scope.site == ClickSite::Canvas {
         // Empty canvas: Paste + Select-All only.
@@ -455,14 +457,14 @@ pub fn ungroup_chord(selection: &[Id<Element>]) -> Option<ToileCommand> {
     })
 }
 
-/// Translate a menu `CommandId` into the `ToileCommand`(s) to emit against the
+/// Translate a menu `StaticKey<Commands>` into the `ToileCommand`(s) to emit against the
 /// current selection. The single place a Toile menu id becomes command(s); pure
 /// and host-tested (`toile-menus`). `PASTE` and `SELECT_ALL` are UI-only intents
 /// handled in the view, so they return `Some(vec![])`. An id the resolver does
 /// not know returns `None`, refused rather than passing as a view-only intent
 /// (`TOILE-UI-152`).
 pub fn resolve_menu_command(
-    id: CommandId,
+    id: StaticKey<Commands>,
     selection: &[Id<Element>],
     _group_scope: Option<&Id<Element>>,
     selected: &[DisplayElement],
@@ -687,7 +689,8 @@ mod tests {
             ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
-        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        let ids: Vec<StaticKey<Commands>> =
+            context_menu_ids(&scope).into_iter().flatten().collect();
         for omitted in [
             UNGROUP,
             UNLOCK,
@@ -698,7 +701,7 @@ mod tests {
         ] {
             assert!(!ids.contains(&omitted), "{omitted:?} does not apply");
         }
-        let empty: Vec<CommandId> = context_menu_ids(&CtxScope::default())
+        let empty: Vec<StaticKey<Commands>> = context_menu_ids(&CtxScope::default())
             .into_iter()
             .flatten()
             .collect();
@@ -913,7 +916,8 @@ mod tests {
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[eid("a")], &dv);
         assert_eq!(scope.framed, FrameHeld::Framed);
-        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        let ids: Vec<StaticKey<Commands>> =
+            context_menu_ids(&scope).into_iter().flatten().collect();
         assert!(ids.contains(&REMOVE_FROM_FRAME), "removal not offered");
         assert!(
             !ids.contains(&ADD_TO_FRAME),
@@ -940,7 +944,8 @@ mod tests {
             ),
         ]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
-        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        let ids: Vec<StaticKey<Commands>> =
+            context_menu_ids(&scope).into_iter().flatten().collect();
         assert!(ids.contains(&ADD_TO_FRAME));
         assert!(!ids.contains(&REMOVE_FROM_FRAME));
     }
@@ -1231,8 +1236,14 @@ mod tests {
     fn an_unknown_id_is_refused_not_ui_only() {
         let dv = viewport(vec![]);
         assert!(
-            resolve_menu_command(CommandId::new("toile.unknown"), &[], None, &els(&dv), &dv)
-                .is_none()
+            resolve_menu_command(
+                StaticKey::<Commands>::new("toile.unknown"),
+                &[],
+                None,
+                &els(&dv),
+                &dv
+            )
+            .is_none()
         );
     }
 
@@ -1290,7 +1301,8 @@ mod tests {
             ambre_bus::app::toile::LockState::Locked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
-        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        let ids: Vec<StaticKey<Commands>> =
+            context_menu_ids(&scope).into_iter().flatten().collect();
         for omitted in [
             CUT,
             DELETE,
@@ -1320,7 +1332,8 @@ mod tests {
             ambre_bus::app::toile::LockState::Unlocked,
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
-        let ids: Vec<CommandId> = context_menu_ids(&scope).into_iter().flatten().collect();
+        let ids: Vec<StaticKey<Commands>> =
+            context_menu_ids(&scope).into_iter().flatten().collect();
         for kept in [
             CUT,
             COPY,

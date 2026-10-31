@@ -67,7 +67,7 @@ impl SyncState {
             tracing::warn!("Sync: WebSocket open requested before access token is ready");
             return;
         }
-        let url = crate::http::SocketUrl::of(self.url_scheme, &self.api_base);
+        let url = crate::http::Url::<crate::http::Socket>::of(self.url_scheme, &self.api_base);
         match WebSocket::new(url.as_str()) {
             Ok(ws) => {
                 ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
@@ -1592,7 +1592,7 @@ impl SyncState {
         let auth = self.auth_context();
         let rule = self.log_rule(document_id);
         wasm_bindgen_futures::spawn_local(async move {
-            let members_url = crate::http::ApiRoot::of(url_scheme, &api_base)
+            let members_url = crate::http::Url::<crate::http::ApiRoot>::of(url_scheme, &api_base)
                 .route(format!("/documents/{document_id}/members"));
             let resp = match http::get_json_auth::<http::MembersResponse>(
                 &members_url,
@@ -1675,7 +1675,10 @@ mod tests {
     /// A worker holding one open document, and the queue of what it tells Logic.
     fn with_open_document() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let id = Id::<Document>::mint();
         state.documents.insert(
             id,
@@ -1859,7 +1862,10 @@ mod tests {
         use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
 
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
         let id = Id::<Document>::mint();
         let mut doc = SyncDocumentState::new(
@@ -1916,7 +1922,10 @@ mod tests {
         use ambre_protocol::ws::{WsClientMsg, decode_client_msg};
 
         let (sink, _rx) = LogicSink::channel();
-        let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
+        let mut state = SyncState::new(
+            sink,
+            crate::http::Url::<crate::RelayHost>::new(String::new()),
+        );
         let mut cursors = std::collections::HashMap::new();
         for last in [7, 12] {
             let id = Id::<Document>::mint();
@@ -1980,9 +1989,9 @@ mod tests {
     #[test]
     fn the_socket_address_carries_no_token() {
         assert_eq!(
-            crate::http::SocketUrl::of(
+            crate::http::Url::<crate::http::Socket>::of(
                 crate::http::UrlScheme::Https,
-                &crate::http::RelayHost::new("relay.example".to_owned())
+                &crate::http::Url::<crate::http::RelayHost>::new("relay.example".to_owned())
             )
             .as_str(),
             "wss://relay.example/api/ws"

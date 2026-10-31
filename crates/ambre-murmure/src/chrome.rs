@@ -9,6 +9,7 @@
 // Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).
 // ============================================================================
 
+use ambre_commands::{Commands, Locale, StaticKey};
 use std::collections::{HashMap, HashSet};
 
 use crate::commands::{
@@ -34,7 +35,6 @@ use ambre_chrome::{
     CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, PaletteKey,
     Pressed, ShellAction, ShellRegion, Toasts,
 };
-use ambre_commands::{CommandId, Locale};
 use ambre_core::id::{Channel, Id, Space, User};
 use ambre_core::{Css, Name, Point, Px, StepDirection};
 use leptos::prelude::*;
@@ -625,7 +625,7 @@ impl MurmureRelay {
 
     /// What the action `id` does on the target, which the menu closes on.
     /// `None` with no target, or for an id it does not offer.
-    pub fn act(&self, id: CommandId) -> Option<MessageAction> {
+    pub fn act(&self, id: StaticKey<Commands>) -> Option<MessageAction> {
         let target = self.target.get_untracked()?;
         let action = message_action(id, &target, self.me.get_untracked())?;
         self.target.set(None);
@@ -1400,7 +1400,7 @@ impl MurmureHandler {
     }
 
     /// Run the command `id`. `false` for an id Murmure did not declare.
-    fn run(&self, id: CommandId) -> bool {
+    fn run(&self, id: StaticKey<Commands>) -> bool {
         let command = match id {
             NEXT_ACTIVITY => self.relay.jump(StepDirection::Forward),
             PREVIOUS_ACTIVITY => self.relay.jump(StepDirection::Backward),
@@ -1427,7 +1427,7 @@ impl MurmureHandler {
 impl CommandHandler for MurmureHandler {
     type Command = AppCommand;
 
-    fn on_command(&self, id: CommandId) -> Vec<ShellAction<AppCommand>> {
+    fn on_command(&self, id: StaticKey<Commands>) -> Vec<ShellAction<AppCommand>> {
         if id == PALETTE {
             return vec![ShellAction::OpenPalette];
         }
@@ -1449,7 +1449,11 @@ impl CommandHandler for MurmureHandler {
         Vec::new()
     }
 
-    fn on_key(&self, id: CommandId, target: ambre_chrome::KeyTarget) -> KeyRoute<AppCommand> {
+    fn on_key(
+        &self,
+        id: StaticKey<Commands>,
+        target: ambre_chrome::KeyTarget,
+    ) -> KeyRoute<AppCommand> {
         if id == PALETTE {
             return KeyRoute::Run(vec![ShellAction::OpenPalette]);
         }
