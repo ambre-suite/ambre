@@ -86,7 +86,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // That chain is unreachable off-EC2, and surfaces as a "dispatch failure" on
     // every request. Set both explicitly. Credentials come from the environment.
     // When an endpoint override is present (the local Garage) we default to its
-    // dev key, `scripts/garage_init.sh`, so the stack works out of the box.
+    // dev key, `scripts/garage_init.sh`, so the stack works out of the box. That
+    // key guards nothing, so the fallback is logged: a deployment names its own.
     let aws_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_owned());
     let mut s3_config =
         aws_sdk_s3::Config::builder().region(aws_sdk_s3::config::Region::new(aws_region));
@@ -98,9 +99,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         ("", "")
     };
-    let access_key = std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| dev_key.to_owned());
-    let secret_key =
-        std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| dev_secret.to_owned());
+    let access_key = std::env::var("AWS_ACCESS_KEY_ID").ok();
+    let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY").ok();
+    if s3_endpoint.is_some() && (access_key.is_none() || secret_key.is_none()) {
+        tracing::warn!(
+            "AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY unset: the relay signs with the dev key \
+             of the local stack (insecure, dev only)"
+        );
+    }
+    let access_key = access_key.unwrap_or_else(|| dev_key.to_owned());
+    let secret_key = secret_key.unwrap_or_else(|| dev_secret.to_owned());
     s3_config = s3_config.credentials_provider(aws_sdk_s3::config::Credentials::new(
         access_key,
         secret_key,

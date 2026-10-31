@@ -1,5 +1,5 @@
 //! Integration tests for the interop converters against golden fixtures
-//! (`toile-import-export`). Host tier only: pure functions, no network / object store.
+//! (`toile-import-export`). Host tier only: pure functions, no network, no store.
 //!
 //! Covers each mapped SVG node type -> expected command batch, and an SVG
 //! round-trip (import -> export -> import stability). It also covers every

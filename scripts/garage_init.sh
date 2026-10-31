@@ -23,7 +23,10 @@ done
 garage status >/dev/null
 
 # One node holds every block: the layout must name it before any request.
-if garage layout show | grep -q "No nodes currently have a role"; then
+# The reply is read whole first: under `pipefail`, a `grep -q` that stops
+# early could kill the writer and read as false.
+layout="$(garage layout show)"
+if grep -q "No nodes currently have a role" <<<"$layout"; then
     node="$(garage node id -q | cut -d@ -f1)"
     garage layout assign -z dev -c 1G "$node" >/dev/null
     garage layout apply --version 1 >/dev/null
