@@ -219,14 +219,14 @@ pub(crate) fn push_shape(
 // TextCache
 // -----------------------------------------------------------------------------
 
-/// A length a text is laid out in: a font size or a wrap width.
-///
 /// An indent in the units of the width a layout breaks to: one whole unit
 /// is one layout unit.
 fn indent_units(indent: Px<WholeParley>) -> Px<Parley> {
     Px::new(f32::from(indent.get()))
 }
 
+/// A length a text is laid out in: a font size or a wrap width.
+///
 /// Parley lays out in the units of its caller, so a screen text passes
 /// [`Px<View>`] and a board text passes [`Px<Doc>`]. Both lengths of one layout
 /// share the space, so a font size in one space never meets a width in the
@@ -699,7 +699,7 @@ mod tests {
         let text = format!("top\r\n{long}\r\nend");
         let indent = SpanShape {
             range: ByteSpan::from_usize_range(5..5 + long.len() + 2),
-            indent: ambre_core::Px::<ambre_core::WholeParley>::new(12),
+            indent: Px::<ambre_core::WholeParley>::new(12),
             ..SpanShape::default()
         };
         let layout = cache.get_or_build_spans(

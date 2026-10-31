@@ -21,7 +21,7 @@ ron   = { version = "0.8", optional = true }
 ambre-bus  = { path = "../ambre-bus" }
 # The keys and modifiers an input event carries (`Key`, `Modifiers`).
 ambre-commands = { path = "../ambre-commands" }
-# The pixel spaces a plan and a size are typed in (`ViewPx`, `CssPx`).
+# The pixel spaces a plan and a size are typed in (`Px<View>`, `Px<WholeCss>`).
 ambre-core = { path = "../ambre-core" }
 ambre-draw = { path = "../ambre-draw" }
 

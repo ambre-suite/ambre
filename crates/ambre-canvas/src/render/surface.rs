@@ -85,7 +85,7 @@ pub(super) trait GlyphSink {
     /// of `slot`.
     fn glyph_corners(
         &mut self,
-        corners: [ambre_core::Point<ambre_core::Px<ambre_core::View>>; 4],
+        corners: [ambre_core::Point<Px<View>>; 4],
         slot: &AtlasSlot,
         tint: Option<Color>,
     );
@@ -101,7 +101,7 @@ impl GlyphSink for QuadRenderer {
 
     fn glyph_corners(
         &mut self,
-        corners: [ambre_core::Point<ambre_core::Px<ambre_core::View>>; 4],
+        corners: [ambre_core::Point<Px<View>>; 4],
         slot: &AtlasSlot,
         tint: Option<Color>,
     ) {
@@ -311,12 +311,7 @@ impl DrawSurface for WgpuSurface<'_> {
         self.renderer.push_quad(r, color);
     }
 
-    fn stroke_rect(
-        &mut self,
-        rect: Rect,
-        color: Color,
-        width: ambre_core::Px<ambre_core::Surface>,
-    ) {
+    fn stroke_rect(&mut self, rect: Rect, color: Color, width: Px<ambre_core::Surface>) {
         let width = width.get();
         let hw = width * 0.5;
         // Picture-frame decomposition: two full-width horizontal bars (which own
@@ -347,12 +342,7 @@ impl DrawSurface for WgpuSurface<'_> {
         }
     }
 
-    fn stroke_line(
-        &mut self,
-        line: Line,
-        color: Color,
-        width: ambre_core::Px<ambre_core::Surface>,
-    ) {
+    fn stroke_line(&mut self, line: Line, color: Color, width: Px<ambre_core::Surface>) {
         let width = width.get();
         let t = self.transform();
         let p0 = t * line.p0;
@@ -394,7 +384,7 @@ impl DrawSurface for WgpuSurface<'_> {
 
         let parley_run = run.run();
         let font_data = parley_run.font();
-        let font_size = ambre_core::Px::<ambre_core::Parley>::new(parley_run.font_size());
+        let font_size = Px::<ambre_core::Parley>::new(parley_run.font_size());
         // swash reads the raw bits. A static face has no coordinate, and an
         // empty Vec does not allocate.
         let coords: Vec<i16> = parley_run
@@ -714,7 +704,7 @@ mod tests {
         }
         fn glyph_corners(
             &mut self,
-            _: [ambre_core::Point<ambre_core::Px<ambre_core::View>>; 4],
+            _: [ambre_core::Point<Px<View>>; 4],
             _: &AtlasSlot,
             tint: Option<Color>,
         ) {
@@ -832,11 +822,7 @@ mod tests {
     #[test]
     fn a_glyph_is_rasterized_at_the_physical_size() {
         assert_eq!(
-            raster_of_layout(
-                ambre_core::Px::<ambre_core::Parley>::new(14.0),
-                1.0,
-                ratio(2.0)
-            ),
+            raster_of_layout(Px::<ambre_core::Parley>::new(14.0), 1.0, ratio(2.0)),
             Px::<GlyphRaster>::new(28.0)
         );
         // A bitmap of 20 x 30 device pixels at density 2.
@@ -886,11 +872,7 @@ mod tests {
     fn a_density_change_asks_for_a_new_raster() {
         use super::super::atlas::{FontId, GlyphKey};
         let key = |density| {
-            let size = raster_of_layout(
-                ambre_core::Px::<ambre_core::Parley>::new(14.0),
-                1.0,
-                ratio(density),
-            );
+            let size = raster_of_layout(Px::<ambre_core::Parley>::new(14.0), 1.0, ratio(density));
             GlyphKey::new(FontId::of_blob(7), GlyphId::new(42), size)
         };
         assert_ne!(key(1.0), key(2.0));
@@ -905,18 +887,14 @@ mod tests {
     fn a_zoomed_glyph_is_rasterized_at_its_screen_size() {
         assert_eq!(
             raster_of_layout(
-                ambre_core::Px::<ambre_core::Parley>::new(14.0),
+                Px::<ambre_core::Parley>::new(14.0),
                 2.0,
                 Scale::<Css, Device>::ONE
             ),
             Px::<GlyphRaster>::new(28.0)
         );
         assert_eq!(
-            raster_of_layout(
-                ambre_core::Px::<ambre_core::Parley>::new(14.0),
-                2.0,
-                ratio(2.0)
-            ),
+            raster_of_layout(Px::<ambre_core::Parley>::new(14.0), 2.0, ratio(2.0)),
             Px::<GlyphRaster>::new(56.0)
         );
 

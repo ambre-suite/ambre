@@ -44,8 +44,9 @@ pub use text::{BundledFamily, LazyFont, ScriptSet, resolve_family, sealed_font_c
 pub mod walk;
 pub use walk::DocumentWalk;
 
-/// The size and the pixels of an image, and the width of a stroke. A back end
-/// sees no other `ambre-core` type.
+/// The pixels of an image, and the pixel lengths of an image and of a stroke.
+/// The size of an image is an `ambre_core::Size`, which this crate does not
+/// re-export: its own `Size` is the kurbo one.
 pub use ambre_core::{Image, Px, RgbaPixels, Surface};
 
 #[cfg(feature = "testing")]
@@ -74,7 +75,7 @@ pub struct ImageSource<'a> {
     /// Non-premultiplied RGBA8 samples, row-major, `width * height * 4` bytes.
     pub pixels: &'a RgbaPixels,
     /// Native pixel size of the image.
-    pub size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
+    pub size: ambre_core::Size<Px<Image>>,
 }
 
 /// The identity of a decoded image, as its caller knows it (`ImageSource::key`).

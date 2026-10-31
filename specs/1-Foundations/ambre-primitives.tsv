@@ -817,7 +817,7 @@ ambre-core | src/font.rs | crate::font | FontSize::new(points) | param | f32	new
 ambre-core | src/font.rs | crate::font | FontSize::points() | ret | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize::whole_points() | ret | u16	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | InvalidFontSize.0 | field | f32	newtype-inner	FontSize field, constructor or accessor
-ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	math	the one points-to-pixels ratio, private to ambre-core; only Pt::to_doc_px, DocPx::to_pt and FontSize::to_px read it
+ambre-core | src/font.rs | crate::font | PX_PER_PT | const | f32	math	the one points-to-pixels ratio, private to ambre-core; only Pt::to_doc_px, Px<Doc>::to_pt and FontSize::to_px read it
 ambre-core | src/font.rs | crate::font | <FontWeight as TryFrom<u16>>::try_from(value) | param | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/font.rs | crate::font | FontFamily::Other.0 | field | String	newtype-inner	FontFamily constructor or accessor
 ambre-core | src/font.rs | crate::font | FontFamily::from_label(label) | param | &str	generic	the codec of an enum that carries data: a font family name as the store or the picker writes it; any name reads, an unknown one as Other
@@ -1864,7 +1864,7 @@ ambre-prose | src/interop/mod.rs | crate::interop | IrRun::plain(text) | param |
 ambre-prose | src/interop/mod.rs | crate::interop | report_message() | ret | Option<String>	free-text	a conversion report as one sentence the user reads
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | coverage_grew() | ret | bool	generic	whether a face now covers a script a past layout was missing, which makes it stale
 ambre-prose | src/layout/fonts.rs | crate::layout::fonts | missing_scripts(text) | param | &str	free-text	a block's text, scanned for the scripts no loaded face covers
-ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	a ratio of the content height, read only as the factor of DocPx * f32; a ratio is no length
+ambre-prose | src/layout/geometry.rs | crate::layout::geometry | BAND_SHARE | const | f32	math	a ratio of the content height, read only as the factor of Px<Doc> * f32; a ratio is no length
 ambre-prose | src/layout/measure.rs | crate::layout::measure | MarkedSpan::is_marked() | ret | bool	generic	predicate result: whether a span carries a mark the shaper reads
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::coverage_grew() | ret | bool	generic	whether a face arrived for a script a past run was missing, which makes it stale
 ambre-prose | src/layout/measure.rs | crate::layout::measure | Measurer::measure(text) | param | &str	free-text	a block's text, shaped for its heights alone
@@ -1926,7 +1926,7 @@ ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_r
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | attr() | ret | Option<&'a str>	free-text	an attribute value as the pasted HTML spells it
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | css_color(value) | param | &str	free-text	a colour value of a pasted style; the parse returns an Rgba
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_family(value) | param | &str	free-text	a font-family list of a pasted style; its first usable name becomes a MarkValue
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	free-text	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through DocPx
+ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | font_size(value) | param | &str	free-text	CSS declaration value of pasted HTML; the parse returns a FontSize, and the pixels go through Px<Doc>
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ink() | ret | bool	generic	whether a pasted colour reads as the page's body ink, so it sets no mark
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | ordered_style(kind) | param | Option<&str>	foreign-api	the type attribute of a pasted ordered list as html5ever yields it; the match returns an OrderedStyle
 ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read | read(html) | param | &str	free-text	the HTML a paste carries
@@ -2701,7 +2701,7 @@ ambre-toile | src/ui/view.rs | crate::ui::view | ToileView::signal_fatal(message
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | send_session(fatal) | param | bool	generic	local state flag or value, not a mode selector
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | FIT_PAD | const | f64	math	the padding fraction a fit scales the bounds by, as 1 + pad
-ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a ZoomFactor
+ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::clamp_zoom(z) | param | f64	math	raw product of a zoom and a relative factor, clamped into a Scale<Doc, View>
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_bounds(pad_frac) | param | f64	math	the padding fraction the bounds are scaled by, as 1 + pad_frac
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::fit_target(pad_frac) | param | f64	math	the padding fraction forwarded to the same 1 + pad_frac scale
 ambre-toile | src/ui/viewport.rs | crate::ui::viewport | ViewportTransform::zoom_about(factor) | param | f64	math	relative zoom factor, not an absolute zoom
@@ -3697,25 +3697,19 @@ ambre-core | src/space.rs | crate::space | <WholeCss as Space>::NAME | const | &
 ambre-core | src/space.rs | crate::space | <WholeCss as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <WholeParley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-core | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f64>>::scaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f64>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f64>>::unscaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | <f64 as Rescale<f64>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
 ambre-core | src/space.rs | crate::space | Float::finite() | ret | bool	generic	predicate
-ambre-core | src/space.rs | crate::space | Rescale::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
-ambre-core | src/space.rs | crate::space | Rescale::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Float>::finite() | ret | bool	generic	predicate
+ambre-core | src/space.rs | crate::space | <f64 as Float>::finite() | ret | bool	generic	predicate
+ambre-core | src/space.rs | crate::space | Rescale::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
+ambre-core | src/space.rs | crate::space | Rescale::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
 ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f32>>::div(divisor) | param | f32	math	a bare factor a float length is scaled or divided by
 ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f64>>::div(divisor) | param | f64	math	a bare factor a float length is scaled or divided by
 ambre-core | src/unit.rs | crate::unit | <Px<S> as Mul<f32>>::mul(factor) | param | f32	math	a bare factor a float length is scaled or divided by

@@ -58,16 +58,14 @@ impl GlyphId {
     }
 }
 
-/// The size a glyph is rasterized at, in device pixels. It is the logical
-/// size, times the scale of the transform it is drawn under, times the density.
+/// The size, in device pixels, that a glyph run is rasterized at. Its layout
+/// gives it `font_size`, in the units of that layout. The run is drawn under a
+/// transform of `scale`, on a screen of `density`.
 ///
 /// A walk is laid out in document units and drawn under a zoom. Its glyphs get
 /// a bitmap of the size they cover on the screen, never a stretched one
 /// (`CANVAS-074`). The atlas keys a raster by this size, so a density change
 /// never draws a raster made for the previous screen (`CANVAS-034`).
-/// The raster of a glyph run whose layout gives it `font_size`, in the units
-/// of that layout. The run is drawn under a transform of `scale`, on a screen
-/// of `density`.
 #[allow(clippy::cast_possible_truncation)]
 pub(crate) fn raster_of_layout(
     font_size: Px<Parley>,

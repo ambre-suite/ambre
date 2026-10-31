@@ -60,19 +60,6 @@ impl<A: Space, B: Space> Scale<A, B> {
     pub const fn get(self) -> f64 {
         self.0
     }
-
-    /// The scale back from `B` to `A`. The reciprocal of a subnormal scale
-    /// overflows an `f64`, so it is pulled back to the largest finite one.
-    #[must_use]
-    pub const fn inverse(self) -> Scale<B, A> {
-        Scale::positive(1.0 / self.0)
-    }
-
-    /// This scale, then `next`: the scale from `A` to `C`.
-    #[must_use]
-    pub const fn then<C: Space>(self, next: Scale<B, C>) -> Scale<A, C> {
-        Scale::positive(self.0 * next.0)
-    }
 }
 
 // By hand, as every impl below: a derive would ask the two markers for a
@@ -141,17 +128,11 @@ mod tests {
         assert_eq!(Scale::<Css, Device>::new(2.0).map(Scale::get), Some(2.0));
     }
 
-    /// A length scaled there and back is the length again, and two scales
-    /// chained are their product.
+    /// A length scaled there and back is the length again.
     #[test]
     fn a_length_scales_into_the_other_space_and_back() {
         let zoom = Scale::<Doc, View>::positive(2.0);
         assert_eq!(Px::<Doc>::new(12.0) * zoom, Px::<View>::new(24.0));
         assert_eq!(Px::<View>::new(24.0) / zoom, Px::<Doc>::new(12.0));
-        assert_eq!(Px::<View>::new(24.0) * zoom.inverse(), Px::<Doc>::new(12.0));
-        let back = zoom.then(zoom.inverse());
-        assert_eq!(back.get(), 1.0);
-        let steep = Scale::<Doc, View>::positive(f64::MIN_POSITIVE).inverse();
-        assert!(steep.get().is_finite() && steep.get() > 0.0);
     }
 }

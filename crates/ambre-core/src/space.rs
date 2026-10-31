@@ -30,8 +30,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 mod sealed {
-    /// Closes [`super::Scalar`] and [`super::Rescale`] to the numbers this
-    /// module lists.
+    /// Closes [`super::Scalar`] to the numbers this module lists. It also
+    /// closes the source number of [`super::Rescale`], though not its target.
     pub trait Sealed {}
 
     impl Sealed for f32 {}
@@ -102,61 +102,101 @@ pub trait Rescale<To>: sealed::Sealed {
     fn unscaled(self, factor: f64) -> To;
 }
 
-macro_rules! scalar_float {
-    ($t:ty) => {
-        impl Scalar for $t {
-            const ZERO: Self = 0.0;
+impl Scalar for f32 {
+    const ZERO: Self = 0.0;
 
-            fn lesser(self, other: Self) -> Self {
-                self.min(other)
-            }
+    fn lesser(self, other: Self) -> Self {
+        self.min(other)
+    }
 
-            fn greater(self, other: Self) -> Self {
-                self.max(other)
-            }
-        }
-
-        impl Float for $t {
-            fn magnitude(self) -> Self {
-                self.abs()
-            }
-
-            fn nearest(self) -> Self {
-                self.round()
-            }
-
-            fn rounded_down(self) -> Self {
-                self.floor()
-            }
-
-            fn finite(self) -> bool {
-                self.is_finite()
-            }
-        }
-    };
+    fn greater(self, other: Self) -> Self {
+        self.max(other)
+    }
 }
 
-macro_rules! scalar_integer {
-    ($t:ty) => {
-        impl Scalar for $t {
-            const ZERO: Self = 0;
+impl Float for f32 {
+    fn magnitude(self) -> Self {
+        self.abs()
+    }
 
-            fn lesser(self, other: Self) -> Self {
-                Ord::min(self, other)
-            }
+    fn nearest(self) -> Self {
+        self.round()
+    }
 
-            fn greater(self, other: Self) -> Self {
-                Ord::max(self, other)
-            }
-        }
-    };
+    fn rounded_down(self) -> Self {
+        self.floor()
+    }
+
+    fn finite(self) -> bool {
+        self.is_finite()
+    }
 }
 
-scalar_float!(f32);
-scalar_float!(f64);
-scalar_integer!(u32);
-scalar_integer!(i32);
-scalar_integer!(u16);
+impl Scalar for f64 {
+    const ZERO: Self = 0.0;
+
+    fn lesser(self, other: Self) -> Self {
+        self.min(other)
+    }
+
+    fn greater(self, other: Self) -> Self {
+        self.max(other)
+    }
+}
+
+impl Float for f64 {
+    fn magnitude(self) -> Self {
+        self.abs()
+    }
+
+    fn nearest(self) -> Self {
+        self.round()
+    }
+
+    fn rounded_down(self) -> Self {
+        self.floor()
+    }
+
+    fn finite(self) -> bool {
+        self.is_finite()
+    }
+}
+
+impl Scalar for u32 {
+    const ZERO: Self = 0;
+
+    fn lesser(self, other: Self) -> Self {
+        Ord::min(self, other)
+    }
+
+    fn greater(self, other: Self) -> Self {
+        Ord::max(self, other)
+    }
+}
+
+impl Scalar for i32 {
+    const ZERO: Self = 0;
+
+    fn lesser(self, other: Self) -> Self {
+        Ord::min(self, other)
+    }
+
+    fn greater(self, other: Self) -> Self {
+        Ord::max(self, other)
+    }
+}
+
+impl Scalar for u16 {
+    const ZERO: Self = 0;
+
+    fn lesser(self, other: Self) -> Self {
+        Ord::min(self, other)
+    }
+
+    fn greater(self, other: Self) -> Self {
+        Ord::max(self, other)
+    }
+}
 
 // The zoom is an `f64`, and an `f32` length scaled by it stays an `f32`
 // product, as it was before the generic type.
@@ -178,27 +218,6 @@ impl Rescale<f64> for f32 {
 
     fn unscaled(self, factor: f64) -> f64 {
         f64::from(self) / factor
-    }
-}
-
-impl Rescale<f64> for f64 {
-    fn scaled(self, factor: f64) -> f64 {
-        self * factor
-    }
-
-    fn unscaled(self, factor: f64) -> f64 {
-        self / factor
-    }
-}
-
-#[allow(clippy::cast_possible_truncation)]
-impl Rescale<f32> for f64 {
-    fn scaled(self, factor: f64) -> f32 {
-        (self * factor) as f32
-    }
-
-    fn unscaled(self, factor: f64) -> f32 {
-        (self / factor) as f32
     }
 }
 
