@@ -35,7 +35,7 @@ pub struct Claims {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub sub: ambre_core::UserId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub spk: Option<ambre_core::SigningKeyHex>,
+    pub spk: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
     pub iat: ambre_core::UnixSeconds,
     pub exp: ambre_core::UnixSeconds,
 }
@@ -199,7 +199,7 @@ impl JwtKeys {
 mod tests {
     use super::*;
 
-    use ambre_core::{Seconds, SigningKeyHex, UnixSeconds};
+    use ambre_core::{FixedBytes, Seconds, UnixSeconds};
 
     fn now() -> UnixSeconds {
         crate::s3::unix_now()
@@ -211,7 +211,7 @@ mod tests {
         let iat = now();
         let claims = Claims {
             sub: ambre_core::UserId::parse_str("11111111-1111-7111-8111-111111111111").unwrap(),
-            spk: Some(SigningKeyHex("ab".repeat(32))),
+            spk: Some(FixedBytes::from_array([0xab; 32])),
             iat,
             exp: iat.plus(Seconds(900)),
         };
@@ -252,7 +252,7 @@ mod tests {
         let iat = UnixSeconds(now().0 - 10_000);
         let claims = Claims {
             sub: ambre_core::UserId::new(),
-            spk: Some(SigningKeyHex("y".into())),
+            spk: Some(FixedBytes::from_array([0x79; 32])),
             iat,
             exp: iat.plus(Seconds(1)), // long past
         };
@@ -268,7 +268,7 @@ mod tests {
         let token = a
             .mint(&Claims {
                 sub: ambre_core::UserId::new(),
-                spk: Some(SigningKeyHex("p".into())),
+                spk: Some(FixedBytes::from_array([0x70; 32])),
                 iat,
                 exp: iat.plus(Seconds(900)),
             })

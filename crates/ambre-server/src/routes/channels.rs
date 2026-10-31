@@ -94,9 +94,9 @@ pub struct MemberChannelJson {
     /// list carries one (`SRV-219`). The relay never reads it.
     pub name_enc: Option<ambre_core::SealedName>,
     /// The caller's copy of the channel key, base64, and the hex exchange key
-    /// of whoever wrapped it, empty for a self-wrapped row.
+    /// of whoever wrapped it, `null` for a self-wrapped row.
     pub doc_key_enc: ambre_core::WrappedDocKey,
-    pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
+    pub wrapper_exchange_pub_key: Option<ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     /// For a direct message, the display names of its other members, which
     /// the client composes a name from (`SRV-220`). Empty otherwise.
     pub peers: Vec<ambre_core::DisplayName>,
@@ -139,10 +139,7 @@ pub async fn list_member_channels(
                 meta_id: row.meta_id,
                 name_enc: row.name_enc,
                 doc_key_enc: row.doc_key_enc,
-                wrapper_exchange_pub_key: row
-                    .wrapper_exchange_pubkey
-                    .map(ambre_core::ExchangeKeyHex::encode)
-                    .unwrap_or_default(),
+                wrapper_exchange_pub_key: row.wrapper_exchange_pubkey,
                 peers: row.peers,
                 meta_last: last,
             }
@@ -211,7 +208,7 @@ pub struct CreateDirectMessageRequest {
     /// The identifier of the channel key, in hex, which the creation and every
     /// invite of the log name.
     #[serde(with = "ambre_core::serde_id::key_id")]
-    pub key_id: ambre_core::KeyId,
+    pub key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
     /// The log of `meta`, signed by the caller. In order, it holds its
     /// `Create`, one editor `Invite` per member in the order of `members`,
     /// then the caller's own `ChangeRole` to editor.
@@ -1046,7 +1043,7 @@ mod tests {
     fn session(user_id: UserId) -> auth::AuthSession {
         auth::AuthSession {
             user_id,
-            signing_pubkey: ambre_core::PublicKey::from_array(
+            signing_pubkey: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
                 signing_key().verifying_key().to_bytes(),
             ),
         }
@@ -1068,15 +1065,19 @@ mod tests {
             document,
             position: ambre_protocol::LogPosition::new(position),
             member: who,
-            member_key: ambre_core::PublicKey::from_array(key.verifying_key().to_bytes()),
+            member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+                key.verifying_key().to_bytes(),
+            ),
             act,
             role,
             key: None,
-            previous: (position > 0).then_some(ambre_protocol::EntryDigest([1; 32])),
+            previous: (position > 0).then_some(
+                ambre_core::FixedBytes::<ambre_protocol::EntryDigest>::from_array([1; 32]),
+            ),
             author: who,
-            signature: ambre_protocol::Signature([0; 64]),
+            signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
-        entry.signature = ambre_protocol::Signature(
+        entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
             key.sign(entry.signed_bytes().expect("signed bytes").as_bytes())
                 .to_bytes(),
         );
@@ -1122,15 +1123,17 @@ mod tests {
     }
 
     async fn named_user(state: &AppState, email: &str, display_name: &str) -> UserId {
-        let signing = ambre_core::PublicKey::from_array(signing_key().verifying_key().to_bytes());
+        let signing = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+            signing_key().verifying_key().to_bytes(),
+        );
         let row = db::create_user(
             &state.db,
             &ambre_core::Email::from(email),
             &ambre_core::DisplayName::new(display_name).unwrap(),
             &ambre_core::WrappedMasterKey::new([1; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([2; 32]),
+            &ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([2; 32]),
             &signing,
-            &ambre_core::ExchangePublicKey::from_array([4; 32]),
+            &ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4; 32]),
         )
         .await
         .expect("user");
@@ -1916,7 +1919,7 @@ mod tests {
                     invitee_id: None,
                     role: Role::Editor,
                     doc_key_enc: ambre_core::WrappedDocKey::new([9u8; 48].to_vec()),
-                    key_id: ambre_core::KeyId::from_array(key),
+                    key_id: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array(key),
                     entry: None,
                 }),
             )
@@ -2586,7 +2589,8 @@ mod tests {
     }
 
     /// The channel key every test direct message names.
-    const DIRECT_KEY: ambre_core::KeyId = ambre_core::KeyId::from_array([8; 16]);
+    const DIRECT_KEY: ambre_core::FixedBytes<ambre_core::KeyId> =
+        ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([8; 16]);
 
     /// The entry `author` signs about `member` at `position` of `document`'s
     /// log, in the form a request carries it. The relay walks no digest, so
@@ -2597,7 +2601,7 @@ mod tests {
         member: UserId,
         act: MembershipAct,
         role: Role,
-        key: Option<ambre_core::KeyId>,
+        key: Option<ambre_core::FixedBytes<ambre_core::KeyId>>,
         author: UserId,
     ) -> ambre_core::EncodedLogEntry {
         use ed25519_dalek::Signer;
@@ -2606,15 +2610,19 @@ mod tests {
             document,
             position: ambre_protocol::LogPosition::new(position),
             member,
-            member_key: ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes()),
+            member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+                signing.verifying_key().to_bytes(),
+            ),
             act,
             role,
             key,
-            previous: (position > 0).then_some(ambre_protocol::EntryDigest([1; 32])),
+            previous: (position > 0).then_some(
+                ambre_core::FixedBytes::<ambre_protocol::EntryDigest>::from_array([1; 32]),
+            ),
             author,
-            signature: ambre_protocol::Signature([0; 64]),
+            signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
-        entry.signature = ambre_protocol::Signature(
+        entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
             signing
                 .sign(entry.signed_bytes().expect("signed bytes").as_bytes())
                 .to_bytes(),
@@ -2788,7 +2796,7 @@ mod tests {
         );
         assert_eq!(
             bobs[0].wrapper_exchange_pub_key,
-            ambre_core::ExchangeKeyHex::encode([4u8; 32])
+            Some(ambre_core::FixedBytes::from_array([4u8; 32]))
         );
         let alices = listed(alice).await.expect("listed").0.channels;
         assert_eq!(
@@ -3201,8 +3209,8 @@ mod tests {
         let [public, shared, own] = bobs_channels(&state, alice, bob, space).await;
         let link = ambre_protocol::KeyLink {
             document_id: space.document_id(),
-            key: ambre_core::KeyId::from_array([2; 16]),
-            previous: ambre_core::KeyId::from_array([1; 16]),
+            key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([2; 16]),
+            previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([1; 16]),
             sealed: ambre_core::SealedPreviousKey::new(vec![2; 200]),
         };
         let revoked = crate::routes::share::revoke_and_rotate(
@@ -3398,8 +3406,8 @@ mod tests {
     ) -> StatusCode {
         let link = ambre_protocol::KeyLink {
             document_id: meta,
-            key: ambre_core::KeyId::from_array([2; 16]),
-            previous: ambre_core::KeyId::from_array([1; 16]),
+            key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([2; 16]),
+            previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([1; 16]),
             sealed: ambre_core::SealedPreviousKey::new(vec![2; 200]),
         };
         let keys = members
@@ -3767,7 +3775,7 @@ mod tests {
         db::insert_update(
             &state.db,
             &document,
-            &ambre_core::PublicKey::from_array([1; 32]),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &snapshot,
             ambre_protocol::messages::Clock(seq.unsigned_abs()),
             ambre_core::Seq(seq.unsigned_abs()),
@@ -3797,7 +3805,7 @@ mod tests {
         db::create_snapshot(
             &state.db,
             &document,
-            &ambre_core::PublicKey::from_array([1; 32]),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &clocks,
             &ambre_core::ObjectKey::from("s"),
             ambre_core::Seq::try_from(covered).expect("a relay number"),
@@ -4185,7 +4193,7 @@ mod tests {
         let held = lease(&state, alice, &channel).await.expect("lease");
         let held = held.lease.expect("granted");
         let exact = snapshot(&state, segment, 2).await;
-        let author = ambre_core::PublicKey::from_array([1; 32]);
+        let author = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]);
         assert_eq!(
             db::confirm_snapshot(&state.db, &segment, &exact, &author)
                 .await
@@ -4217,7 +4225,7 @@ mod tests {
                 &state.db,
                 &segment,
                 &exact,
-                &ambre_core::PublicKey::from_array([2; 32])
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([2; 32])
             )
             .await
             .expect("confirm"),

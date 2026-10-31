@@ -5,14 +5,14 @@ use crate::sharing::GlooHttp;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-use ambre_core::MediaAddress;
+use ambre_core::{FixedBytes, MediaAddress};
 
 /// Seals a blob for one document and the address it is stored under
 /// (`SYNC-051`, `SYNC-074`).
 fn seal_blob(
     data: &ambre_core::MediaBytes,
     document_id: DocumentId,
-    address: &MediaAddress,
+    address: &FixedBytes<MediaAddress>,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
 ) -> Result<pipeline::SealedBlob, pipeline::PipelineError> {
@@ -34,7 +34,7 @@ fn open_blob(
     content_hash: &ambre_core::ContentHash,
     doc_key: &DocumentKey,
 ) -> Result<ambre_core::MediaBytes, SyncError> {
-    let address = MediaAddress::of_hash(content_hash);
+    let address = FixedBytes::<MediaAddress>::of_hash(content_hash);
     let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)?;
     // The media file keeps its bytes in the clear by role, so they move out
     // of the wrapper with no copy. A blob the address refuses is wiped.
@@ -324,7 +324,7 @@ pub(crate) struct Upload {
     id: RequestId,
     document_id: DocumentId,
     data: ambre_core::MediaBytes,
-    address: MediaAddress,
+    address: FixedBytes<MediaAddress>,
     doc_key: DocumentKey,
     signing_key: SigningKey,
 }

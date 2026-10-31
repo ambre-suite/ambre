@@ -18,8 +18,11 @@ use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::fixed_bytes::{DebugForm, FixedBytes, FixedRole};
+use crate::{CommitmentTag, KeyId, Nonce, PublicKey, Signature};
+
 /// The nonce an AEAD seal opens with, as `ambre_crypto::aead` writes it.
-const NONCE_LEN: usize = crate::Nonce::SIZE.0 as usize;
+const NONCE_LEN: usize = FixedBytes::<Nonce>::SIZE.0 as usize;
 /// The tag an AEAD seal closes with.
 const TAG_LEN: usize = 16;
 /// A document key, and a master seed.
@@ -31,11 +34,11 @@ const ANCHOR_LEN: usize = 32;
 /// the size its own type states. The layout byte's type lives in `ambre-sync`,
 /// which this crate cannot see, so its one byte is written here.
 const OBJECT_HEADER_LEN: usize = crate::ByteSize(1)
-    .saturating_add(crate::KeyId::SIZE)
-    .saturating_add(crate::PublicKey::SIZE)
-    .saturating_add(crate::Signature::SIZE)
-    .saturating_add(crate::CommitmentTag::SIZE)
-    .saturating_add(crate::Nonce::SIZE)
+    .saturating_add(FixedBytes::<KeyId>::SIZE)
+    .saturating_add(FixedBytes::<PublicKey>::SIZE)
+    .saturating_add(FixedBytes::<Signature>::SIZE)
+    .saturating_add(FixedBytes::<CommitmentTag>::SIZE)
+    .saturating_add(FixedBytes::<Nonce>::SIZE)
     .0 as usize;
 /// The most bytes one character takes in UTF-8.
 const UTF8_MAX_LEN: usize = 4;
@@ -144,8 +147,8 @@ impl WrappedDocKey {
     /// The wire form of a wrapped key: its nonce, then its ciphertext. The
     /// parts fix the length; nothing checks it against
     /// [`WrappedDocKey::LENGTHS`] here.
-    pub fn from_parts(nonce: &crate::Nonce, ciphertext: &crate::Ciphertext) -> Self {
-        let mut bytes = Vec::with_capacity(nonce.0.len() + ciphertext.0.len());
+    pub fn from_parts(nonce: &FixedBytes<Nonce>, ciphertext: &crate::Ciphertext) -> Self {
+        let mut bytes = Vec::with_capacity(NONCE_LEN + ciphertext.0.len());
         nonce.push_to(&mut bytes);
         bytes.extend_from_slice(&ciphertext.0);
         Self(bytes)
@@ -154,8 +157,8 @@ impl WrappedDocKey {
     /// The nonce and the ciphertext [`WrappedDocKey::from_parts`] joined.
     /// `None` when the bytes are shorter than a nonce.
     #[must_use]
-    pub fn parts(&self) -> Option<(crate::Nonce, crate::Ciphertext)> {
-        let (nonce, ciphertext) = crate::Nonce::split_from(&self.0)?;
+    pub fn parts(&self) -> Option<(FixedBytes<Nonce>, crate::Ciphertext)> {
+        let (nonce, ciphertext) = FixedBytes::<Nonce>::split_from(&self.0)?;
         Some((nonce, crate::Ciphertext(ciphertext.to_vec())))
     }
 }
@@ -182,76 +185,23 @@ define_encoded! {
     lengths: [NONCE_LEN + KEY_LEN + TAG_LEN]
 }
 
-/// The salt the passphrase key of an account is derived with.
+/// The width of a master-key salt, in bytes.
+pub const MASTER_KEY_SALT_LEN: usize = 32;
+
+/// The role of the salt the passphrase key of an account is derived with:
+/// `FixedBytes<MasterKeySalt>`.
 ///
-/// Fixed at [`MasterKeySalt::LEN`] bytes, as [`FileSalt`](crate::FileSalt) is
+/// Fixed at [`MASTER_KEY_SALT_LEN`] bytes, as [`FileSalt`](crate::FileSalt) is
 /// at its own width. A value of another width is refused when it is built,
-/// whether from the wire, a column or a caller. A short salt thus never reaches
-/// the derivation at unlock. On the wire it is its URL-safe base64 text, and
-/// `Debug` prints the length alone.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MasterKeySalt([u8; MasterKeySalt::LEN]);
+/// whether from the wire, a column or a caller (`SRV-239`). A short salt thus
+/// never reaches the derivation at unlock. On the JSON wire it is its
+/// hexadecimal text, and `Debug` prints the length alone.
+pub enum MasterKeySalt {}
 
-/// A master-key salt was built from bytes of another width.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("a master-key salt is {} bytes", MasterKeySalt::LEN)]
-pub struct InvalidMasterKeySalt;
-
-impl MasterKeySalt {
-    /// The width of the salt, in bytes.
-    pub const LEN: usize = 32;
-
-    /// Wraps the salt bytes a CSPRNG drew.
-    pub const fn from_array(bytes: [u8; Self::LEN]) -> Self {
-        Self(bytes)
-    }
-
-    /// Reads the salt from bytes a column or a body carried.
-    ///
-    /// # Errors
-    ///
-    /// [`InvalidMasterKeySalt`] when `bytes` is not [`Self::LEN`] long.
-    pub fn from_slice(bytes: &[u8]) -> Result<Self, InvalidMasterKeySalt> {
-        bytes.try_into().map(Self).map_err(|_| InvalidMasterKeySalt)
-    }
-
-    /// The salt bytes, for the KDF and for the column.
-    pub const fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-
-    /// The text the wire carries.
-    pub fn to_base64(&self) -> String {
-        URL_SAFE.encode(self.0)
-    }
-}
-
-impl std::fmt::Debug for MasterKeySalt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MasterKeySalt({} bytes)", self.0.len())
-    }
-}
-
-impl Serialize for MasterKeySalt {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_base64())
-    }
-}
-
-impl<'de> Deserialize<'de> for MasterKeySalt {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let text = String::deserialize(deserializer)?;
-        let bytes = URL_SAFE
-            .decode(text.as_bytes())
-            .map_err(|e| serde::de::Error::custom(format!("not base64: {e}")))?;
-        Self::from_slice(&bytes).map_err(|_| {
-            serde::de::Error::custom(format!(
-                "MasterKeySalt of {} bytes, not {}",
-                bytes.len(),
-                Self::LEN
-            ))
-        })
-    }
+impl FixedRole for MasterKeySalt {
+    const NAME: &'static str = "MasterKeySalt";
+    const DEBUG: DebugForm = DebugForm::Length;
+    type Array = [u8; MASTER_KEY_SALT_LEN];
 }
 
 define_encoded! {
@@ -278,7 +228,8 @@ define_encoded! {
 #[cfg(test)]
 mod tests {
     use super::{
-        KEY_LEN, MasterKeySalt, NONCE_LEN, SealedName, TAG_LEN, WrappedDocKey, WrappedMasterKey,
+        FixedBytes, KEY_LEN, MASTER_KEY_SALT_LEN, MasterKeySalt, NONCE_LEN, SealedName, TAG_LEN,
+        WrappedDocKey, WrappedMasterKey,
     };
     use serde::de::DeserializeOwned;
 
@@ -319,10 +270,8 @@ mod tests {
         }
         only::<WrappedDocKey>(WrappedDocKey::LENGTHS);
         only::<WrappedMasterKey>(WrappedMasterKey::LENGTHS);
-        only::<MasterKeySalt>(&[MasterKeySalt::LEN]);
         assert_eq!(WrappedDocKey::LENGTHS, [72, 104]);
         assert_eq!(WrappedMasterKey::LENGTHS, [72]);
-        assert_eq!(MasterKeySalt::LEN, 32);
         assert!(reads::<SealedName>(0) && reads::<SealedName>(SealedName::MAX_LEN));
     }
 
@@ -331,7 +280,7 @@ mod tests {
     /// bytes shorter than a nonce have none.
     #[test]
     fn a_wrapped_key_is_its_nonce_then_its_ciphertext() {
-        let nonce = crate::Nonce([1; NONCE_LEN]);
+        let nonce = FixedBytes::<crate::Nonce>::from_array([1; NONCE_LEN]);
         let ciphertext = crate::Ciphertext(vec![2; KEY_LEN + TAG_LEN]);
         let key = WrappedDocKey::from_parts(&nonce, &ciphertext);
         assert_eq!(&key.as_bytes()[..NONCE_LEN], &[1; NONCE_LEN]);
@@ -341,15 +290,23 @@ mod tests {
         assert_eq!(WrappedDocKey::new(vec![0; NONCE_LEN - 1]).parts(), None);
     }
 
-    /// A salt of any width but its own is refused when it is built, so a
-    /// short one never reaches the passphrase derivation at unlock.
+    /// A salt of any width but its own is refused when it is built, from a
+    /// slice or from the JSON wire. So a short one never reaches the
+    /// passphrase derivation at unlock.
     #[test]
     fn a_master_key_salt_of_another_width_is_refused_when_built() {
-        assert!(MasterKeySalt::from_slice(&[0xAB; 16]).is_err());
-        assert!(MasterKeySalt::from_slice(&[0xAB; 33]).is_err());
-        assert!(MasterKeySalt::from_slice(&[]).is_err());
-        let salt = MasterKeySalt::from_slice(&[0xAB; MasterKeySalt::LEN]).unwrap();
-        assert_eq!(salt, MasterKeySalt::from_array([0xAB; 32]));
+        for width in [16, 33, 0] {
+            assert!(FixedBytes::<MasterKeySalt>::from_slice(&vec![0xAB; width]).is_err());
+        }
+        let salt = FixedBytes::<MasterKeySalt>::from_slice(&[0xAB; MASTER_KEY_SALT_LEN]).unwrap();
+        assert_eq!(salt, FixedBytes::from_array([0xAB; 32]));
+        let json = serde_json::to_string(&salt).unwrap();
+        assert_eq!(json, format!("\"{}\"", "ab".repeat(32)));
+        let back: FixedBytes<MasterKeySalt> = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, salt);
+        let short = format!("\"{}\"", "ab".repeat(31));
+        assert!(serde_json::from_str::<FixedBytes<MasterKeySalt>>(&short).is_err());
+        assert_eq!(format!("{salt:?}"), "MasterKeySalt(32 bytes)");
     }
 
     /// `SRV-230`: a sealed name reads up to the longest name in four-byte

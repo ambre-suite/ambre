@@ -10,7 +10,7 @@
 use crate::messages::{Clock, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
-use ambre_core::{DocType, DocumentId, KeyId, PublicKey, RefusalCode, SnapshotId};
+use ambre_core::{DocType, DocumentId, FixedBytes, KeyId, PublicKey, RefusalCode, SnapshotId};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ pub enum WsClientMsg {
     /// set the fence (`ambre-spec-sequencer.md`, `SRV-169`).
     ClockResync {
         document_id: DocumentId,
-        signature: Signature,
+        signature: FixedBytes<Signature>,
     },
 }
 
@@ -145,7 +145,7 @@ pub enum WsServerMsg {
     /// age out of the live set.
     PeerLeft {
         document_id: DocumentId,
-        pub_key: PublicKey,
+        pub_key: FixedBytes<PublicKey>,
     },
 
     /// Response to RequestMissing.
@@ -204,7 +204,7 @@ pub enum WsServerMsg {
     /// the next key, at the same clock, and sends it again (`SYNC-129`).
     KeyRefused {
         document_id: DocumentId,
-        key_id: KeyId,
+        key_id: FixedBytes<KeyId>,
         clock: Clock,
     },
 
@@ -216,7 +216,7 @@ pub enum WsServerMsg {
         document_id: DocumentId,
         clock: Clock,
         expected: Clock,
-        signature: Signature,
+        signature: FixedBytes<Signature>,
     },
     /// The members of this document changed: someone joined, left, or took
     /// another role (`SRV-177`). It names the document alone; a client that
@@ -241,7 +241,7 @@ pub enum WsServerMsg {
     /// lacks (`SYNC-155`).
     DeltaRefused {
         document_id: DocumentId,
-        signature: Signature,
+        signature: FixedBytes<Signature>,
         code: RefusalCode,
     },
 
@@ -253,8 +253,8 @@ pub enum WsServerMsg {
     SnapshotDropped {
         document_id: DocumentId,
         snapshot_id: SnapshotId,
-        author: PublicKey,
-        reporter: PublicKey,
+        author: FixedBytes<PublicKey>,
+        reporter: FixedBytes<PublicKey>,
         after: ambre_core::AfterDrop,
     },
 

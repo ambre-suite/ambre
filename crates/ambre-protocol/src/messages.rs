@@ -5,6 +5,7 @@
 
 use crate::error::ValidationError;
 use crate::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
+use ambre_core::FixedBytes;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -79,13 +80,13 @@ pub struct Update {
     /// AEAD ciphertext (XChaCha20-Poly1305).
     pub ciphertext: Ciphertext,
     /// 24-byte nonce used for encryption.
-    pub nonce: Nonce,
+    pub nonce: FixedBytes<Nonce>,
     /// Public metadata visible to the Blind Relay.
     pub public_data: UpdatePublicData,
     /// HMAC-SHA256(document_key, nonce || ciphertext || public_data_bytes)
-    pub commitment_tag: CommitmentTag,
+    pub commitment_tag: FixedBytes<CommitmentTag>,
     /// Ed25519 signature of (nonce || ciphertext || public_data_bytes || commitment_tag)
-    pub signature: Signature,
+    pub signature: FixedBytes<Signature>,
 }
 
 impl Update {
@@ -119,13 +120,13 @@ pub struct Snapshot {
     /// AEAD ciphertext (XChaCha20-Poly1305).
     pub ciphertext: Ciphertext,
     /// 24-byte nonce used for encryption.
-    pub nonce: Nonce,
+    pub nonce: FixedBytes<Nonce>,
     /// Public metadata visible to the Blind Relay.
     pub public_data: SnapshotPublicData,
     /// HMAC-SHA256(document_key, nonce || ciphertext || public_data_bytes)
-    pub commitment_tag: CommitmentTag,
+    pub commitment_tag: FixedBytes<CommitmentTag>,
     /// Ed25519 signature of (nonce || ciphertext || public_data_bytes || commitment_tag)
-    pub signature: Signature,
+    pub signature: FixedBytes<Signature>,
 }
 
 impl Snapshot {
@@ -166,13 +167,13 @@ pub struct Ephemeral {
     /// AEAD ciphertext (XChaCha20-Poly1305).
     pub ciphertext: Ciphertext,
     /// 24-byte nonce used for encryption.
-    pub nonce: Nonce,
+    pub nonce: FixedBytes<Nonce>,
     /// Public metadata visible to the Blind Relay.
     pub public_data: EphemeralPublicData,
     /// HMAC-SHA256(document_key, nonce || ciphertext || public_data_bytes)
-    pub commitment_tag: CommitmentTag,
+    pub commitment_tag: FixedBytes<CommitmentTag>,
     /// Ed25519 signature of (nonce || ciphertext || public_data_bytes || commitment_tag)
-    pub signature: Signature,
+    pub signature: FixedBytes<Signature>,
 }
 
 impl Ephemeral {
@@ -211,36 +212,36 @@ pub struct SeqUpdate {
 mod validate_tests {
     use super::*;
     use crate::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-    use ambre_core::{DocumentId, KeyId, PublicKey, SnapshotId};
+    use ambre_core::{DocumentId, PublicKey, SnapshotId};
 
     fn update(cipher: Vec<u8>, clock: u64) -> Update {
         Update {
             ciphertext: Ciphertext(cipher),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: DocumentId::from_bytes([1u8; 16]),
-                pub_key: PublicKey::from_array([2u8; 32]),
-                key_id: KeyId::from_array([4u8; 16]),
+                pub_key: FixedBytes::from_array([2u8; 32]),
+                key_id: FixedBytes::from_array([4u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([3u8; 16]),
                 clock: Clock(clock),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::from_array([0u8; 32]),
+            signature: FixedBytes::from_array([0u8; 64]),
         }
     }
 
     fn ephemeral(cipher: Vec<u8>, counter: u64) -> Ephemeral {
         Ephemeral {
             ciphertext: Ciphertext(cipher),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::from_array([0u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: DocumentId::from_bytes([1u8; 16]),
-                pub_key: PublicKey::from_array([2u8; 32]),
-                key_id: KeyId::from_array([4u8; 16]),
+                pub_key: FixedBytes::from_array([2u8; 32]),
+                key_id: FixedBytes::from_array([4u8; 16]),
                 counter: Counter(counter),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::from_array([0u8; 32]),
+            signature: FixedBytes::from_array([0u8; 64]),
         }
     }
 
@@ -302,33 +303,33 @@ mod validate_tests {
 
     fn snapshot(
         cipher: Vec<u8>,
-        proof: Option<ambre_core::ChainHash>,
-        clocks: Vec<(PublicKey, Clock)>,
+        proof: Option<FixedBytes<ambre_core::ChainHash>>,
+        clocks: Vec<(FixedBytes<PublicKey>, Clock)>,
     ) -> Snapshot {
         Snapshot {
             ciphertext: Ciphertext(cipher),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::from_array([0u8; 24]),
             public_data: SnapshotPublicData {
                 document_id: DocumentId::from_bytes([1u8; 16]),
-                pub_key: PublicKey::from_array([2u8; 32]),
-                key_id: KeyId::from_array([4u8; 16]),
+                pub_key: FixedBytes::from_array([2u8; 32]),
+                key_id: FixedBytes::from_array([4u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([3u8; 16]),
                 parent_snapshot_proof: proof,
                 parent_snapshot_update_clocks: clocks,
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::from_array([0u8; 32]),
+            signature: FixedBytes::from_array([0u8; 64]),
         }
     }
 
     #[test]
     fn snapshot_valid() {
         let clocks = vec![
-            (PublicKey::from_array([9u8; 32]), Clock(1)),
-            (PublicKey::from_array([8u8; 32]), Clock(2)),
+            (FixedBytes::from_array([9u8; 32]), Clock(1)),
+            (FixedBytes::from_array([8u8; 32]), Clock(2)),
         ];
         assert!(
-            snapshot(vec![1], Some(ambre_core::ChainHash([1u8; 32])), clocks)
+            snapshot(vec![1], Some(FixedBytes::from_array([1u8; 32])), clocks)
                 .validate()
                 .is_ok()
         );
@@ -343,17 +344,17 @@ mod validate_tests {
     #[test]
     fn snapshot_rejects_empty_ciphertext() {
         assert_eq!(
-            snapshot(vec![], Some(ambre_core::ChainHash([1u8; 32])), vec![]).validate(),
+            snapshot(vec![], Some(FixedBytes::from_array([1u8; 32])), vec![]).validate(),
             Err(ValidationError::EmptyCiphertext)
         );
     }
 
     #[test]
     fn snapshot_rejects_duplicate_author() {
-        let dup = PublicKey::from_array([7u8; 32]);
-        let clocks = vec![(dup.clone(), Clock(1)), (dup, Clock(2))];
+        let dup = FixedBytes::<PublicKey>::from_array([7u8; 32]);
+        let clocks = vec![(dup, Clock(1)), (dup, Clock(2))];
         assert_eq!(
-            snapshot(vec![1], Some(ambre_core::ChainHash([1u8; 32])), clocks).validate(),
+            snapshot(vec![1], Some(FixedBytes::from_array([1u8; 32])), clocks).validate(),
             Err(ValidationError::DuplicatePublicKey)
         );
     }

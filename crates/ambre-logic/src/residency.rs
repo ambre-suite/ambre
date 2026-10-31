@@ -94,7 +94,7 @@ impl LogicState {
         doc_type: DocType,
         horizon: Seq,
         restored: HeldRestore,
-        sessions: Vec<(ambre_core::PeerId, SessionNonce)>,
+        sessions: Vec<(ambre_core::PeerId, FixedBytes<SessionNonce>)>,
     ) {
         let HeldRestore { snapshot, deltas } = restored;
         let held = snapshot.is_some() || !deltas.is_empty();

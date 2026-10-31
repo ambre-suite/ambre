@@ -20,7 +20,7 @@ use tokio::sync::mpsc;
 #[allow(clippy::single_component_path_imports)]
 use tracing;
 
-use ambre_core::{ChannelId, DocumentId, RefusalCode, UserId};
+use ambre_core::{ChannelId, DocumentId, FixedBytes, PublicKey, RefusalCode, UserId};
 use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg};
 
 use crate::payload::{self, Payload};
@@ -119,7 +119,7 @@ struct WsConnectionState {
     /// claim). Every authored `Update` MUST carry this exact key. It bounds the
     /// per-document clock hash to one entry per member, and stops a member from
     /// authoring under an arbitrary self-generated key (impersonation).
-    signing_pubkey: ambre_core::PublicKey,
+    signing_pubkey: FixedBytes<PublicKey>,
     doc_subscriptions: HashSet<DocumentId>,
     /// Last instant membership was verified for each subscribed document. Drives
     /// the [`MEMBERSHIP_RECHECK_TTL`] re-check in `handle_update` (H8).
@@ -210,7 +210,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
 
     let mut conn = WsConnectionState {
         user_id,
-        signing_pubkey: session.signing_pubkey.clone(),
+        signing_pubkey: session.signing_pubkey,
         doc_subscriptions: HashSet::new(),
         doc_access_verified_at: HashMap::new(),
         doc_write: HashMap::new(),

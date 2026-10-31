@@ -12,9 +12,9 @@ pub enum Error {
     #[error("UUID error: {0}")]
     Uuid(#[from] UuidError),
 
-    /// Public key parsing or validation failed.
-    #[error("public key error: {0}")]
-    PublicKey(#[from] PublicKeyError),
+    /// A fixed-width value, such as a public key, failed to parse.
+    #[error("fixed-width value error: {0}")]
+    FixedBytes(#[from] crate::FixedBytesError),
 
     /// Document type validation failed.
     #[error("document type error: {0}")]
@@ -39,18 +39,6 @@ pub enum UuidError {
     /// The provided byte slice has incorrect length.
     #[error("invalid UUID length: expected 16 bytes, got {0}")]
     InvalidLength(usize),
-}
-
-/// Errors related to public key operations.
-#[derive(Error, Debug, Clone)]
-pub enum PublicKeyError {
-    /// The provided byte slice has incorrect length.
-    #[error("invalid public key length: expected 32 bytes, got {0}")]
-    InvalidLength(usize),
-
-    /// The provided hex string is invalid.
-    #[error("invalid hex string: {0}")]
-    InvalidHex(#[from] hex::FromHexError),
 }
 
 /// Errors related to document type operations.

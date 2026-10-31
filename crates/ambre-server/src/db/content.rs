@@ -11,7 +11,7 @@ pub struct SnapshotRow {
     #[allow(dead_code)]
     pub document_id: ambre_core::DocumentId,
     #[allow(dead_code)]
-    pub author_pubkey: ambre_core::PublicKey,
+    pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
     #[allow(dead_code)]
     pub update_clocks: serde_json::Value,
     pub s3_key: ambre_core::ObjectKey,
@@ -56,7 +56,7 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
 pub struct UpdateRow {
     #[allow(dead_code)]
     pub document_id: ambre_core::DocumentId,
-    pub author_pubkey: ambre_core::PublicKey,
+    pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
     #[allow(dead_code)]
     pub snapshot_id: ambre_core::SnapshotId,
     pub clock: ambre_protocol::messages::Clock,
@@ -133,7 +133,7 @@ pub struct Trim {
 pub async fn create_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    author_pubkey: &ambre_core::PublicKey,
+    author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     update_clocks: &serde_json::Value,
     s3_key: &ambre_core::ObjectKey,
     covered_seq: ambre_core::Seq,
@@ -204,7 +204,7 @@ pub async fn confirm_snapshot(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     snapshot_id: &ambre_core::SnapshotId,
-    confirmer: &ambre_core::PublicKey,
+    confirmer: &FixedBytes<ambre_core::PublicKey>,
 ) -> Result<Option<SnapshotStatus>, AppError> {
     let did = id_to_uuid(*document_id);
     let sid = id_to_uuid(*snapshot_id);
@@ -335,7 +335,7 @@ pub async fn get_snapshot(
 pub async fn insert_update(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    author_pubkey: &ambre_core::PublicKey,
+    author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     snapshot_id: &ambre_core::SnapshotId,
     clock: ambre_protocol::messages::Clock,
     seq: ambre_core::Seq,
@@ -365,7 +365,7 @@ pub async fn insert_update(
 pub async fn insert_inline_update(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-    author_pubkey: &ambre_core::PublicKey,
+    author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     snapshot_id: &ambre_core::SnapshotId,
     clock: ambre_protocol::messages::Clock,
     seq: ambre_core::Seq,
@@ -546,7 +546,10 @@ pub struct ClockState {
     /// Highest `seq` ever assigned for the document (0 when it has no updates).
     pub max_seq: ambre_core::Seq,
     /// Per-author `(author_pubkey, max_clock)` high-water marks.
-    pub author_clocks: Vec<(ambre_core::PublicKey, ambre_protocol::messages::Clock)>,
+    pub author_clocks: Vec<(
+        FixedBytes<ambre_core::PublicKey>,
+        ambre_protocol::messages::Clock,
+    )>,
 }
 
 /// Reads the durable clock/seq high-water marks for a document from the `updates`

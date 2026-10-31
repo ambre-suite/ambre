@@ -8,7 +8,9 @@
 //! Assembly into `ambre_protocol::{Update,Snapshot,Ephemeral}` and the
 //! compression version byte live in the Sync thread, not here.
 
-use ambre_core::{Ciphertext, CommitmentTag, MediaBytes, Nonce, PublicKey, SecretBytes, Signature};
+use ambre_core::{
+    Ciphertext, CommitmentTag, FixedBytes, MediaBytes, Nonce, PublicKey, SecretBytes, Signature,
+};
 use ed25519_dalek::SigningKey;
 
 use crate::aead;
@@ -24,13 +26,13 @@ use crate::signature;
 #[derive(Clone, PartialEq, Eq)]
 pub struct Sealed {
     /// XChaCha20 nonce.
-    pub nonce: Nonce,
+    pub nonce: FixedBytes<Nonce>,
     /// AEAD ciphertext (Poly1305 tag appended).
     pub ciphertext: Ciphertext,
     /// HMAC-SHA256 key-commitment tag.
-    pub commitment_tag: CommitmentTag,
+    pub commitment_tag: FixedBytes<CommitmentTag>,
     /// Ed25519 signature over `nonce || ciphertext || aad || commitment_tag`.
-    pub signature: Signature,
+    pub signature: FixedBytes<Signature>,
 }
 
 impl core::fmt::Debug for Sealed {
@@ -78,7 +80,7 @@ pub fn seal_media(
 /// Completes the envelope of a ciphertext: the commitment tag, then the
 /// signature over all of it.
 fn envelope_of(
-    nonce: Nonce,
+    nonce: FixedBytes<Nonce>,
     ciphertext: Ciphertext,
     aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
@@ -113,7 +115,7 @@ pub fn open(
     sealed: &Sealed,
     aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
-    author_pub: &PublicKey,
+    author_pub: &FixedBytes<PublicKey>,
 ) -> Result<SecretBytes, CryptoError> {
     signature::verify(
         author_pub,

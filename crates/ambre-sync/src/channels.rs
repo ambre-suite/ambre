@@ -3,7 +3,7 @@ use ambre_bus::{
     ChannelDocument, ChannelDocumentKind, ChannelName, DirectMember, DocumentActivity,
     MemberChannel, MetaId, SealedChannelKey, SegmentId, SpaceId,
 };
-use ambre_core::DocType;
+use ambre_core::{DocType, FixedBytes};
 
 use crate::error::{Part, SyncError};
 
@@ -603,9 +603,7 @@ impl SyncState {
                     let served =
                         http::get_json_auth::<http::PubkeysResponse>(&url, auth.clone()).await?;
                     check_pinned(member, &served.exchange_pubkey)?;
-                    signing_keys.push(crate::sharing::decode_signing_pubkey(
-                        &served.signing_pubkey,
-                    )?);
+                    signing_keys.push(served.signing_pubkey);
                 }
                 let invited: Vec<_> = members.iter().zip(signing_keys).collect();
                 let body =
@@ -900,7 +898,7 @@ fn listed_keys(
         .filter_map(|entry| {
             let key = crate::documents::unwrap_listed_key(
                 &entry.doc_key_enc,
-                &entry.wrapper_exchange_pub_key,
+                entry.wrapper_exchange_pub_key.as_ref(),
                 exchange_key,
             )?;
             let listed = ambre_bus::ChannelMeta {
@@ -931,7 +929,7 @@ async fn open_channel_names(
         let listed = crate::documents::ListedName {
             document_id: entry.meta_id.document_id(),
             doc_key_enc: &entry.doc_key_enc,
-            wrapper_exchange_pub_key: &entry.wrapper_exchange_pub_key,
+            wrapper_exchange_pub_key: entry.wrapper_exchange_pub_key.as_ref(),
             name_enc,
         };
         match listed.open(exchange_key, url_scheme, api_base, auth).await {
@@ -971,7 +969,9 @@ fn channel_key_aad(channel_id: ChannelId) -> ambre_core::Aad {
 
 /// The digest of an entry in request form: the anchor of the log a first
 /// entry opens, and the link the entry after it carries.
-fn digest_of(entry: &ambre_core::EncodedLogEntry) -> Option<ambre_protocol::EntryDigest> {
+fn digest_of(
+    entry: &ambre_core::EncodedLogEntry,
+) -> Option<FixedBytes<ambre_protocol::EntryDigest>> {
     membership_log::decode(std::slice::from_ref(entry))
         .first()
         .and_then(membership_log::digest)
@@ -986,7 +986,7 @@ pub(crate) fn seal_channel_key(
     channel_id: ChannelId,
     channel_key: &DocumentKey,
     space_key: &DocumentKey,
-    meta_anchor: ambre_protocol::EntryDigest,
+    meta_anchor: FixedBytes<ambre_protocol::EntryDigest>,
 ) -> Result<SealedChannelKey, SyncError> {
     let (nonce, ciphertext) = ambre_crypto::aead::seal_anchored_key(
         channel_key,
@@ -1003,7 +1003,7 @@ pub(crate) fn seal_channel_key(
 
 /// The id of the space key a catalogue entry was sealed under. `None` for
 /// bytes too short to name one.
-pub(crate) fn sealed_under(sealed: &SealedChannelKey) -> Option<KeyId> {
+pub(crate) fn sealed_under(sealed: &SealedChannelKey) -> Option<FixedBytes<KeyId>> {
     sealed.key_id()
 }
 
@@ -1014,7 +1014,7 @@ pub(crate) fn unseal_channel_key(
     channel_id: ChannelId,
     sealed: &SealedChannelKey,
     keys: &crate::chain::Keyring,
-) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), SyncError> {
+) -> Result<(DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>), SyncError> {
     let (key_id, nonce, ciphertext) = sealed
         .split()
         .ok_or(SyncError::Malformed(Part::SealedChannelKey))?;
@@ -1038,7 +1038,7 @@ pub(crate) fn join_key(
     sealed: &SealedChannelKey,
     space_keys: &crate::chain::Keyring,
     exchange_key: &StaticSecret,
-) -> Result<(ambre_core::WrappedDocKey, KeyId), SyncError> {
+) -> Result<(ambre_core::WrappedDocKey, FixedBytes<KeyId>), SyncError> {
     let (key, anchor) = unseal_channel_key(channel_id, sealed, space_keys)?;
     let own_pub = crate::sharing::own_exchange_key(exchange_key);
     let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, &own_pub, &key, anchor)?;
@@ -1051,7 +1051,7 @@ pub(crate) fn join_key(
 pub(crate) fn self_join_entry(
     author: &crate::sharing::Author,
     head: &http::JoinHeadResponse,
-    key: KeyId,
+    key: FixedBytes<KeyId>,
 ) -> Result<Option<ambre_core::EncodedLogEntry>, SyncError> {
     if head.length.is_first() {
         return Ok(None);
@@ -1095,15 +1095,15 @@ pub(crate) fn direct_message_request(
     exchange_key: &StaticSecret,
     channel_id: ChannelId,
     (meta, segment): (MetaId, SegmentId),
-    members: &[(&DirectMember, ambre_core::PublicKey)],
+    members: &[(&DirectMember, FixedBytes<ambre_core::PublicKey>)],
 ) -> Result<http::CreateDirectMessageRequest, SyncError> {
     let key = DocumentKey::generate();
     let document = meta.document_id();
     let own_key = author.public();
     let others: Vec<UserId> = members.iter().map(|(m, _)| m.user_id).collect();
-    let signing_keys: HashMap<UserId, ambre_core::PublicKey> = members
+    let signing_keys: HashMap<UserId, FixedBytes<ambre_core::PublicKey>> = members
         .iter()
-        .map(|(m, signing)| (m.user_id, signing.clone()))
+        .map(|(m, signing)| (m.user_id, *signing))
         .chain([(author.user_id, own_key)])
         .collect();
     let mut next = membership_log::LogHead::EMPTY;
@@ -1115,7 +1115,7 @@ pub(crate) fn direct_message_request(
             member,
             member_key: signing_keys
                 .get(&member)
-                .cloned()
+                .copied()
                 .ok_or(SyncError::MemberUnsigned)?,
             act,
             role,
@@ -1129,7 +1129,7 @@ pub(crate) fn direct_message_request(
     }
     // The creation goes first, so the first digest is the log's root.
     let root = root.ok_or(SyncError::NoDigest)?;
-    let wrap = |peer: &ambre_core::ExchangePublicKey| {
+    let wrap = |peer: &FixedBytes<ambre_core::ExchangePublicKey>| {
         crate::sharing::wrap_anchored_b64(exchange_key, peer, &key, Some(root))
     };
     let own_pub = crate::sharing::own_exchange_key(exchange_key);
@@ -1157,10 +1157,9 @@ pub(crate) fn direct_message_request(
 /// the one the view pinned for them.
 pub(crate) fn check_pinned(
     member: &DirectMember,
-    served_hex: &ambre_core::ExchangeKeyHex,
+    served: &FixedBytes<ambre_core::ExchangePublicKey>,
 ) -> Result<(), SyncError> {
-    let served = crate::sharing::decode_exchange_pubkey(served_hex)?;
-    if served == member.exchange_pub_key {
+    if *served == member.exchange_pub_key {
         Ok(())
     } else {
         Err(SyncError::PinMismatch(member.user_id))
@@ -1300,7 +1299,7 @@ pub(crate) mod tests {
     }
 
     /// An anchor of meta's log, as the creator's `Create` entry would give it.
-    const ANCHOR: ambre_protocol::EntryDigest = ambre_protocol::EntryDigest([5; 32]);
+    const ANCHOR: FixedBytes<ambre_protocol::EntryDigest> = FixedBytes::from_array([5; 32]);
 
     fn exchange_key(byte: u8) -> StaticSecret {
         StaticSecret::from([byte; 32])
@@ -1312,7 +1311,7 @@ pub(crate) mod tests {
         doc_key_enc: &ambre_core::WrappedDocKey,
     ) -> Option<DocumentKey> {
         let bytes = doc_key_enc.as_bytes();
-        let (nonce, ciphertext) = ambre_core::Nonce::split_from(bytes)?;
+        let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
             nonce,
             ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
@@ -1390,7 +1389,11 @@ pub(crate) mod tests {
         let keys = ring(&space_key, &[]);
         assert_eq!(
             sealed.as_bytes().len(),
-            KeyId::SIZE.as_len() + ambre_core::Nonce::SIZE.as_len() + 32 + 32 + 16
+            FixedBytes::<KeyId>::SIZE.as_len()
+                + FixedBytes::<ambre_core::Nonce>::SIZE.as_len()
+                + 32
+                + 32
+                + 16
         );
         let (_, anchor) = unseal_channel_key(channel_id, &sealed, &keys).expect("open");
         assert_eq!(anchor, Some(ANCHOR));
@@ -1670,7 +1673,7 @@ pub(crate) mod tests {
         let meta = MetaId::new();
         // A wrap of the right length that opens under no key of this user.
         let keys = format!(
-            r#""doc_key_enc":{},"wrapper_exchange_pub_key":"""#,
+            r#""doc_key_enc":{},"wrapper_exchange_pub_key":null"#,
             serde_json::to_string(&ambre_core::WrappedDocKey::new(vec![0; 72])).unwrap()
         );
         let body = format!(
@@ -1775,7 +1778,7 @@ pub(crate) mod tests {
         let key = DocumentKey::generate();
         let wrapped = ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, &key).unwrap();
         let doc_key_enc = ambre_core::WrappedDocKey::new(
-            [wrapped.nonce.0.as_slice(), &wrapped.ciphertext.0].concat(),
+            [wrapped.nonce.as_slice(), &wrapped.ciphertext.0].concat(),
         );
         let entry =
             |meta: MetaId, name_enc: Option<ambre_core::SealedName>| http::MemberChannelEntry {
@@ -1785,7 +1788,7 @@ pub(crate) mod tests {
                 meta_id: meta,
                 name_enc,
                 doc_key_enc: doc_key_enc.clone(),
-                wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex(String::new()),
+                wrapper_exchange_pub_key: None,
                 peers: Vec::new(),
                 meta_last: None,
             };
@@ -1955,9 +1958,9 @@ pub(crate) mod tests {
         holder: &StaticSecret,
         sender: &StaticSecret,
         doc_key_enc: &ambre_core::WrappedDocKey,
-    ) -> Option<(DocumentKey, Option<ambre_protocol::EntryDigest>)> {
+    ) -> Option<(DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>)> {
         let bytes = doc_key_enc.as_bytes();
-        let (nonce, ciphertext) = ambre_core::Nonce::split_from(bytes)?;
+        let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
             nonce,
             ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
@@ -1993,7 +1996,7 @@ pub(crate) mod tests {
             .map(|(m, seed)| {
                 (
                     m,
-                    ambre_core::PublicKey::from_array(
+                    FixedBytes::from_array(
                         SigningKey::from_bytes(&[seed; 32])
                             .verifying_key()
                             .to_bytes(),
@@ -2043,16 +2046,16 @@ pub(crate) mod tests {
     #[test]
     fn a_key_other_than_the_pinned_one_is_refused() {
         let bob = member_of(&exchange_key(2));
-        assert!(
-            check_pinned(
-                &bob,
-                &ambre_core::ExchangeKeyHex::encode(bob.exchange_pub_key.as_array())
-            )
-            .is_ok()
-        );
+        assert!(check_pinned(&bob, &bob.exchange_pub_key).is_ok());
         let other = crate::sharing::own_exchange_key(&exchange_key(3));
-        assert!(check_pinned(&bob, &ambre_core::ExchangeKeyHex::encode(other)).is_err());
-        assert!(check_pinned(&bob, &ambre_core::ExchangeKeyHex("not hex".to_owned())).is_err());
+        assert!(check_pinned(&bob, &other).is_err());
+        // A key that is not hex never reaches the pin: the answer that
+        // carries it is refused when it is read.
+        let served = serde_json::json!({
+            "signing_pubkey": "aa".repeat(32),
+            "exchange_pubkey": "not hex",
+        });
+        assert!(serde_json::from_value::<http::PubkeysResponse>(served).is_err());
     }
 
     /// `SYNC-180`: a direct message past its budget fails before any request

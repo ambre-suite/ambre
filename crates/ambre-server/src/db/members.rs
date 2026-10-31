@@ -58,8 +58,8 @@ pub struct MemberWithUserRow {
     pub email_verified: super::EmailProof,
     pub display_name: ambre_core::DisplayName,
     pub role: ambre_core::Role,
-    pub signing_pubkey: ambre_core::PublicKey,
-    pub exchange_pubkey: ambre_core::ExchangePublicKey,
+    pub signing_pubkey: FixedBytes<ambre_core::PublicKey>,
+    pub exchange_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,
     pub doc_key_enc: ambre_core::WrappedDocKey,
     #[allow(dead_code)]
     pub invited_by: Option<ambre_core::UserId>,
@@ -67,7 +67,7 @@ pub struct MemberWithUserRow {
     /// or the member themselves for a self-wrap at creation). The recipient needs
     /// this peer key to perform the ECDH unwrap -- their own key is the wrong DH
     /// partner. `None` only for legacy rows with no `invited_by`.
-    pub wrapper_exchange_pubkey: Option<ambre_core::ExchangePublicKey>,
+    pub wrapper_exchange_pubkey: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
 }
 
 /// One signed membership entry a request carries, checked by the route that
@@ -210,7 +210,7 @@ pub async fn invite_document_member(
     role: ambre_core::Role,
     doc_key_enc: &ambre_core::WrappedDocKey,
     invited_by: &ambre_core::UserId,
-    key_id: &ambre_core::KeyId,
+    key_id: &FixedBytes<ambre_core::KeyId>,
     entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);

@@ -6,8 +6,8 @@
 // passes a decision.
 
 use ambre_bus::{
-    ChannelId, DirectMember, DirectMessageDraft, DocumentId, LogicCommand, RequestId, RestCommand,
-    Role, Timestamp, UserId,
+    ChannelId, DirectMember, DirectMessageDraft, DocumentId, FixedBytes, LogicCommand, RequestId,
+    RestCommand, Role, Timestamp, UserId,
 };
 use ambre_chrome::Dialog;
 use leptos::prelude::*;
@@ -46,7 +46,7 @@ pub(crate) struct TofuPrompt {
     pub(crate) display_name: Option<ambre_core::DisplayName>,
     /// Raw X25519 key the server just returned: pinned on confirmation and
     /// sent beside the request, so Sync wraps only if it still matches.
-    pub(crate) exchange_pub_key: ambre_core::ExchangePublicKey,
+    pub(crate) exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
     /// Preformatted fingerprint (`ambre_crypto::fingerprint`); displayed verbatim.
     pub(crate) fingerprint: ambre_bus::KeyFingerprint,
     /// Whether the key is a first contact or diverges from the pin.
@@ -89,7 +89,7 @@ pub(crate) enum Next {
 /// `role` is the one an invitation grants; a direct message ignores it.
 pub(crate) fn classify(
     prompt: TofuPrompt,
-    pinned: Option<ambre_core::ExchangePublicKey>,
+    pinned: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
     role: Role,
 ) -> Next {
     match pinned {
@@ -110,7 +110,7 @@ pub(crate) fn classify(
 pub(crate) fn confirm(
     prompt: &TofuPrompt,
     role: Role,
-    pin: impl FnOnce(UserId, &ambre_core::ExchangePublicKey),
+    pin: impl FnOnce(UserId, &FixedBytes<ambre_core::ExchangePublicKey>),
     dispatch: impl FnOnce(LogicCommand),
 ) {
     pin(prompt.user_id, &prompt.exchange_pub_key);
@@ -281,7 +281,7 @@ mod tests {
             },
             user_id: UserId::new(),
             display_name: ambre_core::DisplayName::new("Bob").ok(),
-            exchange_pub_key: ambre_core::ExchangePublicKey::from_array([byte; 32]),
+            exchange_pub_key: FixedBytes::from_array([byte; 32]),
             fingerprint: ambre_bus::KeyFingerprint("ABCD EFGH".to_owned()),
             contact: KeyContact::New,
         }
@@ -321,11 +321,7 @@ mod tests {
                 Next::Ask(p) => assert_eq!(p.contact, KeyContact::New, "a first contact is new"),
                 other => panic!("a new key went out: {other:?}"),
             }
-            match classify(
-                prompt,
-                Some(ambre_core::ExchangePublicKey::from_array([9; 32])),
-                Role::Editor,
-            ) {
+            match classify(prompt, Some(FixedBytes::from_array([9; 32])), Role::Editor) {
                 Next::Ask(p) => assert_eq!(
                     p.contact,
                     KeyContact::Changed,
@@ -336,7 +332,7 @@ mod tests {
         }
         let trusted = classify(
             fetched(1),
-            Some(ambre_core::ExchangePublicKey::from_array([1; 32])),
+            Some(FixedBytes::from_array([1; 32])),
             Role::Editor,
         );
         assert_eq!(invited_with(&trusted), Some([1; 32]));
@@ -353,11 +349,11 @@ mod tests {
         };
         let expected = vec![DirectMember {
             user_id: prompt.user_id,
-            exchange_pub_key: ambre_core::ExchangePublicKey::from_array([6; 32]),
+            exchange_pub_key: FixedBytes::from_array([6; 32]),
         }];
         let Next::Proceed(LogicCommand::OpenDirectMessage { draft, .. }) = classify(
             prompt.clone(),
-            Some(ambre_core::ExchangePublicKey::from_array([6; 32])),
+            Some(FixedBytes::from_array([6; 32])),
             Role::Viewer,
         ) else {
             panic!("a pinned key asks again");
@@ -401,7 +397,7 @@ mod tests {
             ..
         }) = classify(
             prompt.clone(),
-            Some(ambre_core::ExchangePublicKey::from_array([7; 32])),
+            Some(FixedBytes::from_array([7; 32])),
             Role::Editor,
         )
         else {
@@ -412,7 +408,7 @@ mod tests {
             invitee,
             DirectMember {
                 user_id: prompt.user_id,
-                exchange_pub_key: ambre_core::ExchangePublicKey::from_array([7; 32]),
+                exchange_pub_key: FixedBytes::from_array([7; 32]),
             }
         );
     }

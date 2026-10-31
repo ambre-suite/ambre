@@ -158,7 +158,7 @@ async fn last_numbers(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::{ChannelId, DocumentId, PublicKey, UserId};
+    use ambre_core::{ChannelId, DocumentId, FixedBytes, PublicKey, UserId};
     use rustis::commands::StringCommands;
 
     fn uuid_of(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
@@ -168,7 +168,7 @@ mod tests {
     fn session(user_id: UserId, key: u8) -> auth::AuthSession {
         auth::AuthSession {
             user_id,
-            signing_pubkey: PublicKey::from_array([key; 32]),
+            signing_pubkey: FixedBytes::<PublicKey>::from_array([key; 32]),
         }
     }
 

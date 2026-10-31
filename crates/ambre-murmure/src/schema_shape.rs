@@ -31,7 +31,8 @@ use ambre_bus::{
     Attachment, ByteSize, ContentHash, MediaType, Mention, MentionTarget, MessageDraft,
     SealedChannelKey, StyleMark, TextStyle, Timestamp, Topic,
 };
-use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
+use ambre_core::FixedBytes;
+use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN};
 use ambre_core::schema::{migration_peer, step_fingerprint};
 use ambre_core::{
     CategoryId, ChannelId, DocumentId, MessageId, PeerEntryBytes, SegmentId, SpaceId, UserId,
@@ -75,8 +76,8 @@ pub(crate) const MEMBER: UserId = UserId::from_bytes([0xb2; 16]);
 pub(crate) fn entry() -> Vec<u8> {
     PeerEntry {
         user: AUTHOR,
-        nonce: SessionNonce([0x5a; SESSION_NONCE_LEN]),
-        signature: ambre_core::Signature([0xc3; ENTRY_SIGNATURE_LEN]),
+        nonce: FixedBytes::from_array([0x5a; SESSION_NONCE_LEN]),
+        signature: FixedBytes::from_array([0xc3; ENTRY_SIGNATURE_LEN]),
     }
     .to_bytes()
 }

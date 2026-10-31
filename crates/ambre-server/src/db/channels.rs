@@ -162,7 +162,7 @@ pub struct MemberChannelRow {
     /// The caller's copy of the channel key, and the exchange key of whoever
     /// wrapped it, `None` for a self-wrapped row.
     pub doc_key_enc: ambre_core::WrappedDocKey,
-    pub wrapper_exchange_pubkey: Option<ambre_core::ExchangePublicKey>,
+    pub wrapper_exchange_pubkey: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
     /// For a direct message, the display names of its other members, by
     /// name then id. Empty for a channel of a space (`SRV-220`).
     pub peers: Vec<ambre_core::DisplayName>,

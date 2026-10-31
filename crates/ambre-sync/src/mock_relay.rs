@@ -199,7 +199,6 @@ impl Default for MockBlindRelay {
 mod tests {
     use super::*;
     use ambre_bus::DocumentId;
-    use ambre_core::PublicKey;
     use ambre_protocol::messages::Clock;
     use ambre_protocol::public_data::UpdatePublicData;
     use ambre_protocol::ws::encode_client_msg;
@@ -216,16 +215,16 @@ mod tests {
 
         let update = Update {
             ciphertext: ambre_protocol::messages::Ciphertext(b"cipher".to_vec()),
-            nonce: ambre_protocol::messages::Nonce([0u8; 24]),
+            nonce: ambre_core::FixedBytes::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc,
-                pub_key: PublicKey::from_array([1u8; 32]),
-                key_id: ambre_core::KeyId::from_array([2u8; 16]),
+                pub_key: ambre_core::FixedBytes::from_array([1u8; 32]),
+                key_id: ambre_core::FixedBytes::from_array([2u8; 16]),
                 snapshot_id: SnapshotId::new(),
                 clock: Clock(1),
             },
-            commitment_tag: ambre_protocol::messages::CommitmentTag([0u8; 32]),
-            signature: ambre_protocol::messages::Signature([0u8; 64]),
+            commitment_tag: ambre_core::FixedBytes::from_array([0u8; 32]),
+            signature: ambre_core::FixedBytes::from_array([0u8; 64]),
         };
         let wire = encode_client_msg(&WsClientMsg::Update(update));
         relay.handle_message(&wire);

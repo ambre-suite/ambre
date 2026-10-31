@@ -6,7 +6,7 @@
 //! document key is then sealed under the KEK with XChaCha20-Poly1305. This module
 //! provides the primitive only; the share/rotation flow lives in the Sync thread.
 
-use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, Nonce, Secret};
+use ambre_core::{Ciphertext, EntryDigest, ExchangePublicKey, FixedBytes, Nonce, Secret};
 use blake2::Blake2b512;
 use hkdf::SimpleHkdf;
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -24,7 +24,7 @@ const KEK_DOMAIN: &[u8] = b"ambre-kek-v2";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WrappedKey {
     /// AEAD nonce used to wrap the key.
-    pub nonce: Nonce,
+    pub nonce: FixedBytes<Nonce>,
     /// Sealed document key (32 bytes + Poly1305 tag).
     pub ciphertext: Ciphertext,
 }
@@ -55,7 +55,7 @@ impl SharedSecret {
 /// the exchange is non-contributory.
 pub fn shared_secret(
     own_secret: &StaticSecret,
-    peer_public: &ExchangePublicKey,
+    peer_public: &FixedBytes<ExchangePublicKey>,
 ) -> Result<SharedSecret, CryptoError> {
     let peer = PublicKey::from(*peer_public.as_array());
     // `x25519_dalek::SharedSecret` wipes itself on drop; its bytes are copied
@@ -79,8 +79,8 @@ pub fn shared_secret(
 )]
 fn derive_kek(
     shared: &SharedSecret,
-    sender_pk: &ExchangePublicKey,
-    recipient_pk: &ExchangePublicKey,
+    sender_pk: &FixedBytes<ExchangePublicKey>,
+    recipient_pk: &FixedBytes<ExchangePublicKey>,
 ) -> DocumentKey {
     // `SimpleHkdf` (SimpleHmac-based) is required: BLAKE2b's variable-output core
     // is not the "eager" hash the default `Hkdf<H>` (raw `Hmac`) demands.
@@ -105,7 +105,7 @@ fn derive_kek(
 /// [`CryptoError::EncryptionFailed`] from the AEAD.
 pub fn wrap_document_key(
     own_secret: &StaticSecret,
-    peer_public: &ExchangePublicKey,
+    peer_public: &FixedBytes<ExchangePublicKey>,
     doc_key: &DocumentKey,
 ) -> Result<WrappedKey, CryptoError> {
     wrap_anchored(own_secret, peer_public, doc_key, None)
@@ -121,18 +121,19 @@ pub fn wrap_document_key(
 /// Every error of [`wrap_document_key`].
 pub fn wrap_anchored(
     own_secret: &StaticSecret,
-    peer_public: &ExchangePublicKey,
+    peer_public: &FixedBytes<ExchangePublicKey>,
     doc_key: &DocumentKey,
-    anchor: Option<&EntryDigest>,
+    anchor: Option<&FixedBytes<EntryDigest>>,
 ) -> Result<WrappedKey, CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
-    let own_pub = ExchangePublicKey::from_array(PublicKey::from(own_secret).to_bytes());
+    let own_pub =
+        FixedBytes::<ExchangePublicKey>::from_array(PublicKey::from(own_secret).to_bytes());
     let kek = derive_kek(&shared, &own_pub, peer_public);
     let plaintext = Secret::filled(|plain: &mut Vec<u8>| {
         plain.reserve_exact(64);
         plain.extend_from_slice(doc_key.as_bytes());
         if let Some(anchor) = anchor {
-            plain.extend_from_slice(&anchor.0);
+            plain.extend_from_slice(anchor.as_slice());
         }
     });
     let (nonce, ciphertext) =
@@ -153,7 +154,7 @@ pub fn wrap_anchored(
 ///   key nor a key and an anchor.
 pub fn unwrap_document_key(
     own_secret: &StaticSecret,
-    peer_public: &ExchangePublicKey,
+    peer_public: &FixedBytes<ExchangePublicKey>,
     wrapped: &WrappedKey,
 ) -> Result<DocumentKey, CryptoError> {
     unwrap_anchored(own_secret, peer_public, wrapped).map(|(key, _)| key)
@@ -167,11 +168,12 @@ pub fn unwrap_document_key(
 /// Every error of [`unwrap_document_key`].
 pub fn unwrap_anchored(
     own_secret: &StaticSecret,
-    peer_public: &ExchangePublicKey,
+    peer_public: &FixedBytes<ExchangePublicKey>,
     wrapped: &WrappedKey,
-) -> Result<(DocumentKey, Option<EntryDigest>), CryptoError> {
+) -> Result<(DocumentKey, Option<FixedBytes<EntryDigest>>), CryptoError> {
     let shared = shared_secret(own_secret, peer_public)?;
-    let own_pub = ExchangePublicKey::from_array(PublicKey::from(own_secret).to_bytes());
+    let own_pub =
+        FixedBytes::<ExchangePublicKey>::from_array(PublicKey::from(own_secret).to_bytes());
     let kek = derive_kek(&shared, peer_public, &own_pub);
     let bytes = aead::open(
         &wrapped.nonce,

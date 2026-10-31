@@ -11,7 +11,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_core::{DocumentId, KeyId};
+use ambre_core::{DocumentId, FixedBytes, KeyId};
 use ambre_crypto::DocumentKey;
 use ambre_protocol::KeyLink;
 
@@ -20,7 +20,7 @@ use crate::pipeline;
 /// The links of one document, indexed by the key each starts from.
 #[derive(Clone, Default)]
 pub(crate) struct Chain {
-    links: HashMap<KeyId, KeyLink>,
+    links: HashMap<FixedBytes<KeyId>, KeyLink>,
 }
 
 impl Chain {
@@ -57,7 +57,7 @@ impl Chain {
         &self,
         document_id: DocumentId,
         current: &DocumentKey,
-        wanted: KeyId,
+        wanted: FixedBytes<KeyId>,
     ) -> Option<DocumentKey> {
         let mut key = current.clone();
         // Each step consumes one link, so a walk longer than the chain is a
@@ -79,7 +79,7 @@ impl Chain {
 /// key its header names.
 pub(crate) fn signed_by_writers(
     links: Vec<KeyLink>,
-    signers: Option<&HashSet<ambre_core::PublicKey>>,
+    signers: Option<&HashSet<FixedBytes<ambre_core::PublicKey>>>,
 ) -> Vec<KeyLink> {
     let Some(signers) = signers else {
         return links;
@@ -102,7 +102,7 @@ pub(crate) struct Keyring {
 
 impl Keyring {
     /// The key `wanted` names, as [`find_key`] reaches it.
-    pub(crate) fn find(&self, wanted: KeyId) -> Option<DocumentKey> {
+    pub(crate) fn find(&self, wanted: FixedBytes<KeyId>) -> Option<DocumentKey> {
         find_key(
             self.document_id,
             &self.current,
@@ -121,7 +121,7 @@ pub(crate) fn find_key(
     current: &DocumentKey,
     previous: &[DocumentKey],
     chain: &Chain,
-    wanted: KeyId,
+    wanted: FixedBytes<KeyId>,
 ) -> Option<DocumentKey> {
     std::iter::once(current)
         .chain(previous)
@@ -225,7 +225,7 @@ mod tests {
         if let Some(link) = links.get_mut(0) {
             *link = pipeline::seal_link(document_id, &keys[0], &keys[1], &stranger).unwrap();
         }
-        let writers = HashSet::from([ambre_core::PublicKey::from_array(
+        let writers = HashSet::from([FixedBytes::<ambre_core::PublicKey>::from_array(
             rotator().verifying_key().to_bytes(),
         )]);
         let kept = signed_by_writers(links.clone(), Some(&writers));

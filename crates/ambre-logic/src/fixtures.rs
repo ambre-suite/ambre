@@ -657,7 +657,9 @@ pub fn manifest_for(
 ///
 /// The keyless digest is [`ambre_crypto::hash::file_digest`], never a link
 /// of the snapshot chain.
-pub fn digest_of(container: &ambre_core::PlaintextContainer) -> ambre_core::FileDigest {
+pub fn digest_of(
+    container: &ambre_core::PlaintextContainer,
+) -> ambre_core::FixedBytes<ambre_core::FileDigest> {
     ambre_crypto::hash::file_digest(container)
 }
 

@@ -276,7 +276,7 @@ pub enum RestCommand {
         invitee_email: Option<ambre_core::Email>,
         invitee: UserId,
         role: Role,
-        expect_exchange_pub_key: ambre_core::ExchangePublicKey,
+        expect_exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
         now: Timestamp,
     },
     /// Revoke a member (triggers the full key-rotation sequence). -> `RevocationComplete`.
@@ -454,14 +454,14 @@ pub enum RestEvent {
         user_id: UserId,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
-        exchange_pub_key: ambre_core::ExchangePublicKey,
+        exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
     },
     /// The answer to `FetchMemberKey`: the key the relay serves for that
     /// user, and its fingerprint, for the same comparison with the pin.
     MemberKey {
         user_id: UserId,
-        exchange_pub_key: ambre_core::ExchangePublicKey,
+        exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
     },
     InviteSent {

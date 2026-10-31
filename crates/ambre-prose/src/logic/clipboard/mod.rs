@@ -28,12 +28,13 @@ use ambre_bus::app::prose::{BlockType, MarkKey};
 
 /// What opens the bytes, so a payload another Ambre application wrote under
 /// the same clipboard type never decodes as this one.
-const MAGIC: ambre_core::FormatMagic = ambre_core::FormatMagic::new(*b"APR1");
+const MAGIC: ambre_core::FixedBytes<ambre_core::FormatMagic> =
+    ambre_core::FixedBytes::from_array(*b"APR1");
 
 /// What a copy carries in this application's own bytes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Payload {
-    magic: ambre_core::FormatMagic,
+    magic: ambre_core::FixedBytes<ambre_core::FormatMagic>,
     blocks: Vec<ClipBlock>,
 }
 

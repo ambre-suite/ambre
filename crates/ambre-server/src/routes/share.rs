@@ -19,7 +19,7 @@ pub(crate) struct Expected {
     pub role: Option<Role>,
     /// The key the entry names, when the route knows it. That is the key an
     /// invite wraps, the key a revoke installs, or none for a role change.
-    pub key: Option<Option<ambre_core::KeyId>>,
+    pub key: Option<Option<ambre_core::FixedBytes<ambre_core::KeyId>>>,
 }
 
 /// Decodes and checks the signed membership entry a request carries
@@ -52,7 +52,7 @@ pub(crate) async fn checked_entry(
         && expected.role.is_none_or(|role| entry.role == role)
         && expected.key.is_none_or(|key| entry.key == key)
         && first == entry.position.is_first()
-        && member_key.as_ref().map(ambre_core::PublicKey::as_slice)
+        && member_key.as_ref().map(ambre_core::FixedBytes::as_slice)
             == Some(entry.member_key.as_slice());
     if !records {
         return Err(AppError::BadRequest(
@@ -62,7 +62,7 @@ pub(crate) async fn checked_entry(
     let signed = entry
         .signed_bytes()
         .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
-    let signature = Signature::from_bytes(&entry.signature.0);
+    let signature = Signature::from_bytes(entry.signature.as_array());
     VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
         .and_then(|key| key.verify_strict(signed.as_bytes(), &signature))
         .map_err(|_| AppError::InvalidSignature)?;
@@ -91,7 +91,7 @@ pub struct InviteRequest {
     /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
     /// refuses the invitation (`SRV-168`).
     #[serde(with = "ambre_core::serde_id::key_id")]
-    pub key_id: ambre_core::KeyId,
+    pub key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
     /// The signed entry the invite appends to the log (`SYNC-105`).
     #[serde(default)]
     pub entry: Option<ambre_core::EncodedLogEntry>,

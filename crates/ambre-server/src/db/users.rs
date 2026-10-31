@@ -16,11 +16,11 @@ pub struct UserRow {
     pub email_verified: EmailProof,
     pub display_name: ambre_core::DisplayName,
     pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
-    pub master_key_salt: Option<ambre_core::MasterKeySalt>,
+    pub master_key_salt: Option<FixedBytes<ambre_core::MasterKeySalt>>,
     /// `None` until the account registers its keys: a provider login creates
     /// the account first (`SRV-027`). Both keys are set or neither is.
-    pub signing_pubkey: Option<ambre_core::PublicKey>,
-    pub exchange_pubkey: Option<ambre_core::ExchangePublicKey>,
+    pub signing_pubkey: Option<FixedBytes<ambre_core::PublicKey>>,
+    pub exchange_pubkey: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
 }
 
 /// Projection of `users` for search results (no key material).
@@ -33,8 +33,8 @@ pub struct UserInfoRow {
     /// possibly-squatted recipient before wrapping the doc key to them (#3).
     pub email_verified: EmailProof,
     pub display_name: ambre_core::DisplayName,
-    pub signing_pubkey: ambre_core::PublicKey,
-    pub exchange_pubkey: ambre_core::ExchangePublicKey,
+    pub signing_pubkey: FixedBytes<ambre_core::PublicKey>,
+    pub exchange_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,
 }
 
 ambre_core::define_flag! {
@@ -147,9 +147,9 @@ pub async fn create_user(
     email: &ambre_core::Email,
     display_name: &ambre_core::DisplayName,
     master_key_enc: &ambre_core::WrappedMasterKey,
-    master_key_salt: &ambre_core::MasterKeySalt,
-    signing_pubkey: &ambre_core::PublicKey,
-    exchange_pubkey: &ambre_core::ExchangePublicKey,
+    master_key_salt: &FixedBytes<ambre_core::MasterKeySalt>,
+    signing_pubkey: &FixedBytes<ambre_core::PublicKey>,
+    exchange_pubkey: &FixedBytes<ambre_core::ExchangePublicKey>,
 ) -> Result<UserRow, AppError> {
     let row = sqlx::query(
         "INSERT INTO users (email, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey"
@@ -157,7 +157,7 @@ pub async fn create_user(
     .bind(email.as_str())
     .bind(display_name.as_str())
     .bind(master_key_enc.as_bytes())
-    .bind(master_key_salt.as_bytes())
+    .bind(master_key_salt.as_slice())
     .bind(signing_pubkey.as_slice())
     .bind(exchange_pubkey.as_slice())
     .fetch_one(pool)
@@ -282,8 +282,8 @@ pub async fn upsert_user_from_oidc(
 pub async fn dev_upsert_user(
     pool: &PgPool,
     username: &ambre_core::DisplayName,
-    signing_pubkey: &ambre_core::PublicKey,
-    exchange_pubkey: &ambre_core::ExchangePublicKey,
+    signing_pubkey: &FixedBytes<ambre_core::PublicKey>,
+    exchange_pubkey: &FixedBytes<ambre_core::ExchangePublicKey>,
 ) -> Result<UserRow, AppError> {
     let email = format!("{username}@dev.local");
     // `(xmax = 0)` is true only for a freshly INSERTed row (vs an ON CONFLICT
@@ -367,13 +367,13 @@ pub async fn update_master_key(
     pool: &PgPool,
     user_id: &ambre_core::UserId,
     master_key_enc: &ambre_core::WrappedMasterKey,
-    master_key_salt: &ambre_core::MasterKeySalt,
+    master_key_salt: &FixedBytes<ambre_core::MasterKeySalt>,
 ) -> Result<(), AppError> {
     let uid = id_to_uuid(*user_id);
     sqlx::query("UPDATE users SET master_key_enc = $2, master_key_salt = $3 WHERE id = $1")
         .bind(uid)
         .bind(master_key_enc.as_bytes())
-        .bind(master_key_salt.as_bytes())
+        .bind(master_key_salt.as_slice())
         .execute(pool)
         .await?;
     Ok(())
@@ -432,9 +432,9 @@ mod tests {
             &ambre_core::Email::from("alice@example.com"),
             &ambre_core::DisplayName::new("Alice").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
-            &ambre_core::PublicKey::from_array([3u8; 32]),
-            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
+            &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
         )
         .await
         .expect("setup account");
@@ -499,9 +499,9 @@ mod tests {
             &ambre_core::Email::from("DAVE@example.com"),
             &ambre_core::DisplayName::new("Impostor").unwrap(),
             &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([8u8; 32]),
-            &ambre_core::PublicKey::from_array([7u8; 32]),
-            &ambre_core::ExchangePublicKey::from_array([6u8; 32]),
+            &FixedBytes::<ambre_core::MasterKeySalt>::from_array([8u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([7u8; 32]),
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([6u8; 32]),
         )
         .await
         .expect_err("a verified email must not be claimable via setup");
@@ -572,9 +572,9 @@ mod tests {
             &ambre_core::Email::from("bob@example.com"),
             &ambre_core::DisplayName::new("Bob").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
-            &ambre_core::PublicKey::from_array([3u8; 32]),
-            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
+            &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
         )
         .await
         .expect("first claim");
@@ -584,9 +584,9 @@ mod tests {
             &ambre_core::Email::from("BOB@example.com"),
             &ambre_core::DisplayName::new("Impostor").unwrap(),
             &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([8u8; 32]),
-            &ambre_core::PublicKey::from_array([7u8; 32]),
-            &ambre_core::ExchangePublicKey::from_array([6u8; 32]),
+            &FixedBytes::<ambre_core::MasterKeySalt>::from_array([8u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([7u8; 32]),
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([6u8; 32]),
         )
         .await
         .expect_err("second claim must conflict");
@@ -603,9 +603,9 @@ mod tests {
             &ambre_core::Email::from("carol@example.com"),
             &ambre_core::DisplayName::new("Carol").unwrap(),
             &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
-            &ambre_core::PublicKey::from_array([3u8; 32]),
-            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
+            &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
         )
         .await
         .expect("create user");

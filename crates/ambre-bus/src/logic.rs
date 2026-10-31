@@ -27,7 +27,7 @@ use crate::{
     ChannelId, DirectMember, DirectMessageDraft, DocType, DocumentId, MurmureCommand, RequestId,
     RestCommand, SpaceCommand, SpaceId, Timestamp,
 };
-use ambre_core::SessionNonce;
+use ambre_core::{FixedBytes, SessionNonce};
 
 // The typed application data plane carried by `LogicCommand::App` lives per-app under
 // `crate::app`, command + event + value types grouped by document type. This envelope
@@ -110,7 +110,7 @@ pub enum LogicCommand {
         /// The earlier sessions of this user on the document: each PeerID with
         /// the nonce it derives from, so what one left unsent travels
         /// (`AUTHOR-028`).
-        sessions: Vec<(ambre_core::PeerId, SessionNonce)>,
+        sessions: Vec<(ambre_core::PeerId, FixedBytes<SessionNonce>)>,
     },
 
     /// The browser refused to store a change of `document_id` that the relay

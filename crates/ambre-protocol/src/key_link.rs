@@ -4,7 +4,7 @@
 //! the rotator (`SYNC-116`). The relay stores the link and indexes it by the two
 //! identifiers it names, and opens nothing: the sealed key is a client object.
 
-use ambre_core::{DocumentId, EncodedKeyLink, KeyId};
+use ambre_core::{DocumentId, EncodedKeyLink, FixedBytes, KeyId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{SerializationError, ValidationError};
@@ -20,9 +20,9 @@ pub struct KeyLink {
     /// The document whose keys the link chains.
     pub document_id: DocumentId,
     /// The key the link starts from: the one installed by the rotation.
-    pub key: KeyId,
+    pub key: FixedBytes<KeyId>,
     /// The key it seals: the one the rotation replaced.
-    pub previous: KeyId,
+    pub previous: FixedBytes<KeyId>,
     /// `previous`, sealed under `key` and signed by the rotator. Its header
     /// names `key` and the rotator's signing key.
     pub sealed: ambre_core::SealedPreviousKey,
@@ -75,8 +75,8 @@ mod tests {
     fn link(sealed: usize, previous: u8) -> KeyLink {
         KeyLink {
             document_id: DocumentId::from_bytes([1; 16]),
-            key: KeyId::from_array([2; 16]),
-            previous: KeyId::from_array([previous; 16]),
+            key: FixedBytes::from_array([2; 16]),
+            previous: FixedBytes::from_array([previous; 16]),
             sealed: ambre_core::SealedPreviousKey::new(vec![7; sealed]),
         }
     }

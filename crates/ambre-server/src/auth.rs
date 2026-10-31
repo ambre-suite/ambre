@@ -22,7 +22,7 @@ pub struct AuthSession {
     /// Cached Ed25519 public key. It avoids a Postgres lookup per WS message,
     /// and binds every authored `Update` to this session identity (see the WS
     /// `handle_update` author-key check).
-    pub signing_pubkey: ambre_core::PublicKey,
+    pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
 }
 
 /// Extracts the bearer token from the `Authorization` header, if present.
@@ -47,7 +47,7 @@ pub struct AccountSession {
     /// User the token belongs to.
     pub user_id: ambre_core::UserId,
     /// `None` until the account registers its keys.
-    pub signing_pubkey: Option<ambre_core::PublicKey>,
+    pub signing_pubkey: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
 }
 
 /// Verify an access token and resolve the account it names.
@@ -59,16 +59,11 @@ pub fn authenticate_account(
         .jwt
         .verify(token)
         .map_err(|_| AppError::Unauthorized)?;
-    let user_id = claims.sub;
-    let signing_pubkey = claims
-        .spk
-        .as_ref()
-        .map(ambre_core::SigningKeyHex::decode)
-        .transpose()
-        .map_err(|_| AppError::Unauthorized)?;
+    // A key that is not 32 bytes of hex fails the read of the claims, so
+    // `verify` refuses it above.
     Ok(AccountSession {
-        user_id,
-        signing_pubkey,
+        user_id: claims.sub,
+        signing_pubkey: claims.spk,
     })
 }
 
@@ -136,15 +131,13 @@ pub struct TokenPair {
 pub async fn issue_session(
     state: &AppState,
     user_id: ambre_core::UserId,
-    signing_pubkey: Option<ambre_core::PublicKey>,
+    signing_pubkey: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
 ) -> Result<TokenPair, AppError> {
     let now = crate::s3::unix_now();
     let access_ttl = access_lifetime(state.config.access_ttl);
     let claims = Claims {
         sub: user_id,
-        spk: signing_pubkey
-            .as_ref()
-            .map(ambre_core::PublicKey::to_key_hex),
+        spk: signing_pubkey,
         iat: now,
         exp: now.plus(access_ttl),
     };
@@ -193,7 +186,7 @@ mod tests {
     async fn the_token_check_reads_no_store(pool: sqlx::PgPool) {
         let state = crate::test_helpers::test_app_state(pool.clone()).await;
         let user = crate::test_helpers::create_test_user(&pool, "local@ambre.app").await;
-        let key = ambre_core::PublicKey::from_array([3u8; 32]);
+        let key = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]);
         let pair = issue_session(&state, user, Some(key)).await.unwrap();
         pool.close().await;
         state.redis.clone().close().await.unwrap();

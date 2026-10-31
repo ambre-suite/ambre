@@ -4,6 +4,7 @@
 //! without decryption. The chain hash folds the parent proof with the new
 //! snapshot bytes, so any reordering or substitution breaks the chain.
 
+use ambre_core::FixedBytes;
 use blake2::{Blake2b512, Digest};
 use data_encoding::BASE32_NOPAD;
 
@@ -28,7 +29,9 @@ const FINGERPRINT_LEN: usize = 20;
 /// aloud for out-of-band verification. The output is stable for a given key: the
 /// same key always yields the same string.
 ///
-pub fn fingerprint(pub_key: &ambre_core::ExchangePublicKey) -> ambre_core::KeyFingerprint {
+pub fn fingerprint(
+    pub_key: &FixedBytes<ambre_core::ExchangePublicKey>,
+) -> ambre_core::KeyFingerprint {
     let mut hasher = Blake2b512::new();
     hasher.update(FINGERPRINT_DOMAIN);
     hasher.update(pub_key.as_array());
@@ -61,11 +64,13 @@ const ENTRY_DIGEST_DOMAIN: &[u8] = b"ambre-membership-digest-v1";
 
 /// The digest of one encoded membership entry, which the next entry names
 /// (`SYNC-102`): `BLAKE2b(domain || entry)`, truncated to 32 bytes.
-pub fn entry_digest(encoded_entry: &ambre_core::EncodedLogEntry) -> ambre_core::EntryDigest {
+pub fn entry_digest(
+    encoded_entry: &ambre_core::EncodedLogEntry,
+) -> FixedBytes<ambre_core::EntryDigest> {
     let mut hasher = Blake2b512::new();
     hasher.update(ENTRY_DIGEST_DOMAIN);
     hasher.update(encoded_entry.as_bytes());
-    ambre_core::EntryDigest(prefix(&hasher.finalize()))
+    FixedBytes::from_array(prefix(&hasher.finalize()))
 }
 
 /// Computes the chain hash `BLAKE2b(len(parent) || parent || snapshot)`,
@@ -73,11 +78,11 @@ pub fn entry_digest(encoded_entry: &ambre_core::EncodedLogEntry) -> ambre_core::
 /// its parent field is empty. The length prefix makes the field boundary
 /// unambiguous, so a parent and a snapshot never read as another pair.
 pub fn chain_hash(
-    parent: Option<&ambre_core::ChainHash>,
+    parent: Option<&FixedBytes<ambre_core::ChainHash>>,
     snapshot: &ambre_core::Ciphertext,
-) -> ambre_core::ChainHash {
-    let parent: &[u8] = parent.map_or(&[], |p| &p.0);
-    ambre_core::ChainHash(length_prefixed(Head(parent), Tail(&snapshot.0)))
+) -> FixedBytes<ambre_core::ChainHash> {
+    let parent: &[u8] = parent.map_or(&[], |p| p.as_slice());
+    FixedBytes::from_array(length_prefixed(Head(parent), Tail(&snapshot.0)))
 }
 
 /// The field that [`length_prefixed`] bounds with its length.
@@ -116,6 +121,6 @@ pub fn dev_seed(username: &ambre_core::DisplayName) -> crate::keys::MasterSeed {
 /// A keyless 32-byte digest of a whole container file, for the fixture
 /// sidecar that catches a flipped byte. Not a link of the snapshot chain: its head is
 /// empty, which keeps the digests of the committed corpus.
-pub fn file_digest<F: ambre_core::ContainerFile>(file: &F) -> ambre_core::FileDigest {
-    ambre_core::FileDigest::from_array(length_prefixed(Head(&[]), Tail(file.as_ref())))
+pub fn file_digest<F: ambre_core::ContainerFile>(file: &F) -> FixedBytes<ambre_core::FileDigest> {
+    FixedBytes::from_array(length_prefixed(Head(&[]), Tail(file.as_ref())))
 }

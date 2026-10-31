@@ -594,7 +594,7 @@ impl LogicState {
         document_id: DocumentId,
         peer: ambre_core::PeerId,
         entry: ambre_core::PeerEntry,
-        nonce: SessionNonce,
+        nonce: FixedBytes<SessionNonce>,
     ) {
         let Some(doc) = self.docs.get(&document_id) else {
             // A channel or a space document is no entry of `docs`.
@@ -637,7 +637,7 @@ impl LogicState {
     pub(crate) fn note_earlier_sessions(
         &mut self,
         document_id: DocumentId,
-        sessions: Vec<(ambre_core::PeerId, SessionNonce)>,
+        sessions: Vec<(ambre_core::PeerId, FixedBytes<SessionNonce>)>,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;

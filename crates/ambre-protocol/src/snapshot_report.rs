@@ -5,7 +5,7 @@
 //! the snapshot's author. So the relay can check it, and nobody can replay it
 //! against another snapshot.
 
-use ambre_core::{DocumentId, PublicKey, SnapshotId};
+use ambre_core::{DocumentId, FixedBytes, PublicKey, SnapshotId};
 
 use crate::transcript::SignedTranscript;
 
@@ -18,7 +18,7 @@ pub const REPORT_DOMAIN: &[u8] = b"ambre-snapshot-report-v1";
 pub fn report_transcript(
     document_id: DocumentId,
     snapshot_id: SnapshotId,
-    author: &PublicKey,
+    author: &FixedBytes<PublicKey>,
 ) -> SignedTranscript {
     // The domain, two UUIDs and one key. The compiler sums the constants, so
     // the sum cannot overflow at run time.
@@ -40,19 +40,19 @@ mod tests {
     fn the_transcript_names_the_document_the_snapshot_and_the_author() {
         let doc = DocumentId::new();
         let snap = SnapshotId::new();
-        let base = report_transcript(doc, snap, &PublicKey::from_array([1; 32]));
+        let base = report_transcript(doc, snap, &FixedBytes::from_array([1; 32]));
         assert!(base.as_bytes().starts_with(REPORT_DOMAIN));
         assert_ne!(
             base,
-            report_transcript(DocumentId::new(), snap, &PublicKey::from_array([1; 32]))
+            report_transcript(DocumentId::new(), snap, &FixedBytes::from_array([1; 32]))
         );
         assert_ne!(
             base,
-            report_transcript(doc, SnapshotId::new(), &PublicKey::from_array([1; 32]))
+            report_transcript(doc, SnapshotId::new(), &FixedBytes::from_array([1; 32]))
         );
         assert_ne!(
             base,
-            report_transcript(doc, snap, &PublicKey::from_array([2; 32]))
+            report_transcript(doc, snap, &FixedBytes::from_array([2; 32]))
         );
     }
 }

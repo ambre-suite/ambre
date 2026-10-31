@@ -74,14 +74,14 @@ pub(crate) fn contiguous_prefix(
 /// left. Accepted, they would land ahead of the refused delta they build on.
 /// So the socket drops them until the author answers the refusal.
 #[derive(Debug, Default)]
-pub(crate) struct ClockFences(HashMap<DocumentId, ambre_protocol::messages::Signature>);
+pub(crate) struct ClockFences(HashMap<DocumentId, FixedBytes<ambre_protocol::messages::Signature>>);
 
 impl ClockFences {
     /// The delta signed `signature` was refused for its clock.
     pub(crate) fn raise(
         &mut self,
         document_id: DocumentId,
-        signature: ambre_protocol::messages::Signature,
+        signature: FixedBytes<ambre_protocol::messages::Signature>,
     ) {
         self.0.insert(document_id, signature);
     }
@@ -116,7 +116,7 @@ impl ClockFences {
     pub(crate) fn answer(
         &mut self,
         document_id: DocumentId,
-        signature: &ambre_protocol::messages::Signature,
+        signature: &FixedBytes<ambre_protocol::messages::Signature>,
     ) {
         if self.0.get(&document_id) == Some(signature) {
             self.0.remove(&document_id);
@@ -202,19 +202,11 @@ pub(crate) async fn handle_subscribe(
     match redis_ops::clock_state_is_cold(&state.redis, &document_id).await {
         Ok(true) => match db::get_clock_state(&state.db, &document_id).await {
             Ok(clock_state) => {
-                let author_clocks: Vec<(
-                    ambre_core::SigningKeyHex,
-                    ambre_protocol::messages::Clock,
-                )> = clock_state
-                    .author_clocks
-                    .iter()
-                    .map(|(pk, clock)| (ambre_core::SigningKeyHex::encode(pk), *clock))
-                    .collect();
                 if let Err(e) = redis_ops::seed_clock_state(
                     &state.redis,
                     &document_id,
                     clock_state.max_seq,
-                    &author_clocks,
+                    &clock_state.author_clocks,
                 )
                 .await
                 {
@@ -254,12 +246,11 @@ pub(crate) async fn handle_subscribe(
     // Count this session once, however often it re-subscribes: its departure
     // is announced only when no other session of the same key still watches
     // (`PRESENCE-015`). A failed count is logged; the departure then fails open.
-    if conn.doc_subscriptions.insert(document_id) {
-        let pub_key_hex = ambre_core::SigningKeyHex::encode(&conn.signing_pubkey);
-        if let Err(e) = redis_ops::doc_session_open(&state.redis, &document_id, &pub_key_hex).await
-        {
-            tracing::error!(error = %e, "subscribe: session count failed");
-        }
+    if conn.doc_subscriptions.insert(document_id)
+        && let Err(e) =
+            redis_ops::doc_session_open(&state.redis, &document_id, &conn.signing_pubkey).await
+    {
+        tracing::error!(error = %e, "subscribe: session count failed");
     }
     conn.doc_access_verified_at
         .insert(document_id, Instant::now());
@@ -305,21 +296,20 @@ pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: Docu
 pub(crate) async fn announce_departure(
     state: &Arc<AppState>,
     document_id: &DocumentId,
-    signing_pubkey: &ambre_core::PublicKey,
+    signing_pubkey: &FixedBytes<PublicKey>,
 ) {
-    let pub_key_hex = ambre_core::SigningKeyHex::encode(signing_pubkey);
     // A count the store cannot answer fails open: the departure is announced,
     // and the session that remains re-enters the set with its next sample.
-    let last = redis_ops::doc_session_close(&state.redis, document_id, &pub_key_hex)
+    let last = redis_ops::doc_session_close(&state.redis, document_id, signing_pubkey)
         .await
         .unwrap_or(true);
     if !last {
         return;
     }
-    let _ = redis_ops::doc_presence_remove(&state.redis, document_id, &pub_key_hex).await;
+    let _ = redis_ops::doc_presence_remove(&state.redis, document_id, signing_pubkey).await;
     let broadcast = Payload::server_msg(&WsServerMsg::PeerLeft {
         document_id: *document_id,
-        pub_key: signing_pubkey.clone(),
+        pub_key: *signing_pubkey,
     });
     let _ = redis_ops::doc_broadcast(&state.redis, document_id, &broadcast).await;
 }
@@ -390,7 +380,7 @@ pub(crate) async fn handle_update(
         return;
     }
 
-    let author_pubkey = update.public_data.pub_key.clone();
+    let author_pubkey = update.public_data.pub_key;
     // Bind the authored key to the session identity. The current model is one
     // signing key per user. That key is `users.signing_pubkey`, carried in the
     // token's `spk` claim, so a member may only author under their own key.
@@ -410,7 +400,6 @@ pub(crate) async fn handle_update(
         return;
     }
 
-    let pub_key_hex = ambre_core::SigningKeyHex::encode(&author_pubkey);
     let clock = update.public_data.clock;
 
     // A delta sent behind a refused one waits for the author's answer: it
@@ -422,13 +411,13 @@ pub(crate) async fn handle_update(
     }
 
     let seq =
-        match redis_ops::verify_clock_and_assign_seq(&state.redis, &doc_id, &pub_key_hex, clock)
+        match redis_ops::verify_clock_and_assign_seq(&state.redis, &doc_id, &author_pubkey, clock)
             .await
         {
             Ok(s) => {
                 tracing::debug!(
                     "[Server] seq assigned doc={doc_id} author={} clock={clock} seq={s}",
-                    pub_key_hex.as_str()
+                    author_pubkey.to_hex()
                 );
                 s
             }
@@ -647,13 +636,12 @@ pub(crate) async fn handle_ephemeral(
         return;
     }
 
-    let pub_key_hex = ambre_core::SigningKeyHex::encode(&eph.public_data.pub_key);
     // A refused write is not broadcast either: a document that owes a rotation
     // carries no presence sealed under a key a departed member holds (`SRV-123`).
     if redis_ops::doc_presence_update(
         &state.redis,
         &doc_id,
-        &pub_key_hex,
+        &eph.public_data.pub_key,
         &eph.ciphertext,
         ambre_core::Seconds(15),
     )
@@ -873,8 +861,8 @@ async fn membership_still_valid(
             // The session no longer watches, so it leaves the count; a member
             // added back later then starts from the right number (`PRESENCE-015`).
             if conn.doc_subscriptions.remove(&doc_id) {
-                let pub_key_hex = ambre_core::SigningKeyHex::encode(&conn.signing_pubkey);
-                let _ = redis_ops::doc_session_close(&state.redis, &doc_id, &pub_key_hex).await;
+                let _ =
+                    redis_ops::doc_session_close(&state.redis, &doc_id, &conn.signing_pubkey).await;
             }
             conn.doc_access_verified_at.remove(&doc_id);
             conn.doc_write.remove(&doc_id);
@@ -901,7 +889,7 @@ pub(crate) async fn verify_document_access(
 #[cfg(test)]
 mod postcard_tests {
     use super::refusal;
-    use ambre_core::{DocumentId, PublicKey, RefusalCode, SnapshotId};
+    use ambre_core::{DocumentId, FixedBytes, PublicKey, RefusalCode, SnapshotId};
     use ambre_protocol::messages::{
         Ciphertext, Clock, CommitmentTag, Counter, Ephemeral, Nonce, Seq, SeqUpdate, Signature,
         Update,
@@ -915,31 +903,31 @@ mod postcard_tests {
     fn make_update() -> Update {
         Update {
             ciphertext: Ciphertext(vec![1, 2, 3]),
-            nonce: Nonce([4u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([4u8; 24]),
             public_data: UpdatePublicData {
                 document_id: DocumentId::from_bytes([5u8; 16]),
-                pub_key: PublicKey::from_array([6u8; 32]),
-                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                pub_key: FixedBytes::<PublicKey>::from_array([6u8; 32]),
+                key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([7u8; 16]),
                 clock: Clock(42),
             },
-            commitment_tag: CommitmentTag([8u8; 32]),
-            signature: Signature([9u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([8u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([9u8; 64]),
         }
     }
 
     fn make_ephemeral() -> Ephemeral {
         Ephemeral {
             ciphertext: Ciphertext(vec![10, 11]),
-            nonce: Nonce([12u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([12u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: DocumentId::from_bytes([13u8; 16]),
-                pub_key: PublicKey::from_array([14u8; 32]),
-                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                pub_key: FixedBytes::<PublicKey>::from_array([14u8; 32]),
+                key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 counter: Counter(15),
             },
-            commitment_tag: CommitmentTag([16u8; 32]),
-            signature: Signature([17u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([16u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([17u8; 64]),
         }
     }
 
@@ -1145,7 +1133,7 @@ mod ephemeral_binding_tests {
         }))
     }
 
-    fn conn_with(session_key: PublicKey, doc_id: DocumentId) -> WsConnectionState {
+    fn conn_with(session_key: FixedBytes<PublicKey>, doc_id: DocumentId) -> WsConnectionState {
         let mut doc_subscriptions = HashSet::new();
         doc_subscriptions.insert(doc_id);
         WsConnectionState {
@@ -1171,18 +1159,18 @@ mod ephemeral_binding_tests {
     /// An unsigned ephemeral (all-zero signature) under `pub_key`. Used only for
     /// the forged-author-key path, which is dropped by the identity check before
     /// the signature is ever examined.
-    fn unsigned_ephemeral(pub_key: PublicKey, doc_id: DocumentId) -> Ephemeral {
+    fn unsigned_ephemeral(pub_key: FixedBytes<PublicKey>, doc_id: DocumentId) -> Ephemeral {
         Ephemeral {
             ciphertext: Ciphertext(vec![1, 2, 3]),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: doc_id,
                 pub_key,
-                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 counter: Counter(1),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         }
     }
 
@@ -1190,32 +1178,32 @@ mod ephemeral_binding_tests {
     /// `verify_ephemeral_signature`, so the relay accepts and records it.
     pub(super) fn signed_ephemeral(
         signing_key: &ed25519_dalek::SigningKey,
-        pub_key: &PublicKey,
+        pub_key: &FixedBytes<PublicKey>,
         doc_id: DocumentId,
         ciphertext: Vec<u8>,
     ) -> Ephemeral {
         use ed25519_dalek::Signer;
         let public_data = EphemeralPublicData {
             document_id: doc_id,
-            pub_key: pub_key.clone(),
-            key_id: ambre_core::KeyId::from_array([0u8; 16]),
+            pub_key: *pub_key,
+            key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             counter: Counter(1),
         };
-        let nonce = Nonce([5u8; 24]);
-        let commitment_tag = CommitmentTag([6u8; 32]);
+        let nonce = FixedBytes::<Nonce>::from_array([5u8; 24]);
+        let commitment_tag = FixedBytes::<CommitmentTag>::from_array([6u8; 32]);
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
         let mut signed_data = Vec::new();
-        push_framed(&mut signed_data, &nonce.0);
+        push_framed(&mut signed_data, nonce.as_slice());
         push_framed(&mut signed_data, &ciphertext);
         push_framed(&mut signed_data, &public_data_bytes);
-        push_framed(&mut signed_data, &commitment_tag.0);
+        push_framed(&mut signed_data, commitment_tag.as_slice());
         let sig = signing_key.sign(&signed_data);
         Ephemeral {
             ciphertext: Ciphertext(ciphertext),
             nonce,
             public_data,
             commitment_tag,
-            signature: Signature(sig.to_bytes()),
+            signature: FixedBytes::<Signature>::from_array(sig.to_bytes()),
         }
     }
 
@@ -1227,12 +1215,13 @@ mod ephemeral_binding_tests {
         };
         let doc_id = DocumentId::new();
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[21u8; 32]);
-        let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
-        let forged_key = PublicKey::from_array([2u8; 32]);
+        let session_key =
+            FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
+        let forged_key = FixedBytes::<PublicKey>::from_array([2u8; 32]);
         let presence_key = format!("doc:{doc_id}:presence");
         let _ = state.redis.del([&presence_key]).await;
 
-        let mut conn = conn_with(session_key.clone(), doc_id);
+        let mut conn = conn_with(session_key, doc_id);
 
         // A forged author key must be dropped before any Redis write.
         handle_ephemeral(&state, &mut conn, unsigned_ephemeral(forged_key, doc_id)).await;
@@ -1273,10 +1262,11 @@ mod ephemeral_binding_tests {
         };
         let doc_id = DocumentId::new();
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[23u8; 32]);
-        let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let session_key =
+            FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let presence_key = format!("doc:{doc_id}:presence");
         let _ = state.redis.del([&presence_key]).await;
-        let mut conn = conn_with(session_key.clone(), doc_id);
+        let mut conn = conn_with(session_key, doc_id);
 
         let sealed: Vec<u8> = (0..=255u8).rev().collect();
         let eph = signed_ephemeral(&signing_key, &session_key, doc_id, sealed.clone());
@@ -1302,11 +1292,12 @@ mod ephemeral_binding_tests {
         };
         let doc_id = DocumentId::new();
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[22u8; 32]);
-        let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let session_key =
+            FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let presence_key = format!("doc:{doc_id}:presence");
         let _ = state.redis.del([&presence_key]).await;
 
-        let mut conn = conn_with(session_key.clone(), doc_id);
+        let mut conn = conn_with(session_key, doc_id);
 
         // Correct author key, but tamper the ciphertext after signing.
         let mut eph = signed_ephemeral(&signing_key, &session_key, doc_id, vec![1, 2, 3]);
@@ -1338,11 +1329,12 @@ mod ephemeral_binding_tests {
         });
         let doc_id = DocumentId::new();
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[23u8; 32]);
-        let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let session_key =
+            FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let presence_key = format!("doc:{doc_id}:presence");
         let _ = state.redis.del([&presence_key]).await;
 
-        let mut conn = conn_with(session_key.clone(), doc_id);
+        let mut conn = conn_with(session_key, doc_id);
         // 9 bytes > the 8-byte cap: dropped before the signature check even runs.
         let eph = signed_ephemeral(&signing_key, &session_key, doc_id, vec![0u8; 9]);
         handle_ephemeral(&state, &mut conn, eph).await;
@@ -1367,8 +1359,8 @@ mod ephemeral_binding_tests {
             return;
         };
         let doc_id = DocumentId::new();
-        let key = PublicKey::from_array([31u8; 32]);
-        let key_hex = ambre_core::SigningKeyHex::encode(&key);
+        let key = FixedBytes::<PublicKey>::from_array([31u8; 32]);
+        let key_hex = key.to_hex();
         let presence_key = format!("doc:{doc_id}:presence");
         let (tx, mut rx) = mpsc::channel(8);
         state
@@ -1381,20 +1373,14 @@ mod ephemeral_binding_tests {
             .await
             .unwrap();
         for _ in 0..2 {
-            redis_ops::doc_session_open(&state.redis, &doc_id, &key_hex)
+            redis_ops::doc_session_open(&state.redis, &doc_id, &key)
                 .await
                 .unwrap();
         }
         let blob = ambre_protocol::messages::Ciphertext(b"blob".to_vec());
-        redis_ops::doc_presence_update(
-            &state.redis,
-            &doc_id,
-            &key_hex,
-            &blob,
-            ambre_core::Seconds(15),
-        )
-        .await
-        .unwrap();
+        redis_ops::doc_presence_update(&state.redis, &doc_id, &key, &blob, ambre_core::Seconds(15))
+            .await
+            .unwrap();
 
         announce_departure(&state, &doc_id, &key).await;
         let kept: bool = state
@@ -1467,7 +1453,7 @@ mod delta_size_cap_tests {
         }))
     }
 
-    fn conn_with(session_key: PublicKey, doc_id: DocumentId) -> WsConnectionState {
+    fn conn_with(session_key: FixedBytes<PublicKey>, doc_id: DocumentId) -> WsConnectionState {
         let mut doc_subscriptions = HashSet::new();
         doc_subscriptions.insert(doc_id);
         WsConnectionState {
@@ -1490,19 +1476,23 @@ mod delta_size_cap_tests {
         }
     }
 
-    fn update_with(pub_key: PublicKey, doc_id: DocumentId, cipher_len: usize) -> Update {
+    fn update_with(
+        pub_key: FixedBytes<PublicKey>,
+        doc_id: DocumentId,
+        cipher_len: usize,
+    ) -> Update {
         Update {
             ciphertext: Ciphertext(vec![0u8; cipher_len]),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc_id,
                 pub_key,
-                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([0u8; 16]),
                 clock: Clock(1),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         }
     }
 
@@ -1515,23 +1505,23 @@ mod delta_size_cap_tests {
             return;
         };
         let doc_id = DocumentId::new();
-        let session_key = PublicKey::from_array([1u8; 32]);
-        let mut empty = update_with(session_key.clone(), doc_id, 16);
+        let session_key = FixedBytes::<PublicKey>::from_array([1u8; 32]);
+        let mut empty = update_with(session_key, doc_id, 16);
         empty.ciphertext = Ciphertext(Vec::new());
         let cases = [
             (empty, RefusalCode::BadRequest),
             (
-                update_with(PublicKey::from_array([2u8; 32]), doc_id, 16),
+                update_with(FixedBytes::<PublicKey>::from_array([2u8; 32]), doc_id, 16),
                 RefusalCode::Forbidden,
             ),
             (
-                update_with(session_key.clone(), doc_id, 16),
+                update_with(session_key, doc_id, 16),
                 RefusalCode::InvalidSignature,
             ),
         ];
         for (fill, (mut update, expected)) in (1u8..).zip(cases) {
-            update.signature = Signature([fill; 64]);
-            let mut conn = conn_with(session_key.clone(), doc_id);
+            update.signature = FixedBytes::<Signature>::from_array([fill; 64]);
+            let mut conn = conn_with(session_key, doc_id);
             let (tx, mut rx) = mpsc::channel::<Payload>(8);
             handle_update(&state, &mut conn, update, &tx).await;
             let reply = rx.try_recv().expect("a refusal");
@@ -1543,7 +1533,7 @@ mod delta_size_cap_tests {
                 matches!(
                     decoded,
                     WsServerMsg::DeltaRefused { document_id, signature, code }
-                        if document_id == doc_id && signature == Signature([fill; 64]) && code == expected
+                        if document_id == doc_id && signature == FixedBytes::<Signature>::from_array([fill; 64]) && code == expected
                 ),
                 "expected {expected}, got {decoded:?}"
             );
@@ -1558,11 +1548,11 @@ mod delta_size_cap_tests {
             return;
         };
         let doc_id = DocumentId::new();
-        let session_key = PublicKey::from_array([1u8; 32]);
+        let session_key = FixedBytes::<PublicKey>::from_array([1u8; 32]);
         let pending_key = format!("doc:{doc_id}:pending");
         let _ = state.redis.del([&pending_key]).await;
 
-        let mut conn = conn_with(session_key.clone(), doc_id);
+        let mut conn = conn_with(session_key, doc_id);
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         // 9 bytes > the 8-byte cap: rejected before any durable write.
@@ -1604,13 +1594,13 @@ mod delta_size_cap_tests {
             return;
         };
         let doc_id = DocumentId::new();
-        let session_key = PublicKey::from_array([1u8; 32]);
+        let session_key = FixedBytes::<PublicKey>::from_array([1u8; 32]);
         let pending_key = format!("doc:{doc_id}:pending");
         let _ = state.redis.del([&pending_key]).await;
 
         // Fresh membership, but a read-only role: the write permission is cached
         // read-only, exactly as `handle_subscribe` would set it for a `viewer`.
-        let mut conn = conn_with(session_key.clone(), doc_id);
+        let mut conn = conn_with(session_key, doc_id);
         conn.doc_write.insert(doc_id, DocWrite::ReadOnly);
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
@@ -1667,7 +1657,7 @@ mod delta_size_cap_tests {
             oidc_clients: Arc::new(std::collections::HashMap::new()),
         });
         let doc_id = DocumentId::new();
-        let session_key = PublicKey::from_array([1u8; 32]);
+        let session_key = FixedBytes::<PublicKey>::from_array([1u8; 32]);
 
         // A fresh doc_id with no rows in the durable index: the very first page
         // of the replay is empty.
@@ -1735,7 +1725,7 @@ mod access_tests {
     /// membership was verified `age` ago.
     fn conn_of(
         user_id: UserId,
-        key: PublicKey,
+        key: FixedBytes<PublicKey>,
         doc_id: DocumentId,
         age: Duration,
     ) -> WsConnectionState {
@@ -1755,19 +1745,19 @@ mod access_tests {
         }
     }
 
-    fn update_for(pub_key: PublicKey, doc_id: DocumentId) -> Update {
+    fn update_for(pub_key: FixedBytes<PublicKey>, doc_id: DocumentId) -> Update {
         Update {
             ciphertext: Ciphertext(vec![1, 2, 3]),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc_id,
                 pub_key,
-                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([0u8; 16]),
                 clock: Clock(1),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         }
     }
 
@@ -1812,12 +1802,12 @@ mod access_tests {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[31u8; 32]);
-        let key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
-        let mut conn = conn_of(editor, key.clone(), doc_id, Duration::ZERO);
+        let key = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
+        let mut conn = conn_of(editor, key, doc_id, Duration::ZERO);
         conn.doc_subscriptions.clear();
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
-        handle_update(&state, &mut conn, update_for(key.clone(), doc_id), &tx).await;
+        handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
         assert!(matches!(
             replies(&mut rx).as_slice(),
             [WsServerMsg::DeltaRefused {
@@ -1862,13 +1852,13 @@ mod access_tests {
         assert!(MEMBERSHIP_RECHECK_TTL <= Duration::from_secs(30));
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
-        let key = PublicKey::from_array([32u8; 32]);
+        let key = FixedBytes::<PublicKey>::from_array([32u8; 32]);
         db::remove_document_member(&pool, &doc_id, &editor, None, ambre_core::UnixSeconds(0))
             .await
             .unwrap();
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
-        let mut conn = conn_of(editor, key.clone(), doc_id, MEMBERSHIP_RECHECK_TTL);
+        let mut conn = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
         handle_update(&state, &mut conn, update_for(key, doc_id), &tx).await;
         match replies(&mut rx).as_slice() {
             [
@@ -1904,10 +1894,10 @@ mod access_tests {
     async fn a_replay_after_a_removal_is_answered_with_nothing(pool: sqlx::PgPool) {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
-        let key = PublicKey::from_array([33u8; 32]);
+        let key = FixedBytes::<PublicKey>::from_array([33u8; 32]);
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
-        let mut kept = conn_of(editor, key.clone(), doc_id, MEMBERSHIP_RECHECK_TTL);
+        let mut kept = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
         handle_request_missing(
             &state,
             &mut kept,
@@ -1951,8 +1941,8 @@ mod access_tests {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[34u8; 32]);
-        let key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
-        let mut conn = conn_of(editor, key.clone(), doc_id, Duration::ZERO);
+        let key = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
+        let mut conn = conn_of(editor, key, doc_id, Duration::ZERO);
 
         let eph =
             super::ephemeral_binding_tests::signed_ephemeral(&signing_key, &key, doc_id, vec![7]);
@@ -2009,28 +1999,28 @@ mod ed25519_tests {
         ];
         let signing_key = SigningKey::from_bytes(&secret_bytes);
         let pubkey_bytes: [u8; 32] = signing_key.verifying_key().to_bytes();
-        let pubkey = PublicKey::from_array(pubkey_bytes);
+        let pubkey = FixedBytes::<PublicKey>::from_array(pubkey_bytes);
 
         let public_data = UpdatePublicData {
             document_id: DocumentId::from_bytes([0u8; 16]),
-            pub_key: pubkey.clone(),
-            key_id: ambre_core::KeyId::from_array([0u8; 16]),
+            pub_key: pubkey,
+            key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: SnapshotId::from_bytes([1u8; 16]),
             clock: Clock(1),
         };
-        let nonce = Nonce([3u8; 24]);
+        let nonce = FixedBytes::<Nonce>::from_array([3u8; 24]);
         let ciphertext = Ciphertext(vec![4, 5, 6]);
-        let commitment_tag = CommitmentTag([7u8; 32]);
+        let commitment_tag = FixedBytes::<CommitmentTag>::from_array([7u8; 32]);
 
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
         let mut signed_data = Vec::new();
-        push_framed(&mut signed_data, &nonce.0);
+        push_framed(&mut signed_data, nonce.as_slice());
         push_framed(&mut signed_data, &ciphertext.0);
         push_framed(&mut signed_data, &public_data_bytes);
-        push_framed(&mut signed_data, &commitment_tag.0);
+        push_framed(&mut signed_data, commitment_tag.as_slice());
 
         let sig = signing_key.sign(&signed_data);
-        let signature = Signature(sig.to_bytes());
+        let signature = FixedBytes::<Signature>::from_array(sig.to_bytes());
 
         let update = Update {
             ciphertext,
@@ -2053,23 +2043,23 @@ mod ed25519_tests {
             0xde, 0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10,
         ];
         let signing_key = SigningKey::from_bytes(&[9u8; 32]);
-        let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
-        let nonce = ambre_protocol::messages::Nonce([1; 24]);
+        let pubkey = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
+        let nonce = FixedBytes::<Nonce>::from_array([1; 24]);
         let ciphertext = ambre_protocol::messages::Ciphertext(b"c".to_vec());
-        let tag = ambre_protocol::messages::CommitmentTag([2; 32]);
+        let tag = FixedBytes::<CommitmentTag>::from_array([2; 32]);
         let mut signed = Vec::new();
-        for field in [&nonce.0[..], &ciphertext.0, b"p", &tag.0] {
+        for field in [nonce.as_slice(), &ciphertext.0, b"p", tag.as_slice()] {
             push_framed(&mut signed, field);
         }
         let sig = signing_key.sign(&signed).to_bytes();
-        let check = |key: &PublicKey, signature: [u8; 64]| {
+        let check = |key: &FixedBytes<PublicKey>, signature: [u8; 64]| {
             verify_sealed_signature(
                 key,
                 &nonce,
                 &ciphertext,
                 &ambre_core::Aad::of(b"p"),
                 &tag,
-                &ambre_protocol::messages::Signature(signature),
+                &FixedBytes::<Signature>::from_array(signature),
             )
         };
         assert!(check(&pubkey, sig).is_ok());
@@ -2090,26 +2080,26 @@ mod ed25519_tests {
         identity[0] = 1;
         let mut forged = [0u8; 64];
         forged[..32].copy_from_slice(&identity);
-        let small = PublicKey::from_array(identity);
+        let small = FixedBytes::<PublicKey>::from_array(identity);
         assert!(check(&small, forged).is_err());
     }
 
     #[test]
     fn invalid_signature_is_rejected() {
-        let pubkey = PublicKey::from_array([42u8; 32]);
+        let pubkey = FixedBytes::<PublicKey>::from_array([42u8; 32]);
 
         let update = Update {
             ciphertext: Ciphertext(vec![1u8]),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: DocumentId::from_bytes([0u8; 16]),
                 pub_key: pubkey,
-                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([0u8; 16]),
                 clock: Clock(0),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         };
 
         assert!(verify_update_signature(&update.public_data.pub_key, &update).is_err());
@@ -2123,25 +2113,25 @@ mod ed25519_tests {
             0x04, 0x05, 0x06, 0x07,
         ];
         let signing_key = SigningKey::from_bytes(&secret_bytes);
-        let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let pubkey = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
 
         let public_data = UpdatePublicData {
             document_id: DocumentId::from_bytes([0u8; 16]),
-            pub_key: pubkey.clone(),
-            key_id: ambre_core::KeyId::from_array([0u8; 16]),
+            pub_key: pubkey,
+            key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: SnapshotId::from_bytes([0u8; 16]),
             clock: Clock(0),
         };
-        let nonce = Nonce([0u8; 24]);
+        let nonce = FixedBytes::<Nonce>::from_array([0u8; 24]);
         let ciphertext = Ciphertext(vec![1, 2, 3]);
-        let commitment_tag = CommitmentTag([0u8; 32]);
+        let commitment_tag = FixedBytes::<CommitmentTag>::from_array([0u8; 32]);
 
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
         let mut signed_data = vec![];
-        push_framed(&mut signed_data, &nonce.0);
+        push_framed(&mut signed_data, nonce.as_slice());
         push_framed(&mut signed_data, &ciphertext.0);
         push_framed(&mut signed_data, &public_data_bytes);
-        push_framed(&mut signed_data, &commitment_tag.0);
+        push_framed(&mut signed_data, commitment_tag.as_slice());
 
         let sig = signing_key.sign(&signed_data);
 
@@ -2150,7 +2140,7 @@ mod ed25519_tests {
             nonce,
             public_data,
             commitment_tag,
-            signature: Signature(sig.to_bytes()),
+            signature: FixedBytes::<Signature>::from_array(sig.to_bytes()),
         };
 
         assert!(verify_update_signature(&pubkey, &tampered).is_err());
@@ -2158,7 +2148,7 @@ mod ed25519_tests {
 
     fn sign_ephemeral(
         signing_key: &SigningKey,
-        pubkey: &PublicKey,
+        pubkey: &FixedBytes<PublicKey>,
         doc_id: DocumentId,
         ciphertext: Vec<u8>,
     ) -> ambre_protocol::Ephemeral {
@@ -2166,32 +2156,32 @@ mod ed25519_tests {
         use ambre_protocol::public_data::EphemeralPublicData;
         let public_data = EphemeralPublicData {
             document_id: doc_id,
-            pub_key: pubkey.clone(),
-            key_id: ambre_core::KeyId::from_array([0u8; 16]),
+            pub_key: *pubkey,
+            key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             counter: Counter(1),
         };
-        let nonce = Nonce([2u8; 24]);
-        let commitment_tag = CommitmentTag([3u8; 32]);
+        let nonce = FixedBytes::<Nonce>::from_array([2u8; 24]);
+        let commitment_tag = FixedBytes::<CommitmentTag>::from_array([3u8; 32]);
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
         let mut signed_data = Vec::new();
-        push_framed(&mut signed_data, &nonce.0);
+        push_framed(&mut signed_data, nonce.as_slice());
         push_framed(&mut signed_data, &ciphertext);
         push_framed(&mut signed_data, &public_data_bytes);
-        push_framed(&mut signed_data, &commitment_tag.0);
+        push_framed(&mut signed_data, commitment_tag.as_slice());
         let sig = signing_key.sign(&signed_data);
         ambre_protocol::Ephemeral {
             ciphertext: Ciphertext(ciphertext),
             nonce,
             public_data,
             commitment_tag,
-            signature: Signature(sig.to_bytes()),
+            signature: FixedBytes::<Signature>::from_array(sig.to_bytes()),
         }
     }
 
     #[test]
     fn valid_ephemeral_signature_is_accepted() {
         let signing_key = SigningKey::from_bytes(&[11u8; 32]);
-        let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let pubkey = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let doc_id = DocumentId::from_bytes([9u8; 16]);
         let eph = sign_ephemeral(&signing_key, &pubkey, doc_id, vec![1, 2, 3, 4]);
         verify_ephemeral_signature(&pubkey, &eph).expect("valid ephemeral signature accepted");
@@ -2200,7 +2190,7 @@ mod ed25519_tests {
     #[test]
     fn tampered_ephemeral_ciphertext_rejects_signature() {
         let signing_key = SigningKey::from_bytes(&[12u8; 32]);
-        let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let pubkey = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let doc_id = DocumentId::from_bytes([9u8; 16]);
         let mut eph = sign_ephemeral(&signing_key, &pubkey, doc_id, vec![1, 2, 3, 4]);
         // Flip the ciphertext after signing: the signature must no longer verify.
@@ -2211,18 +2201,18 @@ mod ed25519_tests {
     #[test]
     fn unsigned_ephemeral_is_rejected() {
         // The old handler broadcast this (all-zero signature) unverified.
-        let pubkey = PublicKey::from_array([7u8; 32]);
+        let pubkey = FixedBytes::<PublicKey>::from_array([7u8; 32]);
         let eph = ambre_protocol::Ephemeral {
             ciphertext: Ciphertext(vec![1, 2, 3]),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: ambre_protocol::public_data::EphemeralPublicData {
                 document_id: DocumentId::from_bytes([0u8; 16]),
-                pub_key: pubkey.clone(),
-                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                pub_key: pubkey,
+                key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 counter: ambre_protocol::messages::Counter(1),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         };
         assert!(verify_ephemeral_signature(&pubkey, &eph).is_err());
     }
@@ -2238,16 +2228,16 @@ mod refusal_tests {
             seq: Seq(seq),
             update: ambre_protocol::Update {
                 ciphertext: Ciphertext(vec![seq as u8]),
-                nonce: Nonce([0u8; 24]),
+                nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
                 public_data: ambre_protocol::public_data::UpdatePublicData {
                     document_id: DocumentId::new(),
-                    pub_key: ambre_core::PublicKey::from_array([1u8; 32]),
-                    key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                    pub_key: ambre_core::FixedBytes::<PublicKey>::from_array([1u8; 32]),
+                    key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                     snapshot_id: ambre_core::SnapshotId::from_bytes([0u8; 16]),
                     clock: Clock(seq),
                 },
-                commitment_tag: CommitmentTag([0u8; 32]),
-                signature: Signature([0u8; 64]),
+                commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
+                signature: FixedBytes::<Signature>::from_array([0u8; 64]),
             },
         }
     }
@@ -2307,16 +2297,16 @@ mod refusal_tests {
         let doc = DocumentId::new();
         let other = DocumentId::new();
         let mut fences = ClockFences::default();
-        fences.raise(doc, Signature([1; 64]));
+        fences.raise(doc, FixedBytes::<Signature>::from_array([1; 64]));
         assert!(fences.holds(&doc) && !fences.holds(&other));
-        fences.answer(doc, &Signature([2; 64]));
+        fences.answer(doc, &FixedBytes::<Signature>::from_array([2; 64]));
         assert!(
             fences.holds(&doc),
             "an answer to another delta lifts nothing"
         );
-        fences.answer(doc, &Signature([1; 64]));
+        fences.answer(doc, &FixedBytes::<Signature>::from_array([1; 64]));
         assert!(!fences.holds(&doc));
-        fences.raise(doc, Signature([3; 64]));
+        fences.raise(doc, FixedBytes::<Signature>::from_array([3; 64]));
         fences.forget(&doc);
         assert!(!fences.holds(&doc));
     }
@@ -2461,7 +2451,7 @@ mod hot_tail_tests {
         let doc_id = create_test_document(&pool, owner, "prose").await;
         let conn = WsConnectionState {
             user_id: owner,
-            signing_pubkey: PublicKey::from_array(key.verifying_key().to_bytes()),
+            signing_pubkey: FixedBytes::<PublicKey>::from_array(key.verifying_key().to_bytes()),
             doc_subscriptions: HashSet::from([doc_id]),
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             doc_write: HashMap::from([(doc_id, DocWrite::Allowed)]),
@@ -2483,25 +2473,25 @@ mod hot_tail_tests {
         use ed25519_dalek::Signer;
         let public_data = UpdatePublicData {
             document_id: doc_id,
-            pub_key: PublicKey::from_array(key.verifying_key().to_bytes()),
-            key_id: ambre_core::KeyId::from_array([0u8; 16]),
+            pub_key: FixedBytes::<PublicKey>::from_array(key.verifying_key().to_bytes()),
+            key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: SnapshotId::from_bytes([0u8; 16]),
             clock: Clock(clock),
         };
         let ciphertext = vec![u8::try_from(clock % 256).unwrap(); len];
-        let nonce = Nonce([5u8; 24]);
-        let commitment_tag = CommitmentTag([6u8; 32]);
+        let nonce = FixedBytes::<Nonce>::from_array([5u8; 24]);
+        let commitment_tag = FixedBytes::<CommitmentTag>::from_array([6u8; 32]);
         let mut signed = Vec::new();
-        push_framed(&mut signed, &nonce.0);
+        push_framed(&mut signed, nonce.as_slice());
         push_framed(&mut signed, &ciphertext);
         push_framed(&mut signed, &postcard::to_allocvec(&public_data).unwrap());
-        push_framed(&mut signed, &commitment_tag.0);
+        push_framed(&mut signed, commitment_tag.as_slice());
         Update {
             ciphertext: Ciphertext(ciphertext),
             nonce,
             public_data,
             commitment_tag,
-            signature: Signature(key.sign(&signed).to_bytes()),
+            signature: FixedBytes::<Signature>::from_array(key.sign(&signed).to_bytes()),
         }
     }
 
@@ -2584,7 +2574,7 @@ mod hot_tail_tests {
         let (state, mut first, doc_id) = writer(pool, &stub, &key).await;
         let mut second = WsConnectionState {
             user_id: first.user_id,
-            signing_pubkey: first.signing_pubkey.clone(),
+            signing_pubkey: first.signing_pubkey,
             doc_subscriptions: HashSet::from([doc_id]),
             doc_access_verified_at: HashMap::from([(doc_id, Instant::now())]),
             doc_write: HashMap::from([(doc_id, DocWrite::Allowed)]),
@@ -2704,7 +2694,7 @@ mod channel_gate_tests {
         uuid::Uuid::from_bytes(*id.into().as_bytes())
     }
 
-    fn conn_of(user_id: UserId, session_key: PublicKey) -> WsConnectionState {
+    fn conn_of(user_id: UserId, session_key: FixedBytes<PublicKey>) -> WsConnectionState {
         WsConnectionState {
             user_id,
             signing_pubkey: session_key,
@@ -2769,19 +2759,19 @@ mod channel_gate_tests {
         segment
     }
 
-    fn update_on(pub_key: PublicKey, doc_id: DocumentId) -> Update {
+    fn update_on(pub_key: FixedBytes<PublicKey>, doc_id: DocumentId) -> Update {
         Update {
             ciphertext: Ciphertext(vec![0u8; 16]),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc_id,
                 pub_key,
-                key_id: ambre_core::KeyId::from_array([0u8; 16]),
+                key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: SnapshotId::from_bytes([0u8; 16]),
                 clock: Clock(1),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         }
     }
 
@@ -2809,7 +2799,7 @@ mod channel_gate_tests {
         let eve = crate::test_helpers::create_test_user(&pool, "eve@test.dev").await;
         let segment = segment_of_channel(&pool, owner, None).await;
         let state = test_app_state(pool).await;
-        let mut conn = conn_of(eve, PublicKey::from_array([2u8; 32]));
+        let mut conn = conn_of(eve, FixedBytes::<PublicKey>::from_array([2u8; 32]));
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         handle_subscribe(&state, &mut conn, segment, &tx).await;
@@ -2833,7 +2823,7 @@ mod channel_gate_tests {
         let bob = crate::test_helpers::create_test_user(&pool, "bob@test.dev").await;
         let segment = segment_of_channel(&pool, owner, Some((bob, ambre_core::Role::Editor))).await;
         let state = test_app_state(pool).await;
-        let mut conn = conn_of(bob, PublicKey::from_array([3u8; 32]));
+        let mut conn = conn_of(bob, FixedBytes::<PublicKey>::from_array([3u8; 32]));
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         handle_subscribe(&state, &mut conn, segment, &tx).await;
@@ -2860,8 +2850,8 @@ mod channel_gate_tests {
         let bob = crate::test_helpers::create_test_user(&pool, "bob@test.dev").await;
         let segment = segment_of_channel(&pool, owner, Some((bob, ambre_core::Role::Viewer))).await;
         let state = test_app_state(pool).await;
-        let session_key = PublicKey::from_array([4u8; 32]);
-        let mut conn = conn_of(bob, session_key.clone());
+        let session_key = FixedBytes::<PublicKey>::from_array([4u8; 32]);
+        let mut conn = conn_of(bob, session_key);
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
         handle_subscribe(&state, &mut conn, segment, &tx).await;
         let _ = rx.try_recv();
@@ -2901,7 +2891,10 @@ mod channel_gate_tests {
             .expect("registered");
         let state = test_app_state(pool).await;
         let key = ed25519_dalek::SigningKey::from_bytes(&[61u8; 32]);
-        let mut conn = conn_of(owner, PublicKey::from_array(key.verifying_key().to_bytes()));
+        let mut conn = conn_of(
+            owner,
+            FixedBytes::<PublicKey>::from_array(key.verifying_key().to_bytes()),
+        );
         let (tx, mut rx) = mpsc::channel::<Payload>(16);
         for document in [thread, segment] {
             handle_subscribe(&state, &mut conn, document, &tx).await;

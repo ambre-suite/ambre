@@ -6,12 +6,14 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::fixed_bytes::{FixedBytes, FixedRole};
+
 /// The content address of a media blob, which the relay stores it under
 /// (`ambre-spec-media.md`). A distinct type, so an element id or a URL never
 /// takes its place.
 ///
 /// An address is the lowercase hex spelling of a [`MediaAddress`]: sixty-four
-/// characters. [`ContentHash::parse`] and [`MediaAddress::content_hash`] are
+/// characters. [`ContentHash::parse`] and [`FixedBytes::content_hash`] are
 /// the only ways in. Serde reads through the same check, so a peer, the relay
 /// or the store never hands over another text. The serde form is the bare
 /// string, as before the check.
@@ -40,30 +42,23 @@ impl ContentHash {
 /// The width of a [`MediaAddress`], in bytes.
 pub const MEDIA_ADDRESS_LEN: usize = 32;
 
-/// The content address of a media blob as bytes: the keyed hash of its
-/// plaintext under the document key. [`ContentHash`] is its hex spelling, the
-/// name the relay stores the blob under. A distinct type, so a commitment tag
-/// or a digest of the same width never takes its place.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MediaAddress([u8; MEDIA_ADDRESS_LEN]);
+/// The role of the content address of a media blob as bytes:
+/// `FixedBytes<MediaAddress>`. It is the keyed hash of its plaintext under the
+/// document key. [`ContentHash`] is its hex spelling, the name the relay
+/// stores the blob under. A distinct role, so a commitment tag or a digest of
+/// the same width never takes its place.
+pub enum MediaAddress {}
 
-impl MediaAddress {
-    /// Wraps the bytes a keyed hash produced.
-    #[must_use]
-    pub const fn from_array(bytes: [u8; MEDIA_ADDRESS_LEN]) -> Self {
-        Self(bytes)
-    }
+impl FixedRole for MediaAddress {
+    const NAME: &'static str = "MediaAddress";
+    type Array = [u8; MEDIA_ADDRESS_LEN];
+}
 
-    /// The bytes, for the additional data a blob is sealed under.
-    #[must_use]
-    pub const fn as_bytes(&self) -> &[u8; MEDIA_ADDRESS_LEN] {
-        &self.0
-    }
-
+impl FixedBytes<MediaAddress> {
     /// The hex spelling the relay names the blob by.
     #[must_use]
     pub fn content_hash(&self) -> ContentHash {
-        ContentHash(hex::encode(self.0))
+        ContentHash(self.to_hex())
     }
 
     /// Reads an address back from its hex spelling. A [`ContentHash`] holds
@@ -76,7 +71,7 @@ impl MediaAddress {
         // check of `ContentHash` refuses both before a hash exists.
         let decoded = hex::decode_to_slice(&hash.0, &mut bytes);
         debug_assert!(decoded.is_ok(), "a ContentHash spells an address");
-        Self(bytes)
+        Self::from_array(bytes)
     }
 }
 
@@ -249,7 +244,7 @@ impl std::iter::Sum for ByteSize {
 
 #[cfg(test)]
 mod tests {
-    use super::{ByteSize, ContentHash, MediaAddress};
+    use super::{ByteSize, ContentHash, FixedBytes, MediaAddress};
 
     #[test]
     fn a_media_value_serializes_as_its_bare_inner_value() {
@@ -270,10 +265,10 @@ mod tests {
 
     #[test]
     fn an_address_reads_back_from_its_hex_spelling() {
-        let address = MediaAddress::from_array([0xab; 32]);
+        let address = FixedBytes::<MediaAddress>::from_array([0xab; 32]);
         let hash = address.content_hash();
         assert_eq!(hash.as_str(), "ab".repeat(32));
-        assert_eq!(MediaAddress::of_hash(&hash), address);
+        assert_eq!(FixedBytes::<MediaAddress>::of_hash(&hash), address);
     }
 
     /// The constructor and serde refuse an uppercase spelling and a wrong

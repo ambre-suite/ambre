@@ -257,9 +257,9 @@ pub use ambre_core::text_offset::{
 };
 pub use ambre_core::{
     ApiFailure, CategoryId, ChannelDocumentKind, ChannelId, CommentId, DocType, DocumentId, Email,
-    FootnoteId, HttpStatus, KeyFingerprint, LeaseId, MeetingId, MessageId, MetaId, Millis,
-    PageMillis, PageTime, PublicKey, RefusalCode, ReplyId, Role, SegmentId, Seq, SnapshotId,
-    SpaceId, SuggestionId, UnreadableCause, UserId, Uuid,
+    FixedBytes, FootnoteId, HttpStatus, KeyFingerprint, LeaseId, MeetingId, MessageId, MetaId,
+    Millis, PageMillis, PageTime, PublicKey, RefusalCode, ReplyId, Role, SegmentId, Seq,
+    SnapshotId, SpaceId, SuggestionId, UnreadableCause, UserId, Uuid,
 };
 
 #[cfg(test)]

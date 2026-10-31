@@ -264,7 +264,7 @@ fn sync_command_roundtrips_through_postcard() {
     roundtrip_sync(&SyncCommand::SendUnsent {
         document_id: doc,
         payload: ambre_core::DeltaBytes::new(vec![3, 4]),
-        nonce: ambre_core::SessionNonce([5; 16]),
+        nonce: ambre_core::FixedBytes::from_array([5; 16]),
     });
     roundtrip_sync(&SyncCommand::OpenChannel {
         channel_id: chan,
@@ -289,7 +289,7 @@ fn logic_event_roundtrips_through_postcard() {
         delta: ambre_bus::SignedDelta {
             seq: ambre_bus::Seq(8),
             payload: ambre_core::DeltaBytes::new(vec![3, 1, 4, 1, 5, 9]),
-            nonce: ambre_core::SessionNonce([2; 16]),
+            nonce: ambre_core::FixedBytes::from_array([2; 16]),
             peer: ambre_core::PeerId(7),
             user: Some(UserId::from_bytes([1; 16])),
             summary: Some(ambre_bus::ActivitySummary {
@@ -304,7 +304,7 @@ fn logic_event_roundtrips_through_postcard() {
         document_id: doc,
         peer: ambre_core::PeerId(7),
         entry: an_entry(8),
-        nonce: ambre_core::SessionNonce([9; 16]),
+        nonce: ambre_core::FixedBytes::from_array([9; 16]),
     });
     roundtrip_event(&LogicEvent::ConnectionStatus {
         document_id: doc,
@@ -438,7 +438,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SealedChannelKey, SegmentId, Seq, SignedDelta, SnapshotId, SnapshotPurpose,
         SnapshotVerdict, SpaceId,
     };
-    use ambre_core::SessionNonce;
+    use ambre_core::FixedBytes;
     use std::collections::BTreeSet;
 
     let doc = DocumentId::new();
@@ -452,7 +452,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
     let delta = SignedDelta {
         seq: ambre_bus::Seq(3),
         payload: ambre_core::DeltaBytes::new(vec![1, 2, 255]),
-        nonce: SessionNonce([4; 16]),
+        nonce: FixedBytes::from_array([4; 16]),
         peer: ambre_core::PeerId(9),
         user: Some(user),
         summary: None,
@@ -487,7 +487,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::SendUnsent {
             document_id: doc,
             payload: ambre_core::DeltaBytes::new(vec![8]),
-            nonce: SessionNonce([6; 16]),
+            nonce: FixedBytes::from_array([6; 16]),
         },
         SyncCommand::SendSnapshot {
             document_id: doc,
@@ -597,7 +597,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             members: vec![DirectMember {
                 user_id: user,
-                exchange_pub_key: ambre_core::ExchangePublicKey::from_array([7; 32]),
+                exchange_pub_key: ambre_core::FixedBytes::from_array([7; 32]),
             }],
         },
         SyncCommand::HoldInbound,
@@ -626,7 +626,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             document_id: doc,
             peer: ambre_core::PeerId(9),
             entry: an_entry(3),
-            nonce: SessionNonce([1; 16]),
+            nonce: FixedBytes::from_array([1; 16]),
         },
         LogicEvent::RemoteUpdate {
             document_id: doc,
@@ -947,7 +947,7 @@ fn request_id_echo_is_preserved_across_the_hop() {
             invitee_email: Some(ambre_bus::Email::from("x@y.z")),
             invitee: UserId::new(),
             role: Role::Editor,
-            expect_exchange_pub_key: ambre_core::ExchangePublicKey::from_array([0u8; 32]),
+            expect_exchange_pub_key: ambre_core::FixedBytes::from_array([0u8; 32]),
             now: Timestamp(0),
         },
     };
@@ -1048,7 +1048,7 @@ fn writing_commands_are_mutating() {
 fn an_entry(fill: u8) -> ambre_core::PeerEntry {
     ambre_core::PeerEntry {
         user: ambre_core::UserId::from_bytes([fill; 16]),
-        nonce: ambre_core::SessionNonce([fill; 16]),
-        signature: ambre_core::Signature([fill; 64]),
+        nonce: ambre_core::FixedBytes::from_array([fill; 16]),
+        signature: ambre_core::FixedBytes::from_array([fill; 64]),
     }
 }

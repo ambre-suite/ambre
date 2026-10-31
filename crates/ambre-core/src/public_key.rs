@@ -1,167 +1,72 @@
-//! Public key wrappers (`[u8; 32]`).
+//! The roles of a public key: 32 bytes each.
 //!
-//! One type per role: [`PublicKey`] verifies an Ed25519 signature, and
-//! [`ExchangePublicKey`] receives an X25519 key exchange. Both hold 32 bytes.
+//! One role per use: `FixedBytes<PublicKey>` verifies an Ed25519 signature,
+//! and `FixedBytes<ExchangePublicKey>` receives an X25519 key exchange. Two
+//! types, so an exchange key never stands where a signing key is read. The
+//! relay's JSON spells both as lowercase hexadecimal, the readable form of
+//! [`FixedBytes`](crate::FixedBytes).
+//!
+//! Public keys are not secret, so neither role wipes its bytes on drop.
+//! Doing so would add a memset to a hot, frequently copied type, and would
+//! imply a confidentiality the type does not have. Wiping is reserved for
+//! the secret key types.
 
-use serde::{Deserialize, Serialize};
-use std::fmt;
+use crate::fixed_bytes::{DebugForm, FixedRole};
 
-use crate::error::PublicKeyError;
+/// The role of a 32-byte Ed25519 public key: the one that verifies a user's
+/// signatures. `FixedBytes<PublicKey>`.
+pub enum PublicKey {}
 
-macro_rules! define_public_key {
-    ($(#[$meta:meta])* $name:ident) => {
-        $(#[$meta])*
-        #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-        pub struct $name([u8; 32]);
-
-        impl $name {
-            /// Creates a public key from a 32-byte array.
-            pub const fn from_array(bytes: [u8; 32]) -> Self {
-                Self(bytes)
-            }
-
-            /// Creates a public key from a slice, returning an error if the length is not 32.
-            ///
-            /// # Errors
-            ///
-            /// [`PublicKeyError::InvalidLength`], carrying the length it received.
-            pub fn from_slice(slice: &[u8]) -> Result<Self, PublicKeyError> {
-                slice
-                    .try_into()
-                    .map(Self)
-                    .map_err(|_| PublicKeyError::InvalidLength(slice.len()))
-            }
-
-            /// Returns the underlying 32-byte array.
-            pub const fn as_array(&self) -> &[u8; 32] {
-                &self.0
-            }
-
-            /// Returns the key as a slice of 32 bytes.
-            pub fn as_slice(&self) -> &[u8] {
-                &self.0
-            }
-
-            /// Returns a hex-encoded string of the public key (lowercase).
-            pub fn to_hex(&self) -> String {
-                hex::encode(self.0)
-            }
-
-            /// Parses a public key from a hex string (with or without `0x` prefix).
-            ///
-            /// Returns an error if the string does not contain exactly 64 hex digits.
-            ///
-            /// # Errors
-            ///
-            /// [`PublicKeyError::InvalidHex`] on a non-hexadecimal digit, and
-            /// [`PublicKeyError::InvalidLength`] on any length other than 32 bytes.
-            pub fn from_hex(hex_str: &str) -> Result<Self, PublicKeyError> {
-                let stripped = hex_str.strip_prefix("0x").unwrap_or(hex_str);
-                let bytes = hex::decode(stripped)?;
-                Self::from_slice(&bytes)
-            }
-        }
-
-        crate::envelope::fixed_bytes!($name, 32);
-
-        impl AsRef<[u8]> for $name {
-            fn as_ref(&self) -> &[u8] {
-                &self.0
-            }
-        }
-
-        impl fmt::Debug for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(
-                    f,
-                    concat!(stringify!($name), "(0x{}...)"),
-                    hex::encode(&self.0[..4])
-                )
-            }
-        }
-
-        impl fmt::Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                write!(f, "0x{}", self.to_hex())
-            }
-        }
-    };
+impl FixedRole for PublicKey {
+    const NAME: &'static str = "PublicKey";
+    const DEBUG: DebugForm = DebugForm::HexPrefix;
+    type Array = [u8; 32];
 }
 
-define_public_key! {
-    /// A 32-byte Ed25519 public key: the one that verifies a user's signatures.
-    ///
-    /// Public keys are not secret, so this type deliberately does NOT zeroize on
-    /// drop. Doing so would only add a memset to a hot, frequently-cloned type
-    /// (every `UpdatePublicData` carries one). It would also imply a
-    /// confidentiality the type does not have. Zeroize is reserved for the real
-    /// secret-key types.
-    PublicKey
-}
+/// The role of a 32-byte X25519 public key: the one a document key is
+/// wrapped to. `FixedBytes<ExchangePublicKey>`.
+pub enum ExchangePublicKey {}
 
-define_public_key! {
-    /// A 32-byte X25519 public key: the one a document key is wrapped to.
-    ///
-    /// It has the size of a [`PublicKey`] and the same text forms. A distinct
-    /// type keeps an exchange key from standing where a signing key is read.
-    /// It does not zeroize on drop, for the reason [`PublicKey`] gives.
-    ExchangePublicKey
-}
-
-impl PublicKey {
-    /// The key as the relay's JSON spells it.
-    #[must_use]
-    pub fn to_key_hex(&self) -> crate::SigningKeyHex {
-        crate::SigningKeyHex::encode(self.0)
-    }
+impl FixedRole for ExchangePublicKey {
+    const NAME: &'static str = "ExchangePublicKey";
+    const DEBUG: DebugForm = DebugForm::HexPrefix;
+    type Array = [u8; 32];
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{ExchangePublicKey, PublicKey};
+    use crate::FixedBytes;
 
     #[test]
-    fn test_from_array() {
-        let array = [0x42; 32];
-        let pk = PublicKey::from_array(array);
-        assert_eq!(pk.as_array(), &array);
-    }
-
-    #[test]
-    fn test_from_slice() {
+    fn a_key_reads_its_own_width_alone() {
         let slice = [0x99; 32];
-        let pk = PublicKey::from_slice(&slice).unwrap();
+        let pk = FixedBytes::<PublicKey>::from_slice(&slice).unwrap();
         assert_eq!(pk.as_slice(), slice);
-        assert!(PublicKey::from_slice(&[0x00; 31]).is_err());
-        assert!(PublicKey::from_slice(&[0x00; 33]).is_err());
+        assert!(FixedBytes::<PublicKey>::from_slice(&[0x00; 31]).is_err());
+        assert!(FixedBytes::<PublicKey>::from_slice(&[0x00; 33]).is_err());
     }
 
     #[test]
-    fn test_hex() {
-        let pk = PublicKey::from_array([0x01; 32]);
-        let hex = pk.to_hex();
-        assert_eq!(
-            hex,
-            "0101010101010101010101010101010101010101010101010101010101010101"
-        );
-        let parsed = PublicKey::from_hex(&hex).unwrap();
-        assert_eq!(pk, parsed);
-        let parsed_with_prefix = PublicKey::from_hex(&format!("0x{}", hex)).unwrap();
-        assert_eq!(pk, parsed_with_prefix);
-    }
-
-    #[test]
-    fn an_exchange_key_reads_its_own_hex() {
-        let key = ExchangePublicKey::from_array([0x0f; 32]);
-        assert_eq!(ExchangePublicKey::from_hex(&key.to_hex()).unwrap(), key);
+    fn a_key_reads_its_own_hex() {
+        let pk = FixedBytes::<PublicKey>::from_array([0x01; 32]);
+        assert_eq!(pk.to_hex(), "01".repeat(32));
+        assert_eq!(FixedBytes::from_hex(&pk.to_hex()), Ok(pk));
+        let key = FixedBytes::<ExchangePublicKey>::from_array([0x0f; 32]);
+        assert_eq!(FixedBytes::from_hex(&key.to_hex()), Ok(key));
         assert_eq!(format!("{key:?}"), "ExchangePublicKey(0x0f0f0f0f...)");
     }
 
+    /// The relay's JSON spells a key as the hexadecimal of its 32 bytes, the
+    /// text the hexadecimal key types held before.
     #[test]
-    fn test_serde() {
-        let pk = PublicKey::from_array([0xaa; 32]);
-        let serialized = serde_json::to_string(&pk).unwrap();
-        let deserialized: PublicKey = serde_json::from_str(&serialized).unwrap();
-        assert_eq!(pk, deserialized);
+    fn a_key_travels_as_its_hex_in_json() {
+        let pk = FixedBytes::<PublicKey>::from_array([0xaa; 32]);
+        let json = serde_json::to_string(&pk).unwrap();
+        assert_eq!(json, format!("\"{}\"", "aa".repeat(32)));
+        assert_eq!(
+            serde_json::from_str::<FixedBytes<PublicKey>>(&json).unwrap(),
+            pk
+        );
     }
 }

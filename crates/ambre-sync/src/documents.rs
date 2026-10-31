@@ -29,7 +29,9 @@ impl SyncState {
                                     let listed = ListedName {
                                         document_id,
                                         doc_key_enc: &e.doc_key_enc,
-                                        wrapper_exchange_pub_key: &e.wrapper_exchange_pub_key,
+                                        wrapper_exchange_pub_key: e
+                                            .wrapper_exchange_pub_key
+                                            .as_ref(),
                                         name_enc,
                                     };
                                     listed.open(ek, url_scheme, &api_base, &auth).await
@@ -345,12 +347,13 @@ impl SyncState {
 
 /// One sealed name of a listing, with the wrapped key that opens it: a
 /// document of the launcher, or the meta of a channel. Keys are base64 of
-/// `nonce || ciphertext`; the wrapper's exchange key is hex, empty for a
+/// `nonce || ciphertext`; the wrapper's exchange key is `None` for a
 /// self-wrapped owner row.
 pub(crate) struct ListedName<'a> {
     pub(crate) document_id: DocumentId,
     pub(crate) doc_key_enc: &'a ambre_core::WrappedDocKey,
-    pub(crate) wrapper_exchange_pub_key: &'a ambre_core::ExchangeKeyHex,
+    pub(crate) wrapper_exchange_pub_key:
+        Option<&'a ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     pub(crate) name_enc: &'a ambre_core::SealedName,
 }
 
@@ -387,22 +390,19 @@ impl ListedName<'_> {
 
 /// The key a listing wrapped for this user, ECDH-unwrapped against the
 /// wrapper's exchange key. The key is base64 of `nonce || ciphertext`, and
-/// the wrapper is hex, empty for a self-wrapped owner row. `None` on any
-/// decode or crypto failure.
+/// the wrapper is `None` for a self-wrapped owner row. `None` on any decode
+/// or crypto failure.
 pub(crate) fn unwrap_listed_key(
     doc_key_enc: &ambre_core::WrappedDocKey,
-    wrapper_exchange_pub_key: &ambre_core::ExchangeKeyHex,
+    wrapper_exchange_pub_key: Option<&ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     exchange_key: &x25519_dalek::StaticSecret,
 ) -> Option<DocumentKey> {
     let (nonce, ciphertext) = doc_key_enc.parts()?;
     let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
-    let wrapper_hex = if wrapper_exchange_pub_key.is_empty() {
-        // Self-wrapped owner row: the DH peer is our own public key.
-        ambre_core::ExchangeKeyHex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())
-    } else {
-        wrapper_exchange_pub_key.clone()
-    };
-    let peer_pub = crate::sharing::decode_exchange_pubkey(&wrapper_hex).ok()?;
+    // Self-wrapped owner row: the DH peer is our own public key.
+    let peer_pub = wrapper_exchange_pub_key
+        .copied()
+        .unwrap_or_else(|| crate::sharing::own_exchange_key(exchange_key));
     ambre_crypto::ecdh::unwrap_document_key(exchange_key, &peer_pub, &wrapped).ok()
 }
 

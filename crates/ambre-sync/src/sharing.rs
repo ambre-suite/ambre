@@ -26,19 +26,9 @@ use ambre_bus::{
 use crate::http;
 use crate::membership_log::{self, Draft, Log, LogHead, LogRule};
 use crate::{LogicSink, SyncEvent};
-use ambre_core::RefusalCode;
+use ambre_core::{FixedBytes, RefusalCode};
 
 use crate::error::{Part, SyncError};
-
-/// Decodes a hex-encoded X25519 public key.
-pub(crate) fn decode_exchange_pubkey(
-    hex_str: &ambre_core::ExchangeKeyHex,
-) -> Result<ambre_core::ExchangePublicKey, SyncError> {
-    let malformed = SyncError::Malformed(Part::ExchangeKey);
-    let bytes = hex::decode(hex_str.as_str()).map_err(|_| malformed)?;
-    ambre_core::ExchangePublicKey::from_slice(&bytes)
-        .map_err(|_| SyncError::Malformed(Part::ExchangeKey))
-}
 
 /// Wraps `doc_key` for the holder of `peer_pub` via X25519 ECDH and returns the
 /// base64 url-safe `nonce || ciphertext` blob the server stores as `doc_key_enc`.
@@ -47,9 +37,9 @@ pub(crate) fn decode_exchange_pubkey(
 /// the recipient learns where the log starts from the member who wrapped.
 pub(crate) fn wrap_anchored_b64(
     my_xk: &StaticSecret,
-    peer_pub: &ambre_core::ExchangePublicKey,
+    peer_pub: &FixedBytes<ambre_core::ExchangePublicKey>,
     doc_key: &DocumentKey,
-    anchor: Option<EntryDigest>,
+    anchor: Option<FixedBytes<EntryDigest>>,
 ) -> Result<ambre_core::WrappedDocKey, ambre_crypto::CryptoError> {
     // Fails if the peer public key is non-contributory (low-order): we refuse to
     // wrap under a predictable KEK rather than hand out a forgeable share.
@@ -70,41 +60,30 @@ pub(crate) fn unwrap_own<'a>(
     exchange_key: &StaticSecret,
     rows: impl IntoIterator<
         Item = (
-            &'a ambre_core::ExchangeKeyHex,
+            &'a FixedBytes<ambre_core::ExchangePublicKey>,
             &'a ambre_core::WrappedDocKey,
-            &'a ambre_core::ExchangeKeyHex,
+            Option<&'a FixedBytes<ambre_core::ExchangePublicKey>>,
         ),
     >,
-) -> Result<(DocumentKey, Option<EntryDigest>), SyncError> {
-    let ours =
-        ambre_core::ExchangeKeyHex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes());
+) -> Result<(DocumentKey, Option<FixedBytes<EntryDigest>>), SyncError> {
+    let ours = own_exchange_key(exchange_key);
     let (own, enc, wrapper) = rows
         .into_iter()
         .find(|(own, _, _)| **own == ours)
         .ok_or(SyncError::OwnRowMissing)?;
     let (nonce, ciphertext) = enc.parts().ok_or(SyncError::Malformed(Part::WrappedKey))?;
-    let wrapper = if wrapper.is_empty() { own } else { wrapper };
-    let peer = decode_exchange_pubkey(wrapper)?;
+    let peer = wrapper.unwrap_or(own);
     let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
     Ok(ambre_crypto::ecdh::unwrap_anchored(
         exchange_key,
-        &peer,
+        peer,
         &wrapped,
     )?)
 }
 
 /// The X25519 public key of `secret`: this user's own exchange key.
-pub(crate) fn own_exchange_key(secret: &StaticSecret) -> ambre_core::ExchangePublicKey {
-    ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(secret).to_bytes())
-}
-
-/// Decodes a hex-encoded Ed25519 verifying key.
-pub(crate) fn decode_signing_pubkey(
-    hex_str: &ambre_core::SigningKeyHex,
-) -> Result<ambre_core::PublicKey, SyncError> {
-    let bytes =
-        hex::decode(hex_str.as_str()).map_err(|_| SyncError::Malformed(Part::SigningKey))?;
-    ambre_core::PublicKey::from_slice(&bytes).map_err(|_| SyncError::Malformed(Part::SigningKey))
+pub(crate) fn own_exchange_key(secret: &StaticSecret) -> FixedBytes<ambre_core::ExchangePublicKey> {
+    FixedBytes::from_array(x25519_dalek::PublicKey::from(secret).to_bytes())
 }
 
 /// The user who signs the entries a change appends (`SYNC-132`).
@@ -115,8 +94,8 @@ pub(crate) struct Author {
 
 impl Author {
     /// The public half of the author's signing key.
-    pub(crate) fn public(&self) -> ambre_core::PublicKey {
-        ambre_core::PublicKey::from_array(self.signing_key.verifying_key().to_bytes())
+    pub(crate) fn public(&self) -> FixedBytes<ambre_core::PublicKey> {
+        FixedBytes::from_array(self.signing_key.verifying_key().to_bytes())
     }
 }
 
@@ -127,7 +106,7 @@ pub(crate) fn served_log(
     document_id: DocumentId,
     exchange_key: &StaticSecret,
     resp: &http::DocumentMembersResponse,
-) -> (Log, Option<EntryDigest>) {
+) -> (Log, Option<FixedBytes<EntryDigest>>) {
     served_log_under(document_id, exchange_key, resp, &LogRule::document())
 }
 
@@ -137,12 +116,12 @@ pub(crate) fn served_log_under(
     exchange_key: &StaticSecret,
     resp: &http::DocumentMembersResponse,
     rule: &LogRule,
-) -> (Log, Option<EntryDigest>) {
+) -> (Log, Option<FixedBytes<EntryDigest>>) {
     let rows = resp.members.iter().map(|m| {
         (
             &m.exchange_pub_key,
             &m.doc_key_enc,
-            &m.wrapper_exchange_pub_key,
+            Some(&m.wrapper_exchange_pub_key),
         )
     });
     let anchor = unwrap_own(exchange_key, rows)
@@ -159,7 +138,7 @@ pub(crate) fn served_log_under(
 /// self-join and heeds its space; any other log does neither.
 pub(crate) fn walk_served_under(
     document_id: DocumentId,
-    anchor: Option<EntryDigest>,
+    anchor: Option<FixedBytes<EntryDigest>>,
     texts: &[ambre_core::EncodedLogEntry],
     rule: &LogRule,
 ) -> Log {
@@ -195,9 +174,7 @@ pub(crate) fn creation(
     let draft = Draft {
         document: document_id,
         member: author.user_id,
-        member_key: ambre_core::PublicKey::from_array(
-            author.signing_key.verifying_key().to_bytes(),
-        ),
+        member_key: FixedBytes::from_array(author.signing_key.verifying_key().to_bytes()),
         act: MembershipAct::Create,
         role: Role::Owner,
         key: Some(doc_key.id()),
@@ -210,19 +187,18 @@ pub(crate) fn creation(
 }
 
 /// Builds the `POST /documents/{id}/share` body: ECDH-wraps `doc_key` for the
-/// invitee whose hex exchange pubkey is `invitee_pub_hex`. The wrap seals the
-/// log `anchor` beside the key (`SYNC-104`), and the body carries the signed
+/// invitee whose exchange pubkey is `invitee_pub`. The wrap seals the log
+/// `anchor` beside the key (`SYNC-104`), and the body carries the signed
 /// `entry`.
 pub(crate) fn build_invite_request(
     my_xk: &StaticSecret,
-    invitee_pub_hex: &ambre_core::ExchangeKeyHex,
+    invitee_pub: &FixedBytes<ambre_core::ExchangePublicKey>,
     invitee: InviteeName,
     doc_key: &DocumentKey,
     role: Role,
-    anchor: Option<EntryDigest>,
+    anchor: Option<FixedBytes<EntryDigest>>,
     entry: Option<ambre_core::EncodedLogEntry>,
 ) -> Result<http::InviteRequest, SyncError> {
-    let peer = decode_exchange_pubkey(invitee_pub_hex)?;
     let (invitee_email, invitee_id) = match invitee {
         InviteeName::Email(email) => (Some(email), None),
         InviteeName::Id(id) => (None, Some(id)),
@@ -231,7 +207,7 @@ pub(crate) fn build_invite_request(
         invitee_email,
         invitee_id,
         role,
-        doc_key_enc: wrap_anchored_b64(my_xk, &peer, doc_key, anchor)?,
+        doc_key_enc: wrap_anchored_b64(my_xk, invitee_pub, doc_key, anchor)?,
         // The relay refuses the copy if a rotation replaced this key
         // between the read and the post (`SYNC-143`).
         key_id: doc_key.id(),
@@ -241,28 +217,26 @@ pub(crate) fn build_invite_request(
 
 /// Re-wraps `new_doc_key` for every remaining member after a revoke (the rotate
 /// payload), with the log `anchor` sealed beside it (`SYNC-104`). A member
-/// whose exchange key does not parse cannot be re-wrapped for. The rotation
+/// whose exchange key the wrap refuses cannot be re-wrapped for. The rotation
 /// goes on for the others, and that member is returned in the second list so
 /// the caller reports it (`SYNC-043`). Nothing is skipped in silence.
 pub(crate) fn rotate_entries_for(
     my_xk: &StaticSecret,
     new_doc_key: &DocumentKey,
-    anchor: Option<EntryDigest>,
+    anchor: Option<FixedBytes<EntryDigest>>,
     members: &[http::DocumentMemberEntry],
 ) -> (Vec<http::RotateKeyEntry>, Vec<ambre_core::DisplayName>) {
     let mut unwrapped = Vec::new();
     let entries = members
         .iter()
         .filter_map(|m| {
-            let wrapped = decode_exchange_pubkey(&m.exchange_pub_key)
-                .ok()
-                .and_then(|peer| wrap_anchored_b64(my_xk, &peer, new_doc_key, anchor).ok());
+            let wrapped = wrap_anchored_b64(my_xk, &m.exchange_pub_key, new_doc_key, anchor);
             match wrapped {
-                Some(doc_key_enc) => Some(http::RotateKeyEntry {
+                Ok(doc_key_enc) => Some(http::RotateKeyEntry {
                     user_id: m.user_id,
                     doc_key_enc,
                 }),
-                None => {
+                Err(_) => {
                     unwrapped.push(m.display_name.clone());
                     None
                 }
@@ -276,20 +250,14 @@ pub(crate) fn rotate_entries_for(
 /// from any members response, given each entry's `(user_id, signing_pub_key)`
 /// (`ambre-spec-membership.md`). Both the open path and the member-list path
 /// feed it, hence the pair input rather than one of the two entry structs. The
-/// identifier was parsed when the response was read, so only the key can fail.
-///
-/// An entry whose key does not parse is skipped rather than failing the whole
-/// response. A member we cannot key on costs that one peer's cursor, while
-/// refusing everything would cost the document its presence entirely.
+/// identifier and the key were parsed when the response was read. A
+/// malformed one refused the whole answer there, so nothing here can fail.
 pub(crate) fn presence_directory<'a>(
-    entries: impl IntoIterator<Item = (UserId, &'a ambre_core::SigningKeyHex)>,
-) -> Vec<(ambre_core::PublicKey, UserId)> {
+    entries: impl IntoIterator<Item = (UserId, &'a FixedBytes<ambre_core::PublicKey>)>,
+) -> Vec<(FixedBytes<ambre_core::PublicKey>, UserId)> {
     entries
         .into_iter()
-        .filter_map(|(user_id, signing_pub_key)| {
-            let key = decode_signing_pubkey(signing_pub_key).ok()?;
-            Some((key, user_id))
-        })
+        .map(|(user_id, signing_pub_key)| (*signing_pub_key, user_id))
         .collect()
 }
 
@@ -445,7 +413,7 @@ pub(crate) struct InviteParams {
     /// The exchange key the user pinned in TOFU phase 1
     /// (`ambre-spec-key-verification.md`). Sync re-fetched key must still equal it, or the
     /// wrap is refused.
-    pub expect_exchange_pub_key: ambre_core::ExchangePublicKey,
+    pub expect_exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
     /// Signs the invitation's entry in the log.
     pub author: Author,
 }
@@ -472,24 +440,17 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         }
     };
     // TOFU pin: the re-fetched key must match the one confirmed in phase 1.
-    match decode_exchange_pubkey(&invitee.exchange_pubkey) {
-        Ok(fetched) if fetched == p.expect_exchange_pub_key => {}
-        Ok(_) => {
-            return api_error(
-                logic_tx,
-                ApiRequest::InviteToDocument,
-                ApiFailure::Local,
-                "Invitee key changed since confirmation; invite refused".into(),
-            );
-        }
-        Err(e) => return failed(logic_tx, ApiRequest::InviteToDocument, e),
+    if invitee.exchange_pubkey != p.expect_exchange_pub_key {
+        return api_error(
+            logic_tx,
+            ApiRequest::InviteToDocument,
+            ApiFailure::Local,
+            "Invitee key changed since confirmation; invite refused".into(),
+        );
     }
     // The invitation's entry names the invitee by identity and signing key.
     let invitee_id = p.invitee;
-    let invitee_key = match decode_signing_pubkey(&invitee.signing_pubkey) {
-        Ok(key) => key,
-        Err(e) => return failed(logic_tx, ApiRequest::InviteToDocument, e),
-    };
+    let invitee_key = invitee.signing_pubkey;
     let members_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
         .route(format!("/documents/{}/members", p.document_id));
     let invite_url = crate::http::ApiRoot::of(p.url_scheme, &p.api_base)
@@ -517,7 +478,7 @@ pub(crate) async fn invite_task<H: ShareHttp>(
         let draft = Draft {
             document: p.document_id,
             member: invitee_id,
-            member_key: invitee_key.clone(),
+            member_key: invitee_key,
             act: MembershipAct::Invite,
             role: p.role,
             key: Some(p.doc_key.id()),
@@ -568,8 +529,8 @@ pub(crate) async fn invite_task<H: ShareHttp>(
 
 /// The keys the relay serves now for the invitee of `p`.
 struct InviteeKeys {
-    exchange_pubkey: ambre_core::ExchangeKeyHex,
-    signing_pubkey: ambre_core::SigningKeyHex,
+    exchange_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,
+    signing_pubkey: FixedBytes<ambre_core::PublicKey>,
 }
 
 /// Fetch the keys of the confirmed invitee again, the way phase 1 found
@@ -673,10 +634,7 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
             "User not found".into(),
         );
     };
-    let exchange_pub_key = match decode_exchange_pubkey(&invitee.exchange_pubkey) {
-        Ok(key) => key,
-        Err(e) => return failed(logic_tx, ApiRequest::FetchInviteeKey, e),
-    };
+    let exchange_pub_key = invitee.exchange_pubkey;
     let fingerprint = ambre_crypto::fingerprint(&exchange_pub_key);
     // The pin is filed under this id. An invented one would make the invitee
     // new on every invitation, and a substituted key would read as a first
@@ -723,10 +681,7 @@ pub(crate) async fn fetch_member_key_task<H: ShareHttp>(
             );
         }
     };
-    let exchange_pub_key = match decode_exchange_pubkey(&served.exchange_pubkey) {
-        Ok(key) => key,
-        Err(e) => return failed(logic_tx, ApiRequest::FetchMemberKey, e),
-    };
+    let exchange_pub_key = served.exchange_pubkey;
     let _ = event_tx.send(SyncEvent::MemberKeyReady {
         id: p.id,
         user_id: p.user_id,
@@ -807,7 +762,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             let draft = Draft {
                 document: p.document_id,
                 member: p.user_id,
-                member_key: decode_signing_pubkey(&m.signing_pub_key)?,
+                member_key: m.signing_pub_key,
                 act: MembershipAct::Revoke,
                 role: m.role,
                 key: Some(new_doc_key.id()),
@@ -949,9 +904,7 @@ async fn leave_document<H: ShareHttp>(
         let draft = Draft {
             document: document_id,
             member: me,
-            member_key: ambre_core::PublicKey::from_array(
-                author.signing_key.verifying_key().to_bytes(),
-            ),
+            member_key: FixedBytes::from_array(author.signing_key.verifying_key().to_bytes()),
             act: MembershipAct::Revoke,
             role,
             key: None,
@@ -1239,18 +1192,15 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
                 "the member is no longer in the document".into(),
             );
         };
-        let entry = decode_signing_pubkey(&target.signing_pub_key).and_then(|member_key| {
-            let draft = Draft {
-                document: p.document_id,
-                member: p.user_id,
-                member_key,
-                act: MembershipAct::ChangeRole,
-                role: p.role,
-                key: None,
-            };
-            entry_after(&log, draft, &p.author)
-        });
-        let entry = match entry {
+        let draft = Draft {
+            document: p.document_id,
+            member: p.user_id,
+            member_key: target.signing_pub_key,
+            act: MembershipAct::ChangeRole,
+            role: p.role,
+            key: None,
+        };
+        let entry = match entry_after(&log, draft, &p.author) {
             Ok(entry) => entry,
             Err(e) => return failed(logic_tx, ApiRequest::UpdateDocumentMemberRole, e),
         };
@@ -1373,7 +1323,7 @@ pub(crate) struct RotateChannelParams {
     /// The channel key the catalogue holds, which the rotation replaces.
     pub previous: DocumentKey,
     /// The anchor of meta's log, sealed beside the catalogue's key.
-    pub anchor: EntryDigest,
+    pub anchor: FixedBytes<EntryDigest>,
     /// The current space key, which seals the new catalogue entry.
     pub space_key: DocumentKey,
 }
@@ -1513,30 +1463,33 @@ mod tests {
     use ambre_crypto::MasterSeed;
     use x25519_dalek::PublicKey;
 
-    /// A deterministic (secret, hex-public) X25519 pair for a fake peer.
-    fn keypair(seed: u8) -> (StaticSecret, ambre_core::ExchangeKeyHex) {
+    /// A deterministic (secret, public) X25519 pair for a fake peer.
+    fn keypair(seed: u8) -> (StaticSecret, FixedBytes<ambre_core::ExchangePublicKey>) {
         let xk = MasterSeed::from_array([seed; 32]).derive_exchange_key();
-        let pub_hex = ambre_core::ExchangeKeyHex::encode(PublicKey::from(&xk).to_bytes());
-        (xk, pub_hex)
+        let public = FixedBytes::from_array(PublicKey::from(&xk).to_bytes());
+        (xk, public)
     }
 
-    fn member(uid: &str, pub_hex: &str) -> http::DocumentMemberEntry {
+    fn member(
+        uid: &str,
+        exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
+    ) -> http::DocumentMemberEntry {
         http::DocumentMemberEntry {
             user_id: UserId::parse_str(uid).expect("a test id"),
             display_name: ambre_core::DisplayName::new("Member").unwrap(),
             email: "m@test.local".into(),
-            signing_pub_key: ambre_core::SigningKeyHex(String::new()),
-            exchange_pub_key: ambre_core::ExchangeKeyHex(pub_hex.to_string()),
+            signing_pub_key: FixedBytes::from_array([0; 32]),
+            exchange_pub_key,
             doc_key_enc: ambre_core::WrappedDocKey::new(Vec::new()),
             role: Role::Editor,
-            wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex(String::new()),
+            wrapper_exchange_pub_key: exchange_pub_key,
         }
     }
 
     /// Decode helper: the inverse of `wrap_anchored_b64`, used by recipients.
     fn unwrap_b64(
         recipient: &StaticSecret,
-        wrapper_pub: &ambre_core::ExchangePublicKey,
+        wrapper_pub: &FixedBytes<ambre_core::ExchangePublicKey>,
         doc_key_enc: &ambre_core::WrappedDocKey,
     ) -> Result<DocumentKey, SyncError> {
         unwrap_anchor_b64(recipient, wrapper_pub, doc_key_enc).map(|(key, _)| key)
@@ -1545,26 +1498,32 @@ mod tests {
     /// As [`unwrap_b64`], with the anchor sealed beside the key.
     fn unwrap_anchor_b64(
         recipient: &StaticSecret,
-        wrapper_pub: &ambre_core::ExchangePublicKey,
+        wrapper_pub: &FixedBytes<ambre_core::ExchangePublicKey>,
         doc_key_enc: &ambre_core::WrappedDocKey,
-    ) -> Result<(DocumentKey, Option<EntryDigest>), SyncError> {
-        let own = ambre_core::ExchangeKeyHex::encode(PublicKey::from(recipient).to_bytes());
-        let wrapper = ambre_core::ExchangeKeyHex::encode(wrapper_pub);
-        unwrap_own(recipient, [(&own, doc_key_enc, &wrapper)])
+    ) -> Result<(DocumentKey, Option<FixedBytes<EntryDigest>>), SyncError> {
+        let own = own_exchange_key(recipient);
+        unwrap_own(recipient, [(&own, doc_key_enc, Some(wrapper_pub))])
     }
 
+    /// An exchange key that is not hex of the right width refuses the answer
+    /// that carries it when it is read. So no member row holds one.
     #[test]
     fn decode_exchange_pubkey_rejects_bad_input() {
-        assert!(decode_exchange_pubkey(&ambre_core::ExchangeKeyHex("not-hex".to_owned())).is_err());
+        let read = |exchange_pubkey: String| {
+            serde_json::from_value::<http::PubkeysResponse>(serde_json::json!({
+                "signing_pubkey": "cd".repeat(32),
+                "exchange_pubkey": exchange_pubkey,
+            }))
+        };
+        assert!(read("not-hex".to_owned()).is_err());
         // 31 bytes -> wrong length.
-        assert!(decode_exchange_pubkey(&ambre_core::ExchangeKeyHex("ab".repeat(31))).is_err());
-        assert!(decode_exchange_pubkey(&ambre_core::ExchangeKeyHex("ab".repeat(32))).is_ok());
+        assert!(read("ab".repeat(31)).is_err());
+        assert!(read("ab".repeat(32)).is_ok());
     }
 
     #[test]
     fn invite_request_wraps_for_the_invitee_only() {
-        let (my_xk, my_pub_hex) = keypair(1);
-        let my_pub: ambre_core::ExchangePublicKey = decode_exchange_pubkey(&my_pub_hex).unwrap();
+        let (my_xk, my_pub) = keypair(1);
         let (invitee_xk, invitee_pub_hex) = keypair(2);
         let (stranger_xk, _) = keypair(3);
         let doc_key = DocumentKey::generate();
@@ -1595,9 +1554,11 @@ mod tests {
     #[test]
     fn invite_request_propagates_bad_pubkey() {
         let (my_xk, _) = keypair(1);
+        // The identity point: a peer key with no contribution, which the wrap
+        // refuses (`SYNC-035`).
         let err = build_invite_request(
             &my_xk,
-            &ambre_core::ExchangeKeyHex("zz-not-hex".to_owned()),
+            &FixedBytes::from_array([0; 32]),
             InviteeName::Email("x@y.z".into()),
             &DocumentKey::generate(),
             Role::Viewer,
@@ -1609,21 +1570,24 @@ mod tests {
 
     #[test]
     fn rotate_entries_cover_valid_members_and_report_malformed() {
-        let (my_xk, my_pub_hex) = keypair(1);
-        let my_pub: ambre_core::ExchangePublicKey = decode_exchange_pubkey(&my_pub_hex).unwrap();
+        let (my_xk, my_pub) = keypair(1);
         let (a_xk, a_pub) = keypair(2);
         let (_b_xk, b_pub) = keypair(3);
         let new_key = DocumentKey::generate();
 
+        // The middle member's key is the identity point, which no wrap takes.
         let members = vec![
-            member("11111111-1111-1111-1111-111111111111", a_pub.as_str()),
-            member("22222222-2222-2222-2222-222222222222", "garbage"),
-            member("33333333-3333-3333-3333-333333333333", b_pub.as_str()),
+            member("11111111-1111-1111-1111-111111111111", a_pub),
+            member(
+                "22222222-2222-2222-2222-222222222222",
+                FixedBytes::from_array([0; 32]),
+            ),
+            member("33333333-3333-3333-3333-333333333333", b_pub),
         ];
         let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, None, &members);
 
-        // The malformed member is returned for the report; the two valid ones
-        // are wrapped (`SYNC-043`).
+        // The member the wrap refuses is returned for the report; the two
+        // valid ones are wrapped (`SYNC-043`).
         assert_eq!(unwrapped.len(), 1);
         assert_eq!(entries.len(), 2);
         let id = |s| UserId::parse_str(s).unwrap();
@@ -1646,10 +1610,11 @@ mod tests {
                 "user_id": user_id,
                 "display_name": "Member",
                 "email": "m@test.local",
-                "signing_pub_key": "",
-                "exchange_pub_key": "ab",
+                "signing_pub_key": "cd".repeat(32),
+                "exchange_pub_key": "ab".repeat(32),
                 "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]),
                 "role": role,
+                "wrapper_exchange_pub_key": "ab".repeat(32),
             }))
         };
         let sound_id = "44444444-4444-4444-4444-444444444444";
@@ -1785,7 +1750,10 @@ mod tests {
     /// The user the search answers, and whom phase 1 confirmed.
     const INVITEE: &str = "55555555-5555-5555-5555-555555555555";
 
-    fn user_search_json(email: &str, exchange_pub_hex: &str) -> serde_json::Value {
+    fn user_search_json(
+        email: &str,
+        exchange_pub_hex: &FixedBytes<ambre_core::ExchangePublicKey>,
+    ) -> serde_json::Value {
         serde_json::json!({ "users": [ {
             "id": INVITEE,
             "email": email,
@@ -1795,7 +1763,10 @@ mod tests {
         } ] })
     }
 
-    fn invite_params(my_xk: &StaticSecret, expect: ambre_core::ExchangePublicKey) -> InviteParams {
+    fn invite_params(
+        my_xk: &StaticSecret,
+        expect: FixedBytes<ambre_core::ExchangePublicKey>,
+    ) -> InviteParams {
         InviteParams {
             id: RequestId::next(),
             document_id: DocumentId::new(),
@@ -1814,15 +1785,12 @@ mod tests {
     #[tokio::test]
     async fn invite_success_posts_wrapped_key_and_emits_invitesent() {
         let (my_xk, my_pub_hex) = keypair(1);
-        let my_pub = decode_exchange_pubkey(&my_pub_hex).unwrap();
+        let my_pub = my_pub_hex;
         let (invitee_xk, invitee_pub_hex) = keypair(2);
-        let invitee_pub = decode_exchange_pubkey(&invitee_pub_hex).unwrap();
+        let invitee_pub = invitee_pub_hex;
 
         let http = FakeHttp::new(vec![
-            Ok(user_search_json(
-                "invitee@test.local",
-                invitee_pub_hex.as_str(),
-            )),
+            Ok(user_search_json("invitee@test.local", &invitee_pub_hex)),
             Ok(serde_json::json!({ "members": [] })),
             Ok(serde_json::json!({
                 "user_id": "55555555-5555-5555-5555-555555555555",
@@ -1866,9 +1834,9 @@ mod tests {
     #[tokio::test]
     async fn an_invite_by_id_fetches_the_keys_of_that_id_and_shares_by_it() {
         let (my_xk, my_pub_hex) = keypair(1);
-        let my_pub = decode_exchange_pubkey(&my_pub_hex).unwrap();
+        let my_pub = my_pub_hex;
         let (invitee_xk, invitee_pub_hex) = keypair(2);
-        let invitee_pub = decode_exchange_pubkey(&invitee_pub_hex).unwrap();
+        let invitee_pub = invitee_pub_hex;
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({
                 "signing_pubkey": "00".repeat(32),
@@ -1912,7 +1880,7 @@ mod tests {
     async fn an_invite_by_id_refuses_a_key_other_than_the_pin() {
         let (my_xk, _) = keypair(1);
         let (_, confirmed_hex) = keypair(2);
-        let confirmed = decode_exchange_pubkey(&confirmed_hex).unwrap();
+        let confirmed = confirmed_hex;
         let (_, substituted_hex) = keypair(9);
         let http = FakeHttp::new(vec![Ok(serde_json::json!({
             "signing_pubkey": "00".repeat(32),
@@ -1943,7 +1911,7 @@ mod tests {
         let (etx, erx, sink, lrx) = channels();
         invite_task(
             &http,
-            invite_params(&my_xk, ambre_core::ExchangePublicKey::from_array([0u8; 32])),
+            invite_params(&my_xk, FixedBytes::from_array([0u8; 32])),
             &etx,
             &sink,
         )
@@ -1965,7 +1933,7 @@ mod tests {
         let (etx, _erx, sink, lrx) = channels();
         invite_task(
             &http,
-            invite_params(&my_xk, ambre_core::ExchangePublicKey::from_array([0u8; 32])),
+            invite_params(&my_xk, FixedBytes::from_array([0u8; 32])),
             &etx,
             &sink,
         )
@@ -1988,12 +1956,12 @@ mod tests {
         // phase 1 (the TOCTOU attack). The pin must refuse before any wrap.
         let (my_xk, _) = keypair(1);
         let (_confirmed_xk, confirmed_hex) = keypair(2);
-        let confirmed = decode_exchange_pubkey(&confirmed_hex).unwrap();
+        let confirmed = confirmed_hex;
         let (_substituted_xk, substituted_hex) = keypair(9);
 
         let http = FakeHttp::new(vec![Ok(user_search_json(
             "invitee@test.local",
-            substituted_hex.as_str(), // server returns the substituted key
+            &substituted_hex, // server returns the substituted key
         ))]);
         let (etx, erx, sink, lrx) = channels();
         // We confirmed `confirmed`, not the substituted key the server now serves.
@@ -2019,10 +1987,10 @@ mod tests {
         // another user than the one phase 1 answered.
         let (my_xk, _) = keypair(1);
         let (_invitee_xk, invitee_hex) = keypair(2);
-        let invitee_pub = decode_exchange_pubkey(&invitee_hex).unwrap();
+        let invitee_pub = invitee_hex;
         let http = FakeHttp::new(vec![Ok(user_search_json(
             "invitee@test.local",
-            invitee_hex.as_str(),
+            &invitee_hex,
         ))]);
         let (etx, erx, sink, lrx) = channels();
         let mut params = invite_params(&my_xk, invitee_pub);
@@ -2055,11 +2023,11 @@ mod tests {
     #[tokio::test]
     async fn fetch_invitee_key_emits_key_and_matching_fingerprint() {
         let (_invitee_xk, invitee_pub_hex) = keypair(2);
-        let invitee_pub = decode_exchange_pubkey(&invitee_pub_hex).unwrap();
+        let invitee_pub = invitee_pub_hex;
 
         let http = FakeHttp::new(vec![Ok(user_search_json(
             "invitee@test.local",
-            invitee_pub_hex.as_str(),
+            &invitee_pub_hex,
         ))]);
         let (etx, erx, sink, lrx) = channels();
         fetch_invitee_key_task(&http, fetch_key_params(), &etx, &sink).await;
@@ -2098,7 +2066,7 @@ mod tests {
     #[tokio::test]
     async fn a_member_key_is_fetched_by_user_id_and_wraps_nothing() {
         let (_member_xk, member_pub_hex) = keypair(3);
-        let member_pub = decode_exchange_pubkey(&member_pub_hex).unwrap();
+        let member_pub = member_pub_hex;
         let user_id = UserId::new();
         let http = FakeHttp::new(vec![Ok(serde_json::json!({
             "signing_pubkey": "00".repeat(32),
@@ -2184,12 +2152,17 @@ mod tests {
     }
 
     /// A members row, for the revoke and the debt tests.
-    fn member_row(uid: &str, name: &str, pub_hex: &str) -> serde_json::Value {
+    fn member_row(
+        uid: &str,
+        name: &str,
+        pub_hex: &FixedBytes<ambre_core::ExchangePublicKey>,
+    ) -> serde_json::Value {
         serde_json::json!({
             "user_id": uid,
             "display_name": name, "email": "m@test.local",
             "signing_pub_key": "00".repeat(32), "exchange_pub_key": pub_hex,
             "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "editor",
+            "wrapper_exchange_pub_key": pub_hex,
         })
     }
 
@@ -2207,8 +2180,8 @@ mod tests {
 
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [
-                member_row("11111111-1111-1111-1111-111111111111", "A", a_pub.as_str()),
-                member_row(&removed, "Carol", c_pub.as_str()),
+                member_row("11111111-1111-1111-1111-111111111111", "A", &a_pub),
+                member_row(&removed, "Carol", &c_pub),
             ] })), // GET members
             Ok(serde_json::json!({ "status": "revoked" })), // POST revoke
         ]);
@@ -2259,7 +2232,7 @@ mod tests {
 
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [
-                member_row(a, "A", a_pub.as_str()), member_row(&removed, "Carol", c_pub.as_str()),
+                member_row(a, "A", &a_pub), member_row(&removed, "Carol", &c_pub),
             ] })),
             Err(http::HttpError::refused(
                 http::Method::Post,
@@ -2268,8 +2241,8 @@ mod tests {
                 Some(RefusalCode::MembersChanged),
             )),
             Ok(serde_json::json!({ "members": [
-                member_row(a, "A", a_pub.as_str()), member_row(&removed, "Carol", c_pub.as_str()),
-                member_row(newcomer, "New", n_pub.as_str()),
+                member_row(a, "A", &a_pub), member_row(&removed, "Carol", &c_pub),
+                member_row(newcomer, "New", &n_pub),
             ] })),
             Ok(serde_json::json!({ "status": "revoked" })),
         ]);
@@ -2308,7 +2281,7 @@ mod tests {
         let (my_xk, _) = keypair(1);
         let (_a_xk, a_pub) = keypair(2);
         let members = serde_json::json!({ "members": [
-            member_row("11111111-1111-1111-1111-111111111111", "A", a_pub.as_str()),
+            member_row("11111111-1111-1111-1111-111111111111", "A", &a_pub),
         ] });
         let mut script = Vec::new();
         for _ in 0..ROTATION_TRIES {
@@ -2347,7 +2320,7 @@ mod tests {
         let newcomer = "44444444-4444-4444-4444-444444444444";
         let http = FakeHttp::new(vec![
             Ok(
-                serde_json::json!({ "members": [ member_row(me, "Me", my_pub.as_str()) ],
+                serde_json::json!({ "members": [ member_row(me, "Me", &my_pub) ],
                 "rotation_owed": true }),
             ),
             Err(http::HttpError::refused(
@@ -2357,7 +2330,7 @@ mod tests {
                 Some(RefusalCode::MembersChanged),
             )),
             Ok(serde_json::json!({ "members": [
-                member_row(me, "Me", my_pub.as_str()), member_row(newcomer, "New", n_pub.as_str()),
+                member_row(me, "Me", &my_pub), member_row(newcomer, "New", &n_pub),
             ], "rotation_owed": true })),
             Ok(serde_json::json!({ "status": "rotated" })),
         ]);
@@ -2398,9 +2371,9 @@ mod tests {
     async fn an_invitation_overtaken_by_a_rotation_is_reported() {
         let (my_xk, _) = keypair(1);
         let (_i_xk, i_pub) = keypair(2);
-        let expect = decode_exchange_pubkey(&i_pub).unwrap();
+        let expect = i_pub;
         let http = FakeHttp::new(vec![
-            Ok(user_search_json("invitee@test.local", i_pub.as_str())),
+            Ok(user_search_json("invitee@test.local", &i_pub)),
             Ok(serde_json::json!({ "members": [] })),
             Err(http::HttpError::refused(
                 http::Method::Post,
@@ -2756,7 +2729,7 @@ mod tests {
         let (_a_xk, a_pub) = keypair(2);
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "members": [
-                member_row("11111111-1111-1111-1111-111111111111", "A", a_pub.as_str()),
+                member_row("11111111-1111-1111-1111-111111111111", "A", &a_pub),
             ] })),
             Err(http::HttpError::Local("HTTP 500".into())),
         ]);
@@ -2879,8 +2852,8 @@ mod tests {
         let (_a_xk, a_pub) = keypair(2);
         let http = FakeHttp::new(vec![
             Ok(serde_json::json!({ "rotation_owed": true, "members": [
-                member_row("11111111-1111-1111-1111-111111111111", "Me", my_pub.as_str()),
-                member_row("22222222-2222-2222-2222-222222222222", "A", a_pub.as_str()),
+                member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
+                member_row("22222222-2222-2222-2222-222222222222", "A", &a_pub),
             ] })),
             Ok(serde_json::json!({ "status": "rotated" })),
         ]);
@@ -2920,11 +2893,11 @@ mod tests {
             "meta_id": meta.to_string(), "role": "editor", "length": 1,
         });
         let one = serde_json::json!({ "members": [
-            member_row("11111111-1111-1111-1111-111111111111", "Me", my_pub.as_str()),
+            member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
         ] });
         let two = serde_json::json!({ "members": [
-            member_row("11111111-1111-1111-1111-111111111111", "Me", my_pub.as_str()),
-            member_row("22222222-2222-2222-2222-222222222222", "A", a_pub.as_str()),
+            member_row("11111111-1111-1111-1111-111111111111", "Me", &my_pub),
+            member_row("22222222-2222-2222-2222-222222222222", "A", &a_pub),
         ] });
         let changed = http::HttpError::refused(
             http::Method::Post,
@@ -2941,7 +2914,7 @@ mod tests {
         ]);
         let (etx, erx, _sink, _lrx) = channels();
         let (previous, space_key) = (DocumentKey::generate(), DocumentKey::generate());
-        let anchor = EntryDigest([5; 32]);
+        let anchor = FixedBytes::from_array([5; 32]);
         let params = RotateChannelParams {
             space_id,
             channel_id,
@@ -3039,7 +3012,7 @@ mod tests {
     #[tokio::test]
     async fn fetch_invitee_key_refuses_a_malformed_id() {
         let (_invitee_xk, invitee_pub_hex) = keypair(2);
-        let mut json = user_search_json("invitee@test.local", invitee_pub_hex.as_str());
+        let mut json = user_search_json("invitee@test.local", &invitee_pub_hex);
         json["users"][0]["id"] = serde_json::json!("not-a-uuid");
         let http = FakeHttp::new(vec![Ok(json)]);
         let (etx, erx, sink, lrx) = channels();
@@ -3065,14 +3038,17 @@ mod tests {
                 {
                     "user_id": "11111111-1111-1111-1111-111111111111",
                     "display_name": "A", "email": "a@test.local",
-                    "signing_pub_key": "00", "exchange_pub_key": a_pub,
+                    "signing_pub_key": "00".repeat(32), "exchange_pub_key": a_pub,
                     "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "editor",
+                    "wrapper_exchange_pub_key": a_pub,
                 },
                 {
+                    // The identity point: a key no wrap takes (`SYNC-035`).
                     "user_id": "22222222-2222-2222-2222-222222222222",
                     "display_name": "Broken", "email": "b@test.local",
-                    "signing_pub_key": "00", "exchange_pub_key": "garbage",
+                    "signing_pub_key": "00".repeat(32), "exchange_pub_key": "00".repeat(32),
                     "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "editor",
+                    "wrapper_exchange_pub_key": "00".repeat(32),
                 },
             ] })),
             Ok(serde_json::json!({ "status": "revoked" })),
@@ -3130,8 +3106,9 @@ mod tests {
         let http = FakeHttp::new(vec![Ok(serde_json::json!({ "members": [ {
             "user_id": "11111111-1111-1111-1111-111111111111",
             "display_name": "A", "email": "a@test.local",
-            "signing_pub_key": "00", "exchange_pub_key": "ab",
+            "signing_pub_key": "00".repeat(32), "exchange_pub_key": "ab".repeat(32),
             "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "viewer",
+            "wrapper_exchange_pub_key": "ab".repeat(32),
         } ] }))]);
         let (etx, erx, _sink, _lrx) = channels();
         list_members_task(&http, list_params(), &etx).await;
@@ -3158,34 +3135,41 @@ mod tests {
     #[test]
     fn presence_directory_maps_valid_entries() {
         let uid = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        let key_hex = ambre_core::SigningKeyHex("aa".repeat(32));
-        let dir = presence_directory([(uid, &key_hex)]);
+        let key = FixedBytes::from_array([0xaa; 32]);
+        let dir = presence_directory([(uid, &key)]);
 
-        assert_eq!(
-            dir,
-            vec![(ambre_core::PublicKey::from_array([0xaa; 32]), uid)]
-        );
+        assert_eq!(dir, vec![(FixedBytes::from_array([0xaa; 32]), uid)]);
     }
 
     #[test]
     fn presence_directory_skips_unparsable_rows_without_inventing_ids() {
-        // A bad row must vanish. A fabricated id would attribute a cursor to
-        // the wrong person, which is what keying presence on the UserId
-        // prevents. A malformed id never gets here: the answer was refused.
-        let good_uid = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        let good_key = ambre_core::SigningKeyHex("bb".repeat(32));
-        let short_key = ambre_core::SigningKeyHex("bb".repeat(31)); // 31 bytes: not a valid Ed25519 key
-        let not_hex = ambre_core::SigningKeyHex("zz-not-hex".to_owned());
-        let dir = presence_directory([
-            (good_uid, &not_hex),
-            (good_uid, &short_key),
-            (good_uid, &good_key),
-        ]);
-
-        assert_eq!(
-            dir,
-            vec![(ambre_core::PublicKey::from_array([0xbb; 32]), good_uid)]
+        // A bad row never reaches the directory: the answer that carries it
+        // is refused when it is read (`SRV-242`). A fabricated id would
+        // attribute a cursor to the wrong person, which is what keying
+        // presence on the UserId prevents.
+        let read = |signing_pub_key: String| {
+            serde_json::from_value::<http::DocumentMembersResponse>(serde_json::json!({
+                "members": [ {
+                    "user_id": "11111111-1111-1111-1111-111111111111",
+                    "display_name": "A", "email": "a@test.local",
+                    "signing_pub_key": signing_pub_key, "exchange_pub_key": "ab".repeat(32),
+                    "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]),
+                    "role": "viewer", "wrapper_exchange_pub_key": "ab".repeat(32),
+                } ]
+            }))
+        };
+        assert!(read("zz-not-hex".to_owned()).is_err());
+        // 31 bytes: not a valid Ed25519 key.
+        assert!(read("bb".repeat(31)).is_err());
+        let sound = read("bb".repeat(32)).expect("a sound answer");
+        let dir = presence_directory(
+            sound
+                .members
+                .iter()
+                .map(|m| (m.user_id, &m.signing_pub_key)),
         );
+        let good_uid = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        assert_eq!(dir, vec![(FixedBytes::from_array([0xbb; 32]), good_uid)]);
     }
 
     // -- Own role (architecture) -----------------------------------------
@@ -3229,8 +3213,9 @@ mod tests {
         let http = FakeHttp::new(vec![Ok(serde_json::json!({ "members": [ {
             "user_id": uid,
             "display_name": "A", "email": "a@test.local",
-            "signing_pub_key": key_hex, "exchange_pub_key": "ab",
+            "signing_pub_key": key_hex, "exchange_pub_key": "ab".repeat(32),
             "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "viewer",
+            "wrapper_exchange_pub_key": "ab".repeat(32),
         } ] }))]);
         let (etx, erx, _sink, _lrx) = channels();
         list_members_task(&http, list_params(), &etx).await;
@@ -3240,7 +3225,7 @@ mod tests {
                 assert_eq!(
                     signing_keys,
                     vec![(
-                        ambre_core::PublicKey::from_array([0xcc; 32]),
+                        FixedBytes::from_array([0xcc; 32]),
                         UserId::parse_str(uid).unwrap()
                     )]
                 );
@@ -3290,7 +3275,7 @@ mod tests {
     struct Logged {
         document_id: DocumentId,
         doc_key: DocumentKey,
-        anchor: EntryDigest,
+        anchor: FixedBytes<EntryDigest>,
         owner_exchange: String,
         rows: Vec<serde_json::Value>,
         log: Vec<ambre_core::EncodedLogEntry>,
@@ -3349,7 +3334,7 @@ mod tests {
             let draft = Draft {
                 document: self.document_id,
                 member: peer.author.user_id,
-                member_key: ambre_core::PublicKey::from_array(
+                member_key: FixedBytes::from_array(
                     peer.author.signing_key.verifying_key().to_bytes(),
                 ),
                 act: MembershipAct::Invite,
@@ -3405,12 +3390,12 @@ mod tests {
         let owner = Peer::new(1);
         let logged = Logged::new(&owner);
         let (invitee_xk, invitee_hex) = keypair(2);
-        let mut params = invite_params(&owner.xk, decode_exchange_pubkey(&invitee_hex).unwrap());
+        let mut params = invite_params(&owner.xk, invitee_hex);
         params.document_id = logged.document_id;
         params.doc_key = logged.doc_key.clone();
         params.author = same(&owner.author);
         let http = FakeHttp::new(vec![
-            Ok(user_search_json("invitee@test.local", invitee_hex.as_str())),
+            Ok(user_search_json("invitee@test.local", &invitee_hex)),
             Ok(logged.answer()),
             Ok(serde_json::json!({
                 "user_id": "55555555-5555-5555-5555-555555555555",
@@ -3452,12 +3437,12 @@ mod tests {
         let first = logged.answer();
         logged.invite(&owner, &Peer::new(3), Role::Viewer);
         let (_invitee_xk, invitee_hex) = keypair(2);
-        let mut params = invite_params(&owner.xk, decode_exchange_pubkey(&invitee_hex).unwrap());
+        let mut params = invite_params(&owner.xk, invitee_hex);
         params.document_id = logged.document_id;
         params.doc_key = logged.doc_key.clone();
         params.author = same(&owner.author);
         let http = FakeHttp::new(vec![
-            Ok(user_search_json("invitee@test.local", invitee_hex.as_str())),
+            Ok(user_search_json("invitee@test.local", &invitee_hex)),
             Ok(first),
             Err(http::HttpError::refused(
                 http::Method::Post,
@@ -3641,7 +3626,7 @@ mod tests {
         let draft = Draft {
             document: logged.document_id,
             member: joiner.author.user_id,
-            member_key: ambre_core::PublicKey::from_array(
+            member_key: FixedBytes::from_array(
                 joiner.author.signing_key.verifying_key().to_bytes(),
             ),
             act: MembershipAct::SelfJoin,

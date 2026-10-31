@@ -299,7 +299,7 @@ mod db_tests {
         crate::db::insert_inline_update(
             &state.db,
             doc,
-            &ambre_core::PublicKey::from_array([5u8; 32]),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
             &snap,
             ambre_protocol::messages::Clock(seq.unsigned_abs()),
             ambre_core::Seq(seq.unsigned_abs()),
@@ -484,7 +484,7 @@ mod db_tests {
         let snap = crate::db::create_snapshot(
             &state.db,
             &doc,
-            &ambre_core::PublicKey::from_array([5u8; 32]),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
             &clocks,
             &ambre_core::ObjectKey::from("snap"),
             ambre_core::Seq(7),
@@ -495,7 +495,7 @@ mod db_tests {
             &state.db,
             &doc,
             &snap,
-            &ambre_core::PublicKey::from_array([9u8; 32]),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32]),
         )
         .await
         .unwrap();

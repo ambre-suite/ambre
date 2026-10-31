@@ -135,7 +135,6 @@ mod tests {
     use super::*;
     use ambre_bus::TrameCommand;
     use ambre_bus::{Col, Row};
-    use ambre_core::SessionNonce;
 
     /// A delta a session of `peer` wrote, carrying `bytes` of cell text.
     fn written_by(peer: ambre_core::PeerId, bytes: usize) -> SignedDelta {
@@ -152,7 +151,7 @@ mod tests {
         SignedDelta {
             seq: ambre_core::Seq(peer.0),
             payload,
-            nonce: SessionNonce([0; 16]),
+            nonce: FixedBytes::from_array([0; 16]),
             peer,
             user: None,
             summary: None,

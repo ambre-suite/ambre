@@ -160,7 +160,7 @@ mod tests {
         let sk = MasterSeed::generate().derive_signing_key();
         let public_data = SnapshotPublicData {
             document_id,
-            pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
+            pub_key: ambre_core::FixedBytes::from_array(sk.verifying_key().to_bytes()),
             key_id: key.id(),
             snapshot_id: SnapshotId::new(),
             parent_snapshot_proof: None,
@@ -168,7 +168,7 @@ mod tests {
         };
         SnapshotUpload {
             document_id,
-            author_pubkey: ambre_core::SigningKeyHex::encode(sk.verifying_key().to_bytes()),
+            author_pubkey: ambre_core::FixedBytes::from_array(sk.verifying_key().to_bytes()),
             covered_seq: horizon,
             blob: pipeline::snapshot_blob(
                 &ambre_core::SnapshotBytes::new(b"fold".to_vec()),

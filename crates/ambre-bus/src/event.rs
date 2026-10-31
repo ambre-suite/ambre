@@ -21,7 +21,7 @@ use crate::{
     MessageId, RequestId, RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId,
     UserId,
 };
-use ambre_core::{Seq, SessionNonce};
+use ambre_core::{FixedBytes, Seq, SessionNonce};
 
 // -----------------------------------------------------------------------------
 // LogicEvent
@@ -49,7 +49,7 @@ pub enum LogicEvent {
         /// The nonce `peer` derives from. The Logic thread keeps it in the
         /// local store, so a later open can send what this session left
         /// unsent (`AUTHOR-028`).
-        nonce: SessionNonce,
+        nonce: FixedBytes<SessionNonce>,
     },
 
     /// Decrypted and decompressed CRDT delta, with its signer, ready for `LoroDoc::import()`.
@@ -543,7 +543,7 @@ pub struct SignedDelta {
     /// The Loro update, decrypted and decompressed.
     pub payload: ambre_core::DeltaBytes,
     /// The session nonce of its author, opened from inside the ciphertext.
-    pub nonce: SessionNonce,
+    pub nonce: FixedBytes<SessionNonce>,
     /// The only PeerID its operations may carry.
     pub peer: ambre_core::PeerId,
     /// The member the signing key resolves to, `None` when the directory does

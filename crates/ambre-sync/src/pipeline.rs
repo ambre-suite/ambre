@@ -14,7 +14,8 @@ use std::io::Read;
 use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::SessionNonce;
 use ambre_core::{
-    Aad, ByteSize, EphemeralBytes, KeyId, MediaBytes, PublicKey, SecretBytes, SnapshotBytes,
+    Aad, ByteSize, EphemeralBytes, FixedBytes, KeyId, MediaBytes, PublicKey, SecretBytes,
+    SnapshotBytes,
 };
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
 use ambre_protocol::messages::{Ciphertext, CommitmentTag, Nonce, Signature};
@@ -140,7 +141,7 @@ impl SummaryMarker {
 #[derive(Debug, PartialEq, Eq)]
 pub struct UpdateBody {
     /// The session nonce the author's PeerID derives from.
-    pub nonce: SessionNonce,
+    pub nonce: FixedBytes<SessionNonce>,
     /// What the update says of itself, for a client that does not hold the
     /// document (`RESID-014`).
     pub summary: Option<ActivitySummary>,
@@ -209,7 +210,7 @@ impl std::fmt::Debug for UpdateFrame {
 ///
 /// [`PipelineError::Summary`] for a summary past its bounds.
 pub fn update_body(
-    nonce: &SessionNonce,
+    nonce: &FixedBytes<SessionNonce>,
     summary: Option<&ActivitySummary>,
     delta: &ambre_core::DeltaBytes,
 ) -> Result<UpdateFrame, PipelineError> {
@@ -218,13 +219,13 @@ pub fn update_body(
     // A capacity hint over buffers already in memory: the sum stays below the
     // bound, and saturating states it.
     let mut body = Vec::with_capacity(
-        SessionNonce::SIZE
+        FixedBytes::<SessionNonce>::SIZE
             .as_len()
             .saturating_add(1)
             .saturating_add(summary_len)
             .saturating_add(delta.len()),
     );
-    body.extend_from_slice(&nonce.0);
+    body.extend_from_slice(nonce.as_slice());
     match summary {
         Some(summary) => {
             body.push(SummaryMarker::Present.byte());
@@ -252,7 +253,8 @@ pub fn split_update_body(body: UpdateFrame) -> Result<UpdateBody, PipelineError>
 }
 
 fn split_frame(body: &[u8]) -> Result<UpdateBody, PipelineError> {
-    let (nonce, rest) = SessionNonce::split_from(body).ok_or(PipelineError::ShortBody)?;
+    let (nonce, rest) =
+        FixedBytes::<SessionNonce>::split_from(body).ok_or(PipelineError::ShortBody)?;
     let (&marker, rest) = rest.split_first().ok_or(PipelineError::ShortBody)?;
     let (summary, delta) = match SummaryMarker::from_byte(marker)? {
         SummaryMarker::Absent => (None, rest),
@@ -271,7 +273,7 @@ fn split_frame(body: &[u8]) -> Result<UpdateBody, PipelineError> {
 /// Refuses a key other than the one the metadata names (`SYNC-125`). On the
 /// seal it keeps a payload from naming a key that did not seal it. On the open
 /// it refuses before any cryptography.
-fn check_key(named: KeyId, doc_key: &DocumentKey) -> Result<(), PipelineError> {
+fn check_key(named: FixedBytes<KeyId>, doc_key: &DocumentKey) -> Result<(), PipelineError> {
     if named == doc_key.id() {
         Ok(())
     } else {
@@ -363,7 +365,7 @@ fn open_payload(
     sealed: &Sealed,
     aad: &Aad,
     doc_key: &DocumentKey,
-    author_pub: &PublicKey,
+    author_pub: &FixedBytes<PublicKey>,
 ) -> Result<OpenedPayload, PipelineError> {
     // The opened bytes are lent, with no copy, through the door `ARCH-047`
     // admits. They are still compressed, and the wrapper wipes them as it
@@ -409,9 +411,9 @@ fn aad_of<T: serde::Serialize>(public_data: &T) -> Result<Aad, PipelineError> {
 /// Rebuilds a [`Sealed`] from a wire message's envelope fields.
 fn sealed_from(
     ciphertext: &Ciphertext,
-    nonce: &Nonce,
-    commitment_tag: &CommitmentTag,
-    signature: &Signature,
+    nonce: &FixedBytes<Nonce>,
+    commitment_tag: &FixedBytes<CommitmentTag>,
+    signature: &FixedBytes<Signature>,
 ) -> Sealed {
     Sealed {
         nonce: *nonce,
@@ -421,7 +423,14 @@ fn sealed_from(
     }
 }
 
-fn message_parts(sealed: Sealed) -> (Ciphertext, Nonce, CommitmentTag, Signature) {
+fn message_parts(
+    sealed: Sealed,
+) -> (
+    Ciphertext,
+    FixedBytes<Nonce>,
+    FixedBytes<CommitmentTag>,
+    FixedBytes<Signature>,
+) {
     (
         sealed.ciphertext,
         sealed.nonce,
@@ -597,7 +606,7 @@ impl SealedFrame {
 
     /// The signature of a sealed update, which names the delta in the relay's
     /// echo and refusal (`SYNC-147`). `None` for any other sealed message.
-    pub(crate) fn update_signature(&self) -> Option<Signature> {
+    pub(crate) fn update_signature(&self) -> Option<FixedBytes<Signature>> {
         match &self.0 {
             WsClientMsg::Update(update) => Some(update.signature),
             _ => None,
@@ -806,11 +815,11 @@ ambre_core::define_layout_version! {
 /// Bytes before the ciphertext of a standalone object, each part at the size
 /// its own type states.
 const OBJECT_HEADER: ByteSize = ObjectLayout::SIZE
-    .saturating_add(KeyId::SIZE)
-    .saturating_add(PublicKey::SIZE)
-    .saturating_add(Signature::SIZE)
-    .saturating_add(CommitmentTag::SIZE)
-    .saturating_add(Nonce::SIZE);
+    .saturating_add(FixedBytes::<KeyId>::SIZE)
+    .saturating_add(FixedBytes::<PublicKey>::SIZE)
+    .saturating_add(FixedBytes::<Signature>::SIZE)
+    .saturating_add(FixedBytes::<CommitmentTag>::SIZE)
+    .saturating_add(FixedBytes::<Nonce>::SIZE);
 
 /// Domain of a sealed document name. The document id follows it in the
 /// additional data, so a name opens under its own document only (`SYNC-068`).
@@ -830,17 +839,20 @@ const MEDIA_DOMAIN: &[u8] = b"ambre-media-v2";
 
 /// The additional data of a media blob: the domain, the document id, then the
 /// address the document stores.
-pub fn media_aad(document_id: ambre_core::DocumentId, address: &ambre_core::MediaAddress) -> Aad {
+pub fn media_aad(
+    document_id: ambre_core::DocumentId,
+    address: &FixedBytes<ambre_core::MediaAddress>,
+) -> Aad {
     let mut aad = MEDIA_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
-    aad.extend_from_slice(address.as_bytes());
+    aad.extend_from_slice(address.as_array());
     Aad::new(aad)
 }
 
 /// The additional data an object is sealed under: the layout and the key
 /// identifier its header names, then the caller's own. The signature covers
 /// all three, so a header cannot be made to name another layout or key.
-fn object_aad(key_id: KeyId, aad: &Aad) -> Aad {
+fn object_aad(key_id: FixedBytes<KeyId>, aad: &Aad) -> Aad {
     let mut bound = vec![ObjectLayout::CURRENT.byte()];
     bound.extend_from_slice(key_id.as_array());
     bound.extend_from_slice(aad.as_bytes());
@@ -878,7 +890,11 @@ pub fn seal_object(
 
 /// Lays out a sealed object: `layout || key id || author key || signature ||
 /// commitment tag || nonce || ciphertext`.
-fn object_bytes(key_id: KeyId, signing_key: &SigningKey, sealed: &Sealed) -> SealedBlob {
+fn object_bytes(
+    key_id: FixedBytes<KeyId>,
+    signing_key: &SigningKey,
+    sealed: &Sealed,
+) -> SealedBlob {
     let mut out = Vec::with_capacity(
         OBJECT_HEADER
             .saturating_add(ByteSize::of_len(sealed.ciphertext.len()))
@@ -887,9 +903,9 @@ fn object_bytes(key_id: KeyId, signing_key: &SigningKey, sealed: &Sealed) -> Sea
     out.push(ObjectLayout::CURRENT.byte());
     out.extend_from_slice(key_id.as_array());
     out.extend_from_slice(signing_key.verifying_key().as_bytes());
-    out.extend_from_slice(&sealed.signature.0);
-    out.extend_from_slice(&sealed.commitment_tag.0);
-    out.extend_from_slice(&sealed.nonce.0);
+    out.extend_from_slice(sealed.signature.as_slice());
+    out.extend_from_slice(sealed.commitment_tag.as_slice());
+    out.extend_from_slice(sealed.nonce.as_slice());
     out.extend_from_slice(&sealed.ciphertext.0);
     SealedBlob(out)
 }
@@ -899,16 +915,19 @@ fn object_bytes(key_id: KeyId, signing_key: &SigningKey, sealed: &Sealed) -> Sea
 fn object_parts(
     object: &impl StoredObject,
     doc_key: &DocumentKey,
-) -> Result<(KeyId, PublicKey, Sealed), PipelineError> {
+) -> Result<(FixedBytes<KeyId>, FixedBytes<PublicKey>, Sealed), PipelineError> {
     let bytes = object.object();
     check_layout(bytes)?;
     let (_, rest) = bytes.split_first().ok_or(PipelineError::ShortObject)?;
-    let (key_id, rest) = KeyId::split_from(rest).ok_or(PipelineError::ShortObject)?;
-    let (author, rest) = PublicKey::split_from(rest).ok_or(PipelineError::ShortObject)?;
-    let (signature, rest) = Signature::split_from(rest).ok_or(PipelineError::ShortObject)?;
+    let (key_id, rest) = FixedBytes::<KeyId>::split_from(rest).ok_or(PipelineError::ShortObject)?;
+    let (author, rest) =
+        FixedBytes::<PublicKey>::split_from(rest).ok_or(PipelineError::ShortObject)?;
+    let (signature, rest) =
+        FixedBytes::<Signature>::split_from(rest).ok_or(PipelineError::ShortObject)?;
     let (commitment_tag, rest) =
-        CommitmentTag::split_from(rest).ok_or(PipelineError::ShortObject)?;
-    let (nonce, ciphertext) = Nonce::split_from(rest).ok_or(PipelineError::ShortObject)?;
+        FixedBytes::<CommitmentTag>::split_from(rest).ok_or(PipelineError::ShortObject)?;
+    let (nonce, ciphertext) =
+        FixedBytes::<Nonce>::split_from(rest).ok_or(PipelineError::ShortObject)?;
     check_key(key_id, doc_key)?;
     let sealed = Sealed {
         nonce,
@@ -951,7 +970,7 @@ const LINK_DOMAIN: &[u8] = b"ambre-key-link-v1";
 
 /// The additional data of a link: the domain, the document id, then the
 /// identifier of the key it seals.
-fn link_aad(document_id: ambre_core::DocumentId, previous: KeyId) -> Aad {
+fn link_aad(document_id: ambre_core::DocumentId, previous: FixedBytes<KeyId>) -> Aad {
     let mut aad = LINK_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
     aad.extend_from_slice(previous.as_array());
@@ -1018,12 +1037,12 @@ pub fn open_link(
 /// [`PipelineError::UnknownLayout`] when the layout is not one this build
 /// reads, and [`PipelineError::ShortObject`] when the bytes cannot hold an
 /// identifier.
-pub fn object_key(object: &impl StoredObject) -> Result<KeyId, PipelineError> {
+pub fn object_key(object: &impl StoredObject) -> Result<FixedBytes<KeyId>, PipelineError> {
     let bytes = object.object();
     check_layout(bytes)?;
     bytes
         .split_first()
-        .and_then(|(_, rest)| KeyId::split_from(rest))
+        .and_then(|(_, rest)| FixedBytes::<KeyId>::split_from(rest))
         .map(|(key_id, _)| key_id)
         .ok_or(PipelineError::ShortObject)
 }
@@ -1036,13 +1055,13 @@ pub fn object_key(object: &impl StoredObject) -> Result<KeyId, PipelineError> {
 ///
 /// [`PipelineError::UnknownLayout`] when the layout is not one this build
 /// reads, and [`PipelineError::ShortObject`] when the bytes cannot hold a key.
-pub fn object_author(object: &impl StoredObject) -> Result<PublicKey, PipelineError> {
+pub fn object_author(object: &impl StoredObject) -> Result<FixedBytes<PublicKey>, PipelineError> {
     let bytes = object.object();
     check_layout(bytes)?;
     bytes
         .split_first()
-        .and_then(|(_, rest)| KeyId::split_from(rest))
-        .and_then(|(_, rest)| PublicKey::split_from(rest))
+        .and_then(|(_, rest)| FixedBytes::<KeyId>::split_from(rest))
+        .and_then(|(_, rest)| FixedBytes::<PublicKey>::split_from(rest))
         .map(|(author, _)| author)
         .ok_or(PipelineError::ShortObject)
 }
@@ -1071,19 +1090,19 @@ mod tests {
         UpdateFrame::from_bytes(bytes.to_vec())
     }
 
-    fn keys() -> (DocumentKey, SigningKey, PublicKey) {
+    fn keys() -> (DocumentKey, SigningKey, FixedBytes<PublicKey>) {
         let doc_key = DocumentKey::from_array([0x11; 32]);
         let signing = MasterSeed::from_array([0x22; 32]).derive_signing_key();
-        let author = PublicKey::from_array(signing.verifying_key().to_bytes());
+        let author = FixedBytes::from_array(signing.verifying_key().to_bytes());
         (doc_key, signing, author)
     }
 
     /// The identifier of the key [`keys`] returns.
-    fn key_id() -> KeyId {
+    fn key_id() -> FixedBytes<KeyId> {
         DocumentKey::from_array([0x11; 32]).id()
     }
 
-    fn update_pd(author: PublicKey) -> UpdatePublicData {
+    fn update_pd(author: FixedBytes<PublicKey>) -> UpdatePublicData {
         UpdatePublicData {
             document_id: DocumentId::new(),
             pub_key: author,
@@ -1135,11 +1154,11 @@ mod tests {
         let (doc_key, signing, author) = keys();
         let pd = SnapshotPublicData {
             document_id: DocumentId::new(),
-            pub_key: author.clone(),
+            pub_key: author,
             key_id: key_id(),
             snapshot_id: SnapshotId::new(),
             parent_snapshot_proof: None,
-            parent_snapshot_update_clocks: vec![(author.clone(), Clock(1)), (author, Clock(2))],
+            parent_snapshot_update_clocks: vec![(author, Clock(1)), (author, Clock(2))],
         };
         assert!(matches!(
             seal_snapshot(
@@ -1159,9 +1178,9 @@ mod tests {
     fn readable_part(update: &Update) -> Vec<u8> {
         let mut blank = update.clone();
         blank.ciphertext = Ciphertext(Vec::new());
-        blank.nonce = Nonce([0u8; 24]);
-        blank.commitment_tag = CommitmentTag([0u8; 32]);
-        blank.signature = Signature([0u8; 64]);
+        blank.nonce = FixedBytes::from_array([0u8; 24]);
+        blank.commitment_tag = FixedBytes::from_array([0u8; 32]);
+        blank.signature = FixedBytes::from_array([0u8; 64]);
         postcard::to_allocvec(&blank).unwrap()
     }
 
@@ -1202,9 +1221,9 @@ mod tests {
     fn the_session_nonce_is_sealed_inside_the_ciphertext() {
         let (doc_key, signing, author) = keys();
         let pd = update_pd(author);
-        let first = SessionNonce([1; SESSION_NONCE_LEN]);
-        let second = SessionNonce([2; SESSION_NONCE_LEN]);
-        let seal = |nonce: &SessionNonce| {
+        let first = FixedBytes::<SessionNonce>::from_array([1; SESSION_NONCE_LEN]);
+        let second = FixedBytes::<SessionNonce>::from_array([2; SESSION_NONCE_LEN]);
+        let seal = |nonce: &FixedBytes<SessionNonce>| {
             seal_update(
                 &update_body(nonce, None, &b"delta".to_vec().into()).unwrap(),
                 pd.clone(),
@@ -1235,7 +1254,7 @@ mod tests {
     fn the_activity_summary_is_sealed_inside_the_ciphertext() {
         let (doc_key, signing, author) = keys();
         let pd = update_pd(author);
-        let nonce = SessionNonce([1; SESSION_NONCE_LEN]);
+        let nonce = FixedBytes::<SessionNonce>::from_array([1; SESSION_NONCE_LEN]);
         let mentioned = UserId::from_bytes([0xA7; 16]);
         let summary = ActivitySummary {
             kind: ActivityKind::Content,
@@ -1274,27 +1293,32 @@ mod tests {
             Err(PipelineError::ShortBody)
         ));
         let mut body = update_body(
-            &SessionNonce([1; SESSION_NONCE_LEN]),
+            &FixedBytes::<SessionNonce>::from_array([1; SESSION_NONCE_LEN]),
             None,
             &b"d".to_vec().into(),
         )
         .unwrap()
         .into_bytes();
-        if let Some(marker) = body.get_mut(SessionNonce::SIZE.as_len()) {
+        if let Some(marker) = body.get_mut(FixedBytes::<SessionNonce>::SIZE.as_len()) {
             *marker = 2;
         }
         assert!(matches!(
             split_update_body(UpdateFrame::from_bytes(body)),
             Err(PipelineError::UnknownSummary)
         ));
-        let mut cut = vec![1; SessionNonce::SIZE.as_len()];
+        let mut cut = vec![1; FixedBytes::<SessionNonce>::SIZE.as_len()];
         cut.extend_from_slice(&[SummaryMarker::Present.byte(), 0, 0]);
         assert!(matches!(
             split_update_body(UpdateFrame::from_bytes(cut)),
             Err(PipelineError::Summary(SummaryError::Short))
         ));
         let empty = split_update_body(
-            update_body(&SessionNonce([1; 16]), None, &b"".to_vec().into()).unwrap(),
+            update_body(
+                &FixedBytes::<SessionNonce>::from_array([1; 16]),
+                None,
+                &b"".to_vec().into(),
+            )
+            .unwrap(),
         )
         .unwrap();
         assert!(empty.delta.is_empty());
@@ -1377,13 +1401,7 @@ mod tests {
     #[test]
     fn a_frame_names_the_key_that_sealed_it() {
         let (doc_key, signing, author) = keys();
-        let update = seal_update(
-            &frame(b"delta"),
-            update_pd(author.clone()),
-            &doc_key,
-            &signing,
-        )
-        .unwrap();
+        let update = seal_update(&frame(b"delta"), update_pd(author), &doc_key, &signing).unwrap();
         assert_eq!(update.public_data.key_id, doc_key.id());
 
         let other = DocumentKey::from_array([0x44; 32]);
@@ -1427,7 +1445,8 @@ mod tests {
         .unwrap()
         .into_bytes();
         let key_at = ObjectLayout::SIZE.as_len();
-        renamed[key_at..key_at + KeyId::SIZE.as_len()].copy_from_slice(doc_key.id().as_array());
+        renamed[key_at..key_at + FixedBytes::<KeyId>::SIZE.as_len()]
+            .copy_from_slice(doc_key.id().as_array());
         assert!(open_object(&fetched(&renamed), &ambre_core::Aad::of(b"aad"), &doc_key).is_err());
     }
 
@@ -1553,8 +1572,8 @@ mod tests {
 
         // The signature: one flipped byte, and the author no longer signed it.
         let signature_at = ObjectLayout::SIZE
-            .saturating_add(KeyId::SIZE)
-            .saturating_add(PublicKey::SIZE)
+            .saturating_add(FixedBytes::<KeyId>::SIZE)
+            .saturating_add(FixedBytes::<PublicKey>::SIZE)
             .as_len();
         let mut forged = sealed.clone();
         forged[signature_at] ^= 1;
@@ -1564,17 +1583,17 @@ mod tests {
         ));
 
         // The tag: a wrong one, re-signed so the signature passes, still fails.
-        let tag_at = signature_at + Signature::SIZE.as_len();
-        let nonce_at = tag_at + CommitmentTag::SIZE.as_len();
+        let tag_at = signature_at + FixedBytes::<Signature>::SIZE.as_len();
+        let nonce_at = tag_at + FixedBytes::<CommitmentTag>::SIZE.as_len();
         let header_len = OBJECT_HEADER.as_len();
         let mut moved = sealed.clone();
         moved[tag_at] ^= 1;
-        let tag = ambre_core::CommitmentTag(moved[tag_at..nonce_at].try_into().unwrap());
-        let nonce = ambre_core::Nonce(moved[nonce_at..header_len].try_into().unwrap());
+        let tag = FixedBytes::<CommitmentTag>::from_slice(&moved[tag_at..nonce_at]).unwrap();
+        let nonce = FixedBytes::<Nonce>::from_slice(&moved[nonce_at..header_len]).unwrap();
         let body = ambre_core::Ciphertext(moved[header_len..].to_vec());
         let bound = object_aad(doc_key.id(), aad);
         let resigned = signature::sign(&signing, &nonce, &body, &bound, &tag);
-        moved[signature_at..tag_at].copy_from_slice(&resigned.0);
+        moved[signature_at..tag_at].copy_from_slice(resigned.as_slice());
         assert!(matches!(
             open_object(&fetched(&moved), aad, &doc_key),
             Err(PipelineError::Crypto(CryptoError::CommitmentMismatch))
@@ -1641,7 +1660,7 @@ mod tests {
     fn a_media_blob_the_old_code_sealed_still_reads_and_opens() {
         let (doc_key, _, author) = keys();
         let id = DocumentId::from_bytes([7; 16]);
-        let address = ambre_core::MediaAddress::from_array([0xab; 32]);
+        let address = FixedBytes::<ambre_core::MediaAddress>::from_array([0xab; 32]);
         let sealed = FetchedBlob::new(
             hex::decode(
                 "01b6e14f706ce523ebafb9bf6eb3cbeb9a9baf2dea5ae773139d2499db2dd2ac\
@@ -1670,7 +1689,7 @@ mod tests {
     /// these bytes.
     #[test]
     fn an_update_body_keeps_the_bytes_of_the_old_layout() {
-        let nonce = SessionNonce([0x5a; SESSION_NONCE_LEN]);
+        let nonce = FixedBytes::<SessionNonce>::from_array([0x5a; SESSION_NONCE_LEN]);
         let delta = ambre_core::DeltaBytes::new(b"delta".to_vec());
         let summary = ActivitySummary {
             kind: ActivityKind::Content,

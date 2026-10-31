@@ -42,6 +42,8 @@ pub mod error;
 /// The name and the bytes of a file an import reads or an export writes.
 pub mod export_file;
 pub mod fingerprint;
+/// Fixed-width byte values, one generic type over a role marker.
+pub mod fixed_bytes;
 /// Fixture machinery (`ambre-spec-fixtures.md`). Behind the non-default
 /// `fixtures` feature so no client build can reach it (I4).
 #[cfg(feature = "fixtures")]
@@ -55,7 +57,6 @@ pub mod id;
 /// Index families: a position, a count, a difference and a span, written by
 /// [`define_index!`].
 pub mod index;
-pub mod key_hex;
 pub mod key_id;
 pub mod lang;
 pub mod layout;
@@ -114,13 +115,14 @@ pub use docfile::{
 };
 pub use email::Email;
 pub use encoded::{
-    EncodedKeyLink, EncodedLogEntry, EscrowedKey, InvalidMasterKeySalt, MasterKeySalt, SealedName,
+    EncodedKeyLink, EncodedLogEntry, EscrowedKey, MASTER_KEY_SALT_LEN, MasterKeySalt, SealedName,
     SealedShare, WrappedDocKey, WrappedMasterKey,
 };
 pub use envelope::{Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
-pub use error::{DocTypeError, Error, PublicKeyError, UuidError, VersionError};
+pub use error::{DocTypeError, Error, UuidError, VersionError};
 pub use export_file::{ExportExtension, ExportFilename, ExportFilenameError, FileBytes};
 pub use fingerprint::KeyFingerprint;
+pub use fixed_bytes::{ByteArray, DebugForm, FixedBytes, FixedBytesError, FixedRole};
 #[cfg(feature = "fixtures")]
 pub use fixtures::{
     BoardFrameCount, ConnectorCount, DocBlockCount, FIXTURE_IMPORT_PEER, FixtureGen,
@@ -135,8 +137,7 @@ pub use id::{
     CategoryId, ChannelId, CommentId, DocumentId, FootnoteId, LeaseId, MeetingId, MessageId,
     MetaId, OrgId, ReplyId, SegmentId, SnapshotId, SpaceId, SuggestionId, UserId,
 };
-pub use key_hex::{ExchangeKeyHex, SignatureHex, SigningKeyHex};
-pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
+pub use key_id::{KEY_ID_LEN, KeyId};
 pub use lang::LangTag;
 pub use link::LinkUrl;
 pub use media::{

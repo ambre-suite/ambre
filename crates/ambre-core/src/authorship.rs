@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::UserId;
 use crate::envelope::Signature;
+use crate::fixed_bytes::{FixedBytes, FixedRole};
 
 /// Length of a session nonce, in bytes.
 pub const SESSION_NONCE_LEN: usize = 16;
@@ -91,11 +92,14 @@ impl IdCounter {
     }
 }
 
-/// 128 random bits drawn when a client opens a document (`AUTHOR-002`).
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
-pub struct SessionNonce(pub [u8; SESSION_NONCE_LEN]);
+/// The role of the 128 random bits drawn when a client opens a document
+/// (`AUTHOR-002`): `FixedBytes<SessionNonce>`.
+pub enum SessionNonce {}
 
-crate::envelope::fixed_bytes!(SessionNonce, SESSION_NONCE_LEN);
+impl FixedRole for SessionNonce {
+    const NAME: &'static str = "SessionNonce";
+    type Array = [u8; SESSION_NONCE_LEN];
+}
 
 /// One row of the peer registry: who wrote under a PeerID, and with which
 /// nonce. It carries that user's signature over the document, the PeerID and
@@ -105,9 +109,9 @@ pub struct PeerEntry {
     /// The user the entry claims.
     pub user: UserId,
     /// The nonce the PeerID derives from.
-    pub nonce: SessionNonce,
+    pub nonce: FixedBytes<SessionNonce>,
     /// The signature of `user` over the document, the PeerID and the nonce.
-    pub signature: Signature,
+    pub signature: FixedBytes<Signature>,
 }
 
 impl PeerEntry {
@@ -117,8 +121,8 @@ impl PeerEntry {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(PEER_ENTRY_LEN);
         out.extend_from_slice(self.user.as_bytes());
-        out.extend_from_slice(&self.nonce.0);
-        out.extend_from_slice(&self.signature.0);
+        self.nonce.push_to(&mut out);
+        self.signature.push_to(&mut out);
         out
     }
 
@@ -127,12 +131,12 @@ impl PeerEntry {
     #[must_use]
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         let (user, rest) = bytes.split_first_chunk::<16>()?;
-        let (nonce, rest) = rest.split_first_chunk::<SESSION_NONCE_LEN>()?;
-        let signature: [u8; ENTRY_SIGNATURE_LEN] = rest.try_into().ok()?;
+        let (nonce, rest) = FixedBytes::<SessionNonce>::split_from(rest)?;
+        let signature = FixedBytes::<Signature>::from_slice(rest).ok()?;
         Some(Self {
             user: UserId::from_bytes(*user),
-            nonce: SessionNonce(*nonce),
-            signature: Signature(signature),
+            nonce,
+            signature,
         })
     }
 }
@@ -230,8 +234,8 @@ mod tests {
     fn an_entry_reads_back_and_a_truncated_one_does_not() {
         let entry = PeerEntry {
             user: UserId::from_bytes([3; 16]),
-            nonce: SessionNonce([5; SESSION_NONCE_LEN]),
-            signature: Signature([7; ENTRY_SIGNATURE_LEN]),
+            nonce: FixedBytes::from_array([5; SESSION_NONCE_LEN]),
+            signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
         };
         let bytes = entry.to_bytes();
         assert_eq!(bytes.len(), PEER_ENTRY_LEN);
@@ -247,8 +251,8 @@ mod tests {
     fn an_entry_crosses_the_bus_as_its_registry_bytes() {
         let entry = PeerEntry {
             user: UserId::from_bytes([3; 16]),
-            nonce: SessionNonce([5; SESSION_NONCE_LEN]),
-            signature: Signature([7; ENTRY_SIGNATURE_LEN]),
+            nonce: FixedBytes::from_array([5; SESSION_NONCE_LEN]),
+            signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
         };
         let wire = postcard::to_allocvec(&entry).unwrap();
         assert_eq!(wire, postcard::to_allocvec(&entry.to_bytes()).unwrap());

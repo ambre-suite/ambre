@@ -27,7 +27,7 @@ pub struct DocumentSummaryRow {
     /// Exchange public key of the member who wrapped the caller's `doc_key_enc`
     /// (the inviter, or the owner at creation). `None` for a self-wrapped owner
     /// row on older data; the client then falls back to its own key.
-    pub wrapper_exchange_pubkey: Option<ambre_core::ExchangePublicKey>,
+    pub wrapper_exchange_pubkey: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
     /// Total number of members on the document (routing metadata, plaintext).
     /// `> 1` means the document is shared.
     pub member_count: ambre_core::MemberCount,

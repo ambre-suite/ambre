@@ -8,8 +8,8 @@ use crate::Receipt;
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
-use ambre_core::authorship::{PeerEntry, SessionNonce};
-use ambre_core::{ChannelId, DeltaBytes, DocumentId, PeerEntryBytes, Seq, UserId};
+use ambre_core::authorship::PeerEntry;
+use ambre_core::{ChannelId, DeltaBytes, DocumentId, FixedBytes, PeerEntryBytes, Seq, UserId};
 use loro::{Container, ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer, VersionVector};
 
 use crate::schema::{MessageKey, Root};
@@ -33,8 +33,8 @@ fn draft(text: &str) -> MessageDraft {
 fn entry(user: UserId) -> PeerEntryBytes {
     PeerEntryBytes::from(&PeerEntry {
         user,
-        nonce: SessionNonce([7; 16]),
-        signature: ambre_core::Signature([9; 64]),
+        nonce: FixedBytes::from_array([7; 16]),
+        signature: FixedBytes::from_array([9; 64]),
     })
 }
 

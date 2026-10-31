@@ -115,7 +115,7 @@ mod handler_tests {
             "email": "user@ambre.app",
             "display_name": "Test User",
             "master_key_enc": base64_encode(&[1u8; 72]),
-            "master_key_salt": base64_encode(&[2u8; 32]),
+            "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode([3u8; 32]),
             "exchange_pubkey": hex::encode([4u8; 32]),
         });
@@ -150,7 +150,7 @@ mod handler_tests {
             "email": "User@Ambre.App",
             "display_name": "Impostor",
             "master_key_enc": base64_encode(&[9u8; 72]),
-            "master_key_salt": base64_encode(&[8u8; 32]),
+            "master_key_salt": hex::encode([8u8; 32]),
             "signing_pubkey": hex::encode([7u8; 32]),
             "exchange_pubkey": hex::encode([6u8; 32]),
         });
@@ -556,8 +556,12 @@ mod handler_tests {
         let [seq, clocks, ..] = keys.texts();
         let [other_seq, ..] = other_keys.texts();
         state.redis.set(seq, 7).await.unwrap();
-        state.redis.hset(clocks, [("aa", "3")]).await.unwrap();
-        let aa = ambre_core::SigningKeyHex("aa".into());
+        let aa = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([0xaa; 32]);
+        state
+            .redis
+            .hset(clocks, [(aa.to_hex(), "3")])
+            .await
+            .unwrap();
         state.redis.set(other_seq, 4).await.unwrap();
         crate::redis_ops::doc_session_open(&state.redis, &doc, &aa)
             .await
@@ -634,7 +638,7 @@ mod handler_tests {
             redis,
             &doc,
             ambre_core::Seq(9),
-            &[(aa.clone(), ambre_protocol::messages::Clock(9))],
+            &[(aa, ambre_protocol::messages::Clock(9))],
         )
         .await
         .unwrap();
@@ -1011,7 +1015,7 @@ mod handler_tests {
             "email": email,
             "display_name": "Signer",
             "master_key_enc": base64_encode(&[1u8; 72]),
-            "master_key_salt": base64_encode(&[2u8; 32]),
+            "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode(key.verifying_key().to_bytes()),
             "exchange_pubkey": hex::encode([seed; 32]),
         });
@@ -1036,7 +1040,7 @@ mod handler_tests {
         key: &ed25519_dalek::SigningKey,
     ) -> String {
         use ed25519_dalek::Signer;
-        entry.signature = ambre_protocol::Signature(
+        entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
             key.sign(entry.signed_bytes().unwrap().as_bytes())
                 .to_bytes(),
         );
@@ -1057,14 +1061,20 @@ mod handler_tests {
             document: doc,
             position: ambre_protocol::LogPosition::new(position),
             member: member.0,
-            member_key: ambre_core::PublicKey::from_array(member.1.verifying_key().to_bytes()),
+            member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+                member.1.verifying_key().to_bytes(),
+            ),
             act,
             role,
             key: (act == ambre_protocol::MembershipAct::Invite)
-                .then(|| ambre_core::KeyId::from_array([1; 16])),
-            previous: (position > 0).then_some(ambre_protocol::EntryDigest([position as u8; 32])),
+                .then(|| ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([1; 16])),
+            previous: (position > 0).then_some(
+                ambre_core::FixedBytes::<ambre_protocol::EntryDigest>::from_array(
+                    [position as u8; 32],
+                ),
+            ),
             author,
-            signature: ambre_protocol::Signature([0; 64]),
+            signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         }
     }
 
@@ -1282,7 +1292,7 @@ mod handler_tests {
         let other = crate::test_helpers::second_instance(&one).await;
         let (app_one, app_other) = (shipped_router(one.clone()), shipped_router(other));
         let user_id = crate::test_helpers::create_test_user(&pool, "both@ambre.app").await;
-        let key = ambre_core::PublicKey::from_array([3u8; 32]);
+        let key = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]);
         let minted = crate::auth::issue_session(&one, user_id, Some(key))
             .await
             .unwrap();
@@ -1451,7 +1461,7 @@ mod handler_tests {
             crate::db::insert_update(
                 &pool,
                 &doc,
-                &ambre_core::PublicKey::from_array([1u8; 32]),
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1u8; 32]),
                 &snapshot,
                 ambre_protocol::messages::Clock(seq),
                 ambre_core::Seq(seq),
@@ -1509,8 +1519,8 @@ mod handler_tests {
     fn link_text(doc_id: &str, key: u8, previous: u8) -> String {
         let link = ambre_protocol::KeyLink {
             document_id: ambre_core::DocumentId::parse_str(doc_id).unwrap(),
-            key: ambre_core::KeyId::from_array([key; 16]),
-            previous: ambre_core::KeyId::from_array([previous; 16]),
+            key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([key; 16]),
+            previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([previous; 16]),
             sealed: ambre_core::SealedPreviousKey::new(vec![key; 200]),
         };
         base64_encode(link.encode().unwrap().as_bytes())
@@ -1652,7 +1662,7 @@ mod handler_tests {
     fn store_master_keys_body() -> serde_json::Value {
         serde_json::json!({
             "master_key_enc": base64_encode(&[1u8; 72]),
-            "master_key_salt": base64_encode(&[2u8; 32]),
+            "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode([3u8; 32]),
             "exchange_pubkey": hex::encode([4u8; 32]),
         })
@@ -1730,7 +1740,7 @@ mod handler_tests {
                 "email": "short@ambre.app",
                 "display_name": "Short",
                 "master_key_enc": base64_encode(&[1u8; 72]),
-                "master_key_salt": base64_encode(&[2u8; 32]),
+                "master_key_salt": hex::encode([2u8; 32]),
                 "signing_pubkey": hex::encode([3u8; 32]),
                 "exchange_pubkey": hex::encode([4u8; 32]),
             });
@@ -1748,7 +1758,7 @@ mod handler_tests {
                 .clone()
                 .oneshot(post("/api/auth/dev/login", body, None))
                 .await;
-            assert_eq!(resp.unwrap().status(), StatusCode::BAD_REQUEST, "dev {key}");
+            assert_eq!(resp.unwrap().status(), StatusCode::CONFLICT, "dev {key}");
         }
         assert_eq!(users().await, 0, "no account was created");
 
@@ -1885,7 +1895,7 @@ mod handler_tests {
         .unwrap();
         assert_eq!(
             session.signing_pubkey,
-            ambre_core::PublicKey::from_array([3u8; 32])
+            ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32])
         );
         let (listed, _) =
             status_and_code(&app, get_with("/api/documents", &format!("Bearer {token}"))).await;
@@ -2194,7 +2204,7 @@ mod handler_tests {
         .await;
         assert!(ended.is_ok(), "the socket that panicked ends");
 
-        let owner_key = ambre_core::PublicKey::from_array([3u8; 32]);
+        let owner_key = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]);
         let heard_leave = loop {
             match next_server_msg(&mut watcher).await {
                 Some(WsServerMsg::PeerLeft {
@@ -2282,7 +2292,7 @@ mod handler_tests {
                 >,
             > + Unpin,
     {
-        let key = ambre_core::PublicKey::from_array([key; 32]);
+        let key = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([key; 32]);
         loop {
             match next_server_msg(socket).await {
                 Some(WsServerMsg::PeerLeft {
@@ -2477,7 +2487,7 @@ mod handler_tests {
             "email": "user@ambre.app",
             "display_name": "Test User",
             "master_key_enc": base64_encode(&[1u8; 72]),
-            "master_key_salt": base64_encode(&[2u8; 32]),
+            "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode([3u8; 32]),
             "exchange_pubkey": hex::encode([4u8; 32]),
         });
@@ -2502,7 +2512,7 @@ mod handler_tests {
             "email": email,
             "display_name": "Second User",
             "master_key_enc": base64_encode(&[1u8; 72]),
-            "master_key_salt": base64_encode(&[2u8; 32]),
+            "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode([spk_byte; 32]),
             "exchange_pubkey": hex::encode([spk_byte; 32]),
         });
@@ -3202,7 +3212,7 @@ mod handler_tests {
             "email": email,
             "display_name": "Signer",
             "master_key_enc": base64_encode(&[1u8; 72]),
-            "master_key_salt": base64_encode(&[2u8; 32]),
+            "master_key_salt": hex::encode([2u8; 32]),
             "signing_pubkey": hex::encode(key.verifying_key().to_bytes()),
             "exchange_pubkey": hex::encode([8u8; 32]),
         });
@@ -3350,7 +3360,7 @@ mod handler_tests {
             crate::db::insert_update(
                 &state.db,
                 &document,
-                &ambre_core::PublicKey::from_array([3u8; 32]),
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
                 &ambre_core::SnapshotId::new(),
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
                 ambre_core::Seq(seq.unsigned_abs()),
@@ -3366,7 +3376,7 @@ mod handler_tests {
             let transcript = report_transcript(
                 document,
                 snapshot,
-                &ambre_core::PublicKey::from_array(author),
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(author),
             );
             serde_json::json!({ "signature": hex::encode(key.sign(transcript.as_bytes()).to_bytes()) })
         };
@@ -3414,7 +3424,7 @@ mod handler_tests {
         let transcript = report_transcript(
             document,
             kept_id,
-            &ambre_core::PublicKey::from_array([3u8; 32]),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
         );
         let body = serde_json::json!({ "signature": hex::encode(key.sign(transcript.as_bytes()).to_bytes()) });
         let report = format!("/api/documents/{doc_id}/snapshots/{kept}/report");

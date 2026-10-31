@@ -84,7 +84,7 @@ impl SyncState {
         invitee_email: Option<ambre_core::Email>,
         invitee: UserId,
         role: Role,
-        expect_exchange_pub_key: ambre_core::ExchangePublicKey,
+        expect_exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
     ) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();

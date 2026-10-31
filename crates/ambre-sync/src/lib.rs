@@ -55,7 +55,7 @@ use ambre_bus::{
     SecretString, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SpaceId, SyncCommand,
     UserId, UserInfo,
 };
-use ambre_core::{KeyId, PublicKey, SessionNonce};
+use ambre_core::{FixedBytes, KeyId, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -320,7 +320,7 @@ enum SyncEvent {
         /// (`ambre-spec-membership.md`). Seeds `SyncDocumentState::signing_keys` so
         /// inbound ephemerals resolve to a spoof-proof author. Empty for a
         /// local-only open (no members response, hence no peers to resolve).
-        signing_keys: Vec<(ambre_core::PublicKey, UserId)>,
+        signing_keys: Vec<(FixedBytes<PublicKey>, UserId)>,
         /// This client's own role on this document, read from its entry in the
         /// same members response (architecture). `Role::Owner` for a
         /// local-only open. Gates mutating commands in Logic as a UX measure;
@@ -489,7 +489,7 @@ enum SyncEvent {
         user_id: UserId,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
-        exchange_pub_key: ambre_core::ExchangePublicKey,
+        exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
     },
     /// The key a user the client named is served with, and its fingerprint.
@@ -497,7 +497,7 @@ enum SyncEvent {
     MemberKeyReady {
         id: RequestId,
         user_id: UserId,
-        exchange_pub_key: ambre_core::ExchangePublicKey,
+        exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
     },
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
@@ -535,7 +535,7 @@ enum SyncEvent {
         /// the same response. Membership just changed often enough for someone to
         /// ask for the list. This is where a new member becomes resolvable and a
         /// revoked one stops. Ignored when the document is not open locally.
-        signing_keys: Vec<(ambre_core::PublicKey, UserId)>,
+        signing_keys: Vec<(FixedBytes<PublicKey>, UserId)>,
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {
@@ -703,7 +703,7 @@ struct SyncDocumentState {
     /// Per-author ephemeral anti-replay counter. Keyed by the author's Ed25519
     /// verifying key bytes. An inbound ephemeral whose counter is <= the stored
     /// value is silently dropped.
-    ephemeral_remote_counters: HashMap<ambre_core::PublicKey, Counter>,
+    ephemeral_remote_counters: HashMap<FixedBytes<PublicKey>, Counter>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
     /// ephemeral author's verifying key to their canonical `UserId`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
@@ -713,7 +713,7 @@ struct SyncDocumentState {
     /// This is a *membership* directory, not a *trust* store: it trusts the
     /// server's key mapping. Detecting a server that substitutes a member's keys
     /// is the TOFU trusted-keys store's job (architecture) and is orthogonal.
-    signing_keys: HashMap<ambre_core::PublicKey, UserId>,
+    signing_keys: HashMap<FixedBytes<PublicKey>, UserId>,
     /// How many member listings of this document were asked, and which one
     /// the directory holds. Two listings can cross on the way, and the answer
     /// to the older one changes nothing. It cannot bring back the key of a
@@ -759,7 +759,7 @@ struct SyncDocumentState {
 /// A snapshot the Logic thread is checking.
 struct PendingCheck {
     /// The signing key its sealed blob verified under: who built it.
-    author: ambre_core::PublicKey,
+    author: FixedBytes<PublicKey>,
     covered_seq: Seq,
     /// The opened snapshot, kept on open only: a match adopts it.
     payload: Option<ambre_core::SnapshotBytes>,
@@ -850,7 +850,7 @@ impl SyncDocumentState {
     /// The key a frame names: the active key, one in the [`old_keys`] cache,
     /// or one the chain reaches from the active key. `None` when this client
     /// reaches no such key (`SYNC-045`, `SYNC-119`).
-    fn key_named(&self, id: KeyId) -> Option<DocumentKey> {
+    fn key_named(&self, id: FixedBytes<KeyId>) -> Option<DocumentKey> {
         chain::find_key(
             self.document_id,
             &self.doc_key,
@@ -893,7 +893,7 @@ impl SyncDocumentState {
     /// presence, and it cannot affect an active author whose counter keeps rising.
     fn accept_ephemeral_counter(
         &mut self,
-        author_pk: &ambre_core::PublicKey,
+        author_pk: &FixedBytes<PublicKey>,
         counter: Counter,
     ) -> bool {
         // A sender counts from 1, so the floor of an author not seen yet is
@@ -913,13 +913,12 @@ impl SyncDocumentState {
                 .ephemeral_remote_counters
                 .iter()
                 .min_by_key(|&(_, &c)| c)
-                .map(|(k, _)| k.clone());
+                .map(|(k, _)| *k);
             if let Some(evict) = evict {
                 self.ephemeral_remote_counters.remove(&evict);
             }
         }
-        self.ephemeral_remote_counters
-            .insert(author_pk.clone(), counter);
+        self.ephemeral_remote_counters.insert(*author_pk, counter);
         true
     }
 
@@ -927,12 +926,11 @@ impl SyncDocumentState {
     /// Called with the members response fetched at open, and again whenever
     /// membership changes, so a revoked member stops resolving.
     ///
-    /// Entries whose key is not valid hex or not 32 bytes are skipped. A member
-    /// we cannot key on simply never resolves, which costs that peer's cursor
-    /// rather than the whole document's presence.
+    /// A key that is not valid hex or not 32 bytes refused the members answer
+    /// when it was read. So every entry here keys a member.
     fn set_signing_keys(
         &mut self,
-        entries: impl IntoIterator<Item = (ambre_core::PublicKey, UserId)>,
+        entries: impl IntoIterator<Item = (FixedBytes<PublicKey>, UserId)>,
     ) {
         self.signing_keys = entries.into_iter().collect();
     }
@@ -947,7 +945,7 @@ impl SyncDocumentState {
     /// directory has not been filled yet). The caller drops the sample: presence
     /// is best-effort, so showing nothing is preferable to attributing a cursor
     /// to a guessed identity.
-    fn resolve_ephemeral_author(&self, author_pk: &ambre_core::PublicKey) -> Option<UserId> {
+    fn resolve_ephemeral_author(&self, author_pk: &FixedBytes<PublicKey>) -> Option<UserId> {
         self.signing_keys.get(author_pk).copied()
     }
 
@@ -965,13 +963,13 @@ impl SyncDocumentState {
     fn open_signed_snapshot(
         &self,
         blob: &pipeline::FetchedBlob,
-    ) -> Result<(ambre_core::SnapshotBytes, ambre_core::PublicKey), pipeline::PipelineError> {
+    ) -> Result<(ambre_core::SnapshotBytes, FixedBytes<PublicKey>), pipeline::PipelineError> {
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
         let key = self
             .key_named(snapshot.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
         let payload = pipeline::open_snapshot(&snapshot, &key)?;
-        Ok((payload, snapshot.public_data.pub_key.clone()))
+        Ok((payload, snapshot.public_data.pub_key))
     }
 
     /// Opens an update with the one key it names, and with no other
@@ -1153,7 +1151,7 @@ pub struct SyncState {
     /// The session nonce of each open document, drawn when it opens and dropped
     /// when it closes (`AUTHOR-002`). Every update this session seals for the
     /// document carries it (`SYNC-112`).
-    session_nonces: HashMap<DocumentId, SessionNonce>,
+    session_nonces: HashMap<DocumentId, FixedBytes<SessionNonce>>,
 
     /// The documents the Logic thread evicted, each kept as a light
     /// subscription (`RESID-004`).
@@ -1912,7 +1910,7 @@ mod ephemeral_tests {
     #[test]
     fn monotonic_counter_accepted_replay_dropped() {
         let mut d = doc_state();
-        let author = ambre_core::PublicKey::from_array([1u8; 32]);
+        let author = FixedBytes::from_array([1u8; 32]);
         assert!(d.accept_ephemeral_counter(&author, Counter(1)));
         assert!(d.accept_ephemeral_counter(&author, Counter(2)));
         // Replay / stale counters are dropped.
@@ -1929,7 +1927,7 @@ mod ephemeral_tests {
         for i in 0..(MAX_EPHEMERAL_REMOTE_AUTHORS as u64 + 100) {
             let mut author = [0u8; 32];
             author[..8].copy_from_slice(&i.to_le_bytes());
-            let author = ambre_core::PublicKey::from_array(author);
+            let author = FixedBytes::from_array(author);
             assert!(d.accept_ephemeral_counter(&author, Counter(1)));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
@@ -1938,8 +1936,8 @@ mod ephemeral_tests {
     // -- Presence identity resolution (`sync`, "Presence identity") ------------
 
     /// The signing key whose 32 bytes all read `byte`.
-    fn key(byte: u8) -> ambre_core::PublicKey {
-        ambre_core::PublicKey::from_array([byte; 32])
+    fn key(byte: u8) -> FixedBytes<PublicKey> {
+        FixedBytes::from_array([byte; 32])
     }
 
     #[test]
@@ -2007,7 +2005,9 @@ mod seal_tests {
             crate::Existence::OnRelay,
         );
         state.documents.insert(id, doc);
-        state.session_nonces.insert(id, SessionNonce([1; 16]));
+        state
+            .session_nonces
+            .insert(id, FixedBytes::from_array([1; 16]));
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
         (state, id, wire)
@@ -2058,32 +2058,32 @@ mod seal_tests {
     fn a_payload_frame_built_outside_the_seal_never_reaches_the_socket() {
         let (state, id, wire) = with_socket();
         let typed = b"a sentence typed in the clear".to_vec();
-        let pub_key = PublicKey::from_array([2u8; 32]);
-        let key_id = KeyId::from_array([4u8; 16]);
+        let pub_key = FixedBytes::<PublicKey>::from_array([2u8; 32]);
+        let key_id = FixedBytes::<KeyId>::from_array([4u8; 16]);
         state.ws_send(&WsClientMsg::Update(Update {
             ciphertext: Ciphertext(typed.clone()),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: id,
-                pub_key: pub_key.clone(),
+                pub_key,
                 key_id,
                 snapshot_id: SnapshotId::from_bytes([3u8; 16]),
                 clock: Clock(1),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         }));
         state.ws_send(&WsClientMsg::Ephemeral(Ephemeral {
             ciphertext: Ciphertext(typed.clone()),
-            nonce: Nonce([0u8; 24]),
+            nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: id,
                 pub_key,
                 key_id,
                 counter: Counter(1),
             },
-            commitment_tag: CommitmentTag([0u8; 32]),
-            signature: Signature([0u8; 64]),
+            commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
+            signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         }));
         assert!(
             sent(&wire).is_empty(),

@@ -19,7 +19,7 @@
 //! [`LogicCommand::Rest`]: crate::LogicCommand::Rest
 //! [`LogicEvent::Rest`]: crate::LogicEvent::Rest
 
-use ambre_core::SessionNonce;
+use ambre_core::{FixedBytes, SessionNonce};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -83,7 +83,7 @@ pub enum SyncCommand {
     SendUnsent {
         document_id: DocumentId,
         payload: ambre_core::DeltaBytes,
-        nonce: SessionNonce,
+        nonce: FixedBytes<SessionNonce>,
     },
 
     /// Full CRDT state for compaction (presigned URL -> S3).

@@ -188,7 +188,7 @@ mod db_tests {
         db::insert_update(
             &state.db,
             doc,
-            &ambre_core::PublicKey::from_array(*author),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(*author),
             &tag,
             ambre_protocol::messages::Clock(seq.unsigned_abs()),
             ambre_core::Seq(seq.unsigned_abs()),
@@ -212,7 +212,7 @@ mod db_tests {
         db::create_snapshot(
             &state.db,
             doc,
-            &ambre_core::PublicKey::from_array(*author),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(*author),
             &json,
             &key,
             covered,
@@ -252,7 +252,7 @@ mod db_tests {
             &state.db,
             &doc,
             &sid,
-            &ambre_core::PublicKey::from_array(BOB),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
         )
         .await
         .unwrap();
@@ -278,7 +278,7 @@ mod db_tests {
             &state.db,
             &doc,
             &reference,
-            &ambre_core::PublicKey::from_array(ALICE),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
         )
         .await
         .unwrap();
@@ -287,7 +287,7 @@ mod db_tests {
             &state.db,
             &doc,
             &own,
-            &ambre_core::PublicKey::from_array(ALICE),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
         )
         .await
         .unwrap();
@@ -311,7 +311,7 @@ mod db_tests {
             &state.db,
             &doc,
             &first,
-            &ambre_core::PublicKey::from_array(ALICE),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
         )
         .await
         .unwrap();
@@ -320,7 +320,7 @@ mod db_tests {
             &state.db,
             &doc,
             &second,
-            &ambre_core::PublicKey::from_array(BOB),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
         )
         .await
         .unwrap();
@@ -330,7 +330,7 @@ mod db_tests {
             &state.db,
             &doc,
             &second,
-            &ambre_core::PublicKey::from_array(CAROL),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(CAROL),
         )
         .await
         .unwrap();
@@ -348,7 +348,7 @@ mod db_tests {
             &state.db,
             &doc,
             &reference,
-            &ambre_core::PublicKey::from_array(BOB),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(BOB),
         )
         .await
         .unwrap();
@@ -357,7 +357,7 @@ mod db_tests {
             &state.db,
             &doc,
             &own,
-            &ambre_core::PublicKey::from_array(ALICE),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
         )
         .await
         .unwrap();
@@ -394,7 +394,7 @@ mod db_tests {
             &state.db,
             &doc,
             &sid,
-            &ambre_core::PublicKey::from_array(ALICE),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(ALICE),
         )
         .await
         .unwrap();

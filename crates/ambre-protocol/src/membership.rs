@@ -7,7 +7,7 @@
 //! what the relay serves (`SYNC-103`). The relay stores the entries and checks
 //! the signature, and computes no digest.
 
-use ambre_core::{DocumentId, EncodedLogEntry, KeyId, PublicKey, Role, UserId};
+use ambre_core::{DocumentId, EncodedLogEntry, FixedBytes, KeyId, PublicKey, Role, UserId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::SerializationError;
@@ -133,22 +133,21 @@ pub struct MembershipEntry {
     pub member: UserId,
     /// The member's signing key, so an entry that member signs later checks
     /// against the log alone.
-    pub member_key: ambre_core::PublicKey,
+    pub member_key: FixedBytes<PublicKey>,
     /// What the entry records.
     pub act: MembershipAct,
     /// The member's role after the entry.
     pub role: Role,
     /// The key an invite or a self-join wraps (`SYNC-123`), and the key a
     /// creation or a revoke installs.
-    pub key: Option<KeyId>,
+    pub key: Option<FixedBytes<KeyId>>,
     /// The digest of the entry before this one, absent on the first alone.
-    pub previous: Option<EntryDigest>,
+    pub previous: Option<FixedBytes<EntryDigest>>,
     /// The member who made the change and signed it.
     pub author: UserId,
     /// The author's signature over [`MembershipEntry::signed_bytes`]. It
-    /// encodes as a length-prefixed byte string, as the `Vec<u8>` it replaced
-    /// did, so a stored entry and its digest keep their bytes.
-    pub signature: Signature,
+    /// encodes as its 64 bytes, with no length prefix.
+    pub signature: FixedBytes<Signature>,
 }
 
 /// The fields a signature covers: every field but the signature.
@@ -157,11 +156,11 @@ struct Signed<'a> {
     document: &'a DocumentId,
     position: LogPosition,
     member: &'a UserId,
-    member_key: &'a PublicKey,
+    member_key: &'a FixedBytes<PublicKey>,
     act: MembershipAct,
     role: Role,
-    key: &'a Option<KeyId>,
-    previous: &'a Option<EntryDigest>,
+    key: &'a Option<FixedBytes<KeyId>>,
+    previous: &'a Option<FixedBytes<EntryDigest>>,
     author: &'a UserId,
 }
 
@@ -234,13 +233,13 @@ mod tests {
             document: DocumentId::from_bytes([1; 16]),
             position: LogPosition::new(1),
             member: UserId::from_bytes([2; 16]),
-            member_key: PublicKey::from_array([3; 32]),
+            member_key: FixedBytes::from_array([3; 32]),
             act: MembershipAct::Invite,
             role: Role::Editor,
-            key: Some(KeyId::from_array([4; 16])),
-            previous: Some(EntryDigest([5; 32])),
+            key: Some(FixedBytes::from_array([4; 16])),
+            previous: Some(FixedBytes::from_array([5; 32])),
             author: UserId::from_bytes([6; 16]),
-            signature: Signature([7; ENTRY_SIGNATURE_LEN]),
+            signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
         }
     }
 
@@ -256,11 +255,11 @@ mod tests {
             |e| e.document = DocumentId::from_bytes([9; 16]),
             |e| e.position = LogPosition::new(2),
             |e| e.member = UserId::from_bytes([9; 16]),
-            |e| e.member_key = PublicKey::from_array([9; 32]),
+            |e| e.member_key = FixedBytes::from_array([9; 32]),
             |e| e.act = MembershipAct::Revoke,
             |e| e.role = Role::Viewer,
             |e| e.key = None,
-            |e| e.previous = Some(EntryDigest([9; 32])),
+            |e| e.previous = Some(FixedBytes::from_array([9; 32])),
             |e| e.author = UserId::from_bytes([9; 16]),
         ];
         for change in changes {
@@ -269,7 +268,7 @@ mod tests {
             assert_ne!(changed.signed_bytes().unwrap(), signed);
         }
         let mut resigned = base.clone();
-        resigned.signature = Signature([8; ENTRY_SIGNATURE_LEN]);
+        resigned.signature = FixedBytes::from_array([8; ENTRY_SIGNATURE_LEN]);
         assert_eq!(resigned.signed_bytes().unwrap(), signed);
     }
 
@@ -290,18 +289,16 @@ mod tests {
         );
     }
 
-    /// The signature closes the encoding as a length-prefixed byte string,
-    /// the form a `Vec<u8>` wrote, so a stored entry keeps its bytes. A
-    /// signature of another length does not decode.
+    /// The signature closes the encoding as its bytes alone, with no length
+    /// prefix: the type fixes the length. A signature of another length does
+    /// not decode.
     #[test]
-    fn the_signature_keeps_its_length_prefixed_encoding() {
+    fn the_signature_closes_the_encoding_as_its_bare_bytes() {
         let sent = entry().encode().unwrap().into_bytes();
-        let tail = sent.len() - ENTRY_SIGNATURE_LEN - 1;
-        assert_eq!(sent[tail], ENTRY_SIGNATURE_LEN as u8);
-        assert_eq!(sent[tail + 1..], [7; ENTRY_SIGNATURE_LEN]);
-        let mut short = sent[..tail].to_vec();
-        short.push(ENTRY_SIGNATURE_LEN as u8 - 1);
-        short.extend([7; ENTRY_SIGNATURE_LEN - 1]);
+        let tail = sent.len() - ENTRY_SIGNATURE_LEN;
+        assert_ne!(sent[tail - 1], ENTRY_SIGNATURE_LEN as u8);
+        assert_eq!(sent[tail..], [7; ENTRY_SIGNATURE_LEN]);
+        let short = sent[..sent.len() - 1].to_vec();
         assert!(MembershipEntry::decode(&EncodedLogEntry::new(short)).is_err());
     }
 

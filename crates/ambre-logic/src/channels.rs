@@ -2336,7 +2336,7 @@ mod tests {
             delta: ambre_bus::SignedDelta {
                 seq: ambre_core::Seq(1),
                 payload,
-                nonce: ambre_core::SessionNonce([0; 16]),
+                nonce: FixedBytes::from_array([0; 16]),
                 peer,
                 user: Some(author),
                 summary: None,
@@ -2415,7 +2415,7 @@ mod tests {
                 ambre_bus::SignedDelta {
                     seq: ambre_core::Seq(seq),
                     payload,
-                    nonce: ambre_core::SessionNonce([0; 16]),
+                    nonce: FixedBytes::from_array([0; 16]),
                     peer,
                     user: Some(author),
                     summary,

@@ -75,8 +75,8 @@ use ambre_bus::{
     UiEvent, UserId,
 };
 
-use ambre_core::SessionNonce;
 use ambre_core::schema::SchemaError;
+use ambre_core::{FixedBytes, SessionNonce};
 
 use ambre_murmure::Order;
 use ambre_prose::ProseState;
@@ -514,7 +514,7 @@ struct LiveDoc {
     relay: loro::VersionVector,
     /// The earlier sessions of this user on the document, read back from the
     /// local store: each PeerID with the nonce it derives from.
-    earlier: Vec<(ambre_core::PeerId, SessionNonce)>,
+    earlier: Vec<(ambre_core::PeerId, FixedBytes<SessionNonce>)>,
     /// The document reopens from the local store after leaving memory, at
     /// this horizon. Sync is asked to open it once the read lands
     /// (`RESID-010`).
@@ -601,7 +601,7 @@ impl LogicState {
             document_id,
             peer,
             entry: test_entry(peer),
-            nonce: SessionNonce([0; 16]),
+            nonce: FixedBytes::from_array([0; 16]),
         });
         peer
     }
@@ -622,8 +622,8 @@ fn test_entry(peer: ambre_core::PeerId) -> ambre_core::PeerEntry {
     user[..8].copy_from_slice(&peer.0.to_le_bytes());
     ambre_core::PeerEntry {
         user: UserId::from_bytes(user),
-        nonce: SessionNonce([0; 16]),
-        signature: ambre_core::Signature([0; 64]),
+        nonce: FixedBytes::from_array([0; 16]),
+        signature: FixedBytes::from_array([0; 64]),
     }
 }
 
@@ -684,7 +684,7 @@ pub enum PersistWrite<S = ambre_core::SnapshotBytes, D = ambre_core::DeltaBytes>
     /// open sends what the session left unsent (`AUTHOR-028`).
     Session {
         peer: ambre_core::PeerId,
-        nonce: SessionNonce,
+        nonce: FixedBytes<SessionNonce>,
     },
     /// An earlier session whose operations the relay holds: nothing of it is
     /// left to send.
@@ -1208,7 +1208,7 @@ fn remote_delta(seq: u64, payload: ambre_core::DeltaBytes) -> ambre_bus::SignedD
     ambre_bus::SignedDelta {
         seq: ambre_core::Seq(seq),
         payload,
-        nonce: ambre_core::SessionNonce([0; 16]),
+        nonce: FixedBytes::from_array([0; 16]),
         peer: ambre_core::PeerId(peer),
         user: None,
         summary: None,
@@ -1702,7 +1702,6 @@ mod authorship_tests {
     use super::*;
     use ambre_bus::TrameCommand;
     use ambre_bus::{Col, Row};
-    use ambre_core::SessionNonce;
     use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
     const ALICE: ambre_core::PeerId = ambre_core::PeerId(0xA11CE);
@@ -1771,7 +1770,7 @@ mod authorship_tests {
         SignedDelta {
             seq: ambre_core::Seq(0),
             payload,
-            nonce: SessionNonce([0; 16]),
+            nonce: FixedBytes::from_array([0; 16]),
             peer,
             user: None,
             summary: None,
@@ -2320,7 +2319,7 @@ mod authorship_tests {
                 doc_type: DocType::Trame,
                 snapshot: Some(snapshot_of(&hers).into()),
                 deltas: Vec::new(),
-                sessions: vec![(ALICE, SessionNonce([7; 16]))],
+                sessions: vec![(ALICE, FixedBytes::from_array([7; 16]))],
             });
         let peer = rig.state.grant_identity(rig.document_id);
         for (seq, delta) in hers.iter().take(relayed).enumerate() {
@@ -2345,7 +2344,7 @@ mod authorship_tests {
     #[test]
     fn an_earlier_sessions_unsent_edits_travel_with_its_nonce() {
         let (sent, saved, hers, peer) = reopened(1);
-        let unsent: Vec<(ambre_core::DeltaBytes, SessionNonce)> = sent
+        let unsent: Vec<(ambre_core::DeltaBytes, FixedBytes<SessionNonce>)> = sent
             .into_iter()
             .filter_map(|cmd| match cmd {
                 SyncCommand::SendUnsent { payload, nonce, .. } => Some((payload, nonce)),
@@ -2355,7 +2354,7 @@ mod authorship_tests {
         let [(payload, nonce)] = unsent.as_slice() else {
             panic!("expected one unsent delta, got {}", unsent.len());
         };
-        assert_eq!(*nonce, SessionNonce([7; 16]));
+        assert_eq!(*nonce, FixedBytes::from_array([7; 16]));
         assert_eq!(authors(payload), vec![ALICE]);
         let meta =
             LoroDoc::decode_import_blob_meta(payload.as_bytes(), false).expect("a readable delta");
