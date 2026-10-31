@@ -2126,10 +2126,10 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | LockToken::as_str() | ret |
 ambre-server | src/redis_ops.rs | crate::redis_ops | REHYDRATE_CLOCK_LUA | const | &str	free-text	Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | ROTATION_OWED | const | &str	generic	refusal word shared with the Lua script text
 ambre-server | src/redis_ops.rs | crate::redis_ops | SEGMENT_LOCKED | const | &str	generic	refusal word shared with the Lua script text
-ambre-server | src/redis_ops.rs | crate::redis_ops | StoreVersion.major | field | u16	foreign-api	version component of the INFO server reply
-ambre-server | src/redis_ops.rs | crate::redis_ops | StoreVersion.minor | field | u16	foreign-api	version component of the INFO server reply
+ambre-server | src/redis_ops.rs | crate::redis_ops | StoreVersion.major | field | u16	generic	version component, compared as a pair
+ambre-server | src/redis_ops.rs | crate::redis_ops | StoreVersion.minor | field | u16	generic	version component, compared as a pair
 ambre-server | src/redis_ops.rs | crate::redis_ops | append_pending_delta::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | check_store_version(info) | param | &str	foreign-api	INFO server reply text read from Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | check_store_version(info) | param | &str	generic	parses a store reply text
 ambre-server | src/redis_ops.rs | crate::redis_ops | claim_snapshot_ask() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | clear_pending_dirty_if_empty::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | clock_refusal(error) | param | &str	generic	parses a store error text
@@ -2143,7 +2143,7 @@ ambre-server | src/redis_ops.rs | crate::redis_ops | lock_segment::LUA | const |
 ambre-server | src/redis_ops.rs | crate::redis_ops | lock_segment_now::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | mark_document_gone::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | mirror_rotation_owed::LUA | const | &str	foreign-api	Lua script text sent to Redis
-ambre-server | src/redis_ops.rs | crate::redis_ops | parse_store_version(info) | param | &str	foreign-api	INFO server reply text read from Redis
+ambre-server | src/redis_ops.rs | crate::redis_ops | parse_store_version(info) | param | &str	generic	parses a store reply text
 ambre-server | src/redis_ops.rs | crate::redis_ops | purge_document_state::LUA | const | &str	foreign-api	Lua script text sent to Redis
 ambre-server | src/redis_ops.rs | crate::redis_ops | refresh_claim() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/redis_ops.rs | crate::redis_ops | release_flush_lock::LUA | const | &str	foreign-api	Lua script text sent to Redis
