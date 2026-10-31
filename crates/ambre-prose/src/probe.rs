@@ -77,14 +77,14 @@ impl ProbeName {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Measure {
     pub name: ProbeName,
-    pub start: ambre_core::PageTime,
-    pub end: ambre_core::PageTime,
+    pub start: ambre_core::Instant<ambre_core::PageLoad>,
+    pub end: ambre_core::Instant<ambre_core::PageLoad>,
 }
 
 impl Measure {
     /// The span from the start to the end.
     #[must_use]
-    pub fn duration(&self) -> ambre_core::PageMillis {
+    pub fn duration(&self) -> ambre_core::TimeSpan<ambre_core::FracMs> {
         self.end - self.start
     }
 }
@@ -92,7 +92,7 @@ impl Measure {
 /// An input handled and not yet drawn.
 #[derive(Clone, Copy, Debug)]
 struct Undrawn {
-    start: ambre_core::PageTime,
+    start: ambre_core::Instant<ambre_core::PageLoad>,
     /// Its effect waits on a layout: a split, a paste, anything the draft
     /// cannot hold. It is drawn by the first frame after the layout.
     needs_layout: Drawing,
@@ -115,7 +115,7 @@ pub struct KeyProbe {
     /// the frame count at that input.
     unconfirmed: Vec<(
         ambre_bus::app::prose::TextAck,
-        ambre_core::PageTime,
+        ambre_core::Instant<ambre_core::PageLoad>,
         FrameNumber,
     )>,
     /// The animation frames begun so far.
@@ -145,8 +145,8 @@ impl KeyProbe {
     /// does not hold is drawn only once its layout arrives.
     pub fn handled(
         &mut self,
-        start: ambre_core::PageTime,
-        now: ambre_core::PageTime,
+        start: ambre_core::Instant<ambre_core::PageLoad>,
+        now: ambre_core::Instant<ambre_core::PageLoad>,
         draft: &DraftBuffer,
         dispatch: Dispatch,
     ) -> Vec<Measure> {
@@ -180,7 +180,7 @@ impl KeyProbe {
     /// is confirmed, or already gone from the draft, ends its measure.
     pub fn answered(
         &mut self,
-        now: ambre_core::PageTime,
+        now: ambre_core::Instant<ambre_core::PageLoad>,
         draft: &DraftBuffer,
         answer: Answer,
     ) -> Vec<Measure> {
@@ -214,7 +214,7 @@ impl KeyProbe {
 
     /// A frame finished painting at `now`: every input it shows ends its
     /// caret measure.
-    pub fn painted(&mut self, now: ambre_core::PageTime) -> Vec<Measure> {
+    pub fn painted(&mut self, now: ambre_core::Instant<ambre_core::PageLoad>) -> Vec<Measure> {
         let mut measures = Vec::new();
         self.undrawn.retain(|input| {
             if input.needs_layout == Drawing::AwaitsLayout {
@@ -313,8 +313,8 @@ mod tests {
             DocOffset::ZERO,
         );
         let echo = probe.handled(
-            ambre_core::PageTime::new(10.0),
-            ambre_core::PageTime::new(10.5),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(10.0),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(10.5),
             &draft,
             Dispatch::Sent,
         );
@@ -322,18 +322,26 @@ mod tests {
         assert_eq!(echo[0].name, ProbeName::Echo);
         assert!((echo[0].duration().get() - 0.5).abs() < 1e-9);
 
-        let caret = probe.painted(ambre_core::PageTime::new(14.0));
+        let caret = probe.painted(ambre_core::Instant::<ambre_core::PageLoad>::new(14.0));
         assert_eq!(caret.len(), 1, "the draft shows the key on the next frame");
         assert_eq!(caret[0].name, ProbeName::Caret);
 
         assert!(
             probe
-                .answered(ambre_core::PageTime::new(15.0), &draft, Answer::Other)
+                .answered(
+                    ambre_core::Instant::<ambre_core::PageLoad>::new(15.0),
+                    &draft,
+                    Answer::Other
+                )
                 .is_empty(),
             "not yet confirmed"
         );
         draft.confirm(ambre_bus::app::prose::TextAck::new(7));
-        let confirm = probe.answered(ambre_core::PageTime::new(20.0), &draft, Answer::Other);
+        let confirm = probe.answered(
+            ambre_core::Instant::<ambre_core::PageLoad>::new(20.0),
+            &draft,
+            Answer::Other,
+        );
         assert_eq!(confirm.len(), 1);
         assert_eq!(confirm[0].name, ProbeName::Confirm);
         assert!((confirm[0].duration().get() - 10.0).abs() < 1e-9);
@@ -348,8 +356,8 @@ mod tests {
         assert!(
             probe
                 .handled(
-                    ambre_core::PageTime::new(0.0),
-                    ambre_core::PageTime::new(1.0),
+                    ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+                    ambre_core::Instant::<ambre_core::PageLoad>::new(1.0),
                     &draft,
                     Dispatch::Sent
                 )
@@ -357,11 +365,17 @@ mod tests {
             "no echo without a draft"
         );
         assert!(
-            probe.painted(ambre_core::PageTime::new(5.0)).is_empty(),
+            probe
+                .painted(ambre_core::Instant::<ambre_core::PageLoad>::new(5.0))
+                .is_empty(),
             "the frame before the layout shows nothing"
         );
-        probe.answered(ambre_core::PageTime::new(30.0), &draft, Answer::Layout);
-        let caret = probe.painted(ambre_core::PageTime::new(33.0));
+        probe.answered(
+            ambre_core::Instant::<ambre_core::PageLoad>::new(30.0),
+            &draft,
+            Answer::Layout,
+        );
+        let caret = probe.painted(ambre_core::Instant::<ambre_core::PageLoad>::new(33.0));
         assert_eq!(caret.len(), 1);
         assert!((caret[0].duration().get() - 33.0).abs() < 1e-9);
     }
@@ -379,15 +393,19 @@ mod tests {
             DocOffset::ZERO,
         );
         probe.handled(
-            ambre_core::PageTime::new(0.0),
-            ambre_core::PageTime::new(0.1),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(0.1),
             &draft,
             Dispatch::Sent,
         );
         draft.confirm(ambre_bus::app::prose::TextAck::new(1));
         assert_eq!(
             probe
-                .answered(ambre_core::PageTime::new(0.5), &draft, Answer::Other)
+                .answered(
+                    ambre_core::Instant::<ambre_core::PageLoad>::new(0.5),
+                    &draft,
+                    Answer::Other
+                )
                 .len(),
             1
         );
@@ -398,14 +416,18 @@ mod tests {
             DocOffset::new(1),
         );
         probe.handled(
-            ambre_core::PageTime::new(1.0),
-            ambre_core::PageTime::new(1.1),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(1.0),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(1.1),
             &draft,
             Dispatch::Sent,
         );
         assert_eq!(
             probe
-                .answered(ambre_core::PageTime::new(1.5), &draft, Answer::Other)
+                .answered(
+                    ambre_core::Instant::<ambre_core::PageLoad>::new(1.5),
+                    &draft,
+                    Answer::Other
+                )
                 .len(),
             0,
             "a confirmed entry is not new"
@@ -414,7 +436,11 @@ mod tests {
         draft.laid();
         assert_eq!(
             probe
-                .answered(ambre_core::PageTime::new(9.0), &draft, Answer::Layout)
+                .answered(
+                    ambre_core::Instant::<ambre_core::PageLoad>::new(9.0),
+                    &draft,
+                    Answer::Layout
+                )
                 .len(),
             1
         );
@@ -433,8 +459,8 @@ mod tests {
             DocOffset::ZERO,
         );
         probe.handled(
-            ambre_core::PageTime::new(0.0),
-            ambre_core::PageTime::new(0.1),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(0.1),
             &draft,
             Dispatch::Sent,
         );
@@ -445,15 +471,19 @@ mod tests {
             DocOffset::new(1),
         );
         probe.handled(
-            ambre_core::PageTime::new(1.0),
-            ambre_core::PageTime::new(1.1),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(1.0),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(1.1),
             &draft,
             Dispatch::Sent,
         );
         draft.confirm(ambre_bus::app::prose::TextAck::new(1));
         draft.confirm(ambre_bus::app::prose::TextAck::new(2));
         draft.laid();
-        let confirm = probe.answered(ambre_core::PageTime::new(9.0), &draft, Answer::Layout);
+        let confirm = probe.answered(
+            ambre_core::Instant::<ambre_core::PageLoad>::new(9.0),
+            &draft,
+            Answer::Layout,
+        );
         assert_eq!(confirm.len(), 2);
     }
 
@@ -465,14 +495,19 @@ mod tests {
         assert!(
             probe
                 .handled(
-                    ambre_core::PageTime::new(0.0),
-                    ambre_core::PageTime::new(0.2),
+                    ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+                    ambre_core::Instant::<ambre_core::PageLoad>::new(0.2),
                     &draft,
                     Dispatch::Kept
                 )
                 .is_empty()
         );
-        assert_eq!(probe.painted(ambre_core::PageTime::new(4.0)).len(), 1);
+        assert_eq!(
+            probe
+                .painted(ambre_core::Instant::<ambre_core::PageLoad>::new(4.0))
+                .len(),
+            1
+        );
     }
 
     /// The count is the frames begun between the key and its answer: the
@@ -489,20 +524,28 @@ mod tests {
             DocOffset::ZERO,
         );
         probe.handled(
-            ambre_core::PageTime::new(0.0),
-            ambre_core::PageTime::new(0.1),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(0.1),
             &draft,
             Dispatch::Sent,
         );
         probe.frame();
-        probe.answered(ambre_core::PageTime::new(16.0), &draft, Answer::Other);
+        probe.answered(
+            ambre_core::Instant::<ambre_core::PageLoad>::new(16.0),
+            &draft,
+            Answer::Other,
+        );
         assert!(
             probe.take_counts().is_empty(),
             "the echo frame has no answer"
         );
         probe.frame();
         draft.confirm(ambre_bus::app::prose::TextAck::new(1));
-        probe.answered(ambre_core::PageTime::new(33.0), &draft, Answer::Other);
+        probe.answered(
+            ambre_core::Instant::<ambre_core::PageLoad>::new(33.0),
+            &draft,
+            Answer::Other,
+        );
         assert_eq!(probe.take_counts(), [FrameCount::new(2)]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");
     }
@@ -526,16 +569,22 @@ mod tests {
 
     #[test]
     fn percentiles_read_the_sorted_samples() {
-        assert_eq!(percentiles(&[], ambre_core::PageMillis::total_cmp), None);
-        let spans: Vec<ambre_core::PageMillis> = (1..=100)
-            .map(|ms| ambre_core::PageMillis::new(f64::from(ms)))
+        assert_eq!(
+            percentiles(&[], ambre_core::TimeSpan::<ambre_core::FracMs>::total_cmp),
+            None
+        );
+        let spans: Vec<ambre_core::TimeSpan<ambre_core::FracMs>> = (1..=100)
+            .map(|ms| ambre_core::TimeSpan::<ambre_core::FracMs>::new(f64::from(ms)))
             .rev()
             .collect();
         assert_eq!(
-            percentiles(&spans, ambre_core::PageMillis::total_cmp),
+            percentiles(
+                &spans,
+                ambre_core::TimeSpan::<ambre_core::FracMs>::total_cmp
+            ),
             Some(Percentiles {
-                median: ambre_core::PageMillis::new(51.0),
-                p95: ambre_core::PageMillis::new(95.0)
+                median: ambre_core::TimeSpan::<ambre_core::FracMs>::new(51.0),
+                p95: ambre_core::TimeSpan::<ambre_core::FracMs>::new(95.0)
             })
         );
         let frames: Vec<FrameCount> = (1..=100).rev().map(FrameCount::new).collect();

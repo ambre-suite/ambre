@@ -30,13 +30,13 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::font::PX_PER_PT;
 use crate::scale::Scale;
 use crate::space::{Css, Doc, Float, Rescale, Scalar, Space, Surface, View};
-use crate::span::PageMillis;
+use crate::span::{FracMs, TimeSpan};
 
 /// CSS pixels per millimetre: a CSS pixel is 1/96 inch, an inch is 25.4 mm.
 pub const PX_PER_MM: f32 = 96.0 / 25.4;
 
 /// Writes one measured quantity type over a float: a length, an angle, or a
-/// span of the page clock (`crate::span::PageMillis`).
+/// span of the page clock (`crate::span::TimeSpan<crate::span::FracMs>`).
 ///
 /// The operators are the ones a quantity allows. Two quantities add,
 /// subtract and divide into a bare ratio. A quantity negates, and scales by
@@ -176,8 +176,6 @@ macro_rules! define_length {
         }
     };
 }
-
-pub(crate) use define_length;
 
 /// A length, or a coordinate, in the pixel space `S` names.
 ///
@@ -558,7 +556,7 @@ impl Px<View> {
 
     /// The speed of a move of this length over `span`.
     #[must_use]
-    pub fn per(self, span: PageMillis) -> ViewSpeed {
+    pub fn per(self, span: TimeSpan<FracMs>) -> ViewSpeed {
         ViewSpeed(self.0 / span.get() as f32)
     }
 }
@@ -600,7 +598,7 @@ impl Px<Surface> {
 impl ViewSpeed {
     /// The length a move at this speed covers over `span`.
     #[must_use]
-    pub fn over(self, span: PageMillis) -> Px<View> {
+    pub fn over(self, span: TimeSpan<FracMs>) -> Px<View> {
         Px::new(self.0 * span.get() as f32)
     }
 }
@@ -744,7 +742,7 @@ impl Vector<Px<View>> {
 
     /// The velocity of this displacement made over `span`.
     #[must_use]
-    pub fn per(self, span: PageMillis) -> ViewSpeedVector {
+    pub fn per(self, span: TimeSpan<FracMs>) -> ViewSpeedVector {
         Vector::new(self.dx.per(span), self.dy.per(span))
     }
 }
@@ -775,8 +773,8 @@ impl Point<Px<Css>> {
 #[cfg(test)]
 mod tests {
     use super::{Mm, Pt, ViewSpeed};
-    use crate::PageMillis;
     use crate::{Css, Doc, Image, Point, Px, Scale, Size, Surface, Vector, View};
+    use crate::{FracMs, TimeSpan};
 
     #[test]
     fn a_document_length_scales_by_the_zoom_and_back() {
@@ -846,7 +844,7 @@ mod tests {
 
     #[test]
     fn a_move_over_a_span_is_a_speed_that_covers_the_move_again() {
-        let span = PageMillis::new(4.0);
+        let span = TimeSpan::<FracMs>::new(4.0);
         let by = Vector::new(Px::<View>::new(3.0), Px::<View>::new(4.0));
         let velocity = by.per(span);
         assert_eq!(velocity.dy, ViewSpeed::new(1.0));

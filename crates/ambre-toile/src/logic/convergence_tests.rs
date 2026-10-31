@@ -1388,7 +1388,7 @@ fn sample_at(x: f64, y: f64) -> PresencePayload {
 fn presence_frame(
     st: &mut ToileState,
     payload: PresencePayload,
-    now: ambre_core::PageTime,
+    now: ambre_core::Instant<ambre_core::PageLoad>,
 ) -> ambre_core::Payload<ambre_core::EphemeralBytes> {
     st.handle_command(ToileCommand::Presence { payload, now })
         .ephemeral
@@ -1436,7 +1436,7 @@ fn a_stroke_in_flight_reaches_the_other_users() {
             laser: None,
             present_slide: None,
         },
-        now: ambre_core::PageTime::new(1_000.0),
+        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0),
     });
     assert!(out.update.is_none(), "a stroke in flight writes nothing");
     let frame = out.ephemeral.expect("the sample broadcasts");
@@ -1475,7 +1475,7 @@ fn presence_command_broadcasts_ephemeral_only() {
     };
     let out = st.handle_command(ToileCommand::Presence {
         payload,
-        now: ambre_core::PageTime::new(1_000.0),
+        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0),
     });
     assert!(out.display.is_empty(), "presence emits no display event");
     assert!(out.update.is_none(), "presence is never a CRDT delta");
@@ -1503,7 +1503,7 @@ fn the_outbound_sample_carries_the_session_display_name() {
     let frame = presence_frame(
         &mut sender,
         sample_at(1.0, 2.0),
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
@@ -1517,7 +1517,7 @@ fn the_outbound_sample_carries_the_session_display_name() {
     let frame = presence_frame(
         &mut anonymous,
         sample_at(3.0, 4.0),
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
     let peers = live_set(rx.apply_ephemeral(Id::<User>::mint(), &frame));
     assert!(peers.iter().any(|p| p.presence.name.is_none()));
@@ -1533,14 +1533,14 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     let frame = presence_frame(
         &mut sender,
         sample_at(5.0, 5.0),
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
     // The receiver's clock starts at the first local sample.
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::PageTime::new(1_000.0),
+        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0),
     });
     let alice = Id::<User>::mint();
     assert_eq!(live_set(rx.apply_ephemeral(alice, &frame)).len(), 1);
@@ -1548,7 +1548,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Still inside the TTL: Alice is live, and the local sample says nothing new.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::PageTime::new(1_000.0 + PRESENCE_TTL.get() - 1.0),
+        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0 + PRESENCE_TTL.get() - 1.0),
     });
     assert!(out.display.is_empty(), "nothing left the set yet");
     assert!(rx.peer_presence(&alice).is_some());
@@ -1556,7 +1556,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
     // Past it: the set changes, and the event that announces it is empty.
     let out = rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::PageTime::new(1_000.0 + PRESENCE_TTL.get() + 1.0),
+        now: ambre_core::Instant::<ambre_core::PageLoad>::new(1_000.0 + PRESENCE_TTL.get() + 1.0),
     });
     assert!(
         live_set(out.display).is_empty(),
@@ -1574,7 +1574,7 @@ fn a_departure_message_drops_the_peer_at_once() {
     let frame = presence_frame(
         &mut sender,
         sample_at(3.0, 3.0),
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
@@ -1605,20 +1605,20 @@ fn a_clock_that_steps_backwards_ages_nobody() {
     let frame = presence_frame(
         &mut sender,
         sample_at(1.0, 1.0),
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::PageTime::new(100_000.0),
+        now: ambre_core::Instant::<ambre_core::PageLoad>::new(100_000.0),
     });
     let alice = Id::<User>::mint();
     rx.apply_ephemeral(alice, &frame);
 
     rx.handle_command(ToileCommand::Presence {
         payload: PresencePayload::default(),
-        now: ambre_core::PageTime::new(0.0),
+        now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     });
     assert!(
         rx.peer_presence(&alice).is_some(),
@@ -1638,11 +1638,15 @@ fn a_sample_replaces_the_peers_presence_whole() {
         laser: Some(Point::new(2.0, 2.0)),
         ..PresencePayload::default()
     };
-    let first = presence_frame(&mut sender, with_selection, ambre_core::PageTime::new(0.0));
+    let first = presence_frame(
+        &mut sender,
+        with_selection,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+    );
     let second = presence_frame(
         &mut sender,
         sample_at(9.0, 9.0),
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
 
     let mut rx = ToileState::new();
@@ -1672,7 +1676,11 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
         laser: None,
         present_slide: None,
     };
-    let frame = presence_frame(&mut sender, payload.clone(), ambre_core::PageTime::new(0.0));
+    let frame = presence_frame(
+        &mut sender,
+        payload.clone(),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+    );
 
     let mut rx = ToileState::new();
     let before = rx.export_snapshot();
@@ -1695,7 +1703,7 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
     let bob_frame = presence_frame(
         &mut sender,
         PresencePayload::default(),
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
     let peers = live_set(rx.apply_ephemeral(bob, &bob_frame));
     assert_eq!(peers.len(), 2, "the event carries the whole live set");
@@ -4569,14 +4577,14 @@ fn concurrent_auto_layout_edits_converge() {
 fn emoji(s: &str) -> Reaction {
     Reaction {
         kind: ReactionKind::Emoji(ambre_bus::Emoji::from(s)),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     }
 }
 
 fn vote(w: i32) -> Reaction {
     Reaction {
         kind: ReactionKind::Vote(ambre_bus::app::toile::VoteWeight::new(w)),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     }
 }
 
@@ -5223,7 +5231,7 @@ fn comment_on(
     st: &mut ToileState,
     anchor: CommentAnchor,
     body: &str,
-    ts: ambre_core::Timestamp,
+    ts: ambre_core::Instant<ambre_core::Authored>,
 ) -> Id<Thread> {
     let out = st.handle_command(ToileCommand::CreateComment {
         anchor,
@@ -5253,13 +5261,13 @@ fn a_thread_anchors_to_an_element_or_to_a_world_point() {
         &mut st,
         CommentAnchor::Element(e.clone()),
         "on the note",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
     let on_board = comment_on(
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(40.0, -12.5)),
         "on the board",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
 
     assert_eq!(
@@ -5281,7 +5289,7 @@ fn a_message_author_is_the_user_id_of_the_session() {
     let out = st.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         body: "too early".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
     assert!(
         out.update.is_none(),
@@ -5294,12 +5302,15 @@ fn a_message_author_is_the_user_id_of_the_session() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "hello",
-        ambre_bus::Timestamp::new(7),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(7),
     );
     let thread = st.comment_thread(&t).expect("the thread reads back");
     assert_eq!(thread.messages.len(), 1);
     assert_eq!(thread.messages[0].author, me);
-    assert_eq!(thread.messages[0].ts, ambre_bus::Timestamp::new(7));
+    assert_eq!(
+        thread.messages[0].ts,
+        ambre_bus::Instant::<ambre_bus::Authored>::new(7)
+    );
     assert_eq!(thread.resolved, ambre_core::ThreadState::Open);
 }
 
@@ -5318,12 +5329,12 @@ fn two_peers_commenting_on_one_spot_mint_distinct_threads() {
     let out_a = a.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(e.clone()),
         body: "from A".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
     let out_b = b.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(e),
         body: "from B".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
     let (ta, tb) = (opened_thread(&out_a), opened_thread(&out_b));
     assert_ne!(ta, tb, "two peers must mint two thread ids");
@@ -5351,7 +5362,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "first",
-        ambre_bus::Timestamp::new(50),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(50),
     );
 
     let mut b = ToileState::new();
@@ -5362,7 +5373,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
         .handle_command(ToileCommand::ReplyComment {
             thread: t.clone(),
             body: "from A".to_owned(),
-            ts: ambre_bus::Timestamp::new(900),
+            ts: ambre_bus::Instant::<ambre_bus::Authored>::new(900),
         })
         .update
         .expect("A's reply broadcasts a delta");
@@ -5370,7 +5381,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
         .handle_command(ToileCommand::ReplyComment {
             thread: t.clone(),
             body: "from B".to_owned(),
-            ts: ambre_bus::Timestamp::new(1),
+            ts: ambre_bus::Instant::<ambre_bus::Authored>::new(1),
         })
         .update
         .expect("B's reply broadcasts a delta");
@@ -5395,7 +5406,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "typo",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
 
     let mut b = ToileState::new();
@@ -5442,7 +5453,7 @@ fn editing_another_authors_message_is_refused() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "mine",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
 
     let mut b = ToileState::new();
@@ -5471,7 +5482,7 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "settled?",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
 
     let mut b = ToileState::new();
@@ -5536,7 +5547,7 @@ fn a_thread_survives_the_deletion_of_its_anchor_element() {
         &mut st,
         CommentAnchor::Element(e.clone()),
         "about the note",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
 
     st.handle_command(ToileCommand::DeleteElements {
@@ -5562,7 +5573,7 @@ fn undo_reverts_the_drawing_and_never_the_comment() {
         &mut st,
         CommentAnchor::Element(e),
         "already read",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
 
     st.handle_command(ToileCommand::Undo);
@@ -5592,7 +5603,7 @@ fn replying_to_a_missing_thread_is_a_rejected_no_op() {
     let out = st.handle_command(ToileCommand::ReplyComment {
         thread: Id::<Thread>::from_text("ghost".to_owned()),
         body: "nobody".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
     assert!(
         out.update.is_none(),
@@ -5627,7 +5638,7 @@ fn a_fresh_thread_is_open_anchored_and_carries_its_first_message() {
         &mut st,
         CommentAnchor::Element(e.clone()),
         "the point",
-        ambre_bus::Timestamp::new(11),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(11),
     );
 
     let thread = st.comment_thread(&t).expect("the thread reads back");
@@ -5658,13 +5669,13 @@ fn a_reply_lands_at_the_end_of_the_thread() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "one",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
     for body in ["two", "three"] {
         st.handle_command(ToileCommand::ReplyComment {
             thread: t.clone(),
             body: body.to_owned(),
-            ts: ambre_bus::Timestamp::new(0),
+            ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
         });
     }
     assert_eq!(
@@ -5683,17 +5694,17 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "first",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "secnd".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "third".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
 
     // Correct the middle message: insert the missing letter.
@@ -5724,7 +5735,7 @@ fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
         &mut st,
         anchor.clone(),
         "open it",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
     st.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
@@ -5733,7 +5744,7 @@ fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "one more".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
 
     let thread = st.comment_thread(&t).expect("the thread reads back");
@@ -5755,12 +5766,12 @@ fn a_resolve_keeps_every_message_body() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "why",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
     st.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "because".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
     st.handle_command(ToileCommand::ResolveThread {
         thread: t.clone(),
@@ -5785,19 +5796,19 @@ fn two_peers_answering_one_brand_new_thread_both_keep_their_reply() {
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "seed",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
     b.apply_remote_snapshot(&a.export_snapshot());
 
     let ra = a.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "from A".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
     let rb = b.handle_command(ToileCommand::ReplyComment {
         thread: t.clone(),
         body: "from B".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
     b.apply_remote(&ra.update.expect("A's reply broadcasts a delta"));
     a.apply_remote(&rb.update.expect("B's reply broadcasts a delta"));
@@ -5819,18 +5830,18 @@ fn a_pin_carries_its_place_its_count_and_its_state() {
         &mut st,
         CommentAnchor::Element(e),
         "about it",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
     st.handle_command(ToileCommand::ReplyComment {
         thread: on_element.clone(),
         body: "agreed".to_owned(),
-        ts: ambre_bus::Timestamp::new(0),
+        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     });
     let on_board = comment_on(
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(5.0, 6.0)),
         "here",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
     st.handle_command(ToileCommand::ResolveThread {
         thread: on_board.clone(),
@@ -5867,7 +5878,7 @@ fn a_pin_leaves_the_board_with_its_anchor_element() {
         &mut st,
         CommentAnchor::Element(e.clone()),
         "about it",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
     assert_eq!(pins(&st).len(), 1);
 
@@ -5892,7 +5903,7 @@ fn the_board_carries_no_body_and_a_read_carries_them_all() {
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
         "the body",
-        ambre_bus::Timestamp::new(0),
+        ambre_bus::Instant::<ambre_bus::Authored>::new(0),
     );
 
     // The board-wide list carries the opening line and the counts, no more.

@@ -6,7 +6,8 @@ use ambre_protocol::messages::Signature;
 
 /// The delay before Sync sends again the first delta the relay failed to
 /// sequence. Each later failure doubles it (`ambre-spec-budgets.md` section 8).
-const RESEND_RETRY_BASE: ambre_core::Millis = ambre_core::Millis::new(1_000);
+const RESEND_RETRY_BASE: ambre_core::TimeSpan<ambre_core::Ms> =
+    ambre_core::TimeSpan::<ambre_core::Ms>::new(1_000);
 
 /// The failures Sync sends again after. One more holds the document
 /// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
@@ -33,7 +34,9 @@ impl std::fmt::Display for HoldCause {
 
 /// The delay before sending again after the `failure`-th failure since the
 /// last echo, counted from one. Past the budget there is none.
-fn resend_retry_delay(failure: ambre_core::FailureCount) -> Option<ambre_core::Millis> {
+fn resend_retry_delay(
+    failure: ambre_core::FailureCount,
+) -> Option<ambre_core::TimeSpan<ambre_core::Ms>> {
     let first = ambre_core::FailureCount::new(1);
     (first..=RESEND_RETRY_LIMIT)
         .contains(&failure)
@@ -3739,7 +3742,9 @@ mod tests {
         assert_eq!(resend_retry_delay(failure(1)), Some(RESEND_RETRY_BASE));
         assert_eq!(
             resend_retry_delay(failure(2)),
-            Some(ambre_core::Millis::new(2 * RESEND_RETRY_BASE.get()))
+            Some(ambre_core::TimeSpan::<ambre_core::Ms>::new(
+                2 * RESEND_RETRY_BASE.get()
+            ))
         );
         assert_eq!(resend_retry_delay(RESEND_RETRY_LIMIT.incremented()), None);
 

@@ -8,8 +8,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use ambre_bus::{
-    Attachment, Deletion, LogicCommand, MessageView, MurmureCommand, MurmureEvent, Notice,
-    Reaction, Revision, TextStyle, Timestamp, UiEvent, Unreadable,
+    Attachment, Authored, Deletion, Instant, LogicCommand, MessageView, MurmureCommand,
+    MurmureEvent, Notice, Reaction, Revision, TextStyle, UiEvent, Unreadable,
 };
 use ambre_core::id::{self, Channel, Document, Id, Message, User};
 use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec, Px, View};
@@ -39,7 +39,8 @@ pub fn row_of(keys: &ListRowVec<RowKey>, key: RowKey) -> Option<ListRow> {
 
 /// Consecutive messages of one author inside this span share one header:
 /// the grouping row of `ambre-spec-budgets.md section 8`.
-pub const GROUP_SPAN: ambre_core::Millis = ambre_core::Millis::new(5 * 60 * 1000);
+pub const GROUP_SPAN: ambre_core::TimeSpan<ambre_core::Ms> =
+    ambre_core::TimeSpan::<ambre_core::Ms>::new(5 * 60 * 1000);
 
 /// What a deleted message shows in place of its body (`MURMURE-185`).
 pub const DELETED: &str = "This message was deleted.";
@@ -82,7 +83,7 @@ struct Segment {
 
 impl Segment {
     /// The time the segment starts at, which places it in the list.
-    fn start(&self) -> Option<Timestamp> {
+    fn start(&self) -> Option<Instant<Authored>> {
         self.band
             .map(|b| b.from)
             .or_else(|| self.messages.first().map(|m| m.ts))
@@ -93,9 +94,9 @@ impl Segment {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Band {
     pub cause: Unreadable,
-    pub from: Timestamp,
+    pub from: Instant<Authored>,
     /// The start of the next segment: `None` when none is listed after it.
-    pub to: Option<Timestamp>,
+    pub to: Option<Instant<Authored>>,
 }
 
 /// What a band names when the keys of its segment never reached this
@@ -169,7 +170,7 @@ impl MessageList {
 
     /// Where `segment` sits: where the list holds it, or a new empty slot
     /// placed by `start`, so an older segment lands above.
-    fn place(&mut self, segment: Id<id::Segment>, start: Timestamp) -> usize {
+    fn place(&mut self, segment: Id<id::Segment>, start: Instant<Authored>) -> usize {
         if let Some(at) = self.segments.iter().position(|s| s.id == segment) {
             return at;
         }
@@ -395,7 +396,7 @@ impl<'a> Row<'a> {
     pub fn words(
         &self,
         name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>,
-        time_of: impl Fn(Timestamp) -> String,
+        time_of: impl Fn(Instant<Authored>) -> String,
     ) -> RowWords {
         let (message, header) = match *self {
             Self::Message { message, header } => (message, header),
@@ -462,7 +463,7 @@ impl<'a> Row<'a> {
     pub fn announcement(
         &self,
         name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>,
-        time_of: impl Fn(Timestamp) -> String,
+        time_of: impl Fn(Instant<Authored>) -> String,
     ) -> String {
         let Some(message) = self.message() else {
             return self.words(name_of, time_of).body;
@@ -502,7 +503,7 @@ pub fn file_label(file: &Attachment) -> String {
 /// The words of a band: its span, its cause and its remedy, muted
 /// (`MURMURE-218`). A segment before the history boundary is the start of
 /// the channel, so it names no failure and no remedy (`MURMURE-219`).
-fn band_words(band: &Band, time_of: impl Fn(Timestamp) -> String) -> RowWords {
+fn band_words(band: &Band, time_of: impl Fn(Instant<Authored>) -> String) -> RowWords {
     let span = match band.to {
         Some(to) => format!("Messages from {} to {}", time_of(band.from), time_of(to)),
         None => format!("Messages since {}", time_of(band.from)),
@@ -898,7 +899,11 @@ pub(crate) mod tests {
     use super::*;
 
     /// A message of `author`, written at `ts` milliseconds.
-    pub(crate) fn message(author: Id<User>, ts: ambre_core::Timestamp, text: &str) -> MessageView {
+    pub(crate) fn message(
+        author: Id<User>,
+        ts: ambre_core::Instant<ambre_core::Authored>,
+        text: &str,
+    ) -> MessageView {
         MessageView {
             id: Id::<Message>::mint(),
             author,
@@ -953,8 +958,8 @@ pub(crate) mod tests {
     fn band(cause: Unreadable, from: u64, to: Option<u64>) -> Band {
         Band {
             cause,
-            from: Timestamp::new(from),
-            to: to.map(Timestamp::new),
+            from: Instant::<Authored>::new(from),
+            to: to.map(Instant::<Authored>::new),
         }
     }
 
@@ -978,11 +983,19 @@ pub(crate) mod tests {
         let mut list = MessageList::default();
         list.absorb(
             newer,
-            vec![message(author, ambre_bus::Timestamp::new(30), "c")],
+            vec![message(
+                author,
+                ambre_bus::Instant::<ambre_bus::Authored>::new(30),
+                "c",
+            )],
         );
         list.absorb(
             older,
-            vec![message(author, ambre_bus::Timestamp::new(10), "a")],
+            vec![message(
+                author,
+                ambre_bus::Instant::<ambre_bus::Authored>::new(10),
+                "a",
+            )],
         );
         list.unreadable(unread, band(Unreadable::KeyNotReceived, 20, Some(30)));
         assert_eq!(texts(&list), ["a", "#", "c"]);
@@ -1030,12 +1043,20 @@ pub(crate) mod tests {
         );
         list.absorb(
             segment,
-            vec![message(author, ambre_bus::Timestamp::new(10), "a")],
+            vec![message(
+                author,
+                ambre_bus::Instant::<ambre_bus::Authored>::new(10),
+                "a",
+            )],
         );
         assert_eq!(texts(&list), ["a"]);
         list.absorb(
             read,
-            vec![message(author, ambre_bus::Timestamp::new(20), "b")],
+            vec![message(
+                author,
+                ambre_bus::Instant::<ambre_bus::Authored>::new(20),
+                "b",
+            )],
         );
         list.unreadable(read, band(Unreadable::Damaged, 20, None));
         assert_eq!(texts(&list), ["a", "b"]);
@@ -1051,15 +1072,31 @@ pub(crate) mod tests {
         list.absorb(
             active,
             vec![
-                message(author, ambre_bus::Timestamp::new(30), "c"),
-                message(author, ambre_bus::Timestamp::new(40), "d"),
+                message(
+                    author,
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(30),
+                    "c",
+                ),
+                message(
+                    author,
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(40),
+                    "d",
+                ),
             ],
         );
         list.absorb(
             closing,
             vec![
-                message(author, ambre_bus::Timestamp::new(10), "a"),
-                message(author, ambre_bus::Timestamp::new(20), "b"),
+                message(
+                    author,
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(10),
+                    "a",
+                ),
+                message(
+                    author,
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(20),
+                    "b",
+                ),
             ],
         );
         assert_eq!(texts(&list), ["a", "b", "c", "d"]);
@@ -1067,7 +1104,11 @@ pub(crate) mod tests {
         assert_eq!(list.latest().map(|m| m.text.as_str()), Some("d"));
         list.absorb(
             active,
-            vec![message(author, ambre_bus::Timestamp::new(50), "e")],
+            vec![message(
+                author,
+                ambre_bus::Instant::<ambre_bus::Authored>::new(50),
+                "e",
+            )],
         );
         assert_eq!(texts(&list), ["a", "b", "c", "d", "e"]);
     }
@@ -1079,8 +1120,16 @@ pub(crate) mod tests {
         let author = Id::<User>::mint();
         let (old, new) = (Id::<id::Segment>::mint(), Id::<id::Segment>::mint());
         let mut list = MessageList::default();
-        let first = message(author, ambre_bus::Timestamp::new(10), "a");
-        let second = message(author, ambre_bus::Timestamp::new(20), "b");
+        let first = message(
+            author,
+            ambre_bus::Instant::<ambre_bus::Authored>::new(10),
+            "a",
+        );
+        let second = message(
+            author,
+            ambre_bus::Instant::<ambre_bus::Authored>::new(20),
+            "b",
+        );
         list.absorb(old, vec![first.clone(), second.clone()]);
         let edited = MessageView {
             text: "a2".to_owned(),
@@ -1103,27 +1152,35 @@ pub(crate) mod tests {
     fn one_author_inside_the_span_shares_one_header() {
         let (ada, bob) = (Id::<User>::mint(), Id::<User>::mint());
         let mut list = MessageList::default();
-        let mut notice = message(ada, ambre_bus::Timestamp::new(2_000), "");
+        let mut notice = message(
+            ada,
+            ambre_bus::Instant::<ambre_bus::Authored>::new(2_000),
+            "",
+        );
         notice.notice = Some(Notice::MemberAdded { member: bob });
         list.absorb(
             Id::<id::Segment>::mint(),
             vec![
-                message(ada, ambre_bus::Timestamp::new(0), "a"),
-                message(ada, ambre_bus::Timestamp::new(GROUP_SPAN.get()), "b"),
+                message(ada, ambre_bus::Instant::<ambre_bus::Authored>::new(0), "a"),
                 message(
                     ada,
-                    ambre_bus::Timestamp::new(2 * GROUP_SPAN.get() + 1),
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(GROUP_SPAN.get()),
+                    "b",
+                ),
+                message(
+                    ada,
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(2 * GROUP_SPAN.get() + 1),
                     "c",
                 ),
                 message(
                     bob,
-                    ambre_bus::Timestamp::new(2 * GROUP_SPAN.get() + 2),
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(2 * GROUP_SPAN.get() + 2),
                     "d",
                 ),
                 notice,
                 message(
                     bob,
-                    ambre_bus::Timestamp::new(2 * GROUP_SPAN.get() + 3),
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(2 * GROUP_SPAN.get() + 3),
                     "e",
                 ),
             ],
@@ -1139,8 +1196,12 @@ pub(crate) mod tests {
         list.absorb(
             Id::<id::Segment>::mint(),
             vec![
-                message(ada, ambre_bus::Timestamp::new(1_000), "a"),
-                message(ada, ambre_bus::Timestamp::new(10), "b"),
+                message(
+                    ada,
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(1_000),
+                    "a",
+                ),
+                message(ada, ambre_bus::Instant::<ambre_bus::Authored>::new(10), "b"),
             ],
         );
         assert_eq!(headers(&list), [true, false]);
@@ -1152,7 +1213,7 @@ pub(crate) mod tests {
     fn a_row_debugs_its_lengths_alone() {
         let message = message(
             Id::<User>::mint(),
-            ambre_bus::Timestamp::new(7),
+            ambre_bus::Instant::<ambre_bus::Authored>::new(7),
             "secret body",
         );
         let row = words(&message, true);
@@ -1169,7 +1230,11 @@ pub(crate) mod tests {
     /// (`MURMURE-185`).
     #[test]
     fn a_deleted_message_shows_a_muted_line() {
-        let mut gone = message(Id::<User>::mint(), ambre_bus::Timestamp::new(7), "");
+        let mut gone = message(
+            Id::<User>::mint(),
+            ambre_bus::Instant::<ambre_bus::Authored>::new(7),
+            "",
+        );
         gone.deleted = ambre_bus::Deletion::Deleted;
         let row = words(&gone, true);
         assert_eq!(row.body, DELETED);
@@ -1187,11 +1252,19 @@ pub(crate) mod tests {
     /// alone (`MURMURE-186`).
     #[test]
     fn an_edited_message_carries_the_marker() {
-        let mut edited = message(Id::<User>::mint(), ambre_bus::Timestamp::new(0), "fixed");
+        let mut edited = message(
+            Id::<User>::mint(),
+            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+            "fixed",
+        );
         edited.edited = ambre_bus::Revision::Edited;
         assert_eq!(words(&edited, false).body, format!("fixed {EDITED}"));
         let plain = words(
-            &message(Id::<User>::mint(), ambre_bus::Timestamp::new(0), "plain"),
+            &message(
+                Id::<User>::mint(),
+                ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+                "plain",
+            ),
             false,
         );
         assert_eq!(plain.body, "plain");
@@ -1205,8 +1278,12 @@ pub(crate) mod tests {
     #[test]
     fn a_message_is_announced_with_its_author_its_time_and_its_text() {
         let name_of = |_| ambre_core::DisplayName::new("Ada").ok();
-        let time_of = |ts: Timestamp| format!("t{}", ts.get());
-        let mut grouped = message(Id::<User>::mint(), ambre_bus::Timestamp::new(7), "hello");
+        let time_of = |ts: Instant<Authored>| format!("t{}", ts.get());
+        let mut grouped = message(
+            Id::<User>::mint(),
+            ambre_bus::Instant::<ambre_bus::Authored>::new(7),
+            "hello",
+        );
         let row = Row::Message {
             message: &grouped,
             header: Header::Joined,
@@ -1237,7 +1314,11 @@ pub(crate) mod tests {
     /// does not know reads under the stand-in name.
     #[test]
     fn a_notice_names_the_member_and_an_unknown_one_reads_as_a_member() {
-        let mut notice = message(Id::<User>::mint(), ambre_bus::Timestamp::new(0), "");
+        let mut notice = message(
+            Id::<User>::mint(),
+            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+            "",
+        );
         notice.notice = Some(Notice::MemberAdded {
             member: Id::<User>::mint(),
         });
@@ -1265,7 +1346,11 @@ pub(crate) mod tests {
     /// A root counts its replies once its thread holds one.
     #[test]
     fn a_root_counts_its_replies() {
-        let mut root = message(Id::<User>::mint(), ambre_bus::Timestamp::new(0), "root");
+        let mut root = message(
+            Id::<User>::mint(),
+            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+            "root",
+        );
         let head = |replies| ThreadHead {
             document: Id::<Document>::mint(),
             replies: ambre_bus::ReplyCount::new(replies),
@@ -1283,7 +1368,11 @@ pub(crate) mod tests {
     /// and a screen reader hears it after the text (`MURMURE-532`).
     #[test]
     fn a_reply_sent_to_the_channel_too_names_its_thread() {
-        let mut copy = message(Id::<User>::mint(), ambre_bus::Timestamp::new(0), "ok");
+        let mut copy = message(
+            Id::<User>::mint(),
+            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+            "ok",
+        );
         assert_eq!(words(&copy, false).replies, None);
         copy.also_in_thread = Some(Id::<Document>::mint());
         assert_eq!(words(&copy, false).replies.as_deref(), Some(FROM_THREAD));
@@ -1471,7 +1560,11 @@ pub(crate) mod tests {
         let (older, newer) = (Id::<id::Segment>::mint(), Id::<id::Segment>::mint());
         let mut list = MessageList::default();
         assert_eq!(list.oldest_segment(), None);
-        let later = message(author, ambre_bus::Timestamp::new(30), "c");
+        let later = message(
+            author,
+            ambre_bus::Instant::<ambre_bus::Authored>::new(30),
+            "c",
+        );
         list.absorb(newer, vec![later.clone()]);
         assert_eq!(list.oldest_segment(), Some(newer));
         list.unreadable(older, band(Unreadable::Damaged, 10, Some(30)));
@@ -1493,7 +1586,7 @@ pub(crate) mod tests {
             event: MurmureEvent::Unreadable {
                 segment,
                 cause: Unreadable::Damaged,
-                from: Timestamp::new(5),
+                from: Instant::<Authored>::new(5),
                 to: None,
             },
         }));
@@ -1510,7 +1603,11 @@ pub(crate) mod tests {
     fn a_thread_fills_its_own_list_and_leaving_drops_the_channel() {
         let (channel, other) = (Id::<Channel>::mint(), Id::<Channel>::mint());
         let author = Id::<User>::mint();
-        let root = message(author, ambre_bus::Timestamp::new(0), "root");
+        let root = message(
+            author,
+            ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+            "root",
+        );
         let mut talks = Conversations::default();
         let document = Id::<Document>::mint();
         let ev = |channel_id, event| UiEvent::Channel { channel_id, event };
@@ -1526,14 +1623,22 @@ pub(crate) mod tests {
             MurmureEvent::ThreadMessages {
                 root: root.id,
                 thread: document,
-                messages: vec![message(author, ambre_bus::Timestamp::new(1), "reply")],
+                messages: vec![message(
+                    author,
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(1),
+                    "reply"
+                )],
             },
         )));
         assert!(talks.absorb(ev(
             other,
             MurmureEvent::Messages {
                 segment: Id::<id::Segment>::mint(),
-                messages: vec![message(author, ambre_bus::Timestamp::new(2), "elsewhere")],
+                messages: vec![message(
+                    author,
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(2),
+                    "elsewhere"
+                )],
             },
         )));
         assert!(!talks.absorb(ev(

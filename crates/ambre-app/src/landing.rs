@@ -41,7 +41,7 @@ pub struct DocItem {
     pub doc_type: DocType,
     pub name: Option<ambre_core::Name>,
     /// Epoch milliseconds of the last modification (routing metadata, plaintext).
-    pub updated_at: ambre_bus::Timestamp,
+    pub updated_at: ambre_bus::Instant<ambre_bus::Authored>,
     /// Total member count; `> 1` => shared.
     pub member_count: ambre_core::MemberCount,
 }
@@ -533,7 +533,7 @@ fn DeleteConfirm(
 
 /// Formats an epoch-millisecond timestamp as a coarse relative time ("2 h ago").
 /// `0` (no server timestamp) renders as an empty string rather than a fake date.
-fn rel_time(updated_at: ambre_bus::Timestamp) -> String {
+fn rel_time(updated_at: ambre_bus::Instant<ambre_bus::Authored>) -> String {
     let updated_at_ms = updated_at.get();
     if updated_at_ms == 0 {
         return String::new();
@@ -1061,7 +1061,7 @@ mod tests {
             document_id: Id::<Document>::mint(),
             doc_type: DocType::Prose,
             name: Some(ambre_core::Name::new("Plan").unwrap()),
-            updated_at: ambre_bus::Timestamp::new(0),
+            updated_at: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
             member_count: ambre_core::MemberCount::ONE,
         };
         let docs = RwSignal::new(vec![item.clone()]);

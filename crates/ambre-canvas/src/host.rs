@@ -108,12 +108,15 @@ pub struct GpuSettled(());
 /// with zero per-frame allocation. The naive allocate-and-forget pattern
 /// leaks a closure per frame. At 240 Hz that grows the JS heap and makes
 /// Firefox throttle rAF down to 60 Hz as self-protection.
-pub fn start_raf_loop(mut frame: impl FnMut(ambre_bus::PageTime) + 'static, _settled: GpuSettled) {
+pub fn start_raf_loop(
+    mut frame: impl FnMut(ambre_bus::Instant<ambre_bus::PageLoad>) + 'static,
+    _settled: GpuSettled,
+) {
     let cb: Rc<FrameSlot> = Rc::new(RefCell::new(None));
     let cb_clone = Rc::clone(&cb);
 
     *cb.borrow_mut() = Some(Closure::new(move |ts: f64| {
-        frame(ambre_bus::PageTime::new(ts));
+        frame(ambre_bus::Instant::<ambre_bus::PageLoad>::new(ts));
         request_frame(&cb_clone);
     }));
     request_frame(&cb);
@@ -125,7 +128,10 @@ pub fn start_raf_loop(mut frame: impl FnMut(ambre_bus::PageTime) + 'static, _set
 /// ([`crate::frame::drive_hidden`]). The browser may space a hidden page's
 /// timers further apart; the relay then runs that often. The interval lives
 /// as long as the page.
-pub fn start_hidden_relay(mut relay: impl FnMut() + 'static, period: ambre_bus::Millis) {
+pub fn start_hidden_relay(
+    mut relay: impl FnMut() + 'static,
+    period: ambre_bus::TimeSpan<ambre_bus::Ms>,
+) {
     let Some(window) = web_sys::window() else {
         return;
     };

@@ -12,6 +12,7 @@
 //! drawn and never stored (`PROSE-FEAT-065`).
 
 use ambre_bus::app::prose::DocOffset;
+use ambre_core::StoredAsI64;
 use loro::TreeID;
 
 use crate::doc;
@@ -150,7 +151,10 @@ impl ProseState {
     /// The stamp is the author's clock, read once and stored. Every reader then
     /// resolves the same date, whatever its own clock says. A collaborator's
     /// change is dated by the collaborator, so nothing here stamps it.
-    pub(super) fn stamp_modified(&mut self, now: ambre_core::Timestamp) -> ProseOutcome {
+    pub(super) fn stamp_modified(
+        &mut self,
+        now: ambre_core::Instant<ambre_core::Authored>,
+    ) -> ProseOutcome {
         let ours = self.own_counter();
         if ours <= self.stamped_counter {
             return ProseOutcome::nothing();
@@ -485,7 +489,7 @@ pub(crate) mod tests {
     fn the_date_field_stores_a_format_and_no_date() {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp::new(1_700_000_000_000),
+            now: ambre_core::Instant::<ambre_core::Authored>::new(1_700_000_000_000),
         });
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::Date(DateFieldFormat::Long),
@@ -562,22 +566,22 @@ pub(crate) mod tests {
             text: "a".to_owned(),
         });
         let stamped = state.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp::new(42),
+            now: ambre_core::Instant::<ambre_core::Authored>::new(42),
         });
         assert!(stamped.update.is_some());
         assert_eq!(
             doc::read_updated_at(state.document()),
-            Some(ambre_core::Timestamp::new(42))
+            Some(ambre_core::Instant::<ambre_core::Authored>::new(42))
         );
         let again = state.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp::new(43),
+            now: ambre_core::Instant::<ambre_core::Authored>::new(43),
         });
         assert!(again.update.is_none(), "nothing was written since");
         state.handle_command(ProseCommand::Undo);
         assert_eq!(state.text_of(&header).as_deref(), Some(""));
         assert_eq!(
             doc::read_updated_at(state.document()),
-            Some(ambre_core::Timestamp::new(42))
+            Some(ambre_core::Instant::<ambre_core::Authored>::new(42))
         );
     }
 
@@ -640,7 +644,7 @@ pub(crate) mod tests {
         });
         send(&field, &mut bob);
         let stamp = alice.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp::new(1_772_712_000_000),
+            now: ambre_core::Instant::<ambre_core::Authored>::new(1_772_712_000_000),
         });
         send(&stamp, &mut bob);
         let header = crate::events::tree_id(alice.bands().header.expect("the header"));
@@ -661,7 +665,7 @@ pub(crate) mod tests {
             pos: DocOffset::ZERO,
         });
         state.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp::new(1_772_712_000_000),
+            now: ambre_core::Instant::<ambre_core::Authored>::new(1_772_712_000_000),
         });
         let header = crate::events::tree_id(header);
         // A new document carries no language, so the date takes the neutral

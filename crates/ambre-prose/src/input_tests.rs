@@ -83,7 +83,12 @@ impl Rig {
         self.input(ProseInput::Text(text.to_owned()))
     }
 
-    fn press(&mut self, (x, y): (f32, f32), shift: bool, now: ambre_core::PageTime) -> bool {
+    fn press(
+        &mut self,
+        (x, y): (f32, f32),
+        shift: bool,
+        now: ambre_core::Instant<ambre_core::PageLoad>,
+    ) -> bool {
         self.input(ProseInput::Press {
             at: view_at(x, y),
             mods: ambre_commands::Modifiers::NONE
@@ -526,7 +531,11 @@ fn a_press_places_the_caret_and_collapses_the_selection() {
     rig.ui.select_all();
     let scroll = rig.ui.viewport.scroll_y;
     let point = rig.point_of(block, 4);
-    assert!(rig.press(point, false, ambre_core::PageTime::new(0.0)));
+    assert!(rig.press(
+        point,
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
+    ));
     let caret = rig.caret();
     assert_eq!(
         (caret.block_id, caret.offset, caret.anchor),
@@ -544,13 +553,17 @@ fn a_press_in_the_margin_resolves_to_the_nearest_caret() {
     let block = rig.blocks()[0];
     let (_, y) = rig.point_of(block, 0);
     let left = rig.ui.column.left(&rig.ui.viewport);
-    assert!(rig.press((left.get() + 2.0, y), false, ambre_core::PageTime::new(0.0)));
+    assert!(rig.press(
+        (left.get() + 2.0, y),
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
+    ));
     assert_eq!(rig.caret().offset, DocOffset::ZERO);
     let bottom = rig.ui.viewport.height - Px::<View>::new(2.0);
     assert!(rig.press(
         (left.get() + 400.0, bottom.get()),
         false,
-        ambre_core::PageTime::new(1000.0)
+        ambre_core::Instant::<ambre_core::PageLoad>::new(1000.0)
     ));
     assert!(rig.ui.cursor.is_some());
 }
@@ -578,7 +591,11 @@ fn a_block_without_text_resolves_to_the_edge_on_the_pointers_side() {
         + placed.height / 2.0;
     let y = (y_doc - rig.ui.viewport.scroll_y).get();
     let left = rig.ui.column.left(&rig.ui.viewport).get() + layout.margin_left.get();
-    rig.press((left + 5.0, y), false, ambre_core::PageTime::new(0.0));
+    rig.press(
+        (left + 5.0, y),
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+    );
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
         (before, DocOffset::new(6))
@@ -586,7 +603,7 @@ fn a_block_without_text_resolves_to_the_edge_on_the_pointers_side() {
     rig.press(
         (left + layout.content_width.get() - 5.0, y),
         false,
-        ambre_core::PageTime::new(1000.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(1000.0),
     );
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
@@ -601,19 +618,35 @@ fn a_second_press_selects_the_word_and_a_third_the_paragraph() {
     let mut rig = Rig::new(&["hello brave world"]);
     let block = rig.blocks()[0];
     let point = rig.point_of(block, 8);
-    rig.press(point, false, ambre_core::PageTime::new(0.0));
-    rig.press(point, false, ambre_core::PageTime::new(100.0));
+    rig.press(
+        point,
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+    );
+    rig.press(
+        point,
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(100.0),
+    );
     assert_eq!(
         rig.ui.selection(),
         Some(((block, DocOffset::new(6)), (block, DocOffset::new(11))))
     );
-    rig.press(point, false, ambre_core::PageTime::new(200.0));
+    rig.press(
+        point,
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(200.0),
+    );
     assert_eq!(
         rig.ui.selection(),
         Some(((block, DocOffset::ZERO), (block, DocOffset::new(17))))
     );
     // Too late for a fourth: a plain press again.
-    rig.press(point, false, ambre_core::PageTime::new(2000.0));
+    rig.press(
+        point,
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(2000.0),
+    );
     assert_eq!(rig.ui.selection(), None);
 }
 
@@ -628,7 +661,11 @@ fn a_third_press_selects_the_text_drafted_at_the_blocks_end() {
     rig.type_text("!!");
     let point = rig.point_of(block, 8);
     for at in [0.0, 100.0, 200.0] {
-        rig.press(point, false, ambre_core::PageTime::new(at));
+        rig.press(
+            point,
+            false,
+            ambre_core::Instant::<ambre_core::PageLoad>::new(at),
+        );
     }
     assert_eq!(
         rig.ui.selection(),
@@ -708,7 +745,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let press = ProseInput::Press {
         at: view_at(600.0, 100.0),
         mods: ambre_commands::Modifiers::NONE,
-        now: ambre_core::PageTime::new(0.0),
+        now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     };
     assert!(
         ui.handle_input(&press, &mut |command| {
@@ -754,7 +791,7 @@ fn a_press_on_a_layout_with_no_page_leaves_the_caret() {
         &ProseInput::Press {
             at: view_at(10.0, 10.0),
             mods: ambre_commands::Modifiers::NONE,
-            now: ambre_core::PageTime::new(0.0),
+            now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
         },
         &mut |_| SendResult::Sent,
     );
@@ -957,7 +994,7 @@ fn a_drag_grows_from_the_anchor_its_press_captured() {
     rig.press(
         rig.point_of(first, 3),
         false,
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
     let scroll = rig.ui.viewport.scroll_y;
     let (x, y) = rig.point_of(second, 4);
@@ -990,7 +1027,7 @@ fn a_remote_change_does_not_move_the_anchor_of_a_drag() {
     rig.press(
         rig.point_of(block, 6),
         false,
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
     let (x, y) = rig.point_of(block, 9);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
@@ -1018,7 +1055,7 @@ fn escape_collapses_and_cancels_the_drag() {
     rig.press(
         rig.point_of(block, 2),
         false,
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
     let (x, y) = rig.point_of(block, 7);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
@@ -1130,7 +1167,7 @@ fn press_follow(rig: &mut Rig, (x, y): (f32, f32), follow: bool) -> bool {
     rig.input(ProseInput::Press {
         at: view_at(x, y),
         mods: ambre_commands::Modifiers::NONE.ctrl_if(ambre_commands::KeyState::from_bool(follow)),
-        now: ambre_core::PageTime::new(0.0),
+        now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     })
 }
 
@@ -1271,7 +1308,11 @@ fn a_press_in_a_header_or_a_footer_lands_in_its_text() {
     let (mut rig, header, footer) = banded();
     for block in [header, footer] {
         let at = band_point(&rig, block, 4, 0);
-        assert!(rig.press(at, false, ambre_core::PageTime::new(0.0)));
+        assert!(rig.press(
+            at,
+            false,
+            ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
+        ));
         assert_eq!(
             (rig.caret().block_id, rig.caret().offset),
             (block, DocOffset::new(4))
@@ -1302,7 +1343,11 @@ fn a_selection_does_not_cross_the_edge_of_a_band() {
     let (mut rig, header, _) = banded();
     let body = rig.blocks()[0];
     let at = band_point(&rig, header, 2, 0);
-    assert!(rig.press(at, false, ambre_core::PageTime::new(0.0)));
+    assert!(rig.press(
+        at,
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
+    ));
     let (x, y) = rig.point_of(body, 5);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(rig.caret().block_id, header);
@@ -1318,7 +1363,11 @@ fn a_selection_does_not_cross_the_edge_of_a_band() {
     // A shift press in the body is a plain press there.
     rig.input(ProseInput::Release);
     rig.ui.last_press = None;
-    assert!(rig.press(rig.point_of(body, 5), true, ambre_core::PageTime::new(0.0)));
+    assert!(rig.press(
+        rig.point_of(body, 5),
+        true,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
+    ));
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset, rig.caret().anchor),
         (body, DocOffset::new(5), None)
@@ -1374,7 +1423,11 @@ fn note_point(rig: &Rig, block: BlockId, offset: u32) -> (f32, f32) {
 fn a_press_in_a_note_lands_in_its_text() {
     let (mut rig, _, note) = noted();
     let at = note_point(&rig, note, 4);
-    assert!(rig.press(at, false, ambre_core::PageTime::new(0.0)));
+    assert!(rig.press(
+        at,
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
+    ));
     assert_eq!(
         (rig.caret().block_id, rig.caret().offset),
         (note, DocOffset::new(4))
@@ -1404,7 +1457,11 @@ fn a_press_in_a_note_lands_in_its_text() {
 fn a_selection_does_not_cross_the_edge_of_a_note() {
     let (mut rig, body, note) = noted();
     let at = note_point(&rig, note, 2);
-    assert!(rig.press(at, false, ambre_core::PageTime::new(0.0)));
+    assert!(rig.press(
+        at,
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)
+    ));
     let (x, y) = rig.point_of(body, 5);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
     assert_eq!(rig.caret().block_id, note);
@@ -1818,7 +1875,11 @@ fn closing_the_menu_leaves_the_text_as_typed() {
     rig.deliver();
     let sent = open(&mut rig);
     let point = rig.point_of(below, 2);
-    rig.press(point, false, ambre_core::PageTime::new(0.0));
+    rig.press(
+        point,
+        false,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+    );
     assert!(!rig.ui.slash_menu().visible());
     assert_eq!(rig.sent.len(), sent, "a press outside sends nothing");
 
@@ -2334,7 +2395,7 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
     rig.press(
         rig.point_of(first, 2),
         false,
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
     let (x, _) = rig.point_of(first, 2);
     let bottom = rig.ui.viewport.height + Px::<View>::new(40.0);
@@ -2343,13 +2404,17 @@ fn a_drag_past_the_edge_scrolls_and_the_selection_follows() {
     });
     let before = rig.ui.selection().expect("a selection").1;
     assert!(
-        !rig.ui.tick_autoscroll(ambre_core::PageTime::new(0.0)),
+        !rig.ui
+            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)),
         "the first tick only starts the clock"
     );
     let mut now = 0.0;
     for _ in 0..20 {
         now += 16.0;
-        assert!(rig.ui.tick_autoscroll(ambre_core::PageTime::new(now)));
+        assert!(
+            rig.ui
+                .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(now))
+        );
         rig.lay();
     }
     assert!(rig.ui.viewport.scroll_y > Px::<Doc>::new(0.0));
@@ -2368,41 +2433,56 @@ fn a_released_drag_leaves_nothing_armed() {
     rig.press(
         rig.point_of(first, 2),
         false,
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
     let (x, _) = rig.point_of(first, 2);
     let bottom = rig.ui.viewport.height + Px::<View>::new(40.0);
     rig.input(ProseInput::Drag {
         at: view_at(x, bottom.get()),
     });
-    rig.ui.tick_autoscroll(ambre_core::PageTime::new(0.0));
+    rig.ui
+        .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(0.0));
     rig.input(ProseInput::Release);
     let scroll = rig.ui.viewport.scroll_y;
-    assert!(!rig.ui.tick_autoscroll(ambre_core::PageTime::new(16.0)));
-    assert!(!rig.ui.tick_autoscroll(ambre_core::PageTime::new(32.0)));
+    assert!(
+        !rig.ui
+            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(16.0))
+    );
+    assert!(
+        !rig.ui
+            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(32.0))
+    );
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
     // Escape disarms a drag in flight the same way.
     rig.press(
         rig.point_of(first, 2),
         false,
-        ambre_core::PageTime::new(1000.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(1000.0),
     );
     rig.input(ProseInput::Drag {
         at: view_at(x, bottom.get()),
     });
-    rig.ui.tick_autoscroll(ambre_core::PageTime::new(40.0));
+    rig.ui
+        .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(40.0));
     rig.key(ProseKey::Escape, false, false);
-    assert!(!rig.ui.tick_autoscroll(ambre_core::PageTime::new(56.0)));
+    assert!(
+        !rig.ui
+            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(56.0))
+    );
     // A drag away from the edges arms nothing.
     rig.press(
         rig.point_of(first, 2),
         false,
-        ambre_core::PageTime::new(2000.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(2000.0),
     );
     let (x, y) = rig.point_of(first, 4);
     rig.input(ProseInput::Drag { at: view_at(x, y) });
-    rig.ui.tick_autoscroll(ambre_core::PageTime::new(80.0));
-    assert!(!rig.ui.tick_autoscroll(ambre_core::PageTime::new(96.0)));
+    rig.ui
+        .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(80.0));
+    assert!(
+        !rig.ui
+            .tick_autoscroll(ambre_core::Instant::<ambre_core::PageLoad>::new(96.0))
+    );
 }
 
 /// `PROSE-UI-204`: dropped text goes in at the drop point as one insertion,
@@ -2414,7 +2494,7 @@ fn dropped_text_is_one_insertion_at_the_drop_point() {
     rig.press(
         rig.point_of(block, 0),
         false,
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
     let (x, y) = rig.point_of(block, 6);
     assert!(rig.input(ProseInput::Drop {
@@ -2448,16 +2528,19 @@ fn long_rig() -> Rig {
 
 /// Flick a finger up the canvas at 2 px/ms, and lift it.
 fn flick_up(rig: &mut Rig) {
-    rig.ui
-        .touch_start(view_at(300.0, 600.0), ambre_core::PageTime::new(0.0));
+    rig.ui.touch_start(
+        view_at(300.0, 600.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+    );
     for step in 1..=5 {
         rig.ui.touch_move(
             view_at(300.0, 600.0 - 32.0 * step as f32),
-            ambre_core::PageTime::new(16.0 * f64::from(step)),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(16.0 * f64::from(step)),
         );
     }
     assert_eq!(
-        rig.ui.touch_end(ambre_core::PageTime::new(80.0)),
+        rig.ui
+            .touch_end(ambre_core::Instant::<ambre_core::PageLoad>::new(80.0)),
         None,
         "a pan is no tap"
     );
@@ -2472,11 +2555,13 @@ fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
     let speed = rig.ui.fling_speed().expect("a flick is in motion").get();
     assert!((speed - 2.0).abs() < 0.01, "the release speed, {speed}");
     let mut now = 80.0;
-    rig.ui.tick_fling(ambre_core::PageTime::new(now));
+    rig.ui
+        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(now));
     let (mut last_step, mut scroll) = (Px::<Doc>::new(f32::INFINITY), rig.ui.viewport.scroll_y);
     while rig.ui.fling_speed().is_some() {
         now += 16.0;
-        rig.ui.tick_fling(ambre_core::PageTime::new(now));
+        rig.ui
+            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(now));
         rig.lay();
         let step = rig.ui.viewport.scroll_y - scroll;
         assert!(
@@ -2486,7 +2571,10 @@ fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
         (last_step, scroll) = (step, rig.ui.viewport.scroll_y);
         assert!(now < 10_000.0, "the motion stops");
     }
-    assert!(!rig.ui.tick_fling(ambre_core::PageTime::new(now + 16.0)));
+    assert!(
+        !rig.ui
+            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(now + 16.0))
+    );
     // Near the end of the column, the motion stops there.
     let end = rig.ui.column.max_scroll(&rig.ui.viewport);
     rig.ui.scroll_by(down(
@@ -2495,7 +2583,9 @@ fn a_flick_slows_down_and_stops_at_the_end_of_the_column() {
     flick_up(&mut rig);
     for frame in 1..=20 {
         rig.ui
-            .tick_fling(ambre_core::PageTime::new(80.0 + 16.0 * f64::from(frame)));
+            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(
+                80.0 + 16.0 * f64::from(frame),
+            ));
     }
     assert_eq!(rig.ui.viewport.scroll_y, end);
     assert_eq!(rig.ui.fling_speed(), None);
@@ -2508,20 +2598,24 @@ fn a_press_stops_a_flick_and_the_motion_writes_nothing() {
     let mut rig = long_rig();
     let block = rig.blocks()[0];
     flick_up(&mut rig);
-    rig.ui.tick_fling(ambre_core::PageTime::new(80.0));
-    rig.ui.tick_fling(ambre_core::PageTime::new(96.0));
+    rig.ui
+        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(80.0));
+    rig.ui
+        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(96.0));
     rig.press(
         rig.point_of(block, 1),
         false,
-        ambre_core::PageTime::new(100.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(100.0),
     );
     assert_eq!(rig.ui.fling_speed(), None);
     flick_up(&mut rig);
     rig.key(ProseKey::Right, false, false);
     assert_eq!(rig.ui.fling_speed(), None);
     flick_up(&mut rig);
-    rig.ui
-        .touch_start(view_at(10.0, 10.0), ambre_core::PageTime::new(200.0));
+    rig.ui.touch_start(
+        view_at(10.0, 10.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(200.0),
+    );
     assert_eq!(rig.ui.fling_speed(), None);
     // Panning and flicking send nothing: the sent edits are the press's.
     assert!(rig.sent.is_empty());
@@ -2556,11 +2650,14 @@ fn notch(dy: f64) -> ambre_draw::WheelDelta {
 #[test]
 fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
     let mut by_line = long_rig();
-    by_line.ui.wheel(notch(2.0), ambre_core::PageTime::new(0.0));
+    by_line.ui.wheel(
+        notch(2.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+    );
     let mut by_px = long_rig();
     by_px.ui.wheel(
         glide(2.0 * f64::from(ambre_draw::WHEEL_LINE.get())),
-        ambre_core::PageTime::new(0.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
     assert!(
         by_px.ui.viewport.scroll_y > Px::<Doc>::new(0.0),
@@ -2577,7 +2674,10 @@ fn a_line_or_a_page_scrolls_the_column_by_its_pixels() {
         ),
         ambre_draw::WheelDeltaMode::Page,
     );
-    by_page.ui.wheel(page_delta, ambre_core::PageTime::new(0.0));
+    by_page.ui.wheel(
+        page_delta,
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+    );
     assert_eq!(by_page.ui.viewport.scroll_y.get(), page.get());
 }
 
@@ -2589,37 +2689,49 @@ fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
     for step in 0..5 {
         rig.ui.wheel(
             glide(16.0),
-            ambre_core::PageTime::new(16.0 * f64::from(step)),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(16.0 * f64::from(step)),
         );
     }
     let glided = rig.ui.viewport.scroll_y;
-    rig.ui.tick_fling(ambre_core::PageTime::new(64.0));
+    rig.ui
+        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(64.0));
     assert_eq!(
         rig.ui.fling_speed(),
         None,
         "no motion while the glide lasts"
     );
     // The frame past the pause launches the motion, and the next one moves.
-    rig.ui.tick_fling(ambre_core::PageTime::new(64.0 + 70.0));
+    rig.ui
+        .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(
+            64.0 + 70.0,
+        ));
     let speed = rig
         .ui
         .fling_speed()
         .expect("the paused glide carries on")
         .get();
     assert!((speed - 1.0).abs() < 0.05, "the glide's speed, {speed}");
-    assert!(rig.ui.tick_fling(ambre_core::PageTime::new(64.0 + 86.0)));
+    assert!(
+        rig.ui
+            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(
+                64.0 + 86.0
+            ))
+    );
     assert!(rig.ui.viewport.scroll_y > glided);
 
     let mut rig = long_rig();
     for step in 0..5 {
         rig.ui.wheel(
             notch(0.4),
-            ambre_core::PageTime::new(16.0 * f64::from(step)),
+            ambre_core::Instant::<ambre_core::PageLoad>::new(16.0 * f64::from(step)),
         );
     }
     let stepped = rig.ui.viewport.scroll_y;
     assert!(
-        !rig.ui.tick_fling(ambre_core::PageTime::new(64.0 + 70.0)),
+        !rig.ui
+            .tick_fling(ambre_core::Instant::<ambre_core::PageLoad>::new(
+                64.0 + 70.0
+            )),
         "a notch never coasts"
     );
     assert_eq!(rig.ui.viewport.scroll_y, stepped);
@@ -2630,14 +2742,17 @@ fn a_paused_glide_keeps_the_column_moving_and_a_notch_never_does() {
 #[test]
 fn a_finger_that_barely_moves_is_a_tap() {
     let mut rig = long_rig();
-    rig.ui
-        .touch_start(view_at(300.0, 400.0), ambre_core::PageTime::new(0.0));
-    assert!(
-        !rig.ui
-            .touch_move(view_at(303.0, 402.0), ambre_core::PageTime::new(10.0))
+    rig.ui.touch_start(
+        view_at(300.0, 400.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
     );
+    assert!(!rig.ui.touch_move(
+        view_at(303.0, 402.0),
+        ambre_core::Instant::<ambre_core::PageLoad>::new(10.0)
+    ));
     assert_eq!(
-        rig.ui.touch_end(ambre_core::PageTime::new(20.0)),
+        rig.ui
+            .touch_end(ambre_core::Instant::<ambre_core::PageLoad>::new(20.0)),
         Some(view_at(300.0, 400.0))
     );
     assert_eq!(rig.ui.viewport.scroll_y, Px::<Doc>::new(0.0));

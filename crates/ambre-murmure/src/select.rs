@@ -6,7 +6,7 @@
 //! above, where an index does not. The paint resolves a pointer into an end,
 //! since only the layout knows which byte lies under it.
 
-use ambre_bus::{Deletion, Timestamp};
+use ambre_bus::{Authored, Deletion, Instant};
 use ambre_core::id::{Id, User};
 use ambre_core::{ByteCount, ByteOffset, ByteSpan, Point, Px, View};
 
@@ -96,7 +96,7 @@ impl TextSelection {
         &self,
         list: &MessageList,
         name_of: &dyn Fn(Id<User>) -> Option<ambre_core::DisplayName>,
-        time_of: &dyn Fn(Timestamp) -> String,
+        time_of: &dyn Fn(Instant<Authored>) -> String,
     ) -> Option<String> {
         let keys = list.keys();
         let mut parts = Vec::new();
@@ -142,7 +142,13 @@ mod tests {
         let messages = bodies
             .iter()
             .enumerate()
-            .map(|(i, body)| message(ada, ambre_bus::Timestamp::new(i as u64 * 60_000), body))
+            .map(|(i, body)| {
+                message(
+                    ada,
+                    ambre_bus::Instant::<ambre_bus::Authored>::new(i as u64 * 60_000),
+                    body,
+                )
+            })
             .collect();
         list.absorb(Id::<Segment>::mint(), messages);
         list
@@ -232,11 +238,15 @@ mod tests {
         let mut list = list(&["hello", "", "again"]);
         let mut edited = message(
             Id::<User>::mint(),
-            ambre_bus::Timestamp::new(200_000),
+            ambre_bus::Instant::<ambre_bus::Authored>::new(200_000),
             "again",
         );
         edited.edited = ambre_bus::Revision::Edited;
-        let mut gone = message(Id::<User>::mint(), ambre_bus::Timestamp::new(100_000), "");
+        let mut gone = message(
+            Id::<User>::mint(),
+            ambre_bus::Instant::<ambre_bus::Authored>::new(100_000),
+            "",
+        );
         gone.deleted = ambre_bus::Deletion::Deleted;
         let segment = Id::<Segment>::mint();
         list.absorb(segment, vec![gone, edited]);

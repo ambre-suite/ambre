@@ -395,7 +395,7 @@ pub async fn remove_document_member(
     document_id: &Id<Document>,
     user_id: &Id<User>,
     entry: Option<&LogEntry>,
-    sweep_due: ambre_core::UnixSeconds,
+    sweep_due: ambre_core::Instant<ambre_core::UnixSec>,
 ) -> Result<Removed, AppError> {
     let mut tx = pool.begin().await?;
     lock_document(&mut tx, *document_id).await?;
@@ -451,7 +451,7 @@ pub async fn revoke_and_rotate(
     members: &[Id<User>],
     link: &ambre_protocol::KeyLink,
     entry: Option<&LogEntry>,
-    sweep_due: ambre_core::UnixSeconds,
+    sweep_due: ambre_core::Instant<ambre_core::UnixSec>,
 ) -> Result<Option<SpaceLeave>, AppError> {
     let mut tx = pool.begin().await?;
     // The document row first, as every rotation takes it: two rotations of one

@@ -80,18 +80,18 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
 pub struct DrawStats {
     /// Cells layer non-text geometry: pending bg, received-cell fills,
     /// grid lines. Zero on overlay-only frames.
-    pub background: ambre_core::PageMillis,
+    pub background: ambre_core::TimeSpan<ambre_core::FracMs>,
     /// Cells layer text (parley shaping + glyph atlas + push_glyph per cell).
     /// Zero on overlay-only frames or when `text_pass` is false.
-    pub cells: ambre_core::PageMillis,
+    pub cells: ambre_core::TimeSpan<ambre_core::FracMs>,
     /// Overlay layer non-HUD: header backgrounds, active tints, separator
     /// lines, active border, header labels.
-    pub headers: ambre_core::PageMillis,
+    pub headers: ambre_core::TimeSpan<ambre_core::FracMs>,
     /// Number of cells with non-empty text actually drawn this frame.
     pub cells_drawn: ambre_canvas::CellsDrawn,
     /// Latest measured input->caret latency (keydown to caret paint).
     /// Read against the keystroke-to-draft budget of `ambre-spec-budgets.md`.
-    pub input_latency: ambre_core::PageMillis,
+    pub input_latency: ambre_core::TimeSpan<ambre_core::FracMs>,
 }
 
 /// Opacity of the veil painted over a dirty (awaiting-recompute) cell. The

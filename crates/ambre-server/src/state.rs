@@ -38,12 +38,12 @@ pub struct AppState {
 pub struct Config {
     /// Access-token (JWT) lifetime in seconds (default 15 min). Short: it is not
     /// revocable before expiry, so the window of a leaked token is bounded.
-    pub access_ttl: ambre_core::Seconds,
+    pub access_ttl: ambre_core::TimeSpan<ambre_core::Sec>,
     /// Refresh-token lifetime in seconds (default 30 days). Stored in Redis and
     /// revocable (logout / rotation).
-    pub refresh_ttl: ambre_core::Seconds,
+    pub refresh_ttl: ambre_core::TimeSpan<ambre_core::Sec>,
     /// Presigned S3 URL lifetime in seconds (default 15 min).
-    pub presigned_url_ttl: ambre_core::Seconds,
+    pub presigned_url_ttl: ambre_core::TimeSpan<ambre_core::Sec>,
     /// Maximum size in bytes of a single encrypted media blob (default 100 MiB).
     /// The declared size is validated against this cap, and then bound into the
     /// presigned PUT URL (`Content-Length`). A member cannot upload an
@@ -177,9 +177,9 @@ message_limit!(
 impl Default for Config {
     fn default() -> Self {
         Self {
-            access_ttl: ambre_core::Seconds::new(900),
-            refresh_ttl: ambre_core::Seconds::new(30 * 24 * 3600),
-            presigned_url_ttl: ambre_core::Seconds::new(900),
+            access_ttl: ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+            refresh_ttl: ambre_core::TimeSpan::<ambre_core::Sec>::new(30 * 24 * 3600),
+            presigned_url_ttl: ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
             media_max_size: ambre_core::ByteSize::new(100 * 1024 * 1024),
             snapshot_max_size: ambre_core::ByteSize::new(50 * 1024 * 1024),
             delta_max_size: ambre_core::ByteSize::new(4 * 1024 * 1024),

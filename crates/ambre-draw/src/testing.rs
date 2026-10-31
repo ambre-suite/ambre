@@ -266,18 +266,18 @@ impl DrawSurface for RecordingSurface {
 /// deterministic zero-deltas in headless tests, which never assert on them.
 #[derive(Clone, Copy, Default)]
 pub struct FixedClock {
-    at: ambre_core::PageTime,
+    at: ambre_core::Instant<ambre_core::PageLoad>,
 }
 
 impl FixedClock {
     /// The clock that reads `at` on every call.
-    pub fn new(at: ambre_core::PageTime) -> Self {
+    pub fn new(at: ambre_core::Instant<ambre_core::PageLoad>) -> Self {
         Self { at }
     }
 }
 
 impl Clock for FixedClock {
-    fn now(&self) -> ambre_core::PageTime {
+    fn now(&self) -> ambre_core::Instant<ambre_core::PageLoad> {
         self.at
     }
 }

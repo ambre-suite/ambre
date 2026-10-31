@@ -482,7 +482,7 @@ pub async fn point_rows_at_batch(
 /// `limit` (`SRV-152`).
 pub async fn idle_inline_documents(
     pool: &PgPool,
-    idle: ambre_core::Seconds,
+    idle: ambre_core::TimeSpan<ambre_core::Sec>,
     limit: QueryLimit,
 ) -> Result<Vec<Id<Document>>, AppError> {
     let ids: Vec<uuid::Uuid> = sqlx::query_scalar(

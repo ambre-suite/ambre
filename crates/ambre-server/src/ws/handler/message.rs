@@ -646,7 +646,7 @@ pub(crate) async fn handle_ephemeral(
         &doc_id,
         &eph.public_data.pub_key,
         &eph.ciphertext,
-        ambre_core::Seconds::new(15),
+        ambre_core::TimeSpan::<ambre_core::Sec>::new(15),
     )
     .await
     .is_err()
@@ -1390,7 +1390,7 @@ mod ephemeral_binding_tests {
             &doc_id,
             &key,
             &blob,
-            ambre_core::Seconds::new(15),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(15),
         )
         .await
         .unwrap();
@@ -1873,7 +1873,7 @@ mod access_tests {
             &doc_id,
             &editor,
             None,
-            ambre_core::UnixSeconds::new(0),
+            ambre_core::Instant::<ambre_core::UnixSec>::new(0),
         )
         .await
         .unwrap();
@@ -1940,7 +1940,7 @@ mod access_tests {
             &doc_id,
             &editor,
             None,
-            ambre_core::UnixSeconds::new(0),
+            ambre_core::Instant::<ambre_core::UnixSec>::new(0),
         )
         .await
         .unwrap();

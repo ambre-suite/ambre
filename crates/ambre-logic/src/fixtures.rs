@@ -165,7 +165,7 @@ mod unknown_commit {
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct BenchMeasurement {
     pub id: String,
-    pub mean_ns: ambre_core::Nanos,
+    pub mean_ns: ambre_core::TimeSpan<ambre_core::Ns>,
 }
 
 impl BenchBaseline {
@@ -248,7 +248,7 @@ fn collect_means(
         };
         out.push(BenchMeasurement {
             id,
-            mean_ns: ambre_core::Nanos::from_mean(mean),
+            mean_ns: ambre_core::TimeSpan::<ambre_core::Ns>::from_mean(mean),
         });
     }
     Ok(())

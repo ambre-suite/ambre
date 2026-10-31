@@ -39,7 +39,8 @@ use super::{ToileState, write_edits};
 /// The slide transition length a fresh board is seeded with.
 /// The deck's `transition_ms` register carries an editable value over it, and a
 /// register holding anything else reads as this (`TOILE-FEAT-028`).
-pub const DEFAULT_TRANSITION: ambre_core::PageMillis = ambre_core::PageMillis::new(300.0);
+pub const DEFAULT_TRANSITION: ambre_core::TimeSpan<ambre_core::FracMs> =
+    ambre_core::TimeSpan::<ambre_core::FracMs>::new(300.0);
 
 impl ToileState {
     // -- sequence (CRDT,) -------------------------------------------------
@@ -329,8 +330,9 @@ impl ToileState {
 
     /// The `transition_ms` register as the document holds it, or the default
     /// (see [`Self::transition`]).
-    pub(super) fn transition_length(&self) -> ambre_core::PageMillis {
-        const MAX_TRANSITION: ambre_core::PageMillis = ambre_core::PageMillis::new(10_000.0);
+    pub(super) fn transition_length(&self) -> ambre_core::TimeSpan<ambre_core::FracMs> {
+        const MAX_TRANSITION: ambre_core::TimeSpan<ambre_core::FracMs> =
+            ambre_core::TimeSpan::<ambre_core::FracMs>::new(10_000.0);
         config(&self.doc)
             .value(ConfigKey::TransitionMs)
             .and_then(|v| match v {
@@ -338,9 +340,11 @@ impl ToileState {
                 LoroValue::I64(ms) => Some(ms as f64),
                 _ => None,
             })
-            .map(ambre_core::PageMillis::new)
+            .map(ambre_core::TimeSpan::<ambre_core::FracMs>::new)
             .filter(|ms| {
-                ms.is_finite() && (ambre_core::PageMillis::ZERO..=MAX_TRANSITION).contains(ms)
+                ms.is_finite()
+                    && (ambre_core::TimeSpan::<ambre_core::FracMs>::ZERO..=MAX_TRANSITION)
+                        .contains(ms)
             })
             .unwrap_or(DEFAULT_TRANSITION)
     }

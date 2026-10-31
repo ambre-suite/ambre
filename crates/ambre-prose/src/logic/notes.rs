@@ -542,7 +542,7 @@ mod tests {
             block_id: block,
             range: DocSpan::from_usize_range(0..2),
             text: "a thread".to_owned(),
-            now: ambre_core::Timestamp::new(0),
+            now: ambre_core::Instant::<ambre_core::Authored>::new(0),
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::CommentInNote));
         let outcome = state.handle_command(ProseCommand::SplitBlock {

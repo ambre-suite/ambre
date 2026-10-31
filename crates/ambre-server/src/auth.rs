@@ -122,7 +122,7 @@ pub struct TokenPair {
     pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
     pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
-    pub access_expires_in: ambre_core::Seconds,
+    pub access_expires_in: ambre_core::TimeSpan<ambre_core::Sec>,
 }
 
 /// Mint an access JWT and create a revocable refresh token in Redis for the
@@ -174,10 +174,13 @@ pub async fn issue_session(
 /// The longest an access token may live, whatever the deployment configures
 /// (`SRV-025`). A token is not revocable before its expiry, so this bounds the
 /// window a leaked one stays usable.
-pub const ACCESS_TOKEN_MAX_TTL: ambre_core::Seconds = ambre_core::Seconds::new(15 * 60);
+pub const ACCESS_TOKEN_MAX_TTL: ambre_core::TimeSpan<ambre_core::Sec> =
+    ambre_core::TimeSpan::<ambre_core::Sec>::new(15 * 60);
 
 /// The lifetime a minted token carries: the configured one, capped.
-fn access_lifetime(configured: ambre_core::Seconds) -> ambre_core::Seconds {
+fn access_lifetime(
+    configured: ambre_core::TimeSpan<ambre_core::Sec>,
+) -> ambre_core::TimeSpan<ambre_core::Sec> {
     configured.min(ACCESS_TOKEN_MAX_TTL)
 }
 

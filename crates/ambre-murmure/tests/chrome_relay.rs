@@ -13,10 +13,10 @@
 )]
 
 use ambre_bus::{
-    CatalogueEntry, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace, DirectMessageEvent,
-    HeldReply, HeldSend, LogicCommand, MemberChannel, MemberInfo, MemberStanding, MemberView,
-    MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, RestCommand,
-    RestEvent, Role, SearchMatch, SpaceEvent, Timestamp, UiEvent,
+    Authored, CatalogueEntry, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace,
+    DirectMessageEvent, HeldReply, HeldSend, Instant, LogicCommand, MemberChannel, MemberInfo,
+    MemberStanding, MemberView, MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent,
+    Presence, RestCommand, RestEvent, Role, SearchMatch, SpaceEvent, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteKey, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, KeyChar, Locale};
@@ -511,7 +511,7 @@ fn a_space_with(
 #[wasm_bindgen_test]
 fn the_refresh_ticks_the_shown_channel_as_well_as_every_space() {
     let (_owner, relay, general, _) = a_space_with_members();
-    let now = Timestamp::new(1_700_000_000_000);
+    let now = Instant::<Authored>::new(1_700_000_000_000);
     let refresh = relay.refresh_presence(now);
     assert!(
         matches!(
@@ -1055,7 +1055,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
     let root = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&root).unwrap();
     let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
-    let now = Timestamp::new(1_700_000_000_000);
+    let now = Instant::<Authored>::new(1_700_000_000_000);
     let _handle = leptos::mount::mount_to(mount, move || {
         view! { <DeleteConfirm relay=relay send=send now=Callback::new(move |()| now) /> }
     });
@@ -1190,7 +1190,7 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
     let root = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&root).unwrap();
     let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
-    let now = Timestamp::new(1_700_000_000_000);
+    let now = Instant::<Authored>::new(1_700_000_000_000);
     let _handle = leptos::mount::mount_to(mount, move || {
         view! { <EmojiPicker relay=relay send=send now=Callback::new(move |()| now) /> }
     });
@@ -1277,7 +1277,7 @@ fn found(query: &str, budget: Id<Channel>, zeta: Id<Channel>) -> UiEvent {
     let message = MessageView {
         id: Id::<Message>::mint(),
         author: Id::<User>::mint(),
-        ts: Timestamp::new(1),
+        ts: Instant::<Authored>::new(1),
         text: "the budget for May".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
@@ -1736,7 +1736,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
     let root = document().create_element("div").unwrap();
     document().body().unwrap().append_child(&root).unwrap();
     let mount: web_sys::HtmlElement = root.clone().dyn_into().unwrap();
-    let now = Timestamp::new(1_700_000_000_000);
+    let now = Instant::<Authored>::new(1_700_000_000_000);
     let _handle = leptos::mount::mount_to(mount, move || {
         view! { <ChannelMentionConfirm relay=relay send=send now=Callback::new(move |()| now) /> }
     });

@@ -96,7 +96,7 @@ impl TrameView {
             edit_dirty: false,
             caret_on: true,
             caret_drawn: None,
-            last_blink: ambre_bus::PageTime::new(0.0),
+            last_blink: ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
             pending_input_mark: None,
             clock,
             text_pass: TextPass::WithText,

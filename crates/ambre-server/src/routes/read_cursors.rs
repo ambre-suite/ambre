@@ -602,7 +602,7 @@ mod tests {
             &meta,
             &bob,
             None,
-            ambre_core::UnixSeconds::new(0),
+            ambre_core::Instant::<ambre_core::UnixSec>::new(0),
         )
         .await
         .expect("remove");

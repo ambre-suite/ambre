@@ -476,7 +476,7 @@ async fn announce_space_leave(
     state: &AppState,
     leave: &db::SpaceLeave,
     target: &Id<User>,
-    sweep_due: ambre_core::UnixSeconds,
+    sweep_due: ambre_core::Instant<ambre_core::UnixSec>,
 ) {
     for meta in &leave.left {
         crate::redis_ops::members_changed(&state.redis, meta).await;

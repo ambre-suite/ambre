@@ -61,7 +61,7 @@ fn thread(id: Id<Comment>, replies: &[&str]) -> CommentThread {
                 reply_id: Id::<Reply>::mint(),
                 author: ambre_core::DisplayName::new("Bob").ok(),
                 user_id: Id::<User>::from_bytes([2; 16]),
-                created_at: ambre_bus::Timestamp::new(0),
+                created_at: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
                 text: (*text).to_owned(),
             })
             .collect(),
@@ -186,7 +186,7 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     let reply = ambre_bus::app::prose::ProseCommand::ReplyToComment {
         comment_id,
         text: String::new(),
-        now: ambre_core::Timestamp::new(0),
+        now: ambre_core::Instant::<ambre_core::Authored>::new(0),
     };
     chrome::notify_event(
         &toasts,

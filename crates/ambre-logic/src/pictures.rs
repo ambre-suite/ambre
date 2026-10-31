@@ -10,7 +10,9 @@ use ambre_core::{Image, Px, Size};
 use std::io::Cursor;
 
 use super::*;
-use ambre_bus::{ContentHash, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent};
+use ambre_bus::{
+    ContentHash, Ms, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent, TimeSpan,
+};
 use ambre_core::{ByteSize, MediaBytes, Payload};
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
@@ -30,8 +32,8 @@ const MAX_ALLOC: ByteSize = ByteSize::new(128 * 1024 * 1024);
 pub(crate) const PICTURE_MAX_SIZE: ByteSize = ByteSize::new(8 * 1024 * 1024);
 /// A frame delay at or under this plays at [`SLOW_DELAY`], as browsers do:
 /// a file that asks for none would otherwise spin.
-const FAST_DELAY: Millis = Millis::new(10);
-const SLOW_DELAY: Millis = Millis::new(100);
+const FAST_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(10);
+const SLOW_DELAY: TimeSpan<Ms> = TimeSpan::<Ms>::new(100);
 
 impl LogicState {
     /// Fetch the image `media_ref`, stored under `document_id`, for the view
@@ -124,7 +126,7 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
                 held = after;
                 frames.push(PictureFrame {
                     pixels,
-                    delay: delay(Millis::new(u64::from(
+                    delay: delay(TimeSpan::<Ms>::new(u64::from(
                         numer.checked_div(denom).unwrap_or(0),
                     ))),
                 });
@@ -141,7 +143,7 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
                 size,
                 frames: vec![PictureFrame {
                     pixels: scale(image, size),
-                    delay: ambre_core::Millis::new(0),
+                    delay: ambre_core::TimeSpan::<ambre_core::Ms>::new(0),
                 }],
             })
         }
@@ -177,7 +179,7 @@ fn scale(image: RgbaImage, size: Size<Px<Image>>) -> Payload<ambre_core::RgbaPix
     .into()
 }
 
-fn delay(ms: Millis) -> Millis {
+fn delay(ms: TimeSpan<Ms>) -> TimeSpan<Ms> {
     if ms <= FAST_DELAY { SLOW_DELAY } else { ms }
 }
 
@@ -224,7 +226,7 @@ mod tests {
             picture
                 .frames
                 .iter()
-                .all(|f| f.delay == ambre_core::Millis::new(70))
+                .all(|f| f.delay == ambre_core::TimeSpan::<ambre_core::Ms>::new(70))
         );
         assert!(
             picture

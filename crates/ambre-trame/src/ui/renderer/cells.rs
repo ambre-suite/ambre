@@ -100,8 +100,8 @@ pub fn draw_cells<S: DrawSurface>(
         None => (cell_area, palette.content_pending),
     };
     if strip.width() <= 0.0 || strip.height() <= 0.0 {
-        stats.background = ambre_core::PageMillis::ZERO;
-        stats.cells = ambre_core::PageMillis::ZERO;
+        stats.background = ambre_core::TimeSpan::<ambre_core::FracMs>::ZERO;
+        stats.cells = ambre_core::TimeSpan::<ambre_core::FracMs>::ZERO;
         stats.cells_drawn = ambre_canvas::CellsDrawn::ZERO;
         return;
     }

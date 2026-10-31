@@ -4,7 +4,7 @@
 use std::rc::Rc;
 
 use ambre_bus::conduit::{Sender, local};
-use ambre_bus::{MessageView, MurmureEvent, Timestamp, UiEvent};
+use ambre_bus::{Authored, Instant, MessageView, MurmureEvent, UiEvent};
 use ambre_canvas::{TextInput, ThemeControl};
 use ambre_core::id::{Channel, Id, Message, Segment, User};
 
@@ -39,8 +39,8 @@ pub fn channel_of(
         }),
         name_of: Rc::new(|_| ambre_core::DisplayName::new("Ada").ok()),
         time_of: Rc::new(|_| "t".to_owned()),
-        now: Rc::new(|| ambre_core::PageTime::new(0.0)),
-        wall_clock: Rc::new(|| ambre_bus::Timestamp::new(0)),
+        now: Rc::new(|| ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)),
+        wall_clock: Rc::new(|| ambre_bus::Instant::<ambre_bus::Authored>::new(0)),
         motion: Rc::new(|| crate::pictures::Motion::Full),
         announce: Rc::new(|_| {}),
         act_on: Rc::new(|_| {}),
@@ -71,7 +71,7 @@ pub fn channel_of(
         .map(|(i, text)| MessageView {
             id: Id::<Message>::mint(),
             author,
-            ts: Timestamp::new(i as u64),
+            ts: Instant::<Authored>::new(i as u64),
             text: (*text).to_owned(),
             mentions: Vec::new(),
             styles: Vec::new(),

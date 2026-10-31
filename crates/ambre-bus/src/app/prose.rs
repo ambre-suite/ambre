@@ -1153,7 +1153,7 @@ pub struct CommentReply {
     pub reply_id: Id<Reply>,
     pub author: Option<ambre_core::DisplayName>,
     pub user_id: Id<User>,
-    pub created_at: crate::Timestamp,
+    pub created_at: crate::Instant<crate::Authored>,
     pub text: String,
 }
 
@@ -1748,7 +1748,7 @@ pub enum ProseCommand {
     /// engine writes it as the document's last-modified stamp when this peer
     /// wrote since the last one (`PROSE-FEAT-066`).
     StampModified {
-        now: ambre_core::Timestamp,
+        now: ambre_core::Instant<ambre_core::Authored>,
     },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
@@ -1796,13 +1796,13 @@ pub enum ProseCommand {
         block_id: BlockId,
         range: DocSpan,
         text: String,
-        now: ambre_core::Timestamp,
+        now: ambre_core::Instant<ambre_core::Authored>,
     },
     /// A reply at the end of the thread, which reopens it (`PROSE-FEAT-079`).
     ReplyToComment {
         comment_id: Id<Comment>,
         text: String,
-        now: ambre_core::Timestamp,
+        now: ambre_core::Instant<ambre_core::Authored>,
     },
     /// Close a thread.
     ResolveComment {
@@ -3121,7 +3121,7 @@ mod tests {
         let secret = "Q3 layoffs".to_owned();
         let block_id = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let pos = DocOffset::ZERO;
-        let now = ambre_core::Timestamp::default();
+        let now = ambre_core::Instant::<ambre_core::Authored>::default();
         let comment_id = Id::<Comment>::mint();
         let reply_id = Id::<Reply>::mint();
         let footnote_id = Id::<Footnote>::mint();

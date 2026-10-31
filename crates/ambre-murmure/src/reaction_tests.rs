@@ -2,7 +2,9 @@
 //! (`features/ambre-spec-murmure-reactions.md`).
 
 use crate::Receipt;
-use ambre_bus::{ActivityKind, MessageDraft, MessageView, Reaction, Timestamp, UnreadCount};
+use ambre_bus::{
+    ActivityKind, Authored, Instant, MessageDraft, MessageView, Reaction, UnreadCount,
+};
 use ambre_core::id::{Channel, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, Seq};
 use loro::{Container, LoroMap, ValueOrContainer, VersionVector};
@@ -12,7 +14,7 @@ use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Refusal, Sent, Signer,
 };
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 const THUMB: &str = "\u{1F44D}";
 
 /// One member of the channel: its state, and the user it writes for.

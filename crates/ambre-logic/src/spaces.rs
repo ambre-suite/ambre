@@ -9,8 +9,8 @@
 
 use super::*;
 use ambre_bus::{
-    MemberInfo, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SpaceCommand,
-    SpaceEvent, Timestamp,
+    Authored, Instant, MemberInfo, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey,
+    SpaceCommand, SpaceEvent,
 };
 use ambre_core::Name;
 use ambre_murmure::{
@@ -62,7 +62,12 @@ impl LogicState {
     /// owner on the first upload. It is written again under its PeerID once
     /// its identity lands, and its whole content leaves once the Sync worker
     /// holds the document.
-    pub(crate) fn create_space(&mut self, space_id: Id<Space>, name: &Name, now: Timestamp) {
+    pub(crate) fn create_space(
+        &mut self,
+        space_id: Id<Space>,
+        name: &Name,
+        now: Instant<Authored>,
+    ) {
         if self.spaces.contains_key(&space_id) || self.space_opening.contains_key(&space_id) {
             return;
         }
@@ -941,7 +946,7 @@ mod tests {
     use ambre_bus::{Role, Topic};
     use ambre_core::id::Category;
 
-    const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+    const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
     /// The name `text` is, within the cap.
     fn fit_name(text: &str) -> Name {
@@ -2318,7 +2323,7 @@ mod tests {
             state.handle_logic_command(LogicCommand::Space {
                 space_id,
                 command: SpaceCommand::RefreshPresence {
-                    now: Timestamp::new(NOW.get() + offset),
+                    now: Instant::<Authored>::new(NOW.get() + offset),
                 },
             });
         };

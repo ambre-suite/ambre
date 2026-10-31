@@ -234,7 +234,11 @@ where
                     let now = event.time_stamp();
                     if host_c
                         .borrow_mut()
-                        .touch(phase, at, ambre_bus::PageTime::new(now))
+                        .touch(
+                            phase,
+                            at,
+                            ambre_bus::Instant::<ambre_bus::PageLoad>::new(now),
+                        )
                         .is_yes()
                     {
                         event.prevent_default();

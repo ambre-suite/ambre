@@ -118,7 +118,7 @@ impl ImageKey {
 pub trait Clock {
     /// The page's monotonic clock. Sub-millisecond precision is expected on
     /// screen but never relied upon for correctness.
-    fn now(&self) -> ambre_core::PageTime;
+    fn now(&self) -> ambre_core::Instant<ambre_core::PageLoad>;
 }
 
 /// GPU- and PDF-agnostic drawing interface.

@@ -24,7 +24,8 @@ pub const INLINE_CAP: InlineCap = InlineCap {
 
 /// How long a document goes without a write before its whole tail moves out
 /// (`ambre-spec-budgets.md section 8`; `SRV-152`).
-pub const IDLE_AFTER: ambre_core::Seconds = ambre_core::Seconds::new(24 * 3600);
+pub const IDLE_AFTER: ambre_core::TimeSpan<ambre_core::Sec> =
+    ambre_core::TimeSpan::<ambre_core::Sec>::new(24 * 3600);
 
 /// How many idle documents one pass moves.
 const IDLE_PASS_LIMIT: crate::db::QueryLimit = crate::db::QueryLimit::saturating(100);

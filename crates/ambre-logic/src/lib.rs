@@ -796,7 +796,7 @@ struct LogicState {
     /// The close each open channel asked of the Sync worker, with the time
     /// of the send that filled its segment (the Murmure segments spec).
     /// Removed on the answer, and with the channel.
-    closing_segments: HashMap<Id<Channel>, ambre_bus::Timestamp>,
+    closing_segments: HashMap<Id<Channel>, ambre_bus::Instant<ambre_bus::Authored>>,
     /// The successor each channel's close names, kept across a failed close
     /// so the next ask registers the one already created. Removed once the
     /// relay answers, and with the channel.

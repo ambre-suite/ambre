@@ -18,11 +18,12 @@ use wasm_bindgen::{JsCast, JsValue};
 use ambre_prose::probe::{FrameCount, Measure, Percentiles, ProbeName, percentiles};
 
 /// How often the summary is printed.
-const SUMMARY_EVERY: ambre_core::PageMillis = ambre_core::PageMillis::new(5_000.0);
+const SUMMARY_EVERY: ambre_core::TimeSpan<ambre_core::FracMs> =
+    ambre_core::TimeSpan::<ambre_core::FracMs>::new(5_000.0);
 
 /// The page's clock, in milliseconds since the page opened.
-pub(crate) fn now() -> ambre_core::PageTime {
-    ambre_core::PageTime::new(
+pub(crate) fn now() -> ambre_core::Instant<ambre_core::PageLoad> {
+    ambre_core::Instant::<ambre_core::PageLoad>::new(
         web_sys::window()
             .and_then(|w| w.performance())
             .map_or(0.0, |p| p.now()),
@@ -33,7 +34,7 @@ pub(crate) fn now() -> ambre_core::PageTime {
 pub(crate) struct PageClock;
 
 impl ambre_draw::Clock for PageClock {
-    fn now(&self) -> ambre_core::PageTime {
+    fn now(&self) -> ambre_core::Instant<ambre_core::PageLoad> {
         now()
     }
 }
@@ -41,10 +42,10 @@ impl ambre_draw::Clock for PageClock {
 /// Where the probes' measures go.
 pub(crate) struct Timeline {
     /// The samples per measure, kept only under `?probes`.
-    samples: Option<BTreeMap<ProbeName, Vec<ambre_core::PageMillis>>>,
+    samples: Option<BTreeMap<ProbeName, Vec<ambre_core::TimeSpan<ambre_core::FracMs>>>>,
     /// The samples per count, kept only under `?probes`.
     counts: Option<BTreeMap<ProbeName, Vec<FrameCount>>>,
-    last_summary: ambre_core::PageTime,
+    last_summary: ambre_core::Instant<ambre_core::PageLoad>,
     /// A sample landed since the last summary.
     fresh: bool,
 }
@@ -62,7 +63,7 @@ impl Timeline {
         Self {
             samples: wanted.then(BTreeMap::new),
             counts: wanted.then(BTreeMap::new),
-            last_summary: ambre_core::PageTime::new(0.0),
+            last_summary: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
             fresh: false,
         }
     }
@@ -94,7 +95,7 @@ impl Timeline {
     }
 
     /// Print the summary when one is due and something new was measured.
-    pub(crate) fn summarize(&mut self, now: ambre_core::PageTime) {
+    pub(crate) fn summarize(&mut self, now: ambre_core::Instant<ambre_core::PageLoad>) {
         let Some(samples) = self.samples.as_ref() else {
             return;
         };
@@ -104,9 +105,10 @@ impl Timeline {
         self.last_summary = now;
         self.fresh = false;
         for (name, values) in samples {
-            if let Some(Percentiles { median, p95 }) =
-                percentiles(values, ambre_core::PageMillis::total_cmp)
-            {
+            if let Some(Percentiles { median, p95 }) = percentiles(
+                values,
+                ambre_core::TimeSpan::<ambre_core::FracMs>::total_cmp,
+            ) {
                 let (p50, p95) = (median.get(), p95.get());
                 web_sys::console::log_1(&JsValue::from_str(&format!(
                     "{}: n={} p50={p50:.2} ms p95={p95:.2} ms",

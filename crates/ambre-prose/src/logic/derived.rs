@@ -541,10 +541,15 @@ mod tests {
                 text: (*word).to_owned(),
             });
             show(&mut view, &outcome.display);
-            assert_eq!(view.tick(ambre_core::PageTime::new(0.0)), None);
+            assert_eq!(
+                view.tick(ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)),
+                None
+            );
         }
         let command = view
-            .tick(ambre_core::PageTime::new(RECOUNT_DELAY.get()))
+            .tick(ambre_core::Instant::<ambre_core::PageLoad>::new(
+                RECOUNT_DELAY.get(),
+            ))
             .expect("the recount is due");
         let outcome = state.handle_command(command);
         show(&mut view, &outcome.display);

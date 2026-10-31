@@ -2024,7 +2024,7 @@ mod tests {
                 invitee: user,
                 role: Role::Editor,
                 expect_exchange_pub_key: FixedBytes::from_array([0; 32]),
-                now: ambre_bus::Timestamp::new(0),
+                now: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
             },
             RestCommand::RevokeFromDocument {
                 document_id: doc,

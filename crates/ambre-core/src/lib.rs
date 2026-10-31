@@ -172,8 +172,8 @@ pub use secret::{
 pub use seq::{DeltaCount, Seq};
 pub use space::{CanvasCss, Css, Device, Doc, Image, Space, Surface, Texel, View};
 pub use span::{
-    FailureCount, FrameRate, LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds,
-    Timestamp, UnixMillis, UnixSeconds,
+    Authored, FailureCount, FracMs, FrameRate, Instant, LamportStamp, Ms, Ns, PageLoad, Rfc3339,
+    Sec, StoredAsI64, Tick, TimeBase, TimeSpan, TimeUnit, UnixMs, UnixSec,
 };
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,

@@ -6,8 +6,8 @@ use ambre_bus::CharSpan;
 use std::collections::HashMap;
 
 use ambre_bus::{
-    ActivityKind, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
-    MurmureEvent, Timestamp,
+    ActivityKind, Authored, Instant, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft,
+    MessageView, MurmureEvent,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
@@ -21,7 +21,7 @@ use crate::{
     ChannelState, ChannelType, MurmureError, Refusal, SeekStep, Sent, Signer, ThreadTarget,
 };
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {
@@ -884,7 +884,7 @@ fn far_copy(alice: &ChannelState, oldest: Option<Id<Segment>>) -> (ChannelState,
         Some((active, 30, SegmentState::Active)),
     ];
     for (id, from, state) in entries.into_iter().flatten() {
-        push_segment_entry(&meta, id, Timestamp::new(from), state).expect("entry");
+        push_segment_entry(&meta, id, Instant::<Authored>::new(from), state).expect("entry");
     }
     meta.commit();
     let meta = Payload::<SnapshotBytes>::new(meta.export(ExportMode::Snapshot).expect("snapshot"));

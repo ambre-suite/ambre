@@ -70,18 +70,18 @@ pub(crate) fn MurmureShell(
         <DeleteConfirm
             relay=relay
             send=send
-            now=Callback::new(|()| ambre_bus::Timestamp::new(js_sys::Date::now() as u64))
+            now=Callback::new(|()| ambre_bus::Instant::<ambre_bus::Authored>::new(js_sys::Date::now() as u64))
         />
         <ChannelMentionConfirm
             relay=relay
             send=send
-            now=Callback::new(|()| ambre_bus::Timestamp::new(js_sys::Date::now() as u64))
+            now=Callback::new(|()| ambre_bus::Instant::<ambre_bus::Authored>::new(js_sys::Date::now() as u64))
         />
         // The view stamps a reaction, as it stamps a deletion.
         <EmojiPicker
             relay=relay
             send=send
-            now=Callback::new(|()| ambre_bus::Timestamp::new(js_sys::Date::now() as u64))
+            now=Callback::new(|()| ambre_bus::Instant::<ambre_bus::Authored>::new(js_sys::Date::now() as u64))
         />
         <KeyList relay=relay />
         <MentionPanel relay=relay />

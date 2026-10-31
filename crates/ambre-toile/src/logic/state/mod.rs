@@ -161,11 +161,11 @@ pub struct ToileState {
     /// cursor). The map drops a peer whose last sample is older than the TTL,
     /// which is how a departure travels with no departure signal
     /// (`TOILE-185`).
-    presence: HashMap<Id<User>, (PresencePayload, ambre_core::PageTime)>,
+    presence: HashMap<Id<User>, (PresencePayload, ambre_core::Instant<ambre_core::PageLoad>)>,
     /// The latest wall clock a local `Presence` command carried, and the only
     /// clock this thread has (`toile-presence`). Monotonic: it never moves
     /// backwards, whatever the machine's own clock does.
-    now: ambre_core::PageTime,
+    now: ambre_core::Instant<ambre_core::PageLoad>,
     /// Presentation (focus) mode toggle (`toile-presentation`). Local/per-viewer,
     /// never in Loro and never synced -- only the slide sequence travels.
     present: PresentMode,
@@ -371,7 +371,7 @@ impl ToileState {
             my_user_id: None,
             my_name: None,
             presence: HashMap::new(),
-            now: ambre_core::PageTime::new(0.0),
+            now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
             present: PresentMode::Editing,
             playback: PlaybackState::default(),
             broadcasting: Broadcast::Private,

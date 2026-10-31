@@ -1306,8 +1306,8 @@ impl TextDelta {
 pub struct Reaction {
     pub kind: ReactionKind,
     /// Stored as the `i64` the reactions sub-map was frozen with.
-    #[serde(with = "ambre_core::span::timestamp_as_i64")]
-    pub ts: ambre_core::Timestamp,
+    #[serde(with = "ambre_core::span::stored_as_i64")]
+    pub ts: ambre_core::Instant<ambre_core::Authored>,
 }
 
 /// The two reaction flavours (`toile-reactions`): a free-form emoji or
@@ -1443,7 +1443,7 @@ pub enum CommentAnchor {
 #[derive(Clone, PartialEq, Eq)]
 pub struct CommentMessage {
     pub author: Id<User>,
-    pub ts: ambre_core::Timestamp,
+    pub ts: ambre_core::Instant<ambre_core::Authored>,
     pub body: String,
 }
 
@@ -2116,7 +2116,7 @@ pub enum ToileCommand {
     CreateComment {
         anchor: CommentAnchor,
         body: String,
-        ts: ambre_core::Timestamp,
+        ts: ambre_core::Instant<ambre_core::Authored>,
     },
     /// Append a message to `thread`. Same clock rule and same history exemption
     /// as [`CreateComment`](Self::CreateComment). A missing thread is a rejected
@@ -2124,7 +2124,7 @@ pub enum ToileCommand {
     ReplyComment {
         thread: Id<Thread>,
         body: String,
-        ts: ambre_core::Timestamp,
+        ts: ambre_core::Instant<ambre_core::Authored>,
     },
     /// Splice the body of the author's own message `message` (its index in the
     /// thread's message list). The body is a `LoroText`, so a self-edit
@@ -2364,7 +2364,7 @@ pub enum ToileCommand {
     /// always advances.
     Presence {
         payload: PresencePayload,
-        now: ambre_core::PageTime,
+        now: ambre_core::Instant<ambre_core::PageLoad>,
     },
 }
 
@@ -3196,7 +3196,7 @@ mod tests {
             ..TextDelta::default()
         };
         let address = WebAddress::parse("https://a.example").expect("an address");
-        let ts = ambre_core::Timestamp::default();
+        let ts = ambre_core::Instant::<ambre_core::Authored>::default();
         let message = CommentMessage {
             author: Id::<User>::mint(),
             ts,

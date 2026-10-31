@@ -4,7 +4,8 @@ use ambre_core::RefusalCode;
 
 /// The delay before Sync asks again for the first stopped replay of a
 /// document. Each later stop doubles it (`ambre-spec-budgets.md` section 8).
-const REPLAY_RETRY_BASE: ambre_core::Millis = ambre_core::Millis::new(1_000);
+const REPLAY_RETRY_BASE: ambre_core::TimeSpan<ambre_core::Ms> =
+    ambre_core::TimeSpan::<ambre_core::Ms>::new(1_000);
 
 /// The stops Sync asks again after. One more reaches Logic as an error
 /// (`ambre-spec-budgets.md` section 8, `SYNC-154`).
@@ -12,14 +13,14 @@ const REPLAY_RETRY_LIMIT: u32 = 5;
 
 /// The delay before asking again after the `stop`-th stop of one replay,
 /// counted from one. Past the budget there is none (`SYNC-154`).
-fn replay_retry_delay(stop: u32) -> Option<ambre_core::Millis> {
+fn replay_retry_delay(stop: u32) -> Option<ambre_core::TimeSpan<ambre_core::Ms>> {
     let doublings = stop
         .checked_sub(1)
         .filter(|doublings| *doublings < REPLAY_RETRY_LIMIT)?;
     2_u64
         .checked_pow(doublings)
         .and_then(|factor| REPLAY_RETRY_BASE.get().checked_mul(factor))
-        .map(ambre_core::Millis::new)
+        .map(ambre_core::TimeSpan::<ambre_core::Ms>::new)
 }
 
 /// The stops of one document's replay since its budget last started.
@@ -245,7 +246,7 @@ impl SyncState {
     /// `delay`. The shell only schedules: the lifecycle decides what the
     /// timer means when it fires.
     #[cfg(target_arch = "wasm32")]
-    fn arm_reconnect_timer(&mut self, delay: ambre_core::Millis) {
+    fn arm_reconnect_timer(&mut self, delay: ambre_core::TimeSpan<ambre_core::Ms>) {
         use wasm_bindgen::JsCast;
 
         let Some(tx) = self.event_tx.clone() else {
@@ -268,13 +269,17 @@ impl SyncState {
     /// Native: no timer. A host test advances the clock and sends
     /// [`SyncEvent::ReconnectNow`] itself.
     #[cfg(not(target_arch = "wasm32"))]
-    fn arm_reconnect_timer(&mut self, _delay: ambre_core::Millis) {}
+    fn arm_reconnect_timer(&mut self, _delay: ambre_core::TimeSpan<ambre_core::Ms>) {}
 
     /// Asks the worker's timers for `event` in `delay`, such as a
     /// [`SyncEvent::ReplayRetry`]. The closure runs once and frees itself, so
     /// several documents can wait at once.
     #[cfg(target_arch = "wasm32")]
-    pub(crate) fn arm_event_timer(&self, event: SyncEvent, delay: ambre_core::Millis) {
+    pub(crate) fn arm_event_timer(
+        &self,
+        event: SyncEvent,
+        delay: ambre_core::TimeSpan<ambre_core::Ms>,
+    ) {
         use wasm_bindgen::JsCast;
 
         let Some(tx) = self.event_tx.clone() else {
@@ -293,7 +298,12 @@ impl SyncState {
 
     /// Native: no timer. A host test sends the event itself.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn arm_event_timer(&self, _event: SyncEvent, _delay: ambre_core::Millis) {}
+    pub(crate) fn arm_event_timer(
+        &self,
+        _event: SyncEvent,
+        _delay: ambre_core::TimeSpan<ambre_core::Ms>,
+    ) {
+    }
 
     /// The relay stopped a replay. Ask again after a delay that doubles at
     /// each stop (`SYNC-153`). A stop past the one before starts the budget
@@ -1705,7 +1715,8 @@ mod tests {
         let (mut state, _rx) = with_open_document();
         let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
         let clock = now.clone();
-        state.clock = std::rc::Rc::new(move || ambre_core::UnixMillis::new(clock.get()));
+        state.clock =
+            std::rc::Rc::new(move || ambre_core::Instant::<ambre_core::UnixMs>::new(clock.get()));
         let fire_at = |state: &mut SyncState, at: u64| {
             now.set(at);
             state.handle_sync_event(SyncEvent::ReconnectNow);
@@ -1739,7 +1750,9 @@ mod tests {
         let reopens = |state: &mut SyncState| {
             let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
             let clock = now.clone();
-            state.clock = std::rc::Rc::new(move || ambre_core::UnixMillis::new(clock.get()));
+            state.clock = std::rc::Rc::new(move || {
+                ambre_core::Instant::<ambre_core::UnixMs>::new(clock.get())
+            });
             state.handle_sync_event(closed(CloseCode::new(1006)));
             now.set(60_000);
             state.handle_sync_event(SyncEvent::ReconnectNow);
@@ -1760,7 +1773,7 @@ mod tests {
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: SecretToken::from("access".to_owned()),
             refresh_token: SecretToken::from("refresh".to_owned()),
-            access_expires_in: ambre_core::Seconds::new(60),
+            access_expires_in: ambre_core::TimeSpan::<ambre_core::Sec>::new(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
@@ -1805,7 +1818,7 @@ mod tests {
             tokens: TokenPair {
                 access_token: SecretToken::from("access".to_owned()),
                 refresh_token: SecretToken::from("refresh".to_owned()),
-                access_expires_in: ambre_core::Seconds::new(60),
+                access_expires_in: ambre_core::TimeSpan::<ambre_core::Sec>::new(60),
             },
         });
         assert_eq!(state.socket_opens, 1);
@@ -2001,7 +2014,7 @@ mod tests {
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: SecretToken::from("acc-s3cr3t".to_owned()),
             refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
-            access_expires_in: ambre_core::Seconds::new(60),
+            access_expires_in: ambre_core::TimeSpan::<ambre_core::Sec>::new(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
@@ -2024,7 +2037,7 @@ mod tests {
         let pair = TokenPair {
             access_token: SecretToken::from("acc-s3cr3t".to_owned()),
             refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
-            access_expires_in: ambre_core::Seconds::new(60),
+            access_expires_in: ambre_core::TimeSpan::<ambre_core::Sec>::new(60),
         };
         let shown = format!("{pair:?}");
         assert!(!shown.contains("s3cr3t"), "{shown}");

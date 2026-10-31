@@ -37,7 +37,7 @@ pub async fn delete_document(state: &AppState, document_id: &Id<Document>) -> Re
 }
 
 /// When the second sweep of a delete begun now is due (`SRV-057`).
-pub fn sweep_due(state: &AppState) -> ambre_core::UnixSeconds {
+pub fn sweep_due(state: &AppState) -> ambre_core::Instant<ambre_core::UnixSec> {
     let window = crate::s3::late_write_window(state.config.presigned_url_ttl);
     crate::s3::unix_now().plus(window)
 }
@@ -48,7 +48,7 @@ pub fn sweep_due(state: &AppState) -> ambre_core::UnixSeconds {
 pub async fn empty_marked(
     state: &AppState,
     documents: &[Id<Document>],
-    sweep_due: ambre_core::UnixSeconds,
+    sweep_due: ambre_core::Instant<ambre_core::UnixSec>,
 ) {
     for doc in documents {
         if let Err(e) = empty_document(state, doc, sweep_due).await {
@@ -65,7 +65,7 @@ pub async fn empty_marked(
 async fn empty_document(
     state: &AppState,
     document_id: &Id<Document>,
-    sweep_due: ambre_core::UnixSeconds,
+    sweep_due: ambre_core::Instant<ambre_core::UnixSec>,
 ) -> Result<(), AppError> {
     let ttl = fence_ttl(sweep_due, crate::s3::unix_now());
     crate::redis_ops::mark_document_gone(&state.redis, document_id, ttl).await?;
@@ -100,7 +100,7 @@ pub async fn finish_deletions(state: &AppState) {
 async fn finish_one(
     state: &AppState,
     document_id: &Id<Document>,
-    sweep_due: ambre_core::UnixSeconds,
+    sweep_due: ambre_core::Instant<ambre_core::UnixSec>,
     rows_left: crate::db::DocumentRows,
 ) -> Result<(), AppError> {
     let now = crate::s3::unix_now();
@@ -123,10 +123,12 @@ async fn finish_one(
 /// How long the tombstone must still live: until the sweep is due, and never
 /// less than a second, which Redis refuses.
 fn fence_ttl(
-    sweep_due: ambre_core::UnixSeconds,
-    now: ambre_core::UnixSeconds,
-) -> ambre_core::Seconds {
-    sweep_due.since(now).max(ambre_core::Seconds::new(1))
+    sweep_due: ambre_core::Instant<ambre_core::UnixSec>,
+    now: ambre_core::Instant<ambre_core::UnixSec>,
+) -> ambre_core::TimeSpan<ambre_core::Sec> {
+    sweep_due
+        .since(now)
+        .max(ambre_core::TimeSpan::<ambre_core::Sec>::new(1))
 }
 
 #[cfg(test)]
@@ -135,10 +137,10 @@ mod tests {
 
     #[test]
     fn a_fence_lives_until_the_sweep_and_never_less_than_a_second() {
-        use ambre_core::Seconds;
-        use ambre_core::UnixSeconds as At;
-        assert_eq!(fence_ttl(At::new(100), At::new(40)), Seconds::new(60));
-        assert_eq!(fence_ttl(At::new(100), At::new(100)), Seconds::new(1));
-        assert_eq!(fence_ttl(At::new(100), At::new(500)), Seconds::new(1));
+        use ambre_core::{Instant, Sec, TimeSpan, UnixSec};
+        let at = Instant::<UnixSec>::new;
+        assert_eq!(fence_ttl(at(100), at(40)), TimeSpan::<Sec>::new(60));
+        assert_eq!(fence_ttl(at(100), at(100)), TimeSpan::<Sec>::new(1));
+        assert_eq!(fence_ttl(at(100), at(500)), TimeSpan::<Sec>::new(1));
     }
 }

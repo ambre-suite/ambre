@@ -146,11 +146,12 @@ pub fn format_s3_media_key(
 }
 
 /// The longest a presigned URL may live: 15 minutes (`ZK-014`, `SRV-052`).
-pub const PRESIGNED_URL_MAX_TTL: ambre_core::Seconds = ambre_core::Seconds::new(15 * 60);
+pub const PRESIGNED_URL_MAX_TTL: ambre_core::TimeSpan<ambre_core::Sec> =
+    ambre_core::TimeSpan::<ambre_core::Sec>::new(15 * 60);
 
 /// The lifetime a presigned URL is signed for: the configured one, held under
 /// the ceiling. A misconfigured day comes out as 15 minutes.
-fn presign_lifetime(ttl: ambre_core::Seconds) -> Duration {
+fn presign_lifetime(ttl: ambre_core::TimeSpan<ambre_core::Sec>) -> Duration {
     ttl.min(PRESIGNED_URL_MAX_TTL).to_duration()
 }
 
@@ -167,7 +168,7 @@ pub async fn generate_presigned_upload_url(
     s3: &S3Client,
     bucket: &BucketName,
     key: &ambre_core::ObjectKey,
-    ttl: ambre_core::Seconds,
+    ttl: ambre_core::TimeSpan<ambre_core::Sec>,
     content_length: ambre_core::ByteSize,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
@@ -188,7 +189,7 @@ pub async fn generate_presigned_download_url(
     s3: &S3Client,
     bucket: &BucketName,
     key: &ambre_core::ObjectKey,
-    ttl: ambre_core::Seconds,
+    ttl: ambre_core::TimeSpan<ambre_core::Sec>,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
@@ -380,17 +381,20 @@ async fn flush_cycle(state: &crate::state::AppState, kind: Cycle) {
 /// How long the per-document flush lock lives. It comfortably exceeds one
 /// flush; if the holder dies mid-flush the lock expires and the next cycle
 /// retries.
-const FLUSH_LOCK_TTL: ambre_core::Seconds = ambre_core::Seconds::new(60);
+const FLUSH_LOCK_TTL: ambre_core::TimeSpan<ambre_core::Sec> =
+    ambre_core::TimeSpan::<ambre_core::Sec>::new(60);
 
 /// How long a write that began before a delete may still land after it
 /// (`SRV-057`). A presigned upload link stays valid for its lifetime. A flush
 /// holds its lock at most `FLUSH_LOCK_TTL`, and a minute of margin covers
 /// the requests in flight. The tombstone lives this long, and the
 /// second sweep of the objects runs once it has passed.
-pub fn late_write_window(presigned_url_ttl: ambre_core::Seconds) -> ambre_core::Seconds {
+pub fn late_write_window(
+    presigned_url_ttl: ambre_core::TimeSpan<ambre_core::Sec>,
+) -> ambre_core::TimeSpan<ambre_core::Sec> {
     // `presign_lifetime` caps the configured TTL, so the sum stays far below
     // the bound. Saturating keeps a window that never ends if it did not.
-    ambre_core::Seconds::new(
+    ambre_core::TimeSpan::<ambre_core::Sec>::new(
         presign_lifetime(presigned_url_ttl)
             .as_secs()
             .saturating_add(FLUSH_LOCK_TTL.get())
@@ -399,12 +403,12 @@ pub fn late_write_window(presigned_url_ttl: ambre_core::Seconds) -> ambre_core::
 }
 
 /// The current instant: the clock of a token's `iat` and of a delete's sweep.
-pub fn unix_now() -> ambre_core::UnixSeconds {
-    ambre_core::UnixSeconds::new(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs()),
-    )
+pub fn unix_now() -> ambre_core::Instant<ambre_core::UnixSec> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(ambre_core::Instant::EPOCH, |d| {
+            ambre_core::Instant::after_epoch(ambre_core::TimeSpan::from_duration(d))
+        })
 }
 
 /// Re-marks every existing `doc:*:pending` key in the dirty set via a single
@@ -793,7 +797,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
-            ambre_core::Seconds::new(900),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
             ambre_core::ByteSize::new(4096),
         )
         .await
@@ -824,7 +828,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
-            ambre_core::Seconds::new(day),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(day),
             ambre_core::ByteSize::new(1),
         )
         .await
@@ -836,7 +840,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
-            ambre_core::Seconds::new(day),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(day),
         )
         .await
         .expect("presign")
@@ -850,7 +854,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
-            ambre_core::Seconds::new(60),
+            ambre_core::TimeSpan::<ambre_core::Sec>::new(60),
         )
         .await
         .expect("presign")

@@ -45,7 +45,8 @@ pub use crate::view::column::Viewport;
 ///
 /// A fast typist then pays for one recount per pause rather than one per
 /// keystroke (`features/ambre-spec-prose-word-count.md section 4`).
-pub const RECOUNT_DELAY: ambre_core::PageMillis = ambre_core::PageMillis::new(500.0);
+pub const RECOUNT_DELAY: ambre_core::TimeSpan<ambre_core::FracMs> =
+    ambre_core::TimeSpan::<ambre_core::FracMs>::new(500.0);
 
 /// The changes a draft went through. A paragraph shaped from the draft can
 /// so tell it still reads what it was shaped from.
@@ -537,7 +538,7 @@ pub struct ProseUiState {
     /// A change arrived since the last tick.
     changed: Changed,
     /// When the text was last seen changing, while a recount is owed.
-    quiet_since: Option<ambre_core::PageTime>,
+    quiet_since: Option<ambre_core::Instant<ambre_core::PageLoad>>,
     /// The number of the last change this view did not draw and applied.
     pub(crate) seen: ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
     /// The number last handed back in a [`ProseCommand::Sync`].
@@ -955,7 +956,7 @@ impl ProseUiState {
     /// A frame that saw a change restarts the wait, so a run of changes costs
     /// one recount, [`RECOUNT_DELAY`] after the last of them. The caller
     /// sends the command it gets back.
-    pub fn tick(&mut self, now: ambre_core::PageTime) -> Option<ProseCommand> {
+    pub fn tick(&mut self, now: ambre_core::Instant<ambre_core::PageLoad>) -> Option<ProseCommand> {
         if std::mem::take(&mut self.changed) == Changed::Changed {
             self.quiet_since = Some(now);
             return None;
@@ -1287,7 +1288,11 @@ mod tests {
                     ambre_core::DeltaBytes,
                 >::new(vec![1])),
             });
-            recounts += usize::from(state.tick(ambre_core::PageTime::new(now)).is_some());
+            recounts += usize::from(
+                state
+                    .tick(ambre_core::Instant::<ambre_core::PageLoad>::new(now))
+                    .is_some(),
+            );
             now += 16.0;
         }
         assert_eq!(recounts, 0);
@@ -1295,7 +1300,8 @@ mod tests {
         // delay has run out, and no second one.
         let stopped = now;
         while now < stopped + 2000.0 {
-            if let Some(command) = state.tick(ambre_core::PageTime::new(now)) {
+            if let Some(command) = state.tick(ambre_core::Instant::<ambre_core::PageLoad>::new(now))
+            {
                 assert_eq!(command, ProseCommand::CountWords);
                 assert!(now - stopped >= RECOUNT_DELAY.get() - 16.0);
                 recounts += 1;

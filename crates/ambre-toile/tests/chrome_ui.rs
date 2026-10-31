@@ -1140,7 +1140,7 @@ async fn the_comment_panel_shows_what_the_board_answered() {
         resolved: ambre_core::ThreadState::Open,
         messages: vec![CommentMessage {
             author: Id::<User>::mint(),
-            ts: ambre_core::Timestamp::new(0),
+            ts: ambre_core::Instant::<ambre_core::Authored>::new(0),
             body: "read back".to_owned(),
         }],
     }));

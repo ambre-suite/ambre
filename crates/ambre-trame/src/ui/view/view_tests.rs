@@ -40,8 +40,8 @@ impl TestClock {
 }
 
 impl Clock for TestClock {
-    fn now(&self) -> ambre_core::PageTime {
-        ambre_core::PageTime::new(self.0.get())
+    fn now(&self) -> ambre_core::Instant<ambre_core::PageLoad> {
+        ambre_core::Instant::<ambre_core::PageLoad>::new(self.0.get())
     }
 }
 

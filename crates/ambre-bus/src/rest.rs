@@ -37,7 +37,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DocType, Role, Timestamp};
+use crate::{Authored, DocType, Instant, Role};
 use ambre_core::id::{Document, Id, Meeting, User};
 
 // -----------------------------------------------------------------------------
@@ -102,7 +102,7 @@ pub struct DocumentSummary {
     pub name: Option<ambre_core::Name>,
     pub role: Role,
     /// Epoch milliseconds.
-    pub updated_at: crate::Timestamp,
+    pub updated_at: crate::Instant<crate::Authored>,
     /// Total member count (routing metadata, plaintext). `> 1` => shared.
     pub member_count: ambre_core::MemberCount,
 }
@@ -280,7 +280,7 @@ pub enum RestCommand {
         invitee: Id<User>,
         role: Role,
         expect_exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
-        now: Timestamp,
+        now: Instant<Authored>,
     },
     /// Revoke a member (triggers the full key-rotation sequence). -> `RevocationComplete`.
     RevokeFromDocument {

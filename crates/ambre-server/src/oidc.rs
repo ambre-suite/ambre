@@ -95,7 +95,7 @@ pub struct CallbackResponse {
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
     pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
-    pub access_expires_in: ambre_core::Seconds,
+    pub access_expires_in: ambre_core::TimeSpan<ambre_core::Sec>,
 }
 
 pub use crate::secrets::OidcSecret;

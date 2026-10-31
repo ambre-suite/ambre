@@ -337,7 +337,7 @@ impl ProseUiState {
     pub fn take_intent(
         &mut self,
         intent: AnnotationIntent,
-        now: ambre_core::Timestamp,
+        now: ambre_core::Instant<ambre_core::Authored>,
     ) -> Option<ProseCommand> {
         Some(match intent {
             AnnotationIntent::Focus { comment_id } => {
@@ -588,7 +588,7 @@ mod tests {
         assert_eq!(
             ui.take_intent(
                 AnnotationIntent::Focus { comment_id: id },
-                ambre_core::Timestamp::new(5)
+                ambre_core::Instant::<ambre_core::Authored>::new(5)
             ),
             None
         );
@@ -598,22 +598,25 @@ mod tests {
             text: "ok".to_owned(),
         };
         assert_eq!(
-            ui.take_intent(reply, ambre_core::Timestamp::new(5)),
+            ui.take_intent(reply, ambre_core::Instant::<ambre_core::Authored>::new(5)),
             Some(ProseCommand::ReplyToComment {
                 comment_id: id,
                 text: "ok".to_owned(),
-                now: ambre_core::Timestamp::new(5)
+                now: ambre_core::Instant::<ambre_core::Authored>::new(5)
             })
         );
         let blank = AnnotationIntent::Reply {
             comment_id: id,
             text: "  ".to_owned(),
         };
-        assert_eq!(ui.take_intent(blank, ambre_core::Timestamp::new(5)), None);
+        assert_eq!(
+            ui.take_intent(blank, ambre_core::Instant::<ambre_core::Authored>::new(5)),
+            None
+        );
         assert_eq!(
             ui.take_intent(
                 AnnotationIntent::Resolve { comment_id: id },
-                ambre_core::Timestamp::new(5)
+                ambre_core::Instant::<ambre_core::Authored>::new(5)
             ),
             Some(ProseCommand::ResolveComment { comment_id: id })
         );
@@ -623,7 +626,7 @@ mod tests {
                 AnnotationIntent::Accept {
                     suggestion_id: suggestion
                 },
-                ambre_core::Timestamp::new(5)
+                ambre_core::Instant::<ambre_core::Authored>::new(5)
             ),
             Some(ProseCommand::AcceptSuggestion {
                 suggestion_id: suggestion
@@ -634,7 +637,7 @@ mod tests {
                 AnnotationIntent::Reject {
                     suggestion_id: suggestion
                 },
-                ambre_core::Timestamp::new(5)
+                ambre_core::Instant::<ambre_core::Authored>::new(5)
             ),
             Some(ProseCommand::RejectSuggestion {
                 suggestion_id: suggestion

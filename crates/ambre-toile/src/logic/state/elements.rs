@@ -825,7 +825,7 @@ mod inner_tests {
                 ToileCommand::CreateComment {
                     anchor: CommentAnchor::Point(Point::new(1.0, 1.0)),
                     body: "late".to_owned(),
-                    ts: ambre_core::Timestamp::from_i64(1),
+                    ts: ambre_core::Instant::<ambre_core::Authored>::new(1),
                 },
             ),
         ];

@@ -35,6 +35,7 @@
 //! [`CommitOrigin::Comment`](ambre_core::crdt::CommitOrigin::Comment), which the `UndoManager` excludes
 //! (`TOILE-FEAT-017`).
 
+use ambre_core::StoredAsI64;
 use std::collections::HashSet;
 
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
@@ -67,7 +68,7 @@ impl ToileState {
         &mut self,
         anchor: &CommentAnchor,
         body: &str,
-        ts: ambre_core::Timestamp,
+        ts: ambre_core::Instant<ambre_core::Authored>,
     ) -> ToileOutcome {
         // A session with no identity has no author to write under. The UI cannot
         // reach this pre-`SessionReady`; guard anyway.
@@ -113,7 +114,7 @@ impl ToileState {
         thread: &Id<Thread>,
         anchor: Vec<u8>,
         author: Id<User>,
-        ts: ambre_core::Timestamp,
+        ts: ambre_core::Instant<ambre_core::Authored>,
         body: &str,
     ) -> Option<()> {
         let map = self
@@ -137,7 +138,7 @@ impl ToileState {
         &mut self,
         thread: &Id<Thread>,
         body: &str,
-        ts: ambre_core::Timestamp,
+        ts: ambre_core::Instant<ambre_core::Authored>,
     ) -> ToileOutcome {
         let Some(author) = self.my_user_id else {
             return ToileOutcome::display_only(Vec::new());
@@ -403,7 +404,7 @@ impl ToileState {
 fn push_message(
     messages: &LoroMovableList,
     author: Id<User>,
-    ts: ambre_core::Timestamp,
+    ts: ambre_core::Instant<ambre_core::Authored>,
     body: &str,
 ) -> Option<()> {
     let map = Fields::<MessageKey>::of(messages.push_container(LoroMap::new()).ok()?);
@@ -447,8 +448,8 @@ fn read_message(value: &LoroValue) -> Option<CommentMessage> {
     };
     let author = Id::<User>::parse_str(author).ok()?;
     let ts = match fields.get(MessageKey::Ts) {
-        Some(LoroValue::I64(ts)) => ambre_core::Timestamp::from_i64(*ts),
-        _ => ambre_core::Timestamp::default(),
+        Some(LoroValue::I64(ts)) => ambre_core::Instant::<ambre_core::Authored>::from_i64(*ts),
+        _ => ambre_core::Instant::<ambre_core::Authored>::default(),
     };
     let body = match fields.get(MessageKey::Body) {
         Some(LoroValue::String(body)) => body.to_string(),

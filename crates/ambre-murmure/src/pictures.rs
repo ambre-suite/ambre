@@ -211,9 +211,12 @@ pub enum Motion {
 /// first frame, and none is due (`MURMURE-130`).
 pub fn frame_at(
     picture: &Picture,
-    now: ambre_core::PageTime,
+    now: ambre_core::Instant<ambre_core::PageLoad>,
     motion: Motion,
-) -> (FrameIndex, Option<ambre_core::PageTime>) {
+) -> (
+    FrameIndex,
+    Option<ambre_core::Instant<ambre_core::PageLoad>>,
+) {
     let total: u64 = picture.frames.iter().map(|f| f.delay.get()).sum();
     if motion == Motion::Reduced || picture.frames.len() < 2 || total == 0 {
         return (FrameIndex::ZERO, None);
@@ -224,7 +227,7 @@ pub fn frame_at(
     for (i, frame) in picture.frames.iter().enumerate() {
         until += frame.delay.get();
         if at < until {
-            let due = ambre_core::Millis::new(until - at).to_page_millis();
+            let due = ambre_core::TimeSpan::<ambre_core::Ms>::new(until - at).to_fractional();
             return (FrameIndex::from_usize(i), Some(now.after(due)));
         }
     }
@@ -260,7 +263,7 @@ mod tests {
                 .iter()
                 .map(|&delay| PictureFrame {
                     pixels: vec![0; bytes].into(),
-                    delay: ambre_core::Millis::new(u64::from(delay)),
+                    delay: ambre_core::TimeSpan::<ambre_core::Ms>::new(u64::from(delay)),
                 })
                 .collect(),
         }
@@ -272,20 +275,48 @@ mod tests {
     fn the_clock_picks_the_frame_and_names_the_next() {
         let gif = picture(&[100, 50, 50], 4);
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(0.0), Motion::Full),
-            (FrameIndex::new(0), Some(ambre_bus::PageTime::new(100.0)))
+            frame_at(
+                &gif,
+                ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0),
+                Motion::Full
+            ),
+            (
+                FrameIndex::new(0),
+                Some(ambre_bus::Instant::<ambre_bus::PageLoad>::new(100.0))
+            )
         );
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(120.0), Motion::Full),
-            (FrameIndex::new(1), Some(ambre_bus::PageTime::new(150.0)))
+            frame_at(
+                &gif,
+                ambre_bus::Instant::<ambre_bus::PageLoad>::new(120.0),
+                Motion::Full
+            ),
+            (
+                FrameIndex::new(1),
+                Some(ambre_bus::Instant::<ambre_bus::PageLoad>::new(150.0))
+            )
         );
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(199.0), Motion::Full),
-            (FrameIndex::new(2), Some(ambre_bus::PageTime::new(200.0)))
+            frame_at(
+                &gif,
+                ambre_bus::Instant::<ambre_bus::PageLoad>::new(199.0),
+                Motion::Full
+            ),
+            (
+                FrameIndex::new(2),
+                Some(ambre_bus::Instant::<ambre_bus::PageLoad>::new(200.0))
+            )
         );
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(230.0), Motion::Full),
-            (FrameIndex::new(0), Some(ambre_bus::PageTime::new(300.0))),
+            frame_at(
+                &gif,
+                ambre_bus::Instant::<ambre_bus::PageLoad>::new(230.0),
+                Motion::Full
+            ),
+            (
+                FrameIndex::new(0),
+                Some(ambre_bus::Instant::<ambre_bus::PageLoad>::new(300.0))
+            ),
             "it loops"
         );
     }
@@ -296,13 +327,17 @@ mod tests {
     fn reduced_motion_holds_the_first_frame() {
         let gif = picture(&[100, 50], 4);
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(120.0), Motion::Reduced),
+            frame_at(
+                &gif,
+                ambre_bus::Instant::<ambre_bus::PageLoad>::new(120.0),
+                Motion::Reduced
+            ),
             (FrameIndex::ZERO, None)
         );
         assert_eq!(
             frame_at(
                 &picture(&[0], 4),
-                ambre_bus::PageTime::new(120.0),
+                ambre_bus::Instant::<ambre_bus::PageLoad>::new(120.0),
                 Motion::Full
             ),
             (FrameIndex::ZERO, None)

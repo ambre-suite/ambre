@@ -25,7 +25,7 @@ use super::viewport::ViewportTransform;
 /// stamped lazily on the first `advance` so the transition is measured from the
 /// first frame it is actually shown, not from event dispatch.
 pub struct Transition {
-    started_at: Option<ambre_core::PageTime>,
+    started_at: Option<ambre_core::Instant<ambre_core::PageLoad>>,
     dur: std::time::Duration,
     cam_from: ViewportTransform,
     cam_to_center: Point,
@@ -93,12 +93,14 @@ impl Transition {
     /// before both the camera glide and the content solve, so the whole
     /// transition shares one easing curve. `phase` uses the raw (un-eased) phase
     /// so the end is reached exactly at `dur`.
-    pub fn advance(&mut self, now: ambre_core::PageTime) -> TransitionFrame {
+    pub fn advance(&mut self, now: ambre_core::Instant<ambre_core::PageLoad>) -> TransitionFrame {
         let start = *self.started_at.get_or_insert(now);
         let raw = if self.dur.is_zero() {
             Phase::END
         } else {
-            Phase::clamped((now - start) / ambre_core::PageMillis::from_duration(self.dur))
+            Phase::clamped(
+                (now - start) / ambre_core::TimeSpan::<ambre_core::FracMs>::from_duration(self.dur),
+            )
         };
         let eased = ease_in_out_cubic(raw);
         TransitionFrame {
@@ -163,7 +165,7 @@ mod tests {
     #[test]
     fn start_frame_holds_source_camera_and_content() {
         let mut t = transition();
-        let f = t.advance(ambre_bus::PageTime::new(1000.0));
+        let f = t.advance(ambre_bus::Instant::<ambre_bus::PageLoad>::new(1000.0));
         // t = 0: camera is exactly the source, no progress yet.
         assert_eq!(f.cam.center, Point::new(0.0, 0.0));
         assert_eq!(f.cam.zoom.get(), 1.0);
@@ -187,8 +189,10 @@ mod tests {
     #[test]
     fn end_frame_lands_on_target_camera_and_content() {
         let mut t = transition();
-        t.advance(ambre_bus::PageTime::new(1000.0)); // stamp start
-        let f = t.advance(ambre_bus::PageTime::new(1000.0 + 300.0));
+        t.advance(ambre_bus::Instant::<ambre_bus::PageLoad>::new(1000.0)); // stamp start
+        let f = t.advance(ambre_bus::Instant::<ambre_bus::PageLoad>::new(
+            1000.0 + 300.0,
+        ));
         assert_eq!(
             f.phase,
             TransitionPhase::Done,
@@ -216,8 +220,8 @@ mod tests {
     #[test]
     fn midpoint_tweens_between_endpoints() {
         let mut t = transition();
-        t.advance(ambre_bus::PageTime::new(0.0)); // start at 0
-        let f = t.advance(ambre_bus::PageTime::new(150.0)); // half of 300 ms
+        t.advance(ambre_bus::Instant::<ambre_bus::PageLoad>::new(0.0)); // start at 0
+        let f = t.advance(ambre_bus::Instant::<ambre_bus::PageLoad>::new(150.0)); // half of 300 ms
         assert_eq!(f.phase, TransitionPhase::Running);
         // Eased 0.5 == 0.5, so the shared element sits at the geometric midpoint
         // and the camera is halfway to the target.
@@ -245,7 +249,7 @@ mod tests {
             to,
             std::time::Duration::ZERO,
         );
-        let f = t.advance(ambre_bus::PageTime::new(42.0));
+        let f = t.advance(ambre_bus::Instant::<ambre_bus::PageLoad>::new(42.0));
         assert_eq!(
             f.phase,
             TransitionPhase::Done,
