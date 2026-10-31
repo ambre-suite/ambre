@@ -4,6 +4,7 @@
 //! `self` and never mutates the document. Shared helpers come from
 //! [`super::codec`].
 
+use ambre_core::Bounded;
 use std::collections::HashSet;
 
 use kurbo::{Affine, BezPath, Rect};
@@ -40,7 +41,7 @@ struct StoredPoint {
     x: ambre_core::StoredBoardLength,
     y: ambre_core::StoredBoardLength,
     #[serde(deserialize_with = "clamped_pressure")]
-    pressure: UnitFraction,
+    pressure: Bounded<UnitFraction>,
 }
 
 impl StoredPoint {
@@ -54,9 +55,14 @@ impl StoredPoint {
 }
 
 /// Read a stored pressure, clamped into `0 ..= 1`, NaN as 1.
-fn clamped_pressure<'de, D: serde::Deserializer<'de>>(reader: D) -> Result<UnitFraction, D::Error> {
+fn clamped_pressure<'de, D: serde::Deserializer<'de>>(
+    reader: D,
+) -> Result<Bounded<UnitFraction>, D::Error> {
     let stored = <f32 as serde::Deserialize>::deserialize(reader)?;
-    Ok(UnitFraction::new(stored.clamp(0.0, 1.0)).unwrap_or(UnitFraction::ONE))
+    Ok(
+        Bounded::<UnitFraction>::new(stored.clamp(0.0, 1.0))
+            .unwrap_or(Bounded::<UnitFraction>::ONE),
+    )
 }
 
 impl ToileState {

@@ -41,7 +41,7 @@ pub(crate) fn shape(style: &TextStyle, range: ByteSpan) -> SpanShape {
         ..SpanShape::default()
     };
     match style {
-        TextStyle::Bold => shape.weight = Some(ambre_core::FontWeight::BOLD),
+        TextStyle::Bold => shape.weight = Some(ambre_core::Bounded::<ambre_core::FontWeight>::BOLD),
         TextStyle::Italic => shape.italic = ambre_core::Slant::Italic,
         TextStyle::Code | TextStyle::CodeBlock => shape.family = Some(CODE_FAMILY),
         TextStyle::Link(_) => shape.underline = ambre_core::Underline::Underlined,

@@ -24,6 +24,7 @@
 /// (`ambre-spec-residency.md`).
 pub mod activity;
 pub mod authorship;
+pub mod bounded;
 pub mod calendar;
 pub mod canvas_id;
 pub mod channel_kind;
@@ -99,10 +100,11 @@ pub mod version;
 pub use authorship::{
     IdCounter, OpCounter, PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce,
 };
+pub use bounded::{Bounded, BoundedRepr, Bounds, Defaulted, OutOfRange, Refusal, UnitFraction};
 pub use calendar::{Month, Year};
 pub use canvas_id::CanvasId;
 pub use channel_kind::{ChannelDocumentKind, SegmentState};
-pub use color::{Alpha, InvalidOpacity, Opacity, Rgb, Rgba};
+pub use color::{Alpha, Opacity, Rgb, Rgba};
 pub use credential::ProviderUrl;
 pub use doc_type::DocType;
 pub use docfile::{
@@ -129,8 +131,8 @@ pub use fixtures::{
     fixture_peer_count, seeded_document_id,
 };
 pub use font::{
-    FontFamily, FontSize, FontWeight, InvalidFontSize, InvalidFontWeight, Slant, Strikethrough,
-    Underline, Weight, WordBreak,
+    FontFamily, FontSize, FontWeight, InvalidFontSize, Slant, Strikethrough, Underline, Weight,
+    WordBreak,
 };
 pub use generation::{Generation, GenerationKind, Issuer, SharedIssuer};
 pub use id::{DocumentScoped, Entity, Id, IdRepr};

@@ -79,7 +79,7 @@ pub struct AnimatedElement {
     pub id: Id<Element>,
     pub bounds: Rect,
     pub rotation: ambre_core::Radians,
-    pub opacity: ambre_core::Opacity,
+    pub opacity: ambre_core::Bounded<ambre_core::Opacity>,
     pub fill: Option<Rgba>,
 }
 
@@ -230,7 +230,7 @@ mod tests {
             id: Id::<Element>::from_text(id.to_owned()),
             bounds,
             rotation: ambre_core::Radians::new(rotation),
-            opacity: ambre_core::Opacity::new(opacity).unwrap(),
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(opacity).unwrap(),
             fill,
         }
     }

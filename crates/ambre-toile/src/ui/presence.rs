@@ -257,7 +257,7 @@ fn paint_laser<S: DrawSurface>(
         let (pa, _) = trail[i - 1];
         let (pb, tb) = trail[i];
         let alpha = laser_alpha(tb, now);
-        if alpha <= ambre_core::Opacity::TRANSPARENT {
+        if alpha <= ambre_core::Bounded::<ambre_core::Opacity>::TRANSPARENT {
             continue;
         }
         let a = *w2s * pa;
@@ -276,12 +276,12 @@ fn paint_laser<S: DrawSurface>(
 pub fn laser_alpha(
     sampled_at: ambre_core::PageTime,
     now: ambre_core::PageTime,
-) -> ambre_core::Opacity {
+) -> ambre_core::Bounded<ambre_core::Opacity> {
     let age = (now - sampled_at).max(ambre_core::PageMillis::ZERO);
     if age >= LASER_FADE {
-        return ambre_core::Opacity::TRANSPARENT;
+        return ambre_core::Bounded::<ambre_core::Opacity>::TRANSPARENT;
     }
-    ambre_core::Opacity::clamped((1.0 - age / LASER_FADE) as f32)
+    ambre_core::Bounded::<ambre_core::Opacity>::clamped((1.0 - age / LASER_FADE) as f32)
 }
 
 /// What a peer's chip reads: the display name their sample carried, or a short
@@ -694,14 +694,14 @@ mod tests {
         );
         assert_eq!(
             laser_alpha(ambre_bus::PageTime::new(0.0), ambre_bus::PageTime::new(0.0)),
-            ambre_core::Opacity::OPAQUE
+            ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE
         );
         assert_eq!(
             laser_alpha(
                 ambre_bus::PageTime::new(0.0),
                 ambre_bus::PageTime::new(LASER_FADE.get())
             ),
-            ambre_core::Opacity::TRANSPARENT
+            ambre_core::Bounded::<ambre_core::Opacity>::TRANSPARENT
         );
         // A sample from the future reads as fresh, never as invisible.
         assert_eq!(
@@ -709,7 +709,7 @@ mod tests {
                 ambre_bus::PageTime::new(100.0),
                 ambre_bus::PageTime::new(0.0)
             ),
-            ambre_core::Opacity::OPAQUE
+            ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE
         );
     }
 
@@ -723,7 +723,10 @@ mod tests {
             (nan, ambre_bus::PageTime::new(0.0)),
             (ambre_bus::PageTime::new(0.0), nan),
         ] {
-            assert_eq!(laser_alpha(at, now), ambre_core::Opacity::OPAQUE);
+            assert_eq!(
+                laser_alpha(at, now),
+                ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE
+            );
         }
     }
 

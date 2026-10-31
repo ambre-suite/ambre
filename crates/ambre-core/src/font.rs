@@ -8,6 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::bounded::{Bounded, Bounds, Defaulted, Refusal};
 use crate::{Doc, Px};
 
 /// CSS pixels per typographic point: a point is 1/72 inch, a CSS pixel is
@@ -123,25 +124,26 @@ impl From<FontSize> for f32 {
 ///
 /// The type serializes as the bare `u16` it wraps, and a decoded weight off
 /// the scale is refused.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(try_from = "u16", into = "u16")]
-pub struct FontWeight(u16);
+pub enum FontWeight {}
 
-impl FontWeight {
+impl Bounds for FontWeight {
+    type Repr = u16;
+    const MIN: u16 = 1;
+    const MAX: u16 = 1000;
+    const NAME: &'static str = "FontWeight";
+    const REFUSAL: Refusal =
+        Refusal::new("a font weight lies on the CSS scale of 1 to 1000, not ", "");
+}
+
+impl Defaulted for FontWeight {
+    const DEFAULT: Bounded<Self> = Bounded::<Self>::REGULAR;
+}
+
+impl Bounded<FontWeight> {
     /// The regular weight, 400.
-    pub const REGULAR: Self = Self(400);
+    pub const REGULAR: Self = Self::at(400);
     /// The bold weight, 700.
-    pub const BOLD: Self = Self(700);
-
-    /// The weight `value`, or `None` off the CSS scale of 1 to 1000.
-    #[must_use]
-    pub const fn new(value: u16) -> Option<Self> {
-        if value >= 1 && value <= 1000 {
-            Some(Self(value))
-        } else {
-            None
-        }
-    }
+    pub const BOLD: Self = Self::at(700);
 
     /// The weight on the CSS scale a face of `weight` sets: what a bold toggle
     /// writes.
@@ -156,64 +158,14 @@ impl FontWeight {
     /// Whether the weight draws as bold: 700 or heavier.
     #[must_use]
     pub const fn is_bold(self) -> bool {
-        self.0 >= Self::BOLD.0
-    }
-
-    /// The weight on the CSS scale.
-    #[must_use]
-    pub const fn get(self) -> u16 {
-        self.0
-    }
-}
-
-impl Default for FontWeight {
-    fn default() -> Self {
-        Self::REGULAR
-    }
-}
-
-impl std::fmt::Display for FontWeight {
-    /// The weight on the CSS scale, without a unit: `700` for bold.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-/// The error of a decoded font weight off the CSS scale of 1 to 1000.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("a font weight lies on the CSS scale of 1 to 1000, not {0}")]
-pub struct InvalidFontWeight(u16);
-
-impl InvalidFontWeight {
-    /// Wraps a raw value. The constructor checks nothing.
-    pub const fn new(value: u16) -> Self {
-        Self(value)
-    }
-
-    /// Returns the raw value.
-    pub const fn get(self) -> u16 {
-        self.0
-    }
-}
-
-impl TryFrom<u16> for FontWeight {
-    type Error = InvalidFontWeight;
-
-    fn try_from(value: u16) -> Result<Self, Self::Error> {
-        Self::new(value).ok_or(InvalidFontWeight(value))
-    }
-}
-
-impl From<FontWeight> for u16 {
-    fn from(weight: FontWeight) -> Self {
-        weight.0
+        self.get() >= Self::BOLD.get()
     }
 }
 
 crate::define_flag! {
     /// The weight of a text's face: the family's regular face or its real
     /// bold. A record that stores a bold toggle keeps the byte of its `bool`.
-    /// A record that stores a weight on the CSS scale holds a [`FontWeight`].
+    /// A record that stores a weight on the CSS scale holds a [`Bounded<FontWeight>`].
     pub enum Weight {
         /// The family's regular face, 400 on the CSS scale.
         Regular,
@@ -358,19 +310,28 @@ impl From<FontFamily> for String {
 #[cfg(test)]
 mod tests {
     use super::{FontFamily, FontSize, FontWeight, Weight};
-    use crate::{Doc, Px};
+    use crate::{Bounded, Doc, Px};
 
     /// A weight lies on the CSS scale, and bold starts at 700.
     #[test]
     fn a_font_weight_lies_on_the_css_scale() {
-        assert_eq!(FontWeight::new(0), None);
-        assert_eq!(FontWeight::new(1001), None);
-        assert_eq!(FontWeight::new(700), Some(FontWeight::BOLD));
-        assert!(FontWeight::new(800).is_some_and(FontWeight::is_bold));
-        assert!(!FontWeight::new(600).is_some_and(FontWeight::is_bold));
-        assert_eq!(FontWeight::of(Weight::Regular), FontWeight::REGULAR);
-        assert_eq!(FontWeight::of(Weight::Bold), FontWeight::BOLD);
-        assert!(FontWeight::try_from(0).is_err());
+        assert_eq!(Bounded::<FontWeight>::new(0), None);
+        assert_eq!(Bounded::<FontWeight>::new(1001), None);
+        assert_eq!(
+            Bounded::<FontWeight>::new(700),
+            Some(Bounded::<FontWeight>::BOLD)
+        );
+        assert!(Bounded::<FontWeight>::new(800).is_some_and(Bounded::<FontWeight>::is_bold));
+        assert!(!Bounded::<FontWeight>::new(600).is_some_and(Bounded::<FontWeight>::is_bold));
+        assert_eq!(
+            Bounded::<FontWeight>::of(Weight::Regular),
+            Bounded::<FontWeight>::REGULAR
+        );
+        assert_eq!(
+            Bounded::<FontWeight>::of(Weight::Bold),
+            Bounded::<FontWeight>::BOLD
+        );
+        assert!(Bounded::<FontWeight>::try_new(0).is_err());
     }
 
     #[test]

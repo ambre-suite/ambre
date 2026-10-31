@@ -35,7 +35,7 @@ enum Op {
 
 fn style() -> TextEditorStyle {
     TextEditorStyle {
-        weight: ambre_core::FontWeight::REGULAR,
+        weight: ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR,
         italic: ambre_bus::Slant::Upright,
         family: ambre_core::FontFamily::Sans,
         base_size: ambre_core::Px::<ambre_core::Doc>::new(16.0),

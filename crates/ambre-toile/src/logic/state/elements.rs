@@ -1094,7 +1094,7 @@ mod inner_tests {
             corner: ambre_core::StoredBoardLength::new(12.0),
             shadow: Some(shadow),
             font: ambre_bus::app::toile::FontSpec {
-                weight: ambre_core::FontWeight::new(600).unwrap(),
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::new(600).unwrap(),
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -1104,7 +1104,7 @@ mod inner_tests {
             corner: ambre_core::StoredBoardLength::ZERO,
             shadow: None,
             font: ambre_bus::app::toile::FontSpec {
-                weight: ambre_core::FontWeight::REGULAR,
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR,
                 ..Default::default()
             },
             ..ElementStyle::default()
@@ -1131,7 +1131,10 @@ mod inner_tests {
         assert_eq!(st.style_of(&a).font.weight.get(), 600);
         assert_eq!(st.style_of(&b).corner, ambre_core::StoredBoardLength::ZERO);
         assert!(st.style_of(&b).shadow.is_none());
-        assert_eq!(st.style_of(&b).font.weight, ambre_core::FontWeight::REGULAR);
+        assert_eq!(
+            st.style_of(&b).font.weight,
+            ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR
+        );
         assert_eq!(st.style_of(&a).fill, Some(Rgba::from_bits(0x0000_ffff)));
         assert_eq!(st.style_of(&b).fill, Some(Rgba::from_bits(0x0000_ffff)));
     }

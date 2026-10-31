@@ -94,7 +94,7 @@ pub use ambre_core::{Slant, Weight, WordBreak};
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct SpanShape {
     pub range: ByteSpan,
-    pub weight: Option<ambre_core::FontWeight>,
+    pub weight: Option<ambre_core::Bounded<ambre_core::FontWeight>>,
     pub italic: Slant,
     pub family: Option<ambre_core::FontFamily>,
     pub underline: ambre_core::Underline,
@@ -634,7 +634,7 @@ mod tests {
         let mut cache = TextCache::new();
         let bold = SpanShape {
             range: ByteSpan::from_usize_range(0..4),
-            weight: Some(ambre_core::FontWeight::BOLD),
+            weight: Some(ambre_core::Bounded::<ambre_core::FontWeight>::BOLD),
             ..SpanShape::default()
         };
         let faces_of = |layout: &parley::Layout<ambre_draw::Brush>| {

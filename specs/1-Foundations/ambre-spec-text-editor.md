@@ -118,7 +118,7 @@ the text being edited looks like the text that was there.
 
 ```rust
 pub struct TextEditorStyle {
-    pub weight: FontWeight,
+    pub weight: Bounded<FontWeight>,
     pub italic: Slant,
     pub family: FontFamily,
     pub base_size: Px<Doc>,

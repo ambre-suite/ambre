@@ -254,12 +254,12 @@ fn postcard_layouts() -> Vec<(String, String)> {
         fill: Some(Rgba::from_bits(0x0203_0401)),
         stroke: Some(Rgba::from_bits(0x0607_0805)),
         stroke_w: ambre_core::StoredBoardLength::new(1.5),
-        opacity: ambre_core::Opacity::new(0.25).unwrap(),
+        opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.25).unwrap(),
         corner: ambre_core::StoredBoardLength::new(3.5),
         font: FontSpec {
             family: Some(ambre_bus::app::toile::FontFamily::Other("f".to_owned())),
             size: ambre_bus::app::toile::FontSizeChoice::try_from(7.5).unwrap(),
-            weight: ambre_core::FontWeight::BOLD,
+            weight: ambre_core::Bounded::<ambre_core::FontWeight>::BOLD,
             italic: ambre_core::Slant::Italic,
             underline: ambre_core::Underline::Underlined,
             strikethrough: ambre_core::Strikethrough::Struck,
@@ -287,7 +287,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
     let points = vec![StrokePoint {
         x: ambre_core::StoredBoardLength::new(1.5),
         y: ambre_core::StoredBoardLength::new(2.5),
-        pressure: ambre_bus::app::toile::UnitFraction::HALF,
+        pressure: ambre_core::Bounded::<ambre_bus::app::toile::UnitFraction>::HALF,
     }];
     vec![
         // `to_bytes` prefixes the style with its own version byte, so the frozen

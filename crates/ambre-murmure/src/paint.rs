@@ -27,7 +27,8 @@ use crate::select::{Selecting, Spot, TextSelection};
 
 /// How strongly a selection tints the text under it: faint, so the text
 /// stays legible.
-const SELECTION_OPACITY: ambre_core::Opacity = ambre_core::Opacity::clamped(0.3);
+const SELECTION_OPACITY: ambre_core::Bounded<ambre_core::Opacity> =
+    ambre_core::Bounded::<ambre_core::Opacity>::clamped(0.3);
 
 /// The ink `selection` tints the text under a selection with.
 fn selection_tint(selection: Color) -> Color {

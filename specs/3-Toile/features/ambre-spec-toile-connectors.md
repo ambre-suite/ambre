@@ -142,7 +142,7 @@ element's box. A path kind decides how the arrow joins the two anchors:
 
 ```rust
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
-pub enum Anchor { Top, Bottom, Left, Right, Center, Free { u: UnitFraction, v: UnitFraction } }
+pub enum Anchor { Top, Bottom, Left, Right, Center, Free { u: Bounded<UnitFraction>, v: Bounded<UnitFraction> } }
 
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum PathType { Straight, Elbow, Curved }

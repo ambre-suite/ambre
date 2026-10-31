@@ -127,7 +127,7 @@ mod tests {
             id: Id::<Element>::from_text(id.to_owned()),
             bounds,
             rotation: ambre_core::Radians::ZERO,
-            opacity: ambre_core::Opacity::new(1.0).unwrap(),
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(1.0).unwrap(),
             fill: Some(Rgba::from_bits(0x0000_00FF)),
         }
     }

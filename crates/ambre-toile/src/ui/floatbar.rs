@@ -83,7 +83,7 @@ pub enum StyleEdit {
     /// Stroke width in world px, floored at zero. The panel alone emits it.
     StrokeWidth(ambre_core::StoredBoardLength),
     /// Opacity. The panel alone emits it.
-    Opacity(ambre_core::Opacity),
+    Opacity(ambre_core::Bounded<ambre_core::Opacity>),
     /// Text (foreground ink) colour (`None` == the kind default ink).
     TextColor(Option<Rgba>),
     /// Font family. The picker's "Default" reset is `None`, so the element
@@ -121,7 +121,9 @@ impl StyleEdit {
             // The choice holds no negative size, so none reaches the style
             // (`TOILE-UI-180`).
             StyleEdit::Size(s) => style.font.size = s,
-            StyleEdit::Bold(b) => style.font.weight = ambre_core::FontWeight::of(b),
+            StyleEdit::Bold(b) => {
+                style.font.weight = ambre_core::Bounded::<ambre_core::FontWeight>::of(b)
+            }
             StyleEdit::Italic(i) => style.font.italic = i,
             StyleEdit::Underline(u) => style.font.underline = u,
             StyleEdit::Strikethrough(s) => style.font.strikethrough = s,
@@ -514,7 +516,7 @@ mod tests {
             text_color: Some(Rgba::from_bits(0x4455_66ff)),
             font: ambre_bus::app::toile::FontSpec {
                 size: FontSizeChoice::from_whole_points(Some(18)),
-                weight: ambre_core::FontWeight::BOLD,
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::BOLD,
                 italic: ambre_core::Slant::Italic,
                 underline: ambre_core::Underline::Plain,
                 strikethrough: ambre_core::Strikethrough::Struck,
@@ -556,9 +558,15 @@ mod tests {
             ..ElementStyle::default()
         };
         StyleEdit::Bold(ambre_core::Weight::Regular).apply_to(&mut s);
-        assert_eq!(s.font.weight, ambre_core::FontWeight::REGULAR);
+        assert_eq!(
+            s.font.weight,
+            ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR
+        );
         StyleEdit::Bold(ambre_core::Weight::Bold).apply_to(&mut s);
-        assert_eq!(s.font.weight, ambre_core::FontWeight::BOLD);
+        assert_eq!(
+            s.font.weight,
+            ambre_core::Bounded::<ambre_core::FontWeight>::BOLD
+        );
         // A negative size is refused, never clamped to automatic: no choice
         // holds one, and a decoded one does not decode.
         assert!(
@@ -592,13 +600,13 @@ mod tests {
             fill: Some(Rgba::from_bits(0x1122_33ff)),
             stroke: Some(Rgba::from_bits(0x4455_66ff)),
             stroke_w: ambre_core::StoredBoardLength::new(3.0),
-            opacity: ambre_core::Opacity::new(0.5).unwrap(),
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.5).unwrap(),
             corner: ambre_core::StoredBoardLength::new(7.0),
             text_color: Some(Rgba::from_bits(0x7788_99ff)),
             font: FontSpec {
                 family: Some(FontFamily::Other("Comic Sans MS".to_owned())),
                 size: FontSizeChoice::from_whole_points(Some(18)),
-                weight: ambre_core::FontWeight::new(600).unwrap(),
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::new(600).unwrap(),
                 italic: ambre_core::Slant::Italic,
                 ..Default::default()
             },
@@ -627,9 +635,9 @@ mod tests {
                 },
             ),
             (
-                StyleEdit::Opacity(ambre_core::Opacity::clamped(2.0)),
+                StyleEdit::Opacity(ambre_core::Bounded::<ambre_core::Opacity>::clamped(2.0)),
                 ElementStyle {
-                    opacity: ambre_core::Opacity::OPAQUE,
+                    opacity: ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE,
                     ..base.clone()
                 },
             ),
@@ -659,7 +667,7 @@ mod tests {
             font: FontSpec {
                 family: Some(FontFamily::Sans),
                 size: FontSizeChoice::from_whole_points(Some(12)),
-                weight: ambre_core::FontWeight::REGULAR,
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR,
                 italic: ambre_core::Slant::Upright,
                 underline: ambre_core::Underline::Plain,
                 strikethrough: ambre_core::Strikethrough::Plain,
@@ -672,7 +680,7 @@ mod tests {
             font: FontSpec {
                 family: Some(FontFamily::Serif),
                 size: FontSizeChoice::from_whole_points(Some(24)),
-                weight: ambre_core::FontWeight::BOLD,
+                weight: ambre_core::Bounded::<ambre_core::FontWeight>::BOLD,
                 italic: ambre_core::Slant::Italic,
                 underline: ambre_core::Underline::Underlined,
                 strikethrough: ambre_core::Strikethrough::Struck,

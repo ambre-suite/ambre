@@ -106,7 +106,7 @@ pub struct ElementStyle {
     pub fill:       Option<Rgba>,  // None = no fill
     pub stroke:     Option<Rgba>,
     pub stroke_w:   StoredBoardLength,
-    pub opacity:    Opacity,             // 0.0 ..= 1.0
+    pub opacity:    Bounded<Opacity>,    // 0.0 ..= 1.0
     pub corner:     StoredBoardLength,   // corner radius
     pub font:       FontSpec,      // family, size (points), weight, italic, underline, strikethrough
     pub shadow:     Option<Shadow>,

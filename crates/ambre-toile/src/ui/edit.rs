@@ -233,7 +233,7 @@ impl InlineEditor {
 
 /// A text colour to a `Color`, pre-multiplying the element `opacity` into the
 /// alpha channel (`TOILE-UI-186`), as the committed pass does.
-fn ink_color(v: Rgba, opacity: ambre_core::Opacity) -> Color {
+fn ink_color(v: Rgba, opacity: ambre_core::Bounded<ambre_core::Opacity>) -> Color {
     super::walk::style_color(v, opacity)
 }
 
@@ -303,7 +303,7 @@ mod tests {
     fn the_pinned_style_carries_opacity_and_decorations() {
         let style = ElementStyle {
             text_color: Some(Rgba::from_bits(0xff00_00ff)),
-            opacity: ambre_core::Opacity::new(0.5).unwrap(),
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.5).unwrap(),
             font: FontSpec {
                 underline: ambre_core::Underline::Underlined,
                 strikethrough: ambre_core::Strikethrough::Struck,

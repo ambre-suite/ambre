@@ -248,7 +248,7 @@ pub(crate) fn resolved_text_ink(
 
 /// Convert a Toile style colour to a `peniko::Color`, pre-multiplying the
 /// element `opacity` into the alpha channel.
-pub(crate) fn style_color(v: Rgba, opacity: ambre_core::Opacity) -> Color {
+pub(crate) fn style_color(v: Rgba, opacity: ambre_core::Bounded<ambre_core::Opacity>) -> Color {
     let [r, g, b, a] = v.channels();
     let alpha = opacity.fade(ambre_core::Alpha::new(a));
     Color::from_rgba8(r, g, b, alpha.get())

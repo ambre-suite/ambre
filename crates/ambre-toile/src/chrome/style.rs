@@ -61,7 +61,7 @@ pub fn StyleInspector(
     let fill = RwSignal::new(None::<Rgba>);
     let stroke = RwSignal::new(None::<Rgba>);
     let stroke_w = RwSignal::new(1.0_f32);
-    let opacity = RwSignal::new(ambre_core::Opacity::OPAQUE);
+    let opacity = RwSignal::new(ambre_core::Bounded::<ambre_core::Opacity>::OPAQUE);
     // Text (foreground) colour + font controls.
     let text_color = RwSignal::new(None::<Rgba>);
     let font_family = RwSignal::new(None::<FontFamily>);
@@ -241,7 +241,7 @@ pub fn StyleInspector(
                             on:mousedown=move |ev| ev.prevent_default()
                             on:input=move |ev| {
                                 if let Ok(v) = event_target_value(&ev).parse::<f32>() {
-                                    let picked = ambre_core::Opacity::clamped(v / 100.0);
+                                    let picked = ambre_core::Bounded::<ambre_core::Opacity>::clamped(v / 100.0);
                                     opacity.set(picked);
                                     commit(StyleEdit::Opacity(picked));
                                 }

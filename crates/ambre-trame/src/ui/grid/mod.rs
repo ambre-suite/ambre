@@ -134,7 +134,7 @@ impl CellEditor {
     /// formatting each paint before flushing.
     pub fn new(at: CellPos, session: ambre_bus::Token<EditSession>, text: String) -> Self {
         let style = TextEditorStyle {
-            weight: ambre_core::FontWeight::REGULAR,
+            weight: ambre_core::Bounded::<ambre_core::FontWeight>::REGULAR,
             italic: ambre_core::Slant::Upright,
             family: ambre_core::FontFamily::Sans,
             base_size: BODY_SIZE,

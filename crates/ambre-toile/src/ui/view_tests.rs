@@ -2578,7 +2578,10 @@ fn two_bar_edits_compose_and_keep_the_selection() {
                 Some(Rgba::from_bits(0x1122_33ff)),
                 "the first edit is kept"
             );
-            assert_eq!(style.font.weight, ambre_core::FontWeight::BOLD);
+            assert_eq!(
+                style.font.weight,
+                ambre_core::Bounded::<ambre_core::FontWeight>::BOLD
+            );
         }
         other => panic!("one restyle expected, got {other:?}"),
     }

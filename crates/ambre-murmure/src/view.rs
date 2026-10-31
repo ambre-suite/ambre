@@ -5901,7 +5901,8 @@ mod tests {
             .into_iter()
             .map(|span| {
                 let look = (
-                    span.weight.map(ambre_core::FontWeight::get),
+                    span.weight
+                        .map(ambre_core::Bounded::<ambre_core::FontWeight>::get),
                     span.italic,
                     span.family,
                     span.color,

@@ -1418,12 +1418,12 @@ fn a_stroke_in_flight_reaches_the_other_users() {
         StrokePoint {
             x: ambre_core::StoredBoardLength::new(10.0),
             y: ambre_core::StoredBoardLength::new(10.0),
-            pressure: ambre_bus::app::toile::UnitFraction::HALF,
+            pressure: ambre_core::Bounded::<ambre_bus::app::toile::UnitFraction>::HALF,
         },
         StrokePoint {
             x: ambre_core::StoredBoardLength::new(12.0),
             y: ambre_core::StoredBoardLength::new(14.0),
-            pressure: ambre_bus::app::toile::UnitFraction::new(0.6)
+            pressure: ambre_core::Bounded::<ambre_bus::app::toile::UnitFraction>::new(0.6)
                 .expect("a pressure inside 0 ..= 1"),
         },
     ];
@@ -2574,7 +2574,7 @@ fn frame_snapshot_captures_declared_children_props() {
     // Give `a` a distinctive style + rotation so the snapshot picks them up.
     let style = ElementStyle {
         fill: Some(Rgba::from_bits(0x1234_56FF)),
-        opacity: ambre_core::Opacity::new(0.5).unwrap(),
+        opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.5).unwrap(),
         ..ElementStyle::default()
     };
     st.handle_command(ToileCommand::RestyleElements {
@@ -6952,7 +6952,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
             fill: Some(Rgba::from_bits(0xFF00_00FF)),
             stroke: None,
             stroke_w: ambre_core::StoredBoardLength::new(4.0),
-            opacity: ambre_core::Opacity::new(0.5).unwrap(),
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.5).unwrap(),
             text_color: Some(Rgba::from_bits(0x00FF_00FF)),
             ..ElementStyle::default()
         },
@@ -6963,7 +6963,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
             fill: None,
             stroke: Some(Rgba::from_bits(0x0000_FFFF)),
             stroke_w: ambre_core::StoredBoardLength::new(1.5),
-            opacity: ambre_core::Opacity::new(0.25).unwrap(),
+            opacity: ambre_core::Bounded::<ambre_core::Opacity>::new(0.25).unwrap(),
             text_color: None,
             ..ElementStyle::default()
         },
