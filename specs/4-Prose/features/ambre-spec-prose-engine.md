@@ -433,7 +433,7 @@ pub enum ProseCommand {
     InsertFooterField     { field: HeaderField, target: HfTarget, pos: DocOffset },
     SetBandAlign          { block_id: BlockId, align: Align },
     /// The view's wall clock, once a run of local changes stops (`PROSE-FEAT-066`).
-    StampModified         { now: Timestamp },
+    StampModified         { now: Instant<Authored> },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
     FindStart  { query: FindQuery },
@@ -451,9 +451,9 @@ pub enum ProseCommand {
     // -- Comments (`features/ambre-spec-prose-comments.md`) --
     /// The author is stamped by the dispatcher from the session identity, never
     /// carried here (`PROSE-FEAT-077`). `now` is a display stamp.
-    AddComment       { block_id: BlockId, range: DocSpan, text: String, now: Timestamp },
+    AddComment       { block_id: BlockId, range: DocSpan, text: String, now: Instant<Authored> },
     /// Reopens a resolved thread as a side effect (`PROSE-FEAT-079`).
-    ReplyToComment   { comment_id: Id<Comment>, text: String, now: Timestamp },
+    ReplyToComment   { comment_id: Id<Comment>, text: String, now: Instant<Authored> },
     ResolveComment   { comment_id: Id<Comment> },
     /// The explicit reopen, with no reply added (`PROSE-FEAT-079`).
     ReopenComment    { comment_id: Id<Comment> },

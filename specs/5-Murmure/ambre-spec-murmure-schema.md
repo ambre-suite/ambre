@@ -90,13 +90,13 @@ an `Id<E>` of `ambre_core::id`. The types marked not
 built join with the feature that first writes them.
 
 ```rust
-pub struct Timestamp(u64);              // Unix milliseconds, display only: a clock is untrusted
+pub struct Instant<C: TimeBase> { .. }  // Instant<Authored>: Unix milliseconds, display only
 pub struct Emoji(Cow<'static, str>);    // exactly one extended grapheme cluster
 pub(crate) struct ReactionKey(String);  // "{user} {emoji}": the first space ends the user
 pub enum ReactionEmoji { Unicode(Emoji), Custom(CustomEmojiId) }  // not built: custom emoji
 pub struct CustomEmojiId(Uuid);         // not built: minted by the admin's client
 pub struct TagId(Uuid);                 // not built: minted by the forum owner's client
-pub struct ImportOrigin { pub name: String, pub ts: Timestamp }  // not built
+pub struct ImportOrigin { pub name: String, pub ts: Instant<Authored> }  // not built
 pub struct MediaType(String);           // a lower-case type and subtype
 pub struct ByteSize(u64);
 pub struct SealedChannelKey(Vec<u8>);   // a channel key, sealed under the space key
@@ -120,24 +120,24 @@ names the unit two concurrent writers race for. Every document also carries the 
 
 | Document | Container | Loro type | Key | Value | LWW unit | Owning feature | State |
 |---|---|---|---|---|---|---|---|
-| every | `header` | Map | `kind`, `channel_id` or `space_id`, `created_at` | `DocumentKind`, `Id<Channel>` or `Id<Space>`, `Timestamp` | the key | -- (this spec section 7) | built |
+| every | `header` | Map | `kind`, `channel_id` or `space_id`, `created_at` | `DocumentKind`, `Id<Channel>` or `Id<Space>`, `Instant<Authored>` | the key | -- (this spec section 7) | built |
 | every | `meta` | Map | `schema_version` | `u32` | the key | -- (`ambre-spec-schema-version.md`) | built |
 | `space` | `space` | Map | `name` | String | the key | spaces | design |
 | `space` | `categories` | Map | an `Id<Category>` | `{name: String, position: u32}` | the category entry | spaces | design |
 | `space` | `channels` | Map | an `Id<Channel>` | `{name: String, topic: String, category_id: Id<Category>, position: u32, key: SealedChannelKey}` | the field | spaces | design |
 | `space` | `emoji` | Map | a `CustomEmojiId` | `{name: String, media_ref, media_type: MediaType}` | the entry | emoji | design |
 | `meta` | `channel` | Map | `type`, `layout`, `name`, `topic` | `ChannelType`, `ChannelLayout`, String, String | the key | channels | built |
-| `meta` | `segments` | List | position | `{document_id: Id<Document>, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amendments: Id<Document>, folded: Id<Document>}` | the field | segments | built |
-| `meta` | `pinned` | Map | an `Id<Message>` | `{segment: Id<Segment>, pinned_at: Timestamp}` | the entry | pins | design |
+| `meta` | `segments` | List | position | `{document_id: Id<Document>, from_ts: Instant<Authored>, to_ts: Instant<Authored>, msg_count: u32, state: SegmentState, amendments: Id<Document>, folded: Id<Document>}` | the field | segments | built |
+| `meta` | `pinned` | Map | an `Id<Message>` | `{segment: Id<Segment>, pinned_at: Instant<Authored>}` | the entry | pins | design |
 | `meta` | `tags` | Map | a `TagId`, for a forum | `{name: String}` | the entry | forums | design |
 | `meta` | `commands` | Map | a command name | `{bot: PublicKey, description: String}` | the entry | bots | design |
 | segment | `header` | Map | `folded`, `folded_seq` | `Id<Document>`, `u64`, on a fold snapshot | the key | segments | built |
 | thread | `header` | Map | `root_id`, `segment_id` | `Id<Message>`, `Id<Segment>` | the key | threads | built |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | built |
-| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `Id<Message>`, `Id<User>`, `Timestamp`, `Id<Document>`, `Id<Document>`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `Id<Meeting>`, `NoticeKind`, `Id<User>` | the key | messages | built |
+| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `Id<Message>`, `Id<User>`, `Instant<Authored>`, `Id<Document>`, `Id<Document>`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `Id<Meeting>`, `NoticeKind`, `Id<User>` | the key | messages | built |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark and the style marks | none: char-CRDT | messages, mentions | built |
 | segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: ByteSize}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
-| segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and an `Id<User>` | a `Timestamp` | the entry | reactions | built |
+| segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and an `Id<User>` | an `Instant<Authored>` | the entry | reactions | built |
 | segment, thread | `messages/{n}/tags` | Map | a `TagId` | `true` | the entry | forums | design |
 | segment, thread | `messages/{n}/actions` | List | position | `{id: String, label: String}` | list order, no LWW | bots | design |
 | segment, thread | `messages/{n}/preview` | Map | `title`, `description`, `image` | String, String, a media reference | the key | link-previews | design |
@@ -148,8 +148,8 @@ names the unit two concurrent writers race for. Every document also carries the 
 | settings | `murmure/layout` | Map | an `Id<Channel>` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
 | settings | `murmure/groups` | Map | a `PersonalGroupId` | `{name: String, position: u32}` | the entry | sidebar | design |
 | settings | `murmure/notify` | Map | an `Id<Channel>` | `NotifyLevel` | the entry | notifications | design |
-| settings | `murmure/bookmarks` | Map | an `Id<Message>` | `{channel: Id<Channel>, segment: Id<Segment>, added: Timestamp}` | the entry | sidebar | design |
-| settings | `murmure/followed` | Map | an `Id<Document>`, the thread | `{channel: Id<Channel>, since: Timestamp}` | the entry | threads | design |
+| settings | `murmure/bookmarks` | Map | an `Id<Message>` | `{channel: Id<Channel>, segment: Id<Segment>, added: Instant<Authored>}` | the entry | sidebar | design |
+| settings | `murmure/followed` | Map | an `Id<Document>`, the thread | `{channel: Id<Channel>, since: Instant<Authored>}` | the entry | threads | design |
 | settings | `murmure/presence` | Map | `indicators` | bool | the key | typing-presence | design |
 
 **The `state` of a segment** is `active`, `closing` or `final`. **The `by` of a delete** is `author`
