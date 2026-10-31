@@ -57,8 +57,8 @@ fn validate_email(email: &ambre_core::Email) -> Result<(), AppError> {
 pub struct SetupAccountResponse {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub access_token: ambre_protocol::ws::AccessToken,
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     pub access_expires_in: ambre_core::Seconds,
 }
 
@@ -132,7 +132,7 @@ pub async fn me(
 #[derive(serde::Deserialize)]
 pub struct LogoutRequest {
     #[serde(default)]
-    pub refresh_token: Option<ambre_protocol::ws::RefreshToken>,
+    pub refresh_token: Option<ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>>,
 }
 
 pub async fn logout(

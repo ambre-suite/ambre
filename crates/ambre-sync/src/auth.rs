@@ -258,8 +258,8 @@ impl SyncState {
         &mut self,
         id: RequestId,
         provider: ambre_core::OidcProvider,
-        code: ambre_core::OidcCode,
-        state: ambre_core::OidcState,
+        code: ambre_core::Credential<ambre_core::OidcCode>,
+        state: ambre_core::Credential<ambre_core::OidcState>,
     ) {
         tracing::info!("Sync: ProviderReturn ({provider})");
         let Some(tx) = self.event_tx.clone() else {

@@ -383,8 +383,8 @@ pub enum RestCommand {
     /// the keys are unlocked or set up.
     ProviderReturn {
         provider: ambre_core::OidcProvider,
-        code: ambre_core::OidcCode,
-        state: ambre_core::OidcState,
+        code: ambre_core::Credential<ambre_core::OidcCode>,
+        state: ambre_core::Credential<ambre_core::OidcState>,
     },
 }
 
@@ -560,7 +560,7 @@ pub enum RestEvent {
     /// The provider's authorization address, and the `state` the relay bound to it.
     ProviderAddress {
         url: ambre_core::ProviderUrl,
-        state: ambre_core::OidcState,
+        state: ambre_core::Credential<ambre_core::OidcState>,
     },
     /// The provider return was exchanged. The tokens stayed on the Sync worker;
     /// `keys_stored` says whether the next step is an unlock or a setup.

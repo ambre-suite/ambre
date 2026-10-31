@@ -290,7 +290,7 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
             after_seq: Seq(3),
         },
         C::Authenticate {
-            token: crate::ws::AccessToken::new("t".into()),
+            token: crate::ws::Credential::new("t".into()),
         },
         C::ClockResync {
             document_id: doc,

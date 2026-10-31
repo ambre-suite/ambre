@@ -44,7 +44,7 @@ pub enum WsClientMsg {
     /// carries none, so no proxy record and no log line holds it
     /// (`ambre-spec-session.md`, `SRV-031`). The relay reads nothing else
     /// until this frame is accepted.
-    Authenticate { token: AccessToken },
+    Authenticate { token: Credential<AccessToken> },
 
     /// The author's answer to a [`WsServerMsg::ClockRefused`], naming the
     /// refused delta by its signature. The relay drops this socket's later
@@ -60,7 +60,7 @@ pub enum WsClientMsg {
 /// [`ambre_core::Secret`], so `Debug` prints no byte of it and a logged frame
 /// logs no token (`SRV-031`). They live in the Secret module of `ambre-core`,
 /// whose hand-written serde keeps the bare text this wire carried before.
-pub use ambre_core::{AccessToken, RefreshToken};
+pub use ambre_core::{AccessToken, Credential, RefreshToken};
 
 /// The code of a WebSocket close frame, 1000 to 4999 (RFC 6455 section 7.4).
 /// The relay closes a refused upgrade with a code of the application range,

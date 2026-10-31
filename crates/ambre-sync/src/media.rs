@@ -266,13 +266,13 @@ pub(crate) trait MediaHttp {
     /// A sealed blob to a presigned object-storage link.
     async fn put_sealed(
         &self,
-        url: &ambre_core::PresignedUrl,
+        url: &ambre_core::Credential<ambre_core::PresignedUrl>,
         blob: &pipeline::SealedBlob,
     ) -> Result<(), http::HttpError>;
     /// A blob from a presigned object-storage link.
     async fn fetch_bytes(
         &self,
-        url: &ambre_core::PresignedUrl,
+        url: &ambre_core::Credential<ambre_core::PresignedUrl>,
     ) -> Result<pipeline::FetchedBlob, http::HttpError>;
     /// An authenticated `DELETE` to the relay, answering its status.
     async fn delete(&self, url: &http::RelayUrl)
@@ -289,14 +289,14 @@ impl MediaHttp for GlooHttp {
     }
     async fn put_sealed(
         &self,
-        url: &ambre_core::PresignedUrl,
+        url: &ambre_core::Credential<ambre_core::PresignedUrl>,
         blob: &pipeline::SealedBlob,
     ) -> Result<(), http::HttpError> {
         http::put_sealed(url, blob).await
     }
     async fn fetch_bytes(
         &self,
-        url: &ambre_core::PresignedUrl,
+        url: &ambre_core::Credential<ambre_core::PresignedUrl>,
     ) -> Result<pipeline::FetchedBlob, http::HttpError> {
         http::fetch_bytes(url).await
     }
@@ -633,14 +633,14 @@ mod tests {
         }
         async fn put_sealed(
             &self,
-            _url: &ambre_core::PresignedUrl,
+            _url: &ambre_core::Credential<ambre_core::PresignedUrl>,
             _blob: &pipeline::SealedBlob,
         ) -> Result<(), http::HttpError> {
             self.step("put")
         }
         async fn fetch_bytes(
             &self,
-            _url: &ambre_core::PresignedUrl,
+            _url: &ambre_core::Credential<ambre_core::PresignedUrl>,
         ) -> Result<pipeline::FetchedBlob, http::HttpError> {
             self.step("fetch")?;
             Ok(pipeline::FetchedBlob::new(self.served.clone()))

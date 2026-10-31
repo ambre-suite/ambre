@@ -86,8 +86,8 @@ pub async fn store_master_keys(
 #[derive(serde::Serialize)]
 pub struct KeysStoredResponse {
     pub status: ambre_core::WriteStatus,
-    pub access_token: ambre_protocol::ws::AccessToken,
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     /// Access-token lifetime in seconds.
     pub access_expires_in: ambre_core::Seconds,
 }

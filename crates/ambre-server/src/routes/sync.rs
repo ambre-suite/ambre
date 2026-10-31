@@ -299,7 +299,7 @@ pub struct SnapshotUploadUrlRequest {
 /// Presigned PUT URL for direct client-to-S3 upload of an encrypted snapshot.
 #[derive(serde::Serialize)]
 pub struct SnapshotUploadUrlResponse {
-    pub upload_url: ambre_core::PresignedUrl,
+    pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
     pub s3_key: ambre_core::ObjectKey,
 }
 
@@ -350,7 +350,7 @@ pub struct SnapshotDownloadUrlRequest {
 }
 #[derive(serde::Serialize)]
 pub struct SnapshotDownloadUrlResponse {
-    pub download_url: ambre_core::PresignedUrl,
+    pub download_url: ambre_core::Credential<ambre_core::PresignedUrl>,
 }
 
 pub async fn snapshot_download_url(

@@ -14,7 +14,7 @@ use crate::redis_keys::{
 };
 use ambre_core::{FixedBytes, PublicKey};
 use ambre_protocol::messages::Clock;
-use ambre_protocol::ws::RefreshToken;
+use ambre_protocol::ws::{Credential, RefreshToken};
 
 /// Atomic Lua script that validates a client clock and assigns a global
 /// monotonic sequence number.
@@ -561,7 +561,7 @@ pub async fn current_seq(
 /// was revoked (logout / rotation).
 pub async fn refresh_get(
     redis: &Client,
-    token: &RefreshToken,
+    token: &Credential<RefreshToken>,
 ) -> Result<Option<RefreshData>, AppError> {
     // `hgetall` returns field/value pairs; rustis deserializes them as a map.
     // (Reading into `Vec<String>` fails with "invalid type: sequence, expected a
@@ -597,7 +597,7 @@ pub async fn refresh_get(
 /// Creates a refresh-token record in Redis with the configured TTL.
 pub async fn refresh_create(
     redis: &Client,
-    token: &RefreshToken,
+    token: &Credential<RefreshToken>,
     data: &RefreshData,
     ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
@@ -622,7 +622,10 @@ pub async fn refresh_create(
 }
 
 /// Deletes a refresh-token record (logout, or the old token during rotation).
-pub async fn refresh_delete(redis: &Client, token: &RefreshToken) -> Result<(), AppError> {
+pub async fn refresh_delete(
+    redis: &Client,
+    token: &Credential<RefreshToken>,
+) -> Result<(), AppError> {
     crate::secrets::token::refresh_key(token, |key| redis.del([key]))
         .await
         .map_err(|e| AppError::Redis(format!("refresh delete failed: {e}")))?;
@@ -635,7 +638,10 @@ pub async fn refresh_delete(redis: &Client, token: &RefreshToken) -> Result<(), 
 /// `DEL` is atomic and reports how many keys it removed, so when several callers
 /// race on the same token exactly one observes `1`. That caller owns the claim;
 /// every other one observes `0` and must be rejected as a replay.
-pub async fn refresh_claim(redis: &Client, token: &RefreshToken) -> Result<bool, AppError> {
+pub async fn refresh_claim(
+    redis: &Client,
+    token: &Credential<RefreshToken>,
+) -> Result<bool, AppError> {
     let removed: usize = crate::secrets::token::refresh_key(token, |key| redis.del([key]))
         .await
         .map_err(|e| AppError::Redis(format!("refresh claim del: {e}")))?;
@@ -651,7 +657,7 @@ pub async fn refresh_claim(redis: &Client, token: &RefreshToken) -> Result<bool,
 /// replay goes undetected. Gating on the [`refresh_claim`] result closes that.
 pub async fn refresh_consume(
     redis: &Client,
-    token: &RefreshToken,
+    token: &Credential<RefreshToken>,
 ) -> Result<Option<RefreshData>, AppError> {
     let Some(data) = refresh_get(redis, token).await? else {
         return Ok(None);
@@ -1080,7 +1086,7 @@ pub struct RefreshData {
 /// during the callback to validate the PKCE verifier and nonce.
 pub async fn oidc_state_set(
     redis: &Client,
-    csrf_state: &ambre_core::OidcState,
+    csrf_state: &ambre_core::Credential<ambre_core::OidcState>,
     auth_state: &OidcAuthState,
 ) -> Result<(), AppError> {
     // Both commands take their copy of the key, and the first its copy of the
@@ -1111,7 +1117,7 @@ pub async fn oidc_state_set(
 /// state expired or was not found.
 pub async fn oidc_state_take(
     redis: &Client,
-    csrf_state: &ambre_core::OidcState,
+    csrf_state: &ambre_core::Credential<ambre_core::OidcState>,
 ) -> Result<OidcAuthState, AppError> {
     // Read into a `HashMap`, NOT a `Vec<String>`. Under RESP3 rustis returns a hash
     // reply as a map, and deserializing that into a flat `Vec<String>` fails with
@@ -1879,7 +1885,8 @@ mod redis_integration_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn oidc_state_roundtrips() {
         let redis = connect_redis().await;
-        let csrf = ambre_core::OidcState::new(uuid::Uuid::new_v4().to_string());
+        let csrf =
+            ambre_core::Credential::<ambre_core::OidcState>::new(uuid::Uuid::new_v4().to_string());
         let kept = OidcAuthState {
             pkce_verifier_secret: OidcSecret::new("verifier-xyz".to_owned()),
             nonce: openidconnect::Nonce::new("nonce-abc".to_owned()),
@@ -1977,8 +1984,8 @@ mod redis_integration_tests {
         let _ = redis.del([clocks_key.as_str(), seq_key.as_str()]).await;
     }
 
-    async fn seed_refresh(redis: &Client) -> RefreshToken {
-        let token = RefreshToken::new(uuid::Uuid::new_v4().to_string());
+    async fn seed_refresh(redis: &Client) -> Credential<RefreshToken> {
+        let token = Credential::<RefreshToken>::new(uuid::Uuid::new_v4().to_string());
         let data = RefreshData {
             user_id: ambre_core::UserId::new(),
             signing_pubkey: Some(FixedBytes::<PublicKey>::from_array([3u8; 32])),

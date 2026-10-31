@@ -125,6 +125,29 @@ fn the_crypto_crate_reads_a_secret_and_the_secret_module_wipes_one() {
     );
 }
 
+/// The one serde door of the credentials reads the value in the Secret
+/// module, where the gate admits it (`ARCH-045`). The gate refuses the same
+/// generic impl in another file of `ambre-core` or in the wire crate. So the
+/// door cannot move out of the module unseen.
+#[test]
+fn the_credential_serde_reads_its_secret_in_the_secret_module_alone() {
+    let door = "impl<K: WireCredential> Serialize for Credential<K> {\n\
+                fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {\n\
+                self.secret.expose().as_str().serialize(s) } }";
+    assert_eq!(
+        refused("ambre-core", "src/secret.rs", door),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        refused("ambre-core", "src/credential.rs", door),
+        ["crates/ambre-core/src/credential.rs:3: `expose`"]
+    );
+    assert_eq!(
+        refused("ambre-protocol", "src/ws.rs", door),
+        ["crates/ambre-protocol/src/ws.rs:3: `expose`"]
+    );
+}
+
 #[test]
 fn another_file_of_ambre_core_is_no_secret_module() {
     let found = refused(

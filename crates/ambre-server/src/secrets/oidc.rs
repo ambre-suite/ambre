@@ -41,6 +41,8 @@ impl OidcSecret {
 
 /// The authorization code, as the code exchange presents it. Named in
 /// `src/oidc.rs` alone, which makes the one exchange (`ARCH-049`).
-pub fn authorization_code(code: &ambre_core::OidcCode) -> AuthorizationCode {
+pub fn authorization_code(
+    code: &ambre_core::Credential<ambre_core::OidcCode>,
+) -> AuthorizationCode {
     AuthorizationCode::new(code.secret().expose().clone())
 }

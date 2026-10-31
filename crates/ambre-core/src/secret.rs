@@ -25,7 +25,8 @@
 //!
 //! Three of them carry what a person types or reads. Five carry a bearer
 //! credential: a session token, a presigned link, an OIDC code and state.
-//! One macro writes the five, so they share one form.
+//! The five are one generic [`Credential`] over a role marker. Its one serde
+//! form serves each role that admits it by an `impl WireCredential` line.
 //!
 //! A type that holds a [`Secret`] derives `Debug`, because the wrapper's own
 //! form is redacted. It cannot derive `Clone`, `Serialize` or `PartialEq`:
@@ -57,6 +58,7 @@
 //! ```
 
 use std::fmt;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -311,111 +313,177 @@ impl<'de> Deserialize<'de> for Passphrase {
     }
 }
 
-/// Writes one bearer credential: a text that grants access to whoever holds
-/// it. The text sits in one shared [`Secret`], so a clone copies the pointer,
-/// never the text. Equality is constant-time, through `matches`. The serde
-/// form is the bare text, as the wire carried it before the wrapper.
-macro_rules! define_credential {
-    ($(#[$meta:meta])* $name:ident) => {
-        $(#[$meta])*
-        #[derive(Clone, Debug)]
-        pub struct $name(Arc<Secret<String>>);
-
-        impl $name {
-            /// Wraps the credential text.
-            #[must_use]
-            pub fn new(text: String) -> Self {
-                Self(Arc::new(Secret::new(text)))
-            }
-
-            /// The wrapper, for the code the gate admits to read the text.
-            #[must_use]
-            pub fn secret(&self) -> &Secret<String> {
-                &self.0
-            }
-
-            /// Whether `other` holds the same text, in constant time.
-            #[must_use]
-            pub fn matches(&self, other: &Self) -> bool {
-                self.0.ct_eq(&other.0).into()
-            }
-        }
-
-        impl Serialize for $name {
-            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                self.0.expose().as_str().serialize(serializer)
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                Ok(Self::new(String::deserialize(deserializer)?))
-            }
-        }
-    };
+mod credential_kind {
+    /// Closes [`super::CredentialKind`] to the roles this module declares, so
+    /// no crate downstream builds a credential of its own, nor admits one to
+    /// the wire.
+    pub trait Sealed {}
+    impl Sealed for super::AccessToken {}
+    impl Sealed for super::RefreshToken {}
+    impl Sealed for super::PresignedUrl {}
+    impl Sealed for super::OidcCode {}
+    impl Sealed for super::OidcState {}
 }
 
-define_credential! {
-    /// An access token: the short-lived credential the relay mints, which a
-    /// request header and the first frame of the socket present (`SRV-031`).
-    AccessToken
+/// The role of a bearer credential: a text that grants access to whoever
+/// holds it. A role is an empty `enum`, and [`Credential`] holds the text.
+pub trait CredentialKind: credential_kind::Sealed + 'static {
+    /// The name the debug form prints.
+    const NAME: &'static str;
 }
 
-impl AccessToken {
+/// The serde door of `ARCH-047`: a role whose credential travels as its bare
+/// text. Each role opts in by one `impl` line in this module, which a review
+/// reads. A role without it has no serde form at all.
+pub trait WireCredential: CredentialKind {}
+
+/// One bearer credential of the role `K`. The text sits in one shared
+/// [`Secret`], so a clone copies the pointer, never the text. Equality is
+/// constant-time, through [`Credential::matches`]. The serde form is the bare
+/// text, as the wire carried it before the wrapper.
+pub struct Credential<K: CredentialKind> {
+    secret: Arc<Secret<String>>,
+    kind: PhantomData<fn() -> K>,
+}
+
+impl<K: CredentialKind> Credential<K> {
+    /// Wraps the credential text.
+    #[must_use]
+    pub fn new(text: String) -> Self {
+        Self {
+            secret: Arc::new(Secret::new(text)),
+            kind: PhantomData,
+        }
+    }
+
+    /// The wrapper, for the code the gate admits to read the text.
+    #[must_use]
+    pub fn secret(&self) -> &Secret<String> {
+        &self.secret
+    }
+
+    /// Whether `other` holds the same text, in constant time.
+    #[must_use]
+    pub fn matches(&self, other: &Self) -> bool {
+        self.secret.ct_eq(&other.secret).into()
+    }
+}
+
+impl<K: CredentialKind> Clone for Credential<K> {
+    fn clone(&self) -> Self {
+        Self {
+            secret: Arc::clone(&self.secret),
+            kind: PhantomData,
+        }
+    }
+}
+
+impl<K: CredentialKind> fmt::Debug for Credential<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple(K::NAME).field(&self.secret).finish()
+    }
+}
+
+/// The one serde door of every credential that travels (`ARCH-047`).
+impl<K: WireCredential> Serialize for Credential<K> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.secret.expose().as_str().serialize(serializer)
+    }
+}
+
+impl<'de, K: WireCredential> Deserialize<'de> for Credential<K> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::new(String::deserialize(deserializer)?))
+    }
+}
+
+/// The role of an access token: the short-lived credential the relay mints,
+/// which a request header and the first frame of the socket present
+/// (`SRV-031`). `Credential<AccessToken>`.
+pub enum AccessToken {}
+
+impl CredentialKind for AccessToken {
+    const NAME: &'static str = "AccessToken";
+}
+
+impl WireCredential for AccessToken {}
+
+impl Credential<AccessToken> {
     /// Takes a wrapper another owner shares, such as the token store of the
     /// Sync worker. No copy of the text is made.
     #[must_use]
     pub fn from_shared(secret: Arc<Secret<String>>) -> Self {
-        Self(secret)
+        Self {
+            secret,
+            kind: PhantomData,
+        }
     }
 }
 
-define_credential! {
-    /// A refresh token: the opaque credential `/auth/refresh` trades for a new
-    /// pair.
-    RefreshToken
+/// The role of a refresh token: the opaque credential `/auth/refresh` trades
+/// for a new pair. `Credential<RefreshToken>`.
+pub enum RefreshToken {}
+
+impl CredentialKind for RefreshToken {
+    const NAME: &'static str = "RefreshToken";
 }
 
-define_credential! {
-    /// A presigned object-store URL: it reads or writes one object until it
-    /// expires.
-    PresignedUrl
+impl WireCredential for RefreshToken {}
+
+/// The role of a presigned object-store URL: it reads or writes one object
+/// until it expires. `Credential<PresignedUrl>`.
+pub enum PresignedUrl {}
+
+impl CredentialKind for PresignedUrl {
+    const NAME: &'static str = "PresignedUrl";
 }
 
-impl PresignedUrl {
+impl WireCredential for PresignedUrl {}
+
+impl Credential<PresignedUrl> {
     /// Lends the full URL to `send`, the one call that sends the request.
     /// Nothing of the text outlives the call but what `send` copies. The
     /// primitive gate admits this name in the transport alone (`ARCH-049`).
     pub fn present_link<R>(&self, send: impl FnOnce(&str) -> R) -> R {
-        send(self.0.expose())
+        send(self.secret.expose())
     }
 
     /// The address without its query, which holds the signature. A log and
     /// an error show this part alone.
     #[must_use]
     pub fn object_address(&self) -> &str {
-        let text = self.0.expose();
+        let text = self.secret.expose();
         text.split_once('?')
             .map_or(text.as_str(), |(address, _)| address)
     }
 }
 
-define_credential! {
-    /// The authorization code an identity provider hands back to the client.
-    OidcCode
+/// The role of the authorization code an identity provider hands back to
+/// the client. `Credential<OidcCode>`.
+pub enum OidcCode {}
+
+impl CredentialKind for OidcCode {
+    const NAME: &'static str = "OidcCode";
 }
 
-define_credential! {
-    /// The CSRF state that binds a sign-in callback to the sign-in it began.
-    OidcState
+impl WireCredential for OidcCode {}
+
+/// The role of the CSRF state that binds a sign-in callback to the sign-in
+/// it began. `Credential<OidcState>`.
+pub enum OidcState {}
+
+impl CredentialKind for OidcState {
+    const NAME: &'static str = "OidcState";
 }
 
-impl OidcState {
+impl WireCredential for OidcState {}
+
+impl Credential<OidcState> {
     /// Lends the state to `store`, the one call that keeps it until the
     /// callback: the page's session storage. The primitive gate admits this
     /// name in that one file (`ARCH-049`).
     pub fn present_state<R>(&self, store: impl FnOnce(&str) -> R) -> R {
-        store(self.0.expose())
+        store(self.secret.expose())
     }
 }
 
@@ -429,8 +497,8 @@ mod tests {
     use zeroize::{Zeroize, ZeroizeOnDrop};
 
     use super::{
-        AccessToken, OidcCode, OidcState, Passphrase, PresignedUrl, RefreshToken, Secret,
-        SecretBytes, SecretString,
+        AccessToken, Credential, OidcCode, OidcState, Passphrase, PresignedUrl, RefreshToken,
+        Secret, SecretBytes, SecretString, WireCredential,
     };
 
     /// A value that counts the wipes it receives, so a test sees the drop
@@ -641,53 +709,56 @@ mod tests {
     #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
     struct Before(String);
 
-    #[test]
-    fn a_credential_travels_as_the_text_it_had_before_its_wrapper() {
-        let text = "https://store.test/o?sig=s3cr3t".to_owned();
-        let before = Before(text.clone());
+    /// One role's credential crosses JSON and postcard as the bare text of
+    /// [`Before`], and reads back from it.
+    fn round_trip<K: WireCredential>(text: &str) {
+        let before = Before(text.to_owned());
         let json = serde_json::to_string(&before).unwrap();
         let bytes = postcard::to_allocvec(&before).unwrap();
+        let value = Credential::<K>::new(text.to_owned());
+        assert_eq!(serde_json::to_string(&value).unwrap(), json);
+        assert_eq!(postcard::to_allocvec(&value).unwrap(), bytes);
+        let back: Credential<K> = serde_json::from_str(&json).unwrap();
+        assert!(back.matches(&value));
+        let back: Credential<K> = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(back.secret().expose(), text);
+        assert_eq!(
+            serde_json::from_str::<Before>(&serde_json::to_string(&back).unwrap()).unwrap(),
+            before
+        );
+    }
 
-        macro_rules! round_trip {
-            ($($name:ident),+) => {$(
-                let value = $name::new(text.clone());
-                assert_eq!(serde_json::to_string(&value).unwrap(), json);
-                assert_eq!(postcard::to_allocvec(&value).unwrap(), bytes);
-                let back: $name = serde_json::from_str(&json).unwrap();
-                assert!(back.matches(&value));
-                let back: $name = postcard::from_bytes(&bytes).unwrap();
-                assert_eq!(back.secret().expose(), &text);
-                assert_eq!(
-                    serde_json::from_str::<Before>(&serde_json::to_string(&back).unwrap())
-                        .unwrap(),
-                    before
-                );
-            )+};
-        }
-        round_trip!(AccessToken, RefreshToken, PresignedUrl, OidcCode, OidcState);
+    #[test]
+    fn a_credential_travels_as_the_text_it_had_before_its_wrapper() {
+        let text = "https://store.test/o?sig=s3cr3t";
+        round_trip::<AccessToken>(text);
+        round_trip::<RefreshToken>(text);
+        round_trip::<PresignedUrl>(text);
+        round_trip::<OidcCode>(text);
+        round_trip::<OidcState>(text);
     }
 
     #[test]
     fn a_credential_prints_no_byte_and_compares_in_constant_time() {
-        let url = PresignedUrl::new("https://store.test/o?sig=s3cr3t".to_owned());
+        let url = Credential::<PresignedUrl>::new("https://store.test/o?sig=s3cr3t".to_owned());
         assert_eq!(format!("{url:?}"), "PresignedUrl(Secret([REDACTED]))");
         assert_eq!(url.object_address(), "https://store.test/o");
         assert_eq!(
             url.present_link(str::to_owned),
             "https://store.test/o?sig=s3cr3t"
         );
-        let state = OidcState::new("st4te".to_owned());
-        assert!(state.matches(&OidcState::new("st4te".to_owned())));
-        assert!(!state.matches(&OidcState::new("st4tf".to_owned())));
+        let state = Credential::<OidcState>::new("st4te".to_owned());
+        assert!(state.matches(&Credential::new("st4te".to_owned())));
+        assert!(!state.matches(&Credential::new("st4tf".to_owned())));
         assert_eq!(state.present_state(str::to_owned), "st4te");
         assert_eq!(
             [
-                Probe::<AccessToken>::PARTIAL_EQ,
-                Probe::<RefreshToken>::PARTIAL_EQ,
-                Probe::<PresignedUrl>::PARTIAL_EQ,
-                Probe::<OidcCode>::PARTIAL_EQ,
-                Probe::<OidcState>::PARTIAL_EQ,
-                Probe::<AccessToken>::DISPLAY,
+                Probe::<Credential<AccessToken>>::PARTIAL_EQ,
+                Probe::<Credential<RefreshToken>>::PARTIAL_EQ,
+                Probe::<Credential<PresignedUrl>>::PARTIAL_EQ,
+                Probe::<Credential<OidcCode>>::PARTIAL_EQ,
+                Probe::<Credential<OidcState>>::PARTIAL_EQ,
+                Probe::<Credential<AccessToken>>::DISPLAY,
             ],
             [false; 6]
         );
@@ -696,7 +767,7 @@ mod tests {
     #[test]
     fn a_shared_access_token_is_the_same_wrapper() {
         let shared = Arc::new(Secret::new("acc".to_owned()));
-        let token = AccessToken::from_shared(Arc::clone(&shared));
+        let token = Credential::<AccessToken>::from_shared(Arc::clone(&shared));
         assert!(std::ptr::eq(token.secret(), shared.as_ref()));
     }
 }

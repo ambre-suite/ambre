@@ -246,6 +246,7 @@
   {"edge": "verified-by", "from": "ARCH-045", "to": "ambre_primitives::secrets::tests::the_token_of_the_sync_worker_at_66bec579_is_refused"},
   {"edge": "verified-by", "from": "ARCH-045", "to": "::every_reader_is_refused_outside_ambre_crypto_in_each_form"},
   {"edge": "verified-by", "from": "ARCH-045", "to": "::another_file_of_ambre_core_is_no_secret_module"},
+  {"edge": "verified-by", "from": "ARCH-045", "to": "::the_credential_serde_reads_its_secret_in_the_secret_module_alone"},
   {"edge": "verified-by", "from": "ARCH-045", "to": "::the_crypto_crate_reads_a_secret_and_the_secret_module_wipes_one"},
   {"edge": "verified-by", "from": "ARCH-045", "to": "::a_name_inside_a_macro_or_an_attribute_is_refused_and_a_string_is_not"},
   {"edge": "verified-by", "from": "ARCH-045", "to": "::test_code_is_never_refused"},

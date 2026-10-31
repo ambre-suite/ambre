@@ -3265,6 +3265,19 @@ ambre-core | src/secret.rs | crate::secret | Passphrase::is_empty() | ret | bool
 ambre-core | src/secret.rs | crate::secret | Passphrase::matches() | ret | bool	generic	a constant-time predicate
 ambre-core | src/secret.rs | crate::secret | Passphrase::new(text) | param | String	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | Passphrase::secret() | ret | &Secret<String>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | Credential.secret | field | Arc<Secret<String>>	newtype-inner	the shared wrapper of the generic credential, a PhantomData marker apart
+ambre-core | src/secret.rs | crate::secret | Credential<K>::new(text) | param | String	newtype-inner	the bearer text the generic credential wraps
+ambre-core | src/secret.rs | crate::secret | Credential<K>::secret() | ret | &Secret<String>	newtype-inner	the shared wrapper, for the code the gate admits to read the text
+ambre-core | src/secret.rs | crate::secret | Credential<K>::matches() | ret | bool	generic	a constant-time predicate
+ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::from_shared(secret) | param | Arc<Secret<String>>	newtype-inner	the shared wrapper of a credential, taken with no copy
+ambre-core | src/secret.rs | crate::secret | Credential<OidcState>::present_state(store) | param | impl FnOnce(&str)->R	generic	lends the state text to the one foreign call that stores it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
+ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | <AccessToken as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/secret.rs | crate::secret | <OidcCode as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/secret.rs | crate::secret | <OidcState as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/secret.rs | crate::secret | <PresignedUrl as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/secret.rs | crate::secret | <RefreshToken as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-core | src/secret.rs | crate::secret | SecretBytes.0 | field | Arc<Secret<Vec<u8>>>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretBytes::into_plaintext() | ret | Vec<u8>	newtype-inner	the opened bytes moved out with no copy, into a role that keeps them in the clear by design; the wrapper is left empty, and a shared wrapper hands out a copy that leaves the original to its other owner, who wipes it (ARCH-047)
 ambre-core | src/secret.rs | crate::secret | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype over a shared ambre_core::Secret
@@ -3309,10 +3322,6 @@ ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(renamed) | p
 ambre-core | src/credential.rs | crate::credential | ProviderUrl.0 | field | String	newtype-inner	the provider address, which the browser shows in clear
 ambre-core | src/credential.rs | crate::credential | ProviderUrl::as_str() | ret | &str	newtype-inner	the provider address, which the browser shows in clear
 ambre-core | src/credential.rs | crate::credential | ProviderUrl::new(text) | param | String	newtype-inner	the provider address, which the browser shows in clear
-ambre-core | src/secret.rs | crate::secret | AccessToken::from_shared(secret) | param | Arc<Secret<String>>	newtype-inner	the shared wrapper of a credential newtype
-ambre-core | src/secret.rs | crate::secret | OidcState::present_state(store) | param | impl FnOnce(&str)->R	generic	lends the state text to the one foreign call that stores it (ARCH-049)
-ambre-core | src/secret.rs | crate::secret | PresignedUrl::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
-ambre-core | src/secret.rs | crate::secret | PresignedUrl::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count(pred) | param | impl Fn(&DrawOp)->bool	generic	a predicate over the recorded operations
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::clips_balanced() | ret | bool	generic	predicate result
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::holds_walk() | ret | bool	generic	predicate or handled-flag result

@@ -18,7 +18,7 @@ use std::collections::HashSet;
 use ambre_core::Secret;
 
 use crate::secrets::SeedText;
-use ambre_protocol::ws::AccessToken;
+use ambre_protocol::ws::{AccessToken, Credential};
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -176,14 +176,20 @@ impl JwtKeys {
     }
 
     /// Mint a signed access token for `claims`.
-    pub fn mint(&self, claims: &Claims) -> Result<AccessToken, jsonwebtoken::errors::Error> {
+    pub fn mint(
+        &self,
+        claims: &Claims,
+    ) -> Result<Credential<AccessToken>, jsonwebtoken::errors::Error> {
         jsonwebtoken::encode(&Header::new(Algorithm::EdDSA), claims, &self.encoding)
-            .map(AccessToken::new)
+            .map(Credential::new)
     }
 
     /// Verify a token's signature and expiry, returning its claims. A `sub`
     /// that is not a user id fails the decode.
-    pub fn verify(&self, token: &AccessToken) -> Result<Claims, jsonwebtoken::errors::Error> {
+    pub fn verify(
+        &self,
+        token: &Credential<AccessToken>,
+    ) -> Result<Claims, jsonwebtoken::errors::Error> {
         Ok(
             crate::secrets::token::decode_access::<Claims>(
                 token,

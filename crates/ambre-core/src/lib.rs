@@ -167,8 +167,8 @@ pub use schema::{
 };
 pub use search::{SearchQuery, UserSearch};
 pub use secret::{
-    AccessToken, OidcCode, OidcState, Passphrase, PresignedUrl, RefreshToken, Secret, SecretBytes,
-    SecretString,
+    AccessToken, Credential, CredentialKind, OidcCode, OidcState, Passphrase, PresignedUrl,
+    RefreshToken, Secret, SecretBytes, SecretString, WireCredential,
 };
 pub use seq::{DeltaCount, Seq};
 pub use span::{

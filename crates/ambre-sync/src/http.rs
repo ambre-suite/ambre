@@ -221,7 +221,7 @@ pub(crate) enum Target {
     /// A route of the relay.
     Relay(RelayUrl),
     /// An object in storage, through its presigned link.
-    Object(ambre_core::PresignedUrl),
+    Object(ambre_core::Credential<ambre_core::PresignedUrl>),
 }
 
 impl Target {
@@ -263,8 +263,8 @@ impl From<&RelayUrl> for Target {
     }
 }
 
-impl From<&ambre_core::PresignedUrl> for Target {
-    fn from(link: &ambre_core::PresignedUrl) -> Self {
+impl From<&ambre_core::Credential<ambre_core::PresignedUrl>> for Target {
+    fn from(link: &ambre_core::Credential<ambre_core::PresignedUrl>) -> Self {
         Self::Object(link.clone())
     }
 }
@@ -1044,7 +1044,7 @@ pub(crate) async fn delete_status_auth(
 /// `ZK-001`).
 #[allow(dead_code)]
 pub(crate) async fn put_sealed(
-    url: &ambre_core::PresignedUrl,
+    url: &ambre_core::Credential<ambre_core::PresignedUrl>,
     blob: &crate::pipeline::SealedBlob,
 ) -> Result<(), HttpError> {
     put_sealed_via(&Fetch, url, blob).await
@@ -1054,7 +1054,7 @@ pub(crate) async fn put_sealed(
 /// link is its own.
 pub(crate) async fn put_sealed_via(
     transport: &impl Transport,
-    url: &ambre_core::PresignedUrl,
+    url: &ambre_core::Credential<ambre_core::PresignedUrl>,
     blob: &crate::pipeline::SealedBlob,
 ) -> Result<(), HttpError> {
     let request = Outgoing {
@@ -1102,7 +1102,7 @@ pub(crate) async fn post_json_auth_ok<T: Serialize>(
 }
 
 pub(crate) async fn fetch_bytes(
-    url: &ambre_core::PresignedUrl,
+    url: &ambre_core::Credential<ambre_core::PresignedUrl>,
 ) -> Result<crate::pipeline::FetchedBlob, HttpError> {
     let request = Outgoing::new(Method::Get, url.into());
     let resp = exchange(&Fetch, &request).await?;
@@ -1155,14 +1155,14 @@ pub(crate) struct DevLoginResponse {
 #[derive(Deserialize)]
 pub(crate) struct ProviderLoginResponse {
     pub url: ambre_core::ProviderUrl,
-    pub state: ambre_core::OidcState,
+    pub state: ambre_core::Credential<ambre_core::OidcState>,
 }
 
 /// The provider's return, posted to `/api/auth/{provider}/callback`.
 #[derive(Serialize)]
 pub(crate) struct ProviderCallbackRequest {
-    pub code: ambre_core::OidcCode,
-    pub state: ambre_core::OidcState,
+    pub code: ambre_core::Credential<ambre_core::OidcCode>,
+    pub state: ambre_core::Credential<ambre_core::OidcState>,
 }
 
 /// The relay's answer to a provider return: who signed in, and their tokens.
@@ -1714,7 +1714,7 @@ pub(crate) struct ReportSnapshotRequest {
 /// URL plus the S3 key the server will reference when the upload is confirmed.
 #[derive(Deserialize)]
 pub(crate) struct SnapshotUploadUrlResponse {
-    pub upload_url: ambre_core::PresignedUrl,
+    pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
     pub s3_key: ambre_core::ObjectKey,
 }
 
@@ -1746,7 +1746,7 @@ pub(crate) struct SnapshotDownloadUrlRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct SnapshotDownloadUrlResponse {
-    pub download_url: ambre_core::PresignedUrl,
+    pub download_url: ambre_core::Credential<ambre_core::PresignedUrl>,
 }
 
 #[derive(Deserialize)]
@@ -1961,7 +1961,7 @@ pub(crate) struct UploadUrlRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct UploadUrlResponse {
-    pub upload_url: ambre_core::PresignedUrl,
+    pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
     #[allow(dead_code)]
     pub s3_key: ambre_core::ObjectKey,
 }
@@ -1973,7 +1973,7 @@ pub(crate) struct DownloadUrlRequest {
 
 #[derive(Deserialize)]
 pub(crate) struct DownloadUrlResponse {
-    pub download_url: ambre_core::PresignedUrl,
+    pub download_url: ambre_core::Credential<ambre_core::PresignedUrl>,
 }
 
 /// Confirms one put. The same two fields as [`UploadUrlRequest`] (`SYNC-053`).
@@ -2374,7 +2374,7 @@ mod tests {
     /// toast.
     #[tokio::test]
     async fn a_failed_presigned_request_reads_without_its_signature() {
-        let link = ambre_core::PresignedUrl::new(
+        let link = ambre_core::Credential::<ambre_core::PresignedUrl>::new(
             "https://store.test/bucket/object?X-Amz-Signature=secret-sig".to_owned(),
         );
         let blob = crate::pipeline::object_blob(

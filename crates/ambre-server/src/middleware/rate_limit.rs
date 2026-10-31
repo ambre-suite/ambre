@@ -133,7 +133,7 @@ impl std::fmt::Display for Peer {
 fn request_bucket(jwt: &crate::jwt::JwtKeys, trust_proxy: ProxyTrust, req: &Request) -> RateBucket {
     let header = |name: &str| req.headers().get(name).and_then(|v| v.to_str().ok());
     if let Some(token) = header("authorization").and_then(|h| h.strip_prefix("Bearer "))
-        && let Ok(claims) = jwt.verify(&ambre_protocol::ws::AccessToken::new(
+        && let Ok(claims) = jwt.verify(&ambre_protocol::ws::Credential::new(
             token.trim().to_owned(),
         ))
     {

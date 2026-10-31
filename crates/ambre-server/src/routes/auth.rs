@@ -65,9 +65,9 @@ pub struct DevLoginResponse {
     pub user_id: ambre_core::UserId,
     pub display_name: ambre_core::DisplayName,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
-    pub access_token: ambre_protocol::ws::AccessToken,
+    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
     pub access_expires_in: ambre_core::Seconds,
 }
@@ -128,14 +128,14 @@ fn account_session_key(
 /// Request body for `POST /api/auth/refresh`: the opaque refresh token.
 #[derive(serde::Deserialize)]
 pub struct RefreshRequest {
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
 }
 
 /// Response for `POST /api/auth/refresh`: a freshly rotated token pair.
 #[derive(serde::Serialize)]
 pub struct RefreshResponse {
-    pub access_token: ambre_protocol::ws::AccessToken,
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     pub access_expires_in: ambre_core::Seconds,
 }
 

@@ -1890,7 +1890,7 @@ mod handler_tests {
         let token = access_token_of(stored).await;
         let session = crate::auth::authenticate_token(
             &state,
-            &ambre_protocol::ws::AccessToken::new(token.clone()),
+            &ambre_protocol::ws::Credential::new(token.clone()),
         )
         .unwrap();
         assert_eq!(
@@ -2413,7 +2413,7 @@ mod handler_tests {
     /// The `Authenticate` frame for `token`, encoded.
     fn authenticate(token: &str) -> Vec<u8> {
         encode_client_msg(&WsClientMsg::Authenticate {
-            token: ambre_protocol::ws::AccessToken::new(token.to_owned()),
+            token: ambre_protocol::ws::Credential::new(token.to_owned()),
         })
         .into_bytes()
     }
@@ -2463,7 +2463,7 @@ mod handler_tests {
         use tokio_tungstenite::tungstenite::Message;
 
         let first = WsClientMsg::Authenticate {
-            token: ambre_protocol::ws::AccessToken::new(token.to_owned()),
+            token: ambre_protocol::ws::Credential::new(token.to_owned()),
         };
         let reply = first_reply(state, "", &first).await;
         let Message::Close(Some(frame)) = reply else {

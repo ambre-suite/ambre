@@ -2072,8 +2072,8 @@ mod tests {
             },
             RestCommand::ProviderReturn {
                 provider: ambre_core::OidcProvider::Google,
-                code: ambre_core::OidcCode::new("c".to_owned()),
-                state: ambre_core::OidcState::new("s".to_owned()),
+                code: ambre_core::Credential::new("c".to_owned()),
+                state: ambre_core::Credential::new("s".to_owned()),
             },
         ];
         for cmd in &all {
