@@ -17,6 +17,7 @@ use crate::error::MurmureError;
 use crate::schema::{MessageKey, Root};
 use crate::session::next_peer;
 use crate::{ChangeTarget, ChannelState, ChannelType, FINALIZE_RETRY, FOLD_DELAY, Replay, Signer};
+use ambre_core::{Ms, TimeSpan};
 
 const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 const LEASE_MS: u64 = 30_000;
@@ -101,7 +102,7 @@ fn amended() -> Amended {
         segment,
         Id::<Lease>::mint(),
         ambre_core::Seq::new(0),
-        ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+        TimeSpan::<Ms>::new(LEASE_MS),
     );
     let sealed = alice
         .final_snapshot(NOW, ambre_core::Seq::new(0))
@@ -208,7 +209,7 @@ impl Amended {
                 horizon: ambre_core::Seq::new(0),
                 amendments: self.amendments,
                 amendments_seq: ambre_core::Seq::new(3),
-                expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+                expires_in: TimeSpan::<Ms>::new(LEASE_MS),
             },
         );
         self.alice
@@ -249,7 +250,7 @@ fn the_fold_lease_is_asked_as_the_relay_says() {
     alice.fold_answered(
         segment,
         FoldAnswer::Deferred {
-            retry_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(5_000),
+            retry_in: TimeSpan::<Ms>::new(5_000),
         },
     );
     assert_eq!(alice.fold_lease_to_ask(NOW), None, "the tick dates it");
@@ -316,7 +317,7 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
             horizon: ambre_core::Seq::new(0),
             amendments,
             amendments_seq: ambre_core::Seq::new(4),
-            expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+            expires_in: TimeSpan::<Ms>::new(LEASE_MS),
         },
     );
     assert!(
@@ -330,7 +331,7 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
             horizon: ambre_core::Seq::new(0),
             amendments,
             amendments_seq: ambre_core::Seq::new(3),
-            expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+            expires_in: TimeSpan::<Ms>::new(LEASE_MS),
         },
     );
     let fold = amended
@@ -403,7 +404,7 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
             horizon: ambre_core::Seq::new(0),
             amendments: Id::<Document>::mint(),
             amendments_seq: ambre_core::Seq::new(1),
-            expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+            expires_in: TimeSpan::<Ms>::new(LEASE_MS),
         },
     );
     assert!(alice.fold_snapshot(NOW).expect("fold").is_none());
@@ -420,7 +421,7 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
             horizon: ambre_core::Seq::new(0),
             amendments,
             amendments_seq: ambre_core::Seq::new(9),
-            expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(LEASE_MS),
+            expires_in: TimeSpan::<Ms>::new(LEASE_MS),
         },
     );
     let base = FINALIZE_RETRY.get();

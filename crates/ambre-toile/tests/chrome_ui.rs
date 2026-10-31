@@ -39,6 +39,7 @@ use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts};
 use ambre_commands::CommandId;
 use ambre_core::id::{Document, Frame, Id, Thread, User};
+use ambre_core::{Authored, Instant};
 use ambre_core::{CharCount, CharOffset};
 use ambre_core::{Doc, Scale, View};
 use ambre_draw::Rect;
@@ -1140,7 +1141,7 @@ async fn the_comment_panel_shows_what_the_board_answered() {
         resolved: ambre_core::ThreadState::Open,
         messages: vec![CommentMessage {
             author: Id::<User>::mint(),
-            ts: ambre_core::Instant::<ambre_core::Authored>::new(0),
+            ts: Instant::<Authored>::new(0),
             body: "read back".to_owned(),
         }],
     }));

@@ -658,6 +658,7 @@ mod inner_tests {
     use crate::logic::state::ToileState;
     use ambre_bus::Token;
     use ambre_core::id::{Element, Id, User};
+    use ambre_core::{Authored, Instant};
 
     fn rect_at(st: &mut ToileState, x: f64) -> Id<Element> {
         st.create_element_inner(
@@ -825,7 +826,7 @@ mod inner_tests {
                 ToileCommand::CreateComment {
                     anchor: CommentAnchor::Point(Point::new(1.0, 1.0)),
                     body: "late".to_owned(),
-                    ts: ambre_core::Instant::<ambre_core::Authored>::new(1),
+                    ts: Instant::<Authored>::new(1),
                 },
             ),
         ];

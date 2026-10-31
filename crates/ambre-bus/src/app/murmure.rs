@@ -343,7 +343,7 @@ pub struct Picture {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PictureFrame {
     pub pixels: ambre_core::Payload<ambre_core::RgbaPixels>,
-    pub delay: ambre_core::TimeSpan<ambre_core::Ms>,
+    pub delay: TimeSpan<Ms>,
 }
 
 impl Picture {
@@ -715,6 +715,7 @@ pub struct SearchMatch {
 /// Who registered the segment a close moves to. The Sync worker answers it,
 /// so it lives on the event plane, and the worker names no app message.
 pub use crate::event::Successor;
+use ambre_core::{Ms, TimeSpan};
 
 /// What a search found in one open channel, and which part of its history
 /// it read (the Murmure search spec).

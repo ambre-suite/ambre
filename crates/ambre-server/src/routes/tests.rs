@@ -631,7 +631,7 @@ mod handler_tests {
                 &doc,
                 &aa,
                 &sample,
-                ambre_core::TimeSpan::<ambre_core::Sec>::new(15)
+                TimeSpan::<Sec>::new(15)
             )
             .await
         ));
@@ -1412,7 +1412,7 @@ mod handler_tests {
         for (configured, minted) in [(24 * 3600, 900), (60, 60)] {
             let state = AppState {
                 config: Arc::new(Config {
-                    access_ttl: ambre_core::TimeSpan::<ambre_core::Sec>::new(configured),
+                    access_ttl: TimeSpan::<Sec>::new(configured),
                     ..Config::default()
                 }),
                 ..(*base).clone()
@@ -1421,14 +1421,8 @@ mod handler_tests {
                 .await
                 .unwrap();
             let claims = state.jwt.verify(&tokens.access_token).unwrap();
-            assert_eq!(
-                claims.exp.since(claims.iat),
-                ambre_core::TimeSpan::<ambre_core::Sec>::new(minted)
-            );
-            assert_eq!(
-                tokens.access_expires_in,
-                ambre_core::TimeSpan::<ambre_core::Sec>::new(minted)
-            );
+            assert_eq!(claims.exp.since(claims.iat), TimeSpan::<Sec>::new(minted));
+            assert_eq!(tokens.access_expires_in, TimeSpan::<Sec>::new(minted));
         }
     }
 
@@ -2640,6 +2634,7 @@ mod handler_tests {
     }
 
     use crate::test_helpers::{S3Stub, offline_s3};
+    use ambre_core::{Sec, TimeSpan};
 
     /// Like [`test_app_state`], with the given S3 client.
     async fn test_app_state_with_s3(pool: sqlx::PgPool, s3: aws_sdk_s3::Client) -> Arc<AppState> {

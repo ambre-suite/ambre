@@ -102,7 +102,7 @@ pub struct DocumentSummary {
     pub name: Option<ambre_core::Name>,
     pub role: Role,
     /// Epoch milliseconds.
-    pub updated_at: crate::Instant<crate::Authored>,
+    pub updated_at: Instant<Authored>,
     /// Total member count (routing metadata, plaintext). `> 1` => shared.
     pub member_count: ambre_core::MemberCount,
 }

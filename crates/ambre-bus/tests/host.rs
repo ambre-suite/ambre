@@ -32,6 +32,7 @@ use ambre_core::id::{
     Channel, Document, Element, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
 };
 use ambre_core::{BoardLength, Generation};
+use ambre_core::{Ms, PageLoad, TimeSpan};
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
 
@@ -782,7 +783,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
                 horizon: ambre_bus::Seq::new(42),
-                expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         },
         LogicEvent::SegmentFinalized {
@@ -803,7 +804,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 horizon: ambre_bus::Seq::new(42),
                 amendments: Id::<Document>::mint(),
                 amendments_seq: ambre_bus::Seq::new(7),
-                expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         },
         LogicEvent::SegmentFolded {
@@ -1005,7 +1006,7 @@ fn read_only_and_local_commands_are_not_mutating() {
         // Toile: ephemeral only -- a viewer still shows a cursor (`toile-presence`).
         AppCommand::Toile(ToileCommand::Presence {
             payload: PresencePayload::default(),
-            now: ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
+            now: Instant::<PageLoad>::new(0.0),
         }),
     ];
     for cmd in cases {

@@ -1307,7 +1307,7 @@ pub struct Reaction {
     pub kind: ReactionKind,
     /// Stored as the `i64` the reactions sub-map was frozen with.
     #[serde(with = "ambre_core::span::stored_as_i64")]
-    pub ts: ambre_core::Instant<ambre_core::Authored>,
+    pub ts: Instant<Authored>,
 }
 
 /// The two reaction flavours (`toile-reactions`): a free-form emoji or
@@ -1405,6 +1405,7 @@ ambre_core::define_tally! {
 }
 
 pub use ambre_core::IdCounter;
+use ambre_core::{Authored, Instant, PageLoad};
 
 /// Read-time tally derived from a target's reaction sub-map
 /// (`toile-reactions`). Never stored
@@ -1443,7 +1444,7 @@ pub enum CommentAnchor {
 #[derive(Clone, PartialEq, Eq)]
 pub struct CommentMessage {
     pub author: Id<User>,
-    pub ts: ambre_core::Instant<ambre_core::Authored>,
+    pub ts: Instant<Authored>,
     pub body: String,
 }
 
@@ -2116,7 +2117,7 @@ pub enum ToileCommand {
     CreateComment {
         anchor: CommentAnchor,
         body: String,
-        ts: ambre_core::Instant<ambre_core::Authored>,
+        ts: Instant<Authored>,
     },
     /// Append a message to `thread`. Same clock rule and same history exemption
     /// as [`CreateComment`](Self::CreateComment). A missing thread is a rejected
@@ -2124,7 +2125,7 @@ pub enum ToileCommand {
     ReplyComment {
         thread: Id<Thread>,
         body: String,
-        ts: ambre_core::Instant<ambre_core::Authored>,
+        ts: Instant<Authored>,
     },
     /// Splice the body of the author's own message `message` (its index in the
     /// thread's message list). The body is a `LoroText`, so a self-edit
@@ -2364,7 +2365,7 @@ pub enum ToileCommand {
     /// always advances.
     Presence {
         payload: PresencePayload,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     },
 }
 
@@ -3150,6 +3151,7 @@ impl fmt::Debug for DisplayConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::{Authored, Instant};
 
     /// A minted id spells its peer and its counter in fixed-width hex, as the
     /// board stores it. An id written before the counter was typed reads the
@@ -3196,7 +3198,7 @@ mod tests {
             ..TextDelta::default()
         };
         let address = WebAddress::parse("https://a.example").expect("an address");
-        let ts = ambre_core::Instant::<ambre_core::Authored>::default();
+        let ts = Instant::<Authored>::default();
         let message = CommentMessage {
             author: Id::<User>::mint(),
             ts,

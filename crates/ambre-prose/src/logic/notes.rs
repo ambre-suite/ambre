@@ -184,6 +184,7 @@ mod tests {
     };
     use crate::logic::ProseOutcome;
     use ambre_bus::app::prose::DocSpan;
+    use ambre_core::{Authored, Instant};
 
     fn refusal(outcome: &ProseOutcome) -> Option<ProseRefusal> {
         outcome.display.iter().find_map(|event| match event {
@@ -542,7 +543,7 @@ mod tests {
             block_id: block,
             range: DocSpan::from_usize_range(0..2),
             text: "a thread".to_owned(),
-            now: ambre_core::Instant::<ambre_core::Authored>::new(0),
+            now: Instant::<Authored>::new(0),
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::CommentInNote));
         let outcome = state.handle_command(ProseCommand::SplitBlock {

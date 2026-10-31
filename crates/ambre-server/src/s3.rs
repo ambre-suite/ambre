@@ -48,6 +48,7 @@ use ambre_core::id::{Document, Id, Snapshot};
 use crate::error::AppError;
 use crate::payload::Payload;
 use crate::redis_keys::{FlushLockKey, PendingKey};
+use ambre_core::{Instant, Sec, TimeSpan, UnixSec};
 
 /// Defines a text the object store names a place with. Each is its own type,
 /// so a bucket never takes the place of a key prefix in one signature.
@@ -146,12 +147,11 @@ pub fn format_s3_media_key(
 }
 
 /// The longest a presigned URL may live: 15 minutes (`ZK-014`, `SRV-052`).
-pub const PRESIGNED_URL_MAX_TTL: ambre_core::TimeSpan<ambre_core::Sec> =
-    ambre_core::TimeSpan::<ambre_core::Sec>::new(15 * 60);
+pub const PRESIGNED_URL_MAX_TTL: TimeSpan<Sec> = TimeSpan::<Sec>::new(15 * 60);
 
 /// The lifetime a presigned URL is signed for: the configured one, held under
 /// the ceiling. A misconfigured day comes out as 15 minutes.
-fn presign_lifetime(ttl: ambre_core::TimeSpan<ambre_core::Sec>) -> Duration {
+fn presign_lifetime(ttl: TimeSpan<Sec>) -> Duration {
     ttl.min(PRESIGNED_URL_MAX_TTL).to_duration()
 }
 
@@ -168,7 +168,7 @@ pub async fn generate_presigned_upload_url(
     s3: &S3Client,
     bucket: &BucketName,
     key: &ambre_core::ObjectKey,
-    ttl: ambre_core::TimeSpan<ambre_core::Sec>,
+    ttl: TimeSpan<Sec>,
     content_length: ambre_core::ByteSize,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
@@ -189,7 +189,7 @@ pub async fn generate_presigned_download_url(
     s3: &S3Client,
     bucket: &BucketName,
     key: &ambre_core::ObjectKey,
-    ttl: ambre_core::TimeSpan<ambre_core::Sec>,
+    ttl: TimeSpan<Sec>,
 ) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
@@ -381,20 +381,17 @@ async fn flush_cycle(state: &crate::state::AppState, kind: Cycle) {
 /// How long the per-document flush lock lives. It comfortably exceeds one
 /// flush; if the holder dies mid-flush the lock expires and the next cycle
 /// retries.
-const FLUSH_LOCK_TTL: ambre_core::TimeSpan<ambre_core::Sec> =
-    ambre_core::TimeSpan::<ambre_core::Sec>::new(60);
+const FLUSH_LOCK_TTL: TimeSpan<Sec> = TimeSpan::<Sec>::new(60);
 
 /// How long a write that began before a delete may still land after it
 /// (`SRV-057`). A presigned upload link stays valid for its lifetime. A flush
 /// holds its lock at most `FLUSH_LOCK_TTL`, and a minute of margin covers
 /// the requests in flight. The tombstone lives this long, and the
 /// second sweep of the objects runs once it has passed.
-pub fn late_write_window(
-    presigned_url_ttl: ambre_core::TimeSpan<ambre_core::Sec>,
-) -> ambre_core::TimeSpan<ambre_core::Sec> {
+pub fn late_write_window(presigned_url_ttl: TimeSpan<Sec>) -> TimeSpan<Sec> {
     // `presign_lifetime` caps the configured TTL, so the sum stays far below
     // the bound. Saturating keeps a window that never ends if it did not.
-    ambre_core::TimeSpan::<ambre_core::Sec>::new(
+    TimeSpan::<Sec>::new(
         presign_lifetime(presigned_url_ttl)
             .as_secs()
             .saturating_add(FLUSH_LOCK_TTL.get())
@@ -403,11 +400,11 @@ pub fn late_write_window(
 }
 
 /// The current instant: the clock of a token's `iat` and of a delete's sweep.
-pub fn unix_now() -> ambre_core::Instant<ambre_core::UnixSec> {
+pub fn unix_now() -> Instant<UnixSec> {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(ambre_core::Instant::EPOCH, |d| {
-            ambre_core::Instant::after_epoch(ambre_core::TimeSpan::from_duration(d))
+        .map_or(Instant::EPOCH, |d| {
+            Instant::after_epoch(TimeSpan::from_duration(d))
         })
 }
 
@@ -604,6 +601,7 @@ async fn drain_front(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::{Sec, TimeSpan};
 
     /// The deployment prefix `text`.
     fn env(text: &str) -> EnvPrefix {
@@ -797,7 +795,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
-            ambre_core::TimeSpan::<ambre_core::Sec>::new(900),
+            TimeSpan::<Sec>::new(900),
             ambre_core::ByteSize::new(4096),
         )
         .await
@@ -828,7 +826,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
-            ambre_core::TimeSpan::<ambre_core::Sec>::new(day),
+            TimeSpan::<Sec>::new(day),
             ambre_core::ByteSize::new(1),
         )
         .await
@@ -840,7 +838,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
-            ambre_core::TimeSpan::<ambre_core::Sec>::new(day),
+            TimeSpan::<Sec>::new(day),
         )
         .await
         .expect("presign")
@@ -854,7 +852,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
-            ambre_core::TimeSpan::<ambre_core::Sec>::new(60),
+            TimeSpan::<Sec>::new(60),
         )
         .await
         .expect("presign")

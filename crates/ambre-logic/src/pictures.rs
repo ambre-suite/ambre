@@ -143,7 +143,7 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
                 size,
                 frames: vec![PictureFrame {
                     pixels: scale(image, size),
-                    delay: ambre_core::TimeSpan::<ambre_core::Ms>::new(0),
+                    delay: TimeSpan::<Ms>::new(0),
                 }],
             })
         }
@@ -186,6 +186,7 @@ fn delay(ms: TimeSpan<Ms>) -> TimeSpan<Ms> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::{Ms, TimeSpan};
     use image::codecs::gif::{GifEncoder, Repeat};
     use image::{Delay, Frame, Rgba};
 
@@ -226,7 +227,7 @@ mod tests {
             picture
                 .frames
                 .iter()
-                .all(|f| f.delay == ambre_core::TimeSpan::<ambre_core::Ms>::new(70))
+                .all(|f| f.delay == TimeSpan::<Ms>::new(70))
         );
         assert!(
             picture

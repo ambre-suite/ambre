@@ -19,6 +19,7 @@ use ambre_core::Secret;
 use ambre_core::id::{Id, User};
 
 use crate::secrets::SeedText;
+use ambre_core::{Instant, UnixSec};
 use ambre_protocol::ws::{AccessToken, Credential};
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::pkcs8::EncodePrivateKey;
@@ -37,8 +38,8 @@ pub struct Claims {
     pub sub: Id<User>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spk: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
-    pub iat: ambre_core::Instant<ambre_core::UnixSec>,
-    pub exp: ambre_core::Instant<ambre_core::UnixSec>,
+    pub iat: Instant<UnixSec>,
+    pub exp: Instant<UnixSec>,
 }
 
 /// The Ed25519 key the access tokens are signed under, from the 32-byte seed

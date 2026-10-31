@@ -51,6 +51,7 @@ use ambre_bus::app::toile::ThreadMessageCount;
 
 use super::ToileState;
 use super::names::{FieldValues, Fields, MessageKey, Root, ThreadKey, entry};
+use ambre_core::{Authored, Instant};
 
 /// How many characters of the opening message the board-wide list carries. The
 /// panel shows a row per thread, and a row is a line: the rest of the
@@ -68,7 +69,7 @@ impl ToileState {
         &mut self,
         anchor: &CommentAnchor,
         body: &str,
-        ts: ambre_core::Instant<ambre_core::Authored>,
+        ts: Instant<Authored>,
     ) -> ToileOutcome {
         // A session with no identity has no author to write under. The UI cannot
         // reach this pre-`SessionReady`; guard anyway.
@@ -114,7 +115,7 @@ impl ToileState {
         thread: &Id<Thread>,
         anchor: Vec<u8>,
         author: Id<User>,
-        ts: ambre_core::Instant<ambre_core::Authored>,
+        ts: Instant<Authored>,
         body: &str,
     ) -> Option<()> {
         let map = self
@@ -138,7 +139,7 @@ impl ToileState {
         &mut self,
         thread: &Id<Thread>,
         body: &str,
-        ts: ambre_core::Instant<ambre_core::Authored>,
+        ts: Instant<Authored>,
     ) -> ToileOutcome {
         let Some(author) = self.my_user_id else {
             return ToileOutcome::display_only(Vec::new());
@@ -404,7 +405,7 @@ impl ToileState {
 fn push_message(
     messages: &LoroMovableList,
     author: Id<User>,
-    ts: ambre_core::Instant<ambre_core::Authored>,
+    ts: Instant<Authored>,
     body: &str,
 ) -> Option<()> {
     let map = Fields::<MessageKey>::of(messages.push_container(LoroMap::new()).ok()?);
@@ -448,8 +449,8 @@ fn read_message(value: &LoroValue) -> Option<CommentMessage> {
     };
     let author = Id::<User>::parse_str(author).ok()?;
     let ts = match fields.get(MessageKey::Ts) {
-        Some(LoroValue::I64(ts)) => ambre_core::Instant::<ambre_core::Authored>::from_i64(*ts),
-        _ => ambre_core::Instant::<ambre_core::Authored>::default(),
+        Some(LoroValue::I64(ts)) => Instant::<Authored>::from_i64(*ts),
+        _ => Instant::<Authored>::default(),
     };
     let body = match fields.get(MessageKey::Body) {
         Some(LoroValue::String(body)) => body.to_string(),

@@ -33,6 +33,7 @@ use ambre_trame::logic::TrameState;
 use ambre_trame::logic::fixtures::{TRAME_BENCH_FIXTURES, TRAME_FIXTURES};
 
 use crate::DocState;
+use ambre_core::{Ns, TimeSpan};
 
 // -----------------------------------------------------------------------------
 // On-disk layout
@@ -165,7 +166,7 @@ mod unknown_commit {
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct BenchMeasurement {
     pub id: String,
-    pub mean_ns: ambre_core::TimeSpan<ambre_core::Ns>,
+    pub mean_ns: TimeSpan<Ns>,
 }
 
 impl BenchBaseline {
@@ -248,7 +249,7 @@ fn collect_means(
         };
         out.push(BenchMeasurement {
             id,
-            mean_ns: ambre_core::TimeSpan::<ambre_core::Ns>::from_mean(mean),
+            mean_ns: TimeSpan::<Ns>::from_mean(mean),
         });
     }
     Ok(())

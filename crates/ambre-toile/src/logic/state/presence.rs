@@ -26,13 +26,13 @@ use ambre_core::id::{Id, User};
 use crate::logic::command::{PresencePayload, PresenceUpdate, ToileEvent, ToileOutcome};
 
 use super::ToileState;
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// How long a peer stays live after their last sample. Chosen against the UI's
 /// heartbeat (`ambre_toile::ui::view::PRESENCE_HEARTBEAT`). A peer survives
 /// several missed samples, so a stalled frame or a slow relay does not blink a
 /// cursor out. A peer who closed the board still leaves within a few seconds.
-pub const PRESENCE_TTL: ambre_core::TimeSpan<ambre_core::FracMs> =
-    ambre_core::TimeSpan::<ambre_core::FracMs>::new(10_000.0);
+pub const PRESENCE_TTL: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(10_000.0);
 
 impl ToileState {
     /// Encode the local peer's presence sample into an ephemeral to
@@ -48,7 +48,7 @@ impl ToileState {
     pub(super) fn broadcast_presence(
         &mut self,
         payload: &PresencePayload,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     ) -> ToileOutcome {
         let expired = self.expire_peers(now);
         let display = if expired {
@@ -123,7 +123,7 @@ impl ToileState {
     ///
     /// The clock only moves forward. A machine whose wall clock steps backwards
     /// (an NTP correction, a suspended tab) must not age every peer out at once.
-    fn expire_peers(&mut self, now: ambre_core::Instant<ambre_core::PageLoad>) -> bool {
+    fn expire_peers(&mut self, now: Instant<PageLoad>) -> bool {
         self.now = self.now.max(now);
         let cutoff = self.now.before(PRESENCE_TTL);
         let before = self.presence.len();

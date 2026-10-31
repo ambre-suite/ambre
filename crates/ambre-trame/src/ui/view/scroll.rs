@@ -9,6 +9,7 @@ use ambre_draw::kinetic::{EdgeScroll, EdgeSpeed, Kinetic, Release, ScrollStep};
 use super::ScrollOutcome;
 use crate::ui::grid::{COL_WIDTH, ROW_HEIGHT, TrameUiState};
 use crate::{ColDelta, RowDelta};
+use ambre_core::{Instant, PageLoad};
 
 /// The scroll motion of the grid, apart from the browser.
 ///
@@ -34,7 +35,7 @@ impl GridScroll {
         &mut self,
         grid: &mut TrameUiState,
         delta: WheelDelta,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     ) -> ScrollOutcome {
         // A line step is one zoomed cell, so it scales with the grid zoom.
         let px = |v: Px<Surface>| v.view_length().css_length();
@@ -85,7 +86,7 @@ impl GridScroll {
     pub(crate) fn tick(
         &mut self,
         grid: &mut TrameUiState,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     ) -> ScrollOutcome {
         let Some(step) = self.kinetic.tick(now) else {
             return ScrollOutcome::Idle;
@@ -104,7 +105,7 @@ impl GridScroll {
         &mut self,
         grid: &mut TrameUiState,
         speed: Option<(EdgeSpeed, EdgeSpeed)>,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     ) -> ScrollOutcome {
         let Some(step) = self.edge.tick(speed, now) else {
             return ScrollOutcome::Idle;
@@ -114,11 +115,7 @@ impl GridScroll {
     }
 
     /// A finger went down: it stops any motion left (`KINETIC-006`).
-    pub(crate) fn press(
-        &mut self,
-        at: Point<Px<View>>,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
-    ) {
+    pub(crate) fn press(&mut self, at: Point<Px<View>>, now: Instant<PageLoad>) {
         self.stop();
         self.kinetic.press(at, now);
     }
@@ -128,7 +125,7 @@ impl GridScroll {
         &mut self,
         grid: &mut TrameUiState,
         at: Point<Px<View>>,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     ) -> ScrollOutcome {
         let Some(step) = self.kinetic.sample(at, now) else {
             return ScrollOutcome::Idle;
@@ -138,7 +135,7 @@ impl GridScroll {
     }
 
     /// A finger lifted: a pan released with speed keeps moving.
-    pub(crate) fn release(&mut self, now: ambre_core::Instant<ambre_core::PageLoad>) -> Release {
+    pub(crate) fn release(&mut self, now: Instant<PageLoad>) -> Release {
         self.kinetic.release(now)
     }
 
@@ -164,6 +161,7 @@ impl GridScroll {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_bus::{Instant, PageLoad};
 
     fn grid() -> TrameUiState {
         TrameUiState::new(Px::<Surface>::new(1200.0), Px::<Surface>::new(800.0))
@@ -182,23 +180,20 @@ mod tests {
                     ambre_canvas::WheelAmount::new(0.0),
                     ambre_canvas::WheelAmount::new(16.0),
                 )),
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(16.0 * f64::from(step)),
+                Instant::<PageLoad>::new(16.0 * f64::from(step)),
             );
         }
         let glided = g.top_row;
-        s.tick(&mut g, ambre_bus::Instant::<ambre_bus::PageLoad>::new(64.0));
+        s.tick(&mut g, Instant::<PageLoad>::new(64.0));
         assert_eq!(s.speed(), None, "no motion while the glide lasts");
         // The frame past the pause launches the motion, and later ones move.
-        s.tick(
-            &mut g,
-            ambre_bus::Instant::<ambre_bus::PageLoad>::new(64.0 + 70.0),
-        );
+        s.tick(&mut g, Instant::<PageLoad>::new(64.0 + 70.0));
         let vy = s.speed().expect("the paused glide carries on").dy.get();
         assert!((vy - 1.0).abs() < 0.05, "the glide's speed, {vy}");
         let mut now = 64.0 + 70.0;
         while g.top_row == glided {
             now += 16.0;
-            s.tick(&mut g, ambre_bus::Instant::<ambre_bus::PageLoad>::new(now));
+            s.tick(&mut g, Instant::<PageLoad>::new(now));
             assert!(now < 2_000.0, "the coast reaches a whole row");
         }
 
@@ -213,16 +208,13 @@ mod tests {
                     ),
                     ambre_canvas::WheelDeltaMode::Line,
                 ),
-                ambre_bus::Instant::<ambre_bus::PageLoad>::new(16.0 * f64::from(step)),
+                Instant::<PageLoad>::new(16.0 * f64::from(step)),
             );
         }
         let stepped = g.top_row;
         assert!(
             matches!(
-                s.tick(
-                    &mut g,
-                    ambre_bus::Instant::<ambre_bus::PageLoad>::new(64.0 + 70.0)
-                ),
+                s.tick(&mut g, Instant::<PageLoad>::new(64.0 + 70.0)),
                 ScrollOutcome::Idle
             ),
             "a notch never coasts"

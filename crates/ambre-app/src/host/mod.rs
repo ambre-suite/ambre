@@ -81,6 +81,8 @@ pub enum TouchPhase {
     /// The browser took the gesture over (`KINETIC-010`).
     Cancel,
 }
+use ambre_bus::{Ms, TimeSpan};
+use ambre_core::{Instant, PageLoad};
 pub use run::run_with;
 
 /// Open a web address in a fresh tab with `noopener,noreferrer`. The page can
@@ -152,8 +154,7 @@ impl ClipboardFormat {
 
 /// How often a hidden page relays, in milliseconds (`CANVAS-075`). The
 /// browser spaces a hidden page's timers to a second at least.
-const HIDDEN_RELAY_PERIOD: ambre_bus::TimeSpan<ambre_bus::Ms> =
-    ambre_bus::TimeSpan::<ambre_bus::Ms>::new(1000);
+const HIDDEN_RELAY_PERIOD: TimeSpan<Ms> = TimeSpan::<Ms>::new(1000);
 
 /// Base64-encode bytes for transport as a clipboard string (UTF-8 safe).
 /// Where a mouse, pointer or drag event landed on its canvas. The DOM
@@ -344,7 +345,7 @@ impl AppView {
     /// Decide what to repaint this frame and clear the dirty flags.
     fn plan_repaint(
         &mut self,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
         hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         match self {
@@ -471,7 +472,7 @@ impl AppView {
         &mut self,
         phase: TouchPhase,
         at: ambre_core::Point<Px<View>>,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     ) -> Consumed {
         match self {
             AppView::Toile(v) => match phase {
@@ -665,6 +666,7 @@ mod tests {
         ClipboardFormat, FrameHost, Published, WebTypes, base64_decode, base64_encode,
         clipboard_item, publish_item,
     };
+    use ambre_core::{Instant, PageLoad};
     use std::collections::VecDeque;
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -748,11 +750,7 @@ mod tests {
     fn tick_fps_needs_two_samples() {
         let mut times = VecDeque::new();
         let mut fps = ambre_core::FrameRate::new(-1.0);
-        FrameHost::tick_fps(
-            &mut times,
-            &mut fps,
-            ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-        );
+        FrameHost::tick_fps(&mut times, &mut fps, Instant::<PageLoad>::new(0.0));
         // A single sample cannot establish a rate.
         assert_eq!(fps, ambre_core::FrameRate::ZERO);
     }
@@ -766,7 +764,7 @@ mod tests {
             FrameHost::tick_fps(
                 &mut times,
                 &mut fps,
-                ambre_core::Instant::<ambre_core::PageLoad>::new(i as f64 * 1000.0 / 60.0),
+                Instant::<PageLoad>::new(i as f64 * 1000.0 / 60.0),
             );
         }
         let fps = fps.get();
@@ -908,16 +906,8 @@ mod tests {
     fn tick_fps_evicts_samples_older_than_one_second() {
         let mut times = VecDeque::new();
         let mut fps = ambre_core::FrameRate::ZERO;
-        FrameHost::tick_fps(
-            &mut times,
-            &mut fps,
-            ambre_core::Instant::<ambre_core::PageLoad>::new(0.0),
-        );
-        FrameHost::tick_fps(
-            &mut times,
-            &mut fps,
-            ambre_core::Instant::<ambre_core::PageLoad>::new(5000.0),
-        ); // 5 s later
+        FrameHost::tick_fps(&mut times, &mut fps, Instant::<PageLoad>::new(0.0));
+        FrameHost::tick_fps(&mut times, &mut fps, Instant::<PageLoad>::new(5000.0)); // 5 s later
         // The 0.0 sample is > 1 s old and must be evicted, leaving one sample.
         assert_eq!(times.len(), 1);
         assert_eq!(fps, ambre_core::FrameRate::ZERO);

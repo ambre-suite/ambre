@@ -10,6 +10,7 @@ use crate::db;
 use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::state::AppState;
+use ambre_core::{Instant, UnixSec};
 
 /// What a route expects of the membership entry its request carries.
 pub(crate) struct Expected {
@@ -476,7 +477,7 @@ async fn announce_space_leave(
     state: &AppState,
     leave: &db::SpaceLeave,
     target: &Id<User>,
-    sweep_due: ambre_core::Instant<ambre_core::UnixSec>,
+    sweep_due: Instant<UnixSec>,
 ) {
     for meta in &leave.left {
         crate::redis_ops::members_changed(&state.redis, meta).await;

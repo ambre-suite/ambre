@@ -16,6 +16,7 @@ use ambre_bus::app::prose::{DocCount, DocOffset};
 use crate::layout::run::{Affinity, LineEdge, ParleyRunData, RunCount, RunLine, RunOffset};
 use crate::ui::ProseUiState;
 use crate::view::hit::HitOffset;
+use ambre_core::{Instant, PageLoad};
 
 /// A walk of the caret with the keys.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -614,7 +615,7 @@ impl ProseUiState {
     /// an edge scrolls, and then the last pointer is resolved again, so the
     /// selection follows the text being revealed. Answers whether the view
     /// moved. With no drag in flight nothing is armed (`PROSE-UI-163`).
-    pub fn tick_autoscroll(&mut self, now: ambre_core::Instant<ambre_core::PageLoad>) -> bool {
+    pub fn tick_autoscroll(&mut self, now: Instant<PageLoad>) -> bool {
         let speed = self.autoscroll_speed().map(|y| (EdgeSpeed::NONE, y));
         let Some(step) = self.autoscroll.tick(speed, now) else {
             return false;

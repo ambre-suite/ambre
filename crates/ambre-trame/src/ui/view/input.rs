@@ -4,6 +4,7 @@
 use super::*;
 use ambre_canvas::PointerButton;
 use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers, SelectionMode};
+use ambre_core::{Instant, PageLoad};
 use ambre_core::{Point, Px, View};
 use ambre_draw::Consumed;
 use ambre_draw::kinetic::Release;
@@ -533,27 +534,19 @@ impl TrameView {
 
     /// A finger went down on the grid. It stops any motion left
     /// (`KINETIC-006`).
-    pub fn touch_down(
-        &mut self,
-        at: Point<Px<View>>,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
-    ) {
+    pub fn touch_down(&mut self, at: Point<Px<View>>, now: Instant<PageLoad>) {
         self.scroll.press(at, now);
     }
 
     /// A finger moved: past the tap slop the grid follows it, cell by cell.
-    pub fn touch_move(
-        &mut self,
-        at: Point<Px<View>>,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
-    ) {
+    pub fn touch_move(&mut self, at: Point<Px<View>>, now: Instant<PageLoad>) {
         let outcome = self.scroll.pan(&mut self.state, at, now);
         self.note_scroll(outcome);
     }
 
     /// A finger lifted. A pan released with speed keeps moving; a tap is a
     /// click where it landed.
-    pub fn touch_up(&mut self, now: ambre_core::Instant<ambre_core::PageLoad>) {
+    pub fn touch_up(&mut self, now: Instant<PageLoad>) {
         if let Release::Tap { at } = self.scroll.release(now) {
             for ev in [
                 InputEvent::PointerDown {

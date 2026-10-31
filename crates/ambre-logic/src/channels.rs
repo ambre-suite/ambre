@@ -6,6 +6,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_bus::{Authored, Instant};
 use ambre_bus::{
     ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelMatches, DocumentActivity,
     HeldReply, HeldSend, MessageAt, MurmureCommand, MurmureEvent,
@@ -81,7 +82,7 @@ fn change_ask(
     channel: &mut ChannelState,
     channel_id: Id<Channel>,
     segment: Id<Segment>,
-    now: ambre_bus::Instant<ambre_bus::Authored>,
+    now: Instant<Authored>,
 ) -> Result<(Id<Document>, Option<SyncCommand>), MurmureError> {
     Ok(match channel.change_target(segment, now)? {
         ChangeTarget::Write(id) => (id, None),
@@ -2107,6 +2108,7 @@ mod tests {
     use ambre_core::CharSpan;
     use ambre_core::Px;
     use ambre_core::id::Lease;
+    use ambre_core::{Ms, TimeSpan};
     use ambre_murmure::ChannelType;
 
     const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
@@ -4601,7 +4603,7 @@ mod tests {
             channel_id,
             segment: closing,
             answer: LeaseAnswer::Deferred {
-                retry_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(5_000),
+                retry_in: TimeSpan::<Ms>::new(5_000),
             },
         });
         command(
@@ -4628,7 +4630,7 @@ mod tests {
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
                 horizon: ambre_core::Seq::new(1),
-                expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         });
         command(
@@ -4673,7 +4675,7 @@ mod tests {
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
                 horizon: ambre_core::Seq::new(1),
-                expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         });
         command(state, channel_id, MurmureCommand::Tick { now });
@@ -5300,7 +5302,7 @@ mod tests {
                 horizon: ambre_core::Seq::new(1),
                 amendments,
                 amendments_seq: ambre_core::Seq::new(0),
-                expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         });
         command(

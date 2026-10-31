@@ -35,6 +35,7 @@ use super::grid::{
 use super::renderer::{self, DrawStats};
 use crate::render::{CommitDirection, FormulaAction, TextPass};
 use crate::{CellPos, CellRect, Col, ColCount, ColDelta, MergeSpan, Row, RowCount, RowDelta};
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// The grid's logical `point` as a canvas point. The grid walks its
 /// geometry in f64; the canvas reads the pointer in f32.
@@ -46,8 +47,7 @@ fn view_point(point: ambre_draw::Point) -> ambre_core::Point<ambre_core::Px<ambr
 }
 
 /// Caret blink half-period: the standard ~530 ms on/off toggle (period ~1.06 s).
-const BLINK_PERIOD: ambre_core::TimeSpan<ambre_core::FracMs> =
-    ambre_core::TimeSpan::<ambre_core::FracMs>::new(530.0);
+const BLINK_PERIOD: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(530.0);
 
 /// The one-slot viewport queue (`TRAME-UI-025`). Every request source writes
 /// through [`coalesce`](Self::coalesce), so the slot holds at most one request
@@ -455,12 +455,12 @@ pub struct TrameView {
     /// pipe sits there while a cell is edited (`CHROME-007`).
     caret_drawn: Option<ambre_draw::Rect>,
     /// The clock's time of the last blink toggle (or blink reset).
-    last_blink: ambre_core::Instant<ambre_core::PageLoad>,
+    last_blink: Instant<PageLoad>,
     /// The clock's time of the input awaiting its caret paint, set by an edit
     /// interaction and consumed once the caret is next drawn. This is the
     /// keydown->caret latency probe, against the keystroke-to-draft budget of
     /// `ambre-spec-budgets.md`. `None` when idle.
-    pending_input_mark: Option<ambre_core::Instant<ambre_core::PageLoad>>,
+    pending_input_mark: Option<Instant<PageLoad>>,
 
     /// The one clock the view reads: the blink, the scroll, the latency probe
     /// and the renderer's sub-phase timings. The page's on screen, a test's

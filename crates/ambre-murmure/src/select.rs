@@ -135,6 +135,7 @@ mod tests {
 
     use super::*;
     use crate::list::tests::message;
+    use ambre_bus::{Authored, Instant};
 
     fn list(bodies: &[&str]) -> MessageList {
         let ada = Id::<User>::mint();
@@ -142,13 +143,7 @@ mod tests {
         let messages = bodies
             .iter()
             .enumerate()
-            .map(|(i, body)| {
-                message(
-                    ada,
-                    ambre_bus::Instant::<ambre_bus::Authored>::new(i as u64 * 60_000),
-                    body,
-                )
-            })
+            .map(|(i, body)| message(ada, Instant::<Authored>::new(i as u64 * 60_000), body))
             .collect();
         list.absorb(Id::<Segment>::mint(), messages);
         list
@@ -238,15 +233,11 @@ mod tests {
         let mut list = list(&["hello", "", "again"]);
         let mut edited = message(
             Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(200_000),
+            Instant::<Authored>::new(200_000),
             "again",
         );
         edited.edited = ambre_bus::Revision::Edited;
-        let mut gone = message(
-            Id::<User>::mint(),
-            ambre_bus::Instant::<ambre_bus::Authored>::new(100_000),
-            "",
-        );
+        let mut gone = message(Id::<User>::mint(), Instant::<Authored>::new(100_000), "");
         gone.deleted = ambre_bus::Deletion::Deleted;
         let segment = Id::<Segment>::mint();
         list.absorb(segment, vec![gone, edited]);

@@ -757,6 +757,7 @@ mod tests {
     use super::*;
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::toile::ToileCommand;
+    use ambre_bus::{Authored, Instant};
     use ambre_bus::{Col, Row};
     use ambre_bus::{Request, RestCommand, RestEvent, TrameCommand};
     use ambre_core::Generation;
@@ -2024,7 +2025,7 @@ mod tests {
                 invitee: user,
                 role: Role::Editor,
                 expect_exchange_pub_key: FixedBytes::from_array([0; 32]),
-                now: ambre_bus::Instant::<ambre_bus::Authored>::new(0),
+                now: Instant::<Authored>::new(0),
             },
             RestCommand::RevokeFromDocument {
                 document_id: doc,

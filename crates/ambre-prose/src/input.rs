@@ -17,10 +17,10 @@ use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
 use crate::layout::run::Affinity;
 use crate::ui::{BlockWait, ProseUiState, SendResult, SyncHold};
 use crate::view::caret::{Direction, SelectUnit, Spot};
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 /// Two presses closer than this in time, and in place, count as one gesture.
-pub const MULTI_PRESS_WINDOW: ambre_core::TimeSpan<ambre_core::FracMs> =
-    ambre_core::TimeSpan::<ambre_core::FracMs>::new(500.0);
+pub const MULTI_PRESS_WINDOW: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(500.0);
 
 /// How far a second press may land from the first and still be in place.
 const MULTI_PRESS: Px<View> = Px::<View>::new(4.0);
@@ -97,7 +97,7 @@ pub enum ProseInput {
         /// The modifiers held. A press with the primary one on a link follows
         /// the link (`PROSE-UI-071`); one with Shift extends the selection.
         mods: Modifiers,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
     },
     Drag {
         at: Point<Px<View>>,
@@ -217,7 +217,7 @@ impl Sent {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Press {
     at: Point<Px<View>>,
-    pressed_at: ambre_core::Instant<ambre_core::PageLoad>,
+    pressed_at: Instant<PageLoad>,
     clicks: Clicks,
 }
 
@@ -889,7 +889,7 @@ impl ProseUiState {
         &mut self,
         at: Point<Px<View>>,
         mode: SelectionMode,
-        now: ambre_core::Instant<ambre_core::PageLoad>,
+        now: Instant<PageLoad>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Consumed {
         let layout = &self.shaped.layout;

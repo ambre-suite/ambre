@@ -2,12 +2,12 @@ use super::*;
 use crate::pipeline::UpdateFrame;
 use crate::rekey::{RefusedFrames, SentFrame};
 use ambre_core::FixedBytes;
+use ambre_core::{Ms, TimeSpan};
 use ambre_protocol::messages::Signature;
 
 /// The delay before Sync sends again the first delta the relay failed to
 /// sequence. Each later failure doubles it (`ambre-spec-budgets.md` section 8).
-const RESEND_RETRY_BASE: ambre_core::TimeSpan<ambre_core::Ms> =
-    ambre_core::TimeSpan::<ambre_core::Ms>::new(1_000);
+const RESEND_RETRY_BASE: TimeSpan<Ms> = TimeSpan::<Ms>::new(1_000);
 
 /// The failures Sync sends again after. One more holds the document
 /// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
@@ -34,9 +34,7 @@ impl std::fmt::Display for HoldCause {
 
 /// The delay before sending again after the `failure`-th failure since the
 /// last echo, counted from one. Past the budget there is none.
-fn resend_retry_delay(
-    failure: ambre_core::FailureCount,
-) -> Option<ambre_core::TimeSpan<ambre_core::Ms>> {
+fn resend_retry_delay(failure: ambre_core::FailureCount) -> Option<TimeSpan<Ms>> {
     let first = ambre_core::FailureCount::new(1);
     (first..=RESEND_RETRY_LIMIT)
         .contains(&failure)
@@ -1772,6 +1770,7 @@ pub(crate) fn members_failure_message(error: &crate::http::HttpError) -> String 
 mod tests {
     use super::*;
     use crate::http::scripted::{Scripted, session};
+    use ambre_core::{Ms, TimeSpan};
     use ambre_protocol::SeqUpdate;
 
     /// The root a relay call under test reaches: `https://relay.test/api`.
@@ -3742,9 +3741,7 @@ mod tests {
         assert_eq!(resend_retry_delay(failure(1)), Some(RESEND_RETRY_BASE));
         assert_eq!(
             resend_retry_delay(failure(2)),
-            Some(ambre_core::TimeSpan::<ambre_core::Ms>::new(
-                2 * RESEND_RETRY_BASE.get()
-            ))
+            Some(TimeSpan::<Ms>::new(2 * RESEND_RETRY_BASE.get()))
         );
         assert_eq!(resend_retry_delay(RESEND_RETRY_LIMIT.incremented()), None);
 

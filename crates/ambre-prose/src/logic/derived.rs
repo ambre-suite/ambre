@@ -190,6 +190,7 @@ mod tests {
         BlockId, BlockInit, BlockType, ProseCommand, ProseEvent, TableOfContents, tree_id,
     };
     use crate::ui::{ProseUiState, RECOUNT_DELAY};
+    use ambre_core::{Instant, PageLoad};
 
     /// A document laid out on the shipped faces, holding nothing yet.
     fn fresh() -> ProseState {
@@ -541,15 +542,10 @@ mod tests {
                 text: (*word).to_owned(),
             });
             show(&mut view, &outcome.display);
-            assert_eq!(
-                view.tick(ambre_core::Instant::<ambre_core::PageLoad>::new(0.0)),
-                None
-            );
+            assert_eq!(view.tick(Instant::<PageLoad>::new(0.0)), None);
         }
         let command = view
-            .tick(ambre_core::Instant::<ambre_core::PageLoad>::new(
-                RECOUNT_DELAY.get(),
-            ))
+            .tick(Instant::<PageLoad>::new(RECOUNT_DELAY.get()))
             .expect("the recount is due");
         let outcome = state.handle_command(command);
         show(&mut view, &outcome.display);

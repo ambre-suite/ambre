@@ -60,6 +60,7 @@ use super::{
     BoardKey, ConfigKey, ConnectorKey, ElementKey, MediaKey, MessageKey, Root, ThreadKey,
     ToileState,
 };
+use ambre_bus::{Authored, Instant};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../../schema/shapes.txt");
@@ -326,14 +327,14 @@ fn postcard_layouts() -> Vec<(String, String)> {
             format!("reactions/{ANY}#emoji"),
             hex(&encode(&Reaction {
                 kind: ReactionKind::Emoji(ambre_bus::Emoji::from("e")),
-                ts: ambre_bus::Instant::<ambre_bus::Authored>::new(1),
+                ts: Instant::<Authored>::new(1),
             })),
         ),
         (
             format!("reactions/{ANY}#vote"),
             hex(&encode(&Reaction {
                 kind: ReactionKind::Vote(ambre_bus::app::toile::VoteWeight::new(2)),
-                ts: ambre_bus::Instant::<ambre_bus::Authored>::new(3),
+                ts: Instant::<Authored>::new(3),
             })),
         ),
     ]
@@ -630,13 +631,13 @@ pub(super) fn board_of_every_key() -> ToileState {
         target: rect.clone(),
         reaction: Some(Reaction {
             kind: ReactionKind::Emoji(ambre_bus::Emoji::from("+1")),
-            ts: ambre_bus::Instant::<ambre_bus::Authored>::new(1),
+            ts: Instant::<Authored>::new(1),
         }),
     });
     let opened = st.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(rect),
         body: "a remark".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(2),
+        ts: Instant::<Authored>::new(2),
     });
     let thread = opened
         .display
@@ -649,7 +650,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     st.handle_command(ToileCommand::ReplyComment {
         thread: thread.clone(),
         body: "an answer".to_owned(),
-        ts: ambre_bus::Instant::<ambre_bus::Authored>::new(3),
+        ts: Instant::<Authored>::new(3),
     });
     st.handle_command(ToileCommand::ResolveThread {
         thread,

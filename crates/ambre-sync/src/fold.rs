@@ -143,6 +143,7 @@ mod tests {
     use super::*;
     use crate::http::scripted::{Scripted, session};
     use crate::updates::{Vouch, send_vouch};
+    use ambre_core::{Ms, TimeSpan};
 
     const BASE: &str = "https://relay.test";
 
@@ -214,14 +215,14 @@ mod tests {
                 horizon: ambre_bus::Seq::new(41),
                 amendments,
                 amendments_seq: ambre_bus::Seq::new(7),
-                expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(30_000)
+                expires_in: TimeSpan::<Ms>::new(30_000)
             })
         );
         let deferred = take_fold_lease(&transport, &auth, &root(), channel, segment).await;
         assert_eq!(
             deferred,
             Ok(FoldAnswer::Deferred {
-                retry_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(86_400_000)
+                retry_in: TimeSpan::<Ms>::new(86_400_000)
             })
         );
         let url = format!("{BASE}/api/channels/{channel}/segments/{segment}/fold-lease");

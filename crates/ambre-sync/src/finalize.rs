@@ -181,6 +181,7 @@ impl SyncState {
 mod tests {
     use super::*;
     use crate::http::scripted::{Scripted, session};
+    use ambre_core::{Ms, TimeSpan};
 
     const BASE: &str = "https://relay.test";
 
@@ -244,14 +245,14 @@ mod tests {
             Ok(LeaseAnswer::Granted {
                 lease,
                 horizon: ambre_bus::Seq::new(41),
-                expires_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(30_000)
+                expires_in: TimeSpan::<Ms>::new(30_000)
             })
         );
         let deferred = take_lease(&transport, &auth, &root(), channel, segment).await;
         assert_eq!(
             deferred,
             Ok(LeaseAnswer::Deferred {
-                retry_in: ambre_core::TimeSpan::<ambre_core::Ms>::new(86_400_000)
+                retry_in: TimeSpan::<Ms>::new(86_400_000)
             })
         );
         let url = format!("{BASE}/api/channels/{channel}/segments/{segment}/lease");

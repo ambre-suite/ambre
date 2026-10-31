@@ -155,6 +155,7 @@ async fn last_numbers(
 mod tests {
     use super::*;
     use ambre_core::{FixedBytes, PublicKey};
+    use ambre_core::{Instant, UnixSec};
     use rustis::commands::StringCommands;
 
     fn uuid_of<E: ambre_core::id::Entity<Repr = ambre_core::Uuid>>(id: Id<E>) -> uuid::Uuid {
@@ -597,15 +598,9 @@ mod tests {
             put_cursor(&state, session(alice, 1), segment, 1).await;
         }
 
-        db::remove_document_member(
-            &state.db,
-            &meta,
-            &bob,
-            None,
-            ambre_core::Instant::<ambre_core::UnixSec>::new(0),
-        )
-        .await
-        .expect("remove");
+        db::remove_document_member(&state.db, &meta, &bob, None, Instant::<UnixSec>::new(0))
+            .await
+            .expect("remove");
         for &segment in &segments {
             assert_eq!(cursor_of(&state.db, bob, segment).await, None);
             assert_eq!(cursor_of(&state.db, alice, segment).await, Some(1));

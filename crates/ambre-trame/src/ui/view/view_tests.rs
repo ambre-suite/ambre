@@ -11,6 +11,7 @@ use std::rc::Rc;
 use super::*;
 use crate::test_support::{at, rect, span};
 use ambre_bus::conduit::Receiver;
+use ambre_core::{Instant, PageLoad};
 use ambre_draw::testing::RecordingSurface;
 
 /// A pointer at logical `(x, y)`, as the canvas hands it over.
@@ -40,8 +41,8 @@ impl TestClock {
 }
 
 impl Clock for TestClock {
-    fn now(&self) -> ambre_core::Instant<ambre_core::PageLoad> {
-        ambre_core::Instant::<ambre_core::PageLoad>::new(self.0.get())
+    fn now(&self) -> Instant<PageLoad> {
+        Instant::<PageLoad>::new(self.0.get())
     }
 }
 
