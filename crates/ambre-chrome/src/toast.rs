@@ -13,6 +13,7 @@
 
 use std::time::Duration;
 
+use ambre_core::{Generation, GenerationKind};
 use leptos::prelude::*;
 
 /// Severity of a toast -- drives its accent stripe (status tokens) and, for
@@ -44,15 +45,17 @@ impl ToastKind {
     }
 }
 
-ambre_core::define_generation! {
-    /// The number a toast is raised under, so a dismissal names that toast
-    /// alone.
-    pub struct ToastId;
+/// The number a toast is raised under, so a dismissal names that toast alone.
+pub enum ToastId {}
+
+impl GenerationKind for ToastId {
+    type IssueRight = ();
+    const NAME: &'static str = "ToastId";
 }
 
 #[derive(Clone)]
 struct Toast {
-    id: ToastId,
+    id: Generation<ToastId>,
     message: String,
     kind: ToastKind,
 }
@@ -62,7 +65,7 @@ struct Toast {
 #[derive(Clone, Copy)]
 pub struct Toasts {
     items: RwSignal<Vec<Toast>>,
-    next_id: RwSignal<ToastId>,
+    next_id: RwSignal<Generation<ToastId>>,
 }
 
 impl Default for Toasts {
@@ -75,7 +78,7 @@ impl Toasts {
     pub fn new() -> Self {
         Self {
             items: RwSignal::new(Vec::new()),
-            next_id: RwSignal::new(ToastId::ZERO),
+            next_id: RwSignal::new(Generation::ZERO),
         }
     }
 
@@ -111,7 +114,7 @@ impl Toasts {
         );
     }
 
-    fn dismiss(self, id: ToastId) {
+    fn dismiss(self, id: Generation<ToastId>) {
         self.items.update(|v| v.retain(|t| t.id != id));
     }
 }

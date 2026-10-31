@@ -421,7 +421,7 @@ PATH_DEP = re.compile(r'^([\w-]+)\s*=\s*\{[^}]*\bpath\s*=\s*"\.\./([\w-]+)"', re
 # The wire types, and what the worker may not name.
 PROTOCOL = "crates/ambre-protocol/src"
 TYPE_DECL = re.compile(r"^\s*pub(?:\([^)]*\))?\s+(?:struct|enum)\s+([A-Z]\w*)", re.MULTILINE)
-REQUEST_ALLOC = re.compile(r"\bRequestId::next\b")
+REQUEST_ALLOC = re.compile(r"\bnext_request\b")
 ENGINE_SPAWN = re.compile(r"\bambre_logic::run\(")
 APP_SRC = "crates/ambre-app/src"
 APP_LIB = "crates/ambre-app/src/lib.rs"

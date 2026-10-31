@@ -3009,7 +3009,7 @@ pub struct DisplayViewport {
     /// How many viewport requests the Logic thread had applied when it built
     /// this frame. The view drops a frame older than the one it last accepted
     /// (`BUS-017`).
-    pub version: crate::ViewportVersion,
+    pub version: ambre_core::Generation<crate::ViewportVersion>,
     pub viewport: Viewport,
     /// The board's grid unit in world units, as its `board` register holds it.
     /// The grid step is a power-of-two multiple of it (`TOILE-UI-279`). The

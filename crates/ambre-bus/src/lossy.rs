@@ -77,7 +77,7 @@ mod tests {
         LogicCommand::App {
             document_id: DocumentId::from_bytes([1; 16]),
             command: AppCommand::Trame(TrameCommand::ScrollViewport {
-                version: crate::ViewportVersion(1),
+                version: ambre_core::Generation::nth(1),
                 row_start: Row::new(0),
                 row_end: Row::new(10),
                 col_start: Col::new(0),
@@ -96,7 +96,7 @@ mod tests {
                 to: Col::new(3),
             },
             TrameCommand::ResizeCol {
-                version: crate::ViewportVersion(1),
+                version: ambre_core::Generation::nth(1),
                 sheet_id: crate::SheetId("s1".to_string()),
                 col: Col::new(0),
                 width: ambre_core::DocPx::new(120.0),

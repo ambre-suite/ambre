@@ -929,7 +929,7 @@ async fn a_click_on_another_member_fetches_their_key() {
     let frame = acme.frame().await;
     let (alice, members) = alice_and_bob(&acme);
     let session = UiEvent::Rest {
-        id: ambre_bus::RequestId::next(),
+        id: Some(ambre_bus::next_request()),
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
             display_name: ambre_core::DisplayName::new("Alice Martin").unwrap(),
@@ -966,7 +966,7 @@ async fn the_invite_control_offers_the_other_members_and_fetches_a_key() {
     let frame = acme.frame().await;
     let (alice, members) = alice_and_bob(&acme);
     let session = UiEvent::Rest {
-        id: ambre_bus::RequestId::next(),
+        id: Some(ambre_bus::next_request()),
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
             display_name: ambre_core::DisplayName::new("Alice Martin").unwrap(),
@@ -1054,7 +1054,7 @@ async fn the_member_list_marks_who_watches_the_channel() {
         presence: Presence::Offline,
     };
     let session = UiEvent::Rest {
-        id: ambre_bus::RequestId::next(),
+        id: Some(ambre_bus::next_request()),
         evt: ambre_bus::RestEvent::SessionReady {
             user_id: alice,
             display_name: ambre_core::DisplayName::new("Alice").unwrap(),

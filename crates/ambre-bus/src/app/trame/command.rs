@@ -282,7 +282,7 @@ pub enum TrameCommand {
     /// `version` is a monotonic counter: the UI Thread drops any response
     /// whose version is older than the last accepted one.
     ScrollViewport {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         row_start: Row,
         row_end: Row,
         col_start: Col,
@@ -448,7 +448,7 @@ pub enum TrameCommand {
     /// [`DataReset`]: super::TrameEvent::DataReset [`ViewportData`]:
     /// super::TrameEvent::ViewportData
     ResizeCol {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         sheet_id: SheetId,
         col: Col,
         width: ambre_core::DocPx,
@@ -456,7 +456,7 @@ pub enum TrameCommand {
     /// Set the height (document px, before the zoom) of row `row` on `sheet_id`. Row analogue of
     /// [`ResizeCol`](TrameCommand::ResizeCol): writes `row_heights_{sheet}`.
     ResizeRow {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         sheet_id: SheetId,
         row: Row,
         height: ambre_core::DocPx,

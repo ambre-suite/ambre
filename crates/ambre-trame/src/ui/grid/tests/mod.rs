@@ -49,7 +49,7 @@ fn seed_merge_2x2(state: &mut TrameUiState) {
         ..Default::default()
     };
     state.on_viewport_data(TrameEvent::ViewportData {
-        version: ambre_bus::ViewportVersion(0),
+        version: ambre_core::Generation::ZERO,
         row_start: Row::new(0),
         col_start: Col::new(0),
         col_widths: vec![],

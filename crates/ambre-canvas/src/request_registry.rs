@@ -2,7 +2,7 @@
 // ============================================================================
 // RequestRegistry<Tag> -- typed P3 request/response correlation on the UI thread.
 //
-// The registry is the sole allocator of `RequestId` values on the UI side.
+// The registry is the sole allocator of `Generation<Request>` values on the UI side.
 // It wraps an outgoing `RestCommand` in a `LogicCommand::Rest` envelope,
 // registers a pending entry with a deadline, and later resolves the matching
 // `UiEvent::Rest` by id. Expired entries (whose deadline has passed) are
@@ -13,7 +13,8 @@
 // implemented yet (no consumer wired), but the scaffolding is here per ARCH P1.
 // ============================================================================
 
-use ambre_bus::{LogicCommand, RequestId, RestCommand};
+use ambre_bus::{LogicCommand, Request, RestCommand};
+use ambre_core::Generation;
 use rustc_hash::FxHashMap;
 use std::marker::PhantomData;
 
@@ -21,7 +22,7 @@ use std::marker::PhantomData;
 ///
 /// Each implementation fixes the default timeout and the expected event type.
 /// The actual matching is done by the caller after `try_recv` confirms the
-/// `RequestId` -- the tag only provides compile-time documentation of the
+/// `Generation<Request>` -- the tag only provides compile-time documentation of the
 /// expected variant.
 pub trait RequestTag {
     /// The `RestEvent` variant expected in response, for documentation only.
@@ -40,7 +41,7 @@ struct PendingEntry {
 ///
 /// # Lifecycle
 ///
-/// 1. **Send** -- `registry.prepare(cmd, now)` allocates a fresh `RequestId`,
+/// 1. **Send** -- `registry.prepare(cmd, now)` allocates a fresh `Generation<Request>`,
 ///    records a `PendingEntry`, and returns a `LogicCommand::Rest` envelope
 ///    ready to forward to the Logic thread.
 /// 2. **Receive** -- when a `UiEvent::Rest { id, evt }` arrives, call
@@ -49,7 +50,7 @@ struct PendingEntry {
 /// 3. **Expire** -- call `registry.expire(now)` once per frame to drop entries
 ///    whose deadline has passed.
 pub struct RequestRegistry<T: RequestTag> {
-    pending: FxHashMap<RequestId, PendingEntry>,
+    pending: FxHashMap<Generation<Request>, PendingEntry>,
     _tag: PhantomData<T>,
 }
 
@@ -72,7 +73,7 @@ impl<T: RequestTag> RequestRegistry<T> {
         self.pending.clear();
     }
 
-    /// Allocate a fresh `RequestId`, register a pending entry with the default
+    /// Allocate a fresh `Generation<Request>`, register a pending entry with the default
     /// timeout, and return the `LogicCommand::Rest` envelope ready to send
     /// downstream.
     ///
@@ -88,7 +89,7 @@ impl<T: RequestTag> RequestRegistry<T> {
         now: ambre_bus::PageTime,
         timeout: ambre_bus::Millis,
     ) -> LogicCommand {
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         self.pending.insert(
             id,
             PendingEntry {
@@ -103,7 +104,7 @@ impl<T: RequestTag> RequestRegistry<T> {
     /// received `RestEvent` to `<T as RequestTag>::Event`.
     ///
     /// Returns `false` for unknown, already-resolved, or expired ids.
-    pub fn try_recv(&mut self, id: RequestId) -> bool {
+    pub fn try_recv(&mut self, id: Generation<Request>) -> bool {
         self.pending.remove(&id).is_some()
     }
 
@@ -136,7 +137,7 @@ mod tests {
 
     #[test]
     fn prepare_allocates_unique_ids() {
-        // Not wasm, but RequestId::next() compiles and runs on the host too.
+        // Not wasm, but ambre_bus::next_request() compiles and runs on the host too.
         let mut reg = TestRegistry::new();
         let cmd1 = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime(0.0));
         let cmd2 = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime(0.0));
@@ -165,7 +166,7 @@ mod tests {
     #[test]
     fn try_recv_rejects_unknown_id() {
         let mut reg = TestRegistry::new();
-        assert!(!reg.try_recv(RequestId(999)));
+        assert!(!reg.try_recv(Generation::nth(999)));
     }
 
     #[test]

@@ -46,10 +46,13 @@ pub use crate::view::column::Viewport;
 /// keystroke (`features/ambre-spec-prose-word-count.md section 4`).
 pub const RECOUNT_DELAY: ambre_core::PageMillis = ambre_core::PageMillis::new(500.0);
 
-ambre_core::define_generation! {
-    /// The number a draft is at, moved on every change. A paragraph shaped
-    /// from the draft can so tell it still reads what it was shaped from.
-    pub struct DraftGeneration;
+/// The changes a draft went through. A paragraph shaped from the draft can
+/// so tell it still reads what it was shaped from.
+pub enum DraftRevision {}
+
+impl ambre_core::GenerationKind for DraftRevision {
+    type IssueRight = ();
+    const NAME: &'static str = "DraftRevision";
 }
 
 /// What this view drew and the layout in force does not carry yet: the text
@@ -68,7 +71,7 @@ pub struct DraftBuffer {
     edits: Vec<DraftEdit>,
     /// Moves on every change, so a paragraph shaped from the draft can tell
     /// it still reads what it was shaped from.
-    generation: DraftGeneration,
+    generation: ambre_core::Generation<DraftRevision>,
 }
 
 /// One command sent inside a block, and whether the Logic thread took it.
@@ -129,7 +132,7 @@ impl DraftBuffer {
 
     /// A number that moves whenever what the draft shows does.
     #[must_use]
-    pub fn generation(&self) -> DraftGeneration {
+    pub fn generation(&self) -> ambre_core::Generation<DraftRevision> {
         self.generation
     }
 
@@ -407,7 +410,7 @@ pub struct ProseUiState {
     // Handed over by the Logic thread.
     /// The version of the last layout this view adopted. An older one is
     /// dropped (`features/ambre-spec-prose-page-rendering.md`).
-    pub layout_version: LayoutVersion,
+    pub layout_version: ambre_core::Generation<LayoutVersion>,
     /// The whole live peer set, replaced on each event (`PRESENCE-009`).
     pub remote_cursors: Vec<RemoteCursor>,
     /// The five figures as last answered, for the shared status bar slot.
@@ -523,7 +526,7 @@ pub struct ProseUiState {
     /// The selection and the layout version the last read was asked for.
     pub(crate) marks_asked: Option<(
         (crate::view::caret::Spot, crate::view::caret::Spot),
-        LayoutVersion,
+        ambre_core::Generation<LayoutVersion>,
     )>,
     /// The slash menu, while it is open.
     pub(crate) slash: Option<crate::view::slash::SlashMenu>,
@@ -535,9 +538,9 @@ pub struct ProseUiState {
     /// When the text was last seen changing, while a recount is owed.
     quiet_since: Option<ambre_core::PageTime>,
     /// The number of the last change this view did not draw and applied.
-    pub(crate) seen: ambre_bus::app::prose::TextChangeSeq,
+    pub(crate) seen: ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
     /// The number last handed back in a [`ProseCommand::Sync`].
-    pub(crate) sent_seen: ambre_bus::app::prose::TextChangeSeq,
+    pub(crate) sent_seen: ambre_core::Generation<ambre_bus::app::prose::TextChangeSeq>,
     /// The text commands sent and not yet taken, in the text this view shows.
     pub(crate) inflight: VecDeque<TextEdit>,
     /// How many text commands the Logic thread said it took.
@@ -1198,7 +1201,7 @@ mod tests {
         state.inflight.push_back(typed);
         state.apply_event(&ProseEvent::TextChanged {
             origin: crate::events::ChangeOrigin::Local,
-            seq: ambre_bus::app::prose::TextChangeSeq(0),
+            seq: ambre_core::Generation::ZERO,
             acked: ambre_bus::app::prose::TextAck(1),
             edits: vec![typed],
             removed: Vec::new(),

@@ -70,13 +70,13 @@ pub mod fixtures;
 
 use ambre_bus::conduit::{Doorbell, Receiver, WorkerSender};
 use ambre_bus::{
-    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, RequestId, RestCommand,
+    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, Request, RestCommand,
     RestEvent, Role, Seq, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SyncCommand,
     UiEvent, UserId,
 };
 
-use ambre_core::SessionNonce;
 use ambre_core::schema::SchemaError;
+use ambre_core::{Generation, SessionNonce};
 
 use ambre_murmure::Order;
 use ambre_prose::ProseState;
@@ -816,16 +816,16 @@ struct LogicState {
     /// Leaves of a space held while its owner role passes on (the Murmure
     /// spaces spec). Each is keyed by the role change this thread asked for,
     /// and holds the leave the view asked for.
-    handing_off: HashMap<ambre_bus::RequestId, (ambre_bus::RequestId, DocumentId)>,
+    handing_off: HashMap<Generation<Request>, (Generation<Request>, DocumentId)>,
     /// The erases of a deleted message's files the relay has not answered,
     /// each with the document its file is stored under and its address.
-    erasing: HashMap<ambre_bus::RequestId, (DocumentId, ambre_core::ContentHash)>,
+    erasing: HashMap<Generation<Request>, (DocumentId, ambre_core::ContentHash)>,
     /// The erases that did not reach the relay, asked again on the next
     /// connection (`ambre-spec-murmure-attachments.md`).
     erase_owed: Vec<(DocumentId, ambre_core::ContentHash)>,
     /// The images fetched for a preview the relay has not answered, each
     /// with the channel whose view asked.
-    picturing: HashMap<ambre_bus::RequestId, (ambre_bus::ChannelId, ambre_bus::ContentHash)>,
+    picturing: HashMap<Generation<Request>, (ambre_bus::ChannelId, ambre_bus::ContentHash)>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
     direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
@@ -850,12 +850,12 @@ struct LogicState {
     /// peer's cursor (`TOILE-UI-076`).
     my_display_name: Option<ambre_core::DisplayName>,
     /// P3 responses this Logic thread issued on behalf of a document
-    /// (`toile-media`). A `RequestId` present here routes its answering
+    /// (`toile-media`). A `Generation<Request>` present here routes its answering
     /// `RestEvent` (or correlated `ApiError`) back into the owning engine,
     /// instead of forwarding it to the UI. UI-issued requests are absent from
     /// this map and forward verbatim, exactly as before. An entry is inserted
     /// when a `ToileRequest` is lowered and removed when its response arrives.
-    rest_routes: HashMap<RequestId, DocumentId>,
+    rest_routes: HashMap<Generation<Request>, DocumentId>,
     /// Sealed `.ambre` exports awaiting the Sync worker's answer
     /// (`DOCFILE-014`): the document whose file the worker holds, and the name
     /// the download will carry. A separate map from
@@ -865,7 +865,7 @@ struct LogicState {
     ///
     /// Cleared with the document that owns it, so a seal outlived by its
     /// document answers nothing rather than downloading into a closed tab.
-    pending_seals: HashMap<RequestId, PendingSeal>,
+    pending_seals: HashMap<Generation<Request>, PendingSeal>,
     /// Every font face the Main thread has fetched and shipped over
     /// (`LogicCommand::LoadFonts`). Kept as bytes, so a document opened later
     /// gets the same set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot

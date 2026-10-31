@@ -2,12 +2,12 @@
 //!
 //! Two groups:
 //! - [`LogicEvent::Rest`] -- a [`RestEvent`] service response answering an earlier
-//!   [`SyncCommand::Rest`], echoing its [`RequestId`]. Forwarded verbatim to the
+//!   [`SyncCommand::Rest`], echoing its [`Request`]. Forwarded verbatim to the
 //!   UI (with a small Logic hook, for example `DocumentCreated` records the doc type).
 //! - **Server push & errors** -- unsolicited notifications (CRDT deltas,
 //!   connection status, member revocation, meeting participants...) and failures
 //!   (`AuthError` / `ApiError` / `SetupRequired` / `UpdateRequired`). No originating request, so no
-//!   `RequestId`; each is handled explicitly by the Logic thread (apply CRDT,
+//!   request id; each is handled explicitly by the Logic thread (apply CRDT,
 //!   mutate state, ...).
 //!
 //! [`SyncCommand::Rest`]: crate::SyncCommand::Rest
@@ -18,10 +18,9 @@ use std::fmt;
 use crate::sync_warning::SyncWarningCode;
 use crate::{
     ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, LeaseId, MemberInfo,
-    MessageId, RequestId, RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId,
-    UserId,
+    MessageId, Request, RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId, UserId,
 };
-use ambre_core::{Seq, SessionNonce};
+use ambre_core::{Generation, Seq, SessionNonce};
 
 // -----------------------------------------------------------------------------
 // LogicEvent
@@ -32,8 +31,12 @@ use ambre_core::{Seq, SessionNonce};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LogicEvent {
     // -- Service plane (relayed request/response) ------------------------------
-    /// A [`RestEvent`] service response echoing the originating [`RequestId`].
-    Rest { id: RequestId, evt: RestEvent },
+    /// A [`RestEvent`] service response echoing the originating [`Request`],
+    /// or `None` for an answer no request asked for.
+    Rest {
+        id: Option<Generation<Request>>,
+        evt: RestEvent,
+    },
 
     // -- Real-time sync (server push) ------------------------------------------
     /// The identity this session writes under in a document, sent once per open
@@ -430,13 +433,13 @@ pub enum LogicEvent {
     /// (for example, [`ApiRequest::ListDocuments`]), and `failure` says whether the relay
     /// answered and with what.
     ///
-    /// `id` echoes the originating [`RequestId`] when the failed command carried one (a
+    /// `id` echoes the originating [`Request`] when the failed command carried one (a
     /// `SyncCommand::Rest`). The dispatcher can then route a correlated failure back to
     /// the issuing document. In `toile-media`, a failed media upload must reach the
     /// pending import waiting on it. `None` for a spontaneous error with no originating
     /// request.
     ApiError {
-        id: Option<RequestId>,
+        id: Option<Generation<Request>>,
         request: ApiRequest,
         failure: ambre_core::ApiFailure,
         message: String,

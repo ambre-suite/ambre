@@ -262,32 +262,36 @@ impl LogicState {
             // forward to the UI. Documents are materialised on `OpenDocument`
             // (which carries the `doc_type`), so no event here mutates state.
             LogicEvent::Rest { id, evt } => {
-                // The answer to a sealed `.ambre` export this thread asked for
-                // (`DOCFILE-014`). It becomes a display event of the owning
-                // application here, and never reaches the engine, which knows
-                // nothing of the seal.
-                if self.resolve_pending_seal(id, &evt) {
-                    return;
-                }
-                // The owner role passed on: the leave it held goes now.
-                if self.handed_off(id, &evt) {
-                    return;
-                }
-                // The erase of a deleted message's file, which no view awaits.
-                if self.erased(id, &evt) {
-                    return;
-                }
-                // The image of a preview, which the view awaits decoded.
-                if self.pictured(id, &evt) {
-                    return;
-                }
-                // A response to a request this Logic thread issued on behalf of a
-                // document (`toile-media`) is fed back into the owning engine. It
-                // is not forwarded to the UI. UI-issued requests are absent from
-                // `rest_routes` and fall through to the verbatim forward.
-                if let Some(document_id) = self.rest_routes.remove(&id) {
-                    self.route_service_event(document_id, id, evt);
-                    return;
+                // An answer no request asked for awaits nothing of this
+                // thread: only its session hook below applies.
+                if let Some(id) = id {
+                    // The answer to a sealed `.ambre` export this thread asked for
+                    // (`DOCFILE-014`). It becomes a display event of the owning
+                    // application here, and never reaches the engine, which knows
+                    // nothing of the seal.
+                    if self.resolve_pending_seal(id, &evt) {
+                        return;
+                    }
+                    // The owner role passed on: the leave it held goes now.
+                    if self.handed_off(id, &evt) {
+                        return;
+                    }
+                    // The erase of a deleted message's file, which no view awaits.
+                    if self.erased(id, &evt) {
+                        return;
+                    }
+                    // The image of a preview, which the view awaits decoded.
+                    if self.pictured(id, &evt) {
+                        return;
+                    }
+                    // A response to a request this Logic thread issued on behalf of a
+                    // document (`toile-media`) is fed back into the owning engine. It
+                    // is not forwarded to the UI. UI-issued requests are absent from
+                    // `rest_routes` and fall through to the verbatim forward.
+                    if let Some(document_id) = self.rest_routes.remove(&id) {
+                        self.route_service_event(document_id, id, evt);
+                        return;
+                    }
                 }
                 // `SessionReady` also seeds the canonical `UserId`. Capture it
                 // for later opens and push it into every already-open document,
@@ -754,7 +758,8 @@ mod tests {
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::toile::ToileCommand;
     use ambre_bus::{Col, Row};
-    use ambre_bus::{DocumentId, RequestId, RestCommand, RestEvent, TrameCommand};
+    use ambre_bus::{DocumentId, Request, RestCommand, RestEvent, TrameCommand};
+    use ambre_core::Generation;
     use std::io::Cursor;
 
     /// A `LogicState` wired to two drainable receivers (UI-bound, Sync-bound).
@@ -945,8 +950,8 @@ mod tests {
             view.apply_event(event);
         }
         assert_eq!(
-            view.layout_version.get(),
-            2,
+            view.layout_version,
+            ambre_core::Generation::nth(2),
             "the later layout is the one in force"
         );
         assert_eq!(view.shaped.layout.page_count.get(), 1);
@@ -1072,7 +1077,7 @@ mod tests {
                 col_start: Col::new(0),
                 row_end: Row::new(16),
                 col_end: Col::new(8),
-                version: ambre_bus::ViewportVersion(1),
+                version: ambre_core::Generation::nth(1),
             }),
         });
         let kept = std::iter::from_fn(|| ui.try_recv().ok()).any(|evt| match evt {
@@ -1091,7 +1096,7 @@ mod tests {
 
     /// Open a document and ask for a sealed `.ambre`, returning the state, the
     /// UI queue, and the service request the seal produced.
-    fn sealing(doc_type: DocType) -> (LogicState, Receiver<UiEvent>, RequestId, Vec<u8>) {
+    fn sealing(doc_type: DocType) -> (LogicState, Receiver<UiEvent>, Generation<Request>, Vec<u8>) {
         let document_id = DocumentId::new();
         let (mut state, ui, sync_rx) = harness();
         state.open_with_identity(document_id, doc_type);
@@ -1160,7 +1165,7 @@ mod tests {
         for doc_type in [DocType::Trame, DocType::Toile] {
             let (mut state, ui, id, _plaintext) = sealing(doc_type);
             state.handle_logic_event(LogicEvent::Rest {
-                id,
+                id: Some(id),
                 evt: RestEvent::DocFileSealed {
                     data: ambre_core::SealedContainer::new(b"sealed bytes".to_vec()),
                 },
@@ -1176,7 +1181,7 @@ mod tests {
         for doc_type in [DocType::Trame, DocType::Toile] {
             let (mut state, ui, id, _plaintext) = sealing(doc_type);
             state.handle_logic_event(LogicEvent::Rest {
-                id,
+                id: Some(id),
                 evt: RestEvent::DocFileSealFailed,
             });
             let events: Vec<UiEvent> = std::iter::from_fn(|| ui.try_recv().ok()).collect();
@@ -1216,7 +1221,7 @@ mod tests {
         let document_id = *state.docs.keys().next().expect("a live document");
         state.handle_logic_command(LogicCommand::CloseDocument { document_id });
         state.handle_logic_event(LogicEvent::Rest {
-            id,
+            id: Some(id),
             evt: RestEvent::DocFileSealed {
                 data: ambre_core::SealedContainer::new(b"sealed bytes".to_vec()),
             },
@@ -1231,14 +1236,14 @@ mod tests {
     /// Wrap a `RestCommand` in a `LogicCommand::Rest` with a fresh id.
     fn rest(cmd: RestCommand) -> LogicCommand {
         LogicCommand::Rest {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             cmd,
         }
     }
 
     fn scroll(version: u64) -> AppCommand {
         AppCommand::Trame(TrameCommand::ScrollViewport {
-            version: ambre_bus::ViewportVersion(version),
+            version: ambre_core::Generation::nth(version),
             row_start: Row::new(0),
             row_end: Row::new(4),
             col_start: Col::new(0),
@@ -1249,7 +1254,7 @@ mod tests {
     #[test]
     fn rest_command_forwards_to_sync_with_id() {
         let (mut state, _ui, sync_rx) = harness();
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         state.handle_logic_command(LogicCommand::Rest {
             id,
             cmd: RestCommand::ListDocuments,
@@ -1336,7 +1341,7 @@ mod tests {
 
         let me = ambre_bus::UserId::new();
         state.handle_logic_event(LogicEvent::Rest {
-            id: RequestId::next(),
+            id: Some(ambre_bus::next_request()),
             evt: RestEvent::SessionReady {
                 user_id: me,
                 display_name: ambre_core::DisplayName::new("Ada").unwrap(),
@@ -1386,9 +1391,9 @@ mod tests {
     #[test]
     fn rest_event_forwards_to_ui_with_id() {
         let (mut state, ui_rx, _sync) = harness();
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         state.handle_logic_event(LogicEvent::Rest {
-            id,
+            id: Some(id),
             evt: RestEvent::DocumentList { documents: vec![] },
         });
         match ui_rx.try_recv() {
@@ -1396,7 +1401,7 @@ mod tests {
                 id: got,
                 evt: RestEvent::DocumentList { .. },
             }) => {
-                assert_eq!(got, id);
+                assert_eq!(got, Some(id));
             }
             other => panic!("unexpected UiEvent: {other:?}"),
         }
@@ -1785,9 +1790,9 @@ mod tests {
         bytes
     }
 
-    /// Import a solid PNG into `doc_id` and return the single `RequestId` the
+    /// Import a solid PNG into `doc_id` and return the single `Generation<Request>` the
     /// lowered `UploadMedia` was correlated with.
-    fn import_one_image(state: &mut LogicState, doc_id: DocumentId) -> RequestId {
+    fn import_one_image(state: &mut LogicState, doc_id: DocumentId) -> Generation<Request> {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Toile(ToileCommand::ImportImage {
@@ -1836,7 +1841,7 @@ mod tests {
 
         // The confirmation is routed into the engine, which applies the import.
         state.handle_logic_event(LogicEvent::Rest {
-            id,
+            id: Some(id),
             evt: RestEvent::MediaUploaded {
                 document_id: doc_id,
                 content_hash: ambre_core::ContentHash::parse(&"b2".repeat(32)).expect("a hash"),
@@ -1863,7 +1868,7 @@ mod tests {
         // `rest_routes` and must forward verbatim exactly as before.
         let (mut state, ui_rx, _sync) = harness();
         state.handle_logic_event(LogicEvent::Rest {
-            id: RequestId::next(),
+            id: Some(ambre_bus::next_request()),
             evt: RestEvent::DocumentList { documents: vec![] },
         });
         assert!(matches!(ui_rx.try_recv(), Ok(UiEvent::Rest { .. })));
@@ -1931,7 +1936,7 @@ mod tests {
         assert!(!state.docs.contains_key(&doc_id));
 
         state.handle_logic_event(LogicEvent::Rest {
-            id,
+            id: Some(id),
             evt: RestEvent::MediaUploaded {
                 document_id: doc_id,
                 content_hash: ambre_core::ContentHash::parse(&"b2".repeat(32)).expect("a hash"),

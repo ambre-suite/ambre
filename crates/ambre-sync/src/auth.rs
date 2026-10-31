@@ -3,7 +3,11 @@ use super::*;
 impl SyncState {
     // -- Session handlers ------------------------------------------------------
 
-    pub(crate) fn handle_unlock(&mut self, id: RequestId, passphrase: ambre_core::Passphrase) {
+    pub(crate) fn handle_unlock(
+        &mut self,
+        id: Generation<Request>,
+        passphrase: ambre_core::Passphrase,
+    ) {
         tracing::info!("Sync: Unlock");
 
         let logic_tx = self.logic_tx.clone();
@@ -22,7 +26,7 @@ impl SyncState {
                         // No master material to unlock: the account still owes
                         // its key setup, which is no failure (`SYNC-134`).
                         let _ = logic_tx.send(LogicEvent::Rest {
-                            id,
+                            id: Some(id),
                             evt: RestEvent::AccountSetupRequired,
                         });
                     }
@@ -92,7 +96,7 @@ impl SyncState {
                             Ok(me) => {
                                 let user_id = me.user_id;
                                 let _ = tx.send(SyncEvent::SessionReady {
-                                    id,
+                                    id: Some(id),
                                     user_id,
                                     display_name: me.display_name,
                                     email: me.email,
@@ -146,7 +150,12 @@ impl SyncState {
     /// (it rejects this unless `DEV_MODE` is set). Lets `?user=<name>` test
     /// multi-user behaviour on one machine; an edit survives a refresh because
     /// the same username always derives the same identity.
-    pub(crate) fn handle_dev_login(&mut self, id: RequestId, username: ambre_core::DisplayName) {
+    /// `id` is `None` for the silent re-login, which no request asked for.
+    pub(crate) fn handle_dev_login(
+        &mut self,
+        id: Option<Generation<Request>>,
+        username: ambre_core::DisplayName,
+    ) {
         tracing::info!("Sync: DevLogin (username={username})");
         // Remember it so a WS auth rejection (close 4401) whose refresh also fails
         // can silently re-login with the same deterministic identity.
@@ -208,14 +217,14 @@ impl SyncState {
             self.master_seed = Some(master_seed);
             self.open_websocket();
             let user_id = UserId::new();
-            self.reply(
+            self.send_to_logic(LogicEvent::Rest {
                 id,
-                RestEvent::SessionReady {
+                evt: RestEvent::SessionReady {
                     user_id,
                     display_name: username,
                     email: ambre_core::Email(String::new()),
                 },
-            );
+            });
         }
     }
 
@@ -224,7 +233,7 @@ impl SyncState {
     /// no session exists yet.
     pub(crate) fn handle_provider_sign_in(
         &mut self,
-        id: RequestId,
+        id: Generation<Request>,
         provider: ambre_core::OidcProvider,
     ) {
         tracing::info!("Sync: ProviderSignIn ({provider})");
@@ -240,7 +249,7 @@ impl SyncState {
         wasm_bindgen_futures::spawn_local(async move {
             let evt = match http::get_json::<http::ProviderLoginResponse>(&url).await {
                 Ok(resp) => LogicEvent::Rest {
-                    id,
+                    id: Some(id),
                     evt: RestEvent::ProviderAddress {
                         url: resp.url,
                         state: resp.state,
@@ -259,7 +268,7 @@ impl SyncState {
     /// [`handle_sync_event`]: Self::handle_sync_event
     pub(crate) fn handle_provider_return(
         &mut self,
-        id: RequestId,
+        id: Generation<Request>,
         provider: ambre_core::OidcProvider,
         code: ambre_core::OidcCode,
         state: ambre_core::OidcState,
@@ -323,7 +332,7 @@ impl SyncState {
 
     pub(crate) fn handle_setup_account(
         &mut self,
-        id: RequestId,
+        id: Generation<Request>,
         passphrase: ambre_core::Passphrase,
         email: ambre_core::Email,
         display_name: ambre_core::DisplayName,
@@ -472,12 +481,12 @@ impl SyncState {
     /// then the relay revokes its refresh token (`SYNC-177`), and only then
     /// does `LoggedOut` answer. A failed revocation still signs out: the keys
     /// are gone already, and the token expires on its own.
-    pub(crate) fn handle_sign_out(&mut self, id: RequestId) {
+    pub(crate) fn handle_sign_out(&mut self, id: Generation<Request>) {
         let held = self.tokens.borrow_mut().take();
         self.handle_logout();
         let (Some(tokens), Some(_)) = (held, self.event_tx.as_ref()) else {
             self.send_to_logic(LogicEvent::Rest {
-                id,
+                id: Some(id),
                 evt: RestEvent::LoggedOut,
             });
             return;
@@ -495,7 +504,7 @@ impl SyncState {
                 tracing::warn!("Sync: the refresh token was not revoked: {e}");
             }
             let _ = logic_tx.send(LogicEvent::Rest {
-                id,
+                id: Some(id),
                 evt: RestEvent::LoggedOut,
             });
         });
@@ -517,7 +526,7 @@ mod provider_tests {
 
     fn signed_in(keys_stored: ambre_bus::KeySetup) -> SyncEvent {
         SyncEvent::ProviderSignedIn {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             user_id: UserId::new(),
             display_name: ambre_core::DisplayName::new("Ada").unwrap(),
             email: "ada@example.org".into(),

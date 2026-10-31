@@ -431,14 +431,14 @@ fn a_spent_uid_counter_answers_each_line_write_with_its_notice() {
     let sheet_id = state.active_sheet.clone();
     state.uid_counter = None;
     let col = state.handle_command(TrameCommand::ResizeCol {
-        version: ambre_bus::ViewportVersion(1),
+        version: ambre_core::Generation::nth(1),
         sheet_id: sheet_id.clone(),
         col: Col::new(3),
         width: ambre_core::DocPx::new(150.0),
     });
     assert!(says_ids_exhausted(&col), "resize column");
     let row = state.handle_command(TrameCommand::ResizeRow {
-        version: ambre_bus::ViewportVersion(1),
+        version: ambre_core::Generation::nth(1),
         sheet_id,
         row: Row::new(3),
         height: ambre_core::DocPx::new(40.0),
@@ -907,13 +907,13 @@ fn deleted_line_leaves_no_formatting() {
         });
     }
     state.handle_command(TrameCommand::ResizeRow {
-        version: ambre_bus::ViewportVersion(1),
+        version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
         row: Row::new(1),
         height: ambre_core::DocPx::new(40.0),
     });
     state.handle_command(TrameCommand::ResizeCol {
-        version: ambre_bus::ViewportVersion(2),
+        version: ambre_core::Generation::nth(2),
         sheet_id: default_sheet(),
         col: Col::new(0),
         width: ambre_core::DocPx::new(150.0),

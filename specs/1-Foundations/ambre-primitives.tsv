@@ -174,7 +174,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | ResolvedCrossRef.shown | fiel
 ambre-bus | src/app/prose.rs | crate::app::prose | StyleId.0 | field | String	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TextAck.0 | field | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | TextAck::plus(n) | param | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
-ambre-bus | src/app/prose.rs | crate::app::prose | TextChangeSeq.0 | field | u64	newtype-inner	TextChangeSeq/TextAck/StyleId newtype
+ambre-bus | src/app/prose.rs | crate::app::prose | <TextChangeSeq as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/app/prose.rs | crate::app::prose | TocEntry.text | field | String	free-text	user content
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::code() | ret | u8	newtype-inner	closed-set enum codec
 ambre-bus | src/app/prose.rs | crate::app::prose | VAlign::from_code(code) | param | u8	newtype-inner	closed-set enum codec
@@ -364,7 +364,7 @@ ambre-bus | src/lib.rs | crate | ClipboardBlob::mark_html(html) | param | &str	g
 ambre-bus | src/lib.rs | crate | CopyOutcome::Text.0 | field | String	free-text	clipboard text/html halves
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_CLOSE | const | &str	generic	HTML comment marker over &str
 ambre-bus | src/lib.rs | crate | HTML_TOKEN_OPEN | const | &str	generic	HTML comment marker over &str
-ambre-bus | src/lib.rs | crate | ViewportVersion.0 | field | u64	newtype-inner	ViewportVersion/ClipToken newtype
+ambre-bus | src/lib.rs | crate | <ViewportVersion as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/logic.rs | crate::logic | AppCommand::is_mutating() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/lossy.rs | crate::lossy | LossyOutcome::sent() | ret | bool	generic	predicate
 ambre-bus | src/lossy.rs | crate::lossy | is_lossy_class() | ret | bool	generic	predicate
@@ -377,7 +377,7 @@ ambre-bus | src/outbox.rs | crate::outbox | SendOutcome::accepted() | ret | bool
 ambre-bus | src/rest.rs | crate::rest | DraftKey.0 | field | String	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::as_str() | ret | &str	newtype-inner	DraftKey newtype
 ambre-bus | src/rest.rs | crate::rest | DraftKey::new(text) | param | String	newtype-inner	DraftKey newtype
-ambre-bus | src/rest.rs | crate::rest | RequestId.0 | field | u64	newtype-inner	RequestId newtype
+ambre-bus | src/rest.rs | crate::rest | <Request as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-bus | src/start.rs | crate::start | StartGate::is_open() | ret | bool	generic	gate state flag
 ambre-bus | src/start.rs | crate::start | WorkerPost.0 | field | Vec<u8>	newtype-inner	the newtype's own inside: the bytes one postMessage carries
 ambre-bus | src/start.rs | crate::start | WorkerPost::as_bytes() | ret | &[u8]	newtype-inner	the newtype's own accessor, for the decoder or the postMessage buffer
@@ -666,6 +666,7 @@ ambre-chrome | src/toast.rs | crate::toast | Toasts::info(message) | param | imp
 ambre-chrome | src/toast.rs | crate::toast | Toasts::push(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::success(message) | param | impl Into<String>	free-text	text, label or user content
 ambre-chrome | src/toast.rs | crate::toast | Toasts::warning(message) | param | impl Into<String>	free-text	text, label or user content
+ambre-chrome | src/toast.rs | crate::toast | <ToastId as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers.0 | field | u8	newtype-inner	the private bit set of the three named members, built only from the named constants
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::alt() | ret | bool	generic	whether the set holds a named member, a predicate answer
 ambre-commands | src/keybinding.rs | crate::keybinding | Modifiers::contains() | ret | bool	generic	whether the set holds a named member, a predicate answer
@@ -888,7 +889,13 @@ ambre-core | src/payload.rs | crate::payload | LoroPayloadRef<'a>::as_bytes() | 
 ambre-core | src/provider.rs | crate::provider | OidcProvider::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/provider.rs | crate::provider | OidcProvider::parse(word) | param | &str	newtype-inner	closed-set enum word codec
 ambre-core | src/residency.rs | crate::residency | Residency<K>::holds() | ret | bool	generic	residency fact flag or its setter; named field, no mode switch
-ambre-core | src/residency.rs | crate::residency | ViewTick.0 | field | u64	newtype-inner	ViewTick newtype
+ambre-core | src/residency.rs | crate::residency | <ViewTick as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-core | src/generation.rs | crate::generation | <Generation<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/generation.rs | crate::generation | Generation.raw | field | u64	newtype-inner	the generation's own number; the marker is a PhantomData
+ambre-core | src/generation.rs | crate::generation | Generation<K>::at(raw) | param | u64	newtype-inner	the generation's own number; the marker is a PhantomData
+ambre-core | src/generation.rs | crate::generation | Generation<K>::from_stored(raw) | param | u64	newtype-inner	the number a store row keeps, read back for a wire family alone
+ambre-core | src/generation.rs | crate::generation | Generation<K>::nth(n) | param | u64	newtype-inner	the count a test names, behind the testing feature (ARCH-055)
+ambre-core | src/generation.rs | crate::generation | Generation<K>::stored() | ret | u64	newtype-inner	the number a store row keeps, for a wire family alone
 ambre-core | src/role.rs | crate::role | <Role as FromStr>::from_str(s) | param | &str	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/role.rs | crate::role | <Role as TryFrom<String>>::try_from(word) | param | String	newtype-inner	the wire word the enum's own fallible constructor reads
 ambre-core | src/role.rs | crate::role | <Role as std::convert::TryFrom<u8>>::try_from(value) | param | u8	newtype-inner	the discriminant byte the enum's own fallible constructor reads
@@ -1150,7 +1157,7 @@ ambre-logic | src/replay.rs | crate::replay | LogicState::replaying() | ret | bo
 ambre-logic | src/replay.rs | crate::replay | REPLAY_SLICE_BYTES | const | usize	math	count, size, limit, index or jitter local to an algorithm
 ambre-logic | src/residency.rs | crate::residency | LogicState::edits_paused() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/residency.rs | crate::residency | LogicState::reopen_evicted() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
-ambre-logic | src/seal_queue.rs | crate::seal_queue | SealTicket.0 | field | u64	newtype-inner	newtype field, constructor or accessor
+ambre-logic | src/seal_queue.rs | crate::seal_queue | <SealTicket as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-logic | src/segments.rs | crate::segments | LogicState::amendments_link_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_close_failed(message) | param | &str	free-text	free text: message, label, name or report
 ambre-logic | src/segments.rs | crate::segments | LogicState::segment_finalize_failed(message) | param | &str	free-text	free text: message, label, name or report
@@ -1291,6 +1298,9 @@ ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	generic	
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param | Option<String>	generic	enum<->stored string codec at the CRDT boundary: the raw string the Loro thread field stores, parsed into the enum here
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype
+ambre-murmure | src/drafts.rs | crate::drafts | <ShelfVersion as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/pictures.rs | crate::pictures | <PaintNumber as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-murmure | src/view.rs | crate::view | <ListsRevision as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::from_bytes(bytes) | param | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow::into_bytes() | ret | Vec<u8>	newtype-inner	DraftRow newtype
 ambre-murmure | src/drafts.rs | crate::drafts | Row.text | field | String	free-text	text, label or user content
@@ -1979,7 +1989,8 @@ ambre-prose | src/view/annotate.rs | crate::view::annotate | AnnotationIntent::R
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::hover() | ret | bool	generic	whether the hovered suggestion changed under the pointer
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_drafts(drafts) | param | &HashMap<CommentId,String>	free-text	the reply the user is typing in each thread's field, keyed by its thread
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect::contains() | ret | bool	generic	whether a point falls inside a rectangle on screen
-ambre-prose | src/view/cache.rs | crate::view::cache | PaintTick.0 | field | u64	newtype-inner	the paint an entry was last drawn on, compared for order alone
+ambre-prose | src/view/cache.rs | crate::view::cache | <PaintTick as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-prose | src/ui.rs | crate::ui | <DraftRevision as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::holds() | ret | bool	generic	whether a key holds drawing state for this very run
 ambre-prose | src/view/cache.rs | crate::view::cache | RunCache::is_empty() | ret | bool	generic	whether no run holds drawing state
 ambre-prose | src/view/caret.rs | crate::view::caret | ProseUiState::end_drag() | ret | bool	generic	whether a drag was in flight when the pointer was released
@@ -2996,9 +3007,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple.0 
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::get() | ret | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple::new(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
-ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion.0 | field | u64	newtype-inner	the stamp the paginator puts on each layout, which only grows
-ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::get() | ret | u64	newtype-inner	the stamp the paginator puts on each layout, which only grows
-ambre-prose | src/layout/run.rs | crate::layout::run | LayoutVersion::new(value) | param | u64	newtype-inner	the stamp the paginator puts on each layout, which only grows
+ambre-prose | src/layout/run.rs | crate::layout::run | <LayoutVersion as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-prose | src/view/annotate.rs | crate::view::annotate | LostReply::notice() | ret | &'static str	free-text	the sentence a toast shows the user for a lost reply
 ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures | FixtureError::Missing.0 | field | &'static str	free-text	a diagnostic sentence naming the part a fixture build could not find
 ambre-prose | src/doc.rs | crate::doc | BuiltInStyle::name() | ret | &'static str	generic	the codec of an enum that carries data: the style name the tree stores and the lookup matches back
@@ -3315,6 +3324,9 @@ ambre-server | src/secrets/token.rs | crate::secrets::token | oidc_state_key(sen
 ambre-server | src/secrets/token.rs | crate::secrets::token | refresh_key(send) | param | impl FnOnce(&str)->R	generic	lends the Redis key of a refresh token to the one Redis call that takes it (ARCH-049)
 ambre-sync | src/http.rs | crate::http | ShownTarget.0 | field | String	newtype-inner	the address an error shows, with no signed query
 ambre-sync | src/http.rs | crate::http | Target::open(send) | param | impl FnOnce(&str)->R	generic	lends the full address to the one foreign call that fetches it
+ambre-sync | src/generation.rs | crate::generation | <Listing as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-sync | src/generation.rs | crate::generation | <ReplayTicket as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
+ambre-sync | src/generation.rs | crate::generation | <ResendTicket as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-primitives | src/depinfo.rs | crate::depinfo | dependencies() | ret | Result<Vec<PathBuf>,String>	free-text	error messages printed to the terminal
 ambre-primitives | src/depinfo.rs | crate::depinfo | package() | ret | String	generic	the package name cargo prints in a package id, put in an error message
 ambre-primitives | src/depinfo.rs | crate::depinfo | parses_as_items() | ret | bool	generic	a predicate or a file read of the scanner

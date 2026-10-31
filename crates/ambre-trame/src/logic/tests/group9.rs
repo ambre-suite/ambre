@@ -14,7 +14,7 @@ const ROW_4: Row = Row::new(4);
 /// `(row, col, raw)`.
 fn cells(state: &mut TrameState) -> Vec<(u32, u32, String)> {
     let out = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_bus::ViewportVersion(9),
+        version: ambre_core::Generation::nth(9),
         row_start: Row::new(0),
         row_end: Row::new(7),
         col_start: Col::new(0),

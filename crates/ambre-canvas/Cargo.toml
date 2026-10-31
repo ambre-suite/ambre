@@ -58,6 +58,9 @@ required-features = ["tokens"]
 [dev-dependencies]
 # The recording surface the fatal screen is painted on in a host test.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
+# `Generation::nth` for a test that names a count. Test builds alone, held by
+# `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
+ambre-core = { path = "../ambre-core", features = ["testing"] }
 
 [lints]
 workspace = true

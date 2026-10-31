@@ -510,7 +510,7 @@ pub struct TrameUiState {
     pub formula_errors: HashSet<CellPos>,
 
     /// Version of the last accepted `ViewportData` response (anti-flicker).
-    pub accepted_version: ambre_bus::ViewportVersion,
+    pub accepted_version: ambre_core::Generation<ambre_bus::ViewportVersion>,
 
     /// Id of the sheet currently shown. Mirrors `TrameEvent::SheetList`; empty
     /// until the first one arrives. Tags the view's edit commands so they target
@@ -519,7 +519,7 @@ pub struct TrameUiState {
     pub active_sheet: ambre_bus::SheetId,
 
     /// Monotonically increasing version counter for outgoing `ScrollViewport` commands.
-    next_version: ambre_bus::ViewportVersion,
+    next_version: ambre_core::Generation<ambre_bus::ViewportVersion>,
 
     /// Grid column carrying the active shared filter, drawn with a funnel badge on
     /// its header (`trame-shared-filter`). `None` when no filter is active. Tracked from
