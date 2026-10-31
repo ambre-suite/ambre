@@ -10,18 +10,17 @@
 // how a reader walks a registry. What lives here is what only Trame can know:
 // which version its containers are at today, and what each past layout has to
 // become.
-
 use std::borrow::Cow;
 
-use ambre_core::{Payload, SnapshotBytes};
+use ambre_core::{Payload, SnapshotBytes, Version};
 
 use loro::{ExportMode, LoroDoc, LoroValue};
 use serde::{Deserialize, Serialize};
 
 use ambre_bus::{CellRect, Col, ColCount, FilterKind, Row, RowCount, SheetId};
 use ambre_core::schema::{
-    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
-    migrate_schema, migration_peer, verdict,
+    SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
+    migration_peer, verdict,
 };
 
 use crate::formula::identity::{AxisEdit, LineEdit};
@@ -249,7 +248,7 @@ impl SheetLine for Col {
 /// Raising it is not a decision about this constant. It is a layout change to a
 /// persisted record, and that obliges a [`MIGRATIONS`] row which carries an
 /// existing workbook across it (`SCHEMA-009`).
-pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+pub const SCHEMA_VERSION: Version<Schema> = Version::new(1);
 
 /// Write the current version into a workbook's `meta` register.
 ///
@@ -277,7 +276,7 @@ pub(crate) fn stamp(doc: &LoroDoc) {
 /// # Errors
 /// [`SchemaError::VersionUnreadable`] for a register holding a non-integer, a
 /// container, or an integer outside `u32`.
-pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
+pub fn read_version(doc: &LoroDoc) -> Result<Version<Schema>, SchemaError> {
     let Some(value) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Meta.as_str())
         .get(ambre_core::schema::MetaKey::SchemaVersion.as_str())
@@ -285,13 +284,11 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
         return Ok(SCHEMA_VERSION_ABSENT);
     };
     match value.into_value() {
-        Ok(LoroValue::I64(n)) => {
-            u32::try_from(n)
-                .map(SchemaVersion::new)
-                .map_err(|_| SchemaError::VersionUnreadable {
-                    found: format!("the integer {n}"),
-                })
-        }
+        Ok(LoroValue::I64(n)) => u32::try_from(n).map(Version::<Schema>::new).map_err(|_| {
+            SchemaError::VersionUnreadable {
+                found: format!("the integer {n}"),
+            }
+        }),
         Ok(other) => Err(SchemaError::VersionUnreadable {
             found: format!("{other:?}"),
         }),
@@ -432,7 +429,7 @@ mod tests {
     /// A snapshot of a workbook carrying `version` in its register. A `None`
     /// version writes no register at all, which is every workbook written
     /// before `ARCH P8`.
-    fn snapshot_at(version: Option<SchemaVersion>) -> Payload<SnapshotBytes> {
+    fn snapshot_at(version: Option<Version<Schema>>) -> Payload<SnapshotBytes> {
         let doc = LoroDoc::new();
         doc.get_map(Root::Sheets.as_str())
             .insert(default_sheet().as_str(), "Sheet1")

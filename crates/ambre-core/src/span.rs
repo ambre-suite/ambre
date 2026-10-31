@@ -6,14 +6,17 @@
 //! kept apart from a span. Each is `#[serde(transparent)]`, so it reads and
 //! writes the bare integer.
 
+use crate::Tally;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-crate::define_tally! {
-    /// How many times in a row one request has failed: the count a retry
-    /// backs off by.
-    pub struct FailureCount;
+/// How many times in a row one request has failed: the count a retry
+/// backs off by.
+pub enum Failures {}
+
+impl crate::TallyKind for Failures {
+    const NAME: &'static str = "FailureCount";
 }
 
 /// A span of time in whole milliseconds.
@@ -53,7 +56,7 @@ impl Millis {
     /// The span doubled once per failure of `failures`, saturating at
     /// `u64::MAX` milliseconds: the delay of a retry that backs off.
     #[must_use]
-    pub const fn doubled(self, failures: FailureCount) -> Self {
+    pub const fn doubled(self, failures: Tally<Failures>) -> Self {
         match 1_u64.checked_shl(failures.get()) {
             Some(factor) => self.times(factor),
             None => Self(u64::MAX),
@@ -444,11 +447,11 @@ mod tests {
     fn a_millisecond_span_scales_and_backs_off_without_overflow() {
         assert_eq!(Millis(2_000).times(3), Millis(6_000));
         assert_eq!(
-            Millis(2_000).doubled(super::FailureCount::new(2)),
+            Millis(2_000).doubled(crate::Tally::<super::Failures>::new(2)),
             Millis(8_000)
         );
         assert_eq!(
-            Millis(2).doubled(super::FailureCount::new(64)),
+            Millis(2).doubled(crate::Tally::<super::Failures>::new(64)),
             Millis(u64::MAX)
         );
         assert_eq!(Millis(u64::MAX).times(2), Millis(u64::MAX));

@@ -29,8 +29,8 @@
 use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{
     Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
-    ElementCount, PresencePayload, PresenceUpdate, PresentMode, SlideCount, SlideIndex,
-    SlidePosition, ToileCommand, ToileEvent,
+    Elements, PresencePayload, PresenceUpdate, PresentMode, SlideCount, SlideIndex, SlidePosition,
+    ToileCommand, ToileEvent,
 };
 use ambre_bus::{AppCommand, AppEvent, UiEvent};
 use ambre_canvas::PerfSnapshot;
@@ -39,7 +39,7 @@ use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts};
 use ambre_commands::CommandId;
 use ambre_core::id::{Document, Frame, Id, Thread, User};
-use ambre_core::{CharCount, CharOffset};
+use ambre_core::{CharCount, CharOffset, Tally};
 use ambre_core::{Doc, Scale, View};
 use ambre_draw::Rect;
 use ambre_toile::chrome::{
@@ -107,7 +107,7 @@ fn multi_selection_shows_count_bounds_and_chips() {
     let owner = Owner::new();
     owner.set();
     let stats = SelStats {
-        count: ambre_bus::app::toile::ElementCount::new(3),
+        count: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(3),
         bounds: Some(Rect::new(10.0, 20.0, 50.0, 80.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.5, ambre_core::FrameRate::new(60.0));
@@ -164,7 +164,7 @@ fn single_selection_shows_count_without_bounds() {
     owner.set();
     // A lone element: the count shows, but no combined-bounds caption.
     let stats = SelStats {
-        count: ambre_bus::app::toile::ElementCount::new(1),
+        count: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(1),
         bounds: Some(Rect::new(0.0, 0.0, 10.0, 10.0)),
     };
     let (root, _zoom) = mount_bar(Some(stats), 1.0, ambre_core::FrameRate::new(60.0));
@@ -277,7 +277,7 @@ fn context_menu_copy_row_fires_copy_command() {
     // the COPY id the view resolves against its selection.
     let scope = CtxScope {
         site: ClickSite::Selection,
-        count: ElementCount::new(1),
+        count: Tally::<Elements>::new(1),
         locks: LockMix::Unlocked,
         ..CtxScope::default()
     };
@@ -304,7 +304,7 @@ fn context_menu_multi_selection_offers_group() {
     owner.set();
     let scope = CtxScope {
         site: ClickSite::Selection,
-        count: ElementCount::new(2),
+        count: Tally::<Elements>::new(2),
         locks: LockMix::Unlocked,
         ..CtxScope::default()
     };
@@ -325,7 +325,7 @@ fn context_menu_locked_selection_offers_only_unlock() {
     // A wholly-locked selection: Unlock applies, Lock is omitted.
     let scope = CtxScope {
         site: ClickSite::Selection,
-        count: ElementCount::new(1),
+        count: Tally::<Elements>::new(1),
         locks: LockMix::Locked,
         ..CtxScope::default()
     };
@@ -441,7 +441,7 @@ fn selection_toolbar_delete_fires_command() {
     // gated by the same flags as the context menu.
     let bar = RwSignal::new(Some(FloatBar {
         at: css_point(40.0, 20.0),
-        count: ElementCount::new(1),
+        count: Tally::<Elements>::new(1),
         groups: GroupHeld::NoGroup,
         locks: LockMix::Unlocked,
         fill: None,
@@ -523,7 +523,7 @@ fn the_button_bars_announce_the_registry_labels() {
     // command button the bar has.
     let bar = RwSignal::new(Some(FloatBar {
         at: css_point(40.0, 20.0),
-        count: ElementCount::new(2),
+        count: Tally::<Elements>::new(2),
         groups: GroupHeld::Group,
         locks: LockMix::Both,
         fill: None,
@@ -889,7 +889,7 @@ fn an_import_report_reaches_the_user() {
     let owner = Owner::new();
     owner.set();
     let root = mount_notified(ToileEvent::ImportReport {
-        imported: ambre_bus::app::toile::ElementCount::new(4),
+        imported: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(4),
         skipped: vec![ambre_bus::app::toile::SkipReason::new("gradient")],
     });
     let toast = root

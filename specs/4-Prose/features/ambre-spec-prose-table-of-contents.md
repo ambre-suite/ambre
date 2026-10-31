@@ -95,7 +95,7 @@ pub struct TocEntry {
     pub heading_number: Option<HeadingNumber>,
     /// The page number the heading starts on, read from the layout (`PROSE-FEAT-060`).
     /// `None` while the layout places no block that holds the heading.
-    pub page:           Option<PageNumber>,
+    pub page:           Option<Ordinal<Page>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

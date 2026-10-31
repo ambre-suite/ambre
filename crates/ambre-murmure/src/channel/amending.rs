@@ -521,7 +521,7 @@ fn overlay_named_threads(amendments: &LoroDoc, messages: &mut [MessageView]) {
     for view in messages.iter_mut().filter(|view| view.thread.is_none()) {
         view.thread = recorded_thread(amendments, view.id).map(|document| ThreadHead {
             document,
-            replies: ambre_bus::ReplyCount::ZERO,
+            replies: ambre_core::Tally::<ambre_bus::Replies>::ZERO,
             last_replier: None,
         });
     }

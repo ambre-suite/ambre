@@ -131,8 +131,8 @@ impl SpatialIndex {
     }
 
     /// Number of leaves. Test helper.
-    pub fn len(&self) -> ambre_core::ElementCount {
-        ambre_core::ElementCount::of_len(self.tree.size())
+    pub fn len(&self) -> ambre_core::Tally<ambre_core::Elements> {
+        ambre_core::Tally::<ambre_core::Elements>::of_len(self.tree.size())
     }
 
     pub fn is_empty(&self) -> bool {
@@ -222,7 +222,10 @@ mod tests {
             idx.remove(&Id::<Element>::from_text(format!("e{i}")));
         }
         assert_eq!(idx.walks(), 0, "no call walked the index");
-        assert_eq!(idx.len(), ambre_core::ElementCount::new(4_900));
+        assert_eq!(
+            idx.len(),
+            ambre_core::Tally::<ambre_core::Elements>::new(4_900)
+        );
         let moved = Viewport {
             center: Point::new(8.0, 5.0),
             zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
@@ -244,7 +247,7 @@ mod tests {
         idx.insert(bounds("a", 0.0, 0.0, 10.0, 10.0));
         idx.insert(bounds("nan", f64::NAN, 0.0, 10.0, 10.0));
         idx.remove(&Id::<Element>::from_text("nan".to_owned()));
-        assert_eq!(idx.len(), ambre_core::ElementCount::new(1));
+        assert_eq!(idx.len(), ambre_core::Tally::<ambre_core::Elements>::new(1));
         assert_eq!(idx.walks(), 1);
     }
 }

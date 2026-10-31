@@ -91,7 +91,7 @@ pub(crate) struct Rekey {
     /// the ticket of the timer armed for it (`SYNC-159`).
     failed: Option<(FixedBytes<Signature>, Generation<ResendTicket>)>,
     /// Sequencing failures since the relay last echoed a delta of this log.
-    failures: ambre_core::FailureCount,
+    failures: ambre_core::Tally<ambre_core::Failures>,
 }
 
 impl Rekey {
@@ -115,7 +115,7 @@ impl Rekey {
         for landed in self.sent.drain(..=at) {
             landed.payload.wipe();
         }
-        self.failures = ambre_core::FailureCount::ZERO;
+        self.failures = ambre_core::Tally::<ambre_core::Failures>::ZERO;
         if self.refused_from.is_some_and(|c| c <= clock) {
             self.refused_from = None;
         }
@@ -141,7 +141,7 @@ impl Rekey {
         &mut self,
         signature: &FixedBytes<Signature>,
         ticket: Generation<ResendTicket>,
-    ) -> Option<ambre_core::FailureCount> {
+    ) -> Option<ambre_core::Tally<ambre_core::Failures>> {
         self.position(signature)?;
         self.failed = Some((*signature, ticket));
         self.failures = self.failures.incremented();

@@ -2510,7 +2510,7 @@ mod tests {
     fn activity(content: u32) -> ambre_core::activity::ActivityCounters {
         ambre_core::activity::ActivityCounters {
             active: ambre_bus::Activity::Active,
-            content: ambre_core::activity::ContentUpdates::new(content),
+            content: ambre_core::Tally::<ambre_core::activity::ContentUpdates>::new(content),
             ..Default::default()
         }
     }
@@ -2572,7 +2572,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::Activity {
             document_id: active.document_id(),
             counters: ambre_core::activity::ActivityCounters {
-                mentions: ambre_core::activity::MentionUpdates::new(1),
+                mentions: ambre_core::Tally::<ambre_core::activity::MentionUpdates>::new(1),
                 ..activity(2)
             },
         });
@@ -4437,7 +4437,7 @@ mod tests {
         let channel_id = Id::<Channel>::mint();
         let channel = ChannelState::create(channel_id, ChannelType::Public, None, NOW)
             .expect("create")
-            .with_segment_size(ambre_murmure::MessageCount::of_len(size));
+            .with_segment_size(ambre_core::Tally::<ambre_bus::Messages>::of_len(size));
         let active = channel.active_id();
         state.hold_channel(channel);
         (channel_id, active)
@@ -6452,7 +6452,7 @@ mod tests {
             state.handle_logic_event(LogicEvent::Activity {
                 document_id: thread,
                 counters: ambre_core::activity::ActivityCounters {
-                    mentions: ambre_core::activity::MentionUpdates::new(1),
+                    mentions: ambre_core::Tally::<ambre_core::activity::MentionUpdates>::new(1),
                     ..activity(2)
                 },
             });
@@ -6500,7 +6500,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::Activity {
             document_id: thread,
             counters: ambre_core::activity::ActivityCounters {
-                mentions: ambre_core::activity::MentionUpdates::new(1),
+                mentions: ambre_core::Tally::<ambre_core::activity::MentionUpdates>::new(1),
                 ..activity(0)
             },
         });

@@ -179,11 +179,10 @@ fn write_note_block(document: &loro::LoroDoc, text: &str) -> Result<TreeID, doc:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::events::{
-        BlockId, BlockInit, FootnoteEntry, FootnoteOrdinal, ProseCommand, block_id,
-    };
+    use crate::events::{BlockId, BlockInit, FootnoteCall, FootnoteEntry, ProseCommand, block_id};
     use crate::logic::ProseOutcome;
     use ambre_bus::app::prose::DocSpan;
+    use ambre_core::Ordinal;
 
     fn refusal(outcome: &ProseOutcome) -> Option<ProseRefusal> {
         outcome.display.iter().find_map(|event| match event {
@@ -245,7 +244,7 @@ mod tests {
         state
             .footnotes()
             .into_iter()
-            .map(|n| (n.text, n.ordinal.map(FootnoteOrdinal::get)))
+            .map(|n| (n.text, n.ordinal.map(Ordinal::<FootnoteCall>::get)))
             .collect()
     }
 
@@ -354,7 +353,7 @@ mod tests {
             alice.footnotes(),
             vec![FootnoteEntry {
                 footnote_id: id,
-                ordinal: Some(FootnoteOrdinal::FIRST),
+                ordinal: Some(Ordinal::<FootnoteCall>::FIRST),
                 text: "edited".to_owned(),
             }]
         );
@@ -382,7 +381,7 @@ mod tests {
         let ordinals: Vec<_> = alice
             .footnotes()
             .iter()
-            .map(|n| n.ordinal.map(FootnoteOrdinal::get))
+            .map(|n| n.ordinal.map(Ordinal::<FootnoteCall>::get))
             .collect();
         assert_eq!(ordinals, vec![Some(1), Some(2)]);
     }
@@ -419,7 +418,7 @@ mod tests {
             listed(&outcome),
             vec![FootnoteEntry {
                 footnote_id: kept,
-                ordinal: Some(FootnoteOrdinal::FIRST),
+                ordinal: Some(Ordinal::<FootnoteCall>::FIRST),
                 text: "kept".to_owned(),
             }]
         );

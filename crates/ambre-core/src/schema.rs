@@ -28,8 +28,9 @@
 
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::version::{OpenRange, Version, VersionKind};
 
 crate::crdt_names! {
     /// The foundation's keys of the root `meta` map,
@@ -47,43 +48,22 @@ crate::crdt_names! {
 /// Absent means zero, so no document written before the register existed needs
 /// rewriting. The alternative is a migration whose only purpose is to enable
 /// migrations.
-pub const SCHEMA_VERSION_ABSENT: SchemaVersion = SchemaVersion(0);
+pub const SCHEMA_VERSION_ABSENT: Version<Schema> = Version::new(0);
 
-/// The version of a document's schema, as its `meta` register holds it
-/// (`SCHEMA-004`).
+/// The space of a document's schema version, as its `meta` register holds
+/// it (`SCHEMA-004`).
 ///
 /// One space for every application: each declares its own current value, and
 /// a stored document carries the value of the build that wrote it. Compare two
 /// with [`verdict`], which names the three outcomes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct SchemaVersion(u32);
+pub enum Schema {}
 
-impl SchemaVersion {
-    /// The version the register holds.
-    #[must_use]
-    pub const fn new(version: u32) -> Self {
-        Self(version)
-    }
-
-    /// The number written to the register.
-    #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-
-    /// The version a bump after this one declares.
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+impl VersionKind for Schema {
+    type Repr = u32;
+    const NAME: &'static str = "SchemaVersion";
 }
 
-impl fmt::Display for SchemaVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
-    }
-}
+impl OpenRange for Schema {}
 
 /// The comparison of a document's schema version against the binary's, and the
 /// only three outcomes there are (`SCHEMA-006`).
@@ -105,7 +85,7 @@ pub enum SchemaVerdict {
 /// point. A call site that reads `Older` runs a migration. One that reads
 /// `Less` has to remember which way round the arguments went.
 #[must_use]
-pub fn verdict(document: SchemaVersion, binary: SchemaVersion) -> SchemaVerdict {
+pub fn verdict(document: Version<Schema>, binary: Version<Schema>) -> SchemaVerdict {
     match document.cmp(&binary) {
         std::cmp::Ordering::Equal => SchemaVerdict::Current,
         std::cmp::Ordering::Less => SchemaVerdict::Older,
@@ -128,21 +108,21 @@ pub enum SchemaError {
         "this document was written by a newer client (schema {document}, this build reads {binary}); update to open it"
     )]
     DocumentTooNew {
-        document: SchemaVersion,
-        binary: SchemaVersion,
+        document: Version<Schema>,
+        binary: Version<Schema>,
     },
 
     /// The document is older and the registry has no step leaving `from`. A
     /// gap in the chain, not a property of the document.
     #[error("no migration path from schema version {from}")]
-    NoMigrationPath { from: SchemaVersion },
+    NoMigrationPath { from: Version<Schema> },
 
     /// A registry step ran and failed. Carries the step so a report names the
     /// hop rather than the whole chain.
     #[error("migrating schema {from} -> {to} failed: {reason}")]
     MigrationFailed {
-        from: SchemaVersion,
-        to: SchemaVersion,
+        from: Version<Schema>,
+        to: Version<Schema>,
         reason: String,
     },
 
@@ -172,8 +152,8 @@ pub enum SchemaError {
 /// shared reference because that is the shape a CRDT handle has: a `LoroDoc`
 /// writes through `&self`.
 pub struct SchemaMigration<D> {
-    pub from: SchemaVersion,
-    pub to: SchemaVersion,
+    pub from: Version<Schema>,
+    pub to: Version<Schema>,
     /// Returns the reason on failure; the walk wraps it into
     /// [`SchemaError::MigrationFailed`] with the hop it came from.
     pub apply: fn(&D) -> Result<(), String>,
@@ -191,8 +171,8 @@ pub struct SchemaMigration<D> {
 /// [`SchemaError::MigrationFailed`] when a step itself fails.
 pub fn migrate_schema<D>(
     steps: &[SchemaMigration<D>],
-    from: SchemaVersion,
-    target: SchemaVersion,
+    from: Version<Schema>,
+    target: Version<Schema>,
     doc: &D,
 ) -> Result<(), SchemaError> {
     if from > target {
@@ -330,8 +310,8 @@ mod tests {
     #[derive(Default)]
     struct Trace(RefCell<Vec<u32>>);
 
-    fn v(version: u32) -> SchemaVersion {
-        SchemaVersion(version)
+    fn v(version: u32) -> Version<Schema> {
+        Version::<Schema>::new(version)
     }
 
     fn step_to(to: u32) -> fn(&Trace) -> Result<(), String> {

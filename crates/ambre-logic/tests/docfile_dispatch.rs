@@ -81,7 +81,10 @@ fn a_toile_file_offered_to_trame_names_the_app_that_should_have_it() {
         .import_ambre_plaintext(&bytes)
         .expect("Toile claims its own file");
     assert_eq!(id, doc_id(2));
-    assert_eq!(state.element_count(), ambre_core::ElementCount::new(1));
+    assert_eq!(
+        state.element_count(),
+        ambre_core::Tally::<ambre_core::Elements>::new(1)
+    );
     assert_eq!(bytes, before, "the rejected read mutated the buffer");
 }
 

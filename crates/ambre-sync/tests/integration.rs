@@ -539,9 +539,8 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         ambre_core::classify(&ambre_core::Payload::<ambre_core::PickedContainer>::new(
             sealed.clone()
         )),
-        Ok(ambre_core::ContainerKind::Sealed(
-            ambre_core::AMBRE_SEALED_VERSION
-        ))
+        Ok(ambre_core::ContainerKind::Sealed(version))
+            if version == ambre_core::AMBRE_SEALED_VERSION
     ));
     // Read as a plaintext container, the same bytes are refused.
     let misread = ambre_core::Payload::<ambre_core::PlaintextContainer>::new(sealed.clone());

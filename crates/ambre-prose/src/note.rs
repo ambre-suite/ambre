@@ -6,13 +6,14 @@
 //! calls in document order, and never stored (`PROSE-FEAT-013`,
 //! `PROSE-FEAT-095`). Nothing in this module writes.
 
+use ambre_core::Ordinal;
 use std::collections::HashSet;
 
 use ambre_core::id::{Footnote, Id};
 use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
 
 use crate::doc;
-use crate::events::{FootnoteEntry, FootnoteOrdinal};
+use crate::events::{FootnoteCall, FootnoteEntry};
 
 /// The entry of footnote `id`, when `annots` holds one of that kind.
 #[must_use]
@@ -71,7 +72,7 @@ pub(crate) fn footnote_calls(document: &LoroDoc) -> Vec<doc::Anchor<Id<Footnote>
 /// A call whose note is gone counts for nothing. Two peers holding one text
 /// therefore count one set of numbers (`PROSE-FEAT-097`).
 #[must_use]
-pub fn ordinals(document: &LoroDoc) -> Vec<(Id<Footnote>, FootnoteOrdinal)> {
+pub fn ordinals(document: &LoroDoc) -> Vec<(Id<Footnote>, Ordinal<FootnoteCall>)> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for anchor in footnote_calls(document) {
@@ -80,7 +81,7 @@ pub fn ordinals(document: &LoroDoc) -> Vec<(Id<Footnote>, FootnoteOrdinal)> {
             continue;
         }
         seen.insert(id);
-        out.push((id, FootnoteOrdinal::from_position(out.len())));
+        out.push((id, Ordinal::<FootnoteCall>::from_position(out.len())));
     }
     out
 }

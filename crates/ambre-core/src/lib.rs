@@ -106,8 +106,8 @@ pub use color::{Alpha, InvalidOpacity, Opacity, Rgb, Rgba};
 pub use credential::ProviderUrl;
 pub use doc_type::DocType;
 pub use docfile::{
-    AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, ContainerFile, ContainerKind,
-    ContainerVersion, DocFileError, FileDigest, FileSalt, HEADER_LEN, SALT_LEN, SEAL_NONCE_LEN,
+    AMBRE_MAGIC, AMBRE_SEALED_VERSION, AMBRE_VERSION, AmbreHeader, Container, ContainerFile,
+    ContainerKind, DocFileError, FileDigest, FileSalt, HEADER_LEN, SALT_LEN, SEAL_NONCE_LEN,
     SEALED_AAD_LEN, SEALED_HEADER_LEN, SealedAmbre, classify, migrate_ambre, parse_sealed_header,
     read_ambre_plaintext, read_ambre_plaintext_as, sealed_aad, write_ambre_plaintext,
     write_ambre_sealed,
@@ -124,9 +124,9 @@ pub use fingerprint::KeyFingerprint;
 pub use fixed_bytes::{ByteArray, DebugForm, FixedBytes, FixedBytesError, FixedRole};
 #[cfg(feature = "fixtures")]
 pub use fixtures::{
-    BoardFrameCount, ConnectorCount, DocBlockCount, FIXTURE_IMPORT_PEER, FixtureGen,
-    FixtureManifest, FixtureName, FixtureSeed, FixtureShape, FormulaCount, GeneratorVersion,
-    PeerCount, ShapeBody, SheetCount, fixture_peer_count, seeded_document_id,
+    BoardFrames, Connectors, DocBlocks, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest,
+    FixtureName, FixtureSeed, FixtureShape, Formulas, Generator, Peers, ShapeBody, Sheets,
+    fixture_peer_count, seeded_document_id,
 };
 pub use font::{
     FontFamily, FontSize, FontWeight, InvalidFontSize, InvalidFontWeight, Slant, Strikethrough,
@@ -150,6 +150,7 @@ pub use name::{
     DisplayName, InvalidDisplayName, NAME_MAX_CHARS, NAME_TOO_LONG, Name, NameTooLong, name_fits,
 };
 pub use object_key::ObjectKey;
+pub use ordinal::{Ordinal, OrdinalKind};
 pub use payload::{
     ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic, LoroPayload,
     LoroPayloadRef, MediaBytes, Payload, PayloadKind, PickedContainer, PickedFile,
@@ -161,8 +162,8 @@ pub use public_key::{ExchangePublicKey, PublicKey};
 pub use role::{DocumentRank, OrganizationRank, Role};
 pub use scale::Scale;
 pub use schema::{
-    SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
-    migrate_schema, migration_peer, scaffold_peer, verdict,
+    SCHEMA_VERSION_ABSENT, Schema, SchemaError, SchemaMigration, SchemaVerdict, migrate_schema,
+    migration_peer, scaffold_peer, verdict,
 };
 pub use search::{SearchQuery, UserSearch};
 pub use secret::{
@@ -172,14 +173,14 @@ pub use secret::{
 pub use seq::{DeltaCount, Seq};
 pub use space::{CanvasCss, Css, Device, Doc, Image, Space, Surface, Texel, View};
 pub use span::{
-    FailureCount, FrameRate, LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds,
+    Failures, FrameRate, LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds,
     Timestamp, UnixMillis, UnixSeconds,
 };
 pub use status::{
     ApiFailure, HttpStatus, RefusalCode, RotationStatus, SnapshotStatus, StatusError,
     UnreadableCause, WriteStatus,
 };
-pub use tally::{CellCount, ElementCount};
+pub use tally::{CellCount, Elements, Tally, TallyKind};
 pub use text_offset::{
     ByteCount, ByteDelta, ByteOffset, ByteSpan, ByteVec, CharCount, CharDelta, CharOffset,
     CharSpan, CharVec, RedactedChars, Utf16Count, Utf16Delta, Utf16Offset, Utf16Span, Utf16Vec,
@@ -191,4 +192,4 @@ pub use unit::{
     ViewSpeedVector,
 };
 pub use uuid::Uuid;
-pub use version::Version;
+pub use version::{Current, OpenRange, Version, VersionKind, VersionRepr};

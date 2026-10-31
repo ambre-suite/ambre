@@ -190,7 +190,7 @@ def tagless() -> bool:
 # `SCHEMA_VERSION` alone: the protocol's `SCHEMA_VERSION_KEY` and
 # `SCHEMA_VERSION_ABSENT` are not a stamped number.
 STAMP = re.compile(
-    r"^pub const SCHEMA_VERSION\s*:\s*SchemaVersion\s*=\s*SchemaVersion::new\((\d+)\)",
+    r"^pub const SCHEMA_VERSION\s*:\s*Version<Schema>\s*=\s*Version(?:::<Schema>)?::new\((\d+)\)",
     re.MULTILINE,
 )
 

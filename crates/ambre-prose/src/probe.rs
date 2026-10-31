@@ -10,6 +10,7 @@
 //! when the answer reaches the view. No clock crosses a thread.
 
 use ambre_bus::app::prose::ProseEvent;
+use ambre_core::Tally;
 
 use crate::ui::DraftBuffer;
 
@@ -121,7 +122,7 @@ pub struct KeyProbe {
     /// The animation frames begun so far.
     frame: FrameNumber,
     /// The frame counts of the confirmations since the last take.
-    counts: Vec<FrameCount>,
+    counts: Vec<Tally<AnimationFrames>>,
     /// The highest acknowledgement number seen in the draft.
     seen: Option<ambre_bus::app::prose::TextAck>,
     undrawn: Vec<Undrawn>,
@@ -135,7 +136,7 @@ impl KeyProbe {
     }
 
     /// The frame counts of the confirmations since the last call.
-    pub fn take_counts(&mut self) -> Vec<FrameCount> {
+    pub fn take_counts(&mut self) -> Vec<Tally<AnimationFrames>> {
         std::mem::take(&mut self.counts)
     }
 
@@ -231,9 +232,11 @@ impl KeyProbe {
     }
 }
 
-ambre_core::define_tally! {
-    /// The animation frames a confirmation waited for.
-    pub struct FrameCount;
+/// The animation frames a confirmation waited for.
+pub enum AnimationFrames {}
+
+impl ambre_core::TallyKind for AnimationFrames {
+    const NAME: &'static str = "FrameCount";
 }
 
 /// How many animation frames began before a moment, counted by the probe.
@@ -249,9 +252,9 @@ impl FrameNumber {
 
     /// The frames begun from `earlier` to this number, zero when `earlier`
     /// is not before it, held at the top of a tally.
-    fn since(self, earlier: Self) -> FrameCount {
+    fn since(self, earlier: Self) -> Tally<AnimationFrames> {
         let frames = self.0.saturating_sub(earlier.0);
-        FrameCount::new(u32::try_from(frames).unwrap_or(u32::MAX))
+        Tally::<AnimationFrames>::new(u32::try_from(frames).unwrap_or(u32::MAX))
     }
 }
 
@@ -503,7 +506,7 @@ mod tests {
         probe.frame();
         draft.confirm(ambre_bus::app::prose::TextAck::new(1));
         probe.answered(ambre_core::PageTime::new(33.0), &draft, Answer::Other);
-        assert_eq!(probe.take_counts(), [FrameCount::new(2)]);
+        assert_eq!(probe.take_counts(), [Tally::<AnimationFrames>::new(2)]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");
     }
 
@@ -517,10 +520,13 @@ mod tests {
         };
         probe.frame();
         assert_eq!(probe.frame, FrameNumber(u64::MAX));
-        assert_eq!(FrameNumber(1).since(FrameNumber(3)), FrameCount::ZERO);
+        assert_eq!(
+            FrameNumber(1).since(FrameNumber(3)),
+            Tally::<AnimationFrames>::ZERO
+        );
         assert_eq!(
             FrameNumber(u64::MAX).since(FrameNumber(0)),
-            FrameCount::new(u32::MAX)
+            Tally::<AnimationFrames>::new(u32::MAX)
         );
     }
 
@@ -538,12 +544,13 @@ mod tests {
                 p95: ambre_core::PageMillis::new(95.0)
             })
         );
-        let frames: Vec<FrameCount> = (1..=100).rev().map(FrameCount::new).collect();
+        let frames: Vec<Tally<AnimationFrames>> =
+            (1..=100).rev().map(Tally::<AnimationFrames>::new).collect();
         assert_eq!(
-            percentiles(&frames, FrameCount::cmp),
+            percentiles(&frames, Tally::<AnimationFrames>::cmp),
             Some(Percentiles {
-                median: FrameCount::new(51),
-                p95: FrameCount::new(95)
+                median: Tally::<AnimationFrames>::new(51),
+                p95: Tally::<AnimationFrames>::new(95)
             })
         );
     }

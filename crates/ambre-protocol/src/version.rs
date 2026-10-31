@@ -3,13 +3,13 @@
 //! Defines the current version of the wire format and provides helpers for
 //! version-aware serialization/deserialization.
 
-use ambre_core::version::Version;
+use ambre_core::version::{Protocol, Version};
 
 /// Current version of the wire protocol.
 ///
 /// This is the version byte that must be prepended to every postcard-serialized
 /// network message, both a WebSocket frame and a REST payload.
-pub const CURRENT_VERSION: Version = Version::V1;
+pub const CURRENT_VERSION: Version<Protocol> = Version::CURRENT;
 
 /// Checks that the provided version is supported.
 ///
@@ -20,7 +20,7 @@ pub const CURRENT_VERSION: Version = Version::V1;
 ///
 /// [`VersionError::UnsupportedVersion`] on any version other than
 /// [`CURRENT_VERSION`], carrying the version it read.
-pub fn check_version(version: Version) -> Result<(), VersionError> {
+pub fn check_version(version: Version<Protocol>) -> Result<(), VersionError> {
     if version == CURRENT_VERSION {
         Ok(())
     } else {
@@ -32,6 +32,6 @@ pub fn check_version(version: Version) -> Result<(), VersionError> {
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 pub enum VersionError {
     /// The encountered version is not supported by this client/server.
-    #[error("unsupported wire protocol version: {0}")]
-    UnsupportedVersion(Version),
+    #[error("unsupported wire protocol version: v{0}")]
+    UnsupportedVersion(Version<Protocol>),
 }

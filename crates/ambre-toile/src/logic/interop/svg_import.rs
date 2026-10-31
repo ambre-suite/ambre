@@ -44,7 +44,8 @@
 //! enforced while walking. Any breach aborts the whole import atomically: the
 //! returned `Err` carries no commands.
 
-use ambre_core::{ElementCount, Rgb, Rgba};
+use ambre_core::Tally;
+use ambre_core::{Elements, Rgb, Rgba};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
 
@@ -94,12 +95,19 @@ pub fn import_svg(
     let root_xml = doc.as_ref().map(|d| d.root_element());
     // The document root is not itself a `<g>`; its direct-member refs are dropped
     // (only nested `<g>` become groups). Nested groups are pushed during the walk.
-    walk_group(tree.root(), root_xml, ImportDepth::ZERO, limits, &mut batch)?;
+    walk_group(
+        tree.root(),
+        root_xml,
+        Tally::<ImportDepth>::ZERO,
+        limits,
+        &mut batch,
+    )?;
 
     if batch.commands.is_empty() {
         return Err(ImportError::Empty);
     }
-    batch.report.imported = ambre_bus::app::toile::ElementCount::of_len(batch.commands.len());
+    batch.report.imported =
+        ambre_core::Tally::<ambre_bus::app::toile::Elements>::of_len(batch.commands.len());
     Ok(batch)
 }
 
@@ -132,7 +140,7 @@ fn import_text_node(
             .skip("text: a node the reader could not read a body from");
         return Ok(None);
     }
-    limits.check_element_count(ElementCount::of_len(batch.commands.len()))?;
+    limits.check_element_count(Tally::<Elements>::of_len(batch.commands.len()))?;
     let x = node
         .attribute("x")
         .and_then(|v| v.parse::<f64>().ok())
@@ -187,7 +195,7 @@ fn is_drawn(node: roxmltree::Node) -> bool {
 fn walk_group(
     group: &usvg::Group,
     xml: Option<roxmltree::Node>,
-    depth: ImportDepth,
+    depth: Tally<ImportDepth>,
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Vec<ImportRef>, ImportError> {
@@ -276,7 +284,7 @@ fn import_path(
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<ImportRef, ImportError> {
-    limits.check_element_count(ElementCount::of_len(batch.commands.len()))?;
+    limits.check_element_count(Tally::<Elements>::of_len(batch.commands.len()))?;
 
     let bez = to_bezpath(path.data(), &path.abs_transform(), limits);
     let bounds = bez.bounding_box();
@@ -305,7 +313,7 @@ fn import_image(
     limits: &Limits,
     batch: &mut ImportBatch,
 ) -> Result<Option<ImportRef>, ImportError> {
-    limits.check_element_count(ElementCount::of_len(batch.commands.len()))?;
+    limits.check_element_count(Tally::<Elements>::of_len(batch.commands.len()))?;
 
     let raw: &[u8] = match image.kind() {
         usvg::ImageKind::PNG(d) | usvg::ImageKind::JPEG(d) => d.as_slice(),

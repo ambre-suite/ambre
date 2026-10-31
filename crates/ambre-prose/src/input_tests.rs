@@ -533,7 +533,10 @@ fn a_press_places_the_caret_and_collapses_the_selection() {
         (block, DocOffset::new(4), None)
     );
     assert_eq!(rig.ui.viewport.scroll_y, scroll);
-    assert_eq!(rig.ui.runs.built(), crate::view::cache::BuildCount::ZERO);
+    assert_eq!(
+        rig.ui.runs.built(),
+        ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+    );
     assert!(rig.ui.provisional_run(block).is_none());
 }
 

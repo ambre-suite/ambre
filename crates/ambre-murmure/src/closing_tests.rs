@@ -26,7 +26,7 @@ fn draft(text: &str) -> MessageDraft {
 fn channel(size: usize) -> ChannelState {
     ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
-        .with_segment_size(crate::MessageCount::of_len(size))
+        .with_segment_size(ambre_core::Tally::<ambre_bus::Messages>::of_len(size))
         .identify()
 }
 

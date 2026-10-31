@@ -6,12 +6,14 @@
 //! also holds the older segments the view asked for. Each document keeps its own identifier, so a
 //! remote delta reaches the one it names and no other (`MURMURE-024`).
 
+use ambre_core::Tally;
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
     ActivityKind, ActivitySummary, Attachment, ChannelMatches, ContentHash, Deletion, Emoji,
-    Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent,
-    Notice, Revision, SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
+    Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, Messages,
+    MurmureEvent, Notice, Revision, SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount,
+    Unreadable,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
 use ambre_core::{
@@ -41,9 +43,7 @@ mod relocating;
 mod threading;
 
 pub use amending::{ChangeTarget, Linked};
-pub use closing::{
-    Closed, MessageCount, SEGMENT_MESSAGES, SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RETRY, Successor,
-};
+pub use closing::{Closed, SEGMENT_MESSAGES, SEGMENT_SNAPSHOT_SIZE, SUCCESSOR_RETRY, Successor};
 pub use finalizing::{FINALIZE_RETRY, FinalSnapshot};
 pub use folding::{FOLD_DELAY, FoldSnapshot, Settled};
 pub use relocating::{Relocated, Replay};
@@ -94,7 +94,7 @@ struct Held {
     created: Option<Created>,
     /// The message count at which an active segment next measures its
     /// snapshot against the byte bound. Zero measures at the first ask.
-    probe_at: MessageCount,
+    probe_at: Tally<Messages>,
 }
 
 impl Held {
@@ -105,7 +105,7 @@ impl Held {
             doc,
             session: None,
             created: None,
-            probe_at: MessageCount::ZERO,
+            probe_at: Tally::<Messages>::ZERO,
         }
     }
 
@@ -266,7 +266,7 @@ pub struct ChannelState {
     /// came with no number has no entry.
     sequences: HashMap<Id<Document>, Sequence>,
     /// The messages past which the active segment asks to close.
-    segment_size: MessageCount,
+    segment_size: Tally<Messages>,
     /// The snapshot bytes past which the active segment asks to close.
     segment_snapshot_size: ambre_core::ByteSize,
     /// Whether the active segment asked to close and waits for the answer.
@@ -759,7 +759,7 @@ impl ChannelState {
         me: Id<User>,
     ) -> Result<UnreadCount, MurmureError> {
         self.count_in(segment.document_id(), read, me, |_| true)
-            .map(MessageCount::unread)
+            .map(UnreadCount::of_messages)
     }
 
     /// The messages [`ChannelState::unread`] counts that mention `me` or the
@@ -808,7 +808,7 @@ impl ChannelState {
             content_of(message)
                 .is_some_and(|content| mention::names(&mention::read(&content, channel), me))
         })
-        .map(MessageCount::mentions)
+        .map(MentionCount::of_messages)
     }
 
     /// The messages of a held segment or thread past `read`, written by
@@ -819,8 +819,8 @@ impl ChannelState {
         read: Seq,
         me: Id<User>,
         counts: impl Fn(&Fields<MessageKey>) -> bool,
-    ) -> Result<MessageCount, MurmureError> {
-        let mut count = MessageCount::ZERO;
+    ) -> Result<Tally<Messages>, MurmureError> {
+        let mut count = Tally::<Messages>::ZERO;
         self.each_unread(document_id, read, me, |_, message| {
             if counts(message) {
                 count = count.incremented();
@@ -958,7 +958,7 @@ impl ChannelState {
         ChannelMatches {
             channel_id: self.channel_id,
             covered,
-            listed: ambre_bus::SegmentCount::of_len(listed.len()),
+            listed: ambre_core::Tally::<ambre_bus::Segments>::of_len(listed.len()),
             matches,
         }
     }
@@ -2053,7 +2053,7 @@ fn read_message(item: ValueOrContainer, channel: Id<Channel>) -> Option<MessageV
         // (`MURMURE-106`).
         thread: document_of(&map, MessageKey::Thread).map(|document| ThreadHead {
             document,
-            replies: ambre_bus::ReplyCount::ZERO,
+            replies: ambre_core::Tally::<ambre_bus::Replies>::ZERO,
             last_replier: None,
         }),
         also_in_thread: document_of(&map, MessageKey::AlsoInThread),

@@ -21,10 +21,11 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementCount, ElementKind, LockState,
+    AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementKind, Elements, LockState,
     NodeId, Reaction, ReactionKind, ToileCommand, ZTarget,
 };
 use ambre_commands::CommandId;
+use ambre_core::Tally;
 use ambre_core::id::{Element, Id};
 use kurbo::{Rect, Vec2};
 
@@ -171,7 +172,7 @@ pub struct CtxScope {
     /// apply.
     pub site: ClickSite,
     /// Number of selected elements. Two or more -> Group applies.
-    pub count: ElementCount,
+    pub count: Tally<Elements>,
     /// A selected element is a group node -> Ungroup applies.
     pub groups: GroupHeld,
     /// The lock states the selection holds: Unlock applies to a locked one,
@@ -188,7 +189,7 @@ pub struct CtxScope {
 impl CtxScope {
     /// At least two elements selected -> Group applies.
     pub fn multi(&self) -> bool {
-        self.count >= ElementCount::new(2)
+        self.count >= Tally::<Elements>::new(2)
     }
 }
 
@@ -281,7 +282,7 @@ pub fn ctx_scope_for(
         return CtxScope::default();
     }
 
-    let mut count = ElementCount::ZERO;
+    let mut count = Tally::<Elements>::ZERO;
     let mut groups = GroupHeld::NoGroup;
     let mut locks = LockMix::Empty;
     // Union of the selected elements' bounds, to find an enclosing frame.
@@ -420,7 +421,7 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
             Some(ALIGN_VCENTER),
             Some(ALIGN_BOTTOM),
         ]);
-        if scope.count >= ElementCount::new(3) {
+        if scope.count >= Tally::<Elements>::new(3) {
             ids.extend([Some(DISTRIBUTE_H), Some(DISTRIBUTE_V)]);
         }
     }
@@ -803,7 +804,7 @@ mod tests {
         )]);
         let scope = ctx_scope_for(&[eid("a")], None, &els(&dv), &[], &dv);
         assert_eq!(scope.site, ClickSite::Selection);
-        assert_eq!(scope.count, ElementCount::new(1));
+        assert_eq!(scope.count, Tally::<Elements>::new(1));
         assert!(!scope.multi());
         assert_eq!(scope.groups, GroupHeld::NoGroup);
         assert_eq!(scope.locks, LockMix::Unlocked);
@@ -827,7 +828,7 @@ mod tests {
         ]);
         let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &els(&dv), &[], &dv);
         assert!(scope.multi());
-        assert_eq!(scope.count, ElementCount::new(2));
+        assert_eq!(scope.count, Tally::<Elements>::new(2));
     }
 
     #[test]
@@ -970,7 +971,7 @@ mod tests {
             ),
         ];
         let scope = ctx_scope_for(&[eid("a"), eid("b")], None, &selected, &[], &dv);
-        assert_eq!(scope.count, ElementCount::new(2));
+        assert_eq!(scope.count, Tally::<Elements>::new(2));
         assert!(scope.multi());
         assert_eq!(scope.locks, LockMix::Both);
     }

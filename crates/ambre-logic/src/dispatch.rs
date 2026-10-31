@@ -1779,7 +1779,10 @@ mod tests {
         assert_eq!(document_id, doc_id);
         let mut reopened = ToileState::new();
         let _ = reopened.import_snapshot(&payload);
-        assert_eq!(reopened.element_count(), ambre_core::ElementCount::new(1));
+        assert_eq!(
+            reopened.element_count(),
+            ambre_core::Tally::<ambre_core::Elements>::new(1)
+        );
     }
 
     // -- Service-plane routing: interop media uploads (`toile-media`) ------
@@ -2229,7 +2232,7 @@ mod tests {
         state.open_with_identity(before, DocType::Prose);
         assert_eq!(
             state.docs[&before].state.face_count(),
-            ambre_prose::logic::FaceCount::ZERO,
+            ambre_core::Tally::<ambre_prose::logic::Faces>::ZERO,
             "nothing has been delivered yet"
         );
 
@@ -2238,7 +2241,7 @@ mod tests {
         });
         assert_eq!(
             state.docs[&before].state.face_count(),
-            ambre_prose::logic::FaceCount::of_len(faces.len()),
+            ambre_core::Tally::<ambre_prose::logic::Faces>::of_len(faces.len()),
             "a document open at delivery takes the faces"
         );
 
@@ -2246,7 +2249,7 @@ mod tests {
         state.open_with_identity(after, DocType::Prose);
         assert_eq!(
             state.docs[&after].state.face_count(),
-            ambre_prose::logic::FaceCount::of_len(faces.len()),
+            ambre_core::Tally::<ambre_prose::logic::Faces>::of_len(faces.len()),
             "a document opened afterwards takes the same set"
         );
 
@@ -2257,7 +2260,7 @@ mod tests {
         for id in [before, after] {
             assert_eq!(
                 state.docs[&id].state.face_count(),
-                ambre_prose::logic::FaceCount::of_len(faces.len() + 1),
+                ambre_core::Tally::<ambre_prose::logic::Faces>::of_len(faces.len() + 1),
                 "a face fetched later reaches an open document too"
             );
         }

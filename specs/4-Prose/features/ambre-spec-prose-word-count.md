@@ -66,11 +66,11 @@ page count is read from the layout the engine took last (`PROSE-FEAT-038`).
 ```rust
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct WordCount {
-    pub words:                  WordTotal,
+    pub words:                  Tally<Words>,
     /// Grapheme clusters that are not whitespace (`PROSE-FEAT-039`).
-    pub characters:             GraphemeCount,
-    pub characters_with_spaces: GraphemeCount,
-    pub paragraphs:             ParagraphCount,
+    pub characters:             Tally<Graphemes>,
+    pub characters_with_spaces: Tally<Graphemes>,
+    pub paragraphs:             Tally<Paragraphs>,
     /// From the layout taken last, not from the tally (`PROSE-FEAT-038`).
     pub pages:                  PageCount,
 }

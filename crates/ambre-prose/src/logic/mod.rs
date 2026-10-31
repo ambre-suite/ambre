@@ -71,6 +71,7 @@ mod schema_shape;
 #[cfg(test)]
 mod schema_reading;
 
+use ambre_core::Tally;
 use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, TreeID, UndoManager, VersionVector};
@@ -91,9 +92,11 @@ use crate::layout::run::ShapedLayout;
 use crate::mark;
 use crate::schema;
 
-ambre_core::define_tally! {
-    /// How many font faces a document measures on (`PROSE-115`).
-    pub struct FaceCount;
+/// How many font faces a document measures on (`PROSE-115`).
+pub enum Faces {}
+
+impl ambre_core::TallyKind for Faces {
+    const NAME: &'static str = "FaceCount";
 }
 
 /// The pages a layout carries before the view asks for any (`PROSE-125`).
@@ -120,7 +123,7 @@ struct LayoutBasis {
     /// The document's state.
     frontiers: loro::Frontiers,
     /// How many faces the layout was shaped on.
-    faces: FaceCount,
+    faces: Tally<Faces>,
     /// The pages it carries.
     window: PageSpan,
 }
@@ -455,10 +458,11 @@ impl ProseState {
 
     /// How many runs the paginator has shaped, over its life.
     #[cfg(test)]
-    pub(crate) fn shaped_count(&self) -> crate::layout::measure::ShapedCount {
-        self.paginator
-            .as_ref()
-            .map_or(crate::layout::measure::ShapedCount::ZERO, Paginator::shaped)
+    pub(crate) fn shaped_count(&self) -> ambre_core::Tally<crate::layout::measure::ShapedRuns> {
+        self.paginator.as_ref().map_or(
+            ambre_core::Tally::<crate::layout::measure::ShapedRuns>::ZERO,
+            Paginator::shaped,
+        )
     }
 
     /// How many faces this document measures on (`PROSE-115`).
@@ -466,8 +470,8 @@ impl ProseState {
     /// Zero means every run shapes into tofu: the measuring context is sealed
     /// and nothing has been handed to it yet.
     #[must_use]
-    pub fn face_count(&self) -> FaceCount {
-        FaceCount::of_len(self.faces.len())
+    pub fn face_count(&self) -> Tally<Faces> {
+        Tally::<Faces>::of_len(self.faces.len())
     }
 
     /// Hand the document the faces pagination measures on (`PROSE-114`).
@@ -1058,7 +1062,7 @@ impl ProseState {
     /// rather than for a decision. Every path that decides goes through the
     /// gate, which refuses an unreadable register instead.
     #[must_use]
-    pub fn schema_version(&self) -> ambre_core::schema::SchemaVersion {
+    pub fn schema_version(&self) -> ambre_core::Version<ambre_core::schema::Schema> {
         schema::read_version(&self.doc).unwrap_or(ambre_core::schema::SCHEMA_VERSION_ABSENT)
     }
 

@@ -3,6 +3,7 @@
 //! Produces an [`Expr`] AST from a raw formula string (without the leading `=`).
 //! Uses nom 8.0 with the `Parser::parse` trait method.
 
+use ambre_core::Tally;
 use nom::Parser;
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while1};
@@ -512,19 +513,26 @@ fn expr(input: &str) -> nom::IResult<&str, Expr> {
 pub const MAX_FORMULA_CHARS: ambre_core::CharCount = ambre_core::CharCount::new(8_192);
 
 /// The deepest parenthesis or call nesting it reads: Excel's own limit.
-pub const MAX_FORMULA_NESTING: FormulaNesting = FormulaNesting::new(64);
+pub const MAX_FORMULA_NESTING: Tally<FormulaNesting> = Tally::<FormulaNesting>::new(64);
 
 /// The most operators it reads. Each one can add a level to the tree, and the
 /// parser, the compiler and the drop all walk the tree by recursion. A release
 /// build overflows a 1 MiB stack past about 256 nested levels and 2 048
 /// operators, so both bounds keep a margin of four.
-pub const MAX_FORMULA_OPERATORS: OperatorCount = OperatorCount::new(512);
+pub const MAX_FORMULA_OPERATORS: Tally<Operators> = Tally::<Operators>::new(512);
 
-ambre_core::define_tally! {
-    /// How deep the parentheses and calls of a formula nest.
-    pub struct FormulaNesting;
-    /// How many operators a formula holds.
-    pub struct OperatorCount;
+/// How deep the parentheses and calls of a formula nest.
+pub enum FormulaNesting {}
+
+impl ambre_core::TallyKind for FormulaNesting {
+    const NAME: &'static str = "FormulaNesting";
+}
+
+/// How many operators a formula holds.
+pub enum Operators {}
+
+impl ambre_core::TallyKind for Operators {
+    const NAME: &'static str = "OperatorCount";
 }
 
 /// Refuse, before any recursion, a formula that could nest deeper than the
@@ -559,10 +567,10 @@ fn within_bounds(input: &str) -> Result<(), ParseError> {
     if ambre_core::CharCount::from_len(chars) > MAX_FORMULA_CHARS {
         return Err(ParseError::TooLong);
     }
-    if FormulaNesting::of_len(deepest) > MAX_FORMULA_NESTING {
+    if Tally::<FormulaNesting>::of_len(deepest) > MAX_FORMULA_NESTING {
         return Err(ParseError::TooDeep);
     }
-    if OperatorCount::of_len(operators) > MAX_FORMULA_OPERATORS {
+    if Tally::<Operators>::of_len(operators) > MAX_FORMULA_OPERATORS {
         return Err(ParseError::TooManyOperators);
     }
     Ok(())

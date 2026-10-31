@@ -10,6 +10,7 @@ use ambre_bus::conduit::Receiver;
 use ambre_commands::KeyChar;
 use ambre_core::Px;
 use ambre_core::Rgba;
+use ambre_core::Tally;
 use ambre_core::id::User;
 use kurbo::Rect;
 
@@ -883,13 +884,13 @@ fn the_pipe_follows_the_caret_inside_the_element() {
 /// for moves nothing (`FIND-004`).
 #[test]
 fn the_current_match_is_brought_into_view() {
-    use ambre_bus::app::toile::{ElementCount, FindResults, SelectionStats};
+    use ambre_bus::app::toile::{Elements, FindResults, SelectionStats};
     let far = Rect::new(1.0e6, 1.0e6, 1.0e6 + 100.0, 1.0e6 + 80.0);
     let mut rig = Rig::with_stickies(&[("a", A)]);
     assert!(!rig.view.cam.visible_world().contains(far.center()));
     let stats = |kind| {
         ToileEvent::SelectionStats(SelectionStats {
-            count: ElementCount::new(1),
+            count: Tally::<Elements>::new(1),
             bounds: Some(far),
             kind,
         })
@@ -1685,7 +1686,7 @@ fn a_rotated_note_keeps_its_rotation_while_edited() {
 /// selection are as they were before the search.
 #[test]
 fn a_find_step_recentres_without_a_zoom_or_a_selection() {
-    use ambre_bus::app::toile::{ElementCount, FindResults, SelectionStats};
+    use ambre_bus::app::toile::{Elements, FindResults, SelectionStats};
     let far = Rect::new(5000.0, 4000.0, 5100.0, 4080.0);
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.click(50.0, 50.0);
@@ -1701,7 +1702,7 @@ fn a_find_step_recentres_without_a_zoom_or_a_selection() {
             if ids == &[eid("far")]
     ));
     rig.answer(ToileEvent::SelectionStats(SelectionStats {
-        count: ElementCount::new(1),
+        count: Tally::<Elements>::new(1),
         bounds: Some(far),
         kind: StatsRequestKind::FindFocus,
     }));
@@ -2119,7 +2120,9 @@ fn asks_for_the_frame(sent: &[ToileCommand]) -> bool {
 /// board no longer holds.
 fn fit_reply(bounds: Option<Rect>) -> ToileEvent {
     ToileEvent::SelectionStats(ambre_bus::app::toile::SelectionStats {
-        count: ambre_bus::app::toile::ElementCount::new(u32::from(bounds.is_some())),
+        count: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(u32::from(
+            bounds.is_some(),
+        )),
         bounds,
         kind: StatsRequestKind::Fit,
     })
@@ -2608,10 +2611,10 @@ fn a_shared_board(peer: Id<User>) -> Rig {
         ambre_bus::app::toile::ReactionTally {
             emoji: vec![(
                 ambre_bus::Emoji::from("+1"),
-                ambre_bus::app::toile::ReactionCount::new(2),
+                ambre_core::Tally::<ambre_bus::app::toile::Reactions>::new(2),
             )],
             vote_total: ambre_bus::app::toile::VoteTotal::ZERO,
-            vote_count: ambre_bus::app::toile::VoteCount::ZERO,
+            vote_count: ambre_core::Tally::<ambre_bus::app::toile::Votes>::ZERO,
         },
     );
     rig.answer(ToileEvent::ViewportData(DisplayViewport {
@@ -2830,7 +2833,7 @@ fn a_thread_brings_the_camera_to_its_anchor() {
     assert!(asked, "the view asks for the anchor's box");
     rig.answer(ToileEvent::SelectionStats(
         ambre_bus::app::toile::SelectionStats {
-            count: ambre_bus::app::toile::ElementCount::new(1),
+            count: ambre_core::Tally::<ambre_bus::app::toile::Elements>::new(1),
             bounds: Some(Rect::new(4000.0, 4000.0, 4100.0, 4200.0)),
             kind: StatsRequestKind::CommentFocus,
         },

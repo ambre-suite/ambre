@@ -12,7 +12,7 @@
 
 use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
 use ambre_core::id::{Channel, Document, Id, Lease, Segment};
-use ambre_core::{DeltaBytes, FailureCount, Millis, Payload, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, Failures, Millis, Payload, Seq, SnapshotBytes, Tally};
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
@@ -36,7 +36,7 @@ pub(super) struct Folding {
     step: Step,
     /// Failed lease requests and commits since the last answer that granted
     /// or deferred the lease.
-    failures: FailureCount,
+    failures: Tally<Failures>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -120,7 +120,7 @@ impl ChannelState {
                     after: Millis::new(0),
                     at: None,
                 },
-                failures: FailureCount::ZERO,
+                failures: Tally::<Failures>::ZERO,
             });
         }
         self.folding.as_mut()
@@ -157,7 +157,7 @@ impl ChannelState {
         let Some(folding) = self.fold_step_of(segment) else {
             return;
         };
-        folding.failures = FailureCount::ZERO;
+        folding.failures = Tally::<Failures>::ZERO;
         folding.step = match answer {
             FoldAnswer::Granted {
                 lease,
@@ -186,7 +186,7 @@ impl ChannelState {
     /// fold delay; another member's check decides this one.
     pub fn fold_committed(&mut self, segment: Id<Segment>) {
         if let Some(folding) = self.fold_step_of(segment) {
-            folding.failures = FailureCount::ZERO;
+            folding.failures = Tally::<Failures>::ZERO;
             folding.step = Step::Due {
                 after: FOLD_DELAY,
                 at: None,

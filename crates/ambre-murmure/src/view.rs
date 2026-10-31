@@ -5583,7 +5583,7 @@ mod tests {
         let root = MessageView {
             thread: Some(ThreadHead {
                 document: thread,
-                replies: ambre_bus::ReplyCount::new(1),
+                replies: ambre_core::Tally::<ambre_bus::Replies>::new(1),
                 last_replier: Some(ada),
             }),
             ..message(ada, ambre_bus::Timestamp::new(0), "root")

@@ -5,6 +5,7 @@
 //! later session of one author resolves to that user, as the relay serves it.
 
 use crate::Receipt;
+use ambre_core::Version;
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
@@ -15,7 +16,7 @@ use loro::{Container, ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer,
 
 use crate::schema::{MessageKey, Root};
 use crate::{
-    ChannelState, ChannelType, JSON_SCHEMA_VERSION, JsonSchemaVersion, MurmureError, Opening,
+    ChannelState, ChannelType, JSON_SCHEMA_VERSION, JsonUpdate, MurmureError, Opening,
     OpeningChannel, Refusal, Signer,
 };
 
@@ -229,7 +230,7 @@ fn a_json_update_of_another_version_is_refused_and_asks_an_update() {
     .expect("refused");
     assert_eq!(
         refused,
-        Refusal::Version(JsonSchemaVersion::new(JSON_SCHEMA_VERSION.get() + 1))
+        Refusal::Version(Version::<JsonUpdate>::new(JSON_SCHEMA_VERSION.get() + 1))
     );
     assert!(refused.asks_update());
     assert!(!Refusal::ForeignAuthor.asks_update());

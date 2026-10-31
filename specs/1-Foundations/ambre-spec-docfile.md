@@ -235,12 +235,12 @@ pub fn read_ambre_plaintext_as(expected: DocType, file: &PlaintextContainer)
 pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError>;
 
 /// Forward migration, one step per version bump. A step is added with its row.
-pub fn migrate_ambre(from: ContainerVersion, file: &PlaintextContainer)
+pub fn migrate_ambre(from: Version<Container>, file: &PlaintextContainer)
     -> Result<PlaintextContainer, DocFileError>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AmbreHeader {
-    pub version: ContainerVersion,
+    pub version: Version<Container>,
     pub doc_type: DocType,
     pub document_id: Id<Document>,
     /// Offset 22 onward: the raw Loro snapshot.
@@ -261,7 +261,7 @@ container assembles and parses the envelope, and its caller fills it (`DOCFILE-0
 pub fn classify<F: ContainerFile>(file: &F) -> Result<ContainerKind, DocFileError>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ContainerKind { Plaintext(ContainerVersion), Sealed(ContainerVersion) }
+pub enum ContainerKind { Plaintext(Version<Container>), Sealed(Version<Container>) }
 
 /// The associated data a seal must be computed over, for a file about to be
 /// written under `salt`: the header up to the nonce.
@@ -280,7 +280,7 @@ pub fn parse_sealed_header(file: &SealedContainer) -> Result<SealedAmbre, DocFil
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SealedAmbre {
-    pub version: ContainerVersion,
+    pub version: Version<Container>,
     pub salt: FileSalt,
     pub nonce: Nonce,
     /// Offset 45 onward. Opens to a whole plaintext container.
@@ -325,7 +325,7 @@ pub enum DocFileError {
     InvalidMagic,
     /// `found < AMBRE_VERSION` -> recoverable through `migrate_ambre`.
     /// `found > AMBRE_VERSION` -> unrecoverable; prompt the user to update.
-    UnsupportedVersion { found: ContainerVersion },
+    UnsupportedVersion { found: Version<Container> },
     /// The `doc_type` byte names no app this build knows -- a file from a client
     /// that shipped a new document type, or corruption. Distinct from
     /// `WrongDocType`, which is a *valid* type belonging to another app and is
@@ -352,7 +352,7 @@ pub enum DocFileError {
     /// A sealed layout this build does not know. Distinct from
     /// `UnsupportedVersion`, whose older half promises a migration: the sealed
     /// lineage has none to promise.
-    SealedVersionUnsupported { found: ContainerVersion },
+    SealedVersionUnsupported { found: Version<Container> },
 }
 ```
 

@@ -5,6 +5,7 @@
 //! sealed with it. The Sync worker reads it with no document, so a document not
 //! held in memory still moves its counters (`RESID-016`).
 
+use crate::Tally;
 use serde::{Deserialize, Serialize};
 
 use crate::id::{Id, User};
@@ -218,17 +219,39 @@ impl ActivitySummary {
     }
 }
 
-crate::define_tally! {
-    /// Updates of kind content.
-    pub struct ContentUpdates;
-    /// Updates of kind reaction.
-    pub struct ReactionUpdates;
-    /// Updates of kind edit.
-    pub struct EditUpdates;
-    /// Updates of any other kind.
-    pub struct OtherUpdates;
-    /// Updates that name this user, or every member.
-    pub struct MentionUpdates;
+/// Updates of kind content.
+pub enum ContentUpdates {}
+
+impl crate::TallyKind for ContentUpdates {
+    const NAME: &'static str = "ContentUpdates";
+}
+
+/// Updates of kind reaction.
+pub enum ReactionUpdates {}
+
+impl crate::TallyKind for ReactionUpdates {
+    const NAME: &'static str = "ReactionUpdates";
+}
+
+/// Updates of kind edit.
+pub enum EditUpdates {}
+
+impl crate::TallyKind for EditUpdates {
+    const NAME: &'static str = "EditUpdates";
+}
+
+/// Updates of any other kind.
+pub enum OtherUpdates {}
+
+impl crate::TallyKind for OtherUpdates {
+    const NAME: &'static str = "OtherUpdates";
+}
+
+/// Updates that name this user, or every member.
+pub enum MentionUpdates {}
+
+impl crate::TallyKind for MentionUpdates {
+    const NAME: &'static str = "MentionUpdates";
 }
 
 /// The activity a client counts for one document it does not hold
@@ -238,15 +261,15 @@ crate::define_tally! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct ActivityCounters {
     /// Updates of kind content.
-    pub content: ContentUpdates,
+    pub content: Tally<ContentUpdates>,
     /// Updates of kind reaction.
-    pub reactions: ReactionUpdates,
+    pub reactions: Tally<ReactionUpdates>,
     /// Updates of kind edit.
-    pub edits: EditUpdates,
+    pub edits: Tally<EditUpdates>,
     /// Updates of any other kind.
-    pub other: OtherUpdates,
+    pub other: Tally<OtherUpdates>,
     /// Updates that name this user, or every member.
-    pub mentions: MentionUpdates,
+    pub mentions: Tally<MentionUpdates>,
     /// Whether something happened, counted or not (`RESID-015`).
     pub active: Activity,
 }
@@ -372,9 +395,9 @@ mod tests {
         assert_eq!(
             counters,
             ActivityCounters {
-                content: ContentUpdates::new(2),
-                reactions: ReactionUpdates::new(1),
-                mentions: MentionUpdates::new(2),
+                content: Tally::<ContentUpdates>::new(2),
+                reactions: Tally::<ReactionUpdates>::new(1),
+                mentions: Tally::<MentionUpdates>::new(2),
                 active: Activity::Active,
                 ..ActivityCounters::default()
             }

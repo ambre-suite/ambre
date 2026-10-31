@@ -21,12 +21,11 @@
     clippy::panic,
     reason = "a fixture generator aborts on a corpus it cannot build"
 )]
-
 use std::collections::BTreeMap;
 
 use ambre_core::{
-    CellCount, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, FormulaCount,
-    GeneratorVersion, ShapeBody, SheetCount, fixture_peer_count, seeded_document_id,
+    CellCount, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape, Formulas, Generator,
+    ShapeBody, Sheets, Tally, Version, fixture_peer_count, seeded_document_id,
 };
 
 use super::*;
@@ -43,7 +42,7 @@ impl TrameState {
     /// manifest describes the document.
     pub fn fixture_shape(&self) -> FixtureShape {
         let mut cells = CellCount::ZERO;
-        let mut formulas = FormulaCount::ZERO;
+        let mut formulas = Tally::<Formulas>::ZERO;
         let sheet_ids = self.fixture_sheet_ids();
         for sheet in &sheet_ids {
             if let LoroValue::Map(map) = self
@@ -63,7 +62,7 @@ impl TrameState {
             peers: self.fixture_peer_count(),
             body: ShapeBody::Trame {
                 cells,
-                sheets: SheetCount::of_len(sheet_ids.len()),
+                sheets: Tally::<Sheets>::of_len(sheet_ids.len()),
                 formulas,
             },
         }
@@ -203,7 +202,7 @@ impl TrameState {
     /// `oplog_vv()` derefs to a map keyed by `PeerID`; the codebase already calls
     /// it on both engines' sync paths. The count drops the loader's own pinned
     /// peer, so a restored solo document still reports one author.
-    fn fixture_peer_count(&self) -> ambre_core::PeerCount {
+    fn fixture_peer_count(&self) -> ambre_core::Tally<ambre_core::Peers> {
         fixture_peer_count(
             self.doc
                 .oplog_vv()
@@ -285,8 +284,8 @@ impl FixtureGen for TrameFixture {
         })
     }
 
-    fn generator_version(&self) -> GeneratorVersion {
-        GeneratorVersion::new(1)
+    fn generator_version(&self) -> Version<Generator> {
+        Version::<Generator>::new(1)
     }
 
     fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
@@ -549,8 +548,8 @@ impl FixtureGen for TrameBenchFixture {
         })
     }
 
-    fn generator_version(&self) -> GeneratorVersion {
-        GeneratorVersion::new(1)
+    fn generator_version(&self) -> Version<Generator> {
+        Version::<Generator>::new(1)
     }
 
     fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {

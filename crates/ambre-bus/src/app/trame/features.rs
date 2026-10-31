@@ -13,6 +13,7 @@
 // -----------------------------------------------------------------------------
 use super::{CellNumber, CellRect, ColCount, DateSerial, FormulaSource, SheetId};
 use ambre_core::Rgb;
+use ambre_core::Tally;
 
 /// How [`TrameCommand::FillRange`] fills `dest \ src` (`trame-autofill`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -136,8 +137,8 @@ pub enum CondFormatKind {
     DataBar {
         color: Rgb,
     },
-    TopN(RankCount),
-    BottomN(RankCount),
+    TopN(Tally<Ranks>),
+    BottomN(Tally<Ranks>),
     TopNPercent(Percent),
 }
 
@@ -189,9 +190,11 @@ impl std::fmt::Debug for CondFormatKind {
     }
 }
 
-ambre_core::define_tally! {
-    /// How many of the top or bottom values a rule marks.
-    pub struct RankCount;
+/// How many of the top or bottom values a rule marks.
+pub enum Ranks {}
+
+impl ambre_core::TallyKind for Ranks {
+    const NAME: &'static str = "RankCount";
 }
 
 /// Style applied when a conditional-formatting rule matches

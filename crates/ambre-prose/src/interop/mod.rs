@@ -15,11 +15,11 @@ pub mod markdown_read;
 pub mod markdown_write;
 
 use ambre_bus::app::prose::{
-    CodeLang, ConversionFormat, ConversionReport, ConversionWarning, DroppedElement,
-    FootnoteOrdinal, LiftedBlock, UnsupportedFeature, WarningCount,
+    CodeLang, ConversionFormat, ConversionLosses, ConversionReport, ConversionWarning,
+    DroppedElement, FootnoteCall, LiftedBlock, UnsupportedFeature,
 };
 
-use ambre_core::{Slant, Strikethrough, Underline, Weight};
+use ambre_core::{Ordinal, Slant, Strikethrough, Tally, Underline, Weight};
 
 use crate::doc::StoredLevel;
 use crate::mark::{InlineCode, Subscript, Superscript};
@@ -213,7 +213,7 @@ pub struct IrTableCell {
 /// One footnote body. A run points at it by ordinal.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IrFootnote {
-    pub ordinal: FootnoteOrdinal,
+    pub ordinal: Ordinal<FootnoteCall>,
     pub runs: Vec<IrRun>,
 }
 
@@ -252,7 +252,7 @@ pub struct IrRun {
     pub suggestion: Suggesting,
     pub cross_ref: Referencing,
     /// The ordinal of the footnote this run calls.
-    pub footnote_ref: Option<FootnoteOrdinal>,
+    pub footnote_ref: Option<Ordinal<FootnoteCall>>,
 }
 
 impl IrRun {
@@ -331,7 +331,7 @@ impl Warnings {
         self.list.push(ConversionWarning::FeatureNotSupported {
             feature,
             format,
-            count: WarningCount::new(1),
+            count: Tally::<ConversionLosses>::new(1),
         });
     }
 
@@ -350,7 +350,7 @@ impl Warnings {
         }
         self.list.push(ConversionWarning::ElementDropped {
             element,
-            count: WarningCount::new(1),
+            count: Tally::<ConversionLosses>::new(1),
         });
     }
 
@@ -369,7 +369,7 @@ impl Warnings {
         }
         self.list.push(ConversionWarning::BlockLifted {
             block,
-            count: WarningCount::new(1),
+            count: Tally::<ConversionLosses>::new(1),
         });
     }
 

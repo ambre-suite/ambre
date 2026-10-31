@@ -9,7 +9,7 @@
 
 use ambre_bus::Timestamp;
 use ambre_core::id::{Id, Lease, Segment};
-use ambre_core::{DeltaBytes, FailureCount, Millis, Payload, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, Failures, Millis, Payload, Seq, SnapshotBytes, Tally};
 use loro::{ExportMode, LoroDoc};
 
 use super::ChannelState;
@@ -21,7 +21,7 @@ use crate::schema::{self, Root, SegmentKey, SegmentState};
 pub const FINALIZE_RETRY: Millis = Millis::new(2_000);
 
 /// The doublings past which the delay stops growing: about half an hour.
-pub(super) const RETRY_DOUBLINGS: FailureCount = FailureCount::new(10);
+pub(super) const RETRY_DOUBLINGS: Tally<Failures> = Tally::<Failures>::new(10);
 
 /// The finalization of one closing segment, as this client drives it.
 #[derive(Debug)]
@@ -30,7 +30,7 @@ pub(super) struct Finalizing {
     step: Step,
     /// Failed lease requests and commits since the last answer that granted
     /// or deferred the lease.
-    failures: FailureCount,
+    failures: Tally<Failures>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -99,7 +99,7 @@ impl ChannelState {
                     after: Millis::new(0),
                     at: None,
                 },
-                failures: FailureCount::ZERO,
+                failures: Tally::<Failures>::ZERO,
             });
         }
         self.finalizing.as_mut()
@@ -130,7 +130,7 @@ impl ChannelState {
     /// the grace period runs, or another member holds the lease.
     pub fn lease_deferred(&mut self, segment: Id<Segment>, retry_in: ambre_core::Millis) {
         if let Some(finalizing) = self.finalize_step(segment) {
-            finalizing.failures = FailureCount::ZERO;
+            finalizing.failures = Tally::<Failures>::ZERO;
             finalizing.step = Step::Due {
                 after: retry_in,
                 at: None,
@@ -149,7 +149,7 @@ impl ChannelState {
         expires_in: ambre_core::Millis,
     ) {
         if let Some(finalizing) = self.finalize_step(segment) {
-            finalizing.failures = FailureCount::ZERO;
+            finalizing.failures = Tally::<Failures>::ZERO;
             finalizing.step = Step::Held {
                 lease,
                 horizon,

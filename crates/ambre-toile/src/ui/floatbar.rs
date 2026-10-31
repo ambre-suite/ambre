@@ -20,10 +20,10 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    DisplayElement, ElementCount, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
+    DisplayElement, ElementKind, ElementStyle, Elements, FontFamily, FontSizeChoice,
 };
 use ambre_core::id::{Element, Id};
-use ambre_core::{Css, Px, Rgba, View};
+use ambre_core::{Css, Px, Rgba, Tally, View};
 use ambre_draw::{Point, Rect};
 
 use super::menu::{GroupHeld, LockMix};
@@ -43,7 +43,7 @@ pub struct FloatBar {
     /// The selection's top-edge midpoint on the page.
     pub at: ambre_core::Point<Px<Css>>,
     /// Number of selected elements. Two or more -> Group applies.
-    pub count: ElementCount,
+    pub count: Tally<Elements>,
     /// A selected element is a group node -> Ungroup applies.
     pub groups: GroupHeld,
     /// The lock states the selection holds: Unlock applies to a locked one,
@@ -60,7 +60,7 @@ pub struct FloatBar {
 impl FloatBar {
     /// At least two elements selected -> Group applies.
     pub fn multi(&self) -> bool {
-        self.count >= ElementCount::new(2)
+        self.count >= Tally::<Elements>::new(2)
     }
 }
 
@@ -165,7 +165,7 @@ pub fn build_floatbar(
     }
 
     let mut union: Option<Rect> = None;
-    let mut count = ElementCount::ZERO;
+    let mut count = Tally::<Elements>::ZERO;
     let mut groups = GroupHeld::NoGroup;
     let mut locks = LockMix::Empty;
     // The bar's own fold: a base style plus one difference flag per field it

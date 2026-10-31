@@ -219,7 +219,7 @@ pub struct IrTableCell {
 
 /// One footnote body. A run points at it by ordinal.
 #[derive(Clone, Debug, PartialEq)]
-pub struct IrFootnote { pub ordinal: FootnoteOrdinal, pub runs: Vec<IrRun> }
+pub struct IrFootnote { pub ordinal: Ordinal<FootnoteCall>, pub runs: Vec<IrRun> }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IrListStyle { Bullet, Ordered(IrOrderedStyle), Todo(TodoMark) }
@@ -245,7 +245,7 @@ pub struct IrRun {
     pub suggestion:    Suggesting,     // Settled | Suggested
     pub cross_ref:     Referencing,    // Text | Reference
     /// The ordinal of the footnote this run calls.
-    pub footnote_ref:  Option<FootnoteOrdinal>,
+    pub footnote_ref:  Option<Ordinal<FootnoteCall>>,
 }
 ```
 

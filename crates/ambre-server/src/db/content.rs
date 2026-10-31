@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::payload::Payload;
+use ambre_core::Tally;
 
 /// Row from `snapshots`.
 #[derive(Debug)]
@@ -71,9 +72,11 @@ pub struct UpdateRow {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
-ambre_core::define_tally! {
-    /// How many snapshots of one document a compaction keeps.
-    pub struct SnapshotCount;
+/// How many snapshots of one document a compaction keeps.
+pub enum Snapshots {}
+
+impl ambre_core::TallyKind for Snapshots {
+    const NAME: &'static str = "SnapshotCount";
 }
 
 pub use ambre_core::DeltaCount;
@@ -805,7 +808,7 @@ pub struct CompactSnapshot {
 /// other (`SRV-131`).
 pub async fn find_compactable_snapshots(
     pool: &PgPool,
-    keep: SnapshotCount,
+    keep: Tally<Snapshots>,
 ) -> Result<Vec<CompactSnapshot>, AppError> {
     let rows = sqlx::query_as::<_, CompactSnapshot>(
         "WITH ranked AS (

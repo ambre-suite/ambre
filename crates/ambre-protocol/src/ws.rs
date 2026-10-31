@@ -333,7 +333,7 @@ impl std::fmt::Debug for WireFrame {
     reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
 )]
 pub fn encode_client_msg(msg: &WsClientMsg) -> WireFrame {
-    let buf = vec![CURRENT_VERSION.as_u8()];
+    let buf = vec![CURRENT_VERSION.get()];
     WireFrame(postcard::to_extend(msg, buf).expect("postcard encode WsClientMsg"))
 }
 
@@ -350,7 +350,7 @@ pub fn decode_client_msg(frame: &WireFrame) -> Result<WsClientMsg, WireDecodeErr
         return Err(WireDecodeError::Empty);
     };
     match version {
-        v if v == CURRENT_VERSION.as_u8() => Ok(postcard::from_bytes(body)?),
+        v if v == CURRENT_VERSION.get() => Ok(postcard::from_bytes(body)?),
         v => Err(WireDecodeError::UnsupportedVersion(v)),
     }
 }
@@ -366,7 +366,7 @@ pub fn decode_client_msg(frame: &WireFrame) -> Result<WsClientMsg, WireDecodeErr
     reason = "every field is a postcard type and a Vec takes any length, so the encode cannot fail"
 )]
 pub fn encode_server_msg(msg: &WsServerMsg) -> WireFrame {
-    let buf = vec![CURRENT_VERSION.as_u8()];
+    let buf = vec![CURRENT_VERSION.get()];
     WireFrame(postcard::to_extend(msg, buf).expect("postcard encode WsServerMsg"))
 }
 
@@ -380,7 +380,7 @@ pub fn decode_server_msg(frame: &WireFrame) -> Result<WsServerMsg, WireDecodeErr
         return Err(WireDecodeError::Empty);
     };
     match version {
-        v if v == CURRENT_VERSION.as_u8() => Ok(postcard::from_bytes(body)?),
+        v if v == CURRENT_VERSION.get() => Ok(postcard::from_bytes(body)?),
         v => Err(WireDecodeError::UnsupportedVersion(v)),
     }
 }
@@ -397,7 +397,7 @@ impl WireDecodeError {
     /// build's. Only an update cures it (`ambre-spec-sync.md`, `SYNC-137`).
     /// An older peer is the relay's lag, never the user's to fix.
     pub fn is_from_newer_peer(&self) -> bool {
-        matches!(self, WireDecodeError::UnsupportedVersion(v) if *v > CURRENT_VERSION.as_u8())
+        matches!(self, WireDecodeError::UnsupportedVersion(v) if *v > CURRENT_VERSION.get())
     }
 }
 

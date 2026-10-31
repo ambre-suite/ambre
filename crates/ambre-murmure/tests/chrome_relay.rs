@@ -1295,13 +1295,13 @@ fn found(query: &str, budget: Id<Channel>, zeta: Id<Channel>) -> UiEvent {
             ChannelMatches {
                 channel_id: budget,
                 covered: vec![segment],
-                listed: ambre_bus::SegmentCount::new(2),
+                listed: ambre_core::Tally::<ambre_bus::Segments>::new(2),
                 matches: vec![SearchMatch { segment, message }],
             },
             ChannelMatches {
                 channel_id: zeta,
                 covered: vec![Id::<Segment>::mint()],
-                listed: ambre_bus::SegmentCount::new(1),
+                listed: ambre_core::Tally::<ambre_bus::Segments>::new(1),
                 matches: Vec::new(),
             },
         ],

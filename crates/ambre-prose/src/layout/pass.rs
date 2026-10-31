@@ -6,12 +6,13 @@
 //! what its type is, and the result is the flat sequence placement consumes.
 //! Nothing here writes to the document it reads (`PROSE-079`).
 
+use ambre_core::Ordinal;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use ambre_bus::app::prose::{
-    BlockType, DocOffset, FootnoteOrdinal, KeepTogether, KeepWithNext, PageCount, PageIndex,
-    PageNumber, ParagraphStyle,
+    BlockType, DocOffset, FootnoteCall, KeepTogether, KeepWithNext, Page, PageCount, PageIndex,
+    ParagraphStyle,
 };
 use ambre_core::id::{Footnote, Id};
 use ambre_core::{Doc, Pt, Px};
@@ -152,7 +153,7 @@ pub const NOTE_GAP: Px<Doc> = Px::<Doc>::new(4.0);
 #[derive(Clone, PartialEq)]
 pub(crate) struct NoteKey {
     id: Id<Footnote>,
-    ordinal: FootnoteOrdinal,
+    ordinal: Ordinal<FootnoteCall>,
     text: String,
     marks: Vec<crate::layout::measure::MarkedSpan>,
 }
@@ -185,7 +186,7 @@ pub(crate) struct NotePlan {
     /// The calls of each block: the code-point offset and the note.
     calls: HashMap<TreeID, Vec<(DocOffset, Id<Footnote>)>>,
     /// Each note's ordinal, shaped height and block.
-    notes: HashMap<Id<Footnote>, (FootnoteOrdinal, Px<Doc>, TreeID)>,
+    notes: HashMap<Id<Footnote>, (Ordinal<FootnoteCall>, Px<Doc>, TreeID)>,
     /// Each note's number as it was shaped.
     pub(crate) numbers: HashMap<Id<Footnote>, ShapedRun>,
     /// Each note's text as it was shaped, under the note's block, indented
@@ -494,7 +495,7 @@ pub(crate) fn measure_document_with(
         &HashMap<TreeID, &MeasuredBlock>,
         &HashMap<TreeID, &MeasuredBlock>,
     ),
-    toc_pages: &HashMap<TreeID, PageNumber>,
+    toc_pages: &HashMap<TreeID, Ordinal<Page>>,
     notes: &NotePlan,
 ) -> Vec<MeasuredBlock> {
     // A measurement already held proves the tree exists, so taking it
@@ -533,7 +534,7 @@ struct Walk<'a> {
     content_width: Px<Doc>,
     cached: &'a HashMap<TreeID, &'a MeasuredBlock>,
     previous: &'a HashMap<TreeID, &'a MeasuredBlock>,
-    toc_pages: &'a HashMap<TreeID, PageNumber>,
+    toc_pages: &'a HashMap<TreeID, Ordinal<Page>>,
     notes: &'a NotePlan,
 }
 
@@ -942,7 +943,7 @@ mod tests {
     fn a_note_key_prints_its_text_by_length_alone() {
         let key = NoteKey {
             id: Id::<Footnote>::mint(),
-            ordinal: FootnoteOrdinal::FIRST,
+            ordinal: Ordinal::<FootnoteCall>::FIRST,
             text: "private note".into(),
             marks: Vec::new(),
         };

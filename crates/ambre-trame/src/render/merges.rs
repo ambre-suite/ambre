@@ -35,12 +35,12 @@ pub fn draw_merges_on<'a, S, I>(
     text_cache: &mut TextCache,
     text_pass: TextPass,
     merges: I,
-) -> ambre_canvas::CellsDrawn
+) -> ambre_core::Tally<ambre_canvas::CellsDrawn>
 where
     S: DrawSurface,
     I: IntoIterator<Item = (CellPos, MergeSpan, CellContent<'a>)>,
 {
-    let mut drawn = ambre_canvas::CellsDrawn::ZERO;
+    let mut drawn = ambre_core::Tally::<ambre_canvas::CellsDrawn>::ZERO;
 
     for (master, span, content) in merges {
         let rect = layout.merge_rect(master, span);

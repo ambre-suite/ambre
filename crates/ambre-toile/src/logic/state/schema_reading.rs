@@ -291,7 +291,8 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
             let LoroValue::I64(n) = stored.value else {
                 return None;
             };
-            let version = ambre_core::schema::SchemaVersion::new(u32::try_from(n).ok()?);
+            let version =
+                ambre_core::Version::<ambre_core::schema::Schema>::new(u32::try_from(n).ok()?);
             Some(format!(
                 "version {version}, {:?}",
                 verdict(version, SCHEMA_VERSION)

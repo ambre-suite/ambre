@@ -21,7 +21,7 @@ use ambre_core::FontSize;
 use ambre_core::Rgba;
 use ambre_core::StoredBoardLength;
 use ambre_core::id::{Connector, Document, Element, Frame, Id, Thread, User};
-use ambre_core::{Slant, Strikethrough, Underline};
+use ambre_core::{Slant, Strikethrough, Tally, Underline};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
 
@@ -1371,7 +1371,7 @@ impl std::fmt::Display for VoteTotal {
     }
 }
 
-pub use ambre_core::ElementCount;
+pub use ambre_core::Elements;
 
 /// Why an import or an export left a construct behind, as the user reads it:
 /// "path fill: non-solid paint dropped".
@@ -1397,11 +1397,18 @@ impl std::fmt::Display for SkipReason {
     }
 }
 
-ambre_core::define_tally! {
-    /// How many votes were cast on one target.
-    pub struct VoteCount;
-    /// How many users reacted to one target with one emoji.
-    pub struct ReactionCount;
+/// How many votes were cast on one target.
+pub enum Votes {}
+
+impl ambre_core::TallyKind for Votes {
+    const NAME: &'static str = "VoteCount";
+}
+
+/// How many users reacted to one target with one emoji.
+pub enum Reactions {}
+
+impl ambre_core::TallyKind for Reactions {
+    const NAME: &'static str = "ReactionCount";
 }
 
 pub use ambre_core::IdCounter;
@@ -1413,9 +1420,9 @@ pub use ambre_core::IdCounter;
 /// aggregate the `Vote` entries.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ReactionTally {
-    pub emoji: Vec<(crate::app::murmure::Emoji, ReactionCount)>,
+    pub emoji: Vec<(crate::app::murmure::Emoji, Tally<Reactions>)>,
     pub vote_total: VoteTotal,
-    pub vote_count: VoteCount,
+    pub vote_count: Tally<Votes>,
 }
 
 // -----------------------------------------------------------------------------
@@ -2712,7 +2719,7 @@ pub enum StatsRequestKind {
 /// (world).
 #[derive(Clone, Debug, PartialEq)]
 pub struct SelectionStats {
-    pub count: ElementCount,
+    pub count: Tally<Elements>,
     pub bounds: Option<Rect>,
     pub kind: StatsRequestKind,
 }
@@ -2847,7 +2854,7 @@ pub enum ToileEvent {
     /// importer left behind. The whole import is one undo item
     /// (`toile-import-export`).
     ImportReport {
-        imported: ElementCount,
+        imported: Tally<Elements>,
         skipped: Vec<SkipReason>,
     },
     /// A foreign-file import aborted before touching the board (a parse error, a

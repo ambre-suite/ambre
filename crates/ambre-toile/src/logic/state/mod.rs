@@ -50,7 +50,7 @@ mod groups;
 mod import;
 mod names;
 mod presence;
-pub use import::{MediaEntryCount, PendingImportCount};
+pub use import::{MediaEntries, PendingImports};
 pub use presence::PRESENCE_TTL;
 pub(crate) mod presentation;
 mod reactions;
@@ -65,13 +65,14 @@ mod schema_shape;
 #[cfg(test)]
 mod schema_reading;
 
+use ambre_core::Tally;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
-use ambre_bus::app::toile::{ElementCount, IdCounter};
+use ambre_bus::app::toile::{Elements, IdCounter};
 use ambre_core::id::{Connector, Element, Frame, Id, Thread, User};
 use ambre_core::schema::SchemaError;
 use ambre_core::{HistoryStep, Rgba};
@@ -91,10 +92,12 @@ pub(crate) use names::{
     ConfigKey, ConnectorKey, Fields, MediaKey, MessageKey, ThreadKey, board, entry, root_map,
 };
 
-ambre_core::define_tally! {
-    /// How many times the whole element map has been resolved: a cost probe
-    /// (`TOILE-056`).
-    pub struct BoardWalkCount;
+/// How many times the whole element map has been resolved: a cost probe
+/// (`TOILE-056`).
+pub enum BoardWalks {}
+
+impl ambre_core::TallyKind for BoardWalks {
+    const NAME: &'static str = "BoardWalkCount";
 }
 
 /// Per-document Toile engine.
@@ -128,7 +131,7 @@ pub struct ToileState {
     /// How many times the whole element map has been resolved. A cost probe a
     /// test reads to show a read walks no board (`TOILE-056`); a `Cell`, since
     /// the reads that would walk take `&self`.
-    board_walks: Cell<BoardWalkCount>,
+    board_walks: Cell<Tally<BoardWalks>>,
     /// Per-session monotonic id-minting counter.
     counter: IdCounter,
     peer: ambre_core::PeerId,
@@ -361,7 +364,7 @@ impl ToileState {
             _watch: watch,
             wires: std::cell::RefCell::default(),
             wires_gone: std::cell::RefCell::default(),
-            board_walks: Cell::new(BoardWalkCount::ZERO),
+            board_walks: Cell::new(Tally::<BoardWalks>::ZERO),
             counter: IdCounter::ZERO,
             peer: ambre_core::PeerId::new(peer),
             viewport: Viewport::default(),
@@ -874,7 +877,7 @@ impl ToileState {
     /// which refuses it instead (`SCHEMA-013`). A caller reaches this one on a
     /// document it just generated, where the case cannot arise.
     #[must_use]
-    pub fn schema_version(&self) -> ambre_core::schema::SchemaVersion {
+    pub fn schema_version(&self) -> ambre_core::Version<ambre_core::schema::Schema> {
         schema::read_version(&self.doc).unwrap_or(ambre_core::schema::SCHEMA_VERSION_ABSENT)
     }
 
@@ -995,7 +998,7 @@ impl ToileState {
 
     fn selection_stats(&self, ids: &[Id<Element>], kind: StatsRequestKind) -> ToileOutcome {
         let mut union: Option<Rect> = None;
-        let mut count = ElementCount::ZERO;
+        let mut count = Tally::<Elements>::ZERO;
         // Empty ids = whole-board extent: the union of every element's bounds.
         // Used by the View -> Fit action (`toile-viewport`), which needs
         // the full board rect the UI does not hold (it sees only the culled
@@ -1200,12 +1203,12 @@ impl ToileState {
     // -- test / integration accessors -----------------------------------------
 
     /// Number of elements currently in the CRDT. Test helper.
-    pub fn element_count(&self) -> ambre_core::ElementCount {
-        ambre_core::ElementCount::of_len(self.bounds.len())
+    pub fn element_count(&self) -> ambre_core::Tally<ambre_core::Elements> {
+        ambre_core::Tally::<ambre_core::Elements>::of_len(self.bounds.len())
     }
 
     /// How many times the whole element map has been resolved. Test helper.
-    pub fn board_walks(&self) -> BoardWalkCount {
+    pub fn board_walks(&self) -> Tally<BoardWalks> {
         self.board_walks.get()
     }
 
@@ -1437,7 +1440,7 @@ mod schema_tests {
         );
         assert_eq!(
             st.element_count(),
-            ambre_core::ElementCount::new(1),
+            ambre_core::Tally::<ambre_core::Elements>::new(1),
             "nothing was merged in"
         );
         assert_eq!(

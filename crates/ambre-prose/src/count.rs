@@ -11,11 +11,12 @@
 //! paragraph is a text block holding a visible character, so the empty
 //! paragraph a new document opens on counts nothing (`PROSE-FEAT-122`).
 
+use ambre_core::Tally;
 use loro::{LoroDoc, LoroTree, TreeID};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::doc;
-use crate::events::{GraphemeCount, ParagraphCount, WordCount, WordTotal};
+use crate::events::{Graphemes, Paragraphs, WordCount, Words};
 
 /// The four text tallies of the whole document, `pages` left at zero.
 ///
@@ -69,15 +70,15 @@ fn tally(text: &str, count: &mut WordCount) {
     // rather than wrapping: every tally holds at its top.
     count.words = count
         .words
-        .plus(WordTotal::of_len(text.unicode_words().count()));
-    count.characters = count.characters.plus(GraphemeCount::of_len(visible));
+        .plus(Tally::<Words>::of_len(text.unicode_words().count()));
+    count.characters = count.characters.plus(Tally::<Graphemes>::of_len(visible));
     count.characters_with_spaces = count
         .characters_with_spaces
-        .plus(GraphemeCount::of_len(clusters));
+        .plus(Tally::<Graphemes>::of_len(clusters));
     if visible == 0 {
         return;
     }
-    if count.paragraphs > ParagraphCount::ZERO {
+    if count.paragraphs > Tally::<Paragraphs>::ZERO {
         count.characters_with_spaces = count.characters_with_spaces.incremented();
     }
     count.paragraphs = count.paragraphs.incremented();

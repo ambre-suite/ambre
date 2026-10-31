@@ -67,13 +67,13 @@ pub fn draw_cells_on<'a, S, I, E>(
     text_pass: TextPass,
     cells: I,
     is_empty: E,
-) -> ambre_canvas::CellsDrawn
+) -> ambre_core::Tally<ambre_canvas::CellsDrawn>
 where
     S: DrawSurface,
     I: IntoIterator<Item = (CellPos, CellContent<'a>)>,
     E: Fn(CellPos) -> bool,
 {
-    let mut drawn = ambre_canvas::CellsDrawn::ZERO;
+    let mut drawn = ambre_core::Tally::<ambre_canvas::CellsDrawn>::ZERO;
 
     for (at, content) in cells {
         let CellPos { row, col } = at;

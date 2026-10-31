@@ -236,14 +236,14 @@ fn render(shape: &Shape) -> String {
 
 /// The section of the freeze that names this version, or `None` when the freeze
 /// carries no such section.
-fn frozen_section(version: ambre_core::schema::SchemaVersion) -> Option<String> {
+fn frozen_section(version: ambre_core::Version<ambre_core::schema::Schema>) -> Option<String> {
     section_of(FROZEN, version)
 }
 
 /// The section of a frozen text that names this version.
 pub(super) fn section_of(
     frozen: &str,
-    version: ambre_core::schema::SchemaVersion,
+    version: ambre_core::Version<ambre_core::schema::Schema>,
 ) -> Option<String> {
     let header = format!("== v{version}");
     let mut taken = String::new();
@@ -630,7 +630,7 @@ fn the_scaffold_a_build_writes_is_the_scaffold_frozen_for_its_version() {
 /// layout, holding what the step rewrites, written under a fixed identity.
 /// Each step reads its own, so a step added later never moves what an earlier
 /// one writes. The registry holds no step yet, so no version has one.
-fn canonical(from: ambre_core::schema::SchemaVersion) -> LoroDoc {
+fn canonical(from: ambre_core::Version<ambre_core::schema::Schema>) -> LoroDoc {
     panic!("the step from version {from} has no canonical document: write one here")
 }
 

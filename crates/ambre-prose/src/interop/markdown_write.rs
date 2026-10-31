@@ -6,16 +6,15 @@
 //! (`PROSE-IO-018`). A table, a to-do item and a footnote are written in GFM
 //! alone (`PROSE-IO-061`). The output depends on the form alone, so the same
 //! document writes the same bytes (`PROSE-IO-003`).
-
 use std::fmt::Write as _;
 
 use ambre_bus::app::prose::{
     ConversionFormat, ConversionReport, MarkdownFlavor, UnsupportedFeature,
 };
 
-use crate::numbering::ListOrdinal;
+use crate::numbering::ListItem;
 
-use ambre_core::{Slant, Strikethrough, Weight};
+use ambre_core::{Ordinal, Slant, Strikethrough, Weight};
 
 use super::{
     Banding, IrBlock, IrListStyle, IrOrderedStyle, IrRun, IrTableRow, Merging, OwnStyle, Paging,
@@ -60,7 +59,7 @@ struct Writer {
 /// ordinal the next ordered item takes.
 struct ListRun {
     previous: Option<IrListStyle>,
-    ordinal: ListOrdinal,
+    ordinal: Ordinal<ListItem>,
 }
 
 /// The spaces every line of a nested block starts with: the width of each
@@ -90,7 +89,7 @@ impl Writer {
     fn blocks(&mut self, blocks: &[IrBlock], indent: &Indent) {
         let mut run = ListRun {
             previous: None,
-            ordinal: ListOrdinal::FIRST,
+            ordinal: Ordinal::<ListItem>::FIRST,
         };
         for block in blocks {
             if let IrBlock::ListItem {
@@ -103,7 +102,7 @@ impl Writer {
                 continue;
             }
             run.previous = None;
-            run.ordinal = ListOrdinal::FIRST;
+            run.ordinal = Ordinal::<ListItem>::FIRST;
             self.separate();
             self.block(block, indent);
         }
@@ -180,7 +179,7 @@ impl Writer {
             ) | (Some(IrListStyle::Ordered(_)), IrListStyle::Ordered(_))
         );
         if !joins {
-            run.ordinal = ListOrdinal::FIRST;
+            run.ordinal = Ordinal::<ListItem>::FIRST;
             self.separate();
         }
         run.previous = Some(style);
@@ -207,7 +206,7 @@ impl Writer {
         let inner = indent.under(&marker);
         let mut child_run = ListRun {
             previous: None,
-            ordinal: ListOrdinal::FIRST,
+            ordinal: Ordinal::<ListItem>::FIRST,
         };
         for (index, child) in children.iter().enumerate() {
             if let IrBlock::ListItem {
@@ -517,7 +516,7 @@ fn longest_run(text: &str, c: char) -> usize {
 mod tests {
     use super::*;
     use crate::interop::{IrFootnote, IrMeta, IrTableCell};
-    use ambre_bus::app::prose::{ConversionWarning, FootnoteOrdinal};
+    use ambre_bus::app::prose::{ConversionWarning, FootnoteCall};
 
     fn para(runs: Vec<IrRun>) -> IrBlock {
         IrBlock::Paragraph {
@@ -717,12 +716,12 @@ mod tests {
                 children: Vec::new(),
             },
             para(vec![IrRun {
-                footnote_ref: Some(FootnoteOrdinal::FIRST),
+                footnote_ref: Some(Ordinal::<FootnoteCall>::FIRST),
                 ..IrRun::plain("claim")
             }]),
         ]);
         doc.footnotes.push(IrFootnote {
-            ordinal: FootnoteOrdinal::FIRST,
+            ordinal: Ordinal::<FootnoteCall>::FIRST,
             runs: vec![IrRun::plain("source")],
         });
         let (text, report) = write(&doc, MarkdownFlavor::CommonMark);

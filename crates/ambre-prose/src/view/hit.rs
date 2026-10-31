@@ -421,7 +421,10 @@ mod tests {
         let far = ui.shaped.layout.blocks.len() - 2;
         let page = ui.shaped.layout.blocks[far].page_start;
         ui.viewport.scroll_y = ui.column.page_top_y(page);
-        assert_eq!(ui.runs.built(), crate::view::cache::BuildCount::ZERO);
+        assert_eq!(
+            ui.runs.built(),
+            ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+        );
         for offset in [0, 7, 42] {
             let (x, y) = drawn_at(&ui, far, offset);
             let hit = ui.hit_test(Point::new(Px::<View>::new(x), Px::<View>::new(y)));
@@ -429,7 +432,10 @@ mod tests {
             assert_eq!(hit, Some((expected, DocOffset::new(offset))));
         }
         // Resolving built nothing: the drawing state is a paint's alone.
-        assert_eq!(ui.runs.built(), crate::view::cache::BuildCount::ZERO);
+        assert_eq!(
+            ui.runs.built(),
+            ambre_core::Tally::<crate::view::cache::Builds>::ZERO
+        );
     }
 
     #[test]

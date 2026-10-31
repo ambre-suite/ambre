@@ -15,6 +15,8 @@
 //! walk, every heading. [`compute_heading_number`] answers for one heading and
 //! stops there, so neither form turns a numbering pass into a walk per heading.
 
+use ambre_core::Ordinal;
+use ambre_core::Tally;
 use std::ops::ControlFlow;
 
 use loro::{LoroTree, TreeID};
@@ -22,10 +24,12 @@ use loro::{LoroTree, TreeID};
 use crate::doc;
 use crate::events::{HeadingLevel, HeadingNumber, ListStyle, OrderedStyle};
 
-ambre_core::define_ordinal! {
-    /// The number an ordered list item is drawn with, one for the first item
-    /// of its run. It is counted, never stored.
-    pub struct ListOrdinal;
+/// The number an ordered list item is drawn with, one for the first item
+/// of its run. It is counted, never stored.
+pub enum ListItem {}
+
+impl ambre_core::OrdinalKind for ListItem {
+    const NAME: &'static str = "ListOrdinal";
 }
 
 /// The width of the counter vector: one counter per level the format declares.
@@ -124,7 +128,7 @@ fn ordered_style_of(tree: &LoroTree, id: &TreeID) -> Option<OrderedStyle> {
 /// The count reads the sibling list backwards from the item, so it costs the
 /// length of the run rather than the length of the document.
 #[must_use]
-pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<ListOrdinal> {
+pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<Ordinal<ListItem>> {
     let style = ordered_style_of(tree, item_id)?;
     let parent = match tree.parent(*item_id) {
         Some(loro::TreeParentId::Node(parent)) => Some(parent),
@@ -133,7 +137,7 @@ pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<ListOrdinal>
     };
     let siblings = doc::children_of(tree, parent);
     let here = siblings.iter().position(|sibling| sibling == item_id)?;
-    let mut ordinal = ListOrdinal::FIRST;
+    let mut ordinal = Ordinal::<ListItem>::FIRST;
     for before in siblings.iter().take(here).rev() {
         if ordered_style_of(tree, before) != Some(style) {
             break;
@@ -150,8 +154,8 @@ pub fn compute_ordinal(tree: &LoroTree, item_id: &TreeID) -> Option<ListOrdinal>
 /// answer is the tree's own parent chain, so it cannot disagree with the shape
 /// the peers converged on.
 #[must_use]
-pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> ListDepth {
-    let mut depth = ListDepth::ZERO;
+pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> Tally<ListDepth> {
+    let mut depth = Tally::<ListDepth>::ZERO;
     let mut here = *item_id;
     while let Some(loro::TreeParentId::Node(parent)) = tree.parent(here) {
         if doc::block_type_of(tree, &parent) != Some(crate::events::BlockType::ListItem) {
@@ -163,9 +167,11 @@ pub fn list_depth(tree: &LoroTree, item_id: &TreeID) -> ListDepth {
     depth
 }
 
-ambre_core::define_tally! {
-    /// How many list items an item nests inside: zero for a top item.
-    pub struct ListDepth;
+/// How many list items an item nests inside: zero for a top item.
+pub enum ListDepth {}
+
+impl ambre_core::TallyKind for ListDepth {
+    const NAME: &'static str = "ListDepth";
 }
 
 /// Visit every live block in document order, depth first and parents before
@@ -382,7 +388,7 @@ mod tests {
     /// The ordinal of one block.
     fn ordinal(state: &ProseState, id: &BlockId) -> Option<u32> {
         compute_ordinal(&doc::blocks(state.document()), &crate::events::tree_id(*id))
-            .map(ListOrdinal::get)
+            .map(Ordinal::<ListItem>::get)
     }
 
     /// The decimal style, which most of these tests number with.
@@ -434,11 +440,11 @@ mod tests {
         let tree = doc::blocks(state.document());
         assert_eq!(
             list_depth(&tree, &crate::events::tree_id(first)),
-            ListDepth::ZERO
+            Tally::<ListDepth>::ZERO
         );
         assert_eq!(
             list_depth(&tree, &crate::events::tree_id(second)),
-            ListDepth::new(1)
+            Tally::<ListDepth>::new(1)
         );
         // The nested item opens a run of its own under its new parent.
         assert_eq!(ordinal(&state, &second), Some(1));

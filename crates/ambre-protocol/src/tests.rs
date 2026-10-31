@@ -193,7 +193,7 @@ fn signaling_messages_roundtrip() {
 fn version_check() {
     use version::{CURRENT_VERSION, check_version};
     assert!(check_version(CURRENT_VERSION).is_ok());
-    let other_version = ambre_core::version::Version::V0;
+    let other_version = ambre_core::version::Version::<ambre_core::version::Protocol>::V0;
     assert!(check_version(other_version).is_err());
 }
 
@@ -234,7 +234,7 @@ fn a_wire_message_that_does_not_decode_is_a_typed_error() {
 #[test]
 fn only_a_newer_wire_version_calls_for_an_update() {
     use crate::ws::{WireDecodeError, WireFrame, decode_server_msg};
-    let current = CURRENT_VERSION.as_u8();
+    let current = CURRENT_VERSION.get();
     let newer = decode_server_msg(&WireFrame::new(vec![current + 1, 0x00])).unwrap_err();
     let older = decode_server_msg(&WireFrame::new(vec![current - 1, 0x00])).unwrap_err();
     assert!(newer.is_from_newer_peer());
@@ -428,7 +428,7 @@ fn the_wire_layout_is_frozen_under_its_version() {
     let (version, frozen) = FROZEN_LAYOUT;
     assert_eq!(
         version,
-        CURRENT_VERSION.as_u8(),
+        CURRENT_VERSION.get(),
         "the version moved: freeze the digest again under it"
     );
     assert_eq!(

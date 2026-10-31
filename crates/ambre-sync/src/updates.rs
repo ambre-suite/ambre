@@ -10,7 +10,8 @@ const RESEND_RETRY_BASE: ambre_core::Millis = ambre_core::Millis::new(1_000);
 
 /// The failures Sync sends again after. One more holds the document
 /// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
-const RESEND_RETRY_LIMIT: ambre_core::FailureCount = ambre_core::FailureCount::new(5);
+const RESEND_RETRY_LIMIT: ambre_core::Tally<ambre_core::Failures> =
+    ambre_core::Tally::<ambre_core::Failures>::new(5);
 
 /// Why a document holds its edits: the relay refused one, or failed to
 /// sequence one past the retry budget. It prints the cause the warning reads.
@@ -19,7 +20,7 @@ enum HoldCause {
     /// A refusal the relay named.
     Refused(ambre_core::RefusalCode),
     /// The failures counted since the last echo.
-    Failed(ambre_core::FailureCount),
+    Failed(ambre_core::Tally<ambre_core::Failures>),
 }
 
 impl std::fmt::Display for HoldCause {
@@ -33,8 +34,10 @@ impl std::fmt::Display for HoldCause {
 
 /// The delay before sending again after the `failure`-th failure since the
 /// last echo, counted from one. Past the budget there is none.
-fn resend_retry_delay(failure: ambre_core::FailureCount) -> Option<ambre_core::Millis> {
-    let first = ambre_core::FailureCount::new(1);
+fn resend_retry_delay(
+    failure: ambre_core::Tally<ambre_core::Failures>,
+) -> Option<ambre_core::Millis> {
+    let first = ambre_core::Tally::<ambre_core::Failures>::new(1);
     (first..=RESEND_RETRY_LIMIT)
         .contains(&failure)
         .then(|| RESEND_RETRY_BASE.doubled(failure.minus(first)))
@@ -3734,7 +3737,7 @@ mod tests {
     /// the budget the document holds it, reported once as a refused edit.
     #[test]
     fn a_delta_failing_past_the_budget_holds_its_document() {
-        let failure = ambre_core::FailureCount::new;
+        let failure = ambre_core::Tally::<ambre_core::Failures>::new;
         assert_eq!(resend_retry_delay(failure(0)), None);
         assert_eq!(resend_retry_delay(failure(1)), Some(RESEND_RETRY_BASE));
         assert_eq!(

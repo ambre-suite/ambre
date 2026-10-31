@@ -14,14 +14,14 @@ pub use ambre_bus::app::grid;
 pub use ambre_bus::app::prose::{
     ActiveMarks, Align, AnchorState, BandSet, BandState, BlockId, BlockInit, BlockType, CellBorder,
     ChangeOrigin, CommandName, CommentReply, CommentThread, CrossRefKind, CursorPosition,
-    DateFieldFormat, EditMode, FindMatch, FindOptions, FindQuery, FirstPage, FootnoteEntry,
-    FootnoteOrdinal, GraphemeCount, HeaderField, HeadingLevel, HeadingNumber, HfTarget,
-    KeepTogether, KeepWithNext, LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan,
-    ListStyle, MarkAction, OrderedStyle, PageCount, PageIndex, PageNumber, PageSpan,
-    ParagraphCount, ParagraphStyle, PatternKind, PresencePayload, ProseCommand, ProseError,
-    ProseEvent, ProseRefusal, RefusedAction, RemoteCursor, ResolvedCrossRef, StyleId, Suggestion,
-    SuggestionKind, SuggestionSpan, TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering,
-    TodoMark, TriState, VAlign, WordCount, WordTotal,
+    DateFieldFormat, EditMode, FindMatch, FindOptions, FindQuery, FirstPage, FootnoteCall,
+    FootnoteEntry, Graphemes, HeaderField, HeadingLevel, HeadingNumber, HfTarget, KeepTogether,
+    KeepWithNext, LineHeight, LineHeightMode, LineSpacingMultiple, LinkSpan, ListStyle, MarkAction,
+    OrderedStyle, Page, PageCount, PageIndex, PageSpan, ParagraphStyle, Paragraphs, PatternKind,
+    PresencePayload, ProseCommand, ProseError, ProseEvent, ProseRefusal, RefusedAction,
+    RemoteCursor, ResolvedCrossRef, StyleId, Suggestion, SuggestionKind, SuggestionSpan,
+    TableOfContents, TableValue, TextEdit, TocEntry, TocNumbering, TodoMark, TriState, VAlign,
+    WordCount, Words,
 };
 
 use loro::TreeID;

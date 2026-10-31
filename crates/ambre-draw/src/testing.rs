@@ -24,13 +24,20 @@ use crate::{
     Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush,
     Rect, Stroke,
 };
-use ambre_core::{Image, Px, Size, Surface};
+use ambre_core::{Image, Px, Size, Surface, Tally};
 
-ambre_core::define_tally! {
-    /// How many glyphs one recorded run holds.
-    pub struct GlyphCount;
-    /// How many recorded operations match a predicate.
-    pub struct OpCount;
+/// How many glyphs one recorded run holds.
+pub enum Glyphs {}
+
+impl ambre_core::TallyKind for Glyphs {
+    const NAME: &'static str = "GlyphCount";
+}
+
+/// How many recorded operations match a predicate.
+pub enum Ops {}
+
+impl ambre_core::TallyKind for Ops {
+    const NAME: &'static str = "OpCount";
 }
 
 /// How many pushes of one stack no pop has closed yet. It never goes below
@@ -77,7 +84,7 @@ pub enum DrawOp {
     /// A pre-shaped glyph run: how many glyphs, the solid brush colour (if any),
     /// and the run origin transform.
     Glyphs {
-        glyph_count: GlyphCount,
+        glyph_count: Tally<Glyphs>,
         color: Option<Color>,
         transform: Affine,
     },
@@ -156,8 +163,8 @@ impl RecordingSurface {
 
     /// Count the ops matching `pred`, for example
     /// `count(|op| matches!(op, DrawOp::FillRect { .. }))`.
-    pub fn count(&self, pred: impl Fn(&DrawOp) -> bool) -> OpCount {
-        OpCount::of_len(self.ops.iter().filter(|op| pred(op)).count())
+    pub fn count(&self, pred: impl Fn(&DrawOp) -> bool) -> Tally<Ops> {
+        Tally::<Ops>::of_len(self.ops.iter().filter(|op| pred(op)).count())
     }
 
     /// Every distinct fill colour seen, in first-seen order. Handy for asserting
@@ -208,7 +215,7 @@ impl DrawSurface for RecordingSurface {
 
     fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine) {
         self.ops.push(DrawOp::Glyphs {
-            glyph_count: GlyphCount::of_len(run.glyphs().count()),
+            glyph_count: Tally::<Glyphs>::of_len(run.glyphs().count()),
             color: brush_color(brush),
             transform,
         });

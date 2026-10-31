@@ -7,15 +7,17 @@
 //! merely large (not malicious) drawing still imports, just bounded to the world.
 
 use ambre_core::Px;
-use ambre_core::{BoardLength, ElementCount};
+use ambre_core::{BoardLength, Elements, Tally};
 use kurbo::{Point, Rect};
 
 use super::ImportError;
 
-ambre_core::define_tally! {
-    /// How deep an import has walked into nested groups and frames: the root
-    /// is depth zero.
-    pub struct ImportDepth;
+/// How deep an import has walked into nested groups and frames: the root
+/// is depth zero.
+pub enum ImportDepth {}
+
+impl ambre_core::TallyKind for ImportDepth {
+    const NAME: &'static str = "ImportDepth";
 }
 
 /// The symmetric bound an imported coordinate is clamped to, per axis. It is
@@ -42,10 +44,10 @@ impl CoordBound {
 pub struct Limits {
     /// Maximum number of elements a single import may create. Guards the R-tree
     /// and memory against an element-count bomb.
-    pub max_elements: ElementCount,
+    pub max_elements: Tally<Elements>,
     /// Maximum group/frame nesting depth walked. Guards against a deeply nested
     /// tree causing unbounded recursion / stack growth.
-    pub max_depth: ImportDepth,
+    pub max_depth: Tally<ImportDepth>,
     /// Absolute world-coordinate clamp (applied per axis, symmetric). A coordinate
     /// outside `[-coord_clamp, coord_clamp]` is clamped to the bound.
     pub coord_clamp: CoordBound,
@@ -58,8 +60,8 @@ impl Default for Limits {
     fn default() -> Self {
         Self {
             // ~2x the 5 000-node budget: comfortable for real files, still a bound.
-            max_elements: ElementCount::new(10_000),
-            max_depth: ImportDepth::new(64),
+            max_elements: Tally::<Elements>::new(10_000),
+            max_depth: Tally::<ImportDepth>::new(64),
             // +/- 1e6 world units: far past any real board, safely inside f32 range
             // for the CRDT geometry fields.
             coord_clamp: CoordBound(BoardLength::new(1_000_000.0)),
@@ -101,7 +103,7 @@ impl Limits {
     /// # Errors
     ///
     /// [`ImportError::TooManyElements`], carrying the limit it holds.
-    pub fn check_element_count(&self, current: ElementCount) -> Result<(), ImportError> {
+    pub fn check_element_count(&self, current: Tally<Elements>) -> Result<(), ImportError> {
         if current >= self.max_elements {
             Err(ImportError::TooManyElements {
                 limit: self.max_elements,
@@ -116,7 +118,7 @@ impl Limits {
     /// # Errors
     ///
     /// [`ImportError::TooDeep`], carrying the limit it holds.
-    pub fn check_depth(&self, depth: ImportDepth) -> Result<(), ImportError> {
+    pub fn check_depth(&self, depth: Tally<ImportDepth>) -> Result<(), ImportError> {
         if depth > self.max_depth {
             Err(ImportError::TooDeep {
                 limit: self.max_depth,
@@ -191,26 +193,26 @@ mod tests {
     #[test]
     fn element_count_guard() {
         let l = Limits {
-            max_elements: ElementCount::new(3),
+            max_elements: Tally::<Elements>::new(3),
             ..Limits::default()
         };
-        assert!(l.check_element_count(ElementCount::new(2)).is_ok());
+        assert!(l.check_element_count(Tally::<Elements>::new(2)).is_ok());
         assert!(matches!(
-            l.check_element_count(ElementCount::new(3)),
-            Err(ImportError::TooManyElements { limit }) if limit == ElementCount::new(3)
+            l.check_element_count(Tally::<Elements>::new(3)),
+            Err(ImportError::TooManyElements { limit }) if limit == Tally::<Elements>::new(3)
         ));
     }
 
     #[test]
     fn depth_guard() {
         let l = Limits {
-            max_depth: ImportDepth::new(2),
+            max_depth: Tally::<ImportDepth>::new(2),
             ..Limits::default()
         };
-        assert!(l.check_depth(ImportDepth::new(2)).is_ok());
+        assert!(l.check_depth(Tally::<ImportDepth>::new(2)).is_ok());
         assert!(matches!(
-            l.check_depth(ImportDepth::new(3)),
-            Err(ImportError::TooDeep { limit }) if limit == ImportDepth::new(2)
+            l.check_depth(Tally::<ImportDepth>::new(3)),
+            Err(ImportError::TooDeep { limit }) if limit == Tally::<ImportDepth>::new(2)
         ));
     }
 

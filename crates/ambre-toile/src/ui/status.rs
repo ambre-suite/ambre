@@ -12,7 +12,8 @@
 // nothing" rule (`trame-status-bar`).
 // ============================================================================
 
-use ambre_bus::app::toile::ElementCount;
+use ambre_bus::app::toile::Elements;
+use ambre_core::Tally;
 use ambre_draw::Rect;
 
 /// Selection aggregates rendered by the status bar, mirrored from
@@ -21,14 +22,14 @@ use ambre_draw::Rect;
 /// world units, `None` when the selection is empty (nothing to frame).
 #[derive(Clone, Copy, PartialEq, Debug, Default)]
 pub struct SelStats {
-    pub count: ElementCount,
+    pub count: Tally<Elements>,
     pub bounds: Option<Rect>,
 }
 
 impl SelStats {
     /// Build the aggregates from a Logic-computed reply: the element tally and
     /// the optional union rectangle (world space).
-    pub fn from_reply(count: ElementCount, bounds: Option<Rect>) -> Self {
+    pub fn from_reply(count: Tally<Elements>, bounds: Option<Rect>) -> Self {
         Self { count, bounds }
     }
 }
@@ -76,7 +77,7 @@ pub fn bounds_label(stats: &SelStats) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::ElementCount;
+    use ambre_bus::app::toile::Elements;
     use ambre_draw::Rect;
 
     #[test]
@@ -89,7 +90,10 @@ mod tests {
     #[test]
     fn single_element_shows_count_only() {
         // A lone element: count is shown, but no combined bounds.
-        let s = SelStats::from_reply(ElementCount::new(1), Some(Rect::new(0.0, 0.0, 10.0, 20.0)));
+        let s = SelStats::from_reply(
+            Tally::<Elements>::new(1),
+            Some(Rect::new(0.0, 0.0, 10.0, 20.0)),
+        );
         assert_eq!(count_label(&s).as_deref(), Some("1 element"));
         assert_eq!(bounds_label(&s), None);
     }
@@ -98,7 +102,7 @@ mod tests {
     fn multi_element_shows_count_and_bounds() {
         // Union rect (10,20)->(50,80): x=10 y=20 w=40 h=60.
         let s = SelStats::from_reply(
-            ElementCount::new(3),
+            Tally::<Elements>::new(3),
             Some(Rect::new(10.0, 20.0, 50.0, 80.0)),
         );
         assert_eq!(count_label(&s).as_deref(), Some("3 elements"));
@@ -107,7 +111,10 @@ mod tests {
 
     #[test]
     fn fractional_world_values_get_one_decimal() {
-        let s = SelStats::from_reply(ElementCount::new(2), Some(Rect::new(1.25, 0.0, 4.0, 3.5)));
+        let s = SelStats::from_reply(
+            Tally::<Elements>::new(2),
+            Some(Rect::new(1.25, 0.0, 4.0, 3.5)),
+        );
         // x=1.25 -> "1.2" (one decimal), w=2.75 -> "2.8", h=3.5 -> "3.5".
         assert_eq!(
             bounds_label(&s).as_deref(),
