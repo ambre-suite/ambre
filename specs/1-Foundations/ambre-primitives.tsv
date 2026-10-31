@@ -96,6 +96,7 @@ ambre-app | src/signin.rs | crate::signin | parse_return(path) | param | &str	ge
 ambre-app | src/signin.rs | crate::signin | parse_return(query) | param | &str	generic	query parser
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Emoji copies into its text
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Emoji as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Emoji wraps
+ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of Topic gives a caller, and serde's try_from hands its deserialisation error
 ambre-bus | src/app/murmure.rs | crate::app::murmure | <Topic as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of Topic validates
 ambre-bus | src/app/murmure.rs | crate::app::murmure | Attachment.name | field | String	free-text	file name as the author's file system gave it
 ambre-bus | src/app/murmure.rs | crate::app::murmure | DirectMessageEvent::Failed.message | field | String	free-text	user-facing message
@@ -593,7 +594,10 @@ ambre-canvas | src/theme.rs | crate::theme | THEME_CSS | const | &str	free-text	
 ambre-canvas | src/theme.rs | crate::theme | Theme::as_u8() | ret | u8	newtype-inner	newtype inner, accessor or constructor
 ambre-canvas | src/theme.rs | crate::theme | Theme::data_attr() | ret | &'static str	newtype-inner	the enum's own word on the data-theme attribute, which the stylesheet matches
 ambre-canvas | src/theme.rs | crate::theme | Theme::from_u8(v) | param | u8	newtype-inner	newtype inner, accessor or constructor
+ambre-canvas | src/tokens.rs | crate::tokens | <OpaqueColour as TryFrom<TokenColour>>::Error | assoc | String	generic	an error that echoes the refused colour
+ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused scale name
 ambre-canvas | src/tokens.rs | crate::tokens | <ScaleName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of ScaleName validates as snake_case
+ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::Error | assoc | String	generic	an error that echoes the refused colour text
 ambre-canvas | src/tokens.rs | crate::tokens | <TokenColour as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the colour text of the source that the fallible constructor of TokenColour parses into its channels
 ambre-canvas | src/tokens.rs | crate::tokens | CanvasColors::fields() | ret | [(&'static str,OpaqueColour);13]	free-text	the Palette field name of each typed colour, written into the generated Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | ChromeColors::vars() | ret | [(&'static str,OpaqueColour);13]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated files the stylesheets read
@@ -921,7 +925,9 @@ ambre-core | src/schema.rs | crate::schema | SchemaVersion::new(version) | param
 ambre-core | src/schema.rs | crate::schema | scaffold_peer(scaffold) | param | &[u8]	generic	FNV hash over bytes
 ambre-core | src/schema.rs | crate::schema | step_fingerprint(written) | param | &[u8]	generic	FNV hash over bytes: the Loro update a step exports, opaque to the hash as scaffold_peer's input is
 ambre-core | src/schema.rs | crate::schema | StepFingerprint.0 | field | u64	newtype-inner	the FNV-1a hash a migration step fingerprint holds
+ambre-core | src/search.rs | crate::search | <SearchQuery as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of SearchQuery gives a caller, and serde's try_from hands its deserialisation error
 ambre-core | src/search.rs | crate::search | <SearchQuery as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of SearchQuery validates
+ambre-core | src/search.rs | crate::search | <UserSearch as TryFrom<String>>::Error | assoc | &'static str	free-text	the fixed message the fallible constructor of UserSearch gives a caller, and serde's try_from hands its deserialisation error
 ambre-core | src/search.rs | crate::search | <UserSearch as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of UserSearch trims and checks
 ambre-core | src/search.rs | crate::search | SearchQuery.0 | field | String	newtype-inner	the message search text, as typed, never blank
 ambre-core | src/search.rs | crate::search | SearchQuery::as_str() | ret | &str	newtype-inner	the message search text, as typed, never blank
@@ -1588,6 +1594,17 @@ ambre-primitives | src/scan.rs | crate::scan | Declared.aliases | field | BTreeM
 ambre-primitives | src/scan.rs | crate::scan | Declared.reach | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared.reexports | field | BTreeMap<String,BTreeSet<String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared.renamed | field | BTreeMap<String,BTreeMap<String,String>>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared.held | field | Vec<(String,String,Vec<String>,String)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared.representations | field | BTreeSet<Home4>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Home | alias | (String,String,String)	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Home4 | alias | (String,String,String,String)	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Host.in_body | field | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | Host.trait_unplain | field | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/scan.rs | crate::scan | Declared::type_home() | ret | Option<Home>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | representation_slots() | ret | BTreeSet<(Vec<String>,String)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::type_home(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::type_home(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | Declared::type_home(segments) | param | &[String]	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::chosen(krate) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::chosen(module) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | Declared::crate_of() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
@@ -1604,6 +1621,9 @@ ambre-primitives | src/scan.rs | crate::scan | Exposure::Primitive.0 | field | S
 ambre-primitives | src/scan.rs | crate::scan | Exposure::Unsure.0 | field | String	free-text	error messages printed to the terminal
 ambre-primitives | src/scan.rs | crate::scan | FileVisit.aliases | field | Vec<(String,Alias)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | FileVisit.reexports | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | FileVisit.representations | field | Vec<(String,Vec<String>,String)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | TraitPath.segments | field | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/scan.rs | crate::scan | idents() | ret | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | FileVisit<'a>::unrename() | ret | Vec<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/scan.rs | crate::scan | META | const | &str	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/scan.rs | crate::scan | Manifest.packages | field | BTreeSet<String>	generic	the text of a Cargo.toml the scanner reads its dependencies from
@@ -2063,6 +2083,7 @@ ambre-server | src/db/content.rs | crate::db::content | document_holds_media() |
 ambre-server | src/db/content.rs | crate::db::content | parse_status(text) | param | &str	generic	generic codec/parser/bytes API
 ambre-server | src/db/content.rs | crate::db::content | point_rows_at_batch() | ret | Result<u64,AppError>	math	row count
 ambre-server | src/db/members.rs | crate::db::members | rotation_owed() | ret | Result<bool,AppError>	generic	predicate result
+ambre-server | src/db/mod.rs | crate::db | <Option<ambre_core::SegmentState> as TryFrom<PgOptState>>::Error | assoc | String	generic	an error that echoes the refused stored segment state
 ambre-server | src/db/mod.rs | crate::db | PgId.0 | field | uuid::Uuid	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/mod.rs | crate::db | PgKey.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/mod.rs | crate::db | PgOptBytes.0 | field | Option<Vec<u8>>	newtype-inner	newtype inner, accessor or constructor
@@ -2361,6 +2382,7 @@ ambre-toile | src/logic/boolean.rs | crate::logic::boolean | shapes_to_bezpath(s
 ambre-toile | src/logic/connector.rs | crate::logic::connector | anchor_is_horizontal() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/connector.rs | crate::logic::connector | outline_meets() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/connector.rs | crate::logic::connector | segment_meets() | ret | bool	generic	predicate or handled-flag result
+ambre-toile | src/logic/index.rs | crate::logic::index | <ElementBounds as RTreeObject>::Envelope | assoc | AABB<[f64;2]>	foreign-api	the envelope rstar builds over the [f64;2] point it implements Point for, the one the index stores
 ambre-toile | src/logic/index.rs | crate::logic::index | SpatialIndex::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | Entry.pixels | field | Option<Vec<u8>>	generic	opaque bytes handed to a parser/encoder/decoder
 ambre-toile | src/logic/interop/media.rs | crate::logic::interop::media | MediaCache::is_empty() | ret | bool	generic	predicate or handled-flag result
@@ -3590,7 +3612,18 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | imports::tree(found) | param 
 ambre-primitives | src/unwrap.rs | crate::unwrap | imports::tree(root) | param | Option<&str>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | imports::tree_inner(found) | param | &mut BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | imports::tree_inner(root) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | GenericCandidate.name | field | String	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | GenericCandidate.slots | field | BTreeSet<(String,String)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | GenericCandidate.tuple | field | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/unwrap.rs | crate::unwrap | GenericRepr.assocs | field | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Method::is_accessor_of() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/unwrap.rs | crate::unwrap | Raw.primitive_reprs | field | BTreeSet<(String,String)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | inner_like() | ret | bool	generic	a predicate or a file read of the scanner
+ambre-primitives | src/unwrap.rs | crate::unwrap | method_of(params) | param | &BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | representation_return(params) | param | &BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | representation_return() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | Method.returns_repr | field | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-primitives | src/unwrap.rs | crate::unwrap | type_params() | ret | BTreeSet<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | into_params() | ret | Vec<(usize,String)>	generic	Rust source text the scanner parses or prints: a path, a type or an item name, with the index of a parameter
 ambre-primitives | src/unwrap.rs | crate::unwrap | into_params(imports) | param | &BTreeMap<String,String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | is_named() | ret | bool	generic	a predicate or a file read of the scanner

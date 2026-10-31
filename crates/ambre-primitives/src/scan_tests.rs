@@ -1010,6 +1010,182 @@ fn a_phantom_marker_is_no_field_of_a_newtype() {
     assert!(scan.newtype_inner(&site(&scan, "Size.width")).is_err());
 }
 
+#[test]
+fn an_associated_type_an_impl_writes_is_a_site() {
+    let found = keys(&[(
+        "src/lib.rs",
+        "pub struct Words;\n\
+         impl TryFrom<String> for Words { type Error = String; \
+         fn try_from(t: String) -> Result<Self, Self::Error> { Ok(Words) } }\n\
+         impl Iterator for Words { type Item = Words; \
+         fn next(&mut self) -> Option<Words> { None } }\n\
+         #[cfg(test)] impl Default for Words { type Seed = u8; }",
+    )]);
+    assert_eq!(
+        found,
+        [
+            "demo | src/lib.rs | crate | <Words as TryFrom<String>>::Error | assoc | String",
+            "demo | src/lib.rs | crate | <Words as TryFrom<String>>::try_from(t) | param | String",
+        ]
+    );
+}
+
+#[test]
+fn a_newtype_inner_line_holds_on_the_associated_type_a_generic_newtype_holds() {
+    let scan = scanned(
+        "pub trait Kind { type Repr; type Other; }\n\
+         pub trait Axis { type Repr; }\n\
+         pub struct Id<E: Kind>(E::Repr);\n\
+         pub struct Index<A>(<A as Axis>::Repr) where A: Axis;\n\
+         pub struct Px<S: Kind>(<S as Kind>::Other, PhantomData<fn() -> S>);\n\
+         pub struct Document;\n\
+         impl Kind for Document { type Repr = u128; type Other = f32; }\n\
+         impl Axis for Document { type Repr = u32; }\n\
+         pub struct Loose;\n\
+         pub trait Free { type Repr; }\n\
+         impl Free for Loose { type Repr = u64; }\n\
+         impl TryFrom<u8> for Loose { type Error = String; \
+         fn try_from(_: u8) -> Result<Self, String> { Ok(Loose) } }",
+    );
+    for item in [
+        "<Document as Kind>::Repr",
+        "<Document as Kind>::Other",
+        "<Document as Axis>::Repr",
+    ] {
+        assert_eq!(scan.newtype_inner(&site(&scan, item)), Ok(()), "{item}");
+    }
+    for item in ["<Loose as Free>::Repr", "<Loose as TryFrom<u8>>::Error"] {
+        assert!(scan.newtype_inner(&site(&scan, item)).is_err(), "{item}");
+    }
+}
+
+#[test]
+fn a_newtype_inner_line_on_an_associated_type_needs_the_very_trait_the_newtype_reads() {
+    let scan = scanned(
+        "pub mod a { pub trait Kind { type Repr; } \
+         pub struct Id<E: Kind>(E::Repr); }\n\
+         pub mod b { pub trait Kind { type Repr; } pub struct Foo; \
+         impl Kind for Foo { type Repr = String; } }\n\
+         pub mod c { use foreign::Kind; pub struct Bar; \
+         impl Kind for Bar { type Repr = u64; } }\n\
+         pub mod d { use crate::a::Kind; pub struct Baz; \
+         impl Kind for Baz { type Repr = u64; } }\n\
+         pub mod e { use crate::a::Kind as K; pub struct Qux; \
+         impl K for Qux { type Repr = u64; } }\n\
+         pub mod g { pub trait Mark { type Repr; } }\n\
+         pub mod h { use crate::g::Mark as M; pub struct Held<E: M>(E::Repr); \
+         pub struct Hx; impl crate::g::Mark for Hx { type Repr = u16; } }\n\
+         pub struct Body;\n\
+         fn body() { trait Kind { type Repr; } impl Kind for Body { type Repr = u8; } }",
+    );
+    for item in [
+        "<Baz as Kind>::Repr",
+        "<Qux as K>::Repr",
+        "<Hx as crate::g::Mark>::Repr",
+    ] {
+        assert_eq!(scan.newtype_inner(&site(&scan, item)), Ok(()), "{item}");
+    }
+    for item in [
+        "<Foo as Kind>::Repr",
+        "<Bar as Kind>::Repr",
+        "body::<Body as Kind>::Repr",
+    ] {
+        assert!(scan.newtype_inner(&site(&scan, item)).is_err(), "{item}");
+    }
+}
+
+#[test]
+fn a_trait_line_never_holds_on_an_associated_type() {
+    let scan = scanned(
+        "pub struct Words;\n\
+         impl TryFrom<u8> for Words { type Error = String; \
+         fn try_from(_: u8) -> Result<Self, String> { Ok(Words) } }\n\
+         impl Iterator for Words { type Item = String; \
+         fn next(&mut self) -> Option<String> { None } }",
+    );
+    for item in ["<Words as TryFrom<u8>>::Error", "<Words as Iterator>::Item"] {
+        assert!(
+            scan.foreign_signature(&site(&scan, item)).is_err(),
+            "{item}"
+        );
+    }
+}
+
+#[test]
+fn a_generic_newtype_names_its_marker_and_a_primitive_argument_stays_bare() {
+    let found = keys(&[(
+        "src/lib.rs",
+        "pub trait Space { type Repr; }\n\
+         pub struct Px<S: Space>(S::Repr, PhantomData<fn() -> S>);\n\
+         pub struct Pair<S: Space, R>(R, PhantomData<fn() -> S>);\n\
+         pub struct Doc;\n\
+         impl Space for Doc { type Repr = f32; }\n\
+         pub fn width(w: Px<Doc>, h: crate::Px<Doc>) -> Option<Px<Doc>> { None }\n\
+         pub fn bare(p: Pair<Doc, f32>) {}",
+    )]);
+    assert_eq!(
+        found,
+        [
+            "demo | src/lib.rs | crate | <Doc as Space>::Repr | assoc | f32",
+            "demo | src/lib.rs | crate | bare(p) | param | Pair<Doc,f32>",
+        ]
+    );
+}
+
+#[test]
+fn a_trait_with_generic_arguments_holds_no_representation() {
+    let scan = scanned(
+        "pub trait Kind<T> { type Repr; }\n\
+         pub struct Id<E: Kind<u8>>(E::Repr);\n\
+         pub struct Raw<E>(<E as Kind<u8>>::Repr) where E: Kind<u8>;\n\
+         pub struct Foo;\n\
+         impl Kind<u8> for Foo { type Repr = u64; }\n\
+         pub trait Mark<T = u8> { type Repr; }\n\
+         pub struct Held<E: Mark<u16>>(E::Repr);\n\
+         pub struct Bar;\n\
+         impl Mark for Bar { type Repr = u64; }",
+    );
+    for item in ["<Foo as Kind<u8>>::Repr", "<Bar as Mark>::Repr"] {
+        assert!(scan.newtype_inner(&site(&scan, item)).is_err(), "{item}");
+    }
+}
+
+#[test]
+fn a_trait_path_with_a_leading_colon_holds_no_representation() {
+    let scan = with_user(
+        "pub trait Kind { type Repr; }",
+        "mod demo { pub trait Kind { type Repr; } }\n\
+         pub struct Id<E: demo::Kind>(E::Repr);\n\
+         pub struct Abs<E: ::demo::Kind>(E::Repr);\n\
+         pub struct Foo;\n\
+         impl ::demo::Kind for Foo { type Repr = u64; }\n\
+         pub struct Bar;\n\
+         impl demo::Kind for Bar { type Repr = u64; }",
+    );
+    assert_eq!(
+        scan.newtype_inner(&site(&scan, "<Bar as demo::Kind>::Repr")),
+        Ok(())
+    );
+    assert!(
+        scan.newtype_inner(&site(&scan, "<Foo as ::demo::Kind>::Repr"))
+            .is_err()
+    );
+}
+
+#[test]
+fn a_mod_inside_a_fn_body_fails_the_scan() {
+    let (_, errors) = run(&[(
+        "src/lib.rs",
+        "pub fn f() { mod inner { pub struct Thing(pub u32); } }",
+    )]);
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.contains("a `mod` inside a block")),
+        "{errors:?}"
+    );
+}
+
 /// The tree of `demo` and two more crates. The crate `user` depends on `demo`,
 /// and its `src/lib.rs` reads `user`. The crate `other` declares an `enum Row`
 /// that `user` cannot reach.

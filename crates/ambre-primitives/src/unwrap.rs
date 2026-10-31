@@ -12,6 +12,12 @@
 //!
 //!   * a newtype is a struct with one field over a primitive, a byte
 //!     vector, a byte slice or a byte array. `PhantomData` is no field;
+//!   * a generic struct is a newtype too when its one field is an
+//!     associated type of a bounded parameter, as `Id<E: Kind>(E::Repr)`.
+//!     An impl of the workspace must write a primitive or bytes for that
+//!     associated type, matched by the last segment of the trait. Its
+//!     accessor returns that associated type, or a borrow of it, never the
+//!     marker;
 //!   * a type a `define_*!` or `fixed_bytes!` macro writes is a newtype too;
 //!   * an accessor is a method of the newtype that takes `self` alone and
 //!     returns the primitive or a borrow of it;
@@ -69,7 +75,7 @@ use syn::visit::Visit;
 use crate::allowlist::LineNo;
 use crate::scan::{
     META, PRIMITIVES, Scan, Source, Tree, dependencies, fragments_of, item_attrs, macro_types,
-    rule_bodies, test_only,
+    representation_slots, rule_bodies, test_only,
 };
 
 /// The allowlist header: a key, the number of sites it allows, then the
@@ -477,6 +483,8 @@ struct Newtype {
     /// Each primitive a std conversion trait turns the newtype into, as
     /// `impl From<Name> for String` does.
     conversions: BTreeSet<String>,
+    /// The representation of a generic newtype, `None` for any other.
+    repr: Option<GenericRepr>,
 }
 
 /// What the workspace declares, read once before any body.
@@ -652,14 +660,28 @@ struct Method {
     takes_self: bool,
     /// Returns a primitive, a borrow of one included.
     returns_inner: bool,
+    /// Returns an associated type of a parameter of a generic impl, by name.
+    returns_repr: Option<String>,
     /// Returns a `bool`: a predicate, never the representation.
     returns_bool: bool,
 }
 
 impl Method {
     fn is_accessor(&self) -> bool {
+        self.is_accessor_of(None)
+    }
+
+    /// Whether the method is an accessor of a newtype whose generic
+    /// representation is `repr`. Only the field's own associated type
+    /// counts: the marker is no representation.
+    fn is_accessor_of(&self, repr: Option<&GenericRepr>) -> bool {
+        let returns = self.returns_inner
+            || match (repr, &self.returns_repr) {
+                (Some(repr), Some(name)) => repr.assocs.contains(name),
+                _ => false,
+            };
         self.self_only
-            && self.returns_inner
+            && returns
             && !self.returns_bool
             && self.name != "len"
             && !self.name.starts_with("is_")
@@ -711,6 +733,12 @@ struct Raw {
     /// Each macro by name: its accessors.
     macros: BTreeMap<String, BTreeSet<String>>,
     invocations: Vec<Invocation>,
+    /// Each generic struct that is a newtype once an impl writes a
+    /// primitive for one of its slots.
+    generic: Vec<GenericCandidate>,
+    /// Each trait, by its last segment, and associated type an impl of the
+    /// workspace writes as a primitive or bytes.
+    primitive_reprs: BTreeSet<(String, String)>,
 }
 
 /// Whether a type is a primitive, or a borrow, a box or a slice of one.
@@ -802,18 +830,80 @@ fn shape_name(ty: &syn::Type) -> Option<String> {
     }
 }
 
+/// The name of the associated type of a parameter of the impl that `ty`
+/// returns, through a borrow: `Repr` for `E::Repr` or `<E as Kind>::Repr`.
+fn representation_return(ty: &syn::Type, params: &BTreeSet<String>) -> Option<String> {
+    match ty {
+        syn::Type::Reference(r) => representation_return(&r.elem, params),
+        syn::Type::Paren(p) => representation_return(&p.elem, params),
+        syn::Type::Group(g) => representation_return(&g.elem, params),
+        syn::Type::Path(p) => {
+            let is_param = |ident: &syn::Ident| params.contains(&ident.to_string());
+            let segments: Vec<&syn::PathSegment> = p.path.segments.iter().collect();
+            match (&p.qself, segments.as_slice()) {
+                (Some(qself), [.., assoc]) if assoc.arguments.is_none() => {
+                    matches!(&*qself.ty, syn::Type::Path(q)
+                        if q.qself.is_none() && q.path.get_ident().is_some_and(is_param))
+                    .then(|| assoc.ident.to_string())
+                }
+                (None, [param, assoc])
+                    if param.arguments.is_none()
+                        && assoc.arguments.is_none()
+                        && is_param(&param.ident) =>
+                {
+                    Some(assoc.ident.to_string())
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The type parameters `generics` declares.
+fn type_params(generics: &syn::Generics) -> BTreeSet<String> {
+    generics
+        .type_params()
+        .map(|param| param.ident.to_string())
+        .collect()
+}
+
+/// The representation of a generic newtype, as its accessors return it.
+#[derive(Clone, Debug, Default)]
+struct GenericRepr {
+    /// The name of each associated type the field holds: `Repr` in
+    /// `Id<E: Kind>(E::Repr)`.
+    assocs: BTreeSet<String>,
+}
+
+/// A generic struct whose one field is an associated type of a marker
+/// ([`representation_slots`]), before the impls are known.
+struct GenericCandidate {
+    name: String,
+    home: Home,
+    tuple: bool,
+    /// Each trait, by its last segment, and associated type the field reads.
+    slots: BTreeSet<(String, String)>,
+    repr: GenericRepr,
+}
+
 /// The signature of an impl method, as the catalog reads it.
-fn method_of(sig: &syn::Signature) -> Method {
+fn method_of(sig: &syn::Signature, params: &BTreeSet<String>) -> Method {
     let takes_self = matches!(sig.inputs.first(), Some(syn::FnArg::Receiver(_)));
-    let (returns_inner, returns_bool) = match &sig.output {
-        syn::ReturnType::Type(_, ty) => (inner_like(ty), is_named(ty, "bool")),
-        syn::ReturnType::Default => (false, false),
+    let (returns_inner, returns_repr, returns_bool) = match &sig.output {
+        syn::ReturnType::Type(_, ty) => (
+            inner_like(ty),
+            representation_return(ty, params),
+            is_named(ty, "bool"),
+        ),
+        syn::ReturnType::Default => (false, None, false),
     };
     Method {
         name: sig.ident.to_string(),
         self_only: takes_self && sig.inputs.len() == 1,
         takes_self,
         returns_inner,
+        returns_repr,
         returns_bool,
     }
 }
@@ -928,6 +1018,7 @@ fn body_methods(
             self_only: !more,
             takes_self,
             returns_inner: arrow && returns_inner(&ret, fragments),
+            returns_repr: None,
             returns_bool,
         };
         if method.is_accessor() {
@@ -1040,14 +1131,33 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                     .entry(name.clone())
                     .or_default()
                     .extend(named);
-                if let [field] = fields.as_slice()
-                    && inner_like(&field.ty)
-                {
-                    let home = self.home();
-                    let newtype = self.raw.catalog.newtypes.entry(name).or_default();
-                    newtype.homes.insert(home);
-                    newtype.tuple |=
+                if let [field] = fields.as_slice() {
+                    let tuple =
                         field.ident.is_none() && !matches!(field.vis, syn::Visibility::Inherited);
+                    let slots = representation_slots(&s.generics, &field.ty);
+                    if inner_like(&field.ty) {
+                        let home = self.home();
+                        let newtype = self.raw.catalog.newtypes.entry(name).or_default();
+                        newtype.homes.insert(home);
+                        newtype.tuple |= tuple;
+                    } else if !slots.is_empty() {
+                        // A newtype only once an impl writes a primitive for
+                        // one of its slots: `Handle<K: Kind>(K::Repr)` over a
+                        // `Config` representation holds no primitive.
+                        let assocs = slots.iter().map(|(_, assoc)| assoc.clone()).collect();
+                        let slots = slots
+                            .into_iter()
+                            .filter_map(|(path, assoc)| Some((path.last()?.clone(), assoc)))
+                            .collect();
+                        let home = self.home();
+                        self.raw.generic.push(GenericCandidate {
+                            name,
+                            home,
+                            tuple,
+                            slots,
+                            repr: GenericRepr { assocs },
+                        });
+                    }
                 }
             }
             // A name a transcriber writes as a metavariable names no item.
@@ -1100,6 +1210,21 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                 }
             }
             syn::Item::Impl(i) => {
+                if !test_only(&i.attrs)
+                    && let Some((_, trait_path, _)) = &i.trait_
+                    && let Some(trait_name) = trait_path.segments.last()
+                {
+                    for item in &i.items {
+                        if let syn::ImplItem::Type(t) = item
+                            && !test_only(&t.attrs)
+                            && inner_like(&t.ty)
+                        {
+                            self.raw
+                                .primitive_reprs
+                                .insert((trait_name.ident.to_string(), t.ident.to_string()));
+                        }
+                    }
+                }
                 let Some(owner) = type_name(&i.self_ty).filter(|owner| !owner.starts_with(META))
                 else {
                     return;
@@ -1123,6 +1248,9 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                 let of_trait = last.map(|last| last.ident.to_string());
                 let argument = last.and_then(first_argument).and_then(Argument::of);
                 let inner = inner_like(&i.self_ty).then(|| owner.clone());
+                // A method generic over its own parameters returns no
+                // representation: only the impl's parameters count.
+                let params = type_params(&i.generics);
                 let mut shows_content = false;
                 let methods = i
                     .items
@@ -1133,7 +1261,7 @@ impl<'ast> Visit<'ast> for CatalogVisit<'_> {
                                 let body = f.block.to_token_stream();
                                 shows_content = reads_field(body.clone()) && !names_len(body);
                             }
-                            Some(method_of(&f.sig))
+                            Some(method_of(&f.sig, &params))
                         }
                         _ => None,
                     })
@@ -1195,6 +1323,20 @@ impl Raw {
     /// the methods of each impl sorted by who owns the trait.
     fn close(mut self) -> Catalog {
         let mut catalog = self.catalog;
+        for candidate in self.generic.drain(..) {
+            if !candidate
+                .slots
+                .iter()
+                .any(|slot| self.primitive_reprs.contains(slot))
+            {
+                continue;
+            }
+            let newtype = catalog.newtypes.entry(candidate.name).or_default();
+            newtype.homes.insert(candidate.home);
+            newtype.tuple |= candidate.tuple;
+            let repr = newtype.repr.get_or_insert_with(GenericRepr::default);
+            repr.assocs.extend(candidate.repr.assocs);
+        }
         for invocation in self.invocations {
             let accessors = self
                 .macros
@@ -1250,10 +1392,11 @@ impl Raw {
                 _ => {}
             }
             if imp.of_trait.is_none() {
+                let repr = newtype.repr.clone();
                 newtype.accessors.extend(
                     imp.methods
                         .iter()
-                        .filter(|method| method.is_accessor())
+                        .filter(|method| method.is_accessor_of(repr.as_ref()))
                         .map(|method| method.name.clone()),
                 );
             }
