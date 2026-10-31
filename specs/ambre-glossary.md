@@ -76,6 +76,11 @@
 | session nonce | the random value a PeerID derives from | | `1-Foundations/ambre-spec-op-authorship.md` |
 | peer registry | the map from a PeerID to its user, inside a document | | `1-Foundations/ambre-spec-op-authorship.md` |
 | IdCounter | the per-session counter an id is minted from, beside a PeerID | | `3-Toile/ambre-spec-toile-schema.md` |
+| `TimeSpan<U>` | a span of time, counted in one unit | pagemillis | `1-Foundations/ambre-spec-architecture.md` |
+| `Instant<C>` | a point in time on one time base, never `std::time::Instant` | pagetime, unixmillis, unixseconds | `1-Foundations/ambre-spec-architecture.md` |
+| `TimeUnit` | the marker of a unit: `Ms`, `Sec`, `Ns` or `FracMs` | | `1-Foundations/ambre-spec-architecture.md` |
+| `TimeBase` | the marker of the clock and epoch an instant counts from | | `1-Foundations/ambre-spec-architecture.md` |
+| `StoredAsI64` | a whole count that a store keeps as a signed integer | | `1-Foundations/ambre-spec-architecture.md` |
 | `Instant<Authored>` | the author's wall clock in Unix milliseconds, shown and never trusted | | `5-Murmure/ambre-spec-murmure-schema.md` |
 | page clock | the page's monotonic milliseconds, restarted on every load | | `1-Foundations/ambre-spec-frame.md` |
 | presence | who is on a document, and where | | `1-Foundations/ambre-spec-presence.md` |

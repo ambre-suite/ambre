@@ -296,9 +296,10 @@ pub struct MurmureView {
     reveal: Reveal,
     /// The list and the latest message this region last heard, so a new one
     /// is announced once (`MURMURE-208`).
-    // The generic instant spells longer than the type it replaced, and the
-    // workspace writes no alias for it, so the lint reads length, not depth.
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "the lint scores the generics nested in the pair, and no alias may hide them"
+    )]
     heard: (Option<ListOf>, Option<(Id<Message>, Instant<Authored>)>),
     /// The text selected, and the points of a drag the next paint resolves
     /// (`MURMURE-425`).

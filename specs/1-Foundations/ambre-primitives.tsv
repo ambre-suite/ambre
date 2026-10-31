@@ -441,9 +441,9 @@ ambre-canvas | src/frame.rs | crate::frame | paint_fatal(message) | param | &str
 ambre-canvas | src/frame.rs | crate::frame | paint_fatal::TITLE_TEXT | const | &str	free-text	message text of the fatal frame
 ambre-canvas | src/frame.rs | crate::frame | text_height() | ret | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/frame.rs | crate::frame | text_height(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in a PageTime
+ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in an Instant<PageLoad>
 ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
-ambre-canvas | src/host.rs | crate::host | request_frame(slot) | param | &FrameSlot	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in a PageTime
+ambre-canvas | src/host.rs | crate::host | request_frame(slot) | param | &FrameSlot	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in an Instant<PageLoad>
 ambre-canvas | src/host.rs | crate::host | fetch_bytes(url) | param | &str	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | url_flag() | ret | bool	generic	predicate result
 ambre-canvas | src/host.rs | crate::host | url_flag(flag) | param | &str	free-text	text, label or message
