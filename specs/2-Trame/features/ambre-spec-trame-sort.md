@@ -110,7 +110,7 @@ Two peers, one sheet. The last column joins the example to the test that holds i
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SortKey {
-    pub col:   ColCount,   // offset within the range: 0 is its first column
+    pub col:   Count<Col>,   // offset within the range: 0 is its first column
     pub order: SortOrder,
 }
 

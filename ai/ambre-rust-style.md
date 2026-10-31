@@ -7,7 +7,7 @@
   the compiler proves the dispatch is exhaustive.
 * **A newtype for every domain value, inside a function too.** An identifier, a quantity with a
   unit, an index or offset, a secret and a validated value each get their own type. Examples:
-  `Id<Message>`, `Timestamp(u64)`, `Row(u32)`, `Emoji(String)`. A closed set of values is
+  `Id<Message>`, `Timestamp(u64)`, `Pos<Row>`, `Emoji(String)`. A closed set of values is
   an `enum`, never a `String`. A `bool` that selects a mode is an `enum` too. A bare `String`,
   `Uuid`, integer, float or `Vec<u8>` is allowed in four places only:
   * free text with no rule;
@@ -110,14 +110,13 @@
   * **Validation.** A value with a rule has a fallible constructor, and no other way in.
     Deserialisation goes through that constructor.
   * **Arithmetic.** It is limited to the operations the domain allows. A position, a count and a
-    difference are three types: `Row + RowCount -> Row` and `Row - Row -> RowDelta`, while
-    `Row + Row` does not compile.
-  * **Iteration.** `Range<Row>` cannot iterate, because `core::iter::Step` is unstable
-    (tracking issue rust-lang/rust#73121). So an index type ships a span type that implements
-    `IntoIterator`. When `Step` reaches stable, implement it for every index type. Then replace
-    each span type with `Range` and delete it. The macro that generates the index types carries
-    the same note.
-  * **Indexing.** A collection indexed by an index type is a typed collection.
+    difference are three types: `Pos<Row> + Count<Row> -> Pos<Row>` and
+    `Pos<Row> - Pos<Row> -> Delta<Row>`, while `Pos<Row> + Pos<Row>` does not compile.
+  * **Iteration.** `Range<Pos<Row>>` cannot iterate, because `core::iter::Step` is unstable
+    (tracking issue rust-lang/rust#73121). So the index family ships `Span<A>`, which implements
+    `IntoIterator`. When `Step` reaches stable, implement it for `Pos<A>`. Then replace `Span<A>`
+    with `Range` and delete it. The module of the index family carries the same note.
+  * **Indexing.** A collection indexed by a position is an `IdxVec<A, T>`.
   * **Derives.** Each type derives what the code needs: `Ord`, `Hash` and `Default` where they
     hold. Its serde form is `#[serde(transparent)]` unless the wire says otherwise. A plaintext type
     prints only its length through `Debug`. A secret type prints nothing of its value: it holds

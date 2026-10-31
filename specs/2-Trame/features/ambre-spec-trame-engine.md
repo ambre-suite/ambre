@@ -124,10 +124,10 @@ document stores. Both directions resolve in constant time.
 ```rust
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SheetIndex {
-    row_by_pos: RowVec<Uid>,
-    col_by_pos: ColVec<Uid>,
-    row_to_pos: HashMap<Uid, Row>,
-    col_to_pos: HashMap<Uid, Col>,
+    row_by_pos: IdxVec<Row, Uid>,
+    col_by_pos: IdxVec<Col, Uid>,
+    row_to_pos: HashMap<Uid, Pos<Row>>,
+    col_to_pos: HashMap<Uid, Pos<Col>>,
 }
 
 impl SheetIndex {
@@ -136,11 +136,11 @@ impl SheetIndex {
 
     /// Shift the positions after `pos`, and reindex. A position past the end
     /// inserts nothing, and deletes nothing, answering `None`.
-    pub fn apply_insert_row(&mut self, pos: Row, id: Uid);
-    pub fn apply_delete_row(&mut self, pos: Row) -> Option<Uid>;
+    pub fn apply_insert_row(&mut self, pos: Pos<Row>, id: Uid);
+    pub fn apply_delete_row(&mut self, pos: Pos<Row>) -> Option<Uid>;
 
     /// Permute the order to mirror a `mov(from, to)`: the primitive behind a sort.
-    pub fn apply_move_row(&mut self, from: Row, to: Row);
+    pub fn apply_move_row(&mut self, from: Pos<Row>, to: Pos<Row>);
 
     /// A position pair to a uid pair. `None` past the used range.
     pub fn resolve(&self, at: CellPos) -> Option<(Uid, Uid)>;
@@ -152,8 +152,8 @@ impl SheetIndex {
 
 // ambre-trame/src/columns.rs
 /// Bijective base 26, the spreadsheet convention: 0 -> "A", 26 -> "AA".
-pub fn col_to_alpha(col: Col) -> String;
-pub fn alpha_to_col(s: &str) -> Result<Col, ColumnParseError>;
+pub fn col_to_alpha(col: Pos<Col>) -> String;
+pub fn alpha_to_col(s: &str) -> Result<Pos<Col>, ColumnParseError>;
 ```
 
 The vectors are dense over the used range, never over the virtual 100 000 rows
@@ -235,8 +235,8 @@ directly -- there is no `DisplayViewport` type on the bus. One cell of it is fla
 ```rust
 #[derive(Debug, Clone, Default)]
 pub struct DisplayCell {
-    pub row: Row,
-    pub col: Col,
+    pub row: Pos<Row>,
+    pub col: Pos<Col>,
     pub text: String,                    // the value the user reads
     pub raw: String,                     // the text they typed, for the formula bar
     pub bold: Weight,

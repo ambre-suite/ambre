@@ -137,9 +137,9 @@ pub struct DraftBuffer { /* private: the entries in the order sent, and a genera
 impl DraftBuffer {
     pub fn is_empty(&self) -> bool;
     /// One entry per keystroke sent (`PROSE-UI-138`).
-    pub fn push_str(&mut self, seq: TextAck, text: &str, block_id: &BlockId, pos: DocOffset);
-    pub fn push_delete(&mut self, seq: TextAck, block_id: &BlockId, start: DocOffset,
-                       end: DocOffset);
+    pub fn push_str(&mut self, seq: TextAck, text: &str, block_id: &BlockId, pos: Pos<DocChar>);
+    pub fn push_delete(&mut self, seq: TextAck, block_id: &BlockId, start: Pos<DocChar>,
+                       end: Pos<DocChar>);
     /// The command numbered `seq` was taken as drawn (`PROSE-UI-005`).
     pub fn confirm(&mut self, seq: TextAck);
     /// A layout was taken: the confirmed entries leave.
@@ -227,7 +227,7 @@ receives them as input events and answers whether the host must swallow the key.
 /// (`ComposeEnd`), a copy and a paste. No `web_sys` here: the shared text field captures the
 /// DOM events.
 pub enum ProseInput { Key { .. }, Text(String), Press { .. }, Drag { .. }, Release,
-                      Drop { .. }, SlashPick(SlashChoice), Compose(String),
+                      Drop { .. }, SlashPick(Pos<SlashChoice>), Compose(String),
                       ComposeEnd(String), Copy(ClipboardWrite), Paste { .. } }
 
 impl ProseUiState {
