@@ -1126,6 +1126,7 @@
   {"edge": "cites-section", "from": "SYNC-043", "section": "3", "to": "1-Foundations/ambre-spec-key-rotation.md"},
   {"edge": "verified-by", "from": "SYNC-043", "to": "ambre_sync::sharing::tests::rotate_entries_cover_valid_members_and_report_malformed"},
   {"edge": "verified-by", "from": "SYNC-043", "to": "ambre_sync::sharing::tests::revoke_reports_a_member_it_could_not_rewrap_for"},
+  {"edge": "verified-by", "from": "SYNC-043", "to": "::a_malformed_exchange_key_reaches_the_report_by_name"},
   {"edge": "cites-section", "from": "SYNC-118", "section": "3", "to": "1-Foundations/ambre-spec-key-rotation.md"},
   {"edge": "cites-rule", "from": "SYNC-118", "to": "SYNC-047"},
   {"edge": "verified-by", "from": "SYNC-118", "to": "ambre_sync::sharing::tests::a_revoke_posts_the_removal_and_the_copies_in_one_request"},

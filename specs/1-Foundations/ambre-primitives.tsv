@@ -1223,7 +1223,7 @@ ambre-logic | src/persistence.rs | crate::persistence | session_of(row) | param 
 ambre-logic | src/persistence.rs | crate::persistence | DbName.0 | field | &'a str	newtype-inner	DbName newtype
 ambre-logic | src/persistence.rs | crate::persistence | DbVersion.0 | field | u32	newtype-inner	DbVersion newtype
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey.0 | field | String	newtype-inner	IdbKey newtype
-ambre-logic | src/persistence.rs | crate::persistence | IdbKey::document_of(text) | param | &str	foreign-api	a key as IndexedDB hands it back, parsed here to its DocumentId
+ambre-logic | src/persistence.rs | crate::persistence | IdbKey::document_of(text) | param | &str	foreign-api	a key as IndexedDB hands it back, parsed here to its Id<Document>
 ambre-logic | src/persistence.rs | crate::persistence | IdbStore::name() | ret | &'static str	newtype-inner	the enum's own store name, unwrapped at the IndexedDB call
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::picture_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::pictured() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1368,7 +1368,7 @@ ambre-murmure | src/delta.rs | crate::delta | check(reactions) | param | impl Fn
 ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
 ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	generic	state flag/predicate: the verdict on one write; the key is parsed as a MessageKey and the thread as a DocumentId inside
+ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	generic	state flag/predicate: the verdict on one write; the key is parsed as a MessageKey and the thread as an Id<Document> inside
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param | Option<String>	generic	enum<->stored string codec at the CRDT boundary: the raw string the Loro thread field stores, parsed into the enum here
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype

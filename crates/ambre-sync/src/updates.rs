@@ -768,12 +768,13 @@ impl SyncState {
     > {
         crate::sharing::unwrap_own(
             exchange_key,
-            members.iter().map(|m| {
-                (
-                    &m.exchange_pub_key,
+            // A row whose exchange key does not parse is no row of ours.
+            members.iter().filter_map(|m| {
+                Some((
+                    m.exchange_pub_key.key()?,
                     &m.doc_key_enc,
-                    Some(&m.wrapper_exchange_pub_key),
-                )
+                    m.wrapper_exchange_pub_key.key(),
+                ))
             }),
         )
     }
@@ -807,7 +808,9 @@ impl SyncState {
         let role =
             crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
         let signing_keys = crate::sharing::presence_directory(
-            resp.members.iter().map(|m| (m.user_id, &m.signing_pub_key)),
+            resp.members
+                .iter()
+                .map(|m| (m.user_id, m.signing_pub_key.key())),
         );
         Ok(OpenedMembers {
             doc_key,
@@ -1857,12 +1860,12 @@ mod tests {
         let wrapper_pub = crate::sharing::own_exchange_key(wrapper);
         http::MemberEntry {
             user_id: uid,
-            signing_pub_key: FixedBytes::from_array([uid.as_bytes()[0]; 32]),
-            exchange_pub_key: holder_pub,
+            signing_pub_key: http::ServedKey::of(FixedBytes::from_array([uid.as_bytes()[0]; 32])),
+            exchange_pub_key: http::ServedKey::of(holder_pub),
             doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder_pub, doc_key, None)
                 .unwrap(),
             role,
-            wrapper_exchange_pub_key: wrapper_pub,
+            wrapper_exchange_pub_key: http::ServedKey::of(wrapper_pub),
         }
     }
 
@@ -3933,7 +3936,7 @@ mod tests {
              named: Option<FixedBytes<ambre_core::ExchangePublicKey>>| {
                 let mut row = member_row(me, &my_xk, wrapper, &doc_key, ambre_core::Role::Editor);
                 if let Some(named) = named {
-                    row.wrapper_exchange_pub_key = named;
+                    row.wrapper_exchange_pub_key = http::ServedKey::of(named);
                 }
                 SyncState::unwrap_document_key(&my_xk, &[row])
                     .map(|key| key.id())

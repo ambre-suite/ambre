@@ -86,6 +86,8 @@ pub(crate) enum SyncError {
 /// What bytes that did not decode stood for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Part {
+    /// A member's Ed25519 signing key, as the relay served it.
+    SigningKey,
     /// A wrapped copy of a document key.
     WrappedKey,
     /// A channel key sealed for a space's catalogue.
@@ -97,6 +99,7 @@ pub(crate) enum Part {
 impl std::fmt::Display for Part {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
+            Self::SigningKey => "the signing key",
             Self::WrappedKey => "the wrapped key",
             Self::SealedChannelKey => "the sealed channel key",
             Self::JoinHead => "the join head",

@@ -120,12 +120,13 @@ pub(crate) fn served_log_under(
     resp: &http::DocumentMembersResponse,
     rule: &LogRule,
 ) -> (Log, Option<FixedBytes<EntryDigest>>) {
-    let rows = resp.members.iter().map(|m| {
-        (
-            &m.exchange_pub_key,
+    // A row whose exchange key does not parse is no row of ours to unwrap.
+    let rows = resp.members.iter().filter_map(|m| {
+        Some((
+            m.exchange_pub_key.key()?,
             &m.doc_key_enc,
-            Some(&m.wrapper_exchange_pub_key),
-        )
+            m.wrapper_exchange_pub_key.key(),
+        ))
     });
     let anchor = unwrap_own(exchange_key, rows)
         .ok()
@@ -226,9 +227,11 @@ pub(crate) fn build_invite_request(
 
 /// Re-wraps `new_doc_key` for every remaining member after a revoke (the rotate
 /// payload), with the log `anchor` sealed beside it (`SYNC-104`). A member
-/// whose exchange key the wrap refuses cannot be re-wrapped for. The rotation
-/// goes on for the others, and that member is returned in the second list so
-/// the caller reports it (`SYNC-043`). Nothing is skipped in silence.
+/// whose exchange key the relay served malformed, or the wrap refuses, cannot
+/// be re-wrapped for. The rotation goes on for the others, and that member is
+/// returned in the second list so the caller reports it (`SYNC-043`). Nothing
+/// is skipped in silence, and nothing is encrypted to a key that did not
+/// parse.
 pub(crate) fn rotate_entries_for(
     my_xk: &StaticSecret,
     new_doc_key: &DocumentKey,
@@ -239,7 +242,10 @@ pub(crate) fn rotate_entries_for(
     let entries = members
         .iter()
         .filter_map(|m| {
-            let wrapped = wrap_anchored_b64(my_xk, &m.exchange_pub_key, new_doc_key, anchor);
+            let wrapped =
+                m.exchange_pub_key.key().ok_or(()).and_then(|key| {
+                    wrap_anchored_b64(my_xk, key, new_doc_key, anchor).map_err(|_| ())
+                });
             match wrapped {
                 Ok(doc_key_enc) => Some(http::RotateKeyEntry {
                     user_id: m.user_id,
@@ -258,16 +264,30 @@ pub(crate) fn rotate_entries_for(
 /// Builds the presence directory (Ed25519 signing key -> canonical `Id<User>`)
 /// from any members response, given each entry's `(user_id, signing_pub_key)`
 /// (`ambre-spec-membership.md`). Both the open path and the member-list path
-/// feed it, hence the pair input rather than one of the two entry structs. The
-/// identifier and the key were parsed when the response was read. A
-/// malformed one refused the whole answer there, so nothing here can fail.
+/// feed it, hence the pair input rather than one of the two entry structs.
+/// The identifier parsed when the response was read. A row whose signing key
+/// did not parse is skipped, never given a guessed identity (`SYNC-015`). The
+/// count of skipped rows is logged, and none of the keys.
 pub(crate) fn presence_directory<'a>(
-    entries: impl IntoIterator<Item = (Id<User>, &'a FixedBytes<ambre_core::PublicKey>)>,
+    entries: impl IntoIterator<Item = (Id<User>, Option<&'a FixedBytes<ambre_core::PublicKey>>)>,
 ) -> Vec<(FixedBytes<ambre_core::PublicKey>, Id<User>)> {
-    entries
+    let mut skipped = 0usize;
+    let directory = entries
         .into_iter()
-        .map(|(user_id, signing_pub_key)| (*signing_pub_key, user_id))
-        .collect()
+        .filter_map(|(user_id, signing_pub_key)| {
+            let key = signing_pub_key.copied();
+            if key.is_none() {
+                skipped = skipped.saturating_add(1);
+            }
+            key.map(|key| (key, user_id))
+        })
+        .collect();
+    if skipped > 0 {
+        tracing::warn!(
+            "[Sync] presence directory skipped {skipped} rows whose signing key did not parse"
+        );
+    }
+    directory
 }
 
 /// Picks this client's own role out of a members response, given `(user_id,
@@ -768,10 +788,15 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
             .into_iter()
             .partition(|m| m.user_id == p.user_id);
         let entry = match removed.first().map(|m| {
+            let member_key = m
+                .signing_pub_key
+                .key()
+                .copied()
+                .ok_or(SyncError::Malformed(Part::SigningKey))?;
             let draft = Draft {
                 document: p.document_id,
                 member: p.user_id,
-                member_key: m.signing_pub_key,
+                member_key,
                 act: MembershipAct::Revoke,
                 role: m.role,
                 key: Some(new_doc_key.id()),
@@ -1201,15 +1226,23 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
                 "the member is no longer in the document".into(),
             );
         };
-        let draft = Draft {
-            document: p.document_id,
-            member: p.user_id,
-            member_key: target.signing_pub_key,
-            act: MembershipAct::ChangeRole,
-            role: p.role,
-            key: None,
-        };
-        let entry = match entry_after(&log, draft, &p.author) {
+        let entry = target
+            .signing_pub_key
+            .key()
+            .copied()
+            .ok_or(SyncError::Malformed(Part::SigningKey))
+            .and_then(|member_key| {
+                let draft = Draft {
+                    document: p.document_id,
+                    member: p.user_id,
+                    member_key,
+                    act: MembershipAct::ChangeRole,
+                    role: p.role,
+                    key: None,
+                };
+                entry_after(&log, draft, &p.author)
+            });
+        let entry = match entry {
             Ok(entry) => entry,
             Err(e) => return failed(logic_tx, ApiRequest::UpdateDocumentMemberRole, e),
         };
@@ -1444,8 +1477,11 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
             // (`ambre-spec-membership.md`). Membership just changed often enough to ask
             // for the list. This is where a new member becomes resolvable and a revoked
             // one stops resolving, with no extra round-trip.
-            let signing_keys =
-                presence_directory(resp.members.iter().map(|m| (m.user_id, &m.signing_pub_key)));
+            let signing_keys = presence_directory(
+                resp.members
+                    .iter()
+                    .map(|m| (m.user_id, m.signing_pub_key.key())),
+            );
             // Each row carries what the log says of it (`SYNC-108`).
             let (log, _) = served_log_under(p.document_id, &p.exchange_key, &resp, &p.rule);
             let word = membership_log::SpaceWord::of(&log);
@@ -1494,11 +1530,11 @@ mod tests {
             user_id: Id::<User>::parse_str(uid).expect("a test id"),
             display_name: ambre_core::DisplayName::new("Member").unwrap(),
             email: "m@test.local".into(),
-            signing_pub_key: FixedBytes::from_array([0; 32]),
-            exchange_pub_key,
+            signing_pub_key: http::ServedKey::of(FixedBytes::from_array([0; 32])),
+            exchange_pub_key: http::ServedKey::of(exchange_pub_key),
             doc_key_enc: ambre_core::Encoded::new(Vec::new()),
             role: Role::Editor,
-            wrapper_exchange_pub_key: exchange_pub_key,
+            wrapper_exchange_pub_key: http::ServedKey::of(exchange_pub_key),
         }
     }
 
@@ -1619,36 +1655,72 @@ mod tests {
         assert!(unwrap_b64(&a_xk, &my_pub, &entries[0].doc_key_enc).is_ok());
     }
 
+    /// `SYNC-043`: a member whose exchange key the relay serves malformed
+    /// stays in the answer, is wrapped for by nobody, and is reported by name.
+    #[test]
+    fn a_malformed_exchange_key_reaches_the_report_by_name() {
+        let (my_xk, _) = keypair(1);
+        let (_, a_pub) = keypair(2);
+        let row = |user_id: &str, name: &str, exchange: String| {
+            serde_json::json!({
+                "user_id": user_id,
+                "display_name": name, "email": "m@test.local",
+                "signing_pub_key": "cd".repeat(32), "exchange_pub_key": exchange,
+                "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]),
+                "role": "editor", "wrapper_exchange_pub_key": "ab".repeat(32),
+            })
+        };
+        let answer = serde_json::from_value::<http::DocumentMembersResponse>(serde_json::json!({
+            "members": [
+                row("11111111-1111-1111-1111-111111111111", "Alice", a_pub.to_hex()),
+                row("22222222-2222-2222-2222-222222222222", "Carol", "zz-not-hex".to_owned()),
+            ]
+        }))
+        .expect("a malformed key never refuses the whole answer");
+        let new_key = DocumentKey::generate();
+        let (entries, unwrapped) = rotate_entries_for(&my_xk, &new_key, None, &answer.members);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].user_id,
+            Id::<User>::parse_str("11111111-1111-1111-1111-111111111111").unwrap()
+        );
+        assert_eq!(unwrapped, [ambre_core::DisplayName::new("Carol").unwrap()]);
+    }
+
     #[test]
     fn map_members_parses_roles_and_refuses_malformed_ids() {
+        // The whole members answer is read, as the relay serves it, so the
+        // test pins the path production takes.
         let read = |user_id: &str, role: &str| {
-            serde_json::from_value::<http::DocumentMemberEntry>(serde_json::json!({
-                "user_id": user_id,
-                "display_name": "Member",
-                "email": "m@test.local",
-                "signing_pub_key": "cd".repeat(32),
-                "exchange_pub_key": "ab".repeat(32),
-                "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]),
-                "role": role,
-                "wrapper_exchange_pub_key": "ab".repeat(32),
+            serde_json::from_value::<http::DocumentMembersResponse>(serde_json::json!({
+                "members": [ {
+                    "user_id": user_id,
+                    "display_name": "Member",
+                    "email": "m@test.local",
+                    "signing_pub_key": "cd".repeat(32),
+                    "exchange_pub_key": "ab".repeat(32),
+                    "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]),
+                    "role": role,
+                    "wrapper_exchange_pub_key": "ab".repeat(32),
+                } ]
             }))
         };
         let sound_id = "44444444-4444-4444-4444-444444444444";
-        // An unparsable id refuses the row when it is read, so nothing is
+        // An unparsable id refuses the answer when it is read, so nothing is
         // left to replace by an invented one (`SYNC-038`).
         assert!(read("not-a-uuid", "editor").is_err());
         // So does a role word no build wrote, and a spelling of a known one
         // (`SRV-180`).
         assert!(read(sound_id, "bogus").is_err());
         assert!(read(sound_id, "Editor").is_err());
-        let sound = read(sound_id, "editor").expect("a sound row");
+        let sound = read(sound_id, "editor").expect("a sound answer");
         let none = Log::walk(
             Id::<Document>::mint(),
             None,
             &[],
             membership_log::no_self_join,
         );
-        let mapped = map_members(vec![sound], &none);
+        let mapped = map_members(sound.members, &none);
         assert_eq!(mapped[0].user_id, Id::<User>::parse_str(sound_id).unwrap());
         assert_eq!(mapped[0].role, Role::Editor);
     }
@@ -3159,17 +3231,17 @@ mod tests {
     fn presence_directory_maps_valid_entries() {
         let uid = Id::<User>::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         let key = FixedBytes::from_array([0xaa; 32]);
-        let dir = presence_directory([(uid, &key)]);
+        let dir = presence_directory([(uid, Some(&key))]);
 
         assert_eq!(dir, vec![(FixedBytes::from_array([0xaa; 32]), uid)]);
     }
 
     #[test]
     fn presence_directory_skips_unparsable_rows_without_inventing_ids() {
-        // A row whose key does not parse is skipped when the answer is read,
-        // and the sound rows beside it stay. A fabricated id would attribute
-        // a cursor to the wrong person, which is what keying presence on the
-        // Id<User> prevents.
+        // The answer reads whole, and the directory skips each row whose
+        // signing key does not parse. A fabricated id would attribute a cursor
+        // to the wrong person, which is what keying presence on the Id<User>
+        // prevents.
         let row = |user_id: &str, signing_pub_key: String| {
             serde_json::json!({
                 "user_id": user_id,
@@ -3187,12 +3259,13 @@ mod tests {
                 row("11111111-1111-1111-1111-111111111111", "bb".repeat(32)),
             ]
         }))
-        .expect("one malformed row never refuses the whole answer");
+        .expect("a malformed key never refuses the whole answer");
+        assert_eq!(answer.members.len(), 3);
         let dir = presence_directory(
             answer
                 .members
                 .iter()
-                .map(|m| (m.user_id, &m.signing_pub_key)),
+                .map(|m| (m.user_id, m.signing_pub_key.key())),
         );
         let good_uid = Id::<User>::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         assert_eq!(dir, vec![(FixedBytes::from_array([0xbb; 32]), good_uid)]);

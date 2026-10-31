@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
-use ambre_core::{ApiFailure, HttpStatus, RefusalCode, Seq, UnreadableCause};
+use ambre_core::{ApiFailure, FixedRole, HttpStatus, RefusalCode, Seq, UnreadableCause};
 use serde::{Deserialize, Serialize};
 
 /// A session token: an access or a refresh token, wiped on drop and redacted
@@ -1664,14 +1664,16 @@ pub(crate) struct MembersResponse {
 pub(crate) struct MemberEntry {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub signing_pub_key: ambre_core::FixedBytes<ambre_core::PublicKey>,
-    pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+    /// A key the relay served malformed costs its own row one use, never the
+    /// whole answer (`ServedKey`).
+    pub signing_pub_key: ServedKey<ambre_core::PublicKey>,
+    pub exchange_pub_key: ServedKey<ambre_core::ExchangePublicKey>,
     pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
     /// Exchange public key of whoever wrapped `doc_key_enc`. The ECDH unwrap must
     /// use this peer key, not our own `exchange_pub_key`.
-    pub wrapper_exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+    pub wrapper_exchange_pub_key: ServedKey<ambre_core::ExchangePublicKey>,
 }
 
 /// Response of `GET /api/documents/{id}/snapshot`: the latest snapshot's id and
@@ -1926,10 +1928,9 @@ impl WriteAnswer {
 
 #[derive(Deserialize)]
 pub(crate) struct DocumentMembersResponse {
-    /// The rows that read whole. A row whose key or id does not parse is
-    /// skipped, never the whole answer, so one malformed row cannot empty
-    /// the presence directory (`SYNC-015`).
-    #[serde(deserialize_with = "sound_rows")]
+    /// Every row the relay serves. An unknown role or a malformed id refuses
+    /// the whole answer (`SRV-180`, `SYNC-038`). A malformed key refuses
+    /// nothing here: each reader of the key meets it (`ServedKey`).
     pub members: Vec<DocumentMemberEntry>,
     /// The document owes a rotation (`SRV-122`, `SYNC-128`).
     #[serde(default)]
@@ -1939,19 +1940,34 @@ pub(crate) struct DocumentMembersResponse {
     pub log: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
-/// Reads a list of rows and keeps each row that parses. A list that is not a
-/// list still refuses the answer; a row that does not parse is dropped
-/// alone.
-fn sound_rows<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: serde::de::DeserializeOwned,
-{
-    let rows = Vec::<serde_json::Value>::deserialize(deserializer)?;
-    Ok(rows
-        .into_iter()
-        .filter_map(|row| serde_json::from_value(row).ok())
-        .collect())
+/// A key as the relay serves it on one member row, read without refusing the
+/// row. `None` when the text is not the hexadecimal of the key's width.
+///
+/// A member row carries three keys, and each has its own reader. The presence
+/// directory skips a row whose signing key does not parse (`SYNC-015`). A
+/// rotation reports a member whose exchange key does not parse by name
+/// (`SYNC-043`). A malformed key thus costs its own row one use, never the
+/// whole answer.
+pub(crate) struct ServedKey<R: FixedRole>(Option<ambre_core::FixedBytes<R>>);
+
+impl<R: FixedRole> ServedKey<R> {
+    /// A key that parsed, as a test row holds it.
+    #[cfg(test)]
+    pub(crate) fn of(key: ambre_core::FixedBytes<R>) -> Self {
+        Self(Some(key))
+    }
+
+    /// The key, or `None` when the relay served text that spells none.
+    pub(crate) fn key(&self) -> Option<&ambre_core::FixedBytes<R>> {
+        self.0.as_ref()
+    }
+}
+
+impl<'de, R: FixedRole> Deserialize<'de> for ServedKey<R> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        Ok(Self(ambre_core::FixedBytes::from_hex(&text).ok()))
+    }
 }
 
 #[derive(Deserialize)]
@@ -1961,8 +1977,8 @@ pub(crate) struct DocumentMemberEntry {
     pub display_name: ambre_core::DisplayName,
     pub email: ambre_core::Email,
     /// Ed25519 verifying key: feeds the presence directory (`presence_directory`).
-    pub signing_pub_key: ambre_core::FixedBytes<ambre_core::PublicKey>,
-    pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+    pub signing_pub_key: ServedKey<ambre_core::PublicKey>,
+    pub exchange_pub_key: ServedKey<ambre_core::ExchangePublicKey>,
     pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// The relay's column, which the signed log overrides (`SYNC-110`). An
     /// unknown word refuses the whole answer when it is read (`SRV-180`).
@@ -1970,7 +1986,7 @@ pub(crate) struct DocumentMemberEntry {
     pub role: ambre_core::Role,
     /// Exchange key of whoever wrapped `doc_key_enc`. Our own row unwraps
     /// against it, which yields the log anchor (`SYNC-104`).
-    pub wrapper_exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
+    pub wrapper_exchange_pub_key: ServedKey<ambre_core::ExchangePublicKey>,
 }
 
 /// Asks for a link to put one sealed blob. It names the keyed address and the
