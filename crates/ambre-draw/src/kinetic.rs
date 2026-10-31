@@ -8,32 +8,33 @@
 //! momentum; a wheel notch never does (`KINETIC-002`, `KINETIC-009`).
 
 use ambre_core::{Css, Point, Px, Vector, View};
-use ambre_core::{PageMillis, ViewSpeed, ViewSpeedVector};
+use ambre_core::{FracMs, TimeSpan, ViewSpeed, ViewSpeedVector};
 
 use crate::wheel::WheelDeltaMode;
+use ambre_core::{Instant, PageLoad};
 
 /// How far a pointer may move, in screen pixels, and still be a tap.
 pub const TAP_SLOP: Px<View> = Px::<View>::new(8.0);
 /// How long a press held inside the slop lasts before it is a long press
 /// (`KINETIC-014`).
-pub const LONG_PRESS: PageMillis = PageMillis::new(500.0);
+pub const LONG_PRESS: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(500.0);
 /// The window of samples the release speed is read over.
-pub const SAMPLE_WINDOW: PageMillis = PageMillis::new(100.0);
+pub const SAMPLE_WINDOW: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(100.0);
 /// The time constant of the slowdown: the speed falls to about a third of
 /// itself over this time.
-pub const DECAY: PageMillis = PageMillis::new(325.0);
+pub const DECAY: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(325.0);
 /// Below this speed, in screen pixels per millisecond, a release leaves no
 /// motion and a motion stops.
 pub const STOP_SPEED: ViewSpeed = ViewSpeed::new(0.02);
 /// The longest step one tick takes, so a stalled frame does not jump. It is
 /// private: a step is timed here alone (`KINETIC-013`).
-const MAX_STEP: PageMillis = PageMillis::new(50.0);
+const MAX_STEP: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(50.0);
 
 /// A pixel wheel step at or past this, in screen pixels, is a notch.
 /// Trackpad glides stay well under it; a notch sits well over it.
 pub const WHEEL_NOTCH: Px<Css> = Px::<Css>::new(40.0);
 /// A pause between wheel events this long ends a glide.
-pub const WHEEL_GAP: PageMillis = PageMillis::new(60.0);
+pub const WHEEL_GAP: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(60.0);
 /// A glide slower than this at its end, in screen pixels per millisecond,
 /// leaves no motion.
 pub const WHEEL_START_SPEED: ViewSpeed = ViewSpeed::new(0.05);
@@ -46,7 +47,7 @@ pub const EDGE_BAND: Px<View> = Px::<View>::new(32.0);
 pub const EDGE_DEPTH: Px<View> = Px::<View>::new(160.0);
 /// The span the edge speed covers its depth in: 1/80 px/ms for each pixel
 /// of depth, so 2 px/ms at most.
-pub const EDGE_SPAN: PageMillis = PageMillis::new(80.0);
+pub const EDGE_SPAN: TimeSpan<FracMs> = TimeSpan::<FracMs>::new(80.0);
 
 /// How far the view moves, in screen pixels on each axis (`KINETIC-013`).
 ///
@@ -59,7 +60,7 @@ pub const EDGE_SPAN: PageMillis = PageMillis::new(80.0);
 /// use ambre_draw::wheel::WheelDeltaMode;
 /// use ambre_core::{Css, Px, Vector};
 /// let delta = Vector::new(Px::<Css>::ZERO, Px::<Css>::new(30.0));
-/// let step = Kinetic::default().wheel(delta, WheelDeltaMode::Line, ambre_core::PageTime::new(0.0));
+/// let step = Kinetic::default().wheel(delta, WheelDeltaMode::Line, ambre_core::Instant::<ambre_core::PageLoad>::new(0.0));
 /// assert_eq!(step.y(), ambre_core::Px::<ambre_core::View>::new(30.0));
 /// ```
 ///
@@ -134,7 +135,7 @@ impl EdgeSpeed {
 /// (`KINETIC-007`).
 #[derive(Clone, Debug, Default)]
 pub struct EdgeScroll {
-    last_at: Option<ambre_core::PageTime>,
+    last_at: Option<Instant<PageLoad>>,
 }
 
 impl EdgeScroll {
@@ -143,7 +144,7 @@ impl EdgeScroll {
     pub fn tick(
         &mut self,
         speed: Option<(EdgeSpeed, EdgeSpeed)>,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) -> Option<ScrollStep> {
         let still = (EdgeSpeed::NONE, EdgeSpeed::NONE);
         let Some((sx, sy)) = speed.filter(|&s| s != still) else {
@@ -188,7 +189,7 @@ pub struct Kinetic {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Glide {
     speed: ViewSpeedVector,
-    last_at: ambre_core::PageTime,
+    last_at: Instant<PageLoad>,
 }
 
 #[derive(Clone, Debug)]
@@ -197,23 +198,23 @@ struct Pan {
     last: Point<Px<View>>,
     panned: bool,
     /// When the pointer went down.
-    pressed_at: ambre_core::PageTime,
+    pressed_at: Instant<PageLoad>,
     /// The press became a long press: it pans nothing and taps nothing.
     held: bool,
     /// Recent positions and their times, for the release speed.
-    samples: Vec<(ambre_core::PageTime, Point<Px<View>>)>,
+    samples: Vec<(Instant<PageLoad>, Point<Px<View>>)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Motion {
     /// Screen pixels per millisecond, on each axis.
     speed: ViewSpeedVector,
-    last_at: Option<ambre_core::PageTime>,
+    last_at: Option<Instant<PageLoad>>,
 }
 
 impl Kinetic {
     /// A pointer went down. It stops any motion left (`KINETIC-006`).
-    pub fn press(&mut self, at: Point<Px<View>>, now: ambre_core::PageTime) {
+    pub fn press(&mut self, at: Point<Px<View>>, now: Instant<PageLoad>) {
         self.motion = None;
         self.glide = None;
         self.pressed = Some(Pan {
@@ -229,7 +230,7 @@ impl Kinetic {
     /// Whether the press became a long press by `now`: held inside the
     /// slop past the delay. The answer is its press point, once. The press
     /// then pans nothing, and its release is no tap (`KINETIC-014`).
-    pub fn held(&mut self, now: ambre_core::PageTime) -> Option<Point<Px<View>>> {
+    pub fn held(&mut self, now: Instant<PageLoad>) -> Option<Point<Px<View>>> {
         let pan = self.pressed.as_mut()?;
         if pan.panned || pan.held || now - pan.pressed_at < LONG_PRESS {
             return None;
@@ -242,7 +243,7 @@ impl Kinetic {
     /// Past it, the answer is how far the view follows, in screen pixels.
     /// The content moves with the pointer, so it is the pointer's step
     /// reversed.
-    pub fn sample(&mut self, at: Point<Px<View>>, now: ambre_core::PageTime) -> Option<ScrollStep> {
+    pub fn sample(&mut self, at: Point<Px<View>>, now: Instant<PageLoad>) -> Option<ScrollStep> {
         let pan = self.pressed.as_mut()?;
         if pan.held {
             return None;
@@ -264,7 +265,7 @@ impl Kinetic {
 
     /// The pointer lifted. A pan released with speed leaves a motion, read
     /// over the last window of samples (`KINETIC-004`).
-    pub fn release(&mut self, now: ambre_core::PageTime) -> Release {
+    pub fn release(&mut self, now: Instant<PageLoad>) -> Release {
         let Some(pan) = self.pressed.take() else {
             return Release::Rest;
         };
@@ -282,7 +283,7 @@ impl Kinetic {
             return Release::Rest;
         };
         let span = last.0 - first.0;
-        if span <= PageMillis::ZERO {
+        if span <= TimeSpan::<FracMs>::ZERO {
             return Release::Rest;
         }
         let speed = (first.1 - last.1).per(span);
@@ -313,7 +314,7 @@ impl Kinetic {
         &mut self,
         delta: Vector<Px<Css>>,
         mode: WheelDeltaMode,
-        now: ambre_core::PageTime,
+        now: Instant<PageLoad>,
     ) -> ScrollStep {
         self.motion = None;
         // The wheel delta is already in screen pixels, a length and no
@@ -330,11 +331,12 @@ impl Kinetic {
         }
         let speed = match self.glide {
             Some(glide) if now - glide.last_at <= WHEEL_GAP => {
-                let dt = (now - glide.last_at).clamp(PageMillis::new(1.0), PageMillis::new(100.0));
+                let dt = (now - glide.last_at)
+                    .clamp(TimeSpan::<FracMs>::new(1.0), TimeSpan::<FracMs>::new(100.0));
                 let b = WHEEL_BLEND;
                 moved.per(dt).scaled(b) + glide.speed.scaled(1.0 - b)
             }
-            _ => moved.per(PageMillis::new(16.0)),
+            _ => moved.per(TimeSpan::<FracMs>::new(16.0)),
         };
         self.glide = Some(Glide {
             speed,
@@ -347,7 +349,7 @@ impl Kinetic {
     /// moves, each tick less than the one before; the first tick only starts
     /// the clock (`KINETIC-005`). The motion stops below the stop speed.
     /// A glide that paused past the gap launches its motion here.
-    pub fn tick(&mut self, now: ambre_core::PageTime) -> Option<ScrollStep> {
+    pub fn tick(&mut self, now: Instant<PageLoad>) -> Option<ScrollStep> {
         if self.motion.is_none() {
             let glide = self.glide?;
             if now - glide.last_at < WHEEL_GAP {
@@ -408,8 +410,8 @@ impl Kinetic {
 
 /// The span one tick moves by: never negative, and never past
 /// [`MAX_STEP`].
-fn step_span(elapsed: PageMillis) -> PageMillis {
-    elapsed.clamp(PageMillis::ZERO, MAX_STEP)
+fn step_span(elapsed: TimeSpan<FracMs>) -> TimeSpan<FracMs> {
+    elapsed.clamp(TimeSpan::<FracMs>::ZERO, MAX_STEP)
 }
 
 /// The speed a drag held near an edge scrolls at, in screen pixels per
@@ -433,6 +435,7 @@ fn edge_speed(at: Px<View>, extent: Px<View>) -> ViewSpeed {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::{Instant, PageLoad};
 
     /// The canvas point at `(x, y)`.
     fn pt(x: f32, y: f32) -> Point<Px<View>> {
@@ -450,16 +453,16 @@ mod tests {
     /// Pan up at 2 px/ms on y, 1 px/ms on x, and lift.
     fn flicked() -> Kinetic {
         let mut kinetic = Kinetic::default();
-        kinetic.press(pt(100.0, 600.0), ambre_core::PageTime::new(0.0));
+        kinetic.press(pt(100.0, 600.0), Instant::<PageLoad>::new(0.0));
         for step in 1..=5 {
             let t = 16.0 * f64::from(step);
             kinetic.sample(
                 pt(100.0 - 16.0 * step as f32, 600.0 - 32.0 * step as f32),
-                ambre_core::PageTime::new(t),
+                Instant::<PageLoad>::new(t),
             );
         }
         assert_eq!(
-            kinetic.release(ambre_core::PageTime::new(80.0)),
+            kinetic.release(Instant::<PageLoad>::new(80.0)),
             Release::Fling
         );
         kinetic
@@ -470,17 +473,17 @@ mod tests {
     #[test]
     fn a_pointer_inside_the_slop_is_a_tap_and_moves_nothing() {
         let mut kinetic = Kinetic::default();
-        kinetic.press(pt(10.0, 20.0), ambre_core::PageTime::new(0.0));
+        kinetic.press(pt(10.0, 20.0), Instant::<PageLoad>::new(0.0));
         assert_eq!(
-            kinetic.sample(pt(13.0, 24.0), ambre_core::PageTime::new(10.0)),
+            kinetic.sample(pt(13.0, 24.0), Instant::<PageLoad>::new(10.0)),
             None
         );
         assert_eq!(
-            kinetic.release(ambre_core::PageTime::new(20.0)),
+            kinetic.release(Instant::<PageLoad>::new(20.0)),
             Release::Tap { at: pt(10.0, 20.0) }
         );
         assert!(!kinetic.moving());
-        assert_eq!(kinetic.tick(ambre_core::PageTime::new(36.0)), None);
+        assert_eq!(kinetic.tick(Instant::<PageLoad>::new(36.0)), None);
     }
 
     /// `KINETIC-014`: a press held inside the slop past the delay is a long
@@ -489,48 +492,48 @@ mod tests {
     #[test]
     fn a_press_held_inside_the_slop_is_a_long_press_and_no_tap() {
         let mut kinetic = Kinetic::default();
-        kinetic.press(pt(10.0, 20.0), ambre_core::PageTime::new(0.0));
+        kinetic.press(pt(10.0, 20.0), Instant::<PageLoad>::new(0.0));
         assert_eq!(
-            kinetic.sample(pt(13.0, 24.0), ambre_core::PageTime::new(100.0)),
+            kinetic.sample(pt(13.0, 24.0), Instant::<PageLoad>::new(100.0)),
             None
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime::new(LONG_PRESS.get() - 1.0)),
+            kinetic.held(Instant::<PageLoad>::new(LONG_PRESS.get() - 1.0)),
             None
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime::new(LONG_PRESS.get())),
+            kinetic.held(Instant::<PageLoad>::new(LONG_PRESS.get())),
             Some(pt(10.0, 20.0))
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime::new(LONG_PRESS.get() + 100.0)),
+            kinetic.held(Instant::<PageLoad>::new(LONG_PRESS.get() + 100.0)),
             None
         );
         assert_eq!(
             kinetic.sample(
                 pt(60.0, 90.0),
-                ambre_core::PageTime::new(LONG_PRESS.get() + 120.0)
+                Instant::<PageLoad>::new(LONG_PRESS.get() + 120.0)
             ),
             None
         );
         assert_eq!(
-            kinetic.release(ambre_core::PageTime::new(LONG_PRESS.get() + 200.0)),
+            kinetic.release(Instant::<PageLoad>::new(LONG_PRESS.get() + 200.0)),
             Release::Rest
         );
         assert!(!kinetic.moving());
 
-        kinetic.press(pt(10.0, 20.0), ambre_core::PageTime::new(0.0));
+        kinetic.press(pt(10.0, 20.0), Instant::<PageLoad>::new(0.0));
         assert!(
             kinetic
-                .sample(pt(10.0, 60.0), ambre_core::PageTime::new(16.0))
+                .sample(pt(10.0, 60.0), Instant::<PageLoad>::new(16.0))
                 .is_some()
         );
         assert_eq!(
-            kinetic.held(ambre_core::PageTime::new(LONG_PRESS.get())),
+            kinetic.held(Instant::<PageLoad>::new(LONG_PRESS.get())),
             None
         );
         assert_eq!(
-            Kinetic::default().held(ambre_core::PageTime::new(LONG_PRESS.get())),
+            Kinetic::default().held(Instant::<PageLoad>::new(LONG_PRESS.get())),
             None
         );
     }
@@ -540,8 +543,8 @@ mod tests {
     #[test]
     fn a_drag_moves_the_view_as_a_pan_past_the_slop_does() {
         let mut kinetic = Kinetic::default();
-        kinetic.press(pt(0.0, 0.0), ambre_core::PageTime::new(0.0));
-        let panned = kinetic.sample(pt(-12.0, 30.0), ambre_core::PageTime::new(16.0));
+        kinetic.press(pt(0.0, 0.0), Instant::<PageLoad>::new(0.0));
+        let panned = kinetic.sample(pt(-12.0, 30.0), Instant::<PageLoad>::new(16.0));
         let dragged = ScrollStep::dragged(pt(0.0, 0.0), pt(-12.0, 30.0));
         assert_eq!(panned, Some(dragged));
         assert_eq!((dragged.x().get(), dragged.y().get()), (12.0, -30.0));
@@ -560,18 +563,18 @@ mod tests {
         );
         // The view follows the pointer while it pans.
         let mut kinetic = Kinetic::default();
-        kinetic.press(pt(0.0, 0.0), ambre_core::PageTime::new(0.0));
+        kinetic.press(pt(0.0, 0.0), Instant::<PageLoad>::new(0.0));
         let step = ScrollStep {
             x: Px::<View>::new(0.0),
             y: Px::<View>::new(20.0),
         };
         assert_eq!(
-            kinetic.sample(pt(0.0, -20.0), ambre_core::PageTime::new(16.0)),
+            kinetic.sample(pt(0.0, -20.0), Instant::<PageLoad>::new(16.0)),
             Some(step)
         );
         // Held still for longer than the window, then lifted: no motion.
         assert_eq!(
-            kinetic.release(ambre_core::PageTime::new(400.0)),
+            kinetic.release(Instant::<PageLoad>::new(400.0)),
             Release::Rest
         );
         assert!(!kinetic.moving());
@@ -583,11 +586,11 @@ mod tests {
     fn each_tick_moves_less_and_the_motion_stops() {
         let mut kinetic = flicked();
         assert_eq!(
-            kinetic.tick(ambre_core::PageTime::new(80.0)),
+            kinetic.tick(Instant::<PageLoad>::new(80.0)),
             Some(ScrollStep::ZERO)
         );
         let (mut now, mut last) = (80.0, f32::INFINITY);
-        while let Some(step) = kinetic.tick(ambre_core::PageTime::new(now + 16.0)) {
+        while let Some(step) = kinetic.tick(Instant::<PageLoad>::new(now + 16.0)) {
             let dy = step.y().get();
             now += 16.0;
             assert!(dy > 0.0 && dy < last, "{dy} after {last}");
@@ -597,9 +600,9 @@ mod tests {
         assert!(!kinetic.moving());
         // A stalled frame takes one bounded step.
         let mut kinetic = flicked();
-        kinetic.tick(ambre_core::PageTime::new(80.0));
+        kinetic.tick(Instant::<PageLoad>::new(80.0));
         let dy = kinetic
-            .tick(ambre_core::PageTime::new(5_080.0))
+            .tick(Instant::<PageLoad>::new(5_080.0))
             .expect("a step")
             .y()
             .get();
@@ -611,13 +614,13 @@ mod tests {
     #[test]
     fn a_press_or_an_edge_stops_the_motion() {
         let mut kinetic = flicked();
-        kinetic.tick(ambre_core::PageTime::new(80.0));
-        kinetic.press(pt(0.0, 0.0), ambre_core::PageTime::new(90.0));
+        kinetic.tick(Instant::<PageLoad>::new(80.0));
+        kinetic.press(pt(0.0, 0.0), Instant::<PageLoad>::new(90.0));
         assert!(!kinetic.moving());
-        assert_eq!(kinetic.tick(ambre_core::PageTime::new(106.0)), None);
+        assert_eq!(kinetic.tick(Instant::<PageLoad>::new(106.0)), None);
         let mut kinetic = flicked();
         kinetic.stop();
-        assert_eq!(kinetic.tick(ambre_core::PageTime::new(96.0)), None);
+        assert_eq!(kinetic.tick(Instant::<PageLoad>::new(96.0)), None);
     }
 
     /// `KINETIC-002`, `KINETIC-009`: a glide that pauses carries on; a notch never starts a
@@ -635,22 +638,22 @@ mod tests {
                 kinetic.wheel(
                     px(0.0, 12.0),
                     WheelDeltaMode::Pixel,
-                    ambre_core::PageTime::new(t)
+                    Instant::<PageLoad>::new(t)
                 ),
                 step
             );
         }
         // Inside the gap the glide waits; past it the motion starts.
         assert_eq!(
-            kinetic.tick(ambre_core::PageTime::new(60.0)),
+            kinetic.tick(Instant::<PageLoad>::new(60.0)),
             Some(ScrollStep::ZERO)
         );
         assert_eq!(
-            kinetic.tick(ambre_core::PageTime::new(110.0)),
+            kinetic.tick(Instant::<PageLoad>::new(110.0)),
             Some(ScrollStep::ZERO)
         );
         let dy = kinetic
-            .tick(ambre_core::PageTime::new(126.0))
+            .tick(Instant::<PageLoad>::new(126.0))
             .expect("a motion")
             .y()
             .get();
@@ -664,25 +667,25 @@ mod tests {
             kinetic.wheel(
                 px(0.0, 100.0),
                 WheelDeltaMode::Pixel,
-                ambre_core::PageTime::new(130.0)
+                Instant::<PageLoad>::new(130.0)
             ),
             notch
         );
         assert!(!kinetic.moving());
-        assert_eq!(kinetic.tick(ambre_core::PageTime::new(300.0)), None);
+        assert_eq!(kinetic.tick(Instant::<PageLoad>::new(300.0)), None);
         kinetic.wheel(
             px(0.0, 3.0),
             WheelDeltaMode::Line,
-            ambre_core::PageTime::new(400.0),
+            Instant::<PageLoad>::new(400.0),
         );
-        assert_eq!(kinetic.tick(ambre_core::PageTime::new(600.0)), None);
+        assert_eq!(kinetic.tick(Instant::<PageLoad>::new(600.0)), None);
         // A glide that dies out slowly leaves no motion.
         kinetic.wheel(
             px(0.0, 0.5),
             WheelDeltaMode::Pixel,
-            ambre_core::PageTime::new(700.0),
+            Instant::<PageLoad>::new(700.0),
         );
-        assert_eq!(kinetic.tick(ambre_core::PageTime::new(800.0)), None);
+        assert_eq!(kinetic.tick(Instant::<PageLoad>::new(800.0)), None);
     }
 
     /// `KINETIC-010`: a cancelled pan leaves no tap and no motion, even one
@@ -690,26 +693,26 @@ mod tests {
     #[test]
     fn a_cancelled_pan_leaves_no_tap_and_no_motion() {
         let mut kinetic = Kinetic::default();
-        kinetic.press(pt(100.0, 600.0), ambre_core::PageTime::new(0.0));
+        kinetic.press(pt(100.0, 600.0), Instant::<PageLoad>::new(0.0));
         for step in 1..=5 {
             let t = 16.0 * f64::from(step);
             kinetic.sample(
                 pt(100.0, 600.0 - 32.0 * step as f32),
-                ambre_core::PageTime::new(t),
+                Instant::<PageLoad>::new(t),
             );
         }
         kinetic.cancel();
         assert!(!kinetic.pressed() && !kinetic.moving());
         assert_eq!(
-            kinetic.release(ambre_core::PageTime::new(90.0)),
+            kinetic.release(Instant::<PageLoad>::new(90.0)),
             Release::Rest
         );
-        assert_eq!(kinetic.tick(ambre_core::PageTime::new(96.0)), None);
+        assert_eq!(kinetic.tick(Instant::<PageLoad>::new(96.0)), None);
         // A tap cancelled before it lifts is no tap either.
-        kinetic.press(pt(10.0, 10.0), ambre_core::PageTime::new(200.0));
+        kinetic.press(pt(10.0, 10.0), Instant::<PageLoad>::new(200.0));
         kinetic.cancel();
         assert_eq!(
-            kinetic.release(ambre_core::PageTime::new(210.0)),
+            kinetic.release(Instant::<PageLoad>::new(210.0)),
             Release::Rest
         );
     }

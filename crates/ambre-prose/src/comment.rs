@@ -6,6 +6,7 @@
 //! the anchor fields of the entry are a cache of it (`PROSE-FEAT-075`).
 //! Nothing in this module writes.
 
+use ambre_core::StoredAsI64;
 use ambre_core::index::{self, Axis, Count, Pos};
 use std::collections::HashMap;
 
@@ -19,6 +20,7 @@ use ambre_core::ThreadState;
 use crate::events::{AnchorState, CommentReply, CommentThread, block_id};
 use crate::mark::MarkRoot;
 use ambre_bus::app::prose::MarkKey;
+use ambre_bus::{Authored, Instant};
 
 /// The mark key of thread `id`.
 #[must_use]
@@ -102,7 +104,7 @@ fn read_reply(map: &Fields<ReplyKey>) -> Option<CommentReply> {
         author: doc::read_string(map, ReplyKey::Author)
             .and_then(|name| ambre_core::DisplayName::new(&name).ok()),
         user_id: Id::<User>::parse_str(&doc::read_string(map, ReplyKey::User)?).ok()?,
-        created_at: ambre_bus::Timestamp::from_i64(
+        created_at: Instant::<Authored>::from_i64(
             doc::read_i64(map, ReplyKey::Created).unwrap_or(0),
         ),
         text,

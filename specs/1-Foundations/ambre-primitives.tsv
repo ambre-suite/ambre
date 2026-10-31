@@ -443,9 +443,9 @@ ambre-canvas | src/frame.rs | crate::frame | paint_fatal(message) | param | &str
 ambre-canvas | src/frame.rs | crate::frame | paint_fatal::TITLE_TEXT | const | &str	free-text	message text of the fatal frame
 ambre-canvas | src/frame.rs | crate::frame | text_height() | ret | f64	math	geometry, layout, GPU or count arithmetic
 ambre-canvas | src/frame.rs | crate::frame | text_height(text) | param | &str	free-text	text, label or message
-ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in a PageTime
+ambre-canvas | src/host.rs | crate::host | FrameSlot | alias | RefCell<Option<Closure<dyn FnMut(f64)>>>	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in an Instant<PageLoad>
 ambre-canvas | src/host.rs | crate::host | fetch_bytes() | ret | Option<Vec<u8>>	generic	generic codec/parser/bytes API
-ambre-canvas | src/host.rs | crate::host | request_frame(slot) | param | &FrameSlot	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in a PageTime
+ambre-canvas | src/host.rs | crate::host | request_frame(slot) | param | &FrameSlot	foreign-api	the requestAnimationFrame callback, which wasm-bindgen types with the f64 the browser passes; start_raf_loop wraps it in an Instant<PageLoad>
 ambre-canvas | src/host.rs | crate::host | fetch_bytes(url) | param | &str	generic	generic codec/parser/bytes API
 ambre-canvas | src/host.rs | crate::host | url_flag() | ret | bool	generic	predicate result
 ambre-canvas | src/host.rs | crate::host | url_flag(flag) | param | &str	free-text	text, label or message
@@ -1057,22 +1057,9 @@ ambre-core | src/serde_id.rs | crate::serde_id | TextId::from_text(text) | param
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::to_text() | ret | String	generic	generic text-id serde helper
 ambre-core | src/serde_id.rs | crate::serde_id | texts_to_ids(texts) | param | Vec<String>	generic	generic text-id serde helper
 ambre-core | src/span.rs | crate::span | LamportStamp.0 | field | u64	newtype-inner	LamportStamp field or storage conversion
-ambre-core | src/span.rs | crate::span | LamportStamp::from_i64(stored) | param | i64	newtype-inner	LamportStamp field or storage conversion
-ambre-core | src/span.rs | crate::span | LamportStamp::to_i64_saturating() | ret | i64	newtype-inner	LamportStamp field or storage conversion
-ambre-core | src/span.rs | crate::span | Millis.0 | field | u64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | Millis::times(n) | param | u64	math	a multiplier, not a span
-ambre-core | src/span.rs | crate::span | Millis::to_timer_i32() | ret | i32	newtype-inner	time newtype accessor for the browser timer
-ambre-core | src/span.rs | crate::span | PageTime.0 | field | f64	newtype-inner	time newtype accessor
 ambre-core | src/span.rs | crate::span | Rfc3339.0 | field | String	newtype-inner	Rfc3339 newtype
 ambre-core | src/span.rs | crate::span | Rfc3339::as_str() | ret | &str	newtype-inner	Rfc3339 newtype
 ambre-core | src/span.rs | crate::span | Rfc3339::formatted(text) | param | String	newtype-inner	Rfc3339 newtype
-ambre-core | src/span.rs | crate::span | Seconds.0 | field | u64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | Timestamp.0 | field | u64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | Timestamp::from_i64(stored) | param | i64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | Timestamp::to_i64_saturating() | ret | i64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | UnixMillis.0 | field | u64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | UnixSeconds.0 | field | u64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | UnixSeconds::to_i64_saturating() | ret | i64	newtype-inner	time newtype accessor
 ambre-core | src/status.rs | crate::status | <SnapshotStatus as FromStr>::from_str(word) | param | &str	newtype-inner	the word the relay stores, which the enum's own fallible constructor reads
 ambre-core | src/status.rs | crate::status | HttpStatus.0 | field | u16	newtype-inner	HttpStatus field or accessor
 ambre-core | src/status.rs | crate::status | HttpStatus::is_client_error() | ret | bool	generic	predicate result
@@ -1438,13 +1425,13 @@ ambre-murmure | src/list.rs | crate::list | JUMP_TO_LATEST | const | &str	free-t
 ambre-murmure | src/list.rs | crate::list | MessageList::is_empty() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/list.rs | crate::list | MessageList::place() | ret | usize	local	the place of a segment in the private segments of the list, which the one caller indexes at once
 ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement() | ret | String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement(time_of) | param | impl Fn(Timestamp)->String	free-text	text, label or user content
-ambre-murmure | src/list.rs | crate::list | Row<'a>::words(time_of) | param | impl Fn(Timestamp)->String	free-text	text, label or user content
+ambre-murmure | src/list.rs | crate::list | Row<'a>::announcement(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
+ambre-murmure | src/list.rs | crate::list | Row<'a>::words(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | RowWords.body | field | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | RowWords.replies | field | Option<String>	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | UNKNOWN_MEMBER | const | &str	free-text	UI text/label const
 ambre-murmure | src/list.rs | crate::list | UNREAD_LINE | const | &str	free-text	UI text/label const
-ambre-murmure | src/list.rs | crate::list | band_words(time_of) | param | impl Fn(Timestamp)->String	free-text	text, label or user content
+ambre-murmure | src/list.rs | crate::list | band_words(time_of) | param | impl Fn(Instant<Authored>)->String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | chip_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | file_label() | ret | String	free-text	text, label or user content
 ambre-murmure | src/list.rs | crate::list | fill_down() | ret | bool	generic	state flag/predicate
@@ -1501,7 +1488,7 @@ ambre-murmure | src/notices.rs | crate::notices | warning_of() | ret | Option<&'
 ambre-murmure | src/opening.rs | crate::opening | OpeningChannel::expects() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/paint.rs | crate::paint | PLACEHOLDER_ASPECT | const | f32	math	a ratio: the width-to-height aspect of a picture not decoded yet
 ambre-murmure | src/paint.rs | crate::paint | chip_boxes(labels) | param | &[String]	free-text	text, label or user content
-ambre-murmure | src/paint.rs | crate::paint | paint_list(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
+ambre-murmure | src/paint.rs | crate::paint | paint_list(time_of) | param | &dyn Fn(Instant<Authored>)->String	free-text	text, label or user content
 ambre-murmure | src/paint.rs | crate::paint | shape(text) | param | &str	free-text	text, label or user content
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures::failed() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/pictures.rs | crate::pictures | Pictures::land() | ret | bool	generic	state flag/predicate
@@ -1533,7 +1520,7 @@ ambre-murmure | src/schema.rs | crate::schema | NoticeKind::parse(word) | param 
 ambre-murmure | src/schema.rs | crate::schema | flag() | ret | bool	generic	untyped CRDT flag read by a FieldKey of any schema: absent or not a bool reads false, and the key gives it its meaning
 ambre-murmure | src/schema.rs | crate::schema | string() | ret | Option<String>	generic	the text the document stores under a key, parsed into its role by the caller
 ambre-murmure | src/schema.rs | crate::schema | string_value() | ret | Option<String>	generic	the text a read found, parsed into its role by the caller
-ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	generic	the store codec of a Timestamp: the i64 a Loro map holds, since Loro has no unsigned integer
+ambre-murmure | src/schema.rs | crate::schema | ts_value() | ret | i64	generic	the store codec of an Instant<Authored>: the i64 a Loro map holds, since Loro has no unsigned integer
 ambre-murmure | src/schema.rs | crate::schema | unsigned() | ret | Option<u64>	generic	a store reader: the non-negative integer under any FieldKey, which the caller types by the key's role
 ambre-murmure | src/search.rs | crate::search | Query.words | field | Vec<String>	newtype-inner	the folded words of a search, the own representation of a Query
 ambre-murmure | src/search.rs | crate::search | Query::matches() | ret | bool	generic	state flag/predicate
@@ -1547,7 +1534,7 @@ ambre-murmure | src/search.rs | crate::search | folded_words(text) | param | &st
 ambre-murmure | src/search.rs | crate::search | is_mark() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/search.rs | crate::search | is_mark(c) | param | char	free-text	text, label or user content
 ambre-murmure | src/select.rs | crate::select | TextSelection::copied() | ret | Option<String>	free-text	text, label or user content
-ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) | param | &dyn Fn(Timestamp)->String	free-text	text, label or user content
+ambre-murmure | src/select.rs | crate::select | TextSelection::copied(time_of) | param | &dyn Fn(Instant<Authored>)->String	free-text	text, label or user content
 ambre-murmure | src/sequence.rs | crate::sequence | FRAME_MAGIC | const | &[u8;4]	generic	snapshot frame byte-layout constant, declared once: delta.rs and the frame parser both read this one
 ambre-murmure | src/sequence.rs | crate::sequence | LoroBytes.0 | field | &'a[u8]	newtype-inner	the Loro bytes of a payload past the frame of a snapshot, which its own methods hand to LoroDoc::import and decode_import_blob_meta
 ambre-murmure | src/sequence.rs | crate::sequence | Range::holds() | ret | bool	generic	state flag/predicate
@@ -1584,7 +1571,7 @@ ambre-murmure | src/view.rs | crate::view | MurmureView::retry_row() | ret | boo
 ambre-murmure | src/view.rs | crate::view | MurmureView::scrolling() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | MurmureView::touch_move() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/view.rs | crate::view | PageReads.announce | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
-ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Timestamp)->String>	free-text	text, label or user content
+ambre-murmure | src/view.rs | crate::view | PageReads.time_of | field | Rc<dyn Fn(Instant<Authored>)->String>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | PageReads.warn | field | Rc<dyn Fn(&str)>	free-text	text, label or user content
 ambre-murmure | src/view.rs | crate::view | WindowWidth::desktop_if(desktop) | param | bool	newtype-inner	the bool the one constructor of WindowWidth reads into its variant
 ambre-murmure | src/watchers.rs | crate::watchers | Watchers::heard() | ret | bool	generic	state flag/predicate
@@ -2039,7 +2026,7 @@ ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::edit_
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::refresh_anchors() | ret | bool	generic	whether refreshing the cached thread anchors wrote anything
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::reply_to_comment(text) | param | &str	free-text	the text of a reply at the end of a thread, as the user typed it
 ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_anchors() | ret | bool	generic	whether any cached thread anchor was rewritten
-ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply(text) | param | &str	free-text	the user text of a reply; the error is a WriteError and the stamp a Timestamp, so the finding no longer holds
+ambre-prose | src/logic/comments.rs | crate::logic::comments | ProseState::write_reply(text) | param | &str	free-text	the user text of a reply; the error is a WriteError and the stamp an Instant<Authored>, so the finding no longer holds
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_all(replacement) | param | &str	free-text	the replacement text the user typed, written over every match
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_one(replacement) | param | &str	free-text	the replacement text the user typed, written over the current match
 ambre-prose | src/logic/find.rs | crate::logic::find | ProseState::replace_range(replacement) | param | &str	free-text	the replacement text the user typed, written over one range
@@ -3107,8 +3094,6 @@ ambre-trame | src/ui/view/mod.rs | crate::ui::view | cell_announcement(value) | 
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | formula_input_focused() | ret | bool	generic	predicate or did-it-change return
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | PerfMark::name() | ret | &'static str	newtype-inner	the name the browser Performance panel knows the mark by
 ambre-trame | src/ui/view/mod.rs | crate::ui::view | PerfMeasure::name() | ret | &'static str	newtype-inner	the name the browser Performance panel knows the measure by
-ambre-core | src/span.rs | crate::span | Nanos.0 | field | u64	newtype-inner	time newtype accessor
-ambre-core | src/span.rs | crate::span | Nanos::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
 ambre-prose | src/band.rs | crate::band | field_of(key) | param | &str	foreign-api	the mark key a loro text delta reports; parsed into a HeaderField at once, the inverse of FieldMark
 ambre-prose | src/probe.rs | crate::probe | ProbeName::as_str() | ret | &'static str	newtype-inner	the enum's own word, the name performance.measure and performance.mark take, which the profiler shows
 ambre-core | src/unit.rs | crate::unit | PX_PER_MM | const | f32	math	unit conversion factor, millimetres to pixels
@@ -3659,20 +3644,6 @@ ambre-core | src/span.rs | crate::span | FrameRate::get() | ret | f32	newtype-in
 ambre-core | src/span.rs | crate::span | FrameRate::new(per_second) | param | f32	newtype-inner	the constructor of the frame-rate newtype
 ambre-core | src/span.rs | crate::span | LamportStamp::get() | ret | u64	newtype-inner	the LamportStamp newtype unwrapped, for a caller outside its module
 ambre-core | src/span.rs | crate::span | LamportStamp::new(value) | param | u64	newtype-inner	the constructor of the LamportStamp newtype
-ambre-core | src/span.rs | crate::span | Millis::get() | ret | u64	newtype-inner	the Millis newtype unwrapped, for a caller outside its module
-ambre-core | src/span.rs | crate::span | Millis::new(value) | param | u64	newtype-inner	the constructor of the Millis newtype
-ambre-core | src/span.rs | crate::span | Nanos::get() | ret | u64	newtype-inner	the Nanos newtype unwrapped, for a caller outside its module
-ambre-core | src/span.rs | crate::span | Nanos::new(value) | param | u64	newtype-inner	the constructor of the Nanos newtype
-ambre-core | src/span.rs | crate::span | PageTime::get() | ret | f64	newtype-inner	the PageTime newtype unwrapped, for a caller outside its module
-ambre-core | src/span.rs | crate::span | PageTime::new(value) | param | f64	newtype-inner	the constructor of the PageTime newtype
-ambre-core | src/span.rs | crate::span | Seconds::get() | ret | u64	newtype-inner	the Seconds newtype unwrapped, for a caller outside its module
-ambre-core | src/span.rs | crate::span | Seconds::new(value) | param | u64	newtype-inner	the constructor of the Seconds newtype
-ambre-core | src/span.rs | crate::span | Timestamp::get() | ret | u64	newtype-inner	the Timestamp newtype unwrapped, for a caller outside its module
-ambre-core | src/span.rs | crate::span | Timestamp::new(value) | param | u64	newtype-inner	the constructor of the Timestamp newtype
-ambre-core | src/span.rs | crate::span | UnixMillis::get() | ret | u64	newtype-inner	the UnixMillis newtype unwrapped, for a caller outside its module
-ambre-core | src/span.rs | crate::span | UnixMillis::new(value) | param | u64	newtype-inner	the constructor of the UnixMillis newtype
-ambre-core | src/span.rs | crate::span | UnixSeconds::get() | ret | u64	newtype-inner	the UnixSeconds newtype unwrapped, for a caller outside its module
-ambre-core | src/span.rs | crate::span | UnixSeconds::new(value) | param | u64	newtype-inner	the constructor of the UnixSeconds newtype
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureName.0 | field | std::borrow::Cow<'static,str>	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::as_str() | ret | &str	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/fixtures.rs | crate::fixtures | FixtureName::declared(name) | param | &'static str	newtype-inner	the newtype's own inside, accessor or constructor
@@ -3944,3 +3915,37 @@ ambre-canvas | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-canvas | src/tokens.rs | crate::tokens | Px.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
+ambre-core | src/span.rs | crate::span | <Authored as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <PageLoad as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <UnixMs as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <UnixSec as TimeBase>::NAME | const | &'static str	free-text	the time base name an instant prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <Ms as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <Ms as TimeUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <Ms as TimeUnit>::Repr | assoc | u64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
+ambre-core | src/span.rs | crate::span | <Sec as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <Sec as TimeUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <Sec as TimeUnit>::Repr | assoc | u64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
+ambre-core | src/span.rs | crate::span | <Ns as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <Ns as TimeUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <Ns as TimeUnit>::Repr | assoc | u64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
+ambre-core | src/span.rs | crate::span | <FracMs as TimeUnit>::NAME | const | &'static str	free-text	the unit name a span prints through Debug, for a log line
+ambre-core | src/span.rs | crate::span | <FracMs as TimeUnit>::PER_SECOND | const | u64	math	unit conversion factor, ticks of the unit in one second
+ambre-core | src/span.rs | crate::span | <FracMs as TimeUnit>::Repr | assoc | f64	newtype-inner	the number a span of this unit holds, the inside of TimeSpan and Instant
+ambre-core | src/span.rs | crate::span | <Instant<C> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/span.rs | crate::span | <TimeSpan<U> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/span.rs | crate::span | <Instant<C> as StoredAsI64>::from_stored_count(count) | param | u64	newtype-inner	the whole count an instant holds, read back by the shared store conversion
+ambre-core | src/span.rs | crate::span | <Instant<C> as StoredAsI64>::stored_count() | ret | u64	newtype-inner	the whole count an instant holds, for the shared store conversion
+ambre-core | src/span.rs | crate::span | <LamportStamp as StoredAsI64>::from_stored_count(count) | param | u64	newtype-inner	the count a stamp holds, read back by the shared store conversion
+ambre-core | src/span.rs | crate::span | <LamportStamp as StoredAsI64>::stored_count() | ret | u64	newtype-inner	the count a stamp holds, for the shared store conversion
+ambre-core | src/span.rs | crate::span | StoredAsI64::from_stored_count(count) | param | u64	generic	the unsigned count of any implementor, which the trait turns into its store spelling
+ambre-core | src/span.rs | crate::span | StoredAsI64::stored_count() | ret | u64	generic	the unsigned count of any implementor, which the trait turns into its store spelling
+ambre-core | src/span.rs | crate::span | StoredAsI64::from_i64(stored) | param | i64	generic	the store codec of any implementor: the i64 a CRDT or a Postgres BIGINT holds, having no unsigned integer
+ambre-core | src/span.rs | crate::span | StoredAsI64::to_i64_saturating() | ret | i64	generic	the store codec of any implementor: the i64 a CRDT or a Postgres BIGINT holds, having no unsigned integer
+ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Div<f64>>::div(divisor) | param | f64	math	a bare factor a float span is scaled or divided by
+ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Mul<f64>>::mul(factor) | param | f64	math	a bare factor a float span is scaled or divided by
+ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Div>::Output | assoc | f64	math	the bare ratio of two spans
+ambre-core | src/span.rs | crate::span | <TimeSpan<FracMs> as Div>::div() | ret | f64	math	the bare ratio of two spans
+ambre-core | src/span.rs | crate::span | TimeSpan<FracMs>::is_finite() | ret | bool	generic	predicate
+ambre-core | src/span.rs | crate::span | TimeSpan<Ms>::to_timer_i32() | ret | i32	foreign-api	the span as the i32 of milliseconds a browser timer takes
+ambre-core | src/span.rs | crate::span | TimeSpan<Ns>::from_mean(mean) | param | f64	foreign-api	the mean in nanoseconds that the bench harness measures as a float
+ambre-core | src/span.rs | crate::span | TimeSpan<U>::times(n) | param | u64	math	a multiplier, not a span

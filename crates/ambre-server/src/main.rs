@@ -38,6 +38,7 @@ use tower_http::trace::TraceLayer;
 #[allow(clippy::single_component_path_imports)]
 use tracing_subscriber;
 
+use ambre_core::{Sec, TimeSpan};
 use state::{AppState, Config};
 
 #[tokio::main]
@@ -201,8 +202,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             state::ProxyTrust::Direct
         },
-        access_ttl: ambre_core::Seconds::new(env_ttl("ACCESS_TTL_SECS", 900)),
-        refresh_ttl: ambre_core::Seconds::new(env_ttl("REFRESH_TTL_SECS", 30 * 24 * 3600)),
+        access_ttl: TimeSpan::<Sec>::new(env_ttl("ACCESS_TTL_SECS", 900)),
+        refresh_ttl: TimeSpan::<Sec>::new(env_ttl("REFRESH_TTL_SECS", 30 * 24 * 3600)),
         media_max_size: ambre_core::ByteSize::new(env_ttl("MEDIA_MAX_BYTES", 100 * 1024 * 1024)),
         snapshot_max_size: ambre_core::ByteSize::new(env_ttl(
             "SNAPSHOT_MAX_BYTES",

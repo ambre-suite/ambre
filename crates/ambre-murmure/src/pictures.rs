@@ -7,7 +7,8 @@
 //! reduced motion picks the first, and nothing off screen is painted, so
 //! nothing off screen plays (`MURMURE-130`, `MURMURE-131`).
 
-use ambre_core::index::{Axis, Pos};
+use ambre_core::index::Axis;
+use ambre_core::index::Pos;
 use std::collections::HashMap;
 
 use ambre_bus::{ContentHash, MediaType, Picture};
@@ -15,6 +16,7 @@ use ambre_core::{ByteSize, Generation, GenerationKind, KnownMediaType};
 use ambre_draw::ImageKey;
 
 use crate::Region;
+use ambre_core::{Instant, Ms, PageLoad, TimeSpan};
 
 /// The bytes the page holds decoded (`ambre-spec-budgets.md section 6`).
 /// Past it, the pictures painted longest ago go, never one on screen.
@@ -207,9 +209,9 @@ pub enum Motion {
 /// first frame, and none is due (`MURMURE-130`).
 pub fn frame_at(
     picture: &Picture,
-    now: ambre_core::PageTime,
+    now: Instant<PageLoad>,
     motion: Motion,
-) -> (Pos<AnimationFrame>, Option<ambre_core::PageTime>) {
+) -> (Pos<AnimationFrame>, Option<Instant<PageLoad>>) {
     let total: u64 = picture.frames.iter().map(|f| f.delay.get()).sum();
     if motion == Motion::Reduced || picture.frames.len() < 2 || total == 0 {
         return (Pos::<AnimationFrame>::ZERO, None);
@@ -220,7 +222,7 @@ pub fn frame_at(
     for (i, frame) in picture.frames.iter().enumerate() {
         until += frame.delay.get();
         if at < until {
-            let due = ambre_core::Millis::new(until - at).to_page_millis();
+            let due = TimeSpan::<Ms>::new(until - at).to_fractional();
             return (Pos::<AnimationFrame>::from_usize(i), Some(now.after(due)));
         }
     }
@@ -243,7 +245,9 @@ pub fn frame_key(media_ref: &ContentHash, index: Pos<AnimationFrame>) -> ImageKe
 mod tests {
     use super::*;
     use ambre_bus::PictureFrame;
+    use ambre_bus::{Instant, PageLoad};
     use ambre_core::Px;
+    use ambre_core::{Ms, TimeSpan};
 
     fn file(c: char) -> ContentHash {
         ContentHash::parse(&format!("{c}{}", "0".repeat(63))).expect("a content hash")
@@ -256,7 +260,7 @@ mod tests {
                 .iter()
                 .map(|&delay| PictureFrame {
                     pixels: vec![0; bytes].into(),
-                    delay: ambre_core::Millis::new(u64::from(delay)),
+                    delay: TimeSpan::<Ms>::new(u64::from(delay)),
                 })
                 .collect(),
         }
@@ -268,31 +272,31 @@ mod tests {
     fn the_clock_picks_the_frame_and_names_the_next() {
         let gif = picture(&[100, 50, 50], 4);
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(0.0), Motion::Full),
+            frame_at(&gif, Instant::<PageLoad>::new(0.0), Motion::Full),
             (
                 Pos::<AnimationFrame>::new(0),
-                Some(ambre_bus::PageTime::new(100.0))
+                Some(Instant::<PageLoad>::new(100.0))
             )
         );
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(120.0), Motion::Full),
+            frame_at(&gif, Instant::<PageLoad>::new(120.0), Motion::Full),
             (
                 Pos::<AnimationFrame>::new(1),
-                Some(ambre_bus::PageTime::new(150.0))
+                Some(Instant::<PageLoad>::new(150.0))
             )
         );
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(199.0), Motion::Full),
+            frame_at(&gif, Instant::<PageLoad>::new(199.0), Motion::Full),
             (
                 Pos::<AnimationFrame>::new(2),
-                Some(ambre_bus::PageTime::new(200.0))
+                Some(Instant::<PageLoad>::new(200.0))
             )
         );
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(230.0), Motion::Full),
+            frame_at(&gif, Instant::<PageLoad>::new(230.0), Motion::Full),
             (
                 Pos::<AnimationFrame>::new(0),
-                Some(ambre_bus::PageTime::new(300.0))
+                Some(Instant::<PageLoad>::new(300.0))
             ),
             "it loops"
         );
@@ -304,13 +308,13 @@ mod tests {
     fn reduced_motion_holds_the_first_frame() {
         let gif = picture(&[100, 50], 4);
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime::new(120.0), Motion::Reduced),
+            frame_at(&gif, Instant::<PageLoad>::new(120.0), Motion::Reduced),
             (Pos::<AnimationFrame>::ZERO, None)
         );
         assert_eq!(
             frame_at(
                 &picture(&[0], 4),
-                ambre_bus::PageTime::new(120.0),
+                Instant::<PageLoad>::new(120.0),
                 Motion::Full
             ),
             (Pos::<AnimationFrame>::ZERO, None)

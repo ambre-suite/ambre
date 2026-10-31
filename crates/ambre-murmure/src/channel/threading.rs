@@ -7,7 +7,7 @@
 //! (`MURMURE-255`).
 
 use ambre_bus::{
-    Deletion, MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead, Timestamp,
+    Authored, Deletion, Instant, MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes};
@@ -202,7 +202,7 @@ impl ChannelState {
     pub fn reply_target(
         &mut self,
         root: Id<Message>,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) -> Result<ThreadTarget, MurmureError> {
         let (segment, named) = self.root_slot(root).ok_or(MurmureError::NoMessage(root))?;
         if let Some(id) = named {
@@ -645,7 +645,7 @@ impl ChannelState {
         root: Id<Message>,
         draft: &MessageDraft,
         author: Id<User>,
-        now: Timestamp,
+        now: Instant<Authored>,
         echo: ReplyEcho,
     ) -> Result<Replied, MurmureError> {
         if !mention::fits(&draft.mentions, &draft.text) {

@@ -9,6 +9,7 @@ use super::super::grid::CellData;
 use super::*;
 use crate::render::{CellContent, SheetAxes, SheetCell, SheetCells, SheetView, SheetWalk};
 use crate::{CellPos, MergeSpan};
+use ambre_core::{FracMs, TimeSpan};
 
 /// The screen cache as the sheet walk reads it.
 pub(super) struct CacheCells<'a>(pub(super) &'a HashMap<CellPos, CellData>);
@@ -100,8 +101,8 @@ pub fn draw_cells<S: DrawSurface>(
         None => (cell_area, palette.content_pending),
     };
     if strip.width() <= 0.0 || strip.height() <= 0.0 {
-        stats.background = ambre_core::PageMillis::ZERO;
-        stats.cells = ambre_core::PageMillis::ZERO;
+        stats.background = TimeSpan::<FracMs>::ZERO;
+        stats.cells = TimeSpan::<FracMs>::ZERO;
         stats.cells_drawn = ambre_canvas::CellsDrawn::ZERO;
         return;
     }

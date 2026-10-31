@@ -19,6 +19,7 @@ use crate::ui::ProseUiState;
 use crate::view::answered_span;
 use crate::view::column::DocPos;
 use crate::view::hit::{Fragment, fragment};
+use ambre_core::{Authored, Instant};
 
 /// A rectangle on the canvas, in pixels of the view.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -338,7 +339,7 @@ impl ProseUiState {
     pub fn take_intent(
         &mut self,
         intent: AnnotationIntent,
-        now: ambre_core::Timestamp,
+        now: Instant<Authored>,
     ) -> Option<ProseCommand> {
         Some(match intent {
             AnnotationIntent::Focus { comment_id } => {
@@ -420,6 +421,7 @@ mod tests {
     };
     use crate::ui::ProseUiState;
     use crate::view::tests::{down, laid_out};
+    use ambre_core::{Authored, Instant};
 
     fn view(paragraphs: usize) -> ProseUiState {
         let (_, shaped) = laid_out(paragraphs, 20);
@@ -593,7 +595,7 @@ mod tests {
         assert_eq!(
             ui.take_intent(
                 AnnotationIntent::Focus { comment_id: id },
-                ambre_core::Timestamp::new(5)
+                Instant::<Authored>::new(5)
             ),
             None
         );
@@ -603,22 +605,22 @@ mod tests {
             text: "ok".to_owned(),
         };
         assert_eq!(
-            ui.take_intent(reply, ambre_core::Timestamp::new(5)),
+            ui.take_intent(reply, Instant::<Authored>::new(5)),
             Some(ProseCommand::ReplyToComment {
                 comment_id: id,
                 text: "ok".to_owned(),
-                now: ambre_core::Timestamp::new(5)
+                now: Instant::<Authored>::new(5)
             })
         );
         let blank = AnnotationIntent::Reply {
             comment_id: id,
             text: "  ".to_owned(),
         };
-        assert_eq!(ui.take_intent(blank, ambre_core::Timestamp::new(5)), None);
+        assert_eq!(ui.take_intent(blank, Instant::<Authored>::new(5)), None);
         assert_eq!(
             ui.take_intent(
                 AnnotationIntent::Resolve { comment_id: id },
-                ambre_core::Timestamp::new(5)
+                Instant::<Authored>::new(5)
             ),
             Some(ProseCommand::ResolveComment { comment_id: id })
         );
@@ -628,7 +630,7 @@ mod tests {
                 AnnotationIntent::Accept {
                     suggestion_id: suggestion
                 },
-                ambre_core::Timestamp::new(5)
+                Instant::<Authored>::new(5)
             ),
             Some(ProseCommand::AcceptSuggestion {
                 suggestion_id: suggestion
@@ -639,7 +641,7 @@ mod tests {
                 AnnotationIntent::Reject {
                     suggestion_id: suggestion
                 },
-                ambre_core::Timestamp::new(5)
+                Instant::<Authored>::new(5)
             ),
             Some(ProseCommand::RejectSuggestion {
                 suggestion_id: suggestion

@@ -9,6 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::AppError;
 use crate::state::{AppState, ProxyTrust};
+use ambre_core::{Instant, Ms, Sec, TimeSpan, UnixMs};
 
 /// Atomic sliding-window rate-limit script (M6).
 ///
@@ -179,7 +180,7 @@ struct RateLimit {
     /// The most requests one bucket makes in a window.
     max_requests: RequestCount,
     /// The span of the sliding window.
-    window: ambre_core::Seconds,
+    window: TimeSpan<Sec>,
 }
 
 /// Rate-limiting categories with different limits.
@@ -202,7 +203,7 @@ impl RateLimitCategory {
         });
         RateLimit {
             max_requests,
-            window: ambre_core::Seconds::new(60),
+            window: TimeSpan::<Sec>::new(60),
         }
     }
 
@@ -262,12 +263,12 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
 
     let bucket = request_bucket(&state.jwt, state.config.trust_proxy_headers, &req);
 
-    let now = ambre_core::UnixMillis::new(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)),
-    );
-    let window_span = ambre_core::Millis::from_duration(window.to_duration());
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(Instant::EPOCH, |d| {
+            Instant::<UnixMs>::after_epoch(TimeSpan::from_duration(d))
+        });
+    let window_span = window.to_floor::<ambre_core::Ms>();
     let verdict =
         match check_sliding_window(&state, &category, &bucket, now, window_span, max_req).await {
             Ok(verdict) => verdict,
@@ -340,8 +341,8 @@ async fn check_sliding_window(
     state: &AppState,
     category: &RateLimitCategory,
     bucket: &RateBucket,
-    now: ambre_core::UnixMillis,
-    window: ambre_core::Millis,
+    now: Instant<UnixMs>,
+    window: TimeSpan<Ms>,
     max_requests: RequestCount,
 ) -> Result<Verdict, AppError> {
     // No window bucket in the key: the sorted set is the sliding window.
@@ -374,6 +375,7 @@ async fn check_sliding_window(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::{Sec, TimeSpan};
 
     // -- client_peer -------------------------------------------------------
 
@@ -508,7 +510,7 @@ mod tests {
             sub: user,
             spk: None,
             iat: now,
-            exp: now.plus(ambre_core::Seconds::new(900)),
+            exp: now.plus(TimeSpan::<Sec>::new(900)),
         };
         (
             user,
@@ -649,7 +651,7 @@ mod tests {
             category.limits(),
             RateLimit {
                 max_requests: RequestCount::new(10),
-                window: ambre_core::Seconds::new(60),
+                window: TimeSpan::<Sec>::new(60),
             }
         );
     }
@@ -661,7 +663,7 @@ mod tests {
             category.limits(),
             RateLimit {
                 max_requests: RequestCount::new(300),
-                window: ambre_core::Seconds::new(60),
+                window: TimeSpan::<Sec>::new(60),
             }
         );
     }
@@ -673,7 +675,7 @@ mod tests {
             category.limits(),
             RateLimit {
                 max_requests: RequestCount::new(10),
-                window: ambre_core::Seconds::new(60),
+                window: TimeSpan::<Sec>::new(60),
             }
         );
     }

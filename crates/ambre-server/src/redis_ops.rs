@@ -492,7 +492,7 @@ pub async fn try_acquire_flush_lock(
     redis: &Client,
     lock_key: &FlushLockKey,
     token: &LockToken,
-    ttl: ambre_core::Seconds,
+    ttl: TimeSpan<Sec>,
 ) -> Result<bool, AppError> {
     let ttl = ttl.get().to_string();
     let res: Option<String> = redis
@@ -531,7 +531,7 @@ pub async fn release_flush_lock(
 pub async fn claim_snapshot_ask(
     redis: &Client,
     document_id: &Id<Document>,
-    ttl: ambre_core::Seconds,
+    ttl: TimeSpan<Sec>,
 ) -> Result<bool, AppError> {
     let key = SnapshotAskedKey::of(document_id);
     let ttl = ttl.get().to_string();
@@ -600,7 +600,7 @@ pub async fn refresh_create(
     redis: &Client,
     token: &Credential<RefreshToken>,
     data: &RefreshData,
-    ttl: ambre_core::Seconds,
+    ttl: TimeSpan<Sec>,
 ) -> Result<(), AppError> {
     let ttl_secs = ttl.get();
 
@@ -748,7 +748,7 @@ pub async fn doc_presence_update(
     document_id: &Id<Document>,
     pub_key: &FixedBytes<PublicKey>,
     presence: &ambre_protocol::messages::Ciphertext,
-    ttl: ambre_core::Seconds,
+    ttl: TimeSpan<Sec>,
 ) -> Result<(), AppError> {
     let pub_key_hex = pub_key.to_hex();
     use base64::Engine;
@@ -815,7 +815,7 @@ pub async fn doc_presence_remove(
 /// session with the same key, so the count is what tells their sessions apart.
 /// An instance that dies closes none of its sessions; the expiry bounds the
 /// count that death leaves behind (`PRESENCE-015`).
-const SESSION_COUNT_TTL: ambre_core::Seconds = ambre_core::Seconds::new(24 * 3600);
+const SESSION_COUNT_TTL: TimeSpan<Sec> = TimeSpan::<Sec>::new(24 * 3600);
 
 /// Counts one more session of `pub_key_hex` watching the document, on every
 /// instance (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-015`). A
@@ -880,7 +880,7 @@ return 0
 pub async fn mark_document_gone(
     redis: &Client,
     document_id: &Id<Document>,
-    ttl: ambre_core::Seconds,
+    ttl: TimeSpan<Sec>,
 ) -> Result<(), AppError> {
     const LUA: &str = "return redis.call('SET', KEYS[1], '1', 'EX', ARGV[1])";
     let gone_key = GoneKey::of(document_id);
@@ -904,7 +904,7 @@ pub async fn mark_document_gone(
 pub async fn purge_document_state(
     redis: &Client,
     document_id: &Id<Document>,
-    ttl: ambre_core::Seconds,
+    ttl: TimeSpan<Sec>,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
 redis.call('SREM', KEYS[9], KEYS[3])
@@ -1044,6 +1044,7 @@ pub async fn mirror_segment_lock(
 /// Whether a document owes a key rotation, as its mirror holds it
 /// (`SRV-123`): the flag the members answer carries too.
 pub use ambre_core::RotationDebt;
+use ambre_core::{Sec, TimeSpan};
 
 /// Sets or clears the mirror of an owed rotation.
 pub async fn mirror_rotation_owed(
@@ -1265,6 +1266,7 @@ mod tests {
 #[cfg(feature = "test-helpers")]
 mod lua_tests {
     use super::*;
+    use ambre_core::{Sec, TimeSpan};
 
     async fn connect_redis() -> rustis::client::Client {
         // These tests run only under `--features db`, where the backing Redis is
@@ -1299,7 +1301,7 @@ mod lua_tests {
             &doc_id,
             pk_hex,
             &super::tests::sample(),
-            ambre_core::Seconds::new(15),
+            TimeSpan::<Sec>::new(15),
         )
         .await;
         assert!(
@@ -1623,6 +1625,7 @@ mod lua_tests {
 #[cfg(test)]
 mod redis_integration_tests {
     use super::*;
+    use ambre_core::{Sec, TimeSpan};
 
     async fn connect_redis() -> rustis::client::Client {
         // These tests run only under `--features db`, where the backing Redis is
@@ -1647,7 +1650,7 @@ mod redis_integration_tests {
                 &redis,
                 &lock_key,
                 &LockToken("tokA".to_owned()),
-                ambre_core::Seconds::new(60)
+                TimeSpan::<Sec>::new(60)
             )
             .await
             .unwrap()
@@ -1657,7 +1660,7 @@ mod redis_integration_tests {
                 &redis,
                 &lock_key,
                 &LockToken("tokB".to_owned()),
-                ambre_core::Seconds::new(60)
+                TimeSpan::<Sec>::new(60)
             )
             .await
             .unwrap()
@@ -1672,7 +1675,7 @@ mod redis_integration_tests {
                 &redis,
                 &lock_key,
                 &LockToken("tokB".to_owned()),
-                ambre_core::Seconds::new(60)
+                TimeSpan::<Sec>::new(60)
             )
             .await
             .unwrap()
@@ -1687,7 +1690,7 @@ mod redis_integration_tests {
                 &redis,
                 &lock_key,
                 &LockToken("tokB".to_owned()),
-                ambre_core::Seconds::new(60)
+                TimeSpan::<Sec>::new(60)
             )
             .await
             .unwrap()
@@ -1858,7 +1861,7 @@ mod redis_integration_tests {
             &doc,
             pk,
             &super::tests::sample(),
-            ambre_core::Seconds::new(15),
+            TimeSpan::<Sec>::new(15),
         )
         .await
         .unwrap();
@@ -1919,7 +1922,7 @@ mod redis_integration_tests {
             &doc,
             pk,
             &super::tests::sample(),
-            ambre_core::Seconds::new(15),
+            TimeSpan::<Sec>::new(15),
         )
         .await
         .unwrap();
@@ -1996,7 +1999,7 @@ mod redis_integration_tests {
             user_id: Id::<User>::mint(),
             signing_pubkey: Some(FixedBytes::<PublicKey>::from_array([3u8; 32])),
         };
-        refresh_create(redis, &token, &data, ambre_core::Seconds::new(60))
+        refresh_create(redis, &token, &data, TimeSpan::<Sec>::new(60))
             .await
             .expect("refresh create");
         token

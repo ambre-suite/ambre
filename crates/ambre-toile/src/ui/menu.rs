@@ -24,6 +24,7 @@ use ambre_bus::app::toile::{
     AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementCount, ElementKind, LockState,
     NodeId, Reaction, ReactionKind, ToileCommand, ZTarget,
 };
+use ambre_bus::{Authored, Instant};
 use ambre_commands::CommandId;
 use ambre_core::id::{Element, Id};
 use kurbo::{Rect, Vec2};
@@ -543,7 +544,7 @@ pub fn resolve_menu_command(
                 selection,
                 Some(Reaction {
                     kind: ReactionKind::Emoji(emoji),
-                    ts: ambre_bus::Timestamp::new(0),
+                    ts: Instant::<Authored>::new(0),
                 }),
             )
         }

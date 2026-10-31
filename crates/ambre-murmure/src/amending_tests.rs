@@ -7,7 +7,7 @@ use ambre_core::index::Span;
 use std::collections::HashMap;
 
 use ambre_bus::{
-    ActivityKind, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle, Timestamp,
+    ActivityKind, Authored, Instant, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
@@ -21,7 +21,7 @@ use crate::{
     ThreadTarget,
 };
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {

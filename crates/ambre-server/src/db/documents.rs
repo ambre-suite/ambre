@@ -2,6 +2,8 @@
 // Document rows and document CRUD queries.
 
 use super::*;
+use ambre_core::StoredAsI64;
+use ambre_core::{Instant, UnixSec};
 
 /// Row returned by `SELECT * FROM documents`.
 #[derive(Debug)]
@@ -208,7 +210,7 @@ pub async fn rename_document(
 #[derive(Debug)]
 pub struct PendingDeletion {
     pub document_id: Id<Document>,
-    pub sweep_due: ambre_core::UnixSeconds,
+    pub sweep_due: Instant<UnixSec>,
     /// Whether the document row is still there: the delete stopped before its
     /// last step.
     pub rows_left: DocumentRows,
@@ -235,7 +237,7 @@ ambre_core::define_flag! {
 pub async fn begin_deletion(
     pool: &PgPool,
     document_id: &Id<Document>,
-    sweep_due: ambre_core::UnixSeconds,
+    sweep_due: Instant<UnixSec>,
 ) -> Result<Vec<super::DeletedChannel>, AppError> {
     let mut tx = pool.begin().await?;
     let channels = super::channels::delete_space_channels_in(
@@ -255,7 +257,7 @@ pub async fn begin_deletion(
 pub(super) async fn begin_deletions_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     documents: &[Id<Document>],
-    sweep_due: ambre_core::UnixSeconds,
+    sweep_due: Instant<UnixSec>,
 ) -> Result<(), AppError> {
     let documents: Vec<uuid::Uuid> = documents.iter().copied().map(id_to_uuid).collect();
     sqlx::query(
@@ -289,7 +291,7 @@ pub async fn pending_deletions(
         .map(|(id, sweep_due, rows_left)| PendingDeletion {
             document_id: uuid_row_to_id(id),
             // A negative mark, which no relay writes, is due at once.
-            sweep_due: ambre_core::UnixSeconds::new(u64::try_from(sweep_due).unwrap_or(0)),
+            sweep_due: Instant::<UnixSec>::from_i64(sweep_due),
             rows_left: DocumentRows::from_bool(rows_left),
         })
         .collect())
@@ -300,7 +302,7 @@ pub async fn pending_deletions(
 pub async fn end_deletion(
     pool: &PgPool,
     document_id: &Id<Document>,
-    swept_at: ambre_core::UnixSeconds,
+    swept_at: Instant<UnixSec>,
 ) -> Result<(), AppError> {
     sqlx::query("DELETE FROM document_deletions WHERE document_id = $1 AND sweep_due <= $2")
         .bind(id_to_uuid(*document_id))

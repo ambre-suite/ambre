@@ -367,12 +367,13 @@ impl NoticeKind {
 }
 
 pub use ambre_core::SegmentState;
+use ambre_core::{Authored, Instant};
 
 /// A timestamp as Loro stores it. Loro has no unsigned integer, and a
 /// millisecond count past `i64::MAX` is 292 million years away, so saturating
 /// loses nothing real.
-pub(crate) fn ts_value(ts: ambre_core::Timestamp) -> i64 {
-    ts.to_i64_saturating()
+pub(crate) fn ts_value(ts: Instant<Authored>) -> i64 {
+    ambre_core::StoredAsI64::to_i64_saturating(ts)
 }
 
 /// Write the `header` of a new document (`MURMURE-001`), and the version
@@ -384,7 +385,7 @@ pub(crate) fn write_header(
     doc: &LoroDoc,
     kind: DocumentKind,
     channel_id: Id<Channel>,
-    created_at: ambre_core::Timestamp,
+    created_at: Instant<Authored>,
 ) -> Result<(), MurmureError> {
     let header = header(doc);
     header.insert(HeaderKey::Kind, kind.as_str())?;
@@ -406,7 +407,7 @@ pub(crate) fn write_header(
 pub(crate) fn write_space_header(
     doc: &LoroDoc,
     space_id: Id<Space>,
-    created_at: ambre_core::Timestamp,
+    created_at: Instant<Authored>,
 ) -> Result<(), MurmureError> {
     let header = header(doc);
     header.insert(HeaderKey::Kind, DocumentKind::Space.as_str())?;

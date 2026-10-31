@@ -8,6 +8,7 @@ use super::prose_status::ProseFigures;
 use super::share::ShareMembers;
 use super::sync_badge::SyncBadge;
 use ambre_bus::DocType;
+use ambre_bus::{Authored, Instant};
 use ambre_chrome::commands::{ClipboardWrite, PasteForm};
 use ambre_murmure::MurmurePane;
 use ambre_murmure::chrome::{
@@ -70,18 +71,18 @@ pub(crate) fn MurmureShell(
         <DeleteConfirm
             relay=relay
             send=send
-            now=Callback::new(|()| ambre_bus::Timestamp::new(js_sys::Date::now() as u64))
+            now=Callback::new(|()| Instant::<Authored>::new(js_sys::Date::now() as u64))
         />
         <ChannelMentionConfirm
             relay=relay
             send=send
-            now=Callback::new(|()| ambre_bus::Timestamp::new(js_sys::Date::now() as u64))
+            now=Callback::new(|()| Instant::<Authored>::new(js_sys::Date::now() as u64))
         />
         // The view stamps a reaction, as it stamps a deletion.
         <EmojiPicker
             relay=relay
             send=send
-            now=Callback::new(|()| ambre_bus::Timestamp::new(js_sys::Date::now() as u64))
+            now=Callback::new(|()| Instant::<Authored>::new(js_sys::Date::now() as u64))
         />
         <KeyList relay=relay />
         <MentionPanel relay=relay />

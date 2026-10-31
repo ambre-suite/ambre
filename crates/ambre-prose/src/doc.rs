@@ -12,6 +12,7 @@
 //! renders as two decimal numbers joined by `@`, so neither half carries the
 //! separator (`PROSE-088`).
 
+use ambre_core::StoredAsI64;
 use ambre_core::crdt::FieldKey;
 use ambre_core::index::{Pos, Span};
 use ambre_core::{FontSize, LangTag, Mm, Pt};
@@ -24,6 +25,7 @@ use ambre_bus::app::prose::{
     LineHeight, LineHeightMode, LineSpacingMultiple, ListStyle, OrderedStyle, ParagraphStyle,
     StyleId, TocNumbering,
 };
+use ambre_core::{Authored, Instant};
 
 // -----------------------------------------------------------------------------
 // Container names and keys (`ambre-spec-prose-schema.md section 3`)
@@ -1608,10 +1610,10 @@ pub(crate) fn is_aside(tree: &LoroTree, id: &TreeID) -> bool {
 
 /// The last-modified stamp, or `None` before any peer wrote one.
 #[must_use]
-pub fn read_updated_at(doc: &LoroDoc) -> Option<ambre_core::Timestamp> {
+pub fn read_updated_at(doc: &LoroDoc) -> Option<Instant<Authored>> {
     meta_read(doc)
         .and_then(|meta| read_i64(&meta, MetaKey::UpdatedAt))
-        .map(ambre_core::Timestamp::from_i64)
+        .map(Instant::<Authored>::from_i64)
 }
 
 /// The document title, empty when none was set.

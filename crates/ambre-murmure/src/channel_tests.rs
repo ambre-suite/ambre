@@ -7,7 +7,7 @@ use ambre_core::index::Span;
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp, Unreadable,
+    Authored, Instant, Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Unreadable,
 };
 use ambre_core::id::{Channel, Document, Id, Meta, Segment, User};
 use ambre_core::schema::SchemaError;
@@ -20,7 +20,7 @@ use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Query, SCHEMA_VERSION, Signer,
 };
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 /// The query a member searching for `text` sends.
 fn parse_query(text: &str) -> Option<Query> {
@@ -1365,7 +1365,7 @@ fn two_finals() -> (Stored, Id<Segment>, Id<Segment>) {
         (newer, 20, SegmentState::Final),
         (stored.active_id, 30, SegmentState::Active),
     ] {
-        push_segment_entry(&meta, id, Timestamp::new(from), state).expect("entry");
+        push_segment_entry(&meta, id, Instant::<Authored>::new(from), state).expect("entry");
     }
     meta.commit();
     stored.meta = snapshot(&meta);
@@ -1384,8 +1384,8 @@ fn a_band_spans_its_segment_up_to_the_next_one() {
         Some(MurmureEvent::Unreadable {
             segment: newer,
             cause: Unreadable::KeyNotReceived,
-            from: Timestamp::new(20),
-            to: Some(Timestamp::new(30)),
+            from: Instant::<Authored>::new(20),
+            to: Some(Instant::<Authored>::new(30)),
         })
     );
     assert!(matches!(

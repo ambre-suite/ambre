@@ -35,6 +35,7 @@ use crate::events::{
 };
 use crate::logic::ProseState;
 use crate::schema::{MIGRATIONS, SCHEMA_VERSION};
+use ambre_core::{Authored, Instant};
 
 /// The frozen shapes, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../schema/shapes.txt");
@@ -457,7 +458,7 @@ fn write_the_bands(state: &mut ProseState) {
         pos: Pos::<DocChar>::ZERO,
     });
     state.handle_command(ProseCommand::StampModified {
-        now: ambre_core::Timestamp::new(1),
+        now: Instant::<Authored>::new(1),
     });
 }
 
@@ -480,7 +481,7 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
         block_id: root,
         range: Span::<DocChar>::from_usize_range(0..1),
         text: "A comment.".to_owned(),
-        now: ambre_core::Timestamp::new(1),
+        now: Instant::<Authored>::new(1),
     });
     let Some(thread) = state.comments().into_iter().next() else {
         panic!("the scenario opened a thread");
@@ -488,7 +489,7 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
     state.handle_command(ProseCommand::ReplyToComment {
         comment_id: thread.comment_id,
         text: "A reply.".to_owned(),
-        now: ambre_core::Timestamp::new(2),
+        now: Instant::<Authored>::new(2),
     });
 }
 

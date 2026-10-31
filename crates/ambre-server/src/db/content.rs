@@ -77,6 +77,7 @@ ambre_core::define_tally! {
 }
 
 pub use ambre_core::DeltaCount;
+use ambre_core::{Sec, TimeSpan};
 
 /// The bounds of a document's inline tail (`SRV-150`).
 #[derive(Debug, Clone, Copy)]
@@ -482,7 +483,7 @@ pub async fn point_rows_at_batch(
 /// `limit` (`SRV-152`).
 pub async fn idle_inline_documents(
     pool: &PgPool,
-    idle: ambre_core::Seconds,
+    idle: TimeSpan<Sec>,
     limit: QueryLimit,
 ) -> Result<Vec<Id<Document>>, AppError> {
     let ids: Vec<uuid::Uuid> = sqlx::query_scalar(

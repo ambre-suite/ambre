@@ -6,6 +6,7 @@
 //! the undo manager excludes: `Ctrl+Z` never retracts a message a collaborator
 //! may have read.
 
+use ambre_core::StoredAsI64;
 use ambre_core::index::{self, Pos};
 use std::collections::HashMap;
 
@@ -18,6 +19,7 @@ use crate::doc;
 use crate::events::{ProseEvent, ProseOutcome, ProseRefusal};
 
 use super::ProseState;
+use ambre_core::{Authored, Instant};
 
 impl ProseState {
     /// A thread over `range` in `block`, opened by a reply holding `text`
@@ -31,7 +33,7 @@ impl ProseState {
         block: &TreeID,
         range: index::Span<DocChar>,
         text: &str,
-        now: ambre_core::Timestamp,
+        now: Instant<Authored>,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
         if doc::is_band(&tree, block) {
@@ -81,7 +83,7 @@ impl ProseState {
         &mut self,
         id: &Id<Comment>,
         text: &str,
-        now: ambre_core::Timestamp,
+        now: Instant<Authored>,
     ) -> ProseOutcome {
         let Some(entry) = comment::entry(&self.doc, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
@@ -270,7 +272,7 @@ impl ProseState {
         &self,
         list: &LoroList,
         text: &str,
-        now: ambre_core::Timestamp,
+        now: Instant<Authored>,
     ) -> Result<(), doc::WriteError> {
         let user = self.my_user_id.ok_or(doc::WriteError::NoIdentity)?;
         let reply = list
@@ -351,6 +353,7 @@ mod tests {
     use crate::events::{BlockId, CommentThread, ProseCommand};
     use ambre_bus::app::prose::DocChar;
     use ambre_core::id::User;
+    use ambre_core::{Authored, Instant};
     use proptest::prelude::*;
 
     const ALICE: Id<User> = Id::from_bytes([1; 16]);
@@ -404,7 +407,7 @@ mod tests {
                 Pos::<DocChar>::new(range.1),
             ),
             text: text.to_owned(),
-            now: ambre_core::Timestamp::new(10),
+            now: Instant::<Authored>::new(10),
         });
         state
             .comments()
@@ -431,7 +434,7 @@ mod tests {
         state: &mut ProseState,
         id: Id<Comment>,
         text: &str,
-        now: ambre_core::Timestamp,
+        now: Instant<Authored>,
     ) -> ProseOutcome {
         state.handle_command(ProseCommand::ReplyToComment {
             comment_id: id,
@@ -499,7 +502,7 @@ mod tests {
                 block_id: block,
                 range,
                 text: "x".to_owned(),
-                now: ambre_core::Timestamp::new(0),
+                now: Instant::<Authored>::new(0),
             }))
         };
         assert_eq!(
@@ -562,7 +565,7 @@ mod tests {
         let head = thread(&state, id).replies.remove(0);
         assert_eq!(head.user_id, ALICE);
         assert_eq!(head.author.unwrap().as_str(), "user 1");
-        assert_eq!(head.created_at, ambre_bus::Timestamp::new(10));
+        assert_eq!(head.created_at, Instant::<Authored>::new(10));
     }
 
     /// A reply lands last, in the list's order and not the stamp's
@@ -571,8 +574,8 @@ mod tests {
     fn a_reply_lands_last_whatever_its_stamp() {
         let (mut state, block) = document(ambre_core::PeerId::new(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
-        reply(&mut state, id, "Two.", ambre_core::Timestamp::new(5));
-        reply(&mut state, id, "Three.", ambre_core::Timestamp::new(1));
+        reply(&mut state, id, "Two.", Instant::<Authored>::new(5));
+        reply(&mut state, id, "Three.", Instant::<Authored>::new(1));
         assert_eq!(texts(&state, id), vec!["One.", "Two.", "Three."]);
     }
 
@@ -586,7 +589,7 @@ mod tests {
             thread(&state, id).resolved,
             ambre_core::ThreadState::Resolved
         );
-        reply(&mut state, id, "Two.", ambre_core::Timestamp::new(11));
+        reply(&mut state, id, "Two.", Instant::<Authored>::new(11));
         assert_eq!(thread(&state, id).resolved, ambre_core::ThreadState::Open);
     }
 
@@ -598,7 +601,7 @@ mod tests {
         let id = open(&mut state, block, (0, 5), "One.");
         let other = open(&mut state, block, (6, 11), "Other.");
         let before = thread(&state, other);
-        reply(&mut state, id, "Two.", ambre_core::Timestamp::new(11));
+        reply(&mut state, id, "Two.", Instant::<Authored>::new(11));
         assert_eq!(span(&state, id), (0, 5));
         assert_eq!(texts(&state, id)[0], "One.");
         assert_eq!(thread(&state, other), before);
@@ -653,7 +656,7 @@ mod tests {
     fn a_reply_is_edited_in_place_by_its_author_alone() {
         let (mut alice, block) = document(ambre_core::PeerId::new(1), ALICE, "Hello");
         let id = open(&mut alice, block, (0, 5), "One.");
-        reply(&mut alice, id, "Two.", ambre_core::Timestamp::new(11));
+        reply(&mut alice, id, "Two.", Instant::<Authored>::new(11));
         alice.handle_command(ProseCommand::ResolveComment { comment_id: id });
         let second = thread(&alice, id).replies[1].reply_id;
         let edit = |text: &str| ProseCommand::EditCommentReply {
@@ -676,7 +679,7 @@ mod tests {
             (Pos::<DocChar>::ZERO, Pos::<DocChar>::new(5))
         );
         assert_eq!(t.replies[1].user_id, ALICE);
-        assert_eq!(t.replies[1].created_at, ambre_bus::Timestamp::new(11));
+        assert_eq!(t.replies[1].created_at, Instant::<Authored>::new(11));
     }
 
     /// Deleting a reply takes it out and keeps the order around it, its
@@ -687,7 +690,7 @@ mod tests {
         let (mut alice, block) = document(ambre_core::PeerId::new(1), ALICE, "Hello");
         let id = open(&mut alice, block, (0, 5), "One.");
         for (text, at) in [("Two.", 11), ("Three.", 12)] {
-            reply(&mut alice, id, text, ambre_core::Timestamp::new(at));
+            reply(&mut alice, id, text, Instant::<Authored>::new(at));
         }
         alice.handle_command(ProseCommand::ResolveComment { comment_id: id });
         let second = thread(&alice, id).replies[1].reply_id;
@@ -715,7 +718,7 @@ mod tests {
     fn deleting_the_head_deletes_the_thread() {
         let (mut state, block) = document(ambre_core::PeerId::new(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
-        reply(&mut state, id, "Two.", ambre_core::Timestamp::new(11));
+        reply(&mut state, id, "Two.", Instant::<Authored>::new(11));
         let head = thread(&state, id).replies[0].reply_id;
         state.handle_command(ProseCommand::DeleteReply {
             comment_id: id,
@@ -822,7 +825,7 @@ mod tests {
             ProseCommand::ReplyToComment {
                 comment_id: id,
                 text: "Two.".to_owned(),
-                now: ambre_core::Timestamp::new(11),
+                now: Instant::<Authored>::new(11),
             },
         );
         let ids = |state: &ProseState| -> Vec<Id<Comment>> {
@@ -843,13 +846,13 @@ mod tests {
             block_id: block,
             range: index::Span::<DocChar>::from_usize_range(0..11),
             text: "Alice.".to_owned(),
-            now: ambre_core::Timestamp::new(1),
+            now: Instant::<Authored>::new(1),
         });
         let theirs = bob.handle_command(ProseCommand::AddComment {
             block_id: block,
             range: index::Span::<DocChar>::from_usize_range(6..17),
             text: "Bob.".to_owned(),
-            now: ambre_core::Timestamp::new(1),
+            now: Instant::<Authored>::new(1),
         });
         bob.apply_remote(&mine.update.expect("a delta"));
         alice.apply_remote(&theirs.update.expect("a delta"));
@@ -884,7 +887,7 @@ mod tests {
     fn an_undo_never_retracts_a_comment() {
         let (mut state, block) = document(ambre_core::PeerId::new(1), ALICE, "Hello");
         let id = open(&mut state, block, (0, 5), "One.");
-        reply(&mut state, id, "Two.", ambre_core::Timestamp::new(11));
+        reply(&mut state, id, "Two.", Instant::<Authored>::new(11));
         state.handle_command(ProseCommand::Undo);
         assert_eq!(texts(&state, id), vec!["One.", "Two."]);
         assert_eq!(state.text_of(&block).as_deref(), Some(""));
@@ -907,7 +910,7 @@ mod tests {
             comment_id: id,
             reply_id: head,
         });
-        let replied = reply(&mut bob, id, "Two.", ambre_core::Timestamp::new(11));
+        let replied = reply(&mut bob, id, "Two.", Instant::<Authored>::new(11));
         bob.apply_remote(&deleted.update.expect("a delta"));
         alice.apply_remote(&replied.update.expect("a delta"));
         assert!(alice.comments().is_empty());

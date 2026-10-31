@@ -29,8 +29,8 @@ use ambre_core::index::{Count, Delta, IdxVec, Pos, Span};
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    Attachment, LogicCommand, Mention, MessageAt, MessageDraft, MurmureCommand, ReplyEcho,
-    StyleMark, TextStyle, Timestamp,
+    Attachment, Authored, Instant, LogicCommand, Mention, MessageAt, MessageDraft, MurmureCommand,
+    ReplyEcho, StyleMark, TextStyle,
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
@@ -383,7 +383,7 @@ pub enum Sent {
 
 impl Sent {
     /// The command to the Logic thread, stamped `now` by the view.
-    pub fn command(self, now: Timestamp) -> LogicCommand {
+    pub fn command(self, now: Instant<Authored>) -> LogicCommand {
         match self {
             Self::Message {
                 to,

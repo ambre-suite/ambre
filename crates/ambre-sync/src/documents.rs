@@ -1,6 +1,7 @@
 use super::*;
 use crate::error::SyncError;
 use crate::http::Reported;
+use ambre_bus::{Authored, Instant};
 
 impl SyncState {
     // -- Document CRUD (HTTP REST) ---------------------------------------------
@@ -47,7 +48,7 @@ impl SyncState {
                                 // (NaN -> 0 when the server timestamp is absent).
                                 updated_at: {
                                     let ms = js_sys::Date::parse(e.updated_at.as_str());
-                                    ambre_bus::Timestamp::new(if ms.is_nan() {
+                                    Instant::<Authored>::new(if ms.is_nan() {
                                         0
                                     } else {
                                         ms as u64
@@ -75,7 +76,7 @@ impl SyncState {
                     doc_type: *doc_type,
                     name: Some(name.clone()),
                     role: Role::Owner,
-                    updated_at: ambre_bus::Timestamp::new(0),
+                    updated_at: Instant::<Authored>::new(0),
                     member_count: ambre_core::MemberCount::ONE,
                 })
                 .collect();

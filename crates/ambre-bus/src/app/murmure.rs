@@ -197,7 +197,7 @@ impl UnreadCount {
     }
 }
 
-pub use ambre_core::Timestamp;
+pub use ambre_core::{Authored, Instant};
 
 /// What a mention names: one member, or every member of the channel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -344,7 +344,7 @@ pub struct Picture {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PictureFrame {
     pub pixels: ambre_core::Payload<ambre_core::RgbaPixels>,
-    pub delay: ambre_core::Millis,
+    pub delay: TimeSpan<Ms>,
 }
 
 impl Picture {
@@ -407,7 +407,7 @@ pub enum MurmureCommand {
         /// answered uploaded, under the channel's `meta` (`MURMURE-132`).
         attachments: Vec<Attachment>,
         /// The instant the author sent it, stamped by the view.
-        now: Timestamp,
+        now: Instant<Authored>,
         /// Whether the author confirmed the `@channel` the Logic thread asked
         /// about (`MURMURE-231`). [`Confirmation::Unconfirmed`] on a first send.
         confirmed: Confirmation,
@@ -440,7 +440,7 @@ pub enum MurmureCommand {
         message: Id<Message>,
         emoji: Emoji,
         /// The instant the member reacted, stamped by the view.
-        now: Timestamp,
+        now: Instant<Authored>,
     },
     /// Remove this session's own reaction `emoji` from `message`
     /// (`MURMURE-096`). The entry of another member stays (`MURMURE-097`).
@@ -458,7 +458,7 @@ pub enum MurmureCommand {
         draft: MessageDraft,
         /// The instant the author edited, stamped by the view. A locked
         /// segment takes the edit in an amendments document created then.
-        now: Timestamp,
+        now: Instant<Authored>,
     },
     /// Delete this session's own `message`: it reads deleted, with an empty
     /// body (`MURMURE-087`). Its thread stays (`MURMURE-090`). A reply
@@ -467,7 +467,7 @@ pub enum MurmureCommand {
         at: MessageAt,
         message: Id<Message>,
         /// The instant the author deleted, stamped by the view.
-        now: Timestamp,
+        now: Instant<Authored>,
     },
     /// Reply to `root` in its thread, under this session's user
     /// (`MURMURE-105`). The first reply opens the thread (`MURMURE-107`).
@@ -479,7 +479,7 @@ pub enum MurmureCommand {
         /// thread (`MURMURE-109`).
         also_in_channel: ReplyEcho,
         /// The instant the author replied, stamped by the view.
-        now: Timestamp,
+        now: Instant<Authored>,
         /// Whether the author confirmed the `@channel` the Logic thread asked
         /// about (`MURMURE-231`). [`Confirmation::Unconfirmed`] on a first
         /// reply.
@@ -488,12 +488,12 @@ pub enum MurmureCommand {
     /// The view's tick of the open channel, once a second while it shows
     /// it. It expires the indicators and refreshes this user's presence in
     /// the channel (the Murmure typing and presence spec).
-    Tick { now: Timestamp },
+    Tick { now: Instant<Authored> },
     /// A keystroke in the composer of the channel (`MURMURE-124`), or of the
     /// thread under `thread`, its root (`MURMURE-536`). An ephemeral, never
     /// a document write (`MURMURE-125`).
     Typing {
-        now: Timestamp,
+        now: Instant<Authored>,
         thread: Option<Id<Message>>,
     },
     /// Ask again for a segment the list shows as a band. Its key chain and
@@ -578,7 +578,7 @@ pub struct MessageView {
     /// The user who wrote the message (`MURMURE-003`).
     pub author: Id<User>,
     /// The instant the author's peer stamped.
-    pub ts: Timestamp,
+    pub ts: Instant<Authored>,
     /// The body, as plain text.
     pub text: String,
     /// The `mention` marks of the body, in text order (`MURMURE-103`).
@@ -716,6 +716,7 @@ pub struct SearchMatch {
 /// Who registered the segment a close moves to. The Sync worker answers it,
 /// so it lives on the event plane, and the worker names no app message.
 pub use crate::event::Successor;
+use ambre_core::{Ms, TimeSpan};
 
 /// What a search found in one open channel, and which part of its history
 /// it read (the Murmure search spec).
@@ -810,8 +811,8 @@ pub enum MurmureEvent {
     Unreadable {
         segment: Id<Segment>,
         cause: Unreadable,
-        from: Timestamp,
-        to: Option<Timestamp>,
+        from: Instant<Authored>,
+        to: Option<Instant<Authored>>,
     },
     /// The image `media_ref`, decoded for its preview, answering a
     /// `ShowPicture`. `None` when it could not be fetched or decoded: the
@@ -1094,7 +1095,7 @@ pub enum SpaceCommand {
     CreatePublicChannel {
         draft: PublicChannelDraft,
         /// The instant of the creation, stamped by the view.
-        now: Timestamp,
+        now: Instant<Authored>,
     },
     /// Create a private channel of the space, with this user as its owner and
     /// only member (`MURMURE-048`). The catalogue does not change
@@ -1102,7 +1103,7 @@ pub enum SpaceCommand {
     CreatePrivateChannel {
         draft: PrivateChannelDraft,
         /// The instant of the creation, stamped by the view.
-        now: Timestamp,
+        now: Instant<Authored>,
     },
     /// Join a public channel of the catalogue, with no other member online
     /// (`MURMURE-039`).
@@ -1122,7 +1123,7 @@ pub enum SpaceCommand {
     /// (`ambre-spec-budgets.md section 8`): the Logic thread reads no clock.
     RefreshPresence {
         /// The view's clock. It never travels: it ages the members.
-        now: Timestamp,
+        now: Instant<Authored>,
     },
 }
 
@@ -1224,7 +1225,7 @@ mod tests {
             Attachment, ByteSize, ContentHash, Deletion, MediaType, MessageAt, MessageDraft,
             MessageView, Revision,
         };
-        use ambre_core::Timestamp;
+        use ambre_core::{Authored, Instant};
         let secret = "Q3 layoffs";
         let topic = Topic::new(secret).expect("a topic");
         assert_eq!(format!("{topic:?}"), "Topic(10 chars)");
@@ -1242,7 +1243,7 @@ mod tests {
         let view = MessageView {
             id: Id::<Message>::mint(),
             author: Id::<User>::mint(),
-            ts: Timestamp::default(),
+            ts: Instant::<Authored>::default(),
             text: secret.to_owned(),
             mentions: Vec::new(),
             styles: Vec::new(),
@@ -1258,7 +1259,7 @@ mod tests {
             at: MessageAt::Segment(Id::<Segment>::from_bytes([7; 16])),
             message: Id::<Message>::mint(),
             draft: draft.clone(),
-            now: Timestamp::default(),
+            now: Instant::<Authored>::default(),
         };
         for line in [
             format!("{draft:?}"),

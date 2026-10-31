@@ -24,7 +24,8 @@
 //! with, so a command needs no conversion on the write path. A caret moves by
 //! grapheme cluster, which is a rule of the view and not of this plane.
 
-use ambre_core::index::{Axis, Count, Delta, MapsTo, Numbered, Pos, Shown, Span};
+use ambre_core::index::Count;
+use ambre_core::index::{Axis, Delta, MapsTo, Numbered, Pos, Shown, Span};
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
@@ -37,6 +38,7 @@ use ambre_core::{Pt, Rgb};
 use super::grid::{CellPos, Col, Row};
 
 pub mod mark;
+use crate::{Authored, Instant};
 pub use mark::MarkValue;
 
 /// A code-point offset into the body of one block, as the CRDT counts it
@@ -1111,7 +1113,7 @@ pub struct CommentReply {
     pub reply_id: Id<Reply>,
     pub author: Option<ambre_core::DisplayName>,
     pub user_id: Id<User>,
-    pub created_at: crate::Timestamp,
+    pub created_at: Instant<Authored>,
     pub text: String,
 }
 
@@ -1706,7 +1708,7 @@ pub enum ProseCommand {
     /// engine writes it as the document's last-modified stamp when this peer
     /// wrote since the last one (`PROSE-FEAT-066`).
     StampModified {
-        now: ambre_core::Timestamp,
+        now: Instant<Authored>,
     },
 
     // -- Find and replace (`features/ambre-spec-prose-find-replace.md`) --
@@ -1754,13 +1756,13 @@ pub enum ProseCommand {
         block_id: BlockId,
         range: Span<DocChar>,
         text: String,
-        now: ambre_core::Timestamp,
+        now: Instant<Authored>,
     },
     /// A reply at the end of the thread, which reopens it (`PROSE-FEAT-079`).
     ReplyToComment {
         comment_id: Id<Comment>,
         text: String,
-        now: ambre_core::Timestamp,
+        now: Instant<Authored>,
     },
     /// Close a thread.
     ResolveComment {
@@ -2967,6 +2969,7 @@ impl fmt::Debug for ProseRefusal {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::{Authored, Instant};
 
     /// A style name and a mark value print their length alone in `Debug`,
     /// and none of the text a user may have typed.
@@ -3082,7 +3085,7 @@ mod tests {
         let secret = "Q3 layoffs".to_owned();
         let block_id = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let pos = Pos::<DocChar>::ZERO;
-        let now = ambre_core::Timestamp::default();
+        let now = Instant::<Authored>::default();
         let comment_id = Id::<Comment>::mint();
         let reply_id = Id::<Reply>::mint();
         let footnote_id = Id::<Footnote>::mint();

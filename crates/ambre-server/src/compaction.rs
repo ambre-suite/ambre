@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 use crate::state::AppState;
 use crate::{db, redis_ops};
 use ambre_core::id::{Document, Id};
+use ambre_core::{Sec, TimeSpan};
 
 /// The deltas past a document's served snapshot at which the relay asks for a
 /// new one (`ambre-spec-budgets.md section 6`, the snapshot threshold row).
@@ -26,7 +27,7 @@ const CHECK_EVERY: db::DeltaCount = db::DeltaCount::new(32);
 
 /// How long one request stands before the relay may ask again. A client that
 /// never answers is asked again on the next crossing past it.
-const ASK_TTL: ambre_core::Seconds = ambre_core::Seconds::new(300);
+const ASK_TTL: TimeSpan<Sec> = TimeSpan::<Sec>::new(300);
 
 /// Whether the history past `horizon` at delta `seq` reaches `threshold`.
 pub fn past_threshold(

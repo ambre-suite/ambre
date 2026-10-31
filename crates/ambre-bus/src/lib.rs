@@ -42,15 +42,14 @@ pub mod ui;
 pub use activity::{Activity, ActivityAnchor, ActivityKind, ActivitySummary, MentionScope};
 // The Murmure data plane, addressed to a channel rather than a document.
 pub use app::murmure::{
-    Attachment, ByteSize, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity,
+    Attachment, Authored, ByteSize, CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity,
     ChannelDocument, ChannelMatches, ChannelMeta, ChannelName, ChannelPlace, Confirmation,
     ContentHash, Deletion, DirectMember, DirectMessageDraft, DirectMessageEvent, DirectPeers,
     DocumentActivity, Emoji, HeldReply, HeldSend, MediaType, MemberChannel, MemberView, Mention,
     MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureCommand,
     MurmureEvent, Notice, Picture, PictureFrame, Presence, PrivateChannelDraft, PublicChannelDraft,
     Reaction, ReplyCount, ReplyEcho, Revision, SealedChannelKey, SearchMatch, SegmentCount,
-    SpaceCommand, SpaceEvent, StyleMark, TextStyle, ThreadHead, Timestamp, Topic, UnreadCount,
-    Unreadable,
+    SpaceCommand, SpaceEvent, StyleMark, TextStyle, ThreadHead, Topic, UnreadCount, Unreadable,
 };
 pub use command::SyncCommand;
 pub use event::{
@@ -242,8 +241,9 @@ pub use ambre_core::text_offset::{
     Byte, Char, Utf16, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte,
 };
 pub use ambre_core::{
-    ApiFailure, ChannelDocumentKind, DocType, Email, FixedBytes, HttpStatus, KeyFingerprint,
-    Millis, PageMillis, PageTime, PublicKey, RefusalCode, Role, Seq, UnreadableCause, Uuid,
+    ApiFailure, ChannelDocumentKind, DocType, Email, FixedBytes, FracMs, HttpStatus, Instant,
+    KeyFingerprint, Ms, PageLoad, PublicKey, RefusalCode, Role, Seq, TimeSpan, UnreadableCause,
+    Uuid,
 };
 
 #[cfg(test)]

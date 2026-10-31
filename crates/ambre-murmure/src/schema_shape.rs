@@ -29,8 +29,8 @@ use ambre_core::index::Span;
 use std::collections::BTreeSet;
 
 use ambre_bus::{
-    Attachment, ByteSize, ContentHash, MediaType, Mention, MentionTarget, MessageDraft,
-    SealedChannelKey, StyleMark, TextStyle, Timestamp, Topic,
+    Attachment, Authored, ByteSize, ContentHash, Instant, MediaType, Mention, MentionTarget,
+    MessageDraft, SealedChannelKey, StyleMark, TextStyle, Topic,
 };
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN};
 use ambre_core::id::{Category, Channel, Document, Id, Message, Segment, Space, User};
@@ -201,7 +201,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         Id::<Channel>::mint(),
         ChannelType::Public,
         Some(&crate::fit_name("general")),
-        Timestamp::new(1_700_000_000_000),
+        Instant::<Authored>::new(1_700_000_000_000),
     )
     .expect("create");
     for (id, peer) in [
@@ -235,7 +235,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
             },
             &[file],
             AUTHOR,
-            Timestamp::new(1_700_000_000_001),
+            Instant::<Authored>::new(1_700_000_000_001),
         )
         .expect("send");
     let segment = state.active_id();
@@ -246,11 +246,11 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
             message,
             &ambre_bus::Emoji::from("\u{1F44D}"),
             AUTHOR,
-            Timestamp::new(1_700_000_000_002),
+            Instant::<Authored>::new(1_700_000_000_002),
         )
         .expect("react");
     state
-        .announce(MEMBER, AUTHOR, Timestamp::new(1_700_000_000_003))
+        .announce(MEMBER, AUTHOR, Instant::<Authored>::new(1_700_000_000_003))
         .expect("announce");
     // A third message the author edits, and a fourth one she deletes.
     for (text, ts) in [("draft", 1_700_000_000_004), ("gone", 1_700_000_000_005)] {
@@ -260,7 +260,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
             styles: Vec::new(),
         };
         state
-            .send(&draft, AUTHOR, Timestamp::new(ts))
+            .send(&draft, AUTHOR, Instant::<Authored>::new(ts))
             .expect("send");
     }
     let messages = state.messages(segment).expect("held");
@@ -284,7 +284,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
 /// with a copy sent to the channel.
 fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Message>) {
     let ThreadTarget::Create(thread) = state
-        .reply_target(root, Timestamp::new(1_700_000_000_005))
+        .reply_target(root, Instant::<Authored>::new(1_700_000_000_005))
         .expect("target")
     else {
         panic!("a root with no thread creates one");
@@ -307,7 +307,7 @@ fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Mess
             root,
             &reply,
             AUTHOR,
-            Timestamp::new(1_700_000_000_005),
+            Instant::<Authored>::new(1_700_000_000_005),
             ambre_bus::ReplyEcho::AlsoInChannel,
         )
         .expect("reply");
@@ -340,7 +340,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
             segment,
             successor,
             crate::Successor::Created,
-            Timestamp::new(1_700_000_000_006),
+            Instant::<Authored>::new(1_700_000_000_006),
         )
         .expect("close");
     state
@@ -354,7 +354,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
         .relocate_locked(segment.document_id(), &[])
         .expect("lock");
     let ChangeTarget::Create(amendments) = state
-        .change_target(segment, Timestamp::new(1_700_000_000_007))
+        .change_target(segment, Instant::<Authored>::new(1_700_000_000_007))
         .expect("target")
     else {
         panic!("a locked segment with no amendments creates them");
@@ -401,7 +401,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
     // A first reply to a locked root records its thread (`MURMURE-484`).
     let root = messages[1].id;
     let ThreadTarget::Create(thread) = state
-        .reply_target(root, Timestamp::new(1_700_000_000_008))
+        .reply_target(root, Instant::<Authored>::new(1_700_000_000_008))
         .expect("target")
     else {
         panic!("a locked root with no thread creates one");
@@ -430,7 +430,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
     let mut space = SpaceState::create(
         Id::<Space>::mint(),
         &crate::fit_name("Acme"),
-        Timestamp::new(1_700_000_000_000),
+        Instant::<Authored>::new(1_700_000_000_000),
     )
     .expect("create");
     space

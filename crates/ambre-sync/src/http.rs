@@ -5,6 +5,7 @@ use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snaps
 use ambre_core::{ApiFailure, FixedRole, HttpStatus, RefusalCode, Seq, UnreadableCause};
 use serde::{Deserialize, Serialize};
 
+use ambre_core::{Ms, Sec, TimeSpan};
 /// A session token: an access or a refresh token, wiped on drop and redacted
 /// in `Debug` (`SYNC-100`, `SYNC-061`). It lives in `ambre-crypto`, which
 /// alone reads its text (`ARCH-045`).
@@ -15,7 +16,7 @@ pub(crate) struct TokenPair {
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
     #[allow(dead_code)]
-    pub access_expires_in: ambre_core::Seconds,
+    pub access_expires_in: TimeSpan<Sec>,
 }
 
 pub(crate) type TokenStore = Rc<RefCell<Option<TokenPair>>>;
@@ -379,7 +380,7 @@ impl AuthContext {
 /// Per-request timeout for every Sync HTTP call (M9). Without it a hung TCP
 /// connection or a stalled proxy would block the Sync worker's request future
 /// forever (the browser `fetch` has no default timeout).
-const REQUEST_TIMEOUT: ambre_core::Millis = ambre_core::Millis::new(30_000);
+const REQUEST_TIMEOUT: TimeSpan<Ms> = TimeSpan::<Ms>::new(30_000);
 
 /// The method of one request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -462,7 +463,7 @@ pub(crate) struct Outgoing {
     /// The content type and the bytes of the body, if any.
     pub body: Option<(ContentType, HttpBody)>,
     /// How long the transport waits before it aborts the request.
-    pub timeout: ambre_core::Millis,
+    pub timeout: TimeSpan<Ms>,
 }
 
 impl Outgoing {
@@ -507,7 +508,7 @@ pub(crate) trait Transport {
     async fn send(&self, request: &Outgoing) -> Result<Incoming, TransportError>;
 
     /// Resolves once `ms` milliseconds have passed.
-    async fn elapse(&self, span: ambre_core::Millis);
+    async fn elapse(&self, span: TimeSpan<Ms>);
 }
 
 /// Why a request got no answer. The browser's own words ride in the variants
@@ -521,7 +522,7 @@ pub(crate) enum TransportError {
     /// The answer came, and its body did not read whole.
     Truncated(String),
     /// No answer arrived within the request's deadline (`SYNC-071`).
-    Deadline(ambre_core::Millis),
+    Deadline(TimeSpan<Ms>),
 }
 
 impl std::fmt::Display for TransportError {
@@ -594,7 +595,7 @@ impl Transport for Fetch {
         })
     }
 
-    async fn elapse(&self, span: ambre_core::Millis) {
+    async fn elapse(&self, span: TimeSpan<Ms>) {
         use wasm_bindgen::JsCast;
 
         let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() else {
@@ -1132,7 +1133,7 @@ pub(crate) struct SetupAccountResponse {
     pub user_id: Id<User>,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
-    pub access_expires_in: ambre_core::Seconds,
+    pub access_expires_in: TimeSpan<Sec>,
 }
 
 #[derive(Serialize)]
@@ -1149,7 +1150,7 @@ pub(crate) struct DevLoginResponse {
     pub display_name: ambre_core::DisplayName,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
-    pub access_expires_in: ambre_core::Seconds,
+    pub access_expires_in: TimeSpan<Sec>,
 }
 
 /// The relay's answer to `GET /api/auth/{provider}/login`.
@@ -1175,7 +1176,7 @@ pub(crate) struct ProviderCallbackResponse {
     pub display_name: ambre_core::DisplayName,
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
-    pub access_expires_in: ambre_core::Seconds,
+    pub access_expires_in: TimeSpan<Sec>,
 }
 
 #[derive(Deserialize)]
@@ -1206,7 +1207,7 @@ pub(crate) struct SetupKeyRequest {
 pub(crate) struct StoreMasterKeysResponse {
     pub access_token: SecretToken,
     pub refresh_token: SecretToken,
-    pub access_expires_in: ambre_core::Seconds,
+    pub access_expires_in: TimeSpan<Sec>,
 }
 
 #[derive(Deserialize)]
@@ -1499,7 +1500,7 @@ pub(crate) struct ThreadResponse {
 pub(crate) struct FinalizeLeaseResponse {
     pub lease: Option<GrantedLeaseResponse>,
     /// Milliseconds before asking again, `0` with a lease.
-    pub retry_in: ambre_core::Millis,
+    pub retry_in: TimeSpan<Ms>,
 }
 
 /// A granted finalize lease.
@@ -1510,7 +1511,7 @@ pub(crate) struct GrantedLeaseResponse {
     /// The last delta the final snapshot covers.
     pub horizon: Seq,
     /// Milliseconds before the lease expires.
-    pub expires_in: ambre_core::Millis,
+    pub expires_in: TimeSpan<Ms>,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/finalize`: commit the final
@@ -1529,7 +1530,7 @@ pub(crate) struct FinalizeSegmentRequest {
 pub(crate) struct FoldLeaseResponse {
     pub lease: Option<GrantedFoldResponse>,
     /// Milliseconds before asking again, `0` with a lease.
-    pub retry_in: ambre_core::Millis,
+    pub retry_in: TimeSpan<Ms>,
 }
 
 /// A granted fold lease.
@@ -1545,7 +1546,7 @@ pub(crate) struct GrantedFoldResponse {
     /// The last delta of the amendments the fold holds at least.
     pub amendments_seq: Seq,
     /// Milliseconds before the lease expires.
-    pub expires_in: ambre_core::Millis,
+    pub expires_in: TimeSpan<Ms>,
 }
 
 /// `POST /api/channels/{id}/segments/{segment}/fold`: commit the fold
@@ -2028,6 +2029,7 @@ pub(crate) struct ConfirmUploadRequest {
 #[cfg(test)]
 pub(crate) mod scripted {
     use super::*;
+    use ambre_core::{Ms, Sec, TimeSpan};
     use std::cell::Cell;
     use std::collections::VecDeque;
 
@@ -2041,7 +2043,7 @@ pub(crate) mod scripted {
         /// Whether a request past the script hangs instead of failing.
         pub silent: Cell<bool>,
         /// Every deadline a silent transport waited out, in milliseconds.
-        pub waited: RefCell<Vec<ambre_core::Millis>>,
+        pub waited: RefCell<Vec<TimeSpan<Ms>>>,
     }
 
     impl Scripted {
@@ -2088,7 +2090,7 @@ pub(crate) mod scripted {
 
         /// A silent transport's clock jumps straight to the deadline. Any
         /// other never reaches it, so a scripted answer always wins.
-        async fn elapse(&self, span: ambre_core::Millis) {
+        async fn elapse(&self, span: TimeSpan<Ms>) {
             if !self.silent.get() {
                 return std::future::pending().await;
             }
@@ -2105,7 +2107,7 @@ pub(crate) mod scripted {
             tokens: Rc::new(RefCell::new(Some(TokenPair {
                 access_token: access.to_owned().into(),
                 refresh_token: refresh.to_owned().into(),
-                access_expires_in: ambre_core::Seconds::new(900),
+                access_expires_in: TimeSpan::<Sec>::new(900),
             }))),
         }
     }

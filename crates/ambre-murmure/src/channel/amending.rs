@@ -8,7 +8,7 @@
 //! for messages of its own segment, each written by their author
 //! (`MURMURE-013`, `MURMURE-253`).
 
-use ambre_bus::{Deletion, MessageDraft, MessageView, MurmureEvent, ThreadHead, Timestamp};
+use ambre_bus::{Authored, Deletion, Instant, MessageDraft, MessageView, MurmureEvent, ThreadHead};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq};
 use loro::{
@@ -130,7 +130,7 @@ impl ChannelState {
     pub fn change_target(
         &mut self,
         segment: Id<Segment>,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) -> Result<ChangeTarget, MurmureError> {
         if !self.amendable(segment) {
             return Ok(ChangeTarget::Write(segment.document_id()));

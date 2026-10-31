@@ -15,6 +15,7 @@
 
 use ambre_bus::app::prose::{DocChar, ProseError, ProseRefusal};
 use ambre_bus::{AppEvent, UiEvent};
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Comment, Document, Id, Reply, User};
 use ambre_core::index::Pos;
 use ambre_prose::chrome::{self, ProseCommentsPanel, ProseSignals};
@@ -62,7 +63,7 @@ fn thread(id: Id<Comment>, replies: &[&str]) -> CommentThread {
                 reply_id: Id::<Reply>::mint(),
                 author: ambre_core::DisplayName::new("Bob").ok(),
                 user_id: Id::<User>::from_bytes([2; 16]),
-                created_at: ambre_bus::Timestamp::new(0),
+                created_at: Instant::<Authored>::new(0),
                 text: (*text).to_owned(),
             })
             .collect(),
@@ -187,7 +188,7 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     let reply = ambre_bus::app::prose::ProseCommand::ReplyToComment {
         comment_id,
         text: String::new(),
-        now: ambre_core::Timestamp::new(0),
+        now: Instant::<Authored>::new(0),
     };
     chrome::notify_event(
         &toasts,

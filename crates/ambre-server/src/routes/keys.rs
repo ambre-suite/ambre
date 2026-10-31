@@ -9,6 +9,7 @@ use crate::db;
 use crate::error::{AppError, Resource};
 use crate::extract::Json;
 use crate::state::AppState;
+use ambre_core::{Sec, TimeSpan};
 
 /// Request body for first-time master key upload.
 /// All binary fields are hex- or base64url-encoded. A key that is not 32
@@ -89,7 +90,7 @@ pub struct KeysStoredResponse {
     pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
     pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     /// Access-token lifetime in seconds.
-    pub access_expires_in: ambre_core::Seconds,
+    pub access_expires_in: TimeSpan<Sec>,
 }
 
 /// Response containing the full key material for the authenticated user.

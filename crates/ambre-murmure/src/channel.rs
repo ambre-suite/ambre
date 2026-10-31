@@ -9,9 +9,9 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    ActivityKind, ActivitySummary, Attachment, ChannelMatches, ContentHash, Deletion, Emoji,
-    Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView, MurmureEvent,
-    Notice, Revision, SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
+    ActivityKind, ActivitySummary, Attachment, Authored, ChannelMatches, ContentHash, Deletion,
+    Emoji, Instant, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
+    MurmureEvent, Notice, Revision, SearchMatch, StyleMark, ThreadHead, UnreadCount, Unreadable,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
 use ambre_core::{
@@ -132,21 +132,21 @@ enum Created {
         channel_type: ChannelType,
         name: Option<ambre_core::Name>,
         active: Id<Segment>,
-        now: Timestamp,
+        now: Instant<Authored>,
     },
     /// The first active segment, which holds no message yet.
-    Segment { now: Timestamp },
+    Segment { now: Instant<Authored> },
     /// The amendments document of a locked segment, which holds no
     /// amendment yet.
     Amendments {
         segment: Id<Segment>,
-        now: Timestamp,
+        now: Instant<Authored>,
     },
     /// The thread document of a root, which holds no reply yet.
     Thread {
         segment: Id<Segment>,
         root: Id<Message>,
-        now: Timestamp,
+        now: Instant<Authored>,
     },
 }
 
@@ -167,7 +167,7 @@ impl Created {
                     doc,
                     DocumentKind::Meta,
                     channel_id,
-                    ambre_bus::Timestamp::new(now.get()),
+                    Instant::<Authored>::new(now.get()),
                 )?;
                 let channel = crate::schema::channel(doc);
                 channel.insert(ChannelKey::Type, channel_type.as_str())?;
@@ -181,7 +181,7 @@ impl Created {
                     doc,
                     DocumentKind::Segment,
                     channel_id,
-                    ambre_bus::Timestamp::new(now.get()),
+                    Instant::<Authored>::new(now.get()),
                 )?;
             }
             Self::Amendments { segment, now } => {
@@ -189,7 +189,7 @@ impl Created {
                     doc,
                     DocumentKind::Amendments,
                     channel_id,
-                    ambre_bus::Timestamp::new(now.get()),
+                    Instant::<Authored>::new(now.get()),
                 )?;
                 crate::schema::header(doc)
                     .insert(schema::HeaderKey::Segment, segment.to_string())?;
@@ -199,7 +199,7 @@ impl Created {
                     doc,
                     DocumentKind::Thread,
                     channel_id,
-                    ambre_bus::Timestamp::new(now.get()),
+                    Instant::<Authored>::new(now.get()),
                 )?;
                 let header = crate::schema::header(doc);
                 header.insert(schema::HeaderKey::Segment, segment.to_string())?;
@@ -328,7 +328,7 @@ impl ChannelState {
         channel_id: Id<Channel>,
         channel_type: ChannelType,
         name: Option<&ambre_core::Name>,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) -> Result<Self, MurmureError> {
         let active_id = Id::<Document>::mint();
         let created = |id: Id<Document>, created: Created| -> Result<Held, MurmureError> {
@@ -976,7 +976,7 @@ impl ChannelState {
         &mut self,
         draft: &MessageDraft,
         author: Id<User>,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) -> Result<Sent, MurmureError> {
         self.send_attached(draft, &[], author, now)
     }
@@ -994,7 +994,7 @@ impl ChannelState {
         draft: &MessageDraft,
         attachments: &[Attachment],
         author: Id<User>,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) -> Result<Sent, MurmureError> {
         // Checked before the first write, so a refused draft leaves no
         // message half written in the segment.
@@ -1018,7 +1018,7 @@ impl ChannelState {
         draft: &MessageDraft,
         attachments: &[Attachment],
         author: Id<User>,
-        now: Timestamp,
+        now: Instant<Authored>,
         copy: Option<(Id<Document>, Id<Message>)>,
     ) -> Result<Sent, MurmureError> {
         let channel = self.channel_id;
@@ -1067,7 +1067,7 @@ impl ChannelState {
         &mut self,
         member: Id<User>,
         author: Id<User>,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) -> Result<Sent, MurmureError> {
         let segment = self.active_id();
         let (doc, session) = self.active.session()?;
@@ -1124,7 +1124,7 @@ impl ChannelState {
         message: Id<Message>,
         emoji: &Emoji,
         user: Id<User>,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) -> Result<Option<Sent>, MurmureError> {
         let at = at.into();
         if !reaction::is_emoji(emoji) {
@@ -1930,7 +1930,7 @@ pub(crate) fn live_segments(
 pub(crate) fn push_segment_entry(
     meta: &LoroDoc,
     id: Id<Segment>,
-    from: Timestamp,
+    from: Instant<Authored>,
     state: SegmentState,
 ) -> Result<(), MurmureError> {
     let entry = crate::schema::Fields::of(
@@ -1969,7 +1969,10 @@ fn segment_entries(meta: &LoroDoc) -> Vec<(Id<Segment>, SegmentState)> {
 /// The span of the final segment `segment`: its `from_ts`, and the `from_ts`
 /// of the segment listed after it. `None` when `meta` lists no final segment
 /// of that identifier, or its `from_ts` is unreadable.
-fn segment_span(meta: &LoroDoc, segment: Id<Segment>) -> Option<(Timestamp, Option<Timestamp>)> {
+fn segment_span(
+    meta: &LoroDoc,
+    segment: Id<Segment>,
+) -> Option<(Instant<Authored>, Option<Instant<Authored>>)> {
     let list: LoroList = crate::schema::root_list(meta, Root::Segments);
     let mut spans: Vec<(Id<Segment>, SegmentState, Option<u64>)> = Vec::with_capacity(list.len());
     list.for_each(|item| {
@@ -1993,8 +1996,8 @@ fn segment_span(meta: &LoroDoc, segment: Id<Segment>) -> Option<(Timestamp, Opti
     let to = spans
         .get(position + 1)
         .and_then(|(_, _, next)| *next)
-        .map(Timestamp::new);
-    Some((Timestamp::new((*from)?), to))
+        .map(Instant::<Authored>::new);
+    Some((Instant::<Authored>::new((*from)?), to))
 }
 
 /// The messages of a segment, in list order. A malformed message is skipped
@@ -2029,7 +2032,7 @@ fn content_of(map: &Fields<MessageKey>) -> Option<LoroText> {
 fn read_message(item: ValueOrContainer, channel: Id<Channel>) -> Option<MessageView> {
     let map = crate::schema::fields_of(item)?;
     let (id, author) = identity_of(&map)?;
-    let ts = Timestamp::new(schema::unsigned(&map, MessageKey::Ts)?);
+    let ts = Instant::<Authored>::new(schema::unsigned(&map, MessageKey::Ts)?);
     let content = content_of(&map)?;
     let deleted = schema::flag(&map, MessageKey::Deleted);
     Some(MessageView {
@@ -2085,7 +2088,7 @@ fn write_message(
     draft: &MessageDraft,
     attachments: &[Attachment],
     author: Id<User>,
-    now: Timestamp,
+    now: Instant<Authored>,
     channel: Id<Channel>,
     copy: Option<(Id<Document>, Id<Message>)>,
 ) -> Result<(Id<Message>, Vec<Mention>, Vec<StyleMark>), MurmureError> {

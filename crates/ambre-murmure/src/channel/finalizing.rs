@@ -7,9 +7,9 @@
 //! once it holds every delta up to the horizon. The engine reads no clock:
 //! each delay is stamped by the next tick.
 
-use ambre_bus::Timestamp;
+use ambre_bus::{Authored, Instant};
 use ambre_core::id::{Id, Lease, Segment};
-use ambre_core::{DeltaBytes, FailureCount, Millis, Payload, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, FailureCount, Ms, Payload, Seq, SnapshotBytes, TimeSpan};
 use loro::{ExportMode, LoroDoc};
 
 use super::ChannelState;
@@ -18,7 +18,7 @@ use crate::schema::{self, Root, SegmentKey, SegmentState};
 
 /// The delay before a failed lease request or commit is asked again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
-pub const FINALIZE_RETRY: Millis = Millis::new(2_000);
+pub const FINALIZE_RETRY: TimeSpan<Ms> = TimeSpan::<Ms>::new(2_000);
 
 /// The doublings past which the delay stops growing: about half an hour.
 pub(super) const RETRY_DOUBLINGS: FailureCount = FailureCount::new(10);
@@ -37,8 +37,8 @@ pub(super) struct Finalizing {
 enum Step {
     /// Ask for the lease `after` milliseconds past the tick that stamps `at`.
     Due {
-        after: Millis,
-        at: Option<Timestamp>,
+        after: TimeSpan<Ms>,
+        at: Option<Instant<Authored>>,
     },
     /// A lease request or a commit is on its way.
     Asked,
@@ -47,8 +47,8 @@ enum Step {
     Held {
         lease: Id<Lease>,
         horizon: Seq,
-        expires_in: ambre_core::Millis,
-        until: Option<Timestamp>,
+        expires_in: TimeSpan<Ms>,
+        until: Option<Instant<Authored>>,
     },
     /// This copy holds an edit the relay refused for the lock, so it is not
     /// the relay's. Another member finalizes the segment.
@@ -96,7 +96,7 @@ impl ChannelState {
             self.finalizing = Some(Finalizing {
                 segment,
                 step: Step::Due {
-                    after: Millis::new(0),
+                    after: TimeSpan::<Ms>::new(0),
                     at: None,
                 },
                 failures: FailureCount::ZERO,
@@ -108,7 +108,7 @@ impl ChannelState {
     /// The closing segment whose finalize lease to ask for at `now`
     /// (`MURMURE-067`). The first tick past the close asks at once: the
     /// relay answers how long the grace period still runs (`SRV-199`).
-    pub fn lease_to_ask(&mut self, now: Timestamp) -> Option<Id<Segment>> {
+    pub fn lease_to_ask(&mut self, now: Instant<Authored>) -> Option<Id<Segment>> {
         let segment = self.finalizing_id()?;
         let finalizing = self.finalize_step(segment)?;
         match &mut finalizing.step {
@@ -128,7 +128,7 @@ impl ChannelState {
 
     /// The relay deferred the lease of `segment` by `retry_in` milliseconds:
     /// the grace period runs, or another member holds the lease.
-    pub fn lease_deferred(&mut self, segment: Id<Segment>, retry_in: ambre_core::Millis) {
+    pub fn lease_deferred(&mut self, segment: Id<Segment>, retry_in: TimeSpan<Ms>) {
         if let Some(finalizing) = self.finalize_step(segment) {
             finalizing.failures = FailureCount::ZERO;
             finalizing.step = Step::Due {
@@ -146,7 +146,7 @@ impl ChannelState {
         segment: Id<Segment>,
         lease: Id<Lease>,
         horizon: Seq,
-        expires_in: ambre_core::Millis,
+        expires_in: TimeSpan<Ms>,
     ) {
         if let Some(finalizing) = self.finalize_step(segment) {
             finalizing.failures = FailureCount::ZERO;
@@ -204,7 +204,7 @@ impl ChannelState {
     /// [`MurmureError::Crdt`] when Loro refuses the export.
     pub fn final_snapshot(
         &mut self,
-        now: Timestamp,
+        now: Instant<Authored>,
         covered: Seq,
     ) -> Result<Option<FinalSnapshot>, MurmureError> {
         let Some(segment) = self.finalizing_id() else {
@@ -223,8 +223,9 @@ impl ChannelState {
             return Ok(None);
         };
         let (lease, horizon) = (*lease, *horizon);
-        let until =
-            *until.get_or_insert(Timestamp::new(now.get().saturating_add(expires_in.get())));
+        let until = *until.get_or_insert(Instant::<Authored>::new(
+            now.get().saturating_add(expires_in.get()),
+        ));
         if covered < horizon || now >= until {
             return Ok(None);
         }

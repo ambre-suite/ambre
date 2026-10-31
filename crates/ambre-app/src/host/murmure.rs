@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_bus::{Attachment, DraftKey, RowPlace, SealedRow, Timestamp};
+use ambre_bus::{Attachment, Authored, DraftKey, Instant, RowPlace, SealedRow};
 use ambre_canvas::TextInput;
 use ambre_core::id::{Id, User};
 use ambre_logic::persistence::PersistenceStore;
@@ -19,6 +19,7 @@ use leptos::prelude::{GetUntracked, Set, Update};
 use wasm_bindgen::JsValue;
 
 use crate::vault::Vault;
+use ambre_core::{Ms, TimeSpan};
 
 /// What the page tells a Murmure region, read from the shell's relay. `warn`
 /// puts a warning in front of the user.
@@ -30,7 +31,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
         time_of: Rc::new(move |ts| clock.format(ts)),
         now: Rc::new(super::probe::now),
         // `Date.now()` is a whole, non-negative count of milliseconds.
-        wall_clock: Rc::new(|| ambre_bus::Timestamp::new(js_sys::Date::now() as u64)),
+        wall_clock: Rc::new(|| Instant::<Authored>::new(js_sys::Date::now() as u64)),
         motion: Rc::new({
             // The query is asked once; its answer follows the user's setting.
             let query = web_sys::window()
@@ -71,7 +72,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
 
 /// How long a tab has to read the address of an image it opened before the
 /// page lets the bytes go.
-const OPENED_FOR: ambre_core::Millis = ambre_core::Millis::new(60_000);
+const OPENED_FOR: TimeSpan<Ms> = TimeSpan::<Ms>::new(60_000);
 
 /// Hand the browser a file a member fetched. A raster image opens in a tab of
 /// its own. Any other file saves, typed as a plain stream of bytes. So no
@@ -284,7 +285,7 @@ impl LocalTime {
     }
 
     /// `ts`, written for the reader.
-    pub fn format(&self, ts: Timestamp) -> String {
+    pub fn format(&self, ts: Instant<Authored>) -> String {
         let date = js_sys::Date::new(&JsValue::from_f64(ts.get() as f64));
         self.0
             .call1(&JsValue::NULL, &date)
@@ -317,7 +318,7 @@ mod tests {
         let expected: String = date
             .to_locale_time_string_with_options("default", &options)
             .into();
-        let written = LocalTime::new().format(Timestamp::new(ms as u64));
+        let written = LocalTime::new().format(Instant::<Authored>::new(ms as u64));
         assert_eq!(written, expected);
         assert!(written.chars().any(|c| c.is_ascii_digit()));
     }
@@ -362,7 +363,7 @@ mod tests {
             channel: Id::<Channel>::mint(),
         });
         assert!(matches!((reads.pane)(), MurmurePane::Members { .. }));
-        let ts = Timestamp::new(1_700_000_000_000);
+        let ts = Instant::<Authored>::new(1_700_000_000_000);
         assert_eq!((reads.time_of)(ts), LocalTime::new().format(ts));
     }
 

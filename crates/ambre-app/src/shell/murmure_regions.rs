@@ -5,9 +5,9 @@
 
 use super::app_root::MurmureShell;
 use ambre_bus::{
-    CatalogueEntry, CategoryView, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace,
-    DirectPeers, LogicCommand, MemberChannel, MemberView, MentionCount, MessageView, Presence,
-    SearchMatch, SpaceCommand, SpaceEvent, Timestamp, UiEvent, UnreadCount,
+    Authored, CatalogueEntry, CategoryView, ChannelActivity, ChannelMatches, ChannelName,
+    ChannelPlace, DirectPeers, Instant, LogicCommand, MemberChannel, MemberView, MentionCount,
+    MessageView, Presence, SearchMatch, SpaceCommand, SpaceEvent, UiEvent, UnreadCount,
 };
 use ambre_core::id::{Category, Channel, Id, Message, Segment, Space, User};
 use ambre_murmure::chrome::MurmureRelay;
@@ -1196,7 +1196,7 @@ async fn a_private_channel_or_a_direct_message_offers_no_member_list() {
 async fn a_refresh_reaches_every_space_and_a_space_lost_drops_its_members() {
     let acme = Acme::new();
     let frame = acme.frame().await;
-    let now = Timestamp::new(1_700_000_000_000);
+    let now = Instant::<Authored>::new(1_700_000_000_000);
     let refresh = frame.relay.refresh_presence(now);
     assert!(
         matches!(
@@ -1277,7 +1277,7 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
     let message = MessageView {
         id: Id::<Message>::mint(),
         author: Id::<User>::mint(),
-        ts: Timestamp::new(1),
+        ts: Instant::<Authored>::new(1),
         text: "the budget for May".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),

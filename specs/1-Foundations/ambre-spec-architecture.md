@@ -274,6 +274,16 @@ only its own module opens an issuer (`ARCH-053`).
 open, and its serde form is the bare number (`ARCH-054`). A test names a count through
 `Generation::nth`, and only a test build turns on its feature (`ARCH-055`).
 
+**Time.** A span of time is `TimeSpan<U>`. Its `TimeUnit` marker fixes the unit and the number:
+`Ms`, `Sec` and `Ns` hold a `u64`, and `FracMs` holds the `f64` of the page clock. A point in time
+is `Instant<C>`, distinct from `std::time::Instant`. Its `TimeBase` marker names the clock and the
+epoch. An instant moves only by a span of its own unit.
+
+**The time bases.** `Authored` is an author's untrusted wall clock. `UnixMs` and `UnixSec` are the
+reader's own clock, and `PageLoad` is the page clock. An instant and a `LamportStamp` share
+`StoredAsI64`, the signed integer a CRDT or a Postgres row keeps. Each type writes the bare number
+of its unit on the wire and in the store.
+
 **Code.** `crates/ambre-app/src/lib.rs` for the boot and the relay, and `crates/ambre-app/src/host/`
 for the frame driver and the view registry. Then `crates/ambre-logic/src/lib.rs` for the Logic
 runtime, `crates/ambre-sync/src/worker.rs` for the worker entry, `.cargo/config.toml` and

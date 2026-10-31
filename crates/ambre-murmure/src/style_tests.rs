@@ -3,7 +3,7 @@
 
 use crate::Receipt;
 use ambre_bus::Char;
-use ambre_bus::{MessageDraft, MessageView, StyleMark, TextStyle, Timestamp};
+use ambre_bus::{Authored, Instant, MessageDraft, MessageView, StyleMark, TextStyle};
 use ambre_core::Seq;
 use ambre_core::id::{Channel, Id, User};
 use ambre_core::index::Span;
@@ -12,7 +12,7 @@ use loro::{Container, LoroText, LoroValue, TextDelta, ValueOrContainer};
 use crate::schema::{Mark, MessageKey, Root};
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 /// Alice's channel, created empty, and the user she writes for.
 fn alice() -> (ChannelState, Id<User>) {

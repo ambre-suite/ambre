@@ -7,7 +7,7 @@
   the compiler proves the dispatch is exhaustive.
 * **A newtype for every domain value, inside a function too.** An identifier, a quantity with a
   unit, an index or offset, a secret and a validated value each get their own type. Examples:
-  `Id<Message>`, `Timestamp(u64)`, `Pos<Row>`, `Emoji(String)`. A closed set of values is
+  `Id<Message>`, `Instant<Authored>`, `Pos<Row>`, `Emoji(String)`. A closed set of values is
   an `enum`, never a `String`. A `bool` that selects a mode is an `enum` too. A bare `String`,
   `Uuid`, integer, float or `Vec<u8>` is allowed in four places only:
   * free text with no rule;

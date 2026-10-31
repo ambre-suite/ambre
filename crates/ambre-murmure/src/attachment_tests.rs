@@ -3,13 +3,13 @@
 
 use crate::Receipt;
 use ambre_bus::{
-    Attachment, ByteSize, ContentHash, MediaType, MessageDraft, MurmureEvent, Timestamp,
+    Attachment, Authored, ByteSize, ContentHash, Instant, MediaType, MessageDraft, MurmureEvent,
 };
 use ambre_core::id::{Channel, Id, User};
 
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel};
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 fn file(hex: char, name: &str) -> Attachment {
     Attachment {

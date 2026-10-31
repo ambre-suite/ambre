@@ -11,6 +11,7 @@ use crate::error::{AppError, Resource};
 use crate::extract::{Json, PathId};
 use crate::redis_ops;
 use crate::state::AppState;
+use ambre_core::{Sec, TimeSpan};
 
 // -- Setup Account -------------------------------------------------
 
@@ -60,7 +61,7 @@ pub struct SetupAccountResponse {
     pub user_id: Id<User>,
     pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
     pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
-    pub access_expires_in: ambre_core::Seconds,
+    pub access_expires_in: TimeSpan<Sec>,
 }
 
 pub async fn setup_account(

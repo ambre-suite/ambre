@@ -19,6 +19,7 @@ use ambre_core::Secret;
 use ambre_core::id::{Id, User};
 
 use crate::secrets::SeedText;
+use ambre_core::{Instant, UnixSec};
 use ambre_protocol::ws::{AccessToken, Credential};
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::pkcs8::EncodePrivateKey;
@@ -37,8 +38,8 @@ pub struct Claims {
     pub sub: Id<User>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spk: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
-    pub iat: ambre_core::UnixSeconds,
-    pub exp: ambre_core::UnixSeconds,
+    pub iat: Instant<UnixSec>,
+    pub exp: Instant<UnixSec>,
 }
 
 /// The Ed25519 key the access tokens are signed under, from the 32-byte seed
@@ -206,9 +207,9 @@ impl JwtKeys {
 mod tests {
     use super::*;
 
-    use ambre_core::{FixedBytes, Seconds, UnixSeconds};
+    use ambre_core::{FixedBytes, Instant, Sec, TimeSpan, UnixSec};
 
-    fn now() -> UnixSeconds {
+    fn now() -> Instant<UnixSec> {
         crate::s3::unix_now()
     }
 
@@ -220,7 +221,7 @@ mod tests {
             sub: Id::<User>::parse_str("11111111-1111-7111-8111-111111111111").unwrap(),
             spk: Some(FixedBytes::from_array([0xab; 32])),
             iat,
-            exp: iat.plus(Seconds::new(900)),
+            exp: iat.plus(TimeSpan::<Sec>::new(900)),
         };
         let token = keys.mint(&claims).expect("mint");
         let decoded = keys.verify(&token).expect("verify");
@@ -256,12 +257,12 @@ mod tests {
     #[test]
     fn expired_token_is_rejected() {
         let keys = JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([9u8; 32]));
-        let iat = UnixSeconds::new(now().get() - 10_000);
+        let iat = Instant::<UnixSec>::new(now().get() - 10_000);
         let claims = Claims {
             sub: Id::<User>::mint(),
             spk: Some(FixedBytes::from_array([0x79; 32])),
             iat,
-            exp: iat.plus(Seconds::new(1)), // long past
+            exp: iat.plus(TimeSpan::<Sec>::new(1)), // long past
         };
         let token = keys.mint(&claims).expect("mint");
         assert!(keys.verify(&token).is_err());
@@ -277,7 +278,7 @@ mod tests {
                 sub: Id::<User>::mint(),
                 spk: Some(FixedBytes::from_array([0x70; 32])),
                 iat,
-                exp: iat.plus(Seconds::new(900)),
+                exp: iat.plus(TimeSpan::<Sec>::new(900)),
             })
             .expect("mint");
         assert!(b.verify(&token).is_err());

@@ -9,8 +9,8 @@
 //! (`MURMURE-419`). The menu of a message offers the ones its target allows.
 
 use ambre_bus::{
-    Emoji, HeldReply, HeldSend, LogicCommand, Mention, MessageAt, MurmureCommand, StyleMark,
-    Timestamp,
+    Authored, Emoji, HeldReply, HeldSend, Instant, LogicCommand, Mention, MessageAt,
+    MurmureCommand, StyleMark,
 };
 use ambre_commands::{
     Command, CommandCategory, CommandId, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale,
@@ -329,7 +329,7 @@ pub struct PendingReaction {
 impl PendingReaction {
     /// The command that reacts with `emoji`, stamped `now` by the view
     /// (`MURMURE-092`).
-    pub fn command(self, emoji: Emoji, now: Timestamp) -> LogicCommand {
+    pub fn command(self, emoji: Emoji, now: Instant<Authored>) -> LogicCommand {
         LogicCommand::Channel {
             channel_id: self.channel,
             command: MurmureCommand::React {
@@ -400,7 +400,7 @@ pub struct PendingDelete {
 impl PendingDelete {
     /// The command that deletes the message, stamped `now` by the view
     /// (`MURMURE-087`).
-    pub fn command(self, now: Timestamp) -> LogicCommand {
+    pub fn command(self, now: Instant<Authored>) -> LogicCommand {
         LogicCommand::Channel {
             channel_id: self.channel,
             command: MurmureCommand::DeleteMessage {
@@ -427,7 +427,7 @@ pub struct AskedAll {
 impl AskedAll {
     /// The send again, confirmed and stamped `now` by the view
     /// (`MURMURE-557`).
-    pub fn command(self, now: Timestamp) -> LogicCommand {
+    pub fn command(self, now: Instant<Authored>) -> LogicCommand {
         let HeldSend {
             draft,
             attachments,
@@ -754,7 +754,7 @@ mod tests {
                     mentions: Vec::new(),
                     styles: Vec::new(),
                 },
-                now: Timestamp::default(),
+                now: Instant::<Authored>::default(),
             },
         });
         let shown = [
@@ -793,7 +793,7 @@ mod tests {
         };
         assert_eq!(asked.region(), Region::Channel);
         assert!(matches!(
-            asked.clone().command(Timestamp::new(7)),
+            asked.clone().command(Instant::<Authored>::new(7)),
             LogicCommand::Channel {
                 channel_id,
                 command: MurmureCommand::SendMessage { draft: d, now, confirmed: ambre_bus::Confirmation::Confirmed, .. },
@@ -813,7 +813,7 @@ mod tests {
         };
         assert_eq!(reply.region(), Region::Thread);
         assert!(matches!(
-            reply.command(Timestamp::new(8)),
+            reply.command(Instant::<Authored>::new(8)),
             LogicCommand::Channel {
                 channel_id,
                 command: MurmureCommand::Reply {
@@ -930,7 +930,7 @@ mod tests {
             message: own.message,
         };
         assert_eq!(pending, asked);
-        let now = Timestamp::new(1_700_000_000_000);
+        let now = Instant::<Authored>::new(1_700_000_000_000);
         let LogicCommand::Channel {
             channel_id,
             command:
@@ -1032,7 +1032,10 @@ mod tests {
                     emoji,
                     now,
                 },
-        } = pending.command(ambre_bus::Emoji::from("\u{1F680}"), Timestamp::new(9))
+        } = pending.command(
+            ambre_bus::Emoji::from("\u{1F680}"),
+            Instant::<Authored>::new(9),
+        )
         else {
             panic!("a pick reacts to the message");
         };
@@ -1043,7 +1046,7 @@ mod tests {
                 MessageAt::Segment(segment),
                 target.message,
                 "\u{1F680}",
-                Timestamp::new(9)
+                Instant::<Authored>::new(9)
             )
         );
     }

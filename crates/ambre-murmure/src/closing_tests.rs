@@ -5,15 +5,16 @@ use ambre_bus::Char;
 use ambre_core::index::Span;
 use std::collections::HashMap;
 
-use ambre_bus::{MessageDraft, MurmureEvent, StyleMark, TextStyle, Timestamp};
+use ambre_bus::{Authored, Instant, MessageDraft, MurmureEvent, StyleMark, TextStyle};
 use ambre_core::id::{Channel, Id, Lease, Segment, User};
 use ambre_core::{ByteSize, DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
 
 use crate::channel::live_segments;
 use crate::session::next_peer;
 use crate::{ChannelState, ChannelType, MurmureError, Signer};
+use ambre_core::{Ms, TimeSpan};
 
-const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
+const NOW: Instant<Authored> = Instant::<Authored>::new(1_700_000_000_000);
 
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {
@@ -116,7 +117,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
         closing,
         Id::<Lease>::mint(),
         ambre_core::Seq::new(1),
-        ambre_core::Millis::new(60_000),
+        TimeSpan::<Ms>::new(60_000),
     );
     alice.mark_final(closing).expect("mark").expect("a delta");
     assert_eq!(alice.closing_id(), None, "the slot is free");
@@ -178,7 +179,7 @@ fn a_successor_that_fails_to_open_is_fetched_again() {
 
     // The Sync worker could not open it.
     assert!(bob.cancel_older(successor.document_id()));
-    let at = |ms: u64| Timestamp::new(NOW.get() + ms);
+    let at = |ms: u64| Instant::<Authored>::new(NOW.get() + ms);
     assert_eq!(bob.successor_to_retry(NOW), None, "the tick dates it");
     assert_eq!(bob.successor_to_retry(at(999)), None);
     assert_eq!(bob.successor_to_retry(at(1_000)), Some(successor));
@@ -219,9 +220,12 @@ fn a_successor_is_fetched_again_four_times_at_most() {
     let mut fetches = 0;
     for _ in 0..10 {
         bob.cancel_older(successor.document_id());
-        assert_eq!(bob.successor_to_retry(Timestamp::new(now)), None);
+        assert_eq!(bob.successor_to_retry(Instant::<Authored>::new(now)), None);
         now += 60_000;
-        if bob.successor_to_retry(Timestamp::new(now)).is_some() {
+        if bob
+            .successor_to_retry(Instant::<Authored>::new(now))
+            .is_some()
+        {
             fetches += 1;
         }
     }

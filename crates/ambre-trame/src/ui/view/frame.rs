@@ -3,6 +3,7 @@
 
 use super::*;
 use ambre_core::index::Pos;
+use ambre_core::{FracMs, Instant, PageLoad, TimeSpan};
 
 impl TrameView {
     /// Swap the active document in place (SPA route change). Drop every
@@ -345,7 +346,7 @@ impl TrameView {
 
     pub fn plan_repaint(
         &mut self,
-        _now: ambre_core::PageTime,
+        _now: Instant<PageLoad>,
         hud_tick: ambre_canvas::HudTick,
     ) -> RepaintPlan {
         // Formatting lives per-cell in the persistent cell layer, so a cursor
@@ -445,8 +446,8 @@ impl TrameView {
         // When the content layer is reused the renderer won't run; zero its HUD
         // sub-phase timings so they read 0 instead of stale values.
         if matches!(content, ContentRepaint::Reuse) {
-            self.draw_stats.background = ambre_core::PageMillis::ZERO;
-            self.draw_stats.cells = ambre_core::PageMillis::ZERO;
+            self.draw_stats.background = TimeSpan::<FracMs>::ZERO;
+            self.draw_stats.cells = TimeSpan::<FracMs>::ZERO;
             self.draw_stats.cells_drawn = ambre_canvas::CellsDrawn::ZERO;
         }
 

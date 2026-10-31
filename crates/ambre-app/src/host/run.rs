@@ -7,6 +7,7 @@
 // ============================================================================
 
 use super::*;
+use ambre_bus::{Instant, PageLoad};
 
 /// Run the UI thread: build the application view and drive it through a
 /// [`FrameHost`] on the requestAnimationFrame loop. DOM input and resize events
@@ -234,7 +235,7 @@ where
                     let now = event.time_stamp();
                     if host_c
                         .borrow_mut()
-                        .touch(phase, at, ambre_bus::PageTime::new(now))
+                        .touch(phase, at, Instant::<PageLoad>::new(now))
                         .is_yes()
                     {
                         event.prevent_default();

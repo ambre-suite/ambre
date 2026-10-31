@@ -2,6 +2,7 @@
 // TrameView: construction and inline-edit lifecycle (begin/commit/cancel).
 
 use super::*;
+use ambre_bus::{Instant, PageLoad};
 use ambre_core::index::{Delta, Pos};
 
 impl TrameView {
@@ -97,7 +98,7 @@ impl TrameView {
             edit_dirty: false,
             caret_on: true,
             caret_drawn: None,
-            last_blink: ambre_bus::PageTime::new(0.0),
+            last_blink: Instant::<PageLoad>::new(0.0),
             pending_input_mark: None,
             clock,
             text_pass: TextPass::WithText,

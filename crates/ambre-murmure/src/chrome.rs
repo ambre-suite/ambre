@@ -27,9 +27,9 @@ use crate::{
 };
 use ambre_bus::{AppCommand, MentionState};
 use ambre_bus::{
-    ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MessageAt,
-    MurmureCommand, MurmureEvent, Presence, RestCommand, RestEvent, SpaceCommand, SpaceEvent,
-    TextStyle, Timestamp, UiEvent,
+    Authored, ChannelMatches, ChannelPlace, DirectMessageEvent, Instant, LogicCommand, MemberView,
+    MessageAt, MurmureCommand, MurmureEvent, Presence, RestCommand, RestEvent, SpaceCommand,
+    SpaceEvent, TextStyle, UiEvent,
 };
 use ambre_chrome::{
     CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, PaletteKey,
@@ -574,7 +574,11 @@ impl MurmureRelay {
     /// pick for a composer waits for its region, and a pick for a message
     /// is the reaction to send (`MURMURE-139`, `MURMURE-140`). `None` with
     /// the picker closed, or for a composer.
-    pub fn pick_emoji(&self, emoji: ambre_bus::Emoji, now: Timestamp) -> Option<LogicCommand> {
+    pub fn pick_emoji(
+        &self,
+        emoji: ambre_bus::Emoji,
+        now: Instant<Authored>,
+    ) -> Option<LogicCommand> {
         let picking = self.picking.get_untracked()?;
         self.picking.set(None);
         match picking {
@@ -639,7 +643,7 @@ impl MurmureRelay {
 
     /// The command of the deletion the member confirmed, stamped `now`, and
     /// the dialog closed (`MURMURE-512`). `None` with none asked.
-    pub fn confirm_delete(&self, now: Timestamp) -> Option<LogicCommand> {
+    pub fn confirm_delete(&self, now: Instant<Authored>) -> Option<LogicCommand> {
         let pending = self.deleting.get_untracked()?;
         self.deleting.set(None);
         Some(pending.command(now))
@@ -647,7 +651,7 @@ impl MurmureRelay {
 
     /// The send the author confirmed, stamped `now`, and the dialog closed
     /// (`MURMURE-557`). `None` with none asked.
-    pub fn confirm_all(&self, now: Timestamp) -> Option<LogicCommand> {
+    pub fn confirm_all(&self, now: Instant<Authored>) -> Option<LogicCommand> {
         let asked = self.asking_all.get_untracked()?;
         self.asking_all.set(None);
         Some(asked.command(now))
@@ -859,7 +863,7 @@ impl MurmureRelay {
     /// The shown channel is ticked too, since a hidden tab draws no frame
     /// (`MURMURE-521`). A visible tab ticks it from its frames as well: the
     /// Logic thread sends one sample per period whoever ticks.
-    pub fn refresh_presence(&self, now: Timestamp) -> Vec<LogicCommand> {
+    pub fn refresh_presence(&self, now: Instant<Authored>) -> Vec<LogicCommand> {
         let mut commands: Vec<LogicCommand> = self.sidebar.with_untracked(|s| {
             s.spaces()
                 .iter()
@@ -1562,7 +1566,7 @@ pub fn MessageSearch(relay: MurmureRelay, send: Callback<LogicCommand>) -> impl 
 pub fn DeleteConfirm(
     relay: MurmureRelay,
     send: Callback<LogicCommand>,
-    now: Callback<(), Timestamp>,
+    now: Callback<(), Instant<Authored>>,
 ) -> impl IntoView {
     let open = RwSignal::new(ambre_chrome::Openness::Closed);
     Effect::new(move |_| {
@@ -1604,7 +1608,7 @@ pub fn DeleteConfirm(
 pub fn ChannelMentionConfirm(
     relay: MurmureRelay,
     send: Callback<LogicCommand>,
-    now: Callback<(), Timestamp>,
+    now: Callback<(), Instant<Authored>>,
 ) -> impl IntoView {
     let open = RwSignal::new(ambre_chrome::Openness::Closed);
     Effect::new(move |_| {
@@ -1748,7 +1752,7 @@ pub fn MarkBarPanel(relay: MurmureRelay) -> impl IntoView {
 pub fn EmojiPicker(
     relay: MurmureRelay,
     send: Callback<LogicCommand>,
-    now: Callback<(), Timestamp>,
+    now: Callback<(), Instant<Authored>>,
 ) -> impl IntoView {
     let open = RwSignal::new(ambre_chrome::Openness::Closed);
     let query = RwSignal::new(String::new());

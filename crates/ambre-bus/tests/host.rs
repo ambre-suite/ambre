@@ -22,10 +22,10 @@
 use ambre_bus::app::toile::{PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::next_request;
 use ambre_bus::{
-    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelMeta,
+    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, Authored, CellFormat, ChannelMeta,
     ChannelName, ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, FoldAnswer,
-    LeaseAnswer, LogicEvent, MemberChannel, MemberInfo, MemberStanding, OpenFailure, RestCommand,
-    RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand,
+    Instant, LeaseAnswer, LogicEvent, MemberChannel, MemberInfo, MemberStanding, OpenFailure,
+    RestCommand, RestEvent, Role, SelectionKind, SyncCommand, TrameCommand,
 };
 use ambre_bus::{Col, Decimals, DecimalsStep, Row};
 use ambre_core::id::{
@@ -33,6 +33,7 @@ use ambre_core::id::{
 };
 use ambre_core::index::{Count, Pos};
 use ambre_core::{BoardLength, Generation};
+use ambre_core::{Ms, PageLoad, TimeSpan};
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
 
@@ -783,7 +784,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
                 horizon: ambre_bus::Seq::new(42),
-                expires_in: ambre_core::Millis::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         },
         LogicEvent::SegmentFinalized {
@@ -804,7 +805,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 horizon: ambre_bus::Seq::new(42),
                 amendments: Id::<Document>::mint(),
                 amendments_seq: ambre_bus::Seq::new(7),
-                expires_in: ambre_core::Millis::new(30_000),
+                expires_in: TimeSpan::<Ms>::new(30_000),
             },
         },
         LogicEvent::SegmentFolded {
@@ -952,7 +953,7 @@ fn request_id_echo_is_preserved_across_the_hop() {
             invitee: Id::<User>::mint(),
             role: Role::Editor,
             expect_exchange_pub_key: ambre_core::FixedBytes::from_array([0u8; 32]),
-            now: Timestamp::new(0),
+            now: Instant::<Authored>::new(0),
         },
     };
     let bytes = postcard::to_allocvec(&cmd).unwrap();
@@ -1006,7 +1007,7 @@ fn read_only_and_local_commands_are_not_mutating() {
         // Toile: ephemeral only -- a viewer still shows a cursor (`toile-presence`).
         AppCommand::Toile(ToileCommand::Presence {
             payload: PresencePayload::default(),
-            now: ambre_core::PageTime::new(0.0),
+            now: Instant::<PageLoad>::new(0.0),
         }),
     ];
     for cmd in cases {

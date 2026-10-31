@@ -205,7 +205,7 @@ pub fn update_drag(&mut self, at: Point<Px<View>>);
 
 /// One tick, once a frame: scroll by the armed speed, clamped (`PROSE-UI-025`), then
 /// re-resolve the last pointer so the selection follows the revealed text (`PROSE-UI-038`).
-pub fn tick_autoscroll(&mut self, now: PageTime) -> bool;
+pub fn tick_autoscroll(&mut self, now: Instant<PageLoad>) -> bool;
 ```
 
 The armed velocity and the anchor live in the UI state and nowhere else

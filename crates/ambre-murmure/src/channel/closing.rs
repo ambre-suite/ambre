@@ -5,9 +5,9 @@
 //! with its answer (`MURMURE-011`). Every client that writes the answer
 //! writes the same entries, so two writers converge on one successor.
 
-use ambre_bus::{MurmureEvent, Timestamp};
+use ambre_bus::{Authored, Instant, MurmureEvent};
 use ambre_core::id::{Id, Segment};
-use ambre_core::{ByteSize, DeltaBytes, FailureCount, Millis, Payload, PeerEntryBytes};
+use ambre_core::{ByteSize, DeltaBytes, FailureCount, Ms, Payload, PeerEntryBytes, TimeSpan};
 use loro::{ExportMode, LoroDoc};
 
 use super::{
@@ -49,7 +49,7 @@ pub const SEGMENT_SNAPSHOT_SIZE: ByteSize = ByteSize::new(2 * 1024 * 1024);
 
 /// The delay before a successor that failed to open is fetched again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
-pub const SUCCESSOR_RETRY: Millis = Millis::new(1_000);
+pub const SUCCESSOR_RETRY: TimeSpan<Ms> = TimeSpan::<Ms>::new(1_000);
 
 /// The failures past which a successor is no longer fetched again.
 const SUCCESSOR_FAILURES: FailureCount = FailureCount::new(5);
@@ -61,7 +61,7 @@ pub(super) struct Retry {
     segment: Id<Segment>,
     failures: FailureCount,
     /// Stamped by the first tick past the failure: the engine reads no clock.
-    at: Option<Timestamp>,
+    at: Option<Instant<Authored>>,
 }
 
 pub use ambre_bus::app::murmure::Successor;
@@ -186,7 +186,7 @@ impl ChannelState {
         closing: Id<Segment>,
         active: Id<Segment>,
         successor: Successor,
-        now: Timestamp,
+        now: Instant<Authored>,
     ) -> Result<Closed, MurmureError> {
         if closing != self.active_id() {
             return Err(MurmureError::NotActive(closing.document_id()));
@@ -292,7 +292,7 @@ impl ChannelState {
     ///
     /// Messages still go to the active segment meanwhile, never to the
     /// successor that did not open.
-    pub fn successor_to_retry(&mut self, now: Timestamp) -> Option<Id<Segment>> {
+    pub fn successor_to_retry(&mut self, now: Instant<Authored>) -> Option<Id<Segment>> {
         if self.successor.is_some() || self.closing.is_some() {
             return None;
         }
@@ -351,7 +351,7 @@ fn record_close(
     meta: &LoroDoc,
     closing: Id<Segment>,
     active: Id<Segment>,
-    now: Timestamp,
+    now: Instant<Authored>,
 ) -> Result<(), MurmureError> {
     let list = crate::schema::root_list(meta, Root::Segments);
     let mut listed = false;
