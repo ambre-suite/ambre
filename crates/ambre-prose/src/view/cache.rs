@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{DocPx, FootnoteId};
+use ambre_core::{DocPx, FootnoteId, Generation, GenerationKind};
 use loro::TreeID;
 
 use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
@@ -41,14 +41,11 @@ pub const RUN_CACHE_RUNS: CachedRunCount = CachedRunCount::new(500);
 
 /// When an entry was last painted: the cache counts each paint. Only the
 /// order of two ticks means something.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-struct PaintTick(u64);
+enum PaintTick {}
 
-impl PaintTick {
-    /// The tick after this one, held at the top.
-    fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+impl GenerationKind for PaintTick {
+    type IssueRight = ();
+    const NAME: &'static str = "PaintTick";
 }
 
 /// Where one glyph run of a shaped run sits.
@@ -109,7 +106,7 @@ static NO_GLYPHS: RunDrawState = RunDrawState {
 struct Entry {
     run: ShapedRun,
     draw: RunDrawState,
-    used: PaintTick,
+    used: Generation<PaintTick>,
 }
 
 /// The drawing state of the runs painted lately, bounded (`PROSE-UI-019`).
@@ -120,7 +117,7 @@ struct Entry {
 pub struct RunCache {
     entries: HashMap<RunKey, Entry>,
     capacity: CachedRunCount,
-    tick: PaintTick,
+    tick: Generation<PaintTick>,
     built: BuildCount,
 }
 
@@ -137,7 +134,7 @@ impl RunCache {
         Self {
             entries: HashMap::new(),
             capacity: capacity.max(CachedRunCount::new(1)),
-            tick: PaintTick::default(),
+            tick: Generation::ZERO,
             built: BuildCount::ZERO,
         }
     }

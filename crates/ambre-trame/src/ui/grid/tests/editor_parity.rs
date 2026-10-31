@@ -109,7 +109,7 @@ fn assert_parity(seed: &str, ops: &[Op]) {
     let mut fcx = FontContext::default();
     let mut cell = CellEditor::new(
         CellPos::new(Row::ZERO, Col::ZERO),
-        crate::EditSessionId::FIRST,
+        ambre_bus::Token::FIRST,
         seed.to_owned(),
     );
     let mut core = TextEditor::new(seed, style());

@@ -220,7 +220,7 @@ pub(crate) enum HeldCommand {
     Space(ambre_bus::SpaceId, ambre_bus::SpaceCommand),
     /// An invite into a direct message, held until its notice can be
     /// written (the Murmure channels spec).
-    Invite(ambre_bus::RequestId, ambre_bus::RestCommand),
+    Invite(Generation<Request>, ambre_bus::RestCommand),
 }
 
 /// The counts of an open channel, `None` when a part of them is unknown
@@ -2135,7 +2135,7 @@ mod tests {
 
     fn signed_in(state: &mut LogicState, user: UserId) {
         state.handle_logic_event(LogicEvent::Rest {
-            id: RequestId(0),
+            id: None,
             evt: RestEvent::SessionReady {
                 user_id: user,
                 display_name: ambre_core::DisplayName::new("alice").unwrap(),
@@ -3766,7 +3766,9 @@ mod tests {
     }
 
     /// The erase a delete asks for, as `(request, document, file)`.
-    fn erases(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, ambre_core::ContentHash)> {
+    fn erases(
+        sent: &[SyncCommand],
+    ) -> Vec<(Generation<Request>, DocumentId, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3791,7 +3793,7 @@ mod tests {
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         let file = ContentHash::parse(&"cd".repeat(32)).expect("a content hash");
-        let (up, down) = (RequestId(41), RequestId(42));
+        let (up, down) = (Generation::nth(41), Generation::nth(42));
         drain(&sync);
 
         for asked in [
@@ -3904,7 +3906,7 @@ mod tests {
 
         drain(&ui);
         state.handle_logic_event(LogicEvent::Rest {
-            id: again,
+            id: Some(again),
             evt: RestEvent::MediaErased {
                 document_id: meta,
                 content_hash: ContentHash::parse(&file).expect("a content hash"),
@@ -3922,7 +3924,9 @@ mod tests {
     }
 
     /// The image of a preview, as `(request, document, file)`.
-    fn downloads(sent: &[SyncCommand]) -> Vec<(RequestId, DocumentId, ambre_core::ContentHash)> {
+    fn downloads(
+        sent: &[SyncCommand],
+    ) -> Vec<(Generation<Request>, DocumentId, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3967,7 +3971,7 @@ mod tests {
             .expect("png");
         drain(&ui);
         state.handle_logic_event(LogicEvent::Rest {
-            id: *id,
+            id: Some(*id),
             evt: RestEvent::MediaDownloaded {
                 document_id: meta,
                 content_hash: file.clone(),

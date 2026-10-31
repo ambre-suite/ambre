@@ -131,6 +131,7 @@ pub use font::{
     FontFamily, FontSize, FontWeight, InvalidFontSize, InvalidFontWeight, Slant, Strikethrough,
     Underline, Weight, WordBreak,
 };
+pub use generation::{Generation, GenerationKind, Issuer, SharedIssuer};
 pub use id::{
     CategoryId, ChannelId, CommentId, DocumentId, FootnoteId, LeaseId, MeetingId, MessageId,
     MetaId, OrgId, ReplyId, SegmentId, SnapshotId, SpaceId, SuggestionId, UserId,

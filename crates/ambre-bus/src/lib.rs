@@ -12,7 +12,7 @@
 //!   and display types. Those modules (`app::trame`, `app::toile`) are re-exported
 //!   flat at the crate root. Document edits and viewport data, routed by
 //!   `DocumentId`. (See `ambre-spec-message-bus.md`.)
-//! - **Service** (`RestCommand`/`RestEvent` + `RequestId` in [`rest`]) -- the
+//! - **Service** (`RestCommand`/`RestEvent` + `Request` in [`rest`]) -- the
 //!   correlatable request/response family carried by `...::Rest { id, ... }` on all
 //!   four envelopes, defined once and forwarded verbatim.
 //!
@@ -22,7 +22,7 @@
 //! `Rest*` payloads it carries, derives `Serialize`/`Deserialize` and is postcard-encoded
 //! on that hop.
 
-mod token;
+pub mod token;
 
 pub mod activity;
 pub mod app;
@@ -64,20 +64,21 @@ pub use app::trame::{
     CellStyle, CellValueKind, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan,
     ColVec, CondFormatId, CondFormatKind, CondFormatPriority, CondStyle, CsvDelimiter, DateParts,
     DateSerial, DayCount, DayOfMonth, DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell,
-    EditSessionId, FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, Merge,
-    MergeSpan, Month, MonthCount, Percent, Row, RowCount, RowDelta, RowFilter, RowSpan, RowVec,
-    SelectionKind, SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos,
-    Slant, SortKey, SortOrder, Strikethrough, StylePatch, TrameCommand, TrameEvent, Underline,
-    VAlign, ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
+    EditSession, FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, Merge, MergeSpan,
+    Month, MonthCount, Percent, Row, RowCount, RowDelta, RowFilter, RowSpan, RowVec, SelectionKind,
+    SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos, Slant, SortKey,
+    SortOrder, Strikethrough, StylePatch, TrameCommand, TrameEvent, Underline, VAlign,
+    ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
 };
 pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};
 pub use outbox::{Load, Outbox, SendOutcome};
 pub use rest::{
-    DocumentSummary, DraftKey, KeySetup, MemberInfo, MemberStanding, RequestId, RestCommand,
-    RestEvent, RowPlace, SealedRow, SecretBytes, SecretString, UserInfo,
+    DocumentSummary, DraftKey, KeySetup, MemberInfo, MemberStanding, Request, RestCommand,
+    RestEvent, RowPlace, SealedRow, SecretBytes, SecretString, UserInfo, next_request,
 };
 pub use sink::CommandSink;
+pub use token::{Token, TokenKind};
 pub use ui::{AppEvent, MentionState, UiEvent};
 
 /// App-agnostic clipboard transport carried across the host <-> view seam and, serialized,
@@ -163,30 +164,17 @@ impl ClipboardBlob {
 
 /// The version of a view's request, echoed by the Logic thread's answer: the
 /// view drops an answer older than the last it accepted (`BUS-017`). A
-/// distinct type, so a sequence number or a count never takes its place.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    Hash,
-    PartialOrd,
-    Ord,
-    serde::Serialize,
-    serde::Deserialize,
-)]
-#[serde(transparent)]
-pub struct ViewportVersion(pub u64);
+/// distinct family, so a sequence number or a count never takes its place.
+/// It crosses the bus, so its serde form is the bare number. It saturates
+/// rather than wraps, so a wrapped answer never reads as an older one.
+pub enum ViewportVersion {}
 
-impl ViewportVersion {
-    /// The version after this one.
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0.wrapping_add(1))
-    }
+impl ambre_core::GenerationKind for ViewportVersion {
+    type IssueRight = ();
+    const NAME: &'static str = "ViewportVersion";
 }
+
+impl ambre_core::generation::Wire for ViewportVersion {}
 
 /// This tab's clipboard ownership token (`UI-THREAD-007`): written beside a
 /// copy, and read back to know a paste is of this tab's own copy. A distinct

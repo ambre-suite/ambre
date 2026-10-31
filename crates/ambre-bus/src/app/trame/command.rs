@@ -11,11 +11,14 @@ use crate::UserId;
 // Trame (spreadsheet) -- commands (UI -> Logic)
 // -----------------------------------------------------------------------------
 
-crate::token::define_token! {
-    /// The token the UI knows an open cell-edit session by, echoed in every
-    /// event about it (`trame-cell-editing`). The view mints the tokens, one
-    /// per session, so an event about a closed session matches no open editor.
-    pub struct EditSessionId;
+/// The family of the tokens the UI knows an open cell-edit session by,
+/// echoed in every event about it (`trame-cell-editing`). The view mints the
+/// tokens, one per session, so an event about a closed session matches no
+/// open editor.
+pub enum EditSession {}
+
+impl crate::token::TokenKind for EditSession {
+    const NAME: &'static str = "EditSessionId";
 }
 
 /// A text refused as a defined name: empty, or not a letter or underscore
@@ -282,7 +285,7 @@ pub enum TrameCommand {
     /// `version` is a monotonic counter: the UI Thread drops any response
     /// whose version is older than the last accepted one.
     ScrollViewport {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         row_start: Row,
         row_end: Row,
         col_start: Col,
@@ -333,7 +336,7 @@ pub enum TrameCommand {
     /// writes nothing. A later commit reaches that cell wherever a peer moved it.
     /// A new session replaces the previous one.
     BeginCellEdit {
-        session: EditSessionId,
+        session: crate::token::Token<EditSession>,
         row: Row,
         col: Col,
     },
@@ -343,14 +346,16 @@ pub enum TrameCommand {
     /// gone, and [`EditTargetGone`](super::TrameEvent::EditTargetGone) said so.
     /// Opens the undo group [`CommitEdit`](TrameCommand::CommitEdit) seals.
     CommitCellEdit {
-        session: EditSessionId,
+        session: crate::token::Token<EditSession>,
         text: String,
     },
 
     /// Close session `session` with no write: an Escape, or a fill that writes
     /// the selection instead. A no-op for a session the Logic thread no longer
     /// holds.
-    EndCellEdit { session: EditSessionId },
+    EndCellEdit {
+        session: crate::token::Token<EditSession>,
+    },
 
     /// Set the plaintext content of many cells in one shot, as `(row, col, text)`
     /// triples. Emitted for a multi-cell fill (Ctrl+Enter) or a clear over a
@@ -448,7 +453,7 @@ pub enum TrameCommand {
     /// [`DataReset`]: super::TrameEvent::DataReset [`ViewportData`]:
     /// super::TrameEvent::ViewportData
     ResizeCol {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         sheet_id: SheetId,
         col: Col,
         width: ambre_core::DocPx,
@@ -456,7 +461,7 @@ pub enum TrameCommand {
     /// Set the height (document px, before the zoom) of row `row` on `sheet_id`. Row analogue of
     /// [`ResizeCol`](TrameCommand::ResizeCol): writes `row_heights_{sheet}`.
     ResizeRow {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         sheet_id: SheetId,
         row: Row,
         height: ambre_core::DocPx,

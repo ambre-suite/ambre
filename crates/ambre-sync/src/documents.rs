@@ -5,7 +5,7 @@ use crate::http::Reported;
 impl SyncState {
     // -- Document CRUD (HTTP REST) ---------------------------------------------
 
-    pub(crate) fn handle_list_documents(&self, id: RequestId) {
+    pub(crate) fn handle_list_documents(&self, id: Generation<Request>) {
         let event_tx = self.event_tx.clone();
 
         if let Some(tx) = event_tx {
@@ -114,7 +114,7 @@ impl SyncState {
 
     pub(crate) fn handle_create_document(
         &mut self,
-        id: RequestId,
+        id: Generation<Request>,
         doc_type: DocType,
         name: ambre_core::Name,
     ) {
@@ -209,7 +209,11 @@ impl SyncState {
         }
     }
 
-    pub(crate) fn handle_delete_document(&mut self, id: RequestId, document_id: DocumentId) {
+    pub(crate) fn handle_delete_document(
+        &mut self,
+        id: Generation<Request>,
+        document_id: DocumentId,
+    ) {
         let event_tx = self.event_tx.clone();
 
         if let Some(tx) = event_tx {
@@ -241,7 +245,7 @@ impl SyncState {
 
     pub(crate) fn handle_rename_document(
         &mut self,
-        id: RequestId,
+        id: Generation<Request>,
         document_id: DocumentId,
         name: ambre_core::Name,
     ) {

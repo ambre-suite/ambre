@@ -69,6 +69,9 @@ console_error_panic_hook = { workspace = true }
 # the crate is empty and the native tier skips it. See ambre-spec-testing.md.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+# `Generation::nth` for a test that names a count. Test builds alone, held by
+# `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
+ambre-core = { path = "../ambre-core", features = ["testing"] }
 # The recording surface, so the child paint pass is checked without a GPU.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 # A conversation fed to a Murmure view, so a cell's copy has text to write.

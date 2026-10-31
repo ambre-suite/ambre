@@ -168,6 +168,7 @@ dependencies = [
  "serde_json",
  "subtle",
  "thiserror 2.0.18",
+ "toml",
  "uuid",
  "zeroize",
 ]

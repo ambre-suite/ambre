@@ -27,7 +27,7 @@ impl SyncState {
     /// throughout, which is why the work sits over here.
     pub(crate) fn handle_seal_doc_file(
         &self,
-        id: RequestId,
+        id: Generation<Request>,
         plaintext: SecretBytes,
         passphrase: ambre_core::Passphrase,
     ) {
@@ -57,7 +57,7 @@ impl SyncState {
     /// too thin to tell them apart earlier (`DOCFILE-016`).
     pub(crate) fn handle_open_doc_file(
         &self,
-        id: RequestId,
+        id: Generation<Request>,
         sealed: ambre_core::SealedContainer,
         passphrase: ambre_core::Passphrase,
     ) {

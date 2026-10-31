@@ -386,7 +386,7 @@ pub struct TrameView {
     editor: Option<CellEditor>,
     /// The token the next edit session opens under. Each session takes it and
     /// moves it on, so an event about a closed session matches no open editor.
-    next_edit_session: crate::EditSessionId,
+    next_edit_session: ambre_bus::Token<crate::EditSession>,
     /// A commit requested from a grid key / click, deferred to the next paint. The
     /// shared editor applies edits only at paint-time flush, since a `FontContext`
     /// is live only then. The buffer is not final when the key is handled, so the
@@ -642,15 +642,13 @@ mod tests {
             col_end: Col::new(5),
         };
         let mut queue = ViewportQueue::default();
-        queue.coalesce(scroll(ambre_bus::ViewportVersion(1)));
-        queue.coalesce(scroll(ambre_bus::ViewportVersion(2)));
+        queue.coalesce(scroll(ambre_core::Generation::nth(1)));
+        queue.coalesce(scroll(ambre_core::Generation::nth(2)));
         assert!(
             matches!(
                 queue.take(),
-                Some(TrameCommand::ScrollViewport {
-                    version: ambre_bus::ViewportVersion(2),
-                    ..
-                })
+                Some(TrameCommand::ScrollViewport { version, .. })
+                    if version == ambre_core::Generation::nth(2)
             ),
             "the newer request wins"
         );
@@ -702,7 +700,7 @@ mod tests {
 
     fn scroll_cmd(version: u64) -> TrameCommand {
         TrameCommand::ScrollViewport {
-            version: ambre_bus::ViewportVersion(version),
+            version: ambre_core::Generation::nth(version),
             row_start: Row::ZERO,
             row_end: Row::ZERO,
             col_start: Col::ZERO,
@@ -722,10 +720,8 @@ mod tests {
         assert!(
             matches!(
                 sent,
-                TrameCommand::ScrollViewport {
-                    version: ambre_bus::ViewportVersion(2),
-                    ..
-                }
+                TrameCommand::ScrollViewport { version, .. }
+                    if version == ambre_core::Generation::nth(2)
             ),
             "the newest request wins"
         );
@@ -742,10 +738,8 @@ mod tests {
         let again = q.take().expect("re-offered");
         assert!(matches!(
             again,
-            TrameCommand::ScrollViewport {
-                version: ambre_bus::ViewportVersion(3),
-                ..
-            }
+            TrameCommand::ScrollViewport { version, .. }
+                if version == ambre_core::Generation::nth(3)
         ));
         assert!(q.take().is_none());
     }

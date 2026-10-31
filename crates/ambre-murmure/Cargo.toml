@@ -39,6 +39,9 @@ leptos       = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+# `Generation::nth` for a test that names a count. Test builds alone, held by
+# `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
+ambre-core = { path = "../ambre-core", features = ["testing"] }
 # Headless paint tests: the RecordingSurface mock of the drawing surface.
 ambre-draw = { path = "../ambre-draw", features = ["testing"] }
 serde_json = { workspace = true }

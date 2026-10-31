@@ -1901,14 +1901,16 @@ impl fmt::Debug for SlideChange {
     }
 }
 
-crate::token::define_token! {
-    /// The token a `CreateElement` carries and its `ElementCreated` echoes, so
-    /// the view that asked claims the element it created and no other
-    /// (`TOILE-UI-194`).
-    ///
-    /// No token is zero, so "no deferred open" is an `Option` and never a
-    /// reserved value. The view mints the tokens, one after another.
-    pub struct CorrelationToken;
+/// The family of the token a `CreateElement` carries and its
+/// `ElementCreated` echoes. The view that asked claims the element it
+/// created and no other (`TOILE-UI-194`).
+///
+/// No token is zero, so "no deferred open" is an `Option` and never a
+/// reserved value. The view mints the tokens, one after another.
+pub enum ElementCreation {}
+
+impl crate::token::TokenKind for ElementCreation {
+    const NAME: &'static str = "CorrelationToken";
 }
 
 /// Whether an element refuses every write (`TOILE-033`).
@@ -1953,7 +1955,7 @@ pub enum ToileCommand {
         /// A request token the engine echoes in `ElementCreated`, so a
         /// deferred open claims the element this command created and no other
         /// (`TOILE-UI-194`). `None` when no deferred open is pending.
-        correlate: Option<CorrelationToken>,
+        correlate: Option<crate::token::Token<ElementCreation>>,
     },
     MoveElements {
         ids: Vec<ElementId>,
@@ -2765,7 +2767,7 @@ pub enum ToileEvent {
     /// open.
     ElementCreated {
         id: ElementId,
-        correlate: Option<CorrelationToken>,
+        correlate: Option<crate::token::Token<ElementCreation>>,
     },
     /// Result of `CopyElements`: the UI stashes it and may mirror it to the OS
     /// clipboard for cross-tab paste (`toile-clipboard`).
@@ -3009,7 +3011,7 @@ pub struct DisplayViewport {
     /// How many viewport requests the Logic thread had applied when it built
     /// this frame. The view drops a frame older than the one it last accepted
     /// (`BUS-017`).
-    pub version: crate::ViewportVersion,
+    pub version: ambre_core::Generation<crate::ViewportVersion>,
     pub viewport: Viewport,
     /// The board's grid unit in world units, as its `board` register holds it.
     /// The grid step is a power-of-two multiple of it (`TOILE-UI-279`). The

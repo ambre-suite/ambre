@@ -52,7 +52,7 @@ impl TrameUiState {
     /// Mint the next monotonic command version (shared with the viewport
     /// request). Used by commands that carry a `version` for echo ordering, for example
     /// [`TrameCommand::ResizeCol`].
-    pub fn bump_version(&mut self) -> ambre_bus::ViewportVersion {
+    pub fn bump_version(&mut self) -> ambre_core::Generation<ambre_bus::ViewportVersion> {
         let v = self.next_version;
         self.next_version = self.next_version.next();
         v

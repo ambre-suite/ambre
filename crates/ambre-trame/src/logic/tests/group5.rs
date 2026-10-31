@@ -581,7 +581,7 @@ fn paste_reindexes_relative_formula() {
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_bus::ViewportVersion(1),
+        version: ambre_core::Generation::nth(1),
         row_start: Row::new(0),
         row_end: Row::new(3),
         col_start: Col::new(0),
@@ -640,7 +640,7 @@ fn fill_auto_extrapolates_numeric_series() {
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_bus::ViewportVersion(1),
+        version: ambre_core::Generation::nth(1),
         row_start: Row::new(0),
         row_end: Row::new(4),
         col_start: Col::new(0),
@@ -698,7 +698,7 @@ fn fill_auto_copies_text_and_reindexes_formula() {
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_bus::ViewportVersion(1),
+        version: ambre_core::Generation::nth(1),
         row_start: Row::new(0),
         row_end: Row::new(1),
         col_start: Col::new(0),
@@ -741,7 +741,7 @@ fn fill_series_single_cell_increments_by_one() {
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_bus::ViewportVersion(1),
+        version: ambre_core::Generation::nth(1),
         row_start: Row::new(0),
         row_end: Row::new(3),
         col_start: Col::new(0),
@@ -793,7 +793,7 @@ fn fill_copy_multi_cell_tiles_verbatim() {
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
-        version: ambre_bus::ViewportVersion(1),
+        version: ambre_core::Generation::nth(1),
         row_start: Row::new(0),
         row_end: Row::new(5),
         col_start: Col::new(0),

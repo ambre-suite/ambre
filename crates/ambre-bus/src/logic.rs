@@ -24,10 +24,10 @@
 //!   kept explicit.
 
 use crate::{
-    ChannelId, DirectMember, DirectMessageDraft, DocType, DocumentId, MurmureCommand, RequestId,
+    ChannelId, DirectMember, DirectMessageDraft, DocType, DocumentId, MurmureCommand, Request,
     RestCommand, SpaceCommand, SpaceId, Timestamp,
 };
-use ambre_core::SessionNonce;
+use ambre_core::{Generation, SessionNonce};
 
 // The typed application data plane carried by `LogicCommand::App` lives per-app under
 // `crate::app`, command + event + value types grouped by document type. This envelope
@@ -130,7 +130,10 @@ pub enum LogicCommand {
     /// to the Sync thread as [`SyncCommand::Rest`], echoing `id` on the response.
     ///
     /// [`SyncCommand::Rest`]: crate::SyncCommand::Rest
-    Rest { id: RequestId, cmd: RestCommand },
+    Rest {
+        id: Generation<Request>,
+        cmd: RestCommand,
+    },
 
     // -- P3 -- Control plane (fire-and-forget, no correlatable response) ---------
     /// Open a real-time sync session for a document.
@@ -171,7 +174,7 @@ pub enum LogicCommand {
     /// (the Murmure channels spec). The key is the one the user confirmed.
     /// Answered as a [`crate::RestCommand::InviteToDocument`] under `id`.
     InviteToChannel {
-        id: RequestId,
+        id: Generation<Request>,
         channel_id: ChannelId,
         invitee: DirectMember,
         /// The instant the user confirmed, which stamps a notice.

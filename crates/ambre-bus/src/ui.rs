@@ -15,7 +15,7 @@
 //! - **Content** ([`UiEvent::Viewport`] / [`UiEvent::Presence`]): typed
 //!   [`AppEvent`]s computed by the Logic thread, routed by `DocumentId`.
 //! - **Service** ([`UiEvent::Rest`]): a [`RestEvent`] response forwarded from
-//!   [`crate::LogicEvent::Rest`], echoing the originating [`RequestId`].
+//!   [`crate::LogicEvent::Rest`], echoing the originating [`Request`].
 //! - **Push & status** (`ConnectionStatus`, `SyncWarning`, `MemberRevoked`,
 //!   channel/meeting push, `AuthError`, `ApiError`, `FatalError`, `SetupRequired`,
 //!   `UpdateRequired`): unsolicited.
@@ -23,7 +23,7 @@
 use crate::sync_warning::SyncWarningCode;
 use crate::{
     ChannelActivity, ChannelId, ChannelMatches, DirectMessageEvent, DocType, DocumentId, MeetingId,
-    MemberChannel, MurmureEvent, RequestId, RestEvent, Role, SpaceEvent, SpaceId, UserId,
+    MemberChannel, MurmureEvent, Request, RestEvent, Role, SpaceEvent, SpaceId, UserId,
 };
 
 // -----------------------------------------------------------------------------
@@ -61,9 +61,13 @@ pub enum UiEvent {
     },
 
     // -- Service plane (relayed request/response) ------------------------------
-    /// A [`RestEvent`] response, echoing the originating [`RequestId`] so the UI
+    /// A [`RestEvent`] response, echoing the originating [`Request`] so the UI
     /// can route it to the call-site that issued the [`crate::RestCommand`].
-    Rest { id: RequestId, evt: RestEvent },
+    /// `None` for an answer no request asked for.
+    Rest {
+        id: Option<ambre_core::Generation<Request>>,
+        evt: RestEvent,
+    },
 
     // -- Connection / status (server push) -------------------------------------
     /// WebSocket connection status for a document (online / offline indicator).
@@ -195,11 +199,11 @@ pub enum UiEvent {
     ///
     /// `request` identifies the originating command so the UI Thread can correlate the
     /// error to the triggering action. `failure` says whether the relay answered, with
-    /// what status and code, or whether the request failed on this device. `id` echoes the originating [`RequestId`] when the
+    /// what status and code, or whether the request failed on this device. `id` echoes the originating [`Request`] when the
     /// failed command carried one, so a UI-issued request can be matched to its failure. It
     /// is `None` for a spontaneous error.
     ApiError {
-        id: Option<RequestId>,
+        id: Option<ambre_core::Generation<Request>>,
         request: crate::ApiRequest,
         failure: ambre_core::ApiFailure,
         message: String,

@@ -73,6 +73,11 @@ ambre-chrome = { path = "../ambre-chrome" }
 leptos = { workspace = true }
 web-sys = { workspace = true }
 
+[dev-dependencies]
+# `Generation::nth` for a test that names a count. Test builds alone, held by
+# `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
+ambre-core = { path = "../ambre-core", features = ["testing"] }
+
 # Placement holds universal rules over an unenumerated input space: a walk that
 # terminates, a page it never goes back to, and a cut only ever taken at a line
 # (`PROSE-017`, `PROSE-078`, `PROSE-071`). proptest pulls `wait-timeout`, which

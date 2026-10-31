@@ -18,8 +18,8 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
-    ClipboardPayload as ToileClipboardPayload, ConnectorId, CorrelationToken, DisplayConnector,
-    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End,
+    ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
+    DisplayGeom, DisplayNode, DisplayViewport, ElementCreation, ElementId, ElementKind, End,
     LinkTarget, PresencePayload, PresentMode, StatsRequestKind, ThreadId, ToileCommand, ToileError,
     ToileEvent, Viewport,
 };
@@ -368,9 +368,9 @@ pub struct ToileView {
     /// The `correlate` token the Sticky / Text tool's `CreateElement` carried,
     /// so the deferred open claims that element and no other (`TOILE-UI-194`).
     /// `None` when no placement awaits its reply.
-    edit_open_on_create: Option<CorrelationToken>,
+    edit_open_on_create: Option<ambre_bus::Token<ElementCreation>>,
     /// The token the next placement's `CreateElement.correlate` carries.
-    next_create_token: CorrelationToken,
+    next_create_token: ambre_bus::Token<ElementCreation>,
     /// Deferred close: the editor commits its buffer as `SetText` and closes on
     /// the next paint (so any intents typed since the last paint flush first).
     edit_closing: bool,
@@ -429,7 +429,7 @@ pub struct ToileView {
     pending_viewport: Option<Viewport>,
     /// The version of the last frame the view accepted. An older one is a
     /// stale answer, and the view drops it (`BUS-017`).
-    accepted_version: ambre_bus::ViewportVersion,
+    accepted_version: ambre_core::Generation<ambre_bus::ViewportVersion>,
     initial_viewport_sent: bool,
     fatal: bool,
 
@@ -743,7 +743,7 @@ impl ToileView {
                 canvas_height.get(),
             )),
             display: DisplayViewport {
-                version: ambre_bus::ViewportVersion(0),
+                version: ambre_core::Generation::ZERO,
                 grid_unit: super::grid::BASE_GRID,
                 reactions: Default::default(),
                 pins: Vec::new(),
@@ -768,7 +768,7 @@ impl ToileView {
             edit_frame: None,
             edit_pending_open: None,
             edit_open_on_create: None,
-            next_create_token: CorrelationToken::FIRST,
+            next_create_token: ambre_bus::Token::FIRST,
             edit_closing: false,
             caret_drawn: None,
             edit_dirty: false,
@@ -792,7 +792,7 @@ impl ToileView {
             viewport_changed: false,
             data_dirty: false,
             pending_viewport: None,
-            accepted_version: ambre_bus::ViewportVersion(0),
+            accepted_version: ambre_core::Generation::ZERO,
             initial_viewport_sent: false,
             fatal: false,
             pending_clipboard: None,
@@ -4359,7 +4359,7 @@ impl ToileView {
         self.close_all_embeds();
         self.document_id = document_id;
         self.display = DisplayViewport {
-            version: ambre_bus::ViewportVersion(0),
+            version: ambre_core::Generation::ZERO,
             grid_unit: super::grid::BASE_GRID,
             reactions: Default::default(),
             pins: Vec::new(),
@@ -4391,7 +4391,7 @@ impl ToileView {
         self.gesture_commit_pending = false;
         self.initial_viewport_sent = false;
         self.pending_viewport = None;
-        self.accepted_version = ambre_bus::ViewportVersion(0);
+        self.accepted_version = ambre_core::Generation::ZERO;
         self.needs_full = true;
         // Keep the transparent text pipe focused so the keyboard works on the
         // freshly-routed board without a click.

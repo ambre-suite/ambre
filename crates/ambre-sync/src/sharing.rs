@@ -20,8 +20,9 @@ use x25519_dalek::StaticSecret;
 
 use ambre_bus::{
     ApiFailure, ApiRequest, ChannelDocumentKind, ChannelId, DocumentId, LogicEvent, MemberInfo,
-    MessageId, RequestId, Role, SegmentId, UserId,
+    MessageId, Request, Role, SegmentId, UserId,
 };
+use ambre_core::Generation;
 
 use crate::http;
 use crate::membership_log::{self, Draft, Log, LogHead, LogRule};
@@ -431,7 +432,7 @@ fn failed(logic_tx: &LogicSink, request: ApiRequest, error: impl http::Reported)
 
 /// Inputs for [`invite_task`], gathered from `SyncState` before spawning.
 pub(crate) struct InviteParams {
-    pub id: RequestId,
+    pub id: Generation<Request>,
     pub document_id: DocumentId,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
@@ -632,7 +633,7 @@ pub(crate) enum InviteeName {
 
 /// Inputs for [`fetch_invitee_key_task`] (TOFU phase 1).
 pub(crate) struct FetchInviteeKeyParams {
-    pub id: RequestId,
+    pub id: Generation<Request>,
     pub document_id: DocumentId,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
@@ -694,7 +695,7 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
 
 /// Inputs for [`fetch_member_key_task`].
 pub(crate) struct FetchMemberKeyParams {
-    pub id: RequestId,
+    pub id: Generation<Request>,
     pub user_id: UserId,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
@@ -741,7 +742,7 @@ const ROTATION_TRIES: usize = 3;
 
 /// Inputs for [`revoke_task`], gathered from `SyncState` before spawning.
 pub(crate) struct RevokeParams {
-    pub id: RequestId,
+    pub id: Generation<Request>,
     pub document_id: DocumentId,
     pub user_id: UserId,
     pub url_scheme: crate::http::UrlScheme,
@@ -878,7 +879,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
 
 /// Inputs for [`leave_task`].
 pub(crate) struct LeaveParams {
-    pub id: RequestId,
+    pub id: Generation<Request>,
     pub document_id: DocumentId,
     /// This user, who signs their own revoke: a departure removes no one else.
     pub author: Author,
@@ -1185,7 +1186,7 @@ pub(crate) struct SettleParams {
 
 /// Inputs for [`role_change_task`].
 pub(crate) struct RoleChangeParams {
-    pub id: RequestId,
+    pub id: Generation<Request>,
     pub document_id: DocumentId,
     /// The member whose role changes.
     pub user_id: UserId,
@@ -1451,10 +1452,10 @@ async fn rotate_channel<H: ShareHttp>(
 /// Inputs for [`list_members_task`].
 pub(crate) struct ListMembersParams {
     /// The request to answer, `None` for a refresh of the directory alone.
-    pub id: Option<RequestId>,
+    pub id: Option<Generation<Request>>,
     /// Which listing of this document this is, so an answer older than the
     /// directory held changes nothing (`SYNC-037`).
-    pub asked: crate::generation::RequestGeneration,
+    pub asked: ambre_core::Generation<crate::generation::Listing>,
     pub document_id: DocumentId,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
@@ -1797,7 +1798,7 @@ mod tests {
 
     fn invite_params(my_xk: &StaticSecret, expect: ambre_core::ExchangePublicKey) -> InviteParams {
         InviteParams {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             document_id: DocumentId::new(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
@@ -2044,7 +2045,7 @@ mod tests {
 
     fn fetch_key_params() -> FetchInviteeKeyParams {
         FetchInviteeKeyParams {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             document_id: DocumentId::new(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
@@ -2086,7 +2087,7 @@ mod tests {
 
     fn member_key_params(user_id: UserId) -> FetchMemberKeyParams {
         FetchMemberKeyParams {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             user_id,
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
@@ -2165,7 +2166,7 @@ mod tests {
 
     fn revoke_params(my_xk: &StaticSecret) -> RevokeParams {
         RevokeParams {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             document_id: DocumentId::new(),
             user_id: UserId::new(),
             url_scheme: crate::http::UrlScheme::Https,
@@ -2786,7 +2787,7 @@ mod tests {
         ]);
         let (etx, erx, sink, lrx) = channels();
         let params = LeaveParams {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             document_id: DocumentId::new(),
             author,
             url_scheme: crate::http::UrlScheme::Https,
@@ -2828,7 +2829,7 @@ mod tests {
         ]);
         let (etx, _erx, sink, lrx) = channels();
         let params = LeaveParams {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             document_id: DocumentId::new(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
@@ -3114,8 +3115,8 @@ mod tests {
 
     fn list_params() -> ListMembersParams {
         ListMembersParams {
-            id: Some(RequestId::next()),
-            asked: crate::generation::RequestGeneration::nth(1),
+            id: Some(ambre_bus::next_request()),
+            asked: ambre_core::Generation::nth(1),
             document_id: DocumentId::new(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
@@ -3531,7 +3532,7 @@ mod tests {
         let mut logged = Logged::new(&owner);
         logged.invite(&owner, &bob, Role::Editor);
         let params = LeaveParams {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             document_id: logged.document_id,
             author: same(&bob.author),
             url_scheme: crate::http::UrlScheme::Https,
@@ -3568,7 +3569,7 @@ mod tests {
         let mut logged = Logged::new(&owner);
         logged.invite(&owner, &bob, Role::Editor);
         let params = RoleChangeParams {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             document_id: logged.document_id,
             user_id: bob.author.user_id,
             role: Role::Viewer,
