@@ -89,7 +89,7 @@ sizes cover the screen, so a negative size would make the walk cover every line.
 
 | Shape | Direction | Carries |
 |---|---|---|
-| `TrameCommand::ResizeCol { version, sheet_id, col, width }` | UI to Logic | the column's position and its new width, a `DocPx` before the zoom (`TRAME-UI-040`) |
+| `TrameCommand::ResizeCol { version, sheet_id, col, width }` | UI to Logic | the column's position and its new width, a `Px<Doc>` before the zoom (`TRAME-UI-040`) |
 | `TrameCommand::ResizeRow { version, sheet_id, row, height }` | UI to Logic | the row analogue |
 | `TrameEvent::DataReset` | Logic to UI | the confirmation: repaint, then adopt the sizes the next answer carries |
 
@@ -97,8 +97,8 @@ sizes cover the screen, so a negative size would make the walk cover every line.
 plus the live guide:
 
 ```rust
-col_widths: HashMap<Col, DocPx>,          // keyed by grid position, mirrors the container
-row_heights: HashMap<Row, DocPx>,
+col_widths: HashMap<Col, Px<Doc>>,          // keyed by grid position, mirrors the container
+row_heights: HashMap<Row, Px<Doc>>,
 resize_preview: Option<ResizePreview>,    // Col(x) or Row(y), in physical px
 ```
 

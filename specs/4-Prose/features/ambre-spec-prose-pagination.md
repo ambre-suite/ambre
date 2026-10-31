@@ -130,18 +130,18 @@ status values are normative in `ambre-spec-template.md`.
 /// Global document layout -- the single source of truth for the UI thread and PDF
 /// export (`PROSE-064`). Derived on every recomputation, never persisted.
 pub struct PageLayout {
-    pub page_width:        DocPx,
-    pub page_height:       DocPx,
-    pub content_width:     DocPx,
-    pub content_height:    DocPx,
-    pub margin_left:       DocPx,
-    pub margin_top:        DocPx,
+    pub page_width:        Px<Doc>,
+    pub page_height:       Px<Doc>,
+    pub content_width:     Px<Doc>,
+    pub content_height:    Px<Doc>,
+    pub margin_left:       Px<Doc>,
+    pub margin_top:        Px<Doc>,
     pub page_count:        PageCount,
     pub blocks:            Vec<BlockLayout>,
-    pub header_height:     DocPx,
-    pub header_first_height: DocPx,
-    pub footer_height:     DocPx,
-    pub footer_first_height: DocPx,
+    pub header_height:     Px<Doc>,
+    pub header_first_height: Px<Doc>,
+    pub footer_height:     Px<Doc>,
+    pub footer_first_height: Px<Doc>,
     /// The first page this layout differs from the one it replaces on (`PROSE-067`).
     /// `None` when nothing moved.
     pub first_dirty_page: Option<PageIndex>,
@@ -158,20 +158,20 @@ pub struct BlockLayout {
     pub block_type:  BlockType,
     /// The height of the portion on `page_start` alone -- never the whole block when
     /// `is_split()`. The later fragments are in `continuation_heights`.
-    pub height:      DocPx,
+    pub height:      Px<Doc>,
     pub page_start:  PageIndex,
-    pub y_in_page:   DocPx,
+    pub y_in_page:   Px<Doc>,
     /// The first line carried by each page after `page_start`. `is_split()` reads
     /// whether it holds one.
     pub split_points: Vec<BlockLine>,
     /// The height of each fragment after `page_start`, one per split point. A
     /// continuation starts at y = 0 (`PROSE-018`) and carries no leading margin
     /// (`PROSE-070`).
-    pub continuation_heights: Vec<DocPx>,
+    pub continuation_heights: Vec<Px<Doc>>,
     /// The notes this block calls, each on the page its calling line took.
     pub notes:       Vec<FootnoteLayout>,
     /// The height the notes hold at the foot of the block's last page once it is placed.
-    pub foot_height: DocPx,
+    pub foot_height: Px<Doc>,
 }
 
 /// A footnote placed at the foot of a page.
@@ -182,7 +182,7 @@ pub struct FootnoteLayout {
     /// Sequential across the whole document, assigned in pass 0.
     pub ordinal:      FootnoteOrdinal,
     pub page:         PageIndex,
-    pub height:       DocPx,
+    pub height:       Px<Doc>,
 }
 
 impl PageLayout {

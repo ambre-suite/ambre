@@ -496,10 +496,10 @@ pub enum ProseCommand {
 
     // -- Not built: pictures (`features/ambre-spec-prose-images.md`) --
     InsertImage      { parent_id: Option<BlockId>, after_id: Option<BlockId>,
-                       content_hash: ContentHash, alt: String, size: ImageSize },
+                       content_hash: ContentHash, alt: String, size: Size<Px<Image>> },
     /// `lock_aspect` keeps the intrinsic ratio; the dispatcher validates and clamps
     /// (`PROSE-FEAT-058`, `PROSE-FEAT-059`).
-    ResizeImage      { block_id: BlockId, size: ImageSize, lock_aspect: bool },
+    ResizeImage      { block_id: BlockId, size: Size<Px<Image>>, lock_aspect: bool },
     SetImageAlign    { block_id: BlockId, align: ImageAlign },
     SetImageAlt      { block_id: BlockId, alt: String },
     SetImageCaption  { block_id: BlockId, caption: String },
@@ -792,11 +792,11 @@ pub struct ProseUiState {
     /// column a run of vertical moves keeps (`features/ambre-spec-prose-selection.md`).
     cursor:          Option<CursorPosition>,
     caret_affinity:  Affinity,
-    x_goal:          Option<DocPx>,
+    x_goal:          Option<Px<Doc>>,
     /// A drag in flight, its last pointer and its autoscroll
     /// (`features/ambre-spec-prose-selection.md`).
     dragging:        Option<(BlockId, DocOffset)>,
-    drag_pointer:    Option<ViewPoint>,
+    drag_pointer:    Option<Point<Px<View>>>,
     autoscroll:      EdgeScroll,
     /// A finger on the canvas, and the motion a flick left (`features/ambre-spec-prose-viewport.md`).
     kinetic:         Kinetic,
@@ -844,7 +844,7 @@ the host, and what the view does with each answer.
 **How input reaches the view.** Through the frame host, as a typed input event from the shared
 transparent `<textarea>` and the DOM pointer listeners. There is **no `winit`**
 (`ambre-spec-ui.md section 4`, `ambre-spec-text-input.md`, `ambre-spec-frame.md section 2`).
-Pointer coordinates are view pixels (`ViewPoint`), measured from the canvas corner, and a click
+Pointer coordinates are view pixels (`Point<Px<View>>`), measured from the canvas corner, and a click
 count separates the single, the double and the triple click. The dispatcher answers whether the host
 must swallow the event. The Prose view is an arm of the frame host's application enum, like Trame's.
 

@@ -97,8 +97,8 @@ cell_cache: HashMap<(u32, u32), CellData>,  // a miss draws as pending or blank
 dirty_cells: HashSet<(u32, u32)>,           // edited locally, not yet confirmed
 accepted_version: Generation<ViewportVersion>, // the last answer taken (`TRAME-UI-005`)
 next_version: Generation<ViewportVersion>,
-col_widths: HashMap<Col, DocPx>,            // only a size that differs from the default
-row_heights: HashMap<Row, DocPx>,
+col_widths: HashMap<Col, Px<Doc>>,            // only a size that differs from the default
+row_heights: HashMap<Row, Px<Doc>>,
 zoom: f64,
 ```
 

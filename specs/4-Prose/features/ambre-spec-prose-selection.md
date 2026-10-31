@@ -132,7 +132,7 @@ pub struct ProseUiState {
     pub cursor:         Option<CursorPosition>,
     pub caret_affinity: Affinity,
     /// The column a run of vertical moves keeps (`PROSE-UI-034`).
-    x_goal:             Option<DocPx>,
+    x_goal:             Option<Px<Doc>>,
     /* the rest of the view */
 }
 ```
@@ -146,7 +146,7 @@ answer for a culled block (`PROSE-UI-031`).
 /// The block and offset under a canvas point. `None` only for a layout with no page.
 impl HitTest for ProseUiState {
     type Target = (BlockId, DocOffset);
-    fn hit_test(&self, at: ViewPoint) -> Option<(BlockId, DocOffset)>;
+    fn hit_test(&self, at: Point<Px<View>>) -> Option<(BlockId, DocOffset)>;
 }
 ```
 
@@ -183,7 +183,7 @@ impl ProseUiState {
     /// The common tail of every move: place the caret, keep or clear the column, extend or
     /// collapse the selection (`PROSE-UI-036`), then reveal it (`PROSE-UI-035`). Never
     /// mutates the document.
-    fn apply_caret(&mut self, next: Spot, affinity: Affinity, x_goal: Option<DocPx>,
+    fn apply_caret(&mut self, next: Spot, affinity: Affinity, x_goal: Option<Px<Doc>>,
                    mode: SelectionMode);
 
     /// After a local insertion, advance the caret in the same block. Clears the column,
@@ -201,7 +201,7 @@ path can leave the caret off screen (`PROSE-UI-035`).
 ```rust
 /// Extend the drag to a pointer position. The anchor is the one captured on pointer-down
 /// (`PROSE-UI-037`); a pointer near the top or bottom edge arms the autoscroll.
-pub fn update_drag(&mut self, at: ViewPoint);
+pub fn update_drag(&mut self, at: Point<Px<View>>);
 
 /// One tick, once a frame: scroll by the armed speed, clamped (`PROSE-UI-025`), then
 /// re-resolve the last pointer so the selection follows the revealed text (`PROSE-UI-038`).

@@ -99,7 +99,7 @@ the selection is. The view publishes a state and the element renders it
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ToolbarState {
     /// The top-centre of the selection's first line, in view pixels. `None` hides the bar.
-    pub anchor: Option<ViewPoint>,
+    pub anchor: Option<Point<Px<View>>>,
     /// `None` until the Logic thread answered for this very selection.
     pub active: Option<ActiveMarks>,
 }

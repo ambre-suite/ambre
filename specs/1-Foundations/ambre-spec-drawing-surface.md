@@ -81,8 +81,8 @@ pub type ParleyBrush = peniko::Brush;
 pub trait DrawSurface {
     // -- Geometry: required methods ----------------------------------------
     fn fill_rect(&mut self, rect: Rect, color: Color);
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: SurfacePx);
-    fn stroke_line(&mut self, line: Line, color: Color, width: SurfacePx);
+    fn stroke_rect(&mut self, rect: Rect, color: Color, width: Px<Surface>);
+    fn stroke_line(&mut self, line: Line, color: Color, width: Px<Surface>);
 
     // -- Text: required method ---------------------------------------------
     fn draw_glyphs(&mut self, run: &GlyphRun<'_, ParleyBrush>, brush: &Brush, transform: Affine);

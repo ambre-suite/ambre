@@ -121,7 +121,7 @@ pub struct TextEditorStyle {
     pub weight: FontWeight,
     pub italic: Slant,
     pub family: FontFamily,
-    pub base_size: DocPx,
+    pub base_size: Px<Doc>,
     pub color: Color,
     pub underline: Underline,
     pub strikethrough: Strikethrough,

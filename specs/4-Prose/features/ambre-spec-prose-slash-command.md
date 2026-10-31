@@ -100,7 +100,7 @@ it (`ambre-spec-ui.md section 2`).
 #[derive(Clone, Default, PartialEq)]  // Debug by hand, the query redacted
 pub struct SlashMenuState {
     /// Under the slash, in canvas space. `None` hides the menu.
-    pub anchor:   Option<ViewPoint>,
+    pub anchor:   Option<Point<Px<View>>>,
     pub query:    String,
     /// The labels the query keeps (`PROSE-UI-194`).
     pub items:    SlashChoiceVec<&'static str>,

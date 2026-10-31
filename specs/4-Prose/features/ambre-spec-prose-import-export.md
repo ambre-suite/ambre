@@ -298,7 +298,7 @@ pub enum IrBlock {
     /// `col_widths` and `style` join `rows`; a cell's spans replace `merged`.
     Table     { col_widths: Vec<Pt>, style: IrTableStyle, rows: Vec<IrTableRow> },
     Image     { content_hash: Option<ContentHash>, src_url: Option<LinkUrl>, alt: String,
-                width: Option<ImagePx>, height: Option<ImagePx>,
+                width: Option<Px<Image>>, height: Option<Px<Image>>,
                 align: Option<IrImageAlign>, caption: Option<String> },
     Toc       { max_level: HeadingLevel, numbered: bool },
     // ...

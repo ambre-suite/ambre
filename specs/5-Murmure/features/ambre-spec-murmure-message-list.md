@@ -138,7 +138,7 @@ offset, so a load above keeps the anchor in place (`MURMURE-192`).
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Rest {
     Latest,                                // on the latest row: a new message scrolls into view
-    Row { key: RowKey, anchor_y: ViewPx }, // a row at a height, which loads leave in place
+    Row { key: RowKey, anchor_y: Px<View> }, // a row at a height, which loads leave in place
 }
 pub enum RowKey { Message(MessageId), Band(SegmentId) }
 ```

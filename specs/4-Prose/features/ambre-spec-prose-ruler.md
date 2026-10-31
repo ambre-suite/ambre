@@ -77,10 +77,10 @@ is. It publishes that (`ambre-spec-ui.md section 2`).
 pub struct RulerState {
     pub visible:       RulerHandles,  // Hidden | Visible
     /// Where the content column starts and how wide it is, from the canvas's corner.
-    pub page_left:     ViewPx,
-    pub content_width: ViewPx,
+    pub page_left:     Px<View>,
+    pub content_width: Px<View>,
     /// How wide one point is on the canvas, at the zoom the column is drawn at.
-    pub point_width:   ViewPx,
+    pub point_width:   Px<View>,
     /// The indents of the block the caret is in, as laid out.
     pub indent_first:  Pt,
     pub indent_left:   Pt,

@@ -95,7 +95,7 @@ pub struct ScrollStep { /* x and y, private */ }
 pub struct Kinetic { /* the press, the motion and a trackpad glide, private */ }
 
 /// What a release leaves: a tap at the press point, a motion, or nothing.
-pub enum Release { Tap { at: ViewPoint }, Fling, Rest }
+pub enum Release { Tap { at: Point<Px<View>> }, Fling, Rest }
 
 /// The speed a drag held at `at` scrolls a view of length `extent` at: `EdgeSpeed::at`.
 pub struct EdgeSpeed(/* private */);

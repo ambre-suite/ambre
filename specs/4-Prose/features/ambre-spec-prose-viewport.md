@@ -88,12 +88,12 @@ The column is rebuilt from the layout on every layout that is applied.
 /// visible, where each page starts, and the inverse of that mapping.
 pub struct PageColumn {
     /// The page trim width, which is what the column is centred on.
-    pub page_width:      DocPx,
-    pub page_height:     DocPx,
-    pub gutter:          DocPx,
+    pub page_width:      Px<Doc>,
+    pub page_height:     Px<Doc>,
+    pub gutter:          Px<Doc>,
     /// Zero for a layout that has not arrived yet.
     pub page_count:      PageCount,
-    pub total_height:    DocPx,
+    pub total_height:    Px<Doc>,
 }
 
 impl PageColumn {
@@ -101,13 +101,13 @@ impl PageColumn {
     /// inverted for any scroll offset (`PROSE-UI-021`).
     pub fn visible_pages(&self, viewport: &Viewport) -> Option<PageSpan>;
     /// Where a page starts, measured from the top of the column.
-    pub fn page_top_y(&self, page: PageIndex) -> DocPx;
+    pub fn page_top_y(&self, page: PageIndex) -> Px<Doc>;
     /// The inverse: the page a document Y belongs to, and the Y within that page. A Y in
     /// a gutter is assigned to the nearer page edge (`PROSE-UI-022`). `None` only for an
     /// empty layout.
-    pub fn doc_y_to_page(&self, doc_y: DocPx) -> Option<(PageIndex, DocPx)>;
+    pub fn doc_y_to_page(&self, doc_y: Px<Doc>) -> Option<(PageIndex, Px<Doc>)>;
     /// The left edge of the column on the canvas (`PROSE-UI-026`).
-    pub fn left(&self, viewport: &Viewport) -> ViewPx;
+    pub fn left(&self, viewport: &Viewport) -> Px<View>;
 }
 ```
 
@@ -116,12 +116,12 @@ impl PageColumn {
 ```rust
 pub struct Viewport {
     /// From the top of the column, in document pixels.
-    pub scroll_y:     DocPx,
+    pub scroll_y:     Px<Doc>,
     /// The canvas, in screen pixels.
-    pub width:        ViewPx,
-    pub height:       ViewPx,
+    pub width:        Px<View>,
+    pub height:       Px<View>,
     /// The user's zoom, one at a hundred per cent (`PROSE-UI-024`).
-    pub zoom:         ZoomFactor,
+    pub zoom:         Scale<Doc, View>,
 }
 ```
 
@@ -133,11 +133,11 @@ re-deriving which page it is on.
 ```rust
 impl PageColumn {
     /// A canvas point as a position in the document.
-    pub fn screen_to_doc(&self, viewport: &Viewport, at: ViewPoint) -> DocPos;
+    pub fn screen_to_doc(&self, viewport: &Viewport, at: Point<Px<View>>) -> DocPos;
 }
 
 pub enum DocPos {
-    OnPage { page: PageIndex, x_in_page: DocPx, y_in_page: DocPx },
+    OnPage { page: PageIndex, x_in_page: Px<Doc>, y_in_page: Px<Doc> },
     /// The layout has no page at all.
     Empty,
 }
@@ -168,7 +168,7 @@ It writes nothing to the document.
 
 ```rust
 /// Zoom by a factor about a screen point.
-pub fn apply_zoom(state: &mut ProseUiState, factor: ZoomFactor, focus: ViewPoint);
+pub fn apply_zoom(state: &mut ProseUiState, factor: Scale<Doc, View>, focus: Point<Px<View>>);
 ```
 
 **Scroll.** Every path that moves the scroll offset clamps it to the column's own range afterwards
