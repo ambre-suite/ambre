@@ -114,7 +114,7 @@ mod tests {
     /// (`RESID-025`).
     #[test]
     fn a_row_is_sealed_under_the_seed_and_opens_on_a_later_session() {
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         let (mut state, rx) = worker(Some([9; 32]));
         let sealed = seal(
             &mut state,
@@ -146,8 +146,8 @@ mod tests {
     /// good row beside them still opens (`RESID-027`).
     #[test]
     fn a_row_that_does_not_open_answers_none_in_its_slot() {
-        let doc = DocumentId::new();
-        let other = DocumentId::new();
+        let doc = Id::<Document>::mint();
+        let other = Id::<Document>::mint();
         let (mut stranger, rx) = worker(Some([3; 32]));
         let foreign = seal(&mut stranger, &rx, RowPlace::Document(doc), b"theirs");
         let (mut state, rx) = worker(Some([9; 32]));
@@ -193,7 +193,7 @@ mod tests {
         state.handle_rest(
             RequestId(1),
             RestCommand::SealLocalRow {
-                place: RowPlace::Document(DocumentId::new()),
+                place: RowPlace::Document(Id::<Document>::mint()),
                 plaintext: SecretBytes::new(b"x".to_vec()),
             },
         );

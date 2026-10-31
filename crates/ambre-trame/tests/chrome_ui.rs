@@ -26,12 +26,13 @@
 
 use ambre_bus::app::find::{MatchCount, MatchIndex};
 use ambre_bus::{
-    AppCommand, AppEvent, CellFormat, CellStyle, Col, DocumentId, HAlign, Row, RowCount, SheetId,
-    SheetName, SheetTab, TrameCommand, TrameEvent, UiEvent, VAlign,
+    AppCommand, AppEvent, CellFormat, CellStyle, Col, HAlign, Row, RowCount, SheetId, SheetName,
+    SheetTab, TrameCommand, TrameEvent, UiEvent, VAlign,
 };
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_commands::Locale;
+use ambre_core::id::{Document, Id};
 use ambre_trame::chrome::{
     self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindQuery, FindReplace, FindReplaceState,
     FormatBar, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE,
@@ -58,7 +59,7 @@ fn style_applied(
     numeric: ambre_bus::CellValueKind,
 ) -> UiEvent {
     UiEvent::Viewport {
-        document_id: DocumentId::new(),
+        document_id: Id::<Document>::mint(),
         event: AppEvent::Trame(TrameEvent::StyleApplied {
             style,
             bold,
@@ -148,7 +149,7 @@ fn style_state_ignores_unrelated_events() {
     let state = StyleState::new();
     state.bold.set(ambre_bus::Weight::Bold);
     let ev = UiEvent::Viewport {
-        document_id: DocumentId::new(),
+        document_id: Id::<Document>::mint(),
         event: AppEvent::Trame(TrameEvent::DataReset),
     };
     chrome::apply_style_event(&state, &ev);
@@ -179,7 +180,7 @@ fn undo_state_mirrors_into_command_store() {
     );
 
     let ev = UiEvent::Viewport {
-        document_id: DocumentId::new(),
+        document_id: Id::<Document>::mint(),
         event: AppEvent::Trame(TrameEvent::UndoState {
             undo: ambre_core::Availability::Enabled,
             redo: ambre_core::Availability::Disabled,
@@ -726,7 +727,7 @@ fn a_lost_edit_reaches_the_user() {
     chrome::notify_event(
         &toasts,
         &UiEvent::Viewport {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             event: AppEvent::Trame(TrameEvent::EditTargetGone {
                 session: ambre_trame::EditSessionId::FIRST,
             }),
@@ -841,7 +842,7 @@ fn a_refusal_reaches_the_user_as_a_toast() {
         chrome::notify_event(
             &toasts,
             &UiEvent::Viewport {
-                document_id: DocumentId::new(),
+                document_id: Id::<Document>::mint(),
                 event: AppEvent::Trame(event),
             },
         );
@@ -907,7 +908,7 @@ fn the_filter_toast_says_how_many_rows_it_hid() {
     chrome::notify_event(
         &toasts,
         &UiEvent::Viewport {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             event: AppEvent::Trame(TrameEvent::FilterApplied {
                 hidden_row_count: RowCount::new(37),
                 col: Col::new(2),
@@ -931,7 +932,7 @@ fn the_sort_reply_opens_the_dialog_over_its_columns() {
     let _owner = OwnerScope::new();
     let relay = relay();
     relay.absorb(&UiEvent::Viewport {
-        document_id: DocumentId::new(),
+        document_id: Id::<Document>::mint(),
         event: AppEvent::Trame(TrameEvent::SortRange {
             r1: Row::new(2),
             c1: Col::new(3),

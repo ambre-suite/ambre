@@ -9,7 +9,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_core::{ChannelId, DeltaBytes, DocumentId, LoroPayloadRef, MetaId, SegmentId, Seq};
+use ambre_core::id::{Channel, Document, Id, Meta, Segment};
+use ambre_core::{DeltaBytes, LoroPayloadRef, Seq};
 use loro::LoroDoc;
 
 use crate::channel::{ChannelState, live_segments};
@@ -24,7 +25,7 @@ pub enum Opening {
     /// Still waiting for a segment already asked for.
     Waiting,
     /// `meta` is in and names these live segments: open each.
-    OpenSegments(Vec<SegmentId>),
+    OpenSegments(Vec<Id<Segment>>),
     /// Every document is in, and the channel is open.
     Open(Box<ChannelState>),
 }
@@ -42,26 +43,26 @@ pub enum Receipt {
 /// The documents of a channel that is opening, and their bytes so far.
 #[derive(Debug)]
 pub struct OpeningChannel {
-    channel_id: ChannelId,
-    meta_id: DocumentId,
+    channel_id: Id<Channel>,
+    meta_id: Id<Document>,
     /// Payloads of each expected document, in arrival order, until it is
     /// ready. `meta` only ever holds bytes.
-    payloads: HashMap<DocumentId, Vec<Arrival>>,
+    payloads: HashMap<Id<Document>, Vec<Arrival>>,
     /// `meta` once admitted. `None` while its bytes are still arriving.
     meta: Option<LoroDoc>,
     /// The live segments `meta` named that are not ready yet.
-    awaiting: HashSet<DocumentId>,
+    awaiting: HashSet<Id<Document>>,
     /// The closing segment `meta` named, the one live segment the channel
     /// can open without.
-    closing: Option<DocumentId>,
+    closing: Option<Id<Document>>,
     /// What the relay numbered of each segment so far, handed to the channel
     /// once it opens.
-    sequences: HashMap<DocumentId, Sequence>,
+    sequences: HashMap<Id<Document>, Sequence>,
 }
 
 impl OpeningChannel {
     /// Begin opening `channel_id`, whose `meta` document the relay named.
-    pub fn new(channel_id: ChannelId, meta_id: MetaId) -> Self {
+    pub fn new(channel_id: Id<Channel>, meta_id: Id<Meta>) -> Self {
         let meta_id = meta_id.document_id();
         Self {
             channel_id,
@@ -75,29 +76,29 @@ impl OpeningChannel {
     }
 
     /// The channel being opened.
-    pub fn channel_id(&self) -> ChannelId {
+    pub fn channel_id(&self) -> Id<Channel> {
         self.channel_id
     }
 
     /// The `meta` document of the channel.
-    pub fn meta_id(&self) -> MetaId {
-        MetaId::from_document(self.meta_id)
+    pub fn meta_id(&self) -> Id<Meta> {
+        Id::<Meta>::from_document(self.meta_id)
     }
 
     /// Whether the bytes of `document_id` belong to this opening.
-    pub fn expects(&self, document_id: DocumentId) -> bool {
+    pub fn expects(&self, document_id: Id<Document>) -> bool {
         self.payloads.contains_key(&document_id)
     }
 
     /// Every document this opening asked the relay for, so a close or a
     /// failure can end the session of each.
-    pub fn document_ids(&self) -> Vec<DocumentId> {
+    pub fn document_ids(&self) -> Vec<Id<Document>> {
         self.payloads.keys().copied().collect()
     }
 
     /// Keep the bytes of an expected document until it is ready. A document
     /// this opening does not expect is [`Receipt::NotExpected`].
-    pub fn receive(&mut self, document_id: DocumentId, payload: LoroPayloadRef<'_>) -> Receipt {
+    pub fn receive(&mut self, document_id: Id<Document>, payload: LoroPayloadRef<'_>) -> Receipt {
         self.receive_at(document_id, None, payload)
     }
 
@@ -106,7 +107,7 @@ impl OpeningChannel {
     /// (`features/ambre-spec-murmure-unread.md section 3`).
     pub fn receive_at(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         order: Option<Order>,
         payload: LoroPayloadRef<'_>,
     ) -> Receipt {
@@ -146,7 +147,7 @@ impl OpeningChannel {
     /// its signer. A refused delta still counts as delivered.
     pub fn receive_signed(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         seq: Seq,
         payload: &DeltaBytes,
         signer: Signer,
@@ -179,7 +180,7 @@ impl OpeningChannel {
     /// [`MurmureError::NoActiveSegment`] for a `meta` that lists none. The
     /// opening is then over: the caller drops it and closes its documents.
     /// [`MurmureError::NotHeld`] for a document this opening does not expect.
-    pub fn ready(&mut self, document_id: DocumentId) -> Result<Opening, MurmureError> {
+    pub fn ready(&mut self, document_id: Id<Document>) -> Result<Opening, MurmureError> {
         if document_id == self.meta_id && self.meta.is_none() {
             return self.meta_ready();
         }
@@ -199,7 +200,7 @@ impl OpeningChannel {
     ///
     /// Returns `None` for any other document, whose failure ends the opening.
     /// Otherwise as [`OpeningChannel::ready`].
-    pub fn give_up(&mut self, document_id: DocumentId) -> Option<Result<Opening, MurmureError>> {
+    pub fn give_up(&mut self, document_id: Id<Document>) -> Option<Result<Opening, MurmureError>> {
         if self.closing != Some(document_id) || !self.awaiting.remove(&document_id) {
             return None;
         }
@@ -240,7 +241,7 @@ impl OpeningChannel {
             .collect();
         let meta = schema::admit_all(&payloads, DocumentKind::Meta, self.channel_id, self.meta_id)?;
         let live = live_segments(&meta, self.channel_id)?;
-        let segments: Vec<SegmentId> = [Some(live.active), live.closing]
+        let segments: Vec<Id<Segment>> = [Some(live.active), live.closing]
             .into_iter()
             .flatten()
             .collect();

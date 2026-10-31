@@ -4,7 +4,8 @@
 // the document from their own row (`SYNC-141`). Every action leaves as a
 // `RestCommand` through `send`, so a test reads the command without a worker.
 
-use ambre_bus::{DocumentId, MemberInfo, MemberStanding, RestCommand, Role, UserId};
+use ambre_bus::{MemberInfo, MemberStanding, RestCommand, Role};
+use ambre_core::id::{Document, Id, User};
 use leptos::prelude::*;
 
 /// What the signed-in user may do on one row of the member list.
@@ -21,7 +22,7 @@ pub(crate) enum RowAction {
 
 /// The action a row offers, from whose row it is and the role it holds. A row
 /// read before the session is known is treated as another member's.
-pub(crate) fn row_action(member: UserId, role: Role, me: Option<UserId>) -> RowAction {
+pub(crate) fn row_action(member: Id<User>, role: Role, me: Option<Id<User>>) -> RowAction {
     match me {
         Some(me) if me == member && role == Role::Owner => RowAction::None,
         Some(me) if me == member => RowAction::Leave,
@@ -48,8 +49,8 @@ fn standing_badge(standing: MemberStanding) -> Option<impl IntoView> {
 #[component]
 pub(crate) fn ShareMembers(
     members: RwSignal<Vec<MemberInfo>>,
-    me: RwSignal<Option<UserId>>,
-    current_doc: RwSignal<Option<DocumentId>>,
+    me: RwSignal<Option<Id<User>>>,
+    current_doc: RwSignal<Option<Id<Document>>>,
     send: Callback<RestCommand>,
 ) -> impl IntoView {
     // A departure takes a second click: it cannot be undone from this side,
@@ -157,7 +158,7 @@ mod tests {
 
     fn member(byte: u8, role: Role) -> MemberInfo {
         MemberInfo {
-            user_id: UserId::from_bytes([byte; 16]),
+            user_id: Id::from_bytes([byte; 16]),
             display_name: ambre_core::DisplayName::new(&format!("member {byte}")).unwrap(),
             email: ambre_bus::Email(format!("m{byte}@example.com")),
             role,
@@ -167,11 +168,11 @@ mod tests {
 
     /// Mount the list for a document owned by member 1, with `me` signed in,
     /// and hand back the root and every command a row sent.
-    fn mount(me: u8) -> (web_sys::Element, RwSignal<Vec<RestCommand>>, DocumentId) {
-        let document_id = DocumentId::new();
+    fn mount(me: u8) -> (web_sys::Element, RwSignal<Vec<RestCommand>>, Id<Document>) {
+        let document_id = Id::<Document>::mint();
         let sent = RwSignal::new(Vec::<RestCommand>::new());
         let members = RwSignal::new(vec![member(1, Role::Owner), member(2, Role::Editor)]);
-        let me = RwSignal::new(Some(UserId::from_bytes([me; 16])));
+        let me = RwSignal::new(Some(Id::from_bytes([me; 16])));
         let current_doc = RwSignal::new(Some(document_id));
         let send = Callback::new(move |cmd| sent.update(|v| v.push(cmd)));
         let container = document().create_element("div").unwrap();
@@ -237,7 +238,7 @@ mod tests {
     /// The row decision, without a browser: whose row, and which role.
     #[wasm_bindgen_test]
     fn each_row_offers_the_action_its_owner_may_take() {
-        let (me, other) = (UserId::from_bytes([1; 16]), UserId::from_bytes([2; 16]));
+        let (me, other) = (Id::from_bytes([1; 16]), Id::from_bytes([2; 16]));
         assert_eq!(row_action(other, Role::Owner, Some(me)), RowAction::Revoke);
         assert_eq!(row_action(me, Role::Editor, Some(me)), RowAction::Leave);
         assert_eq!(row_action(me, Role::Viewer, Some(me)), RowAction::Leave);

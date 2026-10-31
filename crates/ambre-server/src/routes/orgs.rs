@@ -3,6 +3,7 @@ use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use ambre_core::Role;
+use ambre_core::id::{Id, Org, User};
 
 use crate::auth;
 use crate::db;
@@ -28,8 +29,8 @@ pub struct CreateOrgRequest {
 }
 #[derive(serde::Serialize)]
 pub struct CreateOrgResponse {
-    #[serde(with = "ambre_core::serde_id::org_id")]
-    pub id: ambre_core::OrgId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub id: Id<Org>,
     pub name: String,
     pub org_pubkey: ambre_core::ExchangeKeyHex,
     #[serde(flatten)]
@@ -48,8 +49,8 @@ fn org_to_response(org: &db::OrganizationRow) -> CreateOrgResponse {
 /// Request body for adding a member.
 #[derive(serde::Deserialize)]
 pub struct AddMemberRequest {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     /// A role word, parsed by the handler: an unknown word answers 409.
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
@@ -67,8 +68,8 @@ pub struct UpdateMemberRoleRequest {
 
 #[derive(serde::Serialize)]
 pub struct OrgMemberResponse {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub email: ambre_core::Email,
     pub display_name: ambre_core::DisplayName,
     /// Serialized as its lowercase word.
@@ -140,8 +141,8 @@ fn validate_shamir_params(shamir: db::ShamirParams) -> Result<(), AppError> {
 
 async fn require_org_role(
     pool: &sqlx::PgPool,
-    org_id: &ambre_core::OrgId,
-    user_id: &ambre_core::UserId,
+    org_id: &Id<Org>,
+    user_id: &Id<User>,
     allowed_roles: &[Role],
 ) -> Result<db::OrgMembershipRow, AppError> {
     let m = db::get_org_member(pool, org_id, user_id)
@@ -197,7 +198,7 @@ pub async fn list_orgs(
 pub async fn get_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<ambre_core::OrgId>,
+    PathId(org_id): PathId<Id<Org>>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let uid = session.user_id;
@@ -223,7 +224,7 @@ pub async fn get_org(
 pub async fn update_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<ambre_core::OrgId>,
+    PathId(org_id): PathId<Id<Org>>,
     Json(req): Json<UpdateOrgRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
@@ -244,7 +245,7 @@ pub async fn update_org(
 pub async fn delete_org(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<ambre_core::OrgId>,
+    PathId(org_id): PathId<Id<Org>>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let uid = session.user_id;
@@ -275,7 +276,7 @@ fn refuse_share(share: Option<&serde::de::IgnoredAny>) -> Result<(), AppError> {
 pub async fn add_member(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<ambre_core::OrgId>,
+    PathId(org_id): PathId<Id<Org>>,
     Json(req): Json<AddMemberRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
@@ -321,7 +322,7 @@ pub async fn add_member(
 pub async fn list_members(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(org_id): PathId<ambre_core::OrgId>,
+    PathId(org_id): PathId<Id<Org>>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let uid = session.user_id;
@@ -343,7 +344,7 @@ pub async fn list_members(
 pub async fn remove_member(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((org_id, target_uid)): PathId<(ambre_core::OrgId, ambre_core::UserId)>,
+    PathId((org_id, target_uid)): PathId<(Id<Org>, Id<User>)>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let uid = session.user_id;
@@ -377,7 +378,7 @@ pub async fn remove_member(
 pub async fn update_member_role(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((org_id, target_uid)): PathId<(ambre_core::OrgId, ambre_core::UserId)>,
+    PathId((org_id, target_uid)): PathId<(Id<Org>, Id<User>)>,
     Json(req): Json<UpdateMemberRoleRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
@@ -411,7 +412,7 @@ pub async fn update_member_role(
 pub async fn recover_master_key(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((org_id, target_uid)): PathId<(ambre_core::OrgId, ambre_core::UserId)>,
+    PathId((org_id, target_uid)): PathId<(Id<Org>, Id<User>)>,
 ) -> Result<impl IntoResponse, AppError> {
     let session = auth;
     let caller_uid = session.user_id;
@@ -563,7 +564,7 @@ mod tests {
     #[test]
     fn org_to_response_formats_correctly() {
         let org = db::OrganizationRow {
-            id: ambre_core::OrgId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+            id: Id::<Org>::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             name: "Test Org".into(),
             org_pubkey: ambre_core::ExchangePublicKey::from_array([0u8; 32]),
             shamir: split(3, 5),
@@ -582,7 +583,7 @@ mod tests {
     #[test]
     fn member_to_response_with_share() {
         let member = db::OrgMemberRow {
-            user_id: ambre_core::UserId::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+            user_id: Id::<User>::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             email: "user@test.com".into(),
             display_name: ambre_core::DisplayName::new("Test User").unwrap(),
             role: Role::Admin,
@@ -608,7 +609,7 @@ mod tests {
     #[test]
     fn member_to_response_without_share() {
         let member = db::OrgMemberRow {
-            user_id: ambre_core::UserId::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
+            user_id: Id::<User>::parse_str("00000000-0000-0000-0000-000000000002").unwrap(),
             email: "other@test.com".into(),
             display_name: ambre_core::DisplayName::new("Other User").unwrap(),
             role: Role::Member,
@@ -625,6 +626,7 @@ mod tests {
     #[cfg(test)]
     mod integration {
         use crate::routes;
+        use ambre_core::id::{Id, Org, User};
         use axum::Router;
         use axum::body::Body;
         use axum::http::{Request, StatusCode};
@@ -1207,8 +1209,8 @@ mod tests {
             }
             let kept = crate::db::get_org_member(
                 &state.db,
-                &ambre_core::OrgId::parse_str(&org_id).unwrap(),
-                &ambre_core::UserId::parse_str(&owner_uid).unwrap(),
+                &Id::<Org>::parse_str(&org_id).unwrap(),
+                &Id::<User>::parse_str(&owner_uid).unwrap(),
             )
             .await
             .unwrap()

@@ -20,10 +20,10 @@ applications hold a comments feature, and the anchor is the feature.
 
 | | Toile (`features/ambre-spec-toile-comments.md`) | Prose (here) |
 |---|---|---|
-| Anchor | an `ElementId`, or a free world point | a live mark on a text range |
+| Anchor | an `Id<Element>`, or a free world point | a live mark on a text range |
 | When the target dies | the pin dangles, and is not painted (`TOILE-025`) | the thread orphans, and is kept for review (`PROSE-FEAT-202`) |
 | Thread order | the list's, never a timestamp (`TOILE-FEAT-012`) | the list's, never a timestamp (`PROSE-FEAT-186`) |
-| Author | the canonical `UserId` (`TOILE-FEAT-014`) | the canonical `UserId` and a display name, stamped locally (`PROSE-FEAT-077`) |
+| Author | the canonical `Id<User>` (`TOILE-FEAT-014`) | the canonical `Id<User>` and a display name, stamped locally (`PROSE-FEAT-077`) |
 
 Two of the four match. The two that do not are the anchor itself, which is why the feature stays vertical.
 
@@ -36,7 +36,7 @@ Two of the four match. The two that do not are the anchor itself, which is why t
 | `PROSE-FEAT-185` | `INV` | The stored anchor MUST NOT be read for a position while the comment's mark is alive. | this spec section 3 | `ambre_prose::logic::comments::tests::the_cache_follows_the_mark_and_never_overrules_it` | none | verified |
 | `PROSE-FEAT-078` | `INV` | Each comment MUST own its own mark span. | this spec section 3 | `ambre_prose::logic::comments::tests::two_threads_over_shared_characters_keep_their_own_spans` | none | verified |
 | `PROSE-FEAT-186` | `INV` | The order of a thread's replies MUST be the list's own, never a timestamp's. | this spec section 3 | `ambre_prose::logic::comments::tests::a_reply_lands_last_whatever_its_stamp` | none | verified |
-| `PROSE-FEAT-077` | `INV` | The author of a reply, its `UserId` and its name, MUST be stamped from the session identity, never read from the command. | this spec section 3 | structural -- no comment command carries an author, and `write_reply` reads the session's `UserId` and name; `ambre_prose::logic::comments::tests::the_author_is_stamped_from_the_session` | none | verified |
+| `PROSE-FEAT-077` | `INV` | The author of a reply, its `Id<User>` and its name, MUST be stamped from the session identity, never read from the command. | this spec section 3 | structural -- no comment command carries an author, and `write_reply` reads the session's `Id<User>` and name; `ambre_prose::logic::comments::tests::the_author_is_stamped_from_the_session` | none | verified |
 | `PROSE-FEAT-187` | `INV` | Resolving, reopening or deleting a thread MUST NOT be refused on the caller's identity: only a reply is its author's alone. | this spec section 3 | `ambre_prose::logic::comments::tests::another_member_may_close_reopen_and_delete_a_thread` | none | verified |
 | `PROSE-FEAT-296` | `INV` | An undo MUST NOT retract a comment command: a thread, a reply, a resolve or a deletion. | this spec section 3; `TOILE-FEAT-017` | `ambre_prose::logic::comments::tests::an_undo_never_retracts_a_comment` | none | verified |
 | `PROSE-FEAT-009` | `CONC` | A comment thread MUST stay anchored to its text range across concurrent edits. | this spec section 3 | `ambre_prose::logic::comments::tests::a_thread_stays_on_its_text_under_concurrent_edits` | none | verified |
@@ -167,7 +167,7 @@ spans stay whole, and both highlights are painted. Deleting one thread takes off
 other (`PROSE-FEAT-078`).
 
 **The identity, and where the author comes from.** The commands carry the text and a display
-stamp alone. The engine fills the reply's canonical `UserId` and display name from the **current
+stamp alone. The engine fills the reply's canonical `Id<User>` and display name from the **current
 session identity**, never from the payload (`PROSE-FEAT-077`). A session with no user cannot write
 a comment. The author of a thread is the author of its opening reply; the entry names none.
 
@@ -179,7 +179,7 @@ from the key that signed the frame, and stores none. A comment writes its author
 * **The reply to a closed thread.** `ReplyToComment` on a resolved thread is allowed, and reopens
   it (`PROSE-FEAT-079`). `ReopenComment` is the path for reopening without adding a reply.
 * **Whose reply may be touched.** Editing and deleting a reply are the author's alone
-  (`PROSE-FEAT-080`), matched on the reply's `UserId`. Resolving, reopening and deleting a
+  (`PROSE-FEAT-080`), matched on the reply's `Id<User>`. Resolving, reopening and deleting a
   **thread** are not restricted: any collaborator may close a discussion. The check guards the
   honest interface and protects nothing: a peer running other code writes to the CRDT directly.
 * **The head of the thread.** The opening comment is the first reply. Deleting it leaves a thread

@@ -101,7 +101,7 @@ pub struct ShapedLayout {
     pub version: LayoutVersion,
     pub layout:  Arc<PageLayout>,
     pub blocks:  HashMap<TreeID, ShapedRun>,
-    pub notes:   HashMap<FootnoteId, ShapedRun>,
+    pub notes:   HashMap<Id<Footnote>, ShapedRun>,
     pub tables:  HashMap<TreeID, Arc<TableShape>>,
     /* private: the cells, the flow order of every block, the pages carried, the two ends of
        the text, the blocks each page shows */

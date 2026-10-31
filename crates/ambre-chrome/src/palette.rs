@@ -16,6 +16,7 @@
 // ============================================================================
 
 use ambre_commands::{Command, CommandId, Locale};
+use ambre_core::id::{Channel, Id, User};
 use leptos::html;
 use leptos::prelude::*;
 
@@ -54,9 +55,9 @@ pub fn filter<'a>(table: &'a [Command], query: &str, locale: &Locale) -> Vec<&'a
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PaletteKey {
     /// A channel, or a direct message.
-    Channel(ambre_core::ChannelId),
+    Channel(Id<Channel>),
     /// A member of a space.
-    Member(ambre_core::UserId),
+    Member(Id<User>),
 }
 
 /// One entry an application supplies to the palette, such as a channel to
@@ -329,7 +330,7 @@ mod tests {
 
     fn entry(key: u8, label: &str) -> PaletteEntry {
         PaletteEntry {
-            key: PaletteKey::Channel(ambre_core::ChannelId::from_bytes([key; 16])),
+            key: PaletteKey::Channel(Id::from_bytes([key; 16])),
             label: label.into(),
             hint: None,
         }

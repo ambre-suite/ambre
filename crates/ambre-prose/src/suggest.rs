@@ -8,7 +8,7 @@
 //! (`PROSE-FEAT-258`). Nothing in this module writes.
 
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
-use ambre_core::{SuggestionId, UserId};
+use ambre_core::id::{self, Id, User};
 use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
 
 use crate::doc;
@@ -18,7 +18,7 @@ use ambre_bus::app::prose::MarkKey;
 
 /// The mark key of suggestion `id`.
 #[must_use]
-pub(crate) fn mark_key(kind: SuggestionKind, id: &SuggestionId) -> MarkKey {
+pub(crate) fn mark_key(kind: SuggestionKind, id: &Id<id::Suggestion>) -> MarkKey {
     let root = match kind {
         SuggestionKind::Insertion => MarkRoot::Insertion,
         SuggestionKind::Deletion => MarkRoot::Deletion,
@@ -28,19 +28,22 @@ pub(crate) fn mark_key(kind: SuggestionKind, id: &SuggestionId) -> MarkKey {
 
 /// The suggestion a mark key names, when it is one.
 #[must_use]
-pub(crate) fn of_key(key: &str) -> Option<(SuggestionKind, SuggestionId)> {
+pub(crate) fn of_key(key: &str) -> Option<(SuggestionKind, Id<id::Suggestion>)> {
     let (root, id) = key.split_once(':')?;
     let kind = match MarkRoot::parse(root)? {
         MarkRoot::Insertion => SuggestionKind::Insertion,
         MarkRoot::Deletion => SuggestionKind::Deletion,
         _ => return None,
     };
-    Some((kind, SuggestionId::parse_str(id).ok()?))
+    Some((kind, Id::<id::Suggestion>::parse_str(id).ok()?))
 }
 
 /// The entry of suggestion `id`, when `annots` holds one of that kind.
 #[must_use]
-pub(crate) fn entry(document: &LoroDoc, id: &SuggestionId) -> Option<doc::Fields<doc::AnnotKey>> {
+pub(crate) fn entry(
+    document: &LoroDoc,
+    id: &Id<id::Suggestion>,
+) -> Option<doc::Fields<doc::AnnotKey>> {
     let annots = doc::annots(document);
     let Some(ValueOrContainer::Container(Container::Map(map))) = annots.get(&id.to_hyphenated())
     else {
@@ -52,8 +55,8 @@ pub(crate) fn entry(document: &LoroDoc, id: &SuggestionId) -> Option<doc::Fields
 
 /// The user an entry names as its author (`PROSE-FEAT-260`).
 #[must_use]
-pub(crate) fn owner(entry: &doc::Fields<doc::AnnotKey>) -> Option<UserId> {
-    UserId::parse_str(&doc::read_string(entry, doc::AnnotKey::User)?).ok()
+pub(crate) fn owner(entry: &doc::Fields<doc::AnnotKey>) -> Option<Id<User>> {
+    Id::<User>::parse_str(&doc::read_string(entry, doc::AnnotKey::User)?).ok()
 }
 
 /// One run of text under the marks it carries, in its block's own offsets.
@@ -62,7 +65,7 @@ pub(crate) struct Run {
     pub start: DocOffset,
     pub end: DocOffset,
     /// Every suggestion mark on the run.
-    pub marks: Vec<(SuggestionKind, SuggestionId)>,
+    pub marks: Vec<(SuggestionKind, Id<id::Suggestion>)>,
 }
 
 /// The runs of one block, clipped to `start..end`, each with the suggestion
@@ -84,7 +87,7 @@ pub(crate) fn runs(
         let run_end = offset + length;
         let (from, to) = (offset.max(start), run_end.min(end));
         if from < to {
-            let mut marks: Vec<(SuggestionKind, SuggestionId)> = attributes
+            let mut marks: Vec<(SuggestionKind, Id<id::Suggestion>)> = attributes
                 .iter()
                 .flat_map(|attributes| attributes.keys())
                 .filter_map(|key| of_key(key))
@@ -137,8 +140,20 @@ pub(crate) fn strip_inherited(body: &LoroText, span: DocSpan) -> Result<(), doc:
 pub(crate) fn spans(
     document: &LoroDoc,
     blocks: &[TreeID],
-) -> Vec<(SuggestionId, SuggestionKind, TreeID, DocOffset, DocOffset)> {
-    let mut out: Vec<(SuggestionId, SuggestionKind, TreeID, DocOffset, DocOffset)> = Vec::new();
+) -> Vec<(
+    Id<id::Suggestion>,
+    SuggestionKind,
+    TreeID,
+    DocOffset,
+    DocOffset,
+)> {
+    let mut out: Vec<(
+        Id<id::Suggestion>,
+        SuggestionKind,
+        TreeID,
+        DocOffset,
+        DocOffset,
+    )> = Vec::new();
     for block in blocks {
         for run in runs(document, block, DocOffset::ZERO, DocOffset::MAX) {
             for (kind, id) in run.marks {

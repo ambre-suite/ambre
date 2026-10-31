@@ -14,10 +14,10 @@ use crate::logic::command::{
 };
 use crate::logic::index::Viewport;
 use crate::logic::model::{
-    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, NodeId, PathType,
-    ShapeKind, StrokePoint,
+    Anchor, ElementKind, ElementStyle, EndCaps, NodeId, PathType, ShapeKind, StrokePoint,
 };
 use crate::logic::state::{Root, ToileState};
+use ambre_core::id::{Connector, Element, Id};
 
 fn create(st: &mut ToileState, kind: ElementKind, at: Point, size: Size) -> ToileOutcome {
     let content = match kind {
@@ -34,7 +34,7 @@ fn create(st: &mut ToileState, kind: ElementKind, at: Point, size: Size) -> Toil
     })
 }
 
-fn created(out: &ToileOutcome) -> ElementId {
+fn created(out: &ToileOutcome) -> Id<Element> {
     out.display
         .iter()
         .find_map(|e| match e {
@@ -44,7 +44,7 @@ fn created(out: &ToileOutcome) -> ElementId {
         .expect("expected an ElementCreated event")
 }
 
-fn rect(st: &mut ToileState, x: f64, y: f64) -> ElementId {
+fn rect(st: &mut ToileState, x: f64, y: f64) -> Id<Element> {
     let out = create(
         st,
         ElementKind::Shape(ShapeKind::Rect),
@@ -54,7 +54,7 @@ fn rect(st: &mut ToileState, x: f64, y: f64) -> ElementId {
     created(&out)
 }
 
-fn frame(st: &mut ToileState, x: f64, y: f64) -> ElementId {
+fn frame(st: &mut ToileState, x: f64, y: f64) -> Id<Element> {
     let out = create(
         st,
         ElementKind::Frame,
@@ -64,7 +64,7 @@ fn frame(st: &mut ToileState, x: f64, y: f64) -> ElementId {
     created(&out)
 }
 
-fn group(st: &mut ToileState, ids: &[&ElementId]) -> ElementId {
+fn group(st: &mut ToileState, ids: &[&Id<Element>]) -> Id<Element> {
     created(&st.handle_command(ToileCommand::GroupElements {
         ids: ids.iter().map(|id| (*id).clone()).collect(),
     }))
@@ -72,9 +72,9 @@ fn group(st: &mut ToileState, ids: &[&ElementId]) -> ElementId {
 
 fn set_frame(
     st: &mut ToileState,
-    frame: &ElementId,
-    add: &[&ElementId],
-    remove: &[&ElementId],
+    frame: &Id<Element>,
+    add: &[&Id<Element>],
+    remove: &[&Id<Element>],
 ) -> ToileOutcome {
     st.handle_command(ToileCommand::SetFrameChildren {
         frame: frame.clone(),
@@ -83,7 +83,7 @@ fn set_frame(
     })
 }
 
-fn reorder(st: &mut ToileState, id: &ElementId, to: ZTarget) -> ToileOutcome {
+fn reorder(st: &mut ToileState, id: &Id<Element>, to: ZTarget) -> ToileOutcome {
     st.handle_command(ToileCommand::Reorder {
         node: NodeId::Element(id.clone()),
         to,
@@ -94,14 +94,14 @@ fn order(st: &ToileState) -> Vec<NodeId> {
     st.layer_order().to_vec()
 }
 
-fn nodes(ids: &[&ElementId]) -> Vec<NodeId> {
+fn nodes(ids: &[&Id<Element>]) -> Vec<NodeId> {
     ids.iter()
         .map(|id| NodeId::Element((*id).clone()))
         .collect()
 }
 
 /// The element ids of a derived frame, in paint order.
-fn painted(st: &ToileState) -> Vec<ElementId> {
+fn painted(st: &ToileState) -> Vec<Id<Element>> {
     st.debug_viewport()
         .nodes
         .iter()
@@ -228,7 +228,7 @@ fn a_seed_of_another_kind_is_refused() {
 fn a_write_to_a_missing_element_is_refused() {
     let mut st = ToileState::new();
     let kept = rect(&mut st, 0.0, 0.0);
-    let ghost = ElementId("0000000000000009_00000099".to_owned());
+    let ghost = Id::<Element>::from_text("0000000000000009_00000099".to_owned());
     for cmd in [
         ToileCommand::ResizeElement {
             id: ghost.clone(),
@@ -476,7 +476,7 @@ fn a_nested_ungroup_hands_its_children_up_and_moves_nothing() {
 #[test]
 fn ungrouping_a_missing_id_says_so() {
     let mut st = ToileState::new();
-    let ghost = ElementId("0000000000000009_00000099".to_owned());
+    let ghost = Id::<Element>::from_text("0000000000000009_00000099".to_owned());
     let out = st.handle_command(ToileCommand::UngroupElements {
         groups: vec![ghost.clone()],
     });
@@ -522,7 +522,7 @@ fn an_ineligible_id_does_not_stop_the_rest() {
     let f = frame(&mut st, 0.0, 0.0);
     let a = rect(&mut st, 10.0, 10.0);
     let b = rect(&mut st, 30.0, 10.0);
-    let ghost = ElementId("0000000000000009_00000099".to_owned());
+    let ghost = Id::<Element>::from_text("0000000000000009_00000099".to_owned());
     set_frame(&mut st, &f, &[&a], &[]);
     let out = set_frame(&mut st, &f, &[&f, &ghost, &a, &b], &[]);
     assert!(errors(&out).is_empty());
@@ -578,7 +578,7 @@ fn the_last_entry_paints_last() {
 fn an_entry_for_a_lost_element_is_skipped() {
     let mut st = ToileState::new();
     let a = rect(&mut st, 0.0, 0.0);
-    let ghost = ElementId("0000000000000009_00000099".to_owned());
+    let ghost = Id::<Element>::from_text("0000000000000009_00000099".to_owned());
     st.debug_push_layer_raw(&NodeId::Element(ghost).encode());
     let b = rect(&mut st, 20.0, 0.0);
     assert_eq!(painted(&st), [a, b]);
@@ -642,7 +642,7 @@ fn a_reorder_to_its_own_place_writes_nothing() {
 fn a_reorder_of_an_unknown_node_does_nothing_quietly() {
     let mut st = ToileState::new();
     let a = rect(&mut st, 0.0, 0.0);
-    let ghost = ElementId("0000000000000009_00000099".to_owned());
+    let ghost = Id::<Element>::from_text("0000000000000009_00000099".to_owned());
     let out = reorder(&mut st, &ghost, ZTarget::Front);
     assert!(out.update.is_none());
     assert!(out.display.is_empty());
@@ -660,7 +660,7 @@ fn a_command_culls_against_the_last_reported_camera() {
     let mut st = ToileState::new();
     let near = rect(&mut st, 0.0, 0.0);
     let far = rect(&mut st, 5000.0, 5000.0);
-    let shown = |out: &ToileOutcome| -> Vec<ElementId> {
+    let shown = |out: &ToileOutcome| -> Vec<Id<Element>> {
         out.display
             .iter()
             .find_map(|e| match e {
@@ -739,7 +739,7 @@ fn a_remote_batch_repaints_once() {
 fn every_id_the_board_writes_has_the_minted_width() {
     for (peer, counter) in [(0, 0), (u64::MAX, u32::MAX)] {
         assert_eq!(
-            ElementId::mint(
+            Id::<Element>::mint_from(
                 ambre_core::PeerId(peer),
                 ambre_bus::app::toile::IdCounter::new(counter)
             )
@@ -748,7 +748,7 @@ fn every_id_the_board_writes_has_the_minted_width() {
             25
         );
         assert_eq!(
-            ConnectorId::mint(
+            Id::<Connector>::mint_from(
                 ambre_core::PeerId(peer),
                 ambre_bus::app::toile::IdCounter::new(counter)
             )

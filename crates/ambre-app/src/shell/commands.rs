@@ -72,7 +72,7 @@ impl AppHandler {
 #[derive(Clone)]
 pub(crate) struct CommandPath {
     pub(crate) handler: AppHandler,
-    pub(crate) current_doc: RwSignal<Option<DocumentId>>,
+    pub(crate) current_doc: RwSignal<Option<Id<Document>>>,
     pub(crate) to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     pub(crate) clipboard_paste: ambre_bus::conduit::Sender<ClipboardPaste>,
     pub(crate) toasts: Toasts,

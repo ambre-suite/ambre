@@ -13,7 +13,7 @@
 //!
 //! # Three planes, one envelope
 //! - **Content** ([`UiEvent::Viewport`] / [`UiEvent::Presence`]): typed
-//!   [`AppEvent`]s computed by the Logic thread, routed by `DocumentId`.
+//!   [`AppEvent`]s computed by the Logic thread, routed by `Id<Document>`.
 //! - **Service** ([`UiEvent::Rest`]): a [`RestEvent`] response forwarded from
 //!   [`crate::LogicEvent::Rest`], echoing the originating [`RequestId`].
 //! - **Push & status** (`ConnectionStatus`, `SyncWarning`, `MemberRevoked`,
@@ -22,9 +22,10 @@
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelActivity, ChannelId, ChannelMatches, DirectMessageEvent, DocType, DocumentId, MeetingId,
-    MemberChannel, MurmureEvent, RequestId, RestEvent, Role, SpaceEvent, SpaceId, UserId,
+    ChannelActivity, ChannelMatches, DirectMessageEvent, DocType, MemberChannel, MurmureEvent,
+    RequestId, RestEvent, Role, SpaceEvent,
 };
+use ambre_core::id::{Channel, Document, Id, Meeting, Message, Segment, Space, User};
 
 // -----------------------------------------------------------------------------
 // UiEvent -- Logic thread -> UI Thread
@@ -50,13 +51,13 @@ pub enum UiEvent {
     /// update. The UI Thread routes [`event`](AppEvent) to the view owning
     /// `document_id`.
     Viewport {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         event: AppEvent,
     },
 
     /// Decrypted collaborator presence event (cursor position, selection, ...).
     Presence {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         event: AppEvent,
     },
 
@@ -68,7 +69,7 @@ pub enum UiEvent {
     // -- Connection / status (server push) -------------------------------------
     /// WebSocket connection status for a document (online / offline indicator).
     ConnectionStatus {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         connected: ambre_core::LinkState,
     },
 
@@ -76,7 +77,7 @@ pub enum UiEvent {
     /// (`RESID-014`). A reopen replaces it with the counts the document holds
     /// (`RESID-011`).
     Activity {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         counters: ambre_core::activity::ActivityCounters,
     },
 
@@ -85,26 +86,29 @@ pub enum UiEvent {
     /// Fires once per open, including for empty/brand-new documents.
     /// Carries this client's own role so the UI can withhold editing
     /// affordances on a read-only document (`architecture`).
-    DocumentReady { document_id: DocumentId, role: Role },
+    DocumentReady {
+        document_id: Id<Document>,
+        role: Role,
+    },
 
     /// Non-fatal sync warning (quarantine overflow, decrypt failure, ...).
     SyncWarning {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         code: SyncWarningCode,
         message: String,
     },
 
     /// A member was revoked and key rotation is complete (server-initiated).
     MemberRevoked {
-        document_id: DocumentId,
-        revoked_user_id: UserId,
+        document_id: Id<Document>,
+        revoked_user_id: Id<User>,
     },
 
     /// A document was just shared with this user (server-initiated). The UI
     /// refreshes its document list so the new document appears without a reload,
     /// and notifies the user.
     DocumentShared {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     },
 
@@ -112,7 +116,7 @@ pub enum UiEvent {
     /// What an open channel's engine tells its view (`BUS-027`): typed, never
     /// an opaque payload (`BUS-028`).
     Channel {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         event: MurmureEvent,
     },
 
@@ -128,9 +132,9 @@ pub enum UiEvent {
     /// `message` names the message and its segment when the channel is open.
     /// A closed channel is counted by the relay alone, so it names none.
     NewMessage {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         mention: MentionState,
-        message: Option<(crate::SegmentId, crate::MessageId)>,
+        message: Option<(Id<Segment>, Id<Message>)>,
     },
 
     /// Every channel and every space this user is a member of, whole. It
@@ -139,7 +143,7 @@ pub enum UiEvent {
     /// before it opens, and `peers` the other members of each direct message.
     MemberChannels {
         channels: Vec<MemberChannel>,
-        spaces: Vec<SpaceId>,
+        spaces: Vec<Id<Space>>,
         names: Vec<crate::ChannelName>,
         peers: Vec<crate::DirectPeers>,
     },
@@ -155,28 +159,28 @@ pub enum UiEvent {
     /// What an open space tells its view: its catalogue, and the outcome of
     /// a creation or a join.
     Space {
-        space_id: SpaceId,
+        space_id: Id<Space>,
         event: SpaceEvent,
     },
 
     /// The outcome of a direct message request, under the channel id the
     /// request minted.
     DirectMessage {
-        requested: ChannelId,
+        requested: Id<Channel>,
         event: DirectMessageEvent,
     },
 
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
     /// A participant joined the meeting.
     MeetingParticipantJoined {
-        meeting_id: MeetingId,
-        user_id: UserId,
+        meeting_id: Id<Meeting>,
+        user_id: Id<User>,
     },
 
     /// A participant left the meeting.
     MeetingParticipantLeft {
-        meeting_id: MeetingId,
-        user_id: UserId,
+        meeting_id: Id<Meeting>,
+        user_id: Id<User>,
     },
 
     // -- Errors & warnings -----------------------------------------------------
@@ -184,7 +188,7 @@ pub enum UiEvent {
     /// loading screen and tells the user (`ambre-spec-message-bus.md`,
     /// `BUS-030`).
     DocumentOpenFailed {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         message: String,
     },
 
@@ -227,13 +231,13 @@ pub enum UiEvent {
 }
 
 impl UiEvent {
-    /// The `DocumentId` this event is addressed to, for the per-document fan-out a nested
+    /// The `Id<Document>` this event is addressed to, for the per-document fan-out a nested
     /// `doc_embed` needs (`architecture` / `toile-embeds`). A Toile embedding another
     /// document owns a child view, whose Logic->UI stream must be demultiplexed out of the
     /// single shared queue. Only the variants a *view* consumes carry a routing id.
     /// Service-plane and app-global events (`Rest`, `DocumentShared`, channel/meeting push,
     /// errors, `FatalError`) return `None` and stay on the top-level path.
-    pub fn routed_document_id(&self) -> Option<DocumentId> {
+    pub fn routed_document_id(&self) -> Option<Id<Document>> {
         match self {
             UiEvent::Viewport { document_id, .. }
             | UiEvent::Presence { document_id, .. }

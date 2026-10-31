@@ -187,7 +187,7 @@ elements.
 /// One leaf: an element's world box, already expanded to cover its rotation.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElementBounds {
-    pub id:  ElementId,
+    pub id:  Id<Element>,
     pub min: [f64; 2],
     pub max: [f64; 2],
 }
@@ -198,14 +198,14 @@ impl SpatialIndex {
 
     /// The elements that meet the camera's world rectangle, unordered: the
     /// caller paint-orders them (`features/ambre-spec-toile-z-order.md`).
-    pub fn query_visible<'a>(&'a self, vp: &Viewport) -> impl Iterator<Item = ElementId> + 'a;
+    pub fn query_visible<'a>(&'a self, vp: &Viewport) -> impl Iterator<Item = Id<Element>> + 'a;
 
     /// The first pass of a pick. The exact test -- rotation, path fill, stroke
     /// width -- is `features/ambre-spec-toile-selection.md`.
-    pub fn query_point<'a>(&'a self, p: kurbo::Point) -> impl Iterator<Item = ElementId> + 'a;
+    pub fn query_point<'a>(&'a self, p: kurbo::Point) -> impl Iterator<Item = Id<Element>> + 'a;
 
     pub fn insert(&mut self, b: ElementBounds);
-    pub fn remove(&mut self, id: &ElementId);
+    pub fn remove(&mut self, id: &Id<Element>);
     pub fn update(&mut self, b: ElementBounds);
 }
 ```
@@ -268,7 +268,7 @@ impl ToileState {
 
     /// A remote presence sample. The author is the Sync-resolved user id and
     /// never a self-asserted one (`ambre-spec-membership.md`, `SYNC-014`).
-    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &EphemeralBytes) -> Vec<ToileEvent>;
+    pub fn apply_ephemeral(&mut self, from_user_id: Id<User>, payload: &EphemeralBytes) -> Vec<ToileEvent>;
 
     /// A full snapshot, for local persistence, for compaction and for a Sync
     /// request. Its named counterpart, `import_snapshot`, is the name every
@@ -346,7 +346,7 @@ pub struct DisplayViewport {
     pub nodes:     Vec<DisplayNode>,
     /// Derived on read, never stored
     /// (`features/ambre-spec-toile-reactions.md`).
-    pub reactions: BTreeMap<TargetId, ReactionTally>,
+    pub reactions: BTreeMap<Id<Element>, ReactionTally>,
     /// Where each pin sits, its message count and its resolved state, and no
     /// body (`features/ambre-spec-toile-comments.md`).
     pub pins:      Vec<CommentPin>,

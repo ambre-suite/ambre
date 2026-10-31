@@ -6,10 +6,10 @@
 // passes a decision.
 
 use ambre_bus::{
-    ChannelId, DirectMember, DirectMessageDraft, DocumentId, LogicCommand, RequestId, RestCommand,
-    Role, Timestamp, UserId,
+    DirectMember, DirectMessageDraft, LogicCommand, RequestId, RestCommand, Role, Timestamp,
 };
 use ambre_chrome::Dialog;
+use ambre_core::id::{Channel, Document, Id, User};
 use leptos::prelude::*;
 
 /// What a confirmed key is for.
@@ -17,15 +17,15 @@ use leptos::prelude::*;
 pub(crate) enum Purpose {
     /// An invitation to a document, sent to the recipient's email.
     Invite {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         email: ambre_bus::Email,
     },
     /// The direct message of this user and the recipient alone (the Murmure
     /// members spec). `channel_id` names the request.
-    Direct { channel_id: ChannelId },
+    Direct { channel_id: Id<Channel> },
     /// An invitation of a space member into an open channel, by id (the
     /// Murmure channels spec). The invitee joins as an editor.
-    Channel { channel_id: ChannelId },
+    Channel { channel_id: Id<Channel> },
 }
 
 /// A pending trust decision. Built by the per-frame relay from a fetched
@@ -40,7 +40,7 @@ pub(crate) struct TofuPrompt {
     /// What the key is for.
     pub(crate) purpose: Purpose,
     /// The recipient, under whose identity the pin is filed.
-    pub(crate) user_id: UserId,
+    pub(crate) user_id: Id<User>,
     /// The recipient's display name, shown in the prompt. `None` when the
     /// relay named no one, and the prompt reads "This member".
     pub(crate) display_name: Option<ambre_core::DisplayName>,
@@ -110,7 +110,7 @@ pub(crate) fn classify(
 pub(crate) fn confirm(
     prompt: &TofuPrompt,
     role: Role,
-    pin: impl FnOnce(UserId, &ambre_core::ExchangePublicKey),
+    pin: impl FnOnce(Id<User>, &ambre_core::ExchangePublicKey),
     dispatch: impl FnOnce(LogicCommand),
 ) {
     pin(prompt.user_id, &prompt.exchange_pub_key);
@@ -276,10 +276,10 @@ mod tests {
     fn fetched(byte: u8) -> TofuPrompt {
         TofuPrompt {
             purpose: Purpose::Invite {
-                document_id: DocumentId::new(),
+                document_id: Id::<Document>::mint(),
                 email: ambre_core::Email::from("bob@test.local"),
             },
-            user_id: UserId::new(),
+            user_id: Id::<User>::mint(),
             display_name: ambre_core::DisplayName::new("Bob").ok(),
             exchange_pub_key: ambre_core::ExchangePublicKey::from_array([byte; 32]),
             fingerprint: ambre_bus::KeyFingerprint("ABCD EFGH".to_owned()),
@@ -291,7 +291,7 @@ mod tests {
     fn fetched_for_direct(byte: u8) -> TofuPrompt {
         TofuPrompt {
             purpose: Purpose::Direct {
-                channel_id: ChannelId::new(),
+                channel_id: Id::<Channel>::mint(),
             },
             ..fetched(byte)
         }
@@ -385,7 +385,7 @@ mod tests {
     /// key the user saw. It asks first, as every share does.
     #[wasm_bindgen_test]
     fn a_trusted_key_invites_the_member_into_the_channel() {
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         let prompt = TofuPrompt {
             purpose: Purpose::Channel { channel_id },
             ..fetched(7)

@@ -75,8 +75,9 @@ use std::collections::HashMap;
 
 use loro::{ExportMode, LoroDoc, TreeID, UndoManager, VersionVector};
 
+use ambre_core::id::{Id, User};
 use ambre_core::schema::SchemaError;
-use ambre_core::{HistoryStep, StepDirection, UserId};
+use ambre_core::{HistoryStep, StepDirection};
 
 use crate::doc;
 use crate::events::{
@@ -140,25 +141,25 @@ pub struct ProseState {
     /// This document's own peer id, cached at construction.
     peer: ambre_core::PeerId,
     /// The canonical per-user identifier, seeded from `SessionReady` by the
-    /// dispatcher. A stable `UserId`, never the per-session peer id.
-    my_user_id: Option<UserId>,
+    /// dispatcher. A stable `Id<User>`, never the per-session peer id.
+    my_user_id: Option<Id<User>>,
     /// This session's display name, stamped on every outbound presence sample.
     /// Cosmetic: it decides neither identity nor colour (`PRESENCE-004`).
     my_name: Option<ambre_core::DisplayName>,
     /// The threads the last whole-text walk found with no mark. A keystroke
     /// does not walk the text again for them (`comments::refresh_anchors`).
-    orphans: std::collections::HashSet<ambre_core::CommentId>,
+    orphans: std::collections::HashSet<Id<ambre_core::id::Comment>>,
     /// Whether this session turns typing and deleting into suggestions.
     /// Per session, never shared (`features/ambre-spec-prose-engine.md`).
     edit_mode: crate::events::EditMode,
     /// The suggestion the next adjacent edit joins (`PROSE-FEAT-085`).
     burst: Option<suggestions::Burst>,
     /// Every remote peer's latest caret and self-asserted name, keyed by the
-    /// Sync-resolved `UserId`. Ephemeral: never in the CRDT, never persisted
+    /// Sync-resolved `Id<User>`. Ephemeral: never in the CRDT, never persisted
     /// (`PROSE-058`). The name is cosmetic and decides nothing
     /// (`PRESENCE-004`).
     presence: HashMap<
-        UserId,
+        Id<User>,
         (
             crate::events::CursorPosition,
             Option<ambre_core::DisplayName>,
@@ -168,7 +169,7 @@ pub struct ProseState {
     /// knows. A user joins on any frame that decodes and leaves on the relay's
     /// word alone (`PRESENCE-014`). Apart from `presence`, which drops a caret
     /// it cannot place.
-    live: std::collections::HashSet<UserId>,
+    live: std::collections::HashSet<Id<User>>,
     /// This session's last presence sample, re-sent to a newcomer.
     last_frame: Option<ambre_core::EphemeralBytes>,
     /// Whether a newcomer has not heard from this session yet.
@@ -544,14 +545,14 @@ impl ProseState {
         true
     }
 
-    /// Seed the canonical `UserId`, from `LogicEvent::SessionReady`.
-    pub fn set_user_id(&mut self, user_id: UserId) {
+    /// Seed the canonical `Id<User>`, from `LogicEvent::SessionReady`.
+    pub fn set_user_id(&mut self, user_id: Id<User>) {
         self.my_user_id = Some(user_id);
     }
 
-    /// The canonical `UserId` for this session, when a user has signed in.
+    /// The canonical `Id<User>` for this session, when a user has signed in.
     #[must_use]
-    pub fn user_id(&self) -> Option<UserId> {
+    pub fn user_id(&self) -> Option<Id<User>> {
         self.my_user_id
     }
 

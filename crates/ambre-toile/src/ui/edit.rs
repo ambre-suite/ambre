@@ -6,13 +6,14 @@
 // live). Trame's cell editor wraps the same core.
 //
 // This wrapper owns only the Toile-specific concerns. Those are which element is
-// under edit (`ElementId`), and how the pinned style / size is derived from the
+// under edit (`Id<Element>`), and how the pinned style / size is derived from the
 // element. The derivation is sticky ink + auto-size, matching the static render
 // in `render.rs`. Every editing operation delegates to the core.
 // ============================================================================
 
-use ambre_bus::app::toile::{ConnectorId, DisplayElement, ElementId, ElementStyle};
+use ambre_bus::app::toile::{DisplayElement, ElementStyle};
 use ambre_canvas::{Palette, TextEditor, TextEditorStyle};
+use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{Rgba, ViewPx};
 use ambre_draw::{Alignment, BoundingBox, Color, DrawSurface, FontContext, Point};
 
@@ -28,17 +29,17 @@ use super::walk::{TEXT_PAD, TextHost};
 /// same editor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EditTarget {
-    Element(ElementId),
-    ConnectorLabel(ConnectorId),
+    Element(Id<Element>),
+    ConnectorLabel(Id<Connector>),
     /// A frame's title, edited on the board itself (`TOILE-261`). Distinct from
     /// `Element`: a frame has no body, and what commits is a rename.
-    FrameTitle(ElementId),
+    FrameTitle(Id<Element>),
 }
 
 impl EditTarget {
     /// The element whose body is under edit, or `None` for a caption and for a
     /// frame's title. Neither is a body the content pass paints.
-    pub fn element(&self) -> Option<&ElementId> {
+    pub fn element(&self) -> Option<&Id<Element>> {
         match self {
             Self::Element(id) => Some(id),
             Self::ConnectorLabel(_) | Self::FrameTitle(_) => None,
@@ -46,7 +47,7 @@ impl EditTarget {
     }
 
     /// The connector whose caption is under edit, or `None` when an element is.
-    pub fn connector(&self) -> Option<&ConnectorId> {
+    pub fn connector(&self) -> Option<&Id<Connector>> {
         match self {
             Self::ConnectorLabel(id) => Some(id),
             Self::Element(_) | Self::FrameTitle(_) => None,
@@ -55,7 +56,7 @@ impl EditTarget {
 
     /// The frame whose title is under edit, or `None` otherwise. The title pass
     /// reads it, so the band is not painted twice while it is edited.
-    pub fn frame_title(&self) -> Option<&ElementId> {
+    pub fn frame_title(&self) -> Option<&Id<Element>> {
         match self {
             Self::FrameTitle(id) => Some(id),
             Self::Element(_) | Self::ConnectorLabel(_) => None,
@@ -109,7 +110,7 @@ impl InlineEditor {
     /// fixed world size and the theme's text ink. The words are centred in its
     /// box, so they sit on the arrow rather than beside it
     /// (`toile-connectors`).
-    pub fn open_label(id: ConnectorId, text: &str, palette: &Palette) -> Self {
+    pub fn open_label(id: Id<Connector>, text: &str, palette: &Palette) -> Self {
         let font = ElementStyle::default().font;
         let style = TextEditorStyle {
             weight: font.weight,
@@ -132,7 +133,7 @@ impl InlineEditor {
     /// units and the paint applies the zoom, so the caller hands the size the
     /// band reads at the current camera.
     pub fn open_frame_title(
-        id: ElementId,
+        id: Id<Element>,
         title: &str,
         base_size: ambre_core::DocPx,
         palette: &Palette,
@@ -243,7 +244,7 @@ mod tests {
 
     fn elem(style: ElementStyle, kind: ElementKind) -> DisplayElement {
         DisplayElement {
-            id: ElementId("a".to_owned()),
+            id: Id::<Element>::from_text("a".to_owned()),
             kind,
             transform: Affine::IDENTITY,
             bounds: kurbo::Rect::new(0.0, 0.0, 120.0, 80.0),
@@ -264,7 +265,7 @@ mod tests {
     /// body is not what is being typed. The content pass skips the band alone.
     #[test]
     fn the_editor_opens_on_a_frames_title() {
-        let id = ElementId("f".to_owned());
+        let id = Id::<Element>::from_text("f".to_owned());
         let editor = InlineEditor::open_frame_title(
             id.clone(),
             "Agenda",
@@ -286,7 +287,7 @@ mod tests {
     #[test]
     fn an_untouched_placeholder_commits_nothing() {
         let editor = InlineEditor::open_frame_title(
-            ElementId("f".to_owned()),
+            Id::<Element>::from_text("f".to_owned()),
             "",
             ambre_core::DocPx::new(14.0),
             palette(),

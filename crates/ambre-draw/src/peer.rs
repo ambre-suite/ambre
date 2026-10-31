@@ -3,36 +3,37 @@
 // The shared cross-app presence-colour algorithm.
 //
 // Every collaborator is painted in a stable colour derived purely from the seed
-// bytes of their canonical `UserId`. The mapping is a pure function of those 16
+// bytes of their canonical `Id<User>`. The mapping is a pure function of those 16
 // bytes: no per-app state, no random salt. The same user therefore keeps one
 // colour across Prose, Trame and Toile. The colour holds even when they are
 //
 // signed in from two devices (`toile-presence`). Its home is `ambre-draw`
 // because that is the render-primitives crate every app's canvas already
-// depends on. It is seeded on the canonical `UserId` (not a raw `Uuid`), so the
+// depends on. It is seeded on the canonical `Id<User>` (not a raw `Uuid`), so the
 // newtype is preserved end-to-end through presence. That is the sole reason
 // `ambre-draw` takes a scoped `ambre-core` dependency (types only).
 // ============================================================================
 
-use ambre_core::{Rgb, UserId};
+use ambre_core::Rgb;
+use ambre_core::id::{Id, User};
 
 use crate::Color;
 
 /// A stable, well-separated presence colour for the given peer, seeded on their
-/// canonical [`UserId`].
+/// canonical [`Id<User>`].
 ///
 /// The id bytes are folded into a hue with FNV-1a, then mapped through HSL at a
 /// fixed saturation / lightness. Every peer colour is vivid and legible against
 /// both the light and dark board backgrounds. It also stays visually distinct
 /// from its neighbours around the wheel.
-pub fn peer_color(user_id: &UserId) -> Color {
+pub fn peer_color(user_id: &Id<User>) -> Color {
     let [r, g, b] = Hue::of_user(user_id).peer_rgb().channels();
     Color::from_rgba8(r, g, b, 255)
 }
 
 /// The colour of [`peer_color`] as an [`Rgb`]. The DOM chrome draws a user
 /// with it beside the canvas: an avatar, a member row.
-pub fn peer_rgb(user_id: &UserId) -> Rgb {
+pub fn peer_rgb(user_id: &Id<User>) -> Rgb {
     let [r, g, b, _] = peer_color(user_id).to_rgba8().to_u8_array();
     Rgb::from_channels(r, g, b)
 }
@@ -50,7 +51,7 @@ struct Hue(u16);
 impl Hue {
     /// The hue of a peer: the id seed bytes folded with FNV-1a, spread over
     /// the full wheel.
-    fn of_user(user_id: &UserId) -> Self {
+    fn of_user(user_id: &Id<User>) -> Self {
         let mut hash: u32 = 0x811c_9dc5;
         for &b in user_id.as_bytes() {
             hash ^= u32::from(b);
@@ -87,14 +88,14 @@ mod tests {
     /// The DOM colour of a user is their canvas colour, without its alpha.
     #[test]
     fn the_dom_colour_is_the_canvas_colour() {
-        let user = UserId::from_bytes([7u8; 16]);
+        let user = Id::<User>::from_bytes([7u8; 16]);
         let [r, g, b, _] = peer_color(&user).to_rgba8().to_u8_array();
         assert_eq!(peer_rgb(&user).channels(), [r, g, b]);
     }
 
     #[test]
     fn stable_and_pure() {
-        let user = UserId::from_bytes([7u8; 16]);
+        let user = Id::<User>::from_bytes([7u8; 16]);
         assert_eq!(peer_color(&user), peer_color(&user));
     }
 
@@ -102,8 +103,8 @@ mod tests {
     fn distinct_seeds_usually_differ() {
         // Not a guarantee for every pair, but two arbitrary users should not
         // collapse to the same colour in the common case.
-        let a = peer_color(&UserId::from_bytes([1u8; 16]));
-        let b = peer_color(&UserId::from_bytes([2u8; 16]));
+        let a = peer_color(&Id::<User>::from_bytes([1u8; 16]));
+        let b = peer_color(&Id::<User>::from_bytes([2u8; 16]));
         assert_ne!(a, b);
     }
 
@@ -111,7 +112,7 @@ mod tests {
     fn opaque() {
         // Presence colours are always fully opaque; alpha is applied by the
         // caller per overlay element (halo vs cursor vs laser trail).
-        let c = peer_color(&UserId::from_bytes([42u8; 16]));
+        let c = peer_color(&Id::<User>::from_bytes([42u8; 16]));
         assert_eq!(c.components[3], 1.0);
     }
 }

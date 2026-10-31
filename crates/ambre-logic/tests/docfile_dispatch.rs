@@ -22,17 +22,18 @@
 )]
 
 use ambre_core::{
-    DocType, DocumentId,
+    DocType,
     docfile::{DocFileError, read_ambre_plaintext},
+    id::{Document, Id},
 };
 use ambre_toile::ToileState;
 use ambre_trame::{Col, Row, TrameState};
 
-fn doc_id(tag: u8) -> DocumentId {
+fn doc_id(tag: u8) -> Id<Document> {
     let mut bytes = [0u8; 16];
     bytes[..8].copy_from_slice(&[0x01, 0x8f, 0x2a, 0x3b, 0x7c, 0x4d, 0x70, 0x00]);
     bytes[15] = tag;
-    DocumentId::from_bytes(bytes)
+    Id::from_bytes(bytes)
 }
 
 fn trame_file() -> ambre_core::PlaintextContainer {

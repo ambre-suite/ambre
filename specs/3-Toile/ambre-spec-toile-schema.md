@@ -39,9 +39,9 @@ engine. `TOILE-227` and `TOILE-228` are the halves those two hid. `TOILE-229`, `
 
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
-| `TOILE-003` | `INV` | Element identity MUST be a minted `ElementId` carried as a value; a positional or slot key MUST NOT be used. | this spec section 2 | structural -- `ElementId::mint` renders the document `PeerID` and a per-session counter (`crates/ambre-bus/src/app/toile.rs`), and every reference (a connector endpoint, a `children` entry, a `layers` entry, a reaction key) carries that string as a value, so no position is a key; `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- a pasted element draws a fresh id; `ambre_toile::logic::convergence_tests::paste_reproduces_selection_on_a_separate_board` -- the minting carried across boards (neither walks a move, which is `TOILE-227`) | none | verified |
+| `TOILE-003` | `INV` | Element identity MUST be a minted `Id<Element>` carried as a value; a positional or slot key MUST NOT be used. | this spec section 2 | structural -- `Id::<Element>::mint_from` renders the document `PeerID` and a per-session counter (`crates/ambre-bus/src/app/toile.rs`), and every reference (a connector endpoint, a `children` entry, a `layers` entry, a reaction key) carries that string as a value, so no position is a key; `ambre_toile::logic::convergence_tests::copy_does_not_mutate_and_paste_remints_offset` -- a pasted element draws a fresh id; `ambre_toile::logic::convergence_tests::paste_reproduces_selection_on_a_separate_board` -- the minting carried across boards (neither walks a move, which is `TOILE-227`) | none | verified |
 | `TOILE-227` | `INV` | A reference to an element MUST still resolve after a move, a reorder and a regroup. | this spec section 2; this spec section 6 | `ambre_toile::logic::convergence_tests::move_translates_bounds` -- it resolves the id after a translate; `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it reads the `layers` order back after a `mov`, which is the call section 6 rejects the Loro slot id for; `ambre_toile::logic::convergence_tests::group_unions_bounds_and_sits_below_members` -- it resolves the members after they are regrouped | none | verified |
-| `TOILE-229` | `INV` | A composite key MUST re-read as the pair it joins: a `layers` entry as tag and id, a reaction key as target and user. | this spec section 2 | structural -- an id is hex and `_`, a `UserId` is a hyphenated UUID, so no half can carry the `:` or the `/` the key splits on; `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it walks the `NodeId` codec both ways; `ambre_toile::logic::convergence_tests::two_peers_converge` -- it compares the reaction tally of two peers, which is read by splitting the composite key | none | verified |
+| `TOILE-229` | `INV` | A composite key MUST re-read as the pair it joins: a `layers` entry as tag and id, a reaction key as target and user. | this spec section 2 | structural -- an id is hex and `_`, an `Id<User>` is a hyphenated UUID, so no half can carry the `:` or the `/` the key splits on; `ambre_toile::logic::convergence_tests::reorder_to_back_moves_node` -- it walks the `NodeId` codec both ways; `ambre_toile::logic::convergence_tests::two_peers_converge` -- it compares the reaction tally of two peers, which is read by splitting the composite key | none | verified |
 | `TOILE-231` | `INV` | Every id in the document MUST render at the fixed width `mint` produces: 25 characters for an id, 27 for a `layers` entry. | this spec section 2; this spec section 7 | `ambre_toile::logic::structure_tests::every_id_the_board_writes_has_the_minted_width` -- the mint at its two extremes, then every key of the element and arrow maps and every `layers` entry of a board holding each kind of id, written by the widest peer a document takes | none | verified |
 | `TOILE-269` | `INV` | One session MUST NOT mint two equal ids. | this spec section 2 | `ambre_core::authorship::tests::an_id_counter_ends_at_the_top_and_crosses_the_wire_bare` -- the step past the largest u32 answers no counter; `ambre_toile::logic::state::elements::inner_tests::a_spent_counter_refuses_each_create_and_overwrites_nothing` -- the element that holds the last id keeps its box | none | verified |
 | `TOILE-018` | `INV` | An element's whole style MUST be a single LWW register. | this spec section 3; architecture section 2.D | structural -- one `LoroValue::Binary` under the `style` key per element map (`logic/state/elements.rs`), decoded whole by `ElementStyle::from_bytes`, so no attribute has a register to be elected on its own | none | verified |
@@ -65,18 +65,21 @@ engine. `TOILE-227` and `TOILE-228` are the halves those two hid. `TOILE-229`, `
 
 ## 2. IDENTITY
 
-One identity type serves elements, connectors, frames and comment threads.
+Each kind has its own `Id<E>` of `ambre_core::id`: `Id<Element>`, `Id<Connector>`, `Id<Frame>` and
+`Id<Thread>`. The compiler refuses one kind where another is meant.
 
-* `ElementId` is `"{peer:016x}_{counter:08x}"` -- 25 characters. `peer` is the document `PeerID`;
-  `counter` is a per-session monotonic counter, an `IdCounter`.
+* Each id is minted the same way, as `"{peer:016x}_{counter:08x}"` -- 25 characters. `peer` is
+  the document `PeerID`; `counter` is a per-session monotonic counter, an `IdCounter`.
 * A session mints each counter once, and past `u32::MAX` it mints no id, so an id never repeats
   (`TOILE-269`). What a create answers then is `TOILE-270`, in the engine feature.
-* `ConnectorId` uses the same rendering and is a distinct type, so the compiler refuses one where
-  the other is meant. `FrameId` and `TargetId` are aliases of `ElementId`.
+* A frame id becomes its element id through `From`. An element id becomes a frame id only through
+  the board, `ToileState::frame`, when the element is a frame.
+* A comment thread is minted like an element but is never a node of the board. A reaction target
+  is an `Id<Element>`.
 * A `layers` entry joins a tag and an id with `:`: `"E:{element_id}"` or `"C:{connector_id}"`.
 * A `reactions` key joins a target and a user with `/`: `"{target_id}/{user_id}"`. An id is hex and
-  `_`, a `UserId` is a hyphenated UUID, so neither half can contain the separator.
-* `crates/ambre-bus/src/app/toile.rs` holds the two id types and the `NodeId` codec.
+  `_`, an `Id<User>` is a hyphenated UUID, so neither half can contain the separator.
+* `crates/ambre-bus/src/app/toile.rs` holds the `NodeId` codec.
 
 Both the id shape and the two composite keys are decisions, with their rejected alternatives in
 section 6. The width is `TOILE-231`, the two splits are `TOILE-229`.
@@ -221,8 +224,8 @@ Only where a schema decision needs a reason. 40 words each.
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| A minted `ElementId` carried as the map key, and as the value of every reference to it | a positional or slot-derived key | every reorder invalidates it, and a reorder is the whole gesture the board exists for. A minted id is invariant under a move, a reorder, a regroup and a delete, so a connector endpoint, a frame child list, a `layers` entry and a reaction key all keep resolving |
-| A minted `ElementId` carried as the map key, and as the value of every reference to it | the Loro slot id (`ListItemId`) | `LoroMovableList::mov` reassigns the moved element's op id, so every reference keyed by that slot is orphaned on the first reorder. It is the same call Trame reversed for its rows (`ambre-spec-trame-schema.md section 6`) |
+| A minted `Id<Element>` carried as the map key, and as the value of every reference to it | a positional or slot-derived key | every reorder invalidates it, and a reorder is the whole gesture the board exists for. A minted id is invariant under a move, a reorder, a regroup and a delete, so a connector endpoint, a frame child list, a `layers` entry and a reaction key all keep resolving |
+| A minted `Id<Element>` carried as the map key, and as the value of every reference to it | the Loro slot id (`ListItemId`) | `LoroMovableList::mov` reassigns the moved element's op id, so every reference keyed by that slot is orphaned on the first reorder. It is the same call Trame reversed for its rows (`ambre-spec-trame-schema.md section 6`) |
 | `{peer:016x}_{counter:08x}`, fixed width | a document-global monotonic counter | it costs one LWW collision per concurrent create, on a board where concurrent create is the normal case. Two peers minting at the same moment draw a distinct `peer`, so identity needs no coordination and both creations survive |
 | One binary register for a whole element style | one register per attribute | on a blind relay there is no cross-register atomicity, so a fill update racing a stroke update leaves a half-applied style. LWW on one blob converges every peer to one writer's whole style, which is the cross-app pattern of `architecture section 2.D` that Trame's `cellstyle_{sheet}` also follows |
 | `locked` and `link` outside `ElementStyle` | folding both into `ElementStyle` | it puts three unrelated concerns on one register, and a restyle then silently reverts a lock. A lock is a lifecycle flag and a link is navigation; neither is a visual attribute |
@@ -231,9 +234,9 @@ Only where a schema decision needs a reason. 40 words each.
 | `layers` holds a tagged string, not a sub-map | a `LoroMap` per entry | it is a container per z-order slot, and a reorder that touches two structures. A tagged string keeps the list flat and order-preserving, and a `mov` is one operation on one element |
 | The deck in two root containers | one `presentation` map holding an `order` list and a `config` map | a sub-container under a fixed key is created by the first peer that writes into it, so two peers building a deck at the same moment mint rival lists and the engine keeps one. A root container is addressed by its name, which every peer computes alike |
 | A flat `"{target_id}/{user_id}"` key for a reaction | a nested sub-map per target | it is created lazily by the first reactor, so two peers reacting on a fresh target mint rival containers and Loro drops one. The `reactions` root always exists, so concurrent inserts under distinct composite keys all converge, and splitting on the first `/` recovers the target |
-| Keyed by `UserId`, never `PeerID` | keying by `PeerID` | it double-counts the tally and leaves a vote no later session can remove. `PeerID` is per session, so one user on two devices votes twice, while a reaction must survive a reload, a key rotation and a second device |
+| Keyed by `Id<User>`, never `PeerID` | keying by `PeerID` | it double-counts the tally and leaves a vote no later session can remove. `PeerID` is per session, so one user on two devices votes twice, while a reaction must survive a reload, a key rotation and a second device |
 | Raw stroke samples only, never the smoothed curve | storing the smoothed polyline beside the samples | smoothing is a pure function of the samples, so replicating it costs bandwidth and can disagree with a peer's own render |
-| A nested Ambre document is a reference, never inlined | inlining the child's content into this board | it is one key for two documents, and a viewer of the board reads a document they were never granted. As a reference the child keeps its own `DocumentId`, `DocumentKey` and `LoroDoc`, the relay sees no embedding table, and the child's access rules stay the child's |
+| A nested Ambre document is a reference, never inlined | inlining the child's content into this board | it is one key for two documents, and a viewer of the board reads a document they were never granted. As a reference the child keeps its own `Id<Document>`, `DocumentKey` and `LoroDoc`, the relay sees no embedding table, and the child's access rules stay the child's |
 | No `styles` dictionary | a shared style dictionary with an `s` indirection | it is a lookup paid before its benchmark. A board holds far fewer distinct styles than a spreadsheet holds cells, and the deduplication is unmeasured |
 
 ---

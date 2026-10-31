@@ -5,7 +5,8 @@
 //! layout read back is the one the view is handed.
 
 use ambre_bus::app::prose::DocOffset;
-use ambre_core::{DocPx, FootnoteId};
+use ambre_core::DocPx;
+use ambre_core::id::{Footnote, Id};
 use loro::TreeID;
 
 use crate::events::{BlockId, BlockInit, ProseCommand, tree_id};
@@ -44,8 +45,8 @@ fn document(texts: &[String]) -> (ProseState, Vec<BlockId>) {
     (state, ids)
 }
 
-fn add(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> FootnoteId {
-    let before: Vec<FootnoteId> = note::ordinals(state.document())
+fn add(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> Id<Footnote> {
+    let before: Vec<Id<Footnote>> = note::ordinals(state.document())
         .into_iter()
         .map(|(id, _)| id)
         .collect();
@@ -75,8 +76,8 @@ fn page_of_line(layout: &PageLayout, block: &TreeID, line: BlockLine) -> Option<
 }
 
 /// Every note the layout placed, by identity: its ordinal and its page.
-fn placed(layout: &PageLayout) -> Vec<(FootnoteId, u32, u32)> {
-    let mut out: Vec<(FootnoteId, u32, u32)> = layout
+fn placed(layout: &PageLayout) -> Vec<(Id<Footnote>, u32, u32)> {
+    let mut out: Vec<(Id<Footnote>, u32, u32)> = layout
         .page_count
         .span()
         .into_iter()
@@ -126,10 +127,10 @@ fn every_note_is_numbered_from_its_call_before_any_block_is_placed() {
     let later = add(&mut state, ids[1], DocOffset::new(6), "later");
     let earlier = add(&mut state, ids[0], DocOffset::new(5), "earlier");
     let layout = shipped_paginator().full(state.document()).clone();
-    let ordinals: Vec<(FootnoteId, u32)> =
+    let ordinals: Vec<(Id<Footnote>, u32)> =
         placed(&layout).iter().map(|(id, n, _)| (*id, *n)).collect();
     assert_eq!(ordinals, vec![(earlier, 1), (later, 2)]);
-    let counted: Vec<(FootnoteId, u32)> = note::ordinals(state.document())
+    let counted: Vec<(Id<Footnote>, u32)> = note::ordinals(state.document())
         .into_iter()
         .map(|(id, n)| (id, n.get()))
         .collect();

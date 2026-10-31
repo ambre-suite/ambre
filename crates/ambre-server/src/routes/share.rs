@@ -3,6 +3,7 @@ use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use ambre_core::Role;
+use ambre_core::id::{Document, Id, User};
 
 use crate::auth;
 use crate::db;
@@ -14,7 +15,7 @@ use crate::state::AppState;
 pub(crate) struct Expected {
     pub act: ambre_protocol::MembershipAct,
     /// The member the change adds, removes or changes.
-    pub member: ambre_core::UserId,
+    pub member: Id<User>,
     /// The role the entry gives, `None` for a removal.
     pub role: Option<Role>,
     /// The key the entry names, when the route knows it. That is the key an
@@ -30,7 +31,7 @@ pub(crate) struct Expected {
 pub(crate) async fn checked_entry(
     state: &AppState,
     auth: &auth::AuthSession,
-    doc_id: ambre_core::DocumentId,
+    doc_id: Id<Document>,
     entry: Option<&ambre_core::EncodedLogEntry>,
     expected: Expected,
 ) -> Result<Option<db::LogEntry>, AppError> {
@@ -81,8 +82,8 @@ pub struct InviteRequest {
     pub invitee_email: Option<ambre_core::Email>,
     /// The invitee by identity, as a member of a space is known to the
     /// others. A request names one of the two (`SRV-224`).
-    #[serde(default, with = "ambre_core::serde_id::user_id::option")]
-    pub invitee_id: Option<ambre_core::UserId>,
+    #[serde(default, with = "ambre_core::serde_id::text::option")]
+    pub invitee_id: Option<Id<User>>,
     /// A role word, parsed by the handler: an unknown word answers 409, as it
     /// always has, rather than the extractor's 422.
     #[serde(with = "ambre_core::serde_enums::role")]
@@ -90,7 +91,7 @@ pub struct InviteRequest {
     pub doc_key_enc: ambre_core::WrappedDocKey,
     /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
     /// refuses the invitation (`SRV-168`).
-    #[serde(with = "ambre_core::serde_id::key_id")]
+    #[serde(with = "ambre_core::serde_id::text")]
     pub key_id: ambre_core::KeyId,
     /// The signed entry the invite appends to the log (`SYNC-105`).
     #[serde(default)]
@@ -98,8 +99,8 @@ pub struct InviteRequest {
 }
 #[derive(serde::Serialize)]
 pub struct InviteResponse {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub display_name: ambre_core::DisplayName,
     /// Whether the invitee's email was provider-verified (OIDC) rather than
     /// self-asserted at `/auth/setup` (#3). The document key is wrapped to the
@@ -112,7 +113,7 @@ pub struct InviteResponse {
 pub async fn invite_to_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<InviteRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -246,7 +247,7 @@ pub struct RemovalRequest {
 pub async fn revoke_from_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, target)): PathId<(ambre_core::DocumentId, ambre_core::UserId)>,
+    PathId((doc_id, target)): PathId<(Id<Document>, Id<User>)>,
     body: Option<Json<RemovalRequest>>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -332,12 +333,12 @@ pub async fn revoke_from_document(
 /// (`ambre-spec-key-rotation.md`, `SYNC-126`).
 #[derive(serde::Deserialize)]
 pub struct RevokeRequest {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub keys: Vec<RotateKeyEntry>,
     /// Every member the revoke read and keeps, wrapped for or not (`SRV-167`).
-    #[serde(with = "ambre_core::serde_id::user_id::vec")]
-    pub members: Vec<ambre_core::UserId>,
+    #[serde(with = "ambre_core::serde_id::text::vec")]
+    pub members: Vec<Id<User>>,
     /// The link back to the key the revoke replaces (`SYNC-118`).
     pub link: ambre_core::EncodedKeyLink,
     /// The signed entry that records the removal (`SYNC-132`).
@@ -350,7 +351,7 @@ pub struct RevokeRequest {
 pub async fn revoke_and_rotate(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<RevokeRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -425,8 +426,8 @@ pub async fn revoke_and_rotate(
 /// spec).
 pub(crate) async fn space_admin_of_public_meta(
     state: &AppState,
-    document_id: &ambre_core::DocumentId,
-    user: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    user: &Id<User>,
 ) -> Result<bool, AppError> {
     let Some(channel_id) = db::channel_of_document(&state.db, document_id).await? else {
         return Ok(false);
@@ -448,10 +449,7 @@ pub(crate) async fn space_admin_of_public_meta(
 
 /// Raises the debt mirror of each of `documents`, in order. The first that
 /// fails stops the rest.
-async fn raise_debt_mirrors(
-    state: &AppState,
-    documents: &[ambre_core::DocumentId],
-) -> Result<(), AppError> {
+async fn raise_debt_mirrors(state: &AppState, documents: &[Id<Document>]) -> Result<(), AppError> {
     for doc_id in documents {
         crate::redis_ops::mirror_rotation_owed(
             &state.redis,
@@ -464,7 +462,7 @@ async fn raise_debt_mirrors(
 }
 
 /// [`restore_debt_mirror`] for each of `documents`.
-async fn restore_debt_mirrors(state: &AppState, documents: &[ambre_core::DocumentId]) {
+async fn restore_debt_mirrors(state: &AppState, documents: &[Id<Document>]) {
     for doc_id in documents {
         restore_debt_mirror(state, doc_id).await;
     }
@@ -477,7 +475,7 @@ async fn restore_debt_mirrors(state: &AppState, documents: &[ambre_core::Documen
 async fn announce_space_leave(
     state: &AppState,
     leave: &db::SpaceLeave,
-    target: &ambre_core::UserId,
+    target: &Id<User>,
     sweep_due: ambre_core::UnixSeconds,
 ) {
     for meta in &leave.left {
@@ -497,11 +495,7 @@ async fn announce_space_leave(
 /// closes the document. Targeted (not a doc broadcast): only the removed user
 /// learns they were removed, and no remaining member can mistake this for their
 /// own removal. Best-effort -- the membership row is the source of truth.
-pub(crate) async fn notify_removed(
-    state: &AppState,
-    doc_id: &ambre_core::DocumentId,
-    target: &ambre_core::UserId,
-) {
+pub(crate) async fn notify_removed(state: &AppState, doc_id: &Id<Document>, target: &Id<User>) {
     let msg =
         crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::DocumentRevoked {
             document_id: *doc_id,
@@ -511,7 +505,7 @@ pub(crate) async fn notify_removed(
 
 /// Tells every member still on the document to re-read its member list: a new
 /// wrapped copy, or a rotation owed. No user id: it is not a removal signal.
-async fn notify_rotation(state: &AppState, doc_id: &ambre_core::DocumentId) {
+async fn notify_rotation(state: &AppState, doc_id: &Id<Document>) {
     let msg = crate::payload::Payload::server_msg(
         &ambre_protocol::ws::WsServerMsg::KeyRotationRequired {
             document_id: *doc_id,
@@ -522,7 +516,7 @@ async fn notify_rotation(state: &AppState, doc_id: &ambre_core::DocumentId) {
 
 /// Rewrites the debt mirror from the register, which is the authority. A
 /// failure is logged: a subscribe rewrites the mirror again.
-async fn restore_debt_mirror(state: &AppState, doc_id: &ambre_core::DocumentId) {
+async fn restore_debt_mirror(state: &AppState, doc_id: &Id<Document>) {
     let restored = match db::rotation_owed(&state.db, doc_id).await {
         Ok(owed) => {
             let debt = crate::redis_ops::RotationDebt::from_bool(owed);
@@ -538,7 +532,7 @@ async fn restore_debt_mirror(state: &AppState, doc_id: &ambre_core::DocumentId) 
 /// Decodes the wrapped copies of a rotation payload.
 fn decode_keys(
     entries: &[RotateKeyEntry],
-) -> Result<Vec<(ambre_core::UserId, ambre_core::WrappedDocKey)>, AppError> {
+) -> Result<Vec<(Id<User>, ambre_core::WrappedDocKey)>, AppError> {
     Ok(entries
         .iter()
         .map(|e| (e.user_id, e.doc_key_enc.clone()))
@@ -549,7 +543,7 @@ fn decode_keys(
 /// malformed one, one past the size bound, one of another document.
 fn decode_link(
     sent: &ambre_core::EncodedKeyLink,
-    doc_id: ambre_core::DocumentId,
+    doc_id: Id<Document>,
 ) -> Result<ambre_protocol::KeyLink, AppError> {
     let link = ambre_protocol::KeyLink::decode(sent)
         .map_err(|e| AppError::BadRequest(format!("link: {e}")))?;
@@ -566,7 +560,7 @@ fn decode_link(
 pub async fn list_key_links(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
     // The admin who re-keys a public channel reads the chain it extends
     // (`SRV-146`).
@@ -593,23 +587,23 @@ pub struct KeyLinksResponse {
 pub struct RotateKeyRequest {
     pub keys: Vec<RotateKeyEntry>,
     /// Every member the rotation read, wrapped for or not (`SRV-167`).
-    #[serde(with = "ambre_core::serde_id::user_id::vec")]
-    pub members: Vec<ambre_core::UserId>,
+    #[serde(with = "ambre_core::serde_id::text::vec")]
+    pub members: Vec<Id<User>>,
     /// The link back to the key the rotation replaces (`SYNC-118`).
     pub link: ambre_core::EncodedKeyLink,
 }
 /// One entry in the rotation payload: a user and their re-encrypted DocumentKey.
 #[derive(serde::Deserialize)]
 pub struct RotateKeyEntry {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub doc_key_enc: ambre_core::WrappedDocKey,
 }
 
 pub async fn rotate_document_key(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<RotateKeyRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;

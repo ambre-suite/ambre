@@ -111,7 +111,7 @@ Page Up. It acts on the list or the composer that holds the focus, which the she
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PaletteEntry { pub key: PaletteKey, pub label: String, pub hint: Option<&'static str> }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PaletteKey { Channel(ChannelId), Member(UserId) }
+pub enum PaletteKey { Channel(Id<Channel>), Member(Id<User>) }
 pub enum PaletteRow<'a> { Entry(&'a PaletteEntry), Command(&'a Command) }
 ```
 

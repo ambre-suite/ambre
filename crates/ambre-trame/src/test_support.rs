@@ -19,7 +19,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use ambre_bus::{CommandSink, DocumentId, SyncCommand, TrameEvent};
+use ambre_bus::{CommandSink, SyncCommand, TrameEvent};
+use ambre_core::id::{Document, Id};
 
 use crate::{TrameOutcome, TrameState};
 
@@ -50,7 +51,7 @@ impl MockSyncHandle {
     /// dispatcher does in production: a CRDT delta becomes
     /// [`SyncCommand::SendUpdate`], an ephemeral payload becomes
     /// [`SyncCommand::SendEphemeral`]. Both are tagged with `document_id`.
-    pub fn absorb(&self, document_id: DocumentId, outcome: &TrameOutcome) {
+    pub fn absorb(&self, document_id: Id<Document>, outcome: &TrameOutcome) {
         if let Some(payload) = &outcome.update {
             self.send(SyncCommand::SendUpdate {
                 document_id,

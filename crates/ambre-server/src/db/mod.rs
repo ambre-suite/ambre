@@ -1,4 +1,7 @@
 use crate::error::AppError;
+use ambre_core::id::{
+    Channel, Document, Entity, Id, Lease, Message, Meta, Org, Segment, Snapshot, Space, User,
+};
 use sqlx::{PgPool, Row};
 
 // Query functions are split by domain into sibling modules; each reaches the
@@ -219,34 +222,32 @@ impl TryFrom<PgOptState> for Option<ambre_core::SegmentState> {
     }
 }
 
-macro_rules! pg_id {
-    ($($id:ty),* $(,)?) => {$(
-        impl From<PgId> for $id {
-            fn from(PgId(u): PgId) -> Self {
-                uuid_row_to_id(u)
-            }
-        }
+/// An entity whose identifier a row of the relay's store holds.
+trait Stored: Entity<Repr = ambre_core::Uuid> {}
 
-        impl From<PgOptId> for Option<$id> {
-            fn from(PgOptId(u): PgOptId) -> Self {
-                u.map(uuid_row_to_id)
-            }
-        }
-    )*};
+impl Stored for Document {}
+impl Stored for User {}
+impl Stored for Channel {}
+impl Stored for Snapshot {}
+impl Stored for Org {}
+impl Stored for Lease {}
+
+/// A stored identifier column reads into the identifier of any stored entity.
+impl<E: Stored> From<PgId> for Id<E> {
+    fn from(PgId(u): PgId) -> Self {
+        uuid_row_to_id(u)
+    }
 }
 
-pg_id!(
-    ambre_core::DocumentId,
-    ambre_core::UserId,
-    ambre_core::ChannelId,
-    ambre_core::SnapshotId,
-    ambre_core::OrgId,
-    ambre_core::LeaseId,
-);
+/// A stored identifier column that may be `NULL` reads into an optional identifier.
+impl<E: Stored> From<PgOptId> for Option<Id<E>> {
+    fn from(PgOptId(u): PgOptId) -> Self {
+        u.map(uuid_row_to_id)
+    }
+}
 
-pub(crate) fn id_to_uuid(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
-    let core_uuid: ambre_core::Uuid = id.into();
-    uuid::Uuid::from_bytes(*core_uuid.as_bytes())
+pub(crate) fn id_to_uuid<E: Entity<Repr = ambre_core::Uuid>>(id: Id<E>) -> uuid::Uuid {
+    uuid::Uuid::from_bytes(*id.uuid().as_bytes())
 }
 
 #[cfg(test)]
@@ -344,7 +345,7 @@ mod tests {
 
         // IDOR regression guard: resolving the same snapshot id under a foreign
         // document must return None (never leak another document's blob).
-        let other_doc = ambre_core::DocumentId::new();
+        let other_doc = Id::<Document>::mint();
         let cross = get_snapshot(&pool, &other_doc, &sid)
             .await
             .expect("query by id under wrong doc");
@@ -375,7 +376,7 @@ mod tests {
             .expect("create document");
         let document_id = doc.id;
         let author = [5u8; 32];
-        let snap = ambre_core::SnapshotId::new();
+        let snap = Id::<Snapshot>::mint();
 
         // Ten deltas, seq (and clock) 1..=10.
         for seq in 1..=10i64 {
@@ -456,7 +457,7 @@ mod tests {
             .expect("create document");
         let document_id = doc.id;
         let author = [5u8; 32];
-        let snap = ambre_core::SnapshotId::new();
+        let snap = Id::<Snapshot>::mint();
 
         for seq in 1..=10i64 {
             insert_update(

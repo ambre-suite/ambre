@@ -33,7 +33,7 @@ pub use ambre_bus::rest::RequestId;
 /// it can match the answering `RestEvent` back to a pending import. The
 /// `ambre-logic` dispatcher supplies the `document_id` and lowers this to a
 /// `RestCommand`. Toile never constructs a `RestCommand` nor knows its own
-/// `DocumentId`, the same division of labour as the CRDT delta in
+/// `Id<Document>`, the same division of labour as the CRDT delta in
 /// [`ToileOutcome::update`].
 #[derive(Debug)]
 pub enum ToileRequest {

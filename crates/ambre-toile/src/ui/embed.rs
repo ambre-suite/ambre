@@ -3,7 +3,7 @@
 // Nested Ambre documents in the view layer (`toile-embeds`).
 //
 // A `doc_embed` element is a rectangle on the board whose content is another
-// Ambre document with its own `DocumentId`, `DocumentKey` and `LoroDoc`. This
+// Ambre document with its own `Id<Document>`, `DocumentKey` and `LoroDoc`. This
 // module holds the two things `ToileView` needs and nothing else:
 //
 //   - `visible_embeds`: the culled `doc_embed`s projected to screen space, which
@@ -24,10 +24,11 @@
 use std::collections::HashMap;
 
 use ambre_bus::app::toile::{
-    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, InitContent,
+    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementKind, InitContent,
     InputFocus, ToileCommand, WebAddress,
 };
-use ambre_bus::{DocType, DocumentId, LogicCommand};
+use ambre_bus::{DocType, LogicCommand};
+use ambre_core::id::{Document, Element, Id};
 use ambre_draw::{Affine, Point, Rect, Size};
 
 use ambre_canvas::InputEvent;
@@ -51,10 +52,10 @@ pub const EMBED_CLOSE_DEBOUNCE: ambre_core::PageMillis = ambre_core::PageMillis:
 #[derive(Clone, Debug, PartialEq)]
 pub struct VisibleEmbed {
     /// The board element carrying the reference (the focus / hit-test key).
-    pub element: ElementId,
+    pub element: Id<Element>,
     /// The embedded document itself -- the key into `FrameHost`'s child views
     /// and the id the child's own commands carry.
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub doc_type: DocType,
     /// Where to paint the child, in screen pixels. The axis-aligned
     /// bounding box of the element's (possibly rotated) quad. `push_clip` is
@@ -145,7 +146,7 @@ pub fn screen_aabb(elem: &DisplayElement, cam: &ViewportTransform) -> Rect {
 pub fn visible_embeds(
     display: &DisplayViewport,
     cam: &ViewportTransform,
-    focused: Option<&ElementId>,
+    focused: Option<&Id<Element>>,
 ) -> Vec<VisibleEmbed> {
     display
         .nodes
@@ -195,7 +196,7 @@ pub enum EmbedTarget {
     /// Another Ambre document, by reference (`TOILE-021`): the board stores the
     /// id and never the content.
     Document {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     },
 }
@@ -285,7 +286,7 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub struct VisibleWebEmbed {
     /// The board element carrying the address: the shell's key for its frame.
-    pub element: ElementId,
+    pub element: Id<Element>,
     /// The address, as stored. A peer may have written it, so the board read
     /// it back through [`WebAddress::parse`] (`TOILE-267`).
     pub url: WebAddress,
@@ -315,7 +316,7 @@ pub struct VisibleWebEmbed {
 pub fn visible_web_embeds(
     display: &DisplayViewport,
     cam: &ViewportTransform,
-    focused: Option<&ElementId>,
+    focused: Option<&Id<Element>>,
 ) -> Vec<VisibleWebEmbed> {
     display
         .nodes
@@ -361,7 +362,7 @@ pub const CLICK_SLOP: ambre_core::ViewPx = ambre_core::ViewPx::new(4.0);
 #[derive(Default)]
 pub struct EmbedFocus {
     /// The focused embed's board element, if any.
-    focused: Option<ElementId>,
+    focused: Option<Id<Element>>,
     /// The embed under the last press (`None` = empty canvas / non-embed) and
     /// where it landed. The release settles focus, and only if the pointer
     /// barely moved. A drag that starts on an embed must still move it on the
@@ -370,19 +371,19 @@ pub struct EmbedFocus {
     /// The press records the hit even when it names the already-focused embed.
     /// A release there does nothing rather than blurring: a repeat click, for
     /// example the second of a double-click, must not kick focus out.
-    press: Option<(Option<ElementId>, Point)>,
+    press: Option<(Option<Id<Element>>, Point)>,
 }
 
 impl EmbedFocus {
     /// The focused element, for publishing and for the child input route.
-    pub fn current(&self) -> Option<&ElementId> {
+    pub fn current(&self) -> Option<&Id<Element>> {
         self.focused.as_ref()
     }
 
     /// A press landed at `screen` over the embed `hit` (`None` = empty canvas or a
     /// non-embed element). Records it for the release to settle; consumes
     /// nothing, so the board's own gesture proceeds regardless.
-    pub fn on_press(&mut self, hit: Option<&ElementId>, screen: Point) {
+    pub fn on_press(&mut self, hit: Option<&Id<Element>>, screen: Point) {
         self.press = Some((hit.cloned(), screen));
     }
 
@@ -426,7 +427,7 @@ impl EmbedFocus {
     /// focus changed.
     pub fn retain_if<F>(&mut self, still_present: F) -> bool
     where
-        F: Fn(&ElementId) -> bool,
+        F: Fn(&Id<Element>) -> bool,
     {
         if self.focused.as_ref().is_some_and(|id| !still_present(id)) {
             self.focused = None;
@@ -446,7 +447,7 @@ impl EmbedFocus {
 pub struct EmbedSessions {
     /// Open children. `Some(deadline)` = out of the cull set, closing at that
     /// frame-clock reading; `None` = visible, nothing pending.
-    open: HashMap<DocumentId, Option<ambre_core::PageTime>>,
+    open: HashMap<Id<Document>, Option<ambre_core::PageTime>>,
 }
 
 impl EmbedSessions {
@@ -489,7 +490,7 @@ impl EmbedSessions {
             }
         }
 
-        let gone: Vec<DocumentId> = self
+        let gone: Vec<Id<Document>> = self
             .open
             .keys()
             .filter(|id| !references(display, id))
@@ -534,13 +535,13 @@ impl EmbedSessions {
     }
 
     /// Whether `document_id` currently has a session (open or closing).
-    pub fn is_open(&self, document_id: &DocumentId) -> bool {
+    pub fn is_open(&self, document_id: &Id<Document>) -> bool {
         self.open.contains_key(document_id)
     }
 }
 
 /// Every nested document referenced by a `doc_embed` in the culled frame.
-fn embedded_docs(display: &DisplayViewport) -> impl Iterator<Item = (DocumentId, DocType)> + '_ {
+fn embedded_docs(display: &DisplayViewport) -> impl Iterator<Item = (Id<Document>, DocType)> + '_ {
     display.nodes.iter().filter_map(|node| match node {
         DisplayNode::Element(e) => match &e.geom {
             DisplayGeom::DocEmbed {
@@ -555,7 +556,7 @@ fn embedded_docs(display: &DisplayViewport) -> impl Iterator<Item = (DocumentId,
 }
 
 /// Whether the culled frame still references `document_id`.
-fn references(display: &DisplayViewport, document_id: &DocumentId) -> bool {
+fn references(display: &DisplayViewport, document_id: &Id<Document>) -> bool {
     embedded_docs(display).any(|(id, _)| &id == document_id)
 }
 
@@ -603,12 +604,12 @@ mod tests {
 
     pub(super) fn doc_embed(
         id: &str,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         bounds: Rect,
         rot: f64,
     ) -> DisplayElement {
         DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::DocEmbed,
             // Rotation about the bounds' center, matching `derive.rs`.
             transform: Affine::translate(bounds.center().to_vec2())
@@ -646,7 +647,7 @@ mod tests {
         let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         let e = doc_embed(
             "e1",
-            DocumentId::new(),
+            Id::<Document>::mint(),
             Rect::new(20.0, 10.0, 120.0, 90.0),
             0.0,
         );
@@ -662,7 +663,7 @@ mod tests {
         cam.zoom = ambre_core::ZoomFactor::positive(2.5);
         let e = doc_embed(
             "e1",
-            DocumentId::new(),
+            Id::<Document>::mint(),
             Rect::new(0.0, 0.0, 100.0, 100.0),
             0.0,
         );
@@ -678,7 +679,12 @@ mod tests {
     fn transform_survives_a_rotated_embed() {
         let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
         let bounds = Rect::new(0.0, 0.0, 100.0, 40.0);
-        let e = doc_embed("e1", DocumentId::new(), bounds, std::f64::consts::FRAC_PI_2);
+        let e = doc_embed(
+            "e1",
+            Id::<Document>::mint(),
+            bounds,
+            std::f64::consts::FRAC_PI_2,
+        );
         // The unrotated top-left, carried through the element's own rotation, is
         // still the child's origin. Naively subtracting `bounds.origin` in world
         // space would land somewhere else entirely.
@@ -693,7 +699,7 @@ mod tests {
         cam.zoom = ambre_core::ZoomFactor::positive(0.5);
         let e = doc_embed(
             "e1",
-            DocumentId::new(),
+            Id::<Document>::mint(),
             Rect::new(0.0, 0.0, 200.0, 80.0),
             0.0,
         );
@@ -708,7 +714,7 @@ mod tests {
         // would take the whole child away.
         let e = doc_embed(
             "e1",
-            DocumentId::new(),
+            Id::<Document>::mint(),
             Rect::new(0.0, 0.0, 100.0, 20.0),
             std::f64::consts::FRAC_PI_2,
         );
@@ -728,7 +734,7 @@ mod tests {
         let bounds = Rect::new(40.0, 30.0, 240.0, 130.0);
         for rot in [0.0, 0.4, std::f64::consts::FRAC_PI_2, -1.1] {
             for zoom in [0.5, 1.0, 2.5] {
-                let e = doc_embed("e", DocumentId::new(), bounds, rot);
+                let e = doc_embed("e", Id::<Document>::mint(), bounds, rot);
                 let cam = ViewportTransform {
                     zoom: ambre_core::ZoomFactor::positive(zoom),
                     size: Size::new(800.0, 600.0),
@@ -757,7 +763,7 @@ mod tests {
     #[test]
     fn the_paint_origin_is_the_elements_corner_not_its_bounding_box() {
         let bounds = Rect::new(0.0, 0.0, 200.0, 100.0);
-        let e = doc_embed("e", DocumentId::new(), bounds, 0.6);
+        let e = doc_embed("e", Id::<Document>::mint(), bounds, 0.6);
         let cam = ViewportTransform {
             size: Size::new(800.0, 600.0),
             ..Default::default()
@@ -776,12 +782,12 @@ mod tests {
     #[test]
     fn only_the_focused_embed_comes_back_focused() {
         let cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
-        let (a, b) = (DocumentId::new(), DocumentId::new());
+        let (a, b) = (Id::<Document>::mint(), Id::<Document>::mint());
         let dv = viewport(vec![
             DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
             DisplayNode::Element(doc_embed("e2", b, Rect::new(20.0, 0.0, 30.0, 10.0), 0.0)),
         ]);
-        let out = visible_embeds(&dv, &cam, Some(&ElementId("e2".into())));
+        let out = visible_embeds(&dv, &cam, Some(&Id::<Element>::from_text("e2".into())));
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].focused, ambre_bus::app::toile::InputFocus::Board);
         assert_eq!(out[1].focused, ambre_bus::app::toile::InputFocus::Entered);
@@ -800,9 +806,9 @@ mod tests {
 
     #[test]
     fn embed_at_picks_the_topmost_and_skips_locked() {
-        let (a, b) = (DocumentId::new(), DocumentId::new());
+        let (a, b) = (Id::<Document>::mint(), Id::<Document>::mint());
         let over = Rect::new(0.0, 0.0, 50.0, 50.0);
-        let mut locked = doc_embed("e3", DocumentId::new(), over, 0.0);
+        let mut locked = doc_embed("e3", Id::<Document>::mint(), over, 0.0);
         locked.locked = ambre_bus::app::toile::LockState::Locked;
 
         // Two overlapping embeds: the later node is on top (`derive.rs` walks
@@ -813,7 +819,7 @@ mod tests {
         ]);
         assert_eq!(
             embed_at(&dv, Point::new(25.0, 25.0)).map(|e| e.id.clone()),
-            Some(ElementId("e2".into()))
+            Some(Id::<Element>::from_text("e2".into()))
         );
         assert!(embed_at(&dv, Point::new(500.0, 500.0)).is_none());
 
@@ -825,14 +831,14 @@ mod tests {
         ]);
         assert_eq!(
             embed_at(&dv, Point::new(25.0, 25.0)).map(|e| e.id.clone()),
-            Some(ElementId("e1".into()))
+            Some(Id::<Element>::from_text("e1".into()))
         );
     }
 
     // -- Focus: the click-vs-drag arbitration ---------------------------------
 
-    fn eid(s: &str) -> ElementId {
-        ElementId(s.to_owned())
+    fn eid(s: &str) -> Id<Element> {
+        Id::<Element>::from_text(s.to_owned())
     }
 
     #[test]
@@ -966,7 +972,7 @@ mod tests {
         sent
     }
 
-    fn opened(cmds: &[LogicCommand]) -> Vec<DocumentId> {
+    fn opened(cmds: &[LogicCommand]) -> Vec<Id<Document>> {
         cmds.iter()
             .filter_map(|c| match c {
                 LogicCommand::OpenDocument { document_id, .. } => Some(*document_id),
@@ -975,7 +981,7 @@ mod tests {
             .collect()
     }
 
-    fn closed(cmds: &[LogicCommand]) -> Vec<DocumentId> {
+    fn closed(cmds: &[LogicCommand]) -> Vec<Id<Document>> {
         cmds.iter()
             .filter_map(|c| match c {
                 LogicCommand::CloseDocument { document_id } => Some(*document_id),
@@ -984,7 +990,7 @@ mod tests {
             .collect()
     }
 
-    fn board_with(child: DocumentId) -> DisplayViewport {
+    fn board_with(child: Id<Document>) -> DisplayViewport {
         viewport(vec![DisplayNode::Element(doc_embed(
             "e1",
             child,
@@ -996,7 +1002,7 @@ mod tests {
     #[test]
     fn a_visible_embed_opens_once_and_only_once() {
         let mut s = EmbedSessions::default();
-        let child = DocumentId::new();
+        let child = Id::<Document>::mint();
         let dv = board_with(child);
 
         assert_eq!(
@@ -1013,7 +1019,7 @@ mod tests {
     #[test]
     fn close_waits_the_full_debounce() {
         let mut s = EmbedSessions::default();
-        let child = DocumentId::new();
+        let child = Id::<Document>::mint();
         let empty = viewport(Vec::new());
         sync(&mut s, &board_with(child), ambre_bus::PageTime(0.0));
 
@@ -1038,7 +1044,7 @@ mod tests {
     #[test]
     fn a_scroll_oscillation_never_thrashes_the_session() {
         let mut s = EmbedSessions::default();
-        let child = DocumentId::new();
+        let child = Id::<Document>::mint();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
         assert_eq!(
@@ -1066,7 +1072,7 @@ mod tests {
     #[test]
     fn returning_before_the_deadline_cancels_the_close() {
         let mut s = EmbedSessions::default();
-        let child = DocumentId::new();
+        let child = Id::<Document>::mint();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
         sync(&mut s, &dv, ambre_bus::PageTime(0.0));
@@ -1092,7 +1098,7 @@ mod tests {
     #[test]
     fn close_all_takes_every_child_immediately() {
         let mut s = EmbedSessions::default();
-        let (a, b) = (DocumentId::new(), DocumentId::new());
+        let (a, b) = (Id::<Document>::mint(), Id::<Document>::mint());
         let dv = viewport(vec![
             DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
             DisplayNode::Element(doc_embed("e2", b, Rect::new(20.0, 0.0, 30.0, 10.0), 0.0)),
@@ -1101,7 +1107,7 @@ mod tests {
 
         // The board is going away: no debounce, and the sweep empties the
         // registry so a later frame cannot close them twice.
-        let got: std::collections::HashSet<DocumentId> =
+        let got: std::collections::HashSet<Id<Document>> =
             closed(&close_all(&mut s)).into_iter().collect();
         assert_eq!(got, std::collections::HashSet::from([a, b]));
         assert!(close_all(&mut s).is_empty());
@@ -1115,7 +1121,7 @@ mod tests {
     #[test]
     fn an_open_the_channel_refuses_comes_back_next_frame() {
         let mut s = EmbedSessions::default();
-        let child = DocumentId::new();
+        let child = Id::<Document>::mint();
         let dv = board_with(child);
 
         assert_eq!(
@@ -1141,7 +1147,7 @@ mod tests {
     #[test]
     fn a_close_the_channel_refuses_comes_back_next_frame() {
         let mut s = EmbedSessions::default();
-        let child = DocumentId::new();
+        let child = Id::<Document>::mint();
         let dv = board_with(child);
         let empty = viewport(Vec::new());
         sync(&mut s, &dv, ambre_bus::PageTime(0.0));
@@ -1166,7 +1172,7 @@ mod tests {
     #[test]
     fn close_all_keeps_what_the_channel_refused() {
         let mut s = EmbedSessions::default();
-        let (a, b) = (DocumentId::new(), DocumentId::new());
+        let (a, b) = (Id::<Document>::mint(), Id::<Document>::mint());
         let dv = viewport(vec![
             DisplayNode::Element(doc_embed("e1", a, Rect::new(0.0, 0.0, 10.0, 10.0), 0.0)),
             DisplayNode::Element(doc_embed("e2", b, Rect::new(20.0, 0.0, 30.0, 10.0), 0.0)),
@@ -1186,7 +1192,7 @@ mod tests {
     #[test]
     fn two_embeds_of_the_same_document_share_one_session() {
         let mut s = EmbedSessions::default();
-        let child = DocumentId::new();
+        let child = Id::<Document>::mint();
         // The same document placed twice on one board: the registry keys a
         // session by document, not by element, so this must open exactly one.
         let dv = viewport(vec![
@@ -1336,8 +1342,8 @@ mod address_tests {
 
 #[cfg(test)]
 mod web_embed_tests {
-    use ambre_bus::DocumentId;
     use ambre_bus::app::toile::{DisplayGeom, DisplayNode};
+    use ambre_core::id::{Document, Id};
     use ambre_draw::{Rect, Size};
 
     use super::tests::{doc_embed, viewport};
@@ -1346,7 +1352,7 @@ mod web_embed_tests {
     /// A web `embed` element: the doc-embed helper with its geometry swapped, so
     /// one helper covers both kinds.
     fn web(id: &str, bounds: Rect, url: &str) -> DisplayElement {
-        let mut e = doc_embed(id, DocumentId::new(), bounds, 0.0);
+        let mut e = doc_embed(id, Id::<Document>::mint(), bounds, 0.0);
         e.geom = DisplayGeom::Embed(super::WebAddress::parse(url).ok());
         e
     }
@@ -1364,7 +1370,12 @@ mod web_embed_tests {
     #[test]
     fn only_web_embeds_are_published_for_the_shell() {
         let page = web("w", Rect::new(0.0, 0.0, 100.0, 50.0), "https://example.com");
-        let nested = doc_embed("s", DocumentId::new(), Rect::new(0.0, 0.0, 10.0, 10.0), 0.0);
+        let nested = doc_embed(
+            "s",
+            Id::<Document>::mint(),
+            Rect::new(0.0, 0.0, 10.0, 10.0),
+            0.0,
+        );
         let dv = viewport(vec![
             DisplayNode::Element(page),
             DisplayNode::Element(nested),
@@ -1373,7 +1384,7 @@ mod web_embed_tests {
         let got = visible_web_embeds(&dv, &cam(), None);
         assert_eq!(got.len(), 1, "one frame, for the one web embed");
         assert_eq!(got[0].url.as_str(), "https://example.com");
-        assert_eq!(got[0].element.0, "w");
+        assert_eq!(got[0].element.as_str(), "w");
     }
 
     /// `TOILE-UI-337`: a board with no web embed asks the shell for no frame at
@@ -1382,7 +1393,7 @@ mod web_embed_tests {
     fn a_board_with_no_web_embed_publishes_nothing() {
         let dv = viewport(vec![DisplayNode::Element(doc_embed(
             "s",
-            DocumentId::new(),
+            Id::<Document>::mint(),
             Rect::new(0.0, 0.0, 10.0, 10.0),
             0.0,
         ))]);
@@ -1532,8 +1543,9 @@ mod routing_tests {
 mod placement_tests {
     use super::{DEFAULT_EMBED_SIZE, EmbedTarget, PlacedEmbed, placement};
     use crate::ui::viewport::ViewportTransform;
+    use ambre_bus::DocType;
     use ambre_bus::app::toile::{ElementKind, InitContent, ToileCommand};
-    use ambre_bus::{DocType, DocumentId};
+    use ambre_core::id::{Document, Id};
     use ambre_draw::{Point, Size};
 
     fn created(cmd: ToileCommand) -> (ElementKind, Point, Size, InitContent) {
@@ -1555,7 +1567,7 @@ mod placement_tests {
     #[test]
     fn a_picked_document_lands_as_a_reference_in_the_middle_of_the_view() {
         let cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let target = EmbedTarget::Document {
             document_id,
             doc_type: DocType::Trame,

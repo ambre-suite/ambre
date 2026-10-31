@@ -20,9 +20,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ambre_core::docfile::{AMBRE_VERSION, ContainerVersion, DocFileError, read_ambre_plaintext};
+use ambre_core::id::{Document, Id};
 use ambre_core::{
-    DocType, DocumentId, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape,
-    SchemaVersion,
+    DocType, FIXTURE_IMPORT_PEER, FixtureGen, FixtureManifest, FixtureShape, SchemaVersion,
 };
 
 use ambre_prose::ProseState;
@@ -481,7 +481,7 @@ pub fn corpus_root() -> Result<PathBuf, FixtureError> {
 /// # Errors
 ///
 /// As [`load_fixture_from`].
-pub fn load_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError> {
+pub fn load_fixture(name: &str) -> Result<(Id<Document>, DocState), FixtureError> {
     load_fixture_from(&corpus_root()?.join(CURRENT_DIR), name)
 }
 
@@ -496,7 +496,7 @@ pub fn load_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError> 
 /// # Errors
 ///
 /// As [`load_fixture_from`].
-pub fn load_bench_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError> {
+pub fn load_bench_fixture(name: &str) -> Result<(Id<Document>, DocState), FixtureError> {
     load_fixture_from(&corpus_root()?.join(BENCH_DIR), name)
 }
 
@@ -510,7 +510,7 @@ pub fn load_bench_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureE
 ///
 /// [`FixtureError::NotFound`] when no artifact has that name, and
 /// [`FixtureError::Io`] when it cannot be read. Otherwise as [`import_fixture`].
-pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState), FixtureError> {
+pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(Id<Document>, DocState), FixtureError> {
     let path = artifact_path(dir, name);
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
@@ -546,7 +546,7 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState
 /// and [`FixtureError::NoEngine`] for a type with no engine.
 pub fn import_fixture(
     container: &ambre_core::PlaintextContainer,
-) -> Result<(DocumentId, DocState), FixtureError> {
+) -> Result<(Id<Document>, DocState), FixtureError> {
     let doc_type = read_ambre_plaintext(container)?.doc_type;
     // Pinned reader, not `DocState::new`: the receiving state commits its own
     // scaffolding before the merge, so the peer it picks lands in the imported

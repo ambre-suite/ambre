@@ -9,7 +9,7 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelId, DirectMember, DirectMessageDraft, DirectMessageEvent, MurmureEvent, Role, Timestamp,
+    DirectMember, DirectMessageDraft, DirectMessageEvent, MurmureEvent, Role, Timestamp,
 };
 use ambre_murmure::{ChannelState, ChannelType};
 
@@ -50,7 +50,11 @@ impl LogicState {
     /// its first update. An existing one opens as any channel does, and the
     /// channel built at the request is dropped unsent. The request adds no
     /// member to it.
-    pub(crate) fn direct_message_opened(&mut self, requested: ChannelId, channel_id: ChannelId) {
+    pub(crate) fn direct_message_opened(
+        &mut self,
+        requested: Id<Channel>,
+        channel_id: Id<Channel>,
+    ) {
         let Some(channel) = self.direct.remove(&requested) else {
             return;
         };
@@ -70,7 +74,7 @@ impl LogicState {
     }
 
     /// A request failed, and the relay changed nothing.
-    pub(crate) fn direct_failed(&self, requested: ChannelId, message: String) {
+    pub(crate) fn direct_failed(&self, requested: Id<Channel>, message: String) {
         tracing::warn!("Logic: direct message {requested}: {message}");
         self.send_to_ui(UiEvent::DirectMessage {
             requested,
@@ -150,7 +154,7 @@ impl LogicState {
     pub(crate) fn invite_to_channel(
         &mut self,
         id: RequestId,
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         invitee: DirectMember,
         now: Timestamp,
     ) {
@@ -190,7 +194,7 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{DirectMember, MetaId, MurmureCommand, Notice, SegmentId, UserId};
+    use ambre_bus::{DirectMember, MurmureCommand, Notice};
 
     const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
@@ -208,7 +212,7 @@ mod tests {
 
     fn bob() -> DirectMember {
         DirectMember {
-            user_id: UserId::new(),
+            user_id: Id::<User>::mint(),
             exchange_pub_key: ambre_core::ExchangePublicKey::from_array([9; 32]),
         }
     }
@@ -219,8 +223,8 @@ mod tests {
         state: &mut LogicState,
         sync_rx: &Receiver<SyncCommand>,
         members: Vec<DirectMember>,
-    ) -> (ChannelId, MetaId, SegmentId) {
-        let channel_id = ChannelId::new();
+    ) -> (Id<Channel>, Id<Meta>, Id<Segment>) {
+        let channel_id = Id::<Channel>::mint();
         state.handle_logic_command(LogicCommand::OpenDirectMessage {
             draft: DirectMessageDraft {
                 channel_id,
@@ -255,7 +259,7 @@ mod tests {
             requested: channel_id,
             channel_id,
         });
-        let opened: Vec<DocumentId> = drain(&sync_rx)
+        let opened: Vec<Id<Document>> = drain(&sync_rx)
             .into_iter()
             .filter_map(|c| match c {
                 SyncCommand::OpenDocument { document_id, .. } => Some(document_id),
@@ -308,7 +312,7 @@ mod tests {
     fn an_existing_direct_message_opens_in_place_of_the_new_one() {
         let (mut state, ui_rx, sync_rx) = harness();
         let (requested, meta, _) = request(&mut state, &sync_rx, vec![bob()]);
-        let existing = ChannelId::new();
+        let existing = Id::<Channel>::mint();
 
         state.handle_logic_event(LogicEvent::DirectMessageOpened {
             requested,
@@ -357,15 +361,15 @@ mod tests {
         state: &mut LogicState,
         sync_rx: &Receiver<SyncCommand>,
         listed: usize,
-    ) -> (ChannelId, MetaId, SegmentId) {
+    ) -> (Id<Channel>, Id<Meta>, Id<Segment>) {
         let (channel_id, meta, segment) = request(state, sync_rx, vec![bob()]);
         state.handle_logic_event(LogicEvent::DirectMessageOpened {
             requested: channel_id,
             channel_id,
         });
-        state.my_user_id = Some(UserId::new());
+        state.my_user_id = Some(Id::<User>::mint());
         let member = |_| ambre_bus::MemberInfo {
-            user_id: UserId::new(),
+            user_id: Id::<User>::mint(),
             display_name: ambre_core::DisplayName::new("M").unwrap(),
             email: ambre_core::Email::from("m@test.local"),
             role: ambre_bus::Role::Editor,
@@ -378,7 +382,7 @@ mod tests {
         (channel_id, meta, segment)
     }
 
-    fn invite(document_id: DocumentId, invitee: UserId) -> RestCommand {
+    fn invite(document_id: Id<Document>, invitee: Id<User>) -> RestCommand {
         RestCommand::InviteToDocument {
             document_id,
             invitee_email: Some(ambre_core::Email::from("carol@test.local")),
@@ -390,7 +394,7 @@ mod tests {
     }
 
     /// Ready `document_id` under a fresh identity, as Sync would.
-    fn ready(state: &mut LogicState, document_id: DocumentId) {
+    fn ready(state: &mut LogicState, document_id: Id<Document>) {
         state.grant_identity(document_id);
         state.handle_logic_event(LogicEvent::DocumentReady {
             document_id,
@@ -404,7 +408,7 @@ mod tests {
     fn an_invite_into_a_direct_message_of_two_leaves_behind_its_notice() {
         let (mut state, ui_rx, sync_rx) = harness();
         let (channel_id, meta, segment) = created_with(&mut state, &sync_rx, 2);
-        let (id, carol) = (RequestId::next(), UserId::new());
+        let (id, carol) = (RequestId::next(), Id::<User>::mint());
 
         state.handle_logic_command(LogicCommand::Rest {
             id,
@@ -454,7 +458,7 @@ mod tests {
         let id = RequestId::next();
         state.handle_logic_command(LogicCommand::Rest {
             id,
-            cmd: invite(meta.document_id(), UserId::new()),
+            cmd: invite(meta.document_id(), Id::<User>::mint()),
         });
         assert!(matches!(
             drain(&sync_rx).as_slice(),
@@ -471,7 +475,7 @@ mod tests {
         let id = RequestId::next();
         state.handle_logic_command(LogicCommand::Rest {
             id,
-            cmd: invite(meta.document_id(), UserId::new()),
+            cmd: invite(meta.document_id(), Id::<User>::mint()),
         });
         state.forget_murmure_session(segment.document_id());
 
@@ -555,7 +559,7 @@ mod tests {
         });
         state.handle_logic_command(LogicCommand::InviteToChannel {
             id: second,
-            channel_id: ChannelId::new(),
+            channel_id: Id::<Channel>::mint(),
             invitee: bob(),
             now: NOW,
         });

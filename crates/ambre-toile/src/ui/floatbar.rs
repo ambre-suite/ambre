@@ -20,8 +20,9 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    DisplayElement, ElementCount, ElementId, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
+    DisplayElement, ElementCount, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
 };
+use ambre_core::id::{Element, Id};
 use ambre_core::{CssPoint, Rgba, ViewPoint, ViewPx};
 use ambre_draw::{Point, Rect};
 
@@ -151,7 +152,7 @@ pub fn top_center_anchor(
 /// button flags, and the common fill seeds the quick-colour swatch. Connectors are
 /// not addressed by the bar, so only `DisplayElement`s contribute.
 pub fn build_floatbar(
-    selection: &[ElementId],
+    selection: &[Id<Element>],
     selected: &[DisplayElement],
     cam: &ViewportTransform,
     canvas_origin: CssPoint,
@@ -213,7 +214,10 @@ pub fn build_floatbar(
 }
 
 /// Find a selected element by id (linear over the selection's data from Logic).
-fn find_element<'a>(elements: &'a [DisplayElement], id: &ElementId) -> Option<&'a DisplayElement> {
+fn find_element<'a>(
+    elements: &'a [DisplayElement],
+    id: &Id<Element>,
+) -> Option<&'a DisplayElement> {
     elements.iter().find(|e| &e.id == id)
 }
 
@@ -231,8 +235,8 @@ mod tests {
         CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
     }
 
-    fn eid(s: &str) -> ElementId {
-        ElementId(s.to_owned())
+    fn eid(s: &str) -> Id<Element> {
+        Id::<Element>::from_text(s.to_owned())
     }
 
     fn elem(

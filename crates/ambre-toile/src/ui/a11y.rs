@@ -9,9 +9,8 @@
 // ============================================================================
 
 use ambre_bus::DocType;
-use ambre_bus::app::toile::{
-    DisplayElement, DisplayGeom, ElementId, ElementKind, ShapeKind, WebAddress,
-};
+use ambre_bus::app::toile::{DisplayElement, DisplayGeom, ElementKind, ShapeKind, WebAddress};
+use ambre_core::id::{Element, Id};
 
 /// The longest text an announcement carries. A sticky holding a page of notes
 /// is announced by its start, not read whole on every click.
@@ -21,7 +20,10 @@ const TEXT_LIMIT: ambre_core::CharCount = ambre_core::CharCount::new(120);
 /// One element whose data has not arrived yet is not announced: the data
 /// follows within a round trip, and the view announces then.
 #[must_use]
-pub fn selection_announcement(selection: &[ElementId], data: &[DisplayElement]) -> Option<String> {
+pub fn selection_announcement(
+    selection: &[Id<Element>],
+    data: &[DisplayElement],
+) -> Option<String> {
     match selection {
         [] => Some("Nothing selected".to_owned()),
         [id] => data.iter().find(|e| e.id == *id).map(element_announcement),
@@ -93,7 +95,7 @@ mod tests {
         locked: ambre_bus::app::toile::LockState,
     ) -> DisplayElement {
         DisplayElement {
-            id: ElementId::mint(
+            id: Id::<Element>::mint_from(
                 ambre_core::PeerId(1),
                 ambre_bus::app::toile::IdCounter::new(n),
             ),

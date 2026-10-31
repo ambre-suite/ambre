@@ -9,7 +9,7 @@ use ambre_bus::{
     DirectPeers, LogicCommand, MemberChannel, MemberView, MentionCount, MessageView, Presence,
     SearchMatch, SpaceCommand, SpaceEvent, Timestamp, UiEvent, UnreadCount,
 };
-use ambre_core::{CategoryId, ChannelId, MessageId, SegmentId, SpaceId, UserId};
+use ambre_core::id::{Category, Channel, Id, Message, Segment, Space, User};
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::{MessageRef, MurmurePane};
 use leptos::mount::mount_to;
@@ -144,27 +144,27 @@ impl Frame {
 /// `random` to join; a private `board` and a direct message. The user
 /// belongs to all but `random`.
 struct Acme {
-    space: SpaceId,
-    general: ChannelId,
-    sales: ChannelId,
-    random: ChannelId,
-    board: ChannelId,
-    direct: ChannelId,
+    space: Id<Space>,
+    general: Id<Channel>,
+    sales: Id<Channel>,
+    random: Id<Channel>,
+    board: Id<Channel>,
+    direct: Id<Channel>,
 }
 
 impl Acme {
     fn new() -> Self {
         Self {
-            space: SpaceId::new(),
-            general: ChannelId::new(),
-            sales: ChannelId::new(),
-            random: ChannelId::new(),
-            board: ChannelId::new(),
-            direct: ChannelId::new(),
+            space: Id::<Space>::mint(),
+            general: Id::<Channel>::mint(),
+            sales: Id::<Channel>::mint(),
+            random: Id::<Channel>::mint(),
+            board: Id::<Channel>::mint(),
+            direct: Id::<Channel>::mint(),
         }
     }
 
-    fn members(&self, also: &[ChannelId]) -> UiEvent {
+    fn members(&self, also: &[Id<Channel>]) -> UiEvent {
         let public = ChannelPlace::Public(self.space);
         let mut channels = vec![
             MemberChannel {
@@ -197,7 +197,7 @@ impl Acme {
     }
 
     fn catalogue(&self) -> UiEvent {
-        let team = CategoryId::new();
+        let team = Id::<Category>::mint();
         let entry = |channel_id, name: &str, category, position: u32| CatalogueEntry {
             channel_id,
             name: ambre_core::Name::new(name).unwrap(),
@@ -237,7 +237,7 @@ impl Acme {
 }
 
 fn activity(
-    channel_id: ChannelId,
+    channel_id: Id<Channel>,
     active: ambre_bus::Activity,
     counts: Option<(u32, u32)>,
 ) -> UiEvent {
@@ -290,15 +290,15 @@ impl Drop for Frame {
 }
 
 fn channel() -> MurmurePane {
-    MurmurePane::channel(ChannelId::new())
+    MurmurePane::channel(Id::<Channel>::mint())
 }
 
 fn thread() -> MurmurePane {
     MurmurePane::Thread {
-        channel: ChannelId::new(),
+        channel: Id::<Channel>::mint(),
         root: MessageRef {
-            segment: SegmentId::new(),
-            message: MessageId::new(),
+            segment: Id::<Segment>::mint(),
+            message: Id::<Message>::mint(),
         },
     }
 }
@@ -343,7 +343,7 @@ async fn the_channel_and_the_thread_are_each_a_canvas_of_their_cell() {
         Some("Thread")
     );
 
-    let channel = ChannelId::new();
+    let channel = Id::<Channel>::mint();
     frame.pane.set(MurmurePane::Members { channel });
     leptos::task::tick().await;
     assert!(frame.query(&panel).is_none());
@@ -487,7 +487,7 @@ async fn the_command_bar_holds_the_channel_header_and_no_status_bar_shows() {
 }
 
 /// The channel each command opens, `None` for any other command.
-fn opened(commands: &[LogicCommand]) -> Vec<Option<ChannelId>> {
+fn opened(commands: &[LogicCommand]) -> Vec<Option<Id<Channel>>> {
     commands
         .iter()
         .map(|c| match c {
@@ -797,8 +797,8 @@ async fn a_space_lost_leaves_the_sidebar_with_its_channels() {
 
 /// Alice online and Bob offline, as the Logic thread lists the members of
 /// the space.
-fn alice_and_bob(acme: &Acme) -> (UserId, UiEvent) {
-    let alice = UserId::new();
+fn alice_and_bob(acme: &Acme) -> (Id<User>, UiEvent) {
+    let alice = Id::<User>::mint();
     let member = |user_id, name: &str, presence| MemberView {
         user_id,
         display_name: ambre_core::DisplayName::new(name).unwrap(),
@@ -809,7 +809,7 @@ fn alice_and_bob(acme: &Acme) -> (UserId, UiEvent) {
         event: SpaceEvent::Members {
             members: vec![
                 member(alice, "Alice Martin", Presence::Online),
-                member(UserId::new(), "Bob", Presence::Offline),
+                member(Id::<User>::mint(), "Bob", Presence::Offline),
             ],
         },
     };
@@ -1047,7 +1047,7 @@ async fn the_presence_marks_differ_in_shape_as_well_as_in_colour() {
 async fn the_member_list_marks_who_watches_the_channel() {
     let acme = Acme::new();
     let frame = acme.frame().await;
-    let (alice, bob, carol) = (UserId::new(), UserId::new(), UserId::new());
+    let (alice, bob, carol) = (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
     let member = |user_id, name: &str| MemberView {
         user_id,
         display_name: ambre_core::DisplayName::new(name).unwrap(),
@@ -1137,7 +1137,7 @@ async fn the_mark_of_the_channel_differs_in_shape_from_the_others() {
     else {
         unreachable!("alice_and_bob lists members")
     };
-    let carol = UserId::new();
+    let carol = Id::<User>::mint();
     let mut rows = rows.clone();
     rows.push(MemberView {
         user_id: carol,
@@ -1273,10 +1273,10 @@ async fn the_search_box_asks_lists_and_opens_a_match() {
         matches!(asked[..], [LogicCommand::SearchMessages { ref query }] if query.as_str() == "budget"),
         "{asked:?}"
     );
-    let segment = SegmentId::new();
+    let segment = Id::<Segment>::mint();
     let message = MessageView {
-        id: MessageId::new(),
-        author: UserId::new(),
+        id: Id::<Message>::mint(),
+        author: Id::<User>::mint(),
         ts: Timestamp(1),
         text: "the budget for May".to_owned(),
         mentions: Vec::new(),

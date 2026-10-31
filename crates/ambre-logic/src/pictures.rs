@@ -10,9 +10,7 @@ use ambre_core::WholePx;
 use std::io::Cursor;
 
 use super::*;
-use ambre_bus::{
-    ChannelId, ContentHash, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent,
-};
+use ambre_bus::{ContentHash, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent};
 use ambre_core::{ByteSize, ImageSize, MediaBytes};
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
@@ -40,8 +38,8 @@ impl LogicState {
     /// of `channel_id`. One already on its way is not asked twice.
     pub(crate) fn show_picture(
         &mut self,
-        channel_id: ChannelId,
-        document_id: DocumentId,
+        channel_id: Id<Channel>,
+        document_id: Id<Document>,
         media_ref: ContentHash,
     ) {
         let asked = (channel_id, media_ref);
@@ -86,7 +84,7 @@ impl LogicState {
 
     fn send_picture(
         &self,
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         media_ref: ContentHash,
         picture: Option<Picture>,
     ) {

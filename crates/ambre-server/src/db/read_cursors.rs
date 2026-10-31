@@ -7,8 +7,8 @@ use super::*;
 /// One channel document the caller reads, with what the register knows of it.
 #[derive(Debug)]
 pub struct ActivityRow {
-    pub channel_id: ambre_core::ChannelId,
-    pub document_id: ambre_core::DocumentId,
+    pub channel_id: Id<Channel>,
+    pub document_id: Id<Document>,
     /// A segment or a thread: the client counts a thread's mentions alone.
     pub kind: ambre_core::ChannelDocumentKind,
     /// The caller's cursor on the document, 0 when it never wrote one.
@@ -24,8 +24,8 @@ pub struct ActivityRow {
 /// Back is legal: marking a message unread moves the cursor before it.
 pub async fn set_read_cursor(
     pool: &PgPool,
-    user_id: &ambre_core::UserId,
-    document_id: &ambre_core::DocumentId,
+    user_id: &Id<User>,
+    document_id: &Id<Document>,
     seq: ambre_core::Seq,
 ) -> Result<(), AppError> {
     set_read_cursors(pool, user_id, &[(*document_id, seq)]).await
@@ -35,8 +35,8 @@ pub async fn set_read_cursor(
 /// caller's rows alone (the Murmure unread spec).
 pub async fn set_read_cursors(
     pool: &PgPool,
-    user_id: &ambre_core::UserId,
-    cursors: &[(ambre_core::DocumentId, ambre_core::Seq)],
+    user_id: &Id<User>,
+    cursors: &[(Id<Document>, ambre_core::Seq)],
 ) -> Result<(), AppError> {
     let (documents, seqs): (Vec<uuid::Uuid>, Vec<i64>) = cursors
         .iter()
@@ -63,7 +63,7 @@ pub async fn set_read_cursors(
 /// never make a channel active.
 pub async fn channel_activity(
     pool: &PgPool,
-    user_id: &ambre_core::UserId,
+    user_id: &Id<User>,
 ) -> Result<Vec<ActivityRow>, AppError> {
     let rows = sqlx::query(
         "SELECT d.channel_id, d.document_id, d.kind, COALESCE(c.seq, 0) AS cursor, \
@@ -102,8 +102,8 @@ pub async fn channel_activity(
 /// rows, so a removal from it deletes the cursors of the whole channel.
 pub(super) async fn delete_read_cursors_of(
     conn: &mut sqlx::PgConnection,
-    document_id: ambre_core::DocumentId,
-    user_id: ambre_core::UserId,
+    document_id: Id<Document>,
+    user_id: Id<User>,
 ) -> Result<(), AppError> {
     let document_id = id_to_uuid(document_id);
     let user_id = id_to_uuid(user_id);

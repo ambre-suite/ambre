@@ -16,15 +16,15 @@ use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    Attachment, ByteSize, ChannelId, DocumentId, Emoji, LogicCommand, MessageAt, MessageId,
-    MessageView, MurmureCommand, MurmureEvent, ReplyEcho, RequestId, RestEvent, SegmentId,
-    TextStyle, Timestamp, UiEvent, UserId,
+    Attachment, ByteSize, Emoji, LogicCommand, MessageAt, MessageView, MurmureCommand,
+    MurmureEvent, ReplyEcho, RequestId, RestEvent, TextStyle, Timestamp, UiEvent,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
     TextInput, Theme, ThemeControl,
 };
 use ambre_commands::{ClipboardWrite, FunctionKey, Key, KeyBinding, Modifiers};
+use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use ambre_core::{CssPx, CssVector, ViewPoint, ViewPx, ViewSize};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::wheel::WheelDeltaMode;
@@ -60,7 +60,7 @@ pub struct PageReads {
     /// The pane the shell shows now.
     pub pane: Rc<dyn Fn() -> MurmurePane>,
     /// The name of a member, `None` when the page knows none.
-    pub name_of: Rc<dyn Fn(UserId) -> Option<ambre_core::DisplayName>>,
+    pub name_of: Rc<dyn Fn(Id<User>) -> Option<ambre_core::DisplayName>>,
     /// A time, in the reader's language and zone (`MURMURE-418`).
     pub time_of: Rc<dyn Fn(Timestamp) -> String>,
     /// The page's monotonic clock: the wheel and the pictures read it.
@@ -88,13 +88,17 @@ pub struct PageReads {
     pub back: Rc<dyn Fn()>,
     /// The signed-in member, whose last message the up arrow edits
     /// (`MURMURE-178`).
-    pub me: Rc<dyn Fn() -> Option<UserId>>,
+    pub me: Rc<dyn Fn() -> Option<Id<User>>>,
     /// The page's input pipe. A press in the composer gives it the keyboard
     /// focus, and its caret follows the composer's (`MURMURE-430`).
     pub pipe: TextInput,
     /// The members of a channel by name, as the Logic thread last listed
     /// them. The `@` list offers them (`MURMURE-551`).
-    pub members_of: Rc<dyn Fn(ChannelId) -> Vec<(UserId, ambre_core::DisplayName)>>,
+    #[expect(
+        clippy::type_complexity,
+        reason = "each `Id<_>` names its kind, and no alias may hide it"
+    )]
+    pub members_of: Rc<dyn Fn(Id<Channel>) -> Vec<(Id<User>, ambre_core::DisplayName)>>,
     /// Hand the page the `@` list to draw, or `None` to close it. The flag
     /// names the thread's region (`MURMURE-555`).
     pub show_mentions: Rc<dyn Fn(Region, Option<MentionList>)>,
@@ -203,8 +207,8 @@ struct Lists {
 /// messages. Two threads of one channel are two lists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ListOf {
-    Channel(ChannelId),
-    Thread(ChannelId, MessageId),
+    Channel(Id<Channel>),
+    Thread(Id<Channel>, Id<Message>),
 }
 
 /// How the pointer reached a message. A click opens its actions where the
@@ -277,7 +281,7 @@ pub struct MurmureView {
     /// (`MURMURE-417`).
     kinetic: Kinetic,
     /// The oldest segment whose predecessor this region asked for.
-    asked_older: Option<SegmentId>,
+    asked_older: Option<Id<Segment>>,
     /// Where the last paint drew the control back to the latest message,
     /// `None` when the latest message showed (`MURMURE-505`).
     jump: Option<Rect>,
@@ -288,7 +292,7 @@ pub struct MurmureView {
     reveal: Reveal,
     /// The list and the latest message this region last heard, so a new one
     /// is announced once (`MURMURE-208`).
-    heard: (Option<ListOf>, Option<(MessageId, Timestamp)>),
+    heard: (Option<ListOf>, Option<(Id<Message>, Timestamp)>),
     /// The text selected, and the points of a drag the next paint resolves
     /// (`MURMURE-425`).
     selecting: Selecting,
@@ -310,7 +314,7 @@ pub struct MurmureView {
     /// when none plays (`MURMURE-136`).
     next_frame: Option<ambre_core::PageTime>,
     /// The channel on screen this region last ticked, and when.
-    ticked: Option<(ChannelId, ambre_core::PageTime)>,
+    ticked: Option<(Id<Channel>, ambre_core::PageTime)>,
     /// The `@` list this region last handed the page.
     listed: Option<MentionList>,
     /// The format bar this region last handed the page.
@@ -452,7 +456,7 @@ impl MurmureView {
 
     /// The channel on screen in the channel's region, `None` in the thread's
     /// region or with no channel on screen.
-    fn composer_channel(&self) -> Option<ChannelId> {
+    fn composer_channel(&self) -> Option<Id<Channel>> {
         let pane = (self.reads.pane)();
         pane.shown_channel()
             .filter(|_| self.region == Region::Channel)
@@ -762,7 +766,12 @@ impl MurmureView {
     }
 
     /// `message`, lying at `at` in `channel`, as the target of its actions.
-    fn target_of(&self, channel: ChannelId, at: MessageAt, message: &MessageView) -> MessageTarget {
+    fn target_of(
+        &self,
+        channel: Id<Channel>,
+        at: MessageAt,
+        message: &MessageView,
+    ) -> MessageTarget {
         MessageTarget {
             channel,
             at,
@@ -790,7 +799,7 @@ impl MurmureView {
 
     /// Where the root of `thread` lies in the list of `channel`, so the
     /// reply action on its copy opens it (`MURMURE-533`).
-    fn root_of(&self, channel: ChannelId, thread: DocumentId) -> FromThread {
+    fn root_of(&self, channel: Id<Channel>, thread: Id<Document>) -> FromThread {
         let lists = self.lists.borrow();
         let Some(list) = lists.conversations.channel(channel) else {
             return FromThread::Unloaded(thread);
@@ -1871,7 +1880,7 @@ impl MurmureView {
     }
 
     /// A Murmure page binds no document, so a route swap changes nothing.
-    pub fn set_document(&mut self, _document_id: DocumentId) {}
+    pub fn set_document(&mut self, _document_id: Id<Document>) {}
 }
 
 #[cfg(test)]
@@ -1881,8 +1890,8 @@ mod tests {
 
     use ambre_bus::conduit::local;
     use ambre_bus::{
-        ChannelId, ContentHash, HeldReply, HeldSend, MediaType, Mention, MentionTarget,
-        MessageView, MurmureEvent, StyleMark, TextStyle, Unreadable,
+        ContentHash, HeldReply, HeldSend, MediaType, Mention, MentionTarget, MessageView,
+        MurmureEvent, StyleMark, TextStyle, Unreadable,
     };
     use ambre_canvas::theme;
     use ambre_draw::kinetic::LONG_PRESS;
@@ -1944,9 +1953,13 @@ mod tests {
         /// The edit the page holds for the view to take.
         editing: Rc<RefCell<Option<PendingEdit>>>,
         /// The signed-in member, `None` until a test names one.
-        me: Rc<Cell<Option<UserId>>>,
+        me: Rc<Cell<Option<Id<User>>>>,
         /// The members of every channel, as the page lists them.
-        members: Rc<RefCell<Vec<(UserId, ambre_core::DisplayName)>>>,
+        #[expect(
+            clippy::type_complexity,
+            reason = "each `Id<_>` names its kind, and no alias may hide it"
+        )]
+        members: Rc<RefCell<Vec<(Id<User>, ambre_core::DisplayName)>>>,
         /// Each `@` list the view handed the page, oldest first.
         lists: Rc<RefCell<Vec<Listed>>>,
         /// The entry a click picked, for the region it names.
@@ -2153,19 +2166,19 @@ mod tests {
         full
     }
 
-    fn send(page: &Page, channel_id: ChannelId, event: MurmureEvent) {
+    fn send(page: &Page, channel_id: Id<Channel>, event: MurmureEvent) {
         let ev = UiEvent::Channel { channel_id, event };
         page.events.try_send(ev).expect("room in the queue");
     }
 
-    fn list(page: &Page, channel: ChannelId, texts: &[&str]) -> SegmentId {
-        let ada = UserId::new();
+    fn list(page: &Page, channel: Id<Channel>, texts: &[&str]) -> Id<Segment> {
+        let ada = Id::<User>::mint();
         let messages = texts
             .iter()
             .enumerate()
             .map(|(i, text)| message(ada, ambre_bus::Timestamp(i as u64), text))
             .collect();
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         send(page, channel, MurmureEvent::Messages { segment, messages });
         segment
     }
@@ -2199,7 +2212,7 @@ mod tests {
     #[test]
     fn the_selected_channel_shows_its_list_and_is_marked_read_once() {
         let mut page = page();
-        let (shown, other) = (ChannelId::new(), ChannelId::new());
+        let (shown, other) = (Id::<Channel>::mint(), Id::<Channel>::mint());
         list(&page, shown, &["a", "b"]);
         list(&page, other, &["elsewhere"]);
         assert!(frame(&mut page.view));
@@ -2233,15 +2246,15 @@ mod tests {
     #[test]
     fn the_thread_region_shows_the_thread_through_the_same_list() {
         let mut page = page();
-        let channel = ChannelId::new();
-        let ada = UserId::new();
+        let channel = Id::<Channel>::mint();
+        let ada = Id::<User>::mint();
         let root = message(ada, ambre_bus::Timestamp(0), "root");
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         let replies =
             ["one", "two", "three"].map(|text| message(ada, ambre_bus::Timestamp(1), text));
-        let thread = DocumentId::new();
+        let thread = Id::<Document>::mint();
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
             thread,
@@ -2284,14 +2297,14 @@ mod tests {
     #[test]
     fn the_unread_line_stays_after_the_channel_is_marked_read() {
         let mut page = page();
-        let channel = ChannelId::new();
-        let ada = UserId::new();
+        let channel = Id::<Channel>::mint();
+        let ada = Id::<User>::mint();
         let (read, unread) = (
             message(ada, ambre_bus::Timestamp(0), "a"),
             message(ada, ambre_bus::Timestamp(1), "b"),
         );
         let first = Some(unread.id);
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         let messages = vec![read, unread];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         send(&page, channel, MurmureEvent::FirstUnread { message: first });
@@ -2356,7 +2369,7 @@ mod tests {
     #[test]
     fn a_drag_selects_text_that_a_copy_reads_and_sends_nothing() {
         let mut page = page();
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         list(&page, channel, &["hello", "world"]);
         page.pane.set(MurmurePane::Channel { channel, at: None });
         frame_with_fonts(&mut page.view);
@@ -2388,9 +2401,9 @@ mod tests {
     #[test]
     fn a_click_on_a_link_opens_its_address_and_sends_nothing() {
         let mut page = page();
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let link = |text: &str, address: &str, range| {
-            let mut sent = message(UserId::new(), ambre_bus::Timestamp(0), text);
+            let mut sent = message(Id::<User>::mint(), ambre_bus::Timestamp(0), text);
             sent.styles = vec![StyleMark {
                 style: TextStyle::Link(address.into()),
                 range,
@@ -2409,7 +2422,7 @@ mod tests {
                 CharSpan::from_usize_range(4..8),
             ),
         ];
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         page.pane.set(MurmurePane::Channel { channel, at: None });
         frame_with_fonts(&mut page.view);
@@ -2467,9 +2480,9 @@ mod tests {
     #[test]
     fn a_click_on_a_chip_adds_or_takes_away_the_members_reaction() {
         let mut page = page();
-        let (me, ada) = (UserId::new(), UserId::new());
+        let (me, ada) = (Id::<User>::mint(), Id::<User>::mint());
         page.me.set(Some(me));
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut reacted = message(ada, ambre_bus::Timestamp(1), "hello");
         reacted.reactions = vec![
             ambre_bus::Reaction {
@@ -2482,7 +2495,7 @@ mod tests {
             },
         ];
         let id = reacted.id;
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         let messages = vec![reacted];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         page.pane.set(MurmurePane::Channel { channel, at: None });
@@ -2542,7 +2555,7 @@ mod tests {
     /// pick goes in at the caret of that region alone (`MURMURE-139`).
     #[test]
     fn a_picked_emoji_goes_in_at_the_caret() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "ab");
@@ -2576,7 +2589,7 @@ mod tests {
     #[test]
     fn a_drag_past_the_top_scrolls_the_list_under_it() {
         let mut page = page();
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         list(&page, channel, &["hello"; 100]);
         page.pane.set(MurmurePane::Channel { channel, at: None });
         frame(&mut page.view);
@@ -2606,13 +2619,13 @@ mod tests {
 
     /// `count` messages of one author, written from `from` on, in one new
     /// segment of `channel`.
-    fn segment(page: &Page, channel: ChannelId, from: u64, count: u64) -> Vec<MessageView> {
-        let ada = UserId::new();
+    fn segment(page: &Page, channel: Id<Channel>, from: u64, count: u64) -> Vec<MessageView> {
+        let ada = Id::<User>::mint();
         let messages: Vec<_> = (from..from + count)
             .map(|ts| message(ada, ambre_bus::Timestamp(ts), "hello"))
             .collect();
         let ev = MurmureEvent::Messages {
-            segment: SegmentId::new(),
+            segment: Id::<Segment>::mint(),
             messages: messages.clone(),
         };
         send(page, channel, ev);
@@ -2620,7 +2633,7 @@ mod tests {
     }
 
     /// The segments the view asked to load before, since the last call.
-    fn older(page: &Page) -> Vec<SegmentId> {
+    fn older(page: &Page) -> Vec<Id<Segment>> {
         let mut asked = Vec::new();
         while let Ok(command) = page.commands.try_recv() {
             if let LogicCommand::Channel {
@@ -2639,9 +2652,9 @@ mod tests {
     }
 
     /// A channel of `count` messages on screen, at its latest.
-    fn long_channel(count: u64) -> (Page, ChannelId, Vec<MessageView>) {
+    fn long_channel(count: u64) -> (Page, Id<Channel>, Vec<MessageView>) {
         let page = page();
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let messages = segment(&page, channel, 1_000, count);
         page.pane.set(MurmurePane::Channel { channel, at: None });
         (page, channel, messages)
@@ -3132,13 +3145,13 @@ mod tests {
     #[test]
     fn the_thread_takes_the_keys_of_the_channel() {
         let mut page = page();
-        let channel = ChannelId::new();
-        let ada = UserId::new();
+        let channel = Id::<Channel>::mint();
+        let ada = Id::<User>::mint();
         let root = message(ada, ambre_bus::Timestamp(0), "root");
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
-        let thread = DocumentId::new();
+        let thread = Id::<Document>::mint();
         let replies: Vec<_> = (1..=200)
             .map(|ts| message(ada, ambre_bus::Timestamp(ts), "hello"))
             .collect();
@@ -3268,17 +3281,17 @@ mod tests {
 
     /// A channel shown with a band for `cause` at its top, then two messages.
     /// Returns the page, the channel and the segment of the band.
-    fn banded(cause: Unreadable) -> (Page, ChannelId, SegmentId) {
+    fn banded(cause: Unreadable) -> (Page, Id<Channel>, Id<Segment>) {
         let mut page = page();
-        let channel = ChannelId::new();
-        let ada = UserId::new();
+        let channel = Id::<Channel>::mint();
+        let ada = Id::<User>::mint();
         let messages = vec![
             message(ada, ambre_bus::Timestamp(10), "a"),
             message(ada, ambre_bus::Timestamp(11), "b"),
         ];
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         send(&page, channel, MurmureEvent::Messages { segment, messages });
-        let older = SegmentId::new();
+        let older = Id::<Segment>::mint();
         let band = MurmureEvent::Unreadable {
             segment: older,
             cause,
@@ -3293,7 +3306,7 @@ mod tests {
     }
 
     /// The segments the view asked for again since the last call.
-    fn retried(page: &Page) -> Vec<(ChannelId, SegmentId)> {
+    fn retried(page: &Page) -> Vec<(Id<Channel>, Id<Segment>)> {
         let mut asked = Vec::new();
         while let Ok(command) = page.commands.try_recv() {
             if let LogicCommand::Channel {
@@ -3385,9 +3398,9 @@ mod tests {
     #[test]
     fn a_right_click_hands_the_page_its_message_and_sends_nothing() {
         let mut page = page();
-        let channel = ChannelId::new();
-        let ada = UserId::new();
-        let segment = SegmentId::new();
+        let channel = Id::<Channel>::mint();
+        let ada = Id::<User>::mint();
+        let segment = Id::<Segment>::mint();
         let messages = vec![
             message(ada, ambre_bus::Timestamp(0), "a"),
             message(ada, ambre_bus::Timestamp(1), "b"),
@@ -3435,16 +3448,16 @@ mod tests {
     #[test]
     fn a_long_press_hands_the_page_its_message_where_it_held() {
         let mut page = page();
-        let channel = ChannelId::new();
-        let ada = UserId::new();
+        let channel = Id::<Channel>::mint();
+        let ada = Id::<User>::mint();
         let root = message(ada, ambre_bus::Timestamp(0), "root");
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         let reply = message(ada, ambre_bus::Timestamp(1), "one");
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
-            thread: DocumentId::new(),
+            thread: Id::<Document>::mint(),
             messages: vec![reply.clone()],
         };
         send(&page, channel, ev);
@@ -3561,11 +3574,11 @@ mod tests {
     #[test]
     fn a_pane_at_a_message_rests_the_list_on_it() {
         let mut page = page();
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let messages = segment(&page, channel, 1_000, 200);
         let named = messages.get(20).expect("a message").id;
         let at = MessageRef {
-            segment: SegmentId::new(),
+            segment: Id::<Segment>::mint(),
             message: named,
         };
         page.pane.set(MurmurePane::Channel {
@@ -3582,9 +3595,9 @@ mod tests {
         assert!(at.is_some_and(|i| (14..20).contains(&i)), "{at:?}");
         assert_eq!(shown(&page.view).latest_shown, OnScreen::Hidden);
 
-        let later = message(UserId::new(), ambre_bus::Timestamp(9_000), "later");
+        let later = message(Id::<User>::mint(), ambre_bus::Timestamp(9_000), "later");
         let at = MessageRef {
-            segment: SegmentId::new(),
+            segment: Id::<Segment>::mint(),
             message: later.id,
         };
         page.pane.set(MurmurePane::Channel {
@@ -3593,7 +3606,7 @@ mod tests {
         });
         assert!(frame(&mut page.view));
         assert_eq!(page.view.resting_on(), None, "waiting for its message");
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         let messages = vec![later.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         assert!(frame(&mut page.view));
@@ -3621,7 +3634,7 @@ mod tests {
     }
 
     /// A page on `channel`, painted once so the composer's band exists.
-    fn composing(channel: ChannelId) -> Page {
+    fn composing(channel: Id<Channel>) -> Page {
         let mut page = page();
         list(&page, channel, &["a"]);
         page.pane.set(MurmurePane::Channel { channel, at: None });
@@ -3704,7 +3717,7 @@ mod tests {
     /// (`MURMURE-200`).
     #[test]
     fn enter_sends_the_draft_and_shift_enter_breaks_the_line() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         assert!(press_composer(&mut page));
         assert!(type_text(&mut page, "a"));
@@ -3735,7 +3748,7 @@ mod tests {
     const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     /// Drop `name` on the canvas, paint, and return the upload it asked.
-    fn drop_file(page: &mut Page, channel: ChannelId, name: &str) -> RequestId {
+    fn drop_file(page: &mut Page, channel: Id<Channel>, name: &str) -> RequestId {
         page.dropped.borrow_mut().push(PickedFile {
             name: name.to_owned(),
             media_type: MediaType(String::new()),
@@ -3776,7 +3789,7 @@ mod tests {
     /// draft holds while it uploads, and carries it once the relay answered.
     #[test]
     fn a_dropped_file_uploads_and_its_message_carries_it() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let id = drop_file(&mut page, channel, "a.png");
         assert!(press_composer(&mut page));
@@ -3791,7 +3804,7 @@ mod tests {
         assert!(sent_files(&page).is_empty(), "the upload holds the send");
 
         let evt = RestEvent::MediaUploaded {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             content_hash: ContentHash::parse(HASH).expect("an address"),
         };
         page.events
@@ -3820,7 +3833,7 @@ mod tests {
     /// name.
     #[test]
     fn a_failed_upload_adds_nothing_to_the_message() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let id = drop_file(&mut page, channel, "a.png");
         let failed = UiEvent::ApiError {
@@ -3850,11 +3863,11 @@ mod tests {
     /// nothing of it.
     #[test]
     fn a_press_on_a_file_of_the_draft_takes_it_off() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let id = drop_file(&mut page, channel, "a.png");
         let evt = RestEvent::MediaUploaded {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             content_hash: ContentHash::parse(HASH).expect("an address"),
         };
         page.events
@@ -3894,7 +3907,7 @@ mod tests {
     /// goes to the page, which opens or saves it.
     #[test]
     fn a_file_clicked_is_fetched_and_handed_to_the_page() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let file = Attachment {
             media_ref: ContentHash::parse(HASH).expect("an address"),
@@ -3914,7 +3927,7 @@ mod tests {
         };
         assert_eq!((channel_id, media_ref.as_str()), (channel, HASH));
         let evt = RestEvent::MediaDownloaded {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             content_hash: ContentHash::parse(HASH).expect("an address"),
             data: vec![1, 2, 3].into(),
         };
@@ -3941,21 +3954,21 @@ mod tests {
     }
 
     /// A message of `texts.len()` rows whose first carries an animated image.
-    fn gif_list(page: &Page, channel: ChannelId, texts: &[&str]) -> Attachment {
+    fn gif_list(page: &Page, channel: Id<Channel>, texts: &[&str]) -> Attachment {
         let file = Attachment {
             media_ref: ContentHash::parse(HASH).expect("an address"),
             name: "a.gif".to_owned(),
             media_type: MediaType("image/gif".to_owned()),
             size: ByteSize(3),
         };
-        let ada = UserId::new();
+        let ada = Id::<User>::mint();
         let mut messages: Vec<_> = texts
             .iter()
             .enumerate()
             .map(|(i, text)| message(ada, ambre_bus::Timestamp(i as u64), text))
             .collect();
         messages[0].attachments = vec![file.clone()];
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         send(page, channel, MurmureEvent::Messages { segment, messages });
         file
     }
@@ -3965,7 +3978,7 @@ mod tests {
     #[test]
     fn a_picture_on_screen_is_asked_once_and_plays_its_frames() {
         use ambre_bus::{Picture, PictureFrame};
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = page();
         let file = gif_list(&page, channel, &["see"]);
         page.pane.set(MurmurePane::Channel { channel, at: None });
@@ -4009,7 +4022,7 @@ mod tests {
     #[test]
     fn under_reduced_motion_a_picture_never_asks_a_frame() {
         use ambre_bus::{Picture, PictureFrame};
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = page();
         page.motion.set(crate::pictures::Motion::Reduced);
         let file = gif_list(&page, channel, &["see"]);
@@ -4037,7 +4050,7 @@ mod tests {
     /// neither fetched nor played.
     #[test]
     fn a_picture_off_screen_is_not_asked() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = page();
         let texts = vec!["row"; 60];
         gif_list(&page, channel, &texts);
@@ -4055,7 +4068,7 @@ mod tests {
     /// stays (`MURMURE-201`).
     #[test]
     fn an_empty_or_blank_draft_sends_nothing() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         assert!(press_composer(&mut page));
         assert!(key(
@@ -4083,7 +4096,7 @@ mod tests {
     /// draft as it was (`MURMURE-195`, `MURMURE-202`).
     #[test]
     fn each_channel_keeps_its_own_draft() {
-        let (a, b) = (ChannelId::new(), ChannelId::new());
+        let (a, b) = (Id::<Channel>::mint(), Id::<Channel>::mint());
         let mut page = composing(a);
         press_composer(&mut page);
         type_text(&mut page, "for a");
@@ -4118,7 +4131,7 @@ mod tests {
     /// stands above it (`MURMURE-196`).
     #[test]
     fn the_band_holds_a_field_and_no_toolbar() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let band = page.view.composer().band().get();
         assert!(band > 0.0, "a channel region shows the composer");
@@ -4153,7 +4166,7 @@ mod tests {
     /// (`MURMURE-430`).
     #[test]
     fn the_composer_takes_the_pipe_until_escape() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         assert_eq!(page.view.reads.pipe.focus_requests(), 0);
         assert!(press_composer(&mut page), "the press is the composer's");
@@ -4216,7 +4229,7 @@ mod tests {
     /// selection while the composer holds the focus (`MURMURE-430`).
     #[test]
     fn paste_copy_and_cut_go_through_the_draft() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         page.view.paste("hello");
@@ -4278,7 +4291,7 @@ mod tests {
     #[test]
     fn the_command_key_holds_the_composer_chords() {
         use ambre_bus::TextStyle::Bold;
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "hi yo");
@@ -4331,7 +4344,7 @@ mod tests {
     /// an edit drops what a redo held (`MURMURE-433`).
     #[test]
     fn undo_and_redo_walk_the_draft_a_word_at_a_time() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "hi yo");
@@ -4391,7 +4404,7 @@ mod tests {
     /// sent, and sends nothing (`MURMURE-434`).
     #[test]
     fn an_undo_after_a_send_reaches_no_message() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "hello");
@@ -4411,7 +4424,12 @@ mod tests {
     }
 
     /// The edits sent since the last call, and how many new messages.
-    fn edits(page: &Page) -> (Vec<(MessageAt, MessageId, ambre_bus::MessageDraft)>, usize) {
+    fn edits(
+        page: &Page,
+    ) -> (
+        Vec<(MessageAt, Id<Message>, ambre_bus::MessageDraft)>,
+        usize,
+    ) {
         let (mut edits, mut messages) = (Vec::new(), 0);
         while let Ok(command) = page.commands.try_recv() {
             match command {
@@ -4434,10 +4452,10 @@ mod tests {
 
     /// An edit of `message`, reading `text`, as the actions of a message
     /// hand it to the page.
-    fn ask_edit(page: &Page, channel: ChannelId, message: MessageId, text: &str) -> MessageAt {
-        let at = MessageAt::Segment(SegmentId::new());
+    fn ask_edit(page: &Page, channel: Id<Channel>, message: Id<Message>, text: &str) -> MessageAt {
+        let at = MessageAt::Segment(Id::<Segment>::mint());
         let ada = ambre_bus::Mention {
-            target: ambre_bus::MentionTarget::User(UserId::new()),
+            target: ambre_bus::MentionTarget::User(Id::<User>::mint()),
             range: CharSpan::from_usize_range(3..7),
         };
         *page.editing.borrow_mut() = Some(PendingEdit {
@@ -4457,11 +4475,11 @@ mod tests {
     /// ends sending nothing (`MURMURE-203`).
     #[test]
     fn an_edit_loads_the_message_and_sends_an_edit_never_a_new_one() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "draft");
-        let message = MessageId::new();
+        let message = Id::<Message>::mint();
         let at = ask_edit(&page, channel, message, "hi @ada there");
         assert_eq!(
             painted(&mut page, channel).as_deref(),
@@ -4535,11 +4553,11 @@ mod tests {
     /// composer keeps the keys until a second Escape (`MURMURE-204`).
     #[test]
     fn escape_cancels_an_edit_and_leaves_the_message() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "draft");
-        ask_edit(&page, channel, MessageId::new(), "hello");
+        ask_edit(&page, channel, Id::<Message>::mint(), "hello");
         frame_with_fonts(&mut page.view);
         type_text(&mut page, " world");
         frame_with_fonts(&mut page.view);
@@ -4623,7 +4641,7 @@ mod tests {
         ));
         assert_eq!(reads(&page).0, 1, "Escape marks the channel read");
 
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut composing = composing(channel);
         reads(&composing);
         press_composer(&mut composing);
@@ -4661,9 +4679,9 @@ mod tests {
 
     /// Messages of `me` and of another member, in one segment of `channel`
     /// on screen: the member's own, one of theirs deleted, then another's.
-    fn mixed_channel(channel: ChannelId) -> (Page, SegmentId, MessageId) {
+    fn mixed_channel(channel: Id<Channel>) -> (Page, Id<Segment>, Id<Message>) {
         let mut page = page();
-        let (me, bob) = (UserId::new(), UserId::new());
+        let (me, bob) = (Id::<User>::mint(), Id::<User>::mint());
         page.me.set(Some(me));
         let own = message(me, ambre_bus::Timestamp(0), "mine");
         let deleted = MessageView {
@@ -4676,7 +4694,7 @@ mod tests {
             deleted,
             message(bob, ambre_bus::Timestamp(2), "theirs"),
         ];
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         page.pane.set(MurmurePane::Channel { channel, at: None });
         frame_with_fonts(&mut page.view);
@@ -4688,7 +4706,7 @@ mod tests {
     /// caret (`MURMURE-178`).
     #[test]
     fn up_in_an_empty_composer_edits_the_last_own_message() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, segment, own) = mixed_channel(channel);
         press_composer(&mut page);
         type_text(&mut page, "x");
@@ -4738,9 +4756,9 @@ mod tests {
     /// (`MURMURE-179`).
     #[test]
     fn up_never_opens_another_members_message() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
-        page.me.set(Some(UserId::new()));
+        page.me.set(Some(Id::<User>::mint()));
         press_composer(&mut page);
         assert!(
             key(
@@ -4772,7 +4790,7 @@ mod tests {
     /// leaves the draft as it was, unsent (`MURMURE-181`).
     #[test]
     fn marking_everything_read_keeps_the_draft() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "draft");
@@ -4780,7 +4798,7 @@ mod tests {
         send(&page, channel, MurmureEvent::FirstUnread { message: None });
         send(
             &page,
-            ChannelId::new(),
+            Id::<Channel>::mint(),
             MurmureEvent::FirstUnread { message: None },
         );
         assert_eq!(painted(&mut page, channel).as_deref(), Some("draft"));
@@ -4795,7 +4813,7 @@ mod tests {
     /// keyboard; a press in the list takes it back (`MURMURE-430`).
     #[test]
     fn a_tap_in_the_band_focuses_the_composer() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         page.view
             .touch_down(pointer(40.0, 395.0), ambre_bus::PageTime(0.0));
@@ -4839,7 +4857,7 @@ mod tests {
     /// (`MURMURE-518`).
     #[test]
     fn a_key_that_changes_the_draft_sends_a_typing_sample() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         samples(&page);
@@ -4899,7 +4917,7 @@ mod tests {
     /// no channel (`MURMURE-516`).
     #[test]
     fn the_channel_on_screen_ticks_once_per_period() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         assert_eq!(samples(&page).1, 1, "the first paint ticks");
         page.clock.set(ambre_bus::PageTime(
@@ -4912,7 +4930,7 @@ mod tests {
         frame(&mut page.view);
         assert_eq!(samples(&page).1, 1, "one period later");
 
-        let other = ChannelId::new();
+        let other = Id::<Channel>::mint();
         page.pane.set(MurmurePane::Channel {
             channel: other,
             at: None,
@@ -4965,12 +4983,12 @@ mod tests {
     /// indicator lasts, and the line leaves when they stop (`MURMURE-517`).
     #[test]
     fn the_band_names_who_types() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         let band = page.view.composer().band().get();
         assert!(strip_runs(&mut page).is_empty(), "nobody types");
-        let (ada, bob) = (UserId::new(), UserId::new());
-        let watchers = |typing: Vec<UserId>| MurmureEvent::Watchers {
+        let (ada, bob) = (Id::<User>::mint(), Id::<User>::mint());
+        let watchers = |typing: Vec<Id<User>>| MurmureEvent::Watchers {
             watching: vec![ada, bob],
             typing,
             in_threads: Vec::new(),
@@ -4986,13 +5004,13 @@ mod tests {
         assert_eq!(strip_runs(&mut page), vec!["Ada and Ada are typing".len()]);
         send(&page, channel, watchers(vec![]));
         assert!(strip_runs(&mut page).is_empty(), "the indicator expired");
-        let elsewhere = ChannelId::new();
+        let elsewhere = Id::<Channel>::mint();
         send(&page, elsewhere, watchers(vec![ada]));
         assert!(strip_runs(&mut page).is_empty(), "another channel's typing");
         let in_a_thread = MurmureEvent::Watchers {
             watching: vec![ada],
             typing: Vec::new(),
-            in_threads: vec![(MessageId::new(), vec![ada])],
+            in_threads: vec![(Id::<Message>::mint(), vec![ada])],
         };
         send(&page, channel, in_a_thread);
         assert!(strip_runs(&mut page).is_empty(), "a thread's typing");
@@ -5002,15 +5020,15 @@ mod tests {
     /// types in the channel or in another thread (`MURMURE-537`).
     #[test]
     fn the_threads_strip_names_who_types_there() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, mut channel_view, root, _) = threaded(channel);
-        let (ada, bob) = (UserId::new(), UserId::new());
+        let (ada, bob) = (Id::<User>::mint(), Id::<User>::mint());
         let watchers = |in_threads| MurmureEvent::Watchers {
             watching: vec![ada, bob],
             typing: vec![bob],
             in_threads,
         };
-        let elsewhere = vec![(MessageId::new(), vec![bob])];
+        let elsewhere = vec![(Id::<Message>::mint(), vec![bob])];
         send(&page, channel, watchers(elsewhere));
         // The channel's region drains the queue into the shared lists.
         frame_with_fonts(&mut channel_view);
@@ -5024,7 +5042,7 @@ mod tests {
     /// thread's root, in its channel (`MURMURE-536`).
     #[test]
     fn a_key_in_a_threads_composer_names_its_root() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, _channel_view, root, _) = threaded(channel);
         assert!(press_composer(&mut page));
         while page.commands.try_recv().is_ok() {}
@@ -5045,18 +5063,18 @@ mod tests {
     /// stands in `page.view`, and the channel's region, which drains the
     /// queue, comes back beside it. The thread holds a reply of the member,
     /// then one of another member. Answers the root and the own reply.
-    fn threaded(channel: ChannelId) -> (Page, MurmureView, MessageId, MessageId) {
+    fn threaded(channel: Id<Channel>) -> (Page, MurmureView, Id<Message>, Id<Message>) {
         let mut page = page();
-        let (me, bob) = (UserId::new(), UserId::new());
+        let (me, bob) = (Id::<User>::mint(), Id::<User>::mint());
         page.me.set(Some(me));
         let root = message(me, ambre_bus::Timestamp(0), "root");
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         let messages = vec![root.clone()];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         let own = message(me, ambre_bus::Timestamp(1), "mine");
         let ev = MurmureEvent::ThreadMessages {
             root: root.id,
-            thread: DocumentId::new(),
+            thread: Id::<Document>::mint(),
             messages: vec![own.clone(), message(bob, ambre_bus::Timestamp(2), "theirs")],
         };
         send(&page, channel, ev);
@@ -5077,7 +5095,7 @@ mod tests {
 
     /// The replies sent since the last call, as root, text and time. A
     /// message sent to the channel fails the test.
-    fn replies(page: &Page) -> Vec<(MessageId, String, u64)> {
+    fn replies(page: &Page) -> Vec<(Id<Message>, String, u64)> {
         let mut replies = Vec::new();
         while let Ok(command) = page.commands.try_recv() {
             let LogicCommand::Channel { command, .. } = command else {
@@ -5114,7 +5132,7 @@ mod tests {
     /// nothing in the channel (`MURMURE-523`).
     #[test]
     fn enter_in_a_thread_sends_a_reply_to_its_root() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, _channel_view, root, _) = threaded(channel);
         assert!(
             page.view.composer().band().get() > 0.0,
@@ -5139,7 +5157,7 @@ mod tests {
     /// (`MURMURE-524`, `MURMURE-525`).
     #[test]
     fn a_thread_keeps_its_own_draft_apart_from_the_channels() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, mut channel_view, root, own) = threaded(channel);
         std::mem::swap(&mut page.view, &mut channel_view);
         press_composer(&mut page);
@@ -5191,7 +5209,7 @@ mod tests {
     /// its thread, and no new message (`MURMURE-526`).
     #[test]
     fn the_edit_of_a_reply_loads_the_threads_composer() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, mut channel_view, root, own) = threaded(channel);
         *page.editing.borrow_mut() = Some(PendingEdit {
             channel,
@@ -5233,7 +5251,7 @@ mod tests {
     /// (`MURMURE-527`).
     #[test]
     fn up_in_a_threads_empty_composer_edits_the_last_own_reply() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, channel_view, root, _) = threaded(channel);
         press_composer(&mut page);
         frame_with_fonts(&mut page.view);
@@ -5254,7 +5272,7 @@ mod tests {
     /// (`MURMURE-528`).
     #[test]
     fn escape_in_a_threads_list_closes_the_thread() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, _channel_view, root, _) = threaded(channel);
         press_composer(&mut page);
         assert!(key(
@@ -5292,7 +5310,7 @@ mod tests {
     /// thread read (`MURMURE-529`).
     #[test]
     fn closing_a_thread_with_escape_marks_nothing_read() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, _channel_view, _, _) = threaded(channel);
         reads(&page);
         assert!(key(
@@ -5309,7 +5327,7 @@ mod tests {
     /// again shows it, unfocused (`MURMURE-530`).
     #[test]
     fn a_threads_draft_survives_the_thread_closing() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, channel_view, root, _) = threaded(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "later");
@@ -5361,7 +5379,7 @@ mod tests {
     /// the box unchecks (`MURMURE-531`). The channel's band has no box.
     #[test]
     fn the_box_sends_the_reply_to_the_channel_too_once() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, channel_view, root, _) = threaded(channel);
         let of = DraftOf::Thread(channel, root);
         let bottom = page.view.size().height.get() - ALSO_PX / 2.0;
@@ -5401,7 +5419,7 @@ mod tests {
     /// (`MURMURE-531`).
     #[test]
     fn a_tap_on_the_box_checks_it() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, _channel_view, root, _) = threaded(channel);
         let of = DraftOf::Thread(channel, root);
         let bottom = page.view.size().height.get() - ALSO_PX / 2.0;
@@ -5432,7 +5450,7 @@ mod tests {
     /// A second one unchecks it (`MURMURE-534`).
     #[test]
     fn alt_enter_turns_the_box() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, _channel_view, root, _) = threaded(channel);
         let of = DraftOf::Thread(channel, root);
         assert!(press_composer(&mut page));
@@ -5482,7 +5500,7 @@ mod tests {
     /// width only, and drops it again below (`MURMURE-544`).
     #[test]
     fn the_box_names_its_chord_at_the_desktop_width_only() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, _channel_view, _, _) = threaded(channel);
         assert!(press_composer(&mut page));
         let narrow = glyph_runs(&mut page);
@@ -5505,7 +5523,7 @@ mod tests {
     /// channel's draft has no box (`MURMURE-534`).
     #[test]
     fn alt_enter_in_a_channel_sends() {
-        let mut page = composing(ChannelId::new());
+        let mut page = composing(Id::<Channel>::mint());
         assert!(press_composer(&mut page));
         type_text(&mut page, "hi");
         assert!(alt_enter(&mut page));
@@ -5517,7 +5535,7 @@ mod tests {
     /// is drawn on the canvas (`MURMURE-535`).
     #[test]
     fn a_turn_of_the_box_by_a_key_is_said() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, _channel_view, _root, _) = threaded(channel);
         assert!(press_composer(&mut page));
         page.said.borrow_mut().clear();
@@ -5537,9 +5555,9 @@ mod tests {
     #[test]
     fn the_reply_on_a_copy_opens_its_thread() {
         let mut page = page();
-        let channel = ChannelId::new();
-        let ada = UserId::new();
-        let thread = DocumentId::new();
+        let channel = Id::<Channel>::mint();
+        let ada = Id::<User>::mint();
+        let thread = Id::<Document>::mint();
         let root = MessageView {
             thread: Some(ThreadHead {
                 document: thread,
@@ -5552,7 +5570,7 @@ mod tests {
             also_in_thread: Some(thread),
             ..message(ada, ambre_bus::Timestamp(1), "ok")
         };
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         let messages = vec![root.clone(), copy];
         send(&page, channel, MurmureEvent::Messages { segment, messages });
         page.pane.set(MurmurePane::channel(channel));
@@ -5576,9 +5594,9 @@ mod tests {
 
     /// A composer on `channel`, whose members are Ada (the writer), Bob and
     /// Carol, with the keys in its field.
-    fn mentioning(channel: ChannelId) -> (Page, UserId, UserId) {
+    fn mentioning(channel: Id<Channel>) -> (Page, Id<User>, Id<User>) {
         let mut page = composing(channel);
-        let (ada, bob, carol) = (UserId::new(), UserId::new(), UserId::new());
+        let (ada, bob, carol) = (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
         page.me.set(Some(ada));
         *page.members.borrow_mut() = vec![
             (carol, ambre_core::DisplayName::new("Carol").unwrap()),
@@ -5625,7 +5643,7 @@ mod tests {
     /// a space closes the list (`MURMURE-551`).
     #[test]
     fn an_at_opens_the_members_with_the_channel_first() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, ..) = mentioning(channel);
         type_text(&mut page, "hi @");
         frame_with_fonts(&mut page.view);
@@ -5654,7 +5672,7 @@ mod tests {
     /// nothing (`MURMURE-552`).
     #[test]
     fn a_pick_writes_the_name_and_sends_its_mention() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, bob, carol) = mentioning(channel);
         type_text(&mut page, "@b");
         frame_with_fonts(&mut page.view);
@@ -5704,7 +5722,7 @@ mod tests {
     /// (`MURMURE-553`).
     #[test]
     fn an_edit_of_the_draft_keeps_the_mentions_it_leaves_whole() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, bob, _) = mentioning(channel);
         type_text(&mut page, "@bo");
         frame_with_fonts(&mut page.view);
@@ -5786,7 +5804,7 @@ mod tests {
     #[test]
     fn a_closed_marker_becomes_its_mark_and_an_undo_gives_it_back() {
         use ambre_bus::TextStyle::{Bold, Italic};
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "say **done**");
@@ -5848,7 +5866,7 @@ mod tests {
     /// counts bytes, past a wide char (`MURMURE-564`).
     #[test]
     fn the_field_draws_each_mark_as_it_is_typed() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "é **b** `c` [d](https://ambre.dev)");
@@ -5917,7 +5935,7 @@ mod tests {
     #[test]
     fn a_marker_typed_in_code_stays_text() {
         use ambre_bus::TextStyle::Code;
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "`a b`");
@@ -5968,7 +5986,7 @@ mod tests {
     #[test]
     fn a_block_marker_becomes_its_mark_and_the_field_draws_it() {
         use ambre_bus::TextStyle::{CodeBlock, List, Quote};
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "> said");
@@ -6029,7 +6047,7 @@ mod tests {
     /// (`MURMURE-570`).
     #[test]
     fn the_field_draws_a_blocks_lines_past_its_margin_mark() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         let long = "word ".repeat(20);
@@ -6080,7 +6098,7 @@ mod tests {
     #[test]
     fn a_chord_puts_its_style_on_the_selection() {
         use ambre_bus::TextStyle::{Bold, Italic};
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "one two");
@@ -6127,7 +6145,7 @@ mod tests {
     fn a_selection_shows_the_format_bar_and_a_press_toggles_its_style() {
         use crate::markers::Cover;
         use ambre_bus::TextStyle::{Bold, Code, Italic};
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
         type_slowly(&mut page, "one two");
@@ -6190,7 +6208,7 @@ mod tests {
     /// key does not (`MURMURE-571` to `MURMURE-575`).
     #[test]
     fn the_keys_on_the_draft_are_said_once_they_land() {
-        let mut page = composing(ChannelId::new());
+        let mut page = composing(Id::<Channel>::mint());
         let last = |page: &Page| page.said.borrow().last().cloned();
         press_composer(&mut page);
         frame_with_fonts(&mut page.view);
@@ -6231,7 +6249,7 @@ mod tests {
     /// That line is one wrapped part of a draft with no break (`MURMURE-576`).
     #[test]
     fn a_line_move_on_a_wrapped_draft_says_the_line_drawn() {
-        let mut page = composing(ChannelId::new());
+        let mut page = composing(Id::<Channel>::mint());
         let last = |page: &Page| page.said.borrow().last().cloned();
         press_composer(&mut page);
         // Shorter than an announcement holds, so a clip cannot pass for a line.
@@ -6259,7 +6277,7 @@ mod tests {
 
     /// Give the page's shelf `me` and a store of `rows`, as the launcher does
     /// once the session and the store are ready.
-    fn keep_drafts(page: &Page, me: UserId, rows: &Rows) {
+    fn keep_drafts(page: &Page, me: Id<User>, rows: &Rows) {
         use crate::drafts::DraftWrite;
         let store = Rc::clone(rows);
         page.view.reads.drafts.set_sink(Rc::new(move |write| {
@@ -6286,7 +6304,7 @@ mod tests {
     /// No command carried it meanwhile (`MURMURE-210`, `MURMURE-211`).
     #[test]
     fn a_draft_comes_back_after_a_reload() {
-        let (channel, me) = (ChannelId::new(), UserId::new());
+        let (channel, me) = (Id::<Channel>::mint(), Id::<User>::mint());
         let rows = Rows::default();
         let mut page = composing(channel);
         keep_drafts(&page, me, &rows);
@@ -6320,7 +6338,7 @@ mod tests {
     /// keeps none (`MURMURE-212`).
     #[test]
     fn a_sent_draft_leaves_the_store() {
-        let (channel, me) = (ChannelId::new(), UserId::new());
+        let (channel, me) = (Id::<Channel>::mint(), Id::<User>::mint());
         let rows = Rows::default();
         let mut page = composing(channel);
         keep_drafts(&page, me, &rows);
@@ -6344,7 +6362,11 @@ mod tests {
     /// (`MURMURE-215`, `MURMURE-217`).
     #[test]
     fn a_lost_channel_takes_its_draft_from_the_composer() {
-        let (lost, kept, me) = (ChannelId::new(), ChannelId::new(), UserId::new());
+        let (lost, kept, me) = (
+            Id::<Channel>::mint(),
+            Id::<Channel>::mint(),
+            Id::<User>::mint(),
+        );
         let rows = Rows::default();
         let mut page = composing(kept);
         keep_drafts(&page, me, &rows);
@@ -6380,14 +6402,14 @@ mod tests {
     #[test]
     fn an_edit_of_the_styles_alone_is_sent() {
         use ambre_bus::TextStyle::Bold;
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut page = composing(channel);
         press_composer(&mut page);
-        let message = MessageId::new();
+        let message = Id::<Message>::mint();
         let edit = |page: &Page| {
             *page.editing.borrow_mut() = Some(PendingEdit {
                 channel,
-                at: MessageAt::Segment(SegmentId::new()),
+                at: MessageAt::Segment(Id::<Segment>::mint()),
                 message,
                 text: "hi you".to_owned(),
                 mentions: Vec::new(),
@@ -6433,7 +6455,7 @@ mod tests {
     /// changes the draft or sends it (`MURMURE-556`).
     #[test]
     fn the_list_takes_its_keys_and_escape_closes_it_until_the_query_ends() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, ..) = mentioning(channel);
         type_text(&mut page, "@");
         frame_with_fonts(&mut page.view);
@@ -6484,7 +6506,7 @@ mod tests {
     /// region it names alone (`MURMURE-555`).
     #[test]
     fn a_click_on_an_entry_picks_it_in_its_region() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, ..) = mentioning(channel);
         type_text(&mut page, "@");
         frame_with_fonts(&mut page.view);
@@ -6508,7 +6530,7 @@ mod tests {
     /// since stays (`MURMURE-558`).
     #[test]
     fn a_cancelled_at_channel_gives_its_draft_back() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let (mut page, bob, _) = mentioning(channel);
         let draft = ambre_bus::MessageDraft {
             text: "@channel @Bob hi".to_owned(),
@@ -6556,7 +6578,7 @@ mod tests {
         let reply = AskedAll {
             held: HeldSend {
                 reply: Some(HeldReply {
-                    root: MessageId::new(),
+                    root: Id::<Message>::mint(),
                     also_in_channel: ReplyEcho::ThreadOnly,
                 }),
                 ..asked.held.clone()

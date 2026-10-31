@@ -3,6 +3,7 @@
 
 use crate::error::AppError;
 use crate::state::AppState;
+use ambre_core::id::{Document, Id};
 
 /// How many marked deletes one pass works through.
 const PASS_LIMIT: crate::db::QueryLimit = crate::db::QueryLimit::saturating(100);
@@ -18,10 +19,7 @@ const PASS_LIMIT: crate::db::QueryLimit = crate::db::QueryLimit::saturating(100)
 /// # Errors
 ///
 /// The first step that fails. The mark stays, so the delete still completes.
-pub async fn delete_document(
-    state: &AppState,
-    document_id: &ambre_core::DocumentId,
-) -> Result<(), AppError> {
+pub async fn delete_document(state: &AppState, document_id: &Id<Document>) -> Result<(), AppError> {
     let sweep_due = sweep_due(state);
     let space_members = crate::db::space_members(&state.db, document_id).await?;
     let channels = crate::db::begin_deletion(&state.db, document_id, sweep_due).await?;
@@ -49,7 +47,7 @@ pub fn sweep_due(state: &AppState) -> ambre_core::UnixSeconds {
 /// keeps its mark, and the pass finishes it (`SRV-165`).
 pub async fn empty_marked(
     state: &AppState,
-    documents: &[ambre_core::DocumentId],
+    documents: &[Id<Document>],
     sweep_due: ambre_core::UnixSeconds,
 ) {
     for doc in documents {
@@ -66,7 +64,7 @@ pub async fn empty_marked(
 /// step may run again, so a pass repeats the whole of it (`SRV-017`).
 async fn empty_document(
     state: &AppState,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     sweep_due: ambre_core::UnixSeconds,
 ) -> Result<(), AppError> {
     let ttl = fence_ttl(sweep_due, crate::s3::unix_now());
@@ -101,7 +99,7 @@ pub async fn finish_deletions(state: &AppState) {
 /// One pending delete, one pass.
 async fn finish_one(
     state: &AppState,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     sweep_due: ambre_core::UnixSeconds,
     rows_left: crate::db::DocumentRows,
 ) -> Result<(), AppError> {

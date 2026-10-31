@@ -7,7 +7,7 @@
 //!
 //! [`ProseOutcome`] stays here, like `ToileOutcome` and `TrameOutcome` stay in
 //! their own crates. It carries raw CRDT and ephemeral bytes; the `ambre-logic`
-//! dispatcher wraps them into `SyncCommand`s under the owning `DocumentId`,
+//! dispatcher wraps them into `SyncCommand`s under the owning `Id<Document>`,
 //! which the engine does not hold (`PROSE-024`).
 
 pub use ambre_bus::app::grid;

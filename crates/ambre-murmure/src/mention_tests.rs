@@ -4,7 +4,8 @@
 use crate::Receipt;
 use ambre_bus::CharSpan;
 use ambre_bus::{Mention, MentionCount, MentionTarget, MessageDraft, MessageView, Timestamp};
-use ambre_core::{ChannelId, Seq, UserId};
+use ambre_core::Seq;
+use ambre_core::id::{Channel, Id, User};
 use loro::{Container, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{Mark, MessageKey, Root};
@@ -16,11 +17,11 @@ use crate::{
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
 /// Alice's channel, created empty, and the user she writes for.
-fn alice() -> (ChannelState, UserId) {
-    let state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+fn alice() -> (ChannelState, Id<User>) {
+    let state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
-    (state, UserId::new())
+    (state, Id::<User>::mint())
 }
 
 /// A member opening `state`'s channel from its snapshots, with a session.
@@ -61,7 +62,7 @@ fn draft(text: &str, mentions: Vec<Mention>) -> MessageDraft {
 }
 
 /// Hand what `from` wrote, signed by `author`, to `to` under number `seq`.
-fn deliver(to: &mut ChannelState, from: &ChannelState, author: UserId, sent: &Sent, seq: u64) {
+fn deliver(to: &mut ChannelState, from: &ChannelState, author: Id<User>, sent: &Sent, seq: u64) {
     let document_id = sent.segment.document_id();
     let signer = Signer {
         peer: from.peer(document_id).expect("a session"),
@@ -111,7 +112,7 @@ fn stored_marks(state: &ChannelState, n: usize) -> Vec<LoroValue> {
 fn a_mention_is_a_mark_that_carries_its_member() {
     let (mut state, author) = alice();
     let mut bob_state = open_from(&state);
-    let bob = UserId::new();
+    let bob = Id::<User>::mint();
     let sent = state
         .send(
             &draft(
@@ -144,7 +145,7 @@ fn a_mention_is_a_mark_that_carries_its_member() {
 #[test]
 fn a_mention_shows_the_current_name_of_its_member() {
     let (mut state, author) = alice();
-    let bob = UserId::new();
+    let bob = Id::<User>::mint();
     state
         .send(
             &draft("hi @bob", vec![at(MentionTarget::User(bob), 3..7)]),
@@ -154,7 +155,7 @@ fn a_mention_shows_the_current_name_of_its_member() {
         .expect("send");
     let message = &messages(&state)[0];
     let named = |name: &'static str| {
-        move |user: UserId| (user == bob).then(|| ambre_core::DisplayName::new(name).unwrap())
+        move |user: Id<User>| (user == bob).then(|| ambre_core::DisplayName::new(name).unwrap())
     };
     assert_eq!(message.shown(named("Bob")), "hi @Bob");
     assert_eq!(message.shown(named("Robert")), "hi @Robert");
@@ -214,7 +215,7 @@ fn an_at_channel_names_the_channel_and_no_member() {
 fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     let (mut state, author) = alice();
     let mut held = open_from(&state);
-    let (bob, carol) = (UserId::new(), UserId::new());
+    let (bob, carol) = (Id::<User>::mint(), Id::<User>::mint());
     let count = |held: &ChannelState, user| {
         held.mentions(held.active_id(), Seq::ZERO, user)
             .expect("count")
@@ -269,7 +270,7 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
 #[test]
 fn reading_the_mentions_changes_nothing() {
     let (mut state, author) = alice();
-    let bob = UserId::new();
+    let bob = Id::<User>::mint();
     state
         .send(
             &draft("@bob", vec![at(MentionTarget::User(bob), 0..4)]),
@@ -318,7 +319,7 @@ fn a_mention_outside_the_body_writes_nothing() {
 /// text untouched. Before the members are listed, every mention stays.
 #[test]
 fn a_mention_of_a_non_member_is_no_mark() {
-    let (bob, eve) = (UserId::new(), UserId::new());
+    let (bob, eve) = (Id::<User>::mint(), Id::<User>::mint());
     let both = draft(
         "@bob @eve",
         vec![
@@ -347,8 +348,8 @@ fn a_mention_of_a_non_member_is_no_mark() {
 #[test]
 fn an_at_channel_past_the_threshold_waits_for_confirmation() {
     let all = draft("@channel", vec![at(MentionTarget::Channel, 0..8)]);
-    let members: Vec<UserId> = (0..=CONFIRM_CHANNEL_PAST.get())
-        .map(|_| UserId::new())
+    let members: Vec<Id<User>> = (0..=CONFIRM_CHANNEL_PAST.get())
+        .map(|_| Id::<User>::mint())
         .collect();
     let at_threshold = &members[..members.len() - 1];
     assert_eq!(

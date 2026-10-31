@@ -82,7 +82,7 @@ pub struct FindOptions { pub case: CaseMatch, pub word: WordMatch }
 pub type FindQuery = find::FindQuery<FindOptions>;
 
 /// `hits` in paint order; `focus` is the element to recentre on.
-pub struct FindResults { pub hits: Vec<ElementId>, pub focus: Option<ElementId> }
+pub struct FindResults { pub hits: Vec<Id<Element>>, pub focus: Option<Id<Element>> }
 ```
 
 `Find { query, from, backward }` carries the query with its options, none for an emptied field,

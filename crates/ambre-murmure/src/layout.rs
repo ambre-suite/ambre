@@ -3,15 +3,15 @@
 // layout spec). It is local to one window, so no peer shares it and nothing of
 // it reaches the Logic thread.
 
-use ambre_core::{ChannelId, MessageId, SegmentId};
+use ambre_core::id::{Channel, Id, Message, Segment};
 
 /// A message, by the segment that holds it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MessageRef {
     /// The segment of the message.
-    pub segment: SegmentId,
+    pub segment: Id<Segment>,
     /// The message.
-    pub message: MessageId,
+    pub message: Id<Message>,
 }
 
 /// A region of the page that shows a list: the channel in the content
@@ -34,14 +34,14 @@ pub enum MurmurePane {
     /// A channel, in the message list.
     Channel {
         /// The channel.
-        channel: ChannelId,
+        channel: Id<Channel>,
         /// The message the list keeps in view, or `None` for its latest.
         at: Option<MessageRef>,
     },
     /// A thread, opened from a root message of its channel.
     Thread {
         /// The channel of the root message.
-        channel: ChannelId,
+        channel: Id<Channel>,
         /// The root message.
         root: MessageRef,
     },
@@ -49,13 +49,13 @@ pub enum MurmurePane {
     /// (the Murmure members spec).
     Members {
         /// The channel the list was opened from.
-        channel: ChannelId,
+        channel: Id<Channel>,
     },
 }
 
 impl MurmurePane {
     /// A channel at its latest message.
-    pub fn channel(channel: ChannelId) -> Self {
+    pub fn channel(channel: Id<Channel>) -> Self {
         Self::Channel { channel, at: None }
     }
 
@@ -75,7 +75,7 @@ impl MurmurePane {
     }
 
     /// The channel this pane shows, if any.
-    pub fn shown_channel(self) -> Option<ChannelId> {
+    pub fn shown_channel(self) -> Option<Id<Channel>> {
         match self {
             Self::ChannelList => None,
             Self::Channel { channel, .. }
@@ -93,10 +93,10 @@ mod tests {
     /// from a channel shows the channel list, which stays (`MURMURE-168`).
     #[test]
     fn back_from_a_thread_shows_its_channel_at_the_root_then_the_list() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let root = MessageRef {
-            segment: SegmentId::new(),
-            message: MessageId::new(),
+            segment: Id::<Segment>::mint(),
+            message: Id::<Message>::mint(),
         };
         let thread = MurmurePane::Thread { channel, root };
         assert_eq!(
@@ -120,7 +120,7 @@ mod tests {
     /// channel at its latest message.
     #[test]
     fn back_from_the_member_list_shows_its_channel() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let members = MurmurePane::Members { channel };
         assert_eq!(members.shown_channel(), Some(channel));
         assert_eq!(members.back(), MurmurePane::channel(channel));

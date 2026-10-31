@@ -127,7 +127,7 @@ waits on.
 **Containers.** A mark of the suggestion's own key carries its identity on the text: `si:{id}` for
 a suggested insertion, `sd:{id}` for a suggested deletion. One key per suggestion, as a comment
 has, so two suggestions over one character never share a value. One annotation entry carries the
-kind, the author's name and `UserId`. Both are declared in `ambre-spec-prose-schema.md section 3`.
+kind, the author's name and `Id<User>`. Both are declared in `ambre-spec-prose-schema.md section 3`.
 
 **The text is never two documents.** A suggestion is the real text plus a mark. A suggested
 insertion is already in the block, and a suggested deletion is still in it. That is what makes the
@@ -155,7 +155,7 @@ maximal segments by what covers each one, and the two kinds are treated in oppos
 | covered by a pending insertion this peer owns | the text is removed outright (`PROSE-FEAT-087`) |
 | original text, or a suggestion any other peer owns | the text is marked as a suggested deletion (`PROSE-FEAT-088`) |
 
-Ownership is read from the entry the mark points at, by `UserId`. A segment already proposed for
+Ownership is read from the entry the mark points at, by `Id<User>`. A segment already proposed for
 deletion is left as it is (`PROSE-FEAT-268`). Text typed inside another suggestion takes none of
 its marks, so no other identity grows (`PROSE-FEAT-266`). Plain typing strips them too
 (`PROSE-FEAT-304`). No block is joined or removed while

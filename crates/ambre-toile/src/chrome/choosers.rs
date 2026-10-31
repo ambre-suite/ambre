@@ -10,9 +10,10 @@
 // the board's stead reaches a frame.
 // ============================================================================
 
+use ambre_bus::DocType;
 use ambre_bus::app::toile::LinkTarget;
-use ambre_bus::{DocType, DocumentId};
 use ambre_chrome::{ComposedName, Dialog, Openness};
+use ambre_core::id::{Document, Id};
 use leptos::prelude::*;
 
 use super::handler::ToileDialogs;
@@ -25,7 +26,7 @@ use ambre_bus::app::toile::{AddressError, WebAddress};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocChoice {
     /// The document's identity.
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     /// Its kind, which decides how an embed of it renders.
     pub doc_type: DocType,
     /// Its name, if it has one.
@@ -43,7 +44,7 @@ pub fn ToileChoosers(
     docs: Signal<Vec<DocChoice>>,
     /// The document open now, which no chooser offers.
     #[prop(into)]
-    here: Signal<Option<DocumentId>>,
+    here: Signal<Option<Id<Document>>>,
     /// The deck, whose frames a link may point at.
     deck: DeckSignals,
     /// Where a chosen embed is published for the view to place.
@@ -175,7 +176,7 @@ pub fn ToileChoosers(
                             view! {
                                 <li>
                                     <button on:click=move |_| {
-                                        set_link.set(Some(LinkEdit(Some(LinkTarget::Frame(id.clone())))));
+                                        set_link.set(Some(LinkEdit(Some(LinkTarget::Frame(id.clone().into())))));
                                         link_open.set(Openness::Closed);
                                     }>{label}</button>
                                 </li>

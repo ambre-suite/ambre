@@ -18,11 +18,11 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
-    ClipboardPayload as ToileClipboardPayload, ConnectorId, CorrelationToken, DisplayConnector,
-    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End,
-    LinkTarget, PresencePayload, PresentMode, StatsRequestKind, ThreadId, ToileCommand, ToileError,
-    ToileEvent, Viewport,
+    ClipboardPayload as ToileClipboardPayload, CorrelationToken, DisplayConnector, DisplayElement,
+    DisplayGeom, DisplayNode, DisplayViewport, ElementKind, End, LinkTarget, PresencePayload,
+    PresentMode, StatsRequestKind, ToileCommand, ToileError, ToileEvent, Viewport,
 };
+use ambre_core::id::{Connector, Document, Element, Id, Thread};
 
 /// What the user is told when an edit is lost with its target
 /// (`TOILE-UI-387`, `TOILE-UI-388`, `TOILE-UI-389`).
@@ -34,9 +34,7 @@ const NO_FRAME_HOLDS: &str = "The selection is in no frame, so nothing was remov
 /// What the user is told when a fit to the selection has nothing to fit
 /// (`TOILE-UI-160`).
 const NOTHING_TO_ZOOM: &str = "Nothing is selected, so there is nothing to zoom to.";
-use ambre_bus::{
-    AppCommand, AppEvent, DocumentId, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent,
-};
+use ambre_bus::{AppCommand, AppEvent, LogicCommand, LossyOutcome, Outbox, SendOutcome, UiEvent};
 use ambre_canvas::{
     BusyPublisher, ContentRepaint, FrameStats, InputEvent, LayerRepaint, NoticePublisher,
     PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
@@ -280,7 +278,7 @@ thread_local! {
 }
 
 pub struct ToileView {
-    document_id: DocumentId,
+    document_id: Id<Document>,
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     from_logic: ambre_bus::conduit::Receiver<UiEvent>,
     /// The lossless send path: it keeps an edit a full queue could not take,
@@ -302,7 +300,7 @@ pub struct ToileView {
     machine: ToolMachine,
     /// Local selection (never persisted; a peer's selection is presence,
     /// `toile-selection`).
-    selection: Vec<ElementId>,
+    selection: Vec<Id<Element>>,
     /// Full display data of the current selection, off-screen included, fetched
     /// from Logic via `RequestSelectionData` (`TOILE-UI-070`, `TOILE-UI-134`).
     /// The culled [`display`](Self::display) omits the selection past the edge,
@@ -310,7 +308,7 @@ pub struct ToileView {
     selection_data: Vec<DisplayElement>,
     /// The selected ids a frame holds, from the same reply. The menu offers
     /// removal from a frame by this, whatever the boxes (`TOILE-UI-384`).
-    selection_framed: Vec<ElementId>,
+    selection_framed: Vec<Id<Element>>,
     /// A select-all waits for Logic's answer to `RequestBoardIds`, which names
     /// every element on the board, off-screen included (`TOILE-UI-033`). The
     /// list is asked for at each select-all: one read at the open would miss
@@ -319,16 +317,16 @@ pub struct ToileView {
     /// The selected arrow (`toile-connectors`). Exclusive with
     /// [`selection`](Self::selection): an arrow has no box, so it never joins a
     /// marquee, a group or a transform, and selecting one clears the other.
-    arrow: Option<ConnectorId>,
+    arrow: Option<Id<Connector>>,
     /// An endpoint drag in flight: the arrow, the dragged end, and where the
     /// pointer is. The write happens on release (`toile-connectors`).
-    arrow_drag: Option<(ConnectorId, End)>,
+    arrow_drag: Option<(Id<Connector>, End)>,
     /// Entered group scope (`toile-groups` / `toile-selection`):
     /// while `Some(g)`, a click selects a member inside `g` rather than the whole
     /// group. Entered by double-clicking a grouped element (peels one nesting level
     /// per double-click), left by `Escape` or a document swap. Pure-UI state, never
     /// synced.
-    group_scope: Option<ElementId>,
+    group_scope: Option<Id<Element>>,
     /// Live gesture preview (marquee / rubber-band / pen / stroke), world space.
     preview: Option<Preview>,
 
@@ -337,14 +335,14 @@ pub struct ToileView {
     /// the culled set get an outline); `find_focus` is the current match. Local
     /// view state, never synced and never an undo item
     /// (`toile-find`).
-    find_hits: Vec<ElementId>,
-    find_focus: Option<ElementId>,
+    find_hits: Vec<Id<Element>>,
+    find_focus: Option<Id<Element>>,
     /// The focus id awaiting a `SelectionStats` reply so the camera can recenter
     /// on it (`toile-find`). `FindResults` carries no geometry and the focus may
     /// be off-screen. So the view asks Logic for its bounds via
     /// `RequestSelectionStats`, and recenters when the answer lands.
     /// Distinguishes a find-driven stats request from a future status-bar one.
-    pending_find_focus: Option<ElementId>,
+    pending_find_focus: Option<Id<Element>>,
 
     /// Active inline text editor (sticky / text body, `toile-text-editing`).
     /// `None` when not editing. The view queues font-free edit intents here at
@@ -364,7 +362,7 @@ pub struct ToileView {
     /// A freshly-created element (Sticky / Text tool) whose editor must open once
     /// the matching `DisplayViewport` has landed (nothing knows its geometry
     /// before then). Consumed at the end of `update`.
-    edit_pending_open: Option<ElementId>,
+    edit_pending_open: Option<Id<Element>>,
     /// The `correlate` token the Sticky / Text tool's `CreateElement` carried,
     /// so the deferred open claims that element and no other (`TOILE-UI-194`).
     /// `None` when no placement awaits its reply.
@@ -387,7 +385,7 @@ pub struct ToileView {
     /// position). A release near that position with the selection unchanged enters
     /// edit; a drag past the slop (a move gesture) clears it. `None` when the press
     /// did not qualify.
-    click_edit_candidate: Option<(ElementId, Point)>,
+    click_edit_candidate: Option<(Id<Element>, Point)>,
 
     /// Last pointer position in screen (logical) pixels -- the zoom anchor.
     last_pointer: Point,
@@ -560,7 +558,7 @@ pub struct ToileView {
     /// `SelectionStats` reply that carries its bounds. The camera then comes to
     /// it (`TOILE-UI-309`). The same reply as the find focus, and the view
     /// reads it after. `cfg`-agnostic so the dispatch arm stays uniform.
-    pending_comment_focus: Option<ElementId>,
+    pending_comment_focus: Option<Id<Element>>,
 
     /// Set while a Fit / Zoom-to-selection awaits the `SelectionStats` reply whose
     /// bounds it will frame (`toile-viewport`). The reply treats both the same
@@ -574,7 +572,7 @@ pub struct ToileView {
     /// differs. The band's count and bounds then track every selection change
     /// (marquee, click, nudge) without a request threaded through each
     /// mutation site.
-    last_stats_sel: Vec<ElementId>,
+    last_stats_sel: Vec<Id<Element>>,
     /// A board change landed while something is selected, so the selection's
     /// data may be stale: its lock, its box, its frame (`TOILE-UI-384`).
     /// `plan_repaint` asks again once, whatever number of changes landed.
@@ -585,9 +583,9 @@ pub struct ToileView {
 
     /// The render-thread mirror of remote peer presence (`toile-presence`):
     /// cursors, selection ghosts, live strokes and laser trails, keyed by
-    /// canonical `UserId`. Fed by `ToileEvent::PeerPresence` and painted in the
+    /// canonical `Id<User>`. Fed by `ToileEvent::PeerPresence` and painted in the
     /// overlay pass. SYNC P4 gates end-to-end multi-user, because it resolves
-    /// the `pub_key` -> `UserId` that keys an inbound sample. Synthetic events
+    /// the `pub_key` -> `Id<User>` that keys an inbound sample. Synthetic events
     /// exercise the render pass meanwhile.
     presence: PeerCursors,
     /// The broadcast schedule for this peer's own presence
@@ -608,7 +606,7 @@ pub struct ToileView {
     /// from the active `transition` each frame and cleared when it completes. The
     /// content pass looks each element up here before falling back to its static
     /// display (`toile-presentation`).
-    anim_overrides: HashMap<ElementId, AnimatedElement>,
+    anim_overrides: HashMap<Id<Element>, AnimatedElement>,
 
     /// Live transform overrides for the in-flight Select gesture
     /// (`toile-tools`). These are the resized, rotated or moved elements
@@ -619,7 +617,7 @@ pub struct ToileView {
     /// CRDT. The single command still commits on `pointer_up`. Mutually
     /// exclusive with `anim_overrides`: a slide transition and a manual gesture
     /// never run together.
-    gesture_overrides: HashMap<ElementId, AnimatedElement>,
+    gesture_overrides: HashMap<Id<Element>, AnimatedElement>,
 
     /// True between committing a transform gesture on release and the arrival of
     /// the recomputed `ViewportData` that carries the new geometry
@@ -663,7 +661,7 @@ pub struct ToileView {
     /// consumed it. Set by `handle_input`, read once by `FrameHost` right after,
     /// which forwards the (coordinate-remapped) event to that child's own view.
     /// View-local, never CRDT.
-    child_route: Option<ElementId>,
+    child_route: Option<Id<Element>>,
 
     /// The latest frame timestamp (ms), captured in `plan_repaint`, used to blink
     /// the inline-edit caret (`toile-text-editing`). Paint has no clock of its own,
@@ -674,9 +672,9 @@ pub struct ToileView {
 /// The topmost element under a canvas point, through the camera
 /// (`UI-THREAD-001`).
 impl ambre_draw::HitTest for ToileView {
-    type Target = ElementId;
+    type Target = Id<Element>;
 
-    fn hit_test(&self, at: ambre_core::ViewPoint) -> Option<ElementId> {
+    fn hit_test(&self, at: ambre_core::ViewPoint) -> Option<Id<Element>> {
         let at = Point::new(f64::from(at.x.get()), f64::from(at.y.get()));
         self.element_at(self.cam.screen_to_world() * at)
     }
@@ -685,7 +683,7 @@ impl ambre_draw::HitTest for ToileView {
 impl ToileView {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        document_id: DocumentId,
+        document_id: Id<Document>,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
         canvas_width: ambre_core::SurfacePx,
@@ -1173,7 +1171,7 @@ impl ToileView {
             }
             // Remote presence (`toile-presence`): adopt the whole live set, so
             // the overlay drops a peer absent from it with no departure signal
-            // (`PRESENCE-009`, `TOILE-UI-075`). The sender's canonical `UserId`
+            // (`PRESENCE-009`, `TOILE-UI-075`). The sender's canonical `Id<User>`
             // keys each entry (spoof-proof, `TOILE-177`).
             ToileEvent::PeerPresence(peers) => {
                 self.presence.adopt(peers, self.frame_now);
@@ -1515,7 +1513,7 @@ impl ToileView {
     /// The **element**, not the document it points at. Two embeds of one
     /// document are two child views, each sized to its own box. Only the one
     /// under the pointer may take the event (`TOILE-UI-097`).
-    pub fn focused_child(&self) -> Option<ElementId> {
+    pub fn focused_child(&self) -> Option<Id<Element>> {
         let id = self.embed_focus.current()?;
         matches!(self.find_element(id)?.geom, DisplayGeom::DocEmbed { .. }).then(|| id.clone())
     }
@@ -1524,13 +1522,13 @@ impl ToileView {
     /// the (coordinate-remapped) event to (`toile-embeds`, "Input
     /// focus"). Cleared at the start of every `handle_input`, so it reflects only
     /// the latest event.
-    pub fn child_route(&self) -> Option<ElementId> {
+    pub fn child_route(&self) -> Option<Id<Element>> {
         self.child_route.clone()
     }
 
     /// Whether `screen` lands inside the focused embed's (rotated) quad. Used to
     /// decide that a pointer event belongs to the child rather than the board.
-    fn screen_in_focused_embed(&self, screen: Point, id: &ElementId) -> bool {
+    fn screen_in_focused_embed(&self, screen: Point, id: &Id<Element>) -> bool {
         let Some(e) = self.find_element(id) else {
             return false;
         };
@@ -1551,7 +1549,7 @@ impl ToileView {
     /// impossible to pan or zoom while any embed held focus. The wheel scrolled
     /// the child wherever the cursor was, and only a click outside gave the
     /// board its own navigation back.
-    fn route_to_child(&self, ev: &InputEvent, id: &ElementId) -> bool {
+    fn route_to_child(&self, ev: &InputEvent, id: &Id<Element>) -> bool {
         embed::routes_to_child(ev, self.last_pointer, |p| {
             self.screen_in_focused_embed(p, id)
         })
@@ -1602,7 +1600,7 @@ impl ToileView {
         // Focus cannot outlive the element that held it. An embed a peer
         // deleted, or one scrolled far enough away to close, leaves the board
         // with nothing to route input into.
-        let present: Vec<ElementId> = self
+        let present: Vec<Id<Element>> = self
             .display
             .nodes
             .iter()
@@ -1641,7 +1639,7 @@ impl ToileView {
     }
 
     /// The topmost element under a world point.
-    fn element_at(&self, world: Point) -> Option<ElementId> {
+    fn element_at(&self, world: Point) -> Option<Id<Element>> {
         hit_topmost(&self.display.nodes, world, self.pick())
     }
 
@@ -1993,7 +1991,7 @@ impl ToileView {
     }
 
     /// Whether an element id resolves to an inline-editable Sticky / Text element.
-    fn is_text_editable(&self, id: &ElementId) -> bool {
+    fn is_text_editable(&self, id: &Id<Element>) -> bool {
         self.find_element(id)
             .is_some_and(|e| matches!(e.kind, ElementKind::Sticky | ElementKind::Text))
     }
@@ -2287,7 +2285,7 @@ impl ToileView {
 
     /// Open `thread` in the panel: ask Logic for it whole (the board carries no
     /// body, `TOILE-205`) and show the panel (`TOILE-UI-082`).
-    fn open_thread(&mut self, thread: ThreadId) {
+    fn open_thread(&mut self, thread: Id<Thread>) {
         self.show_comments_panel();
         self.send_edit(ToileCommand::ReadComments {
             thread: Some(thread),
@@ -2298,13 +2296,13 @@ impl ToileView {
     /// the board-wide list always, and the open thread when it is that one. The
     /// panel keeps no answer of its own (`TOILE-UI-023`).
     #[cfg(target_arch = "wasm32")]
-    fn reread_comments(&mut self, thread: &ThreadId) {
+    fn reread_comments(&mut self, thread: &Id<Thread>) {
         let panel = self.comments.panel.get_untracked();
         let showing = self.comments.open.get_untracked().map(|t| t.id);
         self.reread_comments_shown(panel, showing.as_ref(), thread);
     }
     #[cfg(not(target_arch = "wasm32"))]
-    fn reread_comments(&mut self, _thread: &ThreadId) {}
+    fn reread_comments(&mut self, _thread: &Id<Thread>) {}
 
     /// The re-read itself, over what the panel shows: whether it is open, and
     /// the thread it shows whole. A closed panel reads nothing.
@@ -2315,8 +2313,8 @@ impl ToileView {
     fn reread_comments_shown(
         &mut self,
         panel: PanelState,
-        showing: Option<&ThreadId>,
-        thread: &ThreadId,
+        showing: Option<&Id<Thread>>,
+        thread: &Id<Thread>,
     ) {
         if !panel.is_open() {
             return;
@@ -2485,7 +2483,7 @@ impl ToileView {
             return;
         };
         self.deck.intent.set(None);
-        let order: Vec<ambre_bus::app::toile::FrameId> = self
+        let order: Vec<Id<ambre_core::id::Frame>> = self
             .deck
             .view
             .get_untracked()
@@ -2505,7 +2503,10 @@ impl ToileView {
             // so the panel sends what was typed and reads the answer back
             // (`TOILE-250`, `TOILE-251`).
             DeckIntent::Rename(frame, name) => {
-                self.send_edit(ToileCommand::RenameFrame { frame, name });
+                self.send_edit(ToileCommand::RenameFrame {
+                    frame: frame.into(),
+                    name,
+                });
                 return;
             }
         };
@@ -3132,7 +3133,7 @@ impl ToileView {
     /// included) and then the culled set. The editor and the single-selection
     /// shortcuts read the selection data, which survives a pan off screen
     /// (`TOILE-UI-070`, `TOILE-UI-210`).
-    fn find_element(&self, id: &ElementId) -> Option<&DisplayElement> {
+    fn find_element(&self, id: &Id<Element>) -> Option<&DisplayElement> {
         self.selection_data
             .iter()
             .find(|e| &e.id == id)
@@ -3150,7 +3151,7 @@ impl ToileView {
     /// old body, `toile-text-editing`). The displayed body may carry a peer's
     /// edit since the editor opened on `base`. So the echo is the merge Logic
     /// computes, and those words stay on screen (`TOILE-UI-382`).
-    fn patch_element_text(&mut self, id: &ElementId, base: &str, text: &str) {
+    fn patch_element_text(&mut self, id: &Id<Element>, base: &str, text: &str) {
         if let Some(DisplayNode::Element(e)) = self
             .display
             .nodes
@@ -3181,7 +3182,7 @@ impl ToileView {
 
     /// A displayed connector by id (linear over the culled set, like
     /// [`find_element`](Self::find_element)).
-    fn find_connector(&self, id: &ConnectorId) -> Option<&DisplayConnector> {
+    fn find_connector(&self, id: &Id<Connector>) -> Option<&DisplayConnector> {
         self.display.nodes.iter().find_map(|n| match n {
             DisplayNode::Connector(c) if &c.id == id => Some(c),
             _ => None,
@@ -3257,7 +3258,7 @@ impl ToileView {
 
     /// Optimistically set a frame's title in the local display, so the band
     /// does not flash its previous name before the round trip returns.
-    fn patch_frame_title(&mut self, id: &ElementId, title: &str) {
+    fn patch_frame_title(&mut self, id: &Id<Element>, title: &str) {
         if let Some(DisplayNode::Element(e)) = self
             .display
             .nodes
@@ -3272,7 +3273,7 @@ impl ToileView {
     /// Optimistically set a connector's caption in the local display, the
     /// counterpart of [`patch_element_text`](Self::patch_element_text), and
     /// merged the same way (`TOILE-UI-382`).
-    fn patch_connector_label(&mut self, id: &ConnectorId, base: &str, text: &str) {
+    fn patch_connector_label(&mut self, id: &Id<Connector>, base: &str, text: &str) {
         if let Some(DisplayNode::Connector(c)) = self
             .display
             .nodes
@@ -3285,7 +3286,7 @@ impl ToileView {
 
     /// Open the inline editor on a connector's caption (`toile-connectors`).
     /// No-op for an arrow that is not on screen.
-    fn open_label_editor(&mut self, id: ConnectorId) {
+    fn open_label_editor(&mut self, id: Id<Connector>) {
         let Some(c) = self.find_connector(&id) else {
             return;
         };
@@ -3305,7 +3306,7 @@ impl ToileView {
 
     /// Open the inline editor on a frame's title (`TOILE-261`). No-op for a
     /// frame that has left the culled set.
-    fn open_frame_title_editor(&mut self, id: ElementId) {
+    fn open_frame_title_editor(&mut self, id: Id<Element>) {
         let Some(e) = self.find_element(&id) else {
             return;
         };
@@ -3346,7 +3347,7 @@ impl ToileView {
     /// The single selected Sticky / Text element, if the selection is exactly one
     /// such element (the target of type-to-edit, `toile-text-editing`). `None` for
     /// an empty, multi, or non-text selection.
-    fn single_editable_selection(&self) -> Option<ElementId> {
+    fn single_editable_selection(&self) -> Option<Id<Element>> {
         let [id] = self.selection.as_slice() else {
             return None;
         };
@@ -3357,7 +3358,7 @@ impl ToileView {
 
     /// Open the inline editor on a Sticky / Text element (`toile-text-editing`).
     /// No-op for any other kind or an unknown id.
-    fn open_editor(&mut self, id: ElementId) {
+    fn open_editor(&mut self, id: Id<Element>) {
         let editor = {
             let Some(e) = self.find_element(&id) else {
                 return;
@@ -3394,7 +3395,7 @@ impl ToileView {
     /// missing (`TOILE-UI-387`). The body editor is the selection, so the
     /// refetch a board change triggers covers it. A title editor clears the
     /// selection and refetches its frame on its own (`TOILE-UI-390`).
-    fn drop_lost_editor(&mut self, missing: &[ElementId]) {
+    fn drop_lost_editor(&mut self, missing: &[Id<Element>]) {
         if self
             .editor
             .as_ref()
@@ -3408,7 +3409,7 @@ impl ToileView {
     /// Close a caption editor whose arrow the board lost (`TOILE-UI-388`).
     /// The board names the arrows it lost, so one panned out of the frame
     /// keeps its editor (`TOILE-UI-386`).
-    fn drop_lost_caption_editor(&mut self, gone: &[ConnectorId]) {
+    fn drop_lost_caption_editor(&mut self, gone: &[Id<Connector>]) {
         if self
             .editor
             .as_ref()
@@ -4348,7 +4349,7 @@ impl ToileView {
 
     /// Swap the active document in place (SPA route change): reset document-scoped
     /// state, keep the plumbing and canvas size, and re-fetch the viewport.
-    pub fn set_document(&mut self, document_id: DocumentId) {
+    pub fn set_document(&mut self, document_id: Id<Document>) {
         if self.document_id == document_id {
             return;
         }

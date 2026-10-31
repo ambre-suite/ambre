@@ -9,7 +9,7 @@
 use ambre_core::activity as sealed;
 use serde::{Deserialize, Serialize};
 
-use crate::UserId;
+use ambre_core::id::{Id, User};
 
 pub use sealed::{Activity, ActivityAnchor, ActivityKind, MentionScope};
 
@@ -22,7 +22,7 @@ pub struct ActivitySummary {
     /// The kind of change the update carries.
     pub kind: ActivityKind,
     /// The users the update names.
-    pub mentions: Vec<UserId>,
+    pub mentions: Vec<Id<User>>,
     /// Whether the update names every member, an `@channel`. It writes the
     /// byte of a `bool`.
     pub mentions_all: MentionScope,
@@ -71,13 +71,13 @@ mod tests {
     fn a_summary_past_the_seals_bounds_names_the_channel() {
         let within = ActivitySummary {
             kind: ActivityKind::Edit,
-            mentions: vec![UserId::from_bytes([1; 16])],
+            mentions: vec![Id::<User>::from_bytes([1; 16])],
             mentions_all: crate::MentionScope::Named,
             anchor: ActivityAnchor::new(vec![9; 8]),
         };
         assert_eq!(ActivitySummary::from(within.to_sealed()), within);
         let past = ActivitySummary {
-            mentions: vec![UserId::from_bytes([1; 16]); sealed::MAX_MENTIONS + 1],
+            mentions: vec![Id::<User>::from_bytes([1; 16]); sealed::MAX_MENTIONS + 1],
             anchor: Some(long_anchor()),
             ..within
         };

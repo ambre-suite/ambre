@@ -5,11 +5,12 @@
 //! version registry and both read rules live once in `ambre_core::docfile`
 //! (`PROSE-IO-049`).
 
+use ambre_core::DocType;
 use ambre_core::docfile::{
     AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext,
 };
+use ambre_core::id::{Document, Id};
 use ambre_core::schema::SchemaError;
-use ambre_core::{DocType, DocumentId};
 use loro::{ExportMode, LoroDoc};
 
 use crate::events::ProseEvent;
@@ -25,7 +26,7 @@ use super::ProseState;
 #[must_use]
 pub fn export_ambre_plaintext(
     doc: &LoroDoc,
-    doc_id: DocumentId,
+    doc_id: Id<Document>,
 ) -> Option<ambre_core::PlaintextContainer> {
     let payload = doc
         .export(ExportMode::Snapshot)
@@ -63,7 +64,7 @@ impl ProseState {
     #[must_use]
     pub fn export_ambre_plaintext(
         &self,
-        doc_id: DocumentId,
+        doc_id: Id<Document>,
     ) -> Option<ambre_core::PlaintextContainer> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
@@ -81,7 +82,7 @@ impl ProseState {
     pub fn import_ambre_plaintext(
         &mut self,
         data: &ambre_core::PlaintextContainer,
-    ) -> Result<(DocumentId, Vec<ProseEvent>), DocFileError> {
+    ) -> Result<(Id<Document>, Vec<ProseEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
         let events = self.import_snapshot(&header.payload).map_err(|e| match e {
             // Bytes the engine will not read already have a name in the
@@ -102,8 +103,8 @@ mod tests {
     use super::*;
     use crate::events::ProseCommand;
 
-    fn doc_id() -> DocumentId {
-        DocumentId::from_bytes([
+    fn doc_id() -> Id<Document> {
+        Id::<Document>::from_bytes([
             0x01, 0x8f, 0x2a, 0x3b, 0x7c, 0x4d, 0x70, 0x00, 0x80, 0x00, 0x11, 0x22, 0x33, 0x44,
             0x55, 0x66,
         ])

@@ -16,12 +16,11 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use ambre_core::DocType;
-use ambre_core::DocumentId;
 pub use ambre_core::FontFamily;
 use ambre_core::FontSize;
 use ambre_core::Rgba;
 use ambre_core::StoredBoardLength;
-use ambre_core::UserId;
+use ambre_core::id::{Connector, Document, Element, Frame, Id, Thread, User};
 use ambre_core::{Slant, Strikethrough, Underline};
 use kurbo::{Affine, BezPath, Point, Rect, Size, Vec2};
 use serde::{Deserialize, Serialize};
@@ -30,58 +29,20 @@ use serde::{Deserialize, Serialize};
 // Identity -- minted, move-invariant ids (`ambre-spec-toile-schema.md`)
 // =============================================================================
 
-/// Stable identity of an element / connector / frame / group, minted once as
-/// `"{peer:016x}_{counter:08x}"` and never reused. Owned as a value (never a
-/// Loro op id), so `LoroMovableList::mov` reorders leave every reference valid.
-///
-/// Two peers that concurrently create a node mint distinct ids (distinct
-/// `PeerID`): both survive, neither overwrites the other
-/// (`ambre-spec-toile-schema.md`).
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Serialize, Deserialize)]
-pub struct ElementId(pub String);
-
-/// Stable identity of a connector. Same minting scheme as [`ElementId`]; a
-/// distinct type so the compiler rejects one wherever the other belongs.
-#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Serialize, Deserialize)]
-pub struct ConnectorId(pub String);
-
-/// A frame's identity in a presentation sequence (`toile-presentation`). A
-/// frame is an ordinary element (`type = "frame"`), so this is a plain
-/// [`ElementId`] alias -- a naming aid at call sites, not a distinct type.
-pub type FrameId = ElementId;
-
-/// The element an auto-layout / boolean / reaction command targets
-/// (`toile-presentation`). Aliased to [`ElementId`] for the same reason as
-/// [`FrameId`].
-pub type TargetId = ElementId;
-
-impl ElementId {
-    /// Mint from the document `PeerID` and a per-session monotonic counter.
-    pub fn mint(peer: ambre_core::PeerId, counter: IdCounter) -> Self {
-        Self(format!("{peer:016x}_{:08x}", counter.get()))
-    }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl ConnectorId {
-    /// Mint from the document `PeerID` and a per-session monotonic counter.
-    pub fn mint(peer: ambre_core::PeerId, counter: IdCounter) -> Self {
-        Self(format!("{peer:016x}_{:08x}", counter.get()))
-    }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
+// A node, a connector, a frame and a comment thread each carry an `Id` of
+// `ambre_core::id`, minted once as `"{peer:016x}_{counter:08x}"` and never
+// reused. The id is a value, never a Loro op id, so a `LoroMovableList::mov`
+// reorder leaves every reference valid. Two peers that create a node at the
+// same time mint distinct ids (distinct `PeerID`), and both nodes survive
+// (`ambre-spec-toile-schema.md`).
 
 /// Z-order node identity (`toile-z-order`): `layers` interleaves
 /// elements and connectors in a single back-to-front paint order, so a connector
 /// can sit behind an element.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum NodeId {
-    Element(ElementId),
-    Connector(ConnectorId),
+    Element(Id<Element>),
+    Connector(Id<Connector>),
 }
 
 impl NodeId {
@@ -90,8 +51,8 @@ impl NodeId {
     /// sub-map so the list stays a flat, order-preserving sequence.
     pub fn encode(&self) -> String {
         match self {
-            NodeId::Element(id) => format!("E:{}", id.0),
-            NodeId::Connector(id) => format!("C:{}", id.0),
+            NodeId::Element(id) => format!("E:{id}"),
+            NodeId::Connector(id) => format!("C:{id}"),
         }
     }
 
@@ -100,8 +61,8 @@ impl NodeId {
     pub fn decode(s: &str) -> Option<Self> {
         let (tag, rest) = s.split_once(':')?;
         match tag {
-            "E" => Some(NodeId::Element(ElementId(rest.to_owned()))),
-            "C" => Some(NodeId::Connector(ConnectorId(rest.to_owned()))),
+            "E" => Some(NodeId::Element(Id::from_text(rest.to_owned()))),
+            "C" => Some(NodeId::Connector(Id::from_text(rest.to_owned()))),
             _ => None,
         }
     }
@@ -512,10 +473,10 @@ pub enum LinkTarget {
     /// fetches it (`TOILE-110`).
     Url(ambre_core::LinkUrl),
     /// A frame on this board: the camera fits to it (`TOILE-113`).
-    Frame(ElementId),
+    Frame(Id<Element>),
     /// Another Ambre document, opened by the shell (`TOILE-114`).
     Document {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     },
 }
@@ -1163,7 +1124,7 @@ pub enum InitContent {
     Image(MediaRef),   // the picture's blob, key into `media` once stored
     Embed(WebAddress), // web url (sandboxed iframe)
     DocEmbed {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     }, // nested Ambre document (`toile-embeds`)
     Text(String),      // initial plain body (sticky / text)
@@ -1281,8 +1242,8 @@ pub struct FindOptions {
 /// synced.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FindResults {
-    pub hits: Vec<ElementId>,
-    pub focus: Option<ElementId>,
+    pub hits: Vec<Id<Element>>,
+    pub focus: Option<Id<Element>>,
 }
 
 /// A single char-CRDT splice on a `LoroText` (`toile-text-editing`,
@@ -1325,7 +1286,7 @@ impl TextDelta {
 /// One user's persisted reaction on a target (`toile-reactions`): an
 /// emoji OR a signed vote weight, plus a wall-clock `ts` kept only as a display
 /// tiebreak. Loro handles the LWW on a user's own key, since the map key is the
-/// canonical `UserId`. This `ts` does not. Postcard-encoded into the reactions
+/// canonical `Id<User>`. This `ts` does not. Postcard-encoded into the reactions
 /// sub-map value (`toile-reactions`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Reaction {
@@ -1449,12 +1410,6 @@ pub struct ReactionTally {
 // commenting on one spot mint distinct threads (`TOILE-FEAT-011`).
 // -----------------------------------------------------------------------------
 
-/// A comment thread's identity (`toile-comments`). Minted like an
-/// [`ElementId`], and aliased to it for the same reason as [`FrameId`]: one
-/// identity type serves elements, connectors, frames and threads
-/// (`ambre-spec-toile-schema.md section 2`).
-pub type ThreadId = ElementId;
-
 /// What a comment thread hangs on (`toile-comments`, `TOILE-024`). An element
 /// anchor tracks the element through every move; a point anchor carries a remark
 /// on empty board. A viewport coordinate is never an anchor: it means nothing on
@@ -1463,17 +1418,17 @@ pub type ThreadId = ElementId;
 /// Postcard-encoded into the thread map's `anchor` key.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CommentAnchor {
-    Element(ElementId),
+    Element(Id<Element>),
     Point(kurbo::Point),
 }
 
 /// One message of a thread, read from the CRDT (`toile-comments`). The
-/// `author` is the canonical `UserId`, never a `PeerID` (`TOILE-FEAT-014`). The
+/// `author` is the canonical `Id<User>`, never a `PeerID` (`TOILE-FEAT-014`). The
 /// reader sees the `ts`, and nothing orders by it (`TOILE-FEAT-012`).
 /// `Debug` prints the length of the body alone.
 #[derive(Clone, PartialEq, Eq)]
 pub struct CommentMessage {
-    pub author: UserId,
+    pub author: Id<User>,
     pub ts: ambre_core::Timestamp,
     pub body: String,
 }
@@ -1494,7 +1449,7 @@ impl fmt::Debug for CommentMessage {
 /// `LoroMovableList` order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommentThread {
-    pub id: ThreadId,
+    pub id: Id<Thread>,
     pub anchor: CommentAnchor,
     pub resolved: ambre_core::ThreadState,
     pub messages: Vec<CommentMessage>,
@@ -1509,7 +1464,7 @@ pub struct CommentThread {
 /// maps it to screen and draws a constant-size marker there (`TOILE-UI-022`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommentPin {
-    pub thread: ThreadId,
+    pub thread: Id<Thread>,
     pub at: Point,
     pub messages: ThreadMessageCount,
     pub resolved: ambre_core::ThreadState,
@@ -1524,7 +1479,7 @@ pub struct CommentPin {
 /// the preview alone.
 #[derive(Clone, PartialEq)]
 pub struct CommentSummary {
-    pub id: ThreadId,
+    pub id: Id<Thread>,
     pub anchor: CommentAnchor,
     pub resolved: ambre_core::ThreadState,
     pub messages: ThreadMessageCount,
@@ -1553,7 +1508,7 @@ impl fmt::Debug for CommentSummary {
 /// `Debug` prints the length of the name alone.
 #[derive(Clone, PartialEq)]
 pub struct DeckFrame {
-    pub id: FrameId,
+    pub id: Id<Frame>,
     pub name: String,
 }
 
@@ -1761,7 +1716,7 @@ pub enum PresentFocus {
 /// that consumes these stays in the engine (`ambre_toile::logic::animate`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SnapElement {
-    pub id: ElementId,
+    pub id: Id<Element>,
     /// Position + size, world space (the element AABB).
     pub bounds: Rect,
     /// The rotation (the element `rot` field).
@@ -1784,7 +1739,7 @@ impl FrameSnapshot {
     /// The captured element with `id`, if this frame contains it. Linear scan --
     /// the test-facing accessor mirroring the `toile-presentation`
     /// pseudo-code.
-    pub fn by_id(&self, id: &ElementId) -> Option<&SnapElement> {
+    pub fn by_id(&self, id: &Id<Element>) -> Option<&SnapElement> {
         self.elements.iter().find(|e| &e.id == id)
     }
 }
@@ -1875,7 +1830,7 @@ pub struct SlideChange {
     /// The new active frame's element id, or `None` when the slide has no
     /// resolvable frame (dangling id / empty deck). The presenter panel uses it
     /// as the target of `EditNotes`.
-    pub frame: Option<ElementId>,
+    pub frame: Option<Id<Element>>,
     /// The new active frame's speaker notes as plain text, seeding the presenter
     /// panel's editor (`toile-presentation`). Empty when the frame has no
     /// notes yet or is absent.
@@ -1956,7 +1911,7 @@ pub enum ToileCommand {
         correlate: Option<CorrelationToken>,
     },
     MoveElements {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
         delta: Vec2,
     },
     /// Align or distribute a selection (`toile-elements section 1.7`). One
@@ -1969,15 +1924,15 @@ pub enum ToileCommand {
     /// and a locked element takes no part -- it neither moves nor counts in the
     /// union (`TOILE-234`).
     AlignElements {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
         op: AlignOp,
     },
     ResizeElement {
-        id: ElementId,
+        id: Id<Element>,
         new: Rect,
     },
     RotateElement {
-        id: ElementId,
+        id: Id<Element>,
         radians: ambre_core::Radians,
     },
     /// Ask for the pixels behind one or more media addresses
@@ -1992,11 +1947,11 @@ pub enum ToileCommand {
         hashes: Vec<ambre_core::ContentHash>,
     },
     RestyleElements {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
         style: ElementStyle,
     },
     DeleteElements {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
     },
     /// Write the plaintext body of a sticky / text element
     /// (`toile-text-editing`). The inline editor commits its whole buffer as
@@ -2005,12 +1960,12 @@ pub enum ToileCommand {
     /// that arrived meanwhile survives (`TOILE-UI-381`). The handler rejects a
     /// non-text element id.
     SetText {
-        id: ElementId,
+        id: Id<Element>,
         base: String,
         text: String,
     },
     LockElements {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
         lock: LockState,
     },
 
@@ -2025,14 +1980,14 @@ pub enum ToileCommand {
     /// Bind a set of elements into a fresh group element (selects/transforms as
     /// one). One undo item.
     GroupElements {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
     },
     /// Drop each group's binding, re-parenting its children to the group's own
     /// parent. The children survive, and only the group nodes go away. A
     /// multi-selection is one gesture, so the whole list is one undo item
     /// (`TOILE-094`).
     UngroupElements {
-        groups: Vec<ElementId>,
+        groups: Vec<Id<Element>>,
     },
 
     // -- Frames (`toile-frames`) --
@@ -2042,16 +1997,16 @@ pub enum ToileCommand {
     /// The engine keeps the `toile-frames` invariant (a child paints
     /// after its frame). One undo item.
     SetFrameChildren {
-        frame: ElementId,
-        add: Vec<ElementId>,
-        remove: Vec<ElementId>,
+        frame: Id<Element>,
+        add: Vec<Id<Element>>,
+        remove: Vec<Id<Element>>,
     },
     /// Take each listed element out of the frame that holds it, whichever that
     /// is. The engine resolves the membership, because the display carries no
     /// parent-frame edge and the frame that contains a box need not be its
     /// parent (`toile-menus`). An id no frame holds is skipped. One undo item.
     RemoveFromFrames {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
     },
     /// Name a frame (`toile-frames`). The title is one LWW register, not a
     /// shared text. A title is short and written by one person at a time. Two
@@ -2060,19 +2015,19 @@ pub enum ToileCommand {
     /// [`FRAME_NAME_MAX`](crate::app::toile::FRAME_NAME_MAX) by the engine.
     /// One undo item.
     RenameFrame {
-        frame: ElementId,
+        frame: Id<Element>,
         name: String,
     },
 
     // -- Presentation (`toile-presentation`) --
     /// Set the shared slide sequence: the frames, in playback order
-    /// (`toile-presentation`). CRDT (a `LoroMovableList<FrameId>`),
+    /// (`toile-presentation`). CRDT (a `LoroMovableList<Id<Frame>>`),
     /// convergent and undoable (`toile-undo`). Repeated ids are
-    /// de-duplicated; a dangling FrameId is skipped at derivation like a dangling
+    /// de-duplicated; a dangling Id<Frame> is skipped at derivation like a dangling
     /// connector (`toile-z-order`), so no frame-existence check happens
     /// here.
     SetSlideOrder {
-        order: Vec<FrameId>,
+        order: Vec<Id<Frame>>,
     },
     /// Step the local playback cursor to the next / previous slide, saturating at
     /// the deck bounds (`toile-presentation`). Local only -- no CRDT
@@ -2098,9 +2053,9 @@ pub enum ToileCommand {
     /// Follow the given presenter's broadcast playback position, or stop following
     /// with `None` (`toile-presentation`, "Follow presenter"). Local role
     /// only -- no CRDT delta. While following, an inbound presence sample from that
-    /// `UserId` moves this viewer's active slide; a manual navigation clears the
+    /// `Id<User>` moves this viewer's active slide; a manual navigation clears the
     /// follow ("take control").
-    FollowPresenter(Option<UserId>),
+    FollowPresenter(Option<Id<User>>),
     /// Apply a char-CRDT edit to a frame's collaborative speaker notes
     /// (`toile-presentation`). Notes live in the frame element's payload as
     /// a LoroText, seeded on first edit. CRDT, convergent, one commit = one undo
@@ -2109,7 +2064,7 @@ pub enum ToileCommand {
     /// since, the handler merges the change into the stored note instead
     /// (`TOILE-FEAT-088`).
     EditNotes {
-        frame: FrameId,
+        frame: Id<Frame>,
         base: String,
         delta: TextDelta,
     },
@@ -2119,18 +2074,18 @@ pub enum ToileCommand {
     /// never persists them (`toile-auto-layout`). Convergent and undoable; a
     /// missing / non-frame id is a rejected no-op.
     SetAutoLayout {
-        frame: FrameId,
+        frame: Id<Frame>,
         layout: Option<AutoLayout>,
     },
 
     // -- Reactions / votes (`toile-reactions`) --
     /// Place, change or remove the local user's reaction on a target (element or
     /// frame). Shared, persisted CRDT: a sub-map keyed by target + canonical
-    /// `UserId`, so one user has exactly one entry per target (a re-vote is LWW on
+    /// `Id<User>`, so one user has exactly one entry per target (a re-vote is LWW on
     /// their own key). `reaction: None` removes the user's own entry. Tallies are
     /// derived on read, never stored. One commit = one undo item.
     React {
-        target: TargetId,
+        target: Id<Element>,
         reaction: Option<Reaction>,
     },
 
@@ -2141,7 +2096,7 @@ pub enum ToileCommand {
     /// the author's wall clock, shown to the reader and used for nothing else:
     /// the Logic thread has no clock, and a clock orders nothing
     /// (`TOILE-FEAT-012`). Outside the undo stack (`TOILE-FEAT-017`); a
-    /// no-op before the session carries a `UserId`.
+    /// no-op before the session carries a `Id<User>`.
     CreateComment {
         anchor: CommentAnchor,
         body: String,
@@ -2151,7 +2106,7 @@ pub enum ToileCommand {
     /// as [`CreateComment`](Self::CreateComment). A missing thread is a rejected
     /// no-op.
     ReplyComment {
-        thread: ThreadId,
+        thread: Id<Thread>,
         body: String,
         ts: ambre_core::Timestamp,
     },
@@ -2161,14 +2116,14 @@ pub enum ToileCommand {
     /// `EditNotes` one. Another author's message, or a missing index, is a
     /// rejected no-op.
     EditComment {
-        thread: ThreadId,
+        thread: Id<Thread>,
         message: ThreadMessageIndex,
         delta: TextDelta,
     },
     /// Resolve `thread`, or reopen it. Idempotent and convergent, and it
     /// destroys neither the thread nor its messages (`TOILE-FEAT-015`).
     ResolveThread {
-        thread: ThreadId,
+        thread: Id<Thread>,
         state: ambre_core::ThreadState,
     },
     /// Read comments back for the panel, which holds no state of its own
@@ -2177,7 +2132,7 @@ pub enum ToileCommand {
     /// board-wide list and answers [`CommentList`](ToileEvent::CommentList).
     /// A pure read: no commit, no delta, no undo item.
     ReadComments {
-        thread: Option<ThreadId>,
+        thread: Option<Id<Thread>>,
     },
     /// Read the board's frames back for the deck panel, which holds no state of
     /// its own (`toile-presentation`). Answers
@@ -2196,7 +2151,7 @@ pub enum ToileCommand {
     /// geometry) is a no-op.
     BooleanOp {
         op: BoolOp,
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
         sources: Sources,
     },
 
@@ -2206,33 +2161,33 @@ pub enum ToileCommand {
 
     // -- Connectors --
     CreateConnector {
-        from: ElementId,
+        from: Id<Element>,
         from_anch: Anchor,
-        to: ElementId,
+        to: Id<Element>,
         to_anch: Anchor,
         path_type: PathType,
         arrows: EndCaps,
     },
     RetargetConnector {
-        id: ConnectorId,
+        id: Id<Connector>,
         endpoint: End,
-        to: ElementId,
+        to: Id<Element>,
         anch: Anchor,
     },
     DeleteConnector {
-        id: ConnectorId,
+        id: Id<Connector>,
     },
     /// Set or clear the link register of one element (`toile-links`). `None`
     /// clears it. One register write and one undo item; nothing else on the
     /// element moves (`TOILE-066`, `TOILE-111`).
     SetLink {
-        id: ElementId,
+        id: Id<Element>,
         link: Option<LinkTarget>,
     },
     /// Overwrite an arrow's style register, whole, like `RestyleElements` does
     /// for an element (`toile-connectors`).
     RestyleConnector {
-        id: ConnectorId,
+        id: Id<Connector>,
         style: ElementStyle,
     },
     /// Write an arrow's caption. The whole caption travels as `text`, with
@@ -2241,7 +2196,7 @@ pub enum ToileCommand {
     /// character by character, instead of one body winning
     /// (`toile-connectors`).
     SetConnectorLabel {
-        id: ConnectorId,
+        id: Id<Connector>,
         base: String,
         text: String,
     },
@@ -2257,7 +2212,7 @@ pub enum ToileCommand {
     /// (does not mutate the doc); answered by `ToileEvent::Clipboard`. Cut is the
     /// UI issuing this then `DeleteElements` on the same selection.
     CopyElements {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
     },
     /// Re-mint every node in `payload`, offset so `payload.origin` lands at `at`,
     /// and insert above the current top of the z-order. One undo item.
@@ -2268,7 +2223,7 @@ pub enum ToileCommand {
     /// Copy + paste fused into a single undo item, offset by `delta` (the
     /// alt-drag / Ctrl+D nudge).
     DuplicateElements {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
         delta: Vec2,
     },
 
@@ -2281,13 +2236,13 @@ pub enum ToileCommand {
     /// (`FIND-005`). No CRDT effect.
     Find {
         query: Option<FindQuery>,
-        from: Option<ElementId>,
+        from: Option<Id<Element>>,
         direction: ambre_core::StepDirection,
     },
 
     // -- Selection aggregates for the status bar (`toile-status-bar`) --
     RequestSelectionStats {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
         kind: StatsRequestKind,
     },
     /// Ask Logic for the full display data of these ids, off-screen included
@@ -2296,7 +2251,7 @@ pub enum ToileCommand {
     /// surfaces and the inline editor read this instead of the viewport
     /// (`TOILE-UI-070`, `TOILE-UI-134`).
     RequestSelectionData {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
     },
     /// Ask Logic for every element id on the board, off-screen included, which
     /// select-all needs because the UI thread holds the culled set alone
@@ -2607,7 +2562,7 @@ fn lenient_name<'de, D: serde::Deserializer<'de>>(
 /// stroke, and/or a laser point. All fields are optional so a bare cursor move
 /// need not resend the selection. Postcard-encoded into the `SendEphemeral`
 /// payload. This payload deliberately carries NO identity. The receiver keys
-/// presence off the sender's canonical `UserId`, which `ambre-sync` resolves
+/// presence off the sender's canonical `Id<User>`, which `ambre-sync` resolves
 /// from the authenticated `pub_key`, so a peer cannot spoof another user's
 /// cursor.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -2615,7 +2570,7 @@ pub struct PresencePayload {
     /// The sender's display name, cosmetic and forgeable
     /// (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-004`). It labels a
     /// cursor and decides neither identity, nor colour, nor permission. Both
-    /// come from the `UserId` the transport resolved. `None` falls back to a
+    /// come from the `Id<User>` the transport resolved. `None` falls back to a
     /// short handle derived from that id. So does a name that breaks the
     /// display-name rule: the sample stays, the name is dropped.
     #[serde(deserialize_with = "lenient_name")]
@@ -2623,7 +2578,7 @@ pub struct PresencePayload {
     /// World-space pointer; `None` means the pointer left the board.
     pub cursor: Option<Point>,
     /// The peer's current selection, drawn as halos. Empty = nothing selected.
-    pub selection: Vec<ElementId>,
+    pub selection: Vec<Id<Element>>,
     /// In-flight freehand stroke samples (world space), streamed before the
     /// stroke commits to a `"drawing"` element (`toile-freehand`). `None` =
     /// not drawing.
@@ -2640,7 +2595,7 @@ pub struct PresencePayload {
     pub present_slide: Option<SlideIndex>,
 }
 
-/// A remote peer's latest presence, keyed by the canonical `UserId`
+/// A remote peer's latest presence, keyed by the canonical `Id<User>`
 /// (`toile-presence`). The UI derives the peer color / name label by
 /// hashing `user_id` with the shared cross-app algorithm
 /// (`ambre_draw::peer::peer_color`). A collaborator therefore keeps the same
@@ -2648,7 +2603,7 @@ pub struct PresencePayload {
 /// the render side is `toile-presence`'s overlay pass.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PresenceUpdate {
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub presence: PresencePayload,
 }
 
@@ -2661,9 +2616,9 @@ pub struct PresenceUpdate {
 #[derive(Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ToileError {
     #[error("element {} not found", .0.as_str())]
-    NoSuchElement(ElementId),
+    NoSuchElement(Id<Element>),
     #[error("connector {} not found", .0.as_str())]
-    NoSuchConnector(ConnectorId),
+    NoSuchConnector(Id<Connector>),
     #[error("{} cannot be created via CreateElement", .kind.type_tag())]
     NotCreatable { kind: ElementKind },
     #[error("InitContent does not match the requested element kind")]
@@ -2673,7 +2628,7 @@ pub enum ToileError {
     #[error("a group needs at least two distinct members")]
     GroupNeedsTwo,
     #[error("element {} is not a group", .0.as_str())]
-    NotAGroup(ElementId),
+    NotAGroup(Id<Element>),
     #[error("a collaborator's change could not be applied; the board may be behind")]
     RemoteImportFailed,
     #[error("boolean op needs at least two eligible shape / path elements")]
@@ -2764,7 +2719,7 @@ pub enum ToileEvent {
     /// carried (`TOILE-UI-194`). `None` when the create requested no deferred
     /// open.
     ElementCreated {
-        id: ElementId,
+        id: Id<Element>,
         correlate: Option<CorrelationToken>,
     },
     /// Result of `CopyElements`: the UI stashes it and may mirror it to the OS
@@ -2782,24 +2737,24 @@ pub enum ToileEvent {
         /// The requested ids a frame's children list holds, whatever their
         /// box. The menu offers removal from a frame by this, not by geometry
         /// (`TOILE-UI-384`).
-        framed: Vec<ElementId>,
+        framed: Vec<Id<Element>>,
         /// The requested ids the board no longer holds, a peer's deletion
         /// included. The view drops them from its selection (`TOILE-UI-385`).
-        missing: Vec<ElementId>,
+        missing: Vec<Id<Element>>,
     },
     /// Every element id on the board, for select-all (`TOILE-UI-033`).
-    BoardIds(Vec<ElementId>),
+    BoardIds(Vec<Id<Element>>),
     /// Text-search hits + recenter target (`toile-find`). Local view
     /// state, never synced and never an undo item.
     FindResults(FindResults),
-    DanglingConnector(ConnectorId),
+    DanglingConnector(Id<Connector>),
     /// The arrows the board just lost, whoever deleted them. The view drops a
     /// selection or a caption editor on one of them. It never reads an arrow's
     /// absence from the culled frame that way, since panning one off screen
     /// is not deleting it (`TOILE-UI-386`, `TOILE-UI-388`).
-    ArrowsGone(Vec<ConnectorId>),
+    ArrowsGone(Vec<Id<Connector>>),
     /// The whole live peer set to render, each entry keyed by the canonical
-    /// `UserId` (`toile-presence`, `PRESENCE-009`). Ephemeral, never persisted.
+    /// `Id<User>` (`toile-presence`, `PRESENCE-009`). Ephemeral, never persisted.
     ///
     /// The set, not one peer: the view replaces its mirror with it. A peer who
     /// stopped sending therefore leaves the set, and the overlay pass stops
@@ -2829,19 +2784,19 @@ pub enum ToileEvent {
     /// presenter"). `Some(u)` = now following `u`, `None` = stopped following
     /// (for example after taking control with a manual navigation). Local view
     /// state.
-    FollowingChanged(Option<UserId>),
+    FollowingChanged(Option<Id<User>>),
     /// A target's reaction set changed (`toile-reactions`): the UI
     /// re-reads the derived tally for this target. Emitted on a local `React`; the
     /// derived tally is never carried in the CRDT, only recomputed on read.
-    ReactionsUpdated(TargetId),
+    ReactionsUpdated(Id<Element>),
     /// A thread changed (`toile-comments`): created, replied to, edited or
     /// resolved. The panel holds no authoritative state, so it re-reads the
     /// thread on this event (`TOILE-UI-023`). The bodies never ride the display
     /// viewport (`TOILE-026`), so the event carries the id alone.
-    CommentsUpdated(ThreadId),
+    CommentsUpdated(Id<Thread>),
     /// A thread must take the focus (`toile-comments`): the comment tool just
     /// dropped it, or a click landed on its pin. The panel opens on it.
-    CommentThreadOpened(ThreadId),
+    CommentThreadOpened(Id<Thread>),
     /// Every thread of the board, in id order (`toile-comments`): the answer to
     /// a `ReadComments { thread: None }`. A thread whose anchor element is gone
     /// is in it, because the discussion outlives the drawing
@@ -2864,7 +2819,7 @@ pub enum ToileEvent {
     /// the whole note, because the presenter panel's editor holds a body and
     /// not a position. Emitted only when the text actually differs.
     NotesChanged {
-        frame: ElementId,
+        frame: Id<Element>,
         notes: String,
     },
     /// A foreign-file import applied successfully
@@ -3028,7 +2983,7 @@ pub struct DisplayViewport {
     /// The reaction badge pass paints one chip row per entry. A `BTreeMap` (not
     /// `HashMap`) so iteration order is deterministic -- the derived viewport
     /// must equal a full rebuild byte-for-byte (convergence tests).
-    pub reactions: BTreeMap<TargetId, ReactionTally>,
+    pub reactions: BTreeMap<Id<Element>, ReactionTally>,
     /// The comment pins to paint (`toile-comments`, `TOILE-026`): one entry per
     /// thread whose anchor resolves inside this camera. Message bodies never
     /// ride here: the reader fetches a thread when it opens one (`TOILE-205`). A
@@ -3045,7 +3000,7 @@ pub enum DisplayNode {
 
 #[derive(Clone, Debug)]
 pub struct DisplayElement {
-    pub id: ElementId,
+    pub id: Id<Element>,
     pub kind: ElementKind,
     pub transform: Affine, // world transform incl. rotation
     pub bounds: Rect,
@@ -3064,7 +3019,7 @@ pub struct DisplayElement {
     /// upward through the group chain to the top-most enclosing group. The
     /// display therefore carries the edge, not a command round-trip. A group
     /// node itself carries its own parent group here.
-    pub group: Option<ElementId>,
+    pub group: Option<Id<Element>>,
 }
 
 #[derive(Clone)]
@@ -3103,7 +3058,7 @@ pub enum DisplayGeom {
     Embed(Option<WebAddress>),
     /// Nested Ambre document (`toile-embeds`).
     DocEmbed {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
         focused: InputFocus,
     },
@@ -3150,7 +3105,7 @@ impl fmt::Debug for DisplayGeom {
 
 #[derive(Clone)]
 pub struct DisplayConnector {
-    pub id: ConnectorId,
+    pub id: Id<Connector>,
     /// Already routed against the current bounds (`toile-connectors`).
     pub path: BezPath,
     pub style: ElementStyle,
@@ -3185,11 +3140,11 @@ mod tests {
         let peer = ambre_core::PeerId(0x1f);
         let counter = IdCounter::new(0x2a);
         assert_eq!(
-            ElementId::mint(peer, counter).as_str(),
+            Id::<Element>::mint_from(peer, counter).as_str(),
             "000000000000001f_0000002a"
         );
         assert_eq!(
-            ConnectorId::mint(peer, IdCounter::new(0x2b)).as_str(),
+            Id::<Connector>::mint_from(peer, IdCounter::new(0x2b)).as_str(),
             "000000000000001f_0000002b"
         );
     }
@@ -3213,7 +3168,9 @@ mod tests {
     /// length in `Debug`, and none of the text.
     #[test]
     fn a_typed_text_prints_its_length_alone() {
-        let id = ElementId::mint(ambre_core::PeerId(1), IdCounter::new(2));
+        let id = Id::<Element>::mint_from(ambre_core::PeerId(1), IdCounter::new(2));
+        let frame_id = Id::<Frame>::mint_from(ambre_core::PeerId(1), IdCounter::new(5));
+        let thread = Id::<Thread>::mint_from(ambre_core::PeerId(1), IdCounter::new(6));
         let secret = "Q3 layoffs".to_owned();
         let delta = TextDelta {
             insert: secret.clone(),
@@ -3222,19 +3179,19 @@ mod tests {
         let address = WebAddress::parse("https://a.example").expect("an address");
         let ts = ambre_core::Timestamp::default();
         let message = CommentMessage {
-            author: UserId::default(),
+            author: Id::<User>::mint(),
             ts,
             body: secret.clone(),
         };
         let summary = CommentSummary {
-            id: id.clone(),
+            id: thread.clone(),
             anchor: CommentAnchor::Element(id.clone()),
             resolved: ambre_core::ThreadState::default(),
             messages: ThreadMessageCount::new(1),
             preview: secret.clone(),
         };
         let frame = DeckFrame {
-            id: id.clone(),
+            id: frame_id.clone(),
             name: secret.clone(),
         };
         // A copied frame carries its notes, and a copied sticky its body.
@@ -3258,7 +3215,7 @@ mod tests {
                 name: secret.clone(),
             },
             ToileCommand::EditNotes {
-                frame: id.clone(),
+                frame: frame_id.clone(),
                 base: secret.clone(),
                 delta: delta.clone(),
             },
@@ -3268,12 +3225,12 @@ mod tests {
                 ts,
             },
             ToileCommand::ReplyComment {
-                thread: id.clone(),
+                thread: thread.clone(),
                 body: secret.clone(),
                 ts,
             },
             ToileCommand::SetConnectorLabel {
-                id: ConnectorId::mint(ambre_core::PeerId(1), IdCounter::new(3)),
+                id: Id::<Connector>::mint_from(ambre_core::PeerId(1), IdCounter::new(3)),
                 base: secret.clone(),
                 text: secret.clone(),
             },
@@ -3317,7 +3274,7 @@ mod tests {
             format!(
                 "{:?}",
                 DisplayConnector {
-                    id: ConnectorId::mint(ambre_core::PeerId(1), IdCounter::new(4)),
+                    id: Id::<Connector>::mint_from(ambre_core::PeerId(1), IdCounter::new(4)),
                     path: BezPath::new(),
                     style: ElementStyle::default(),
                     arrows: EndCaps {

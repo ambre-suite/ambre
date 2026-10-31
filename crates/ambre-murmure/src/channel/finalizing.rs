@@ -8,7 +8,8 @@
 //! each delay is stamped by the next tick.
 
 use ambre_bus::Timestamp;
-use ambre_core::{DeltaBytes, FailureCount, LeaseId, Millis, SegmentId, Seq, SnapshotBytes};
+use ambre_core::id::{Id, Lease, Segment};
+use ambre_core::{DeltaBytes, FailureCount, Millis, Seq, SnapshotBytes};
 use loro::{ExportMode, LoroDoc};
 
 use super::ChannelState;
@@ -25,7 +26,7 @@ pub(super) const RETRY_DOUBLINGS: FailureCount = FailureCount::new(10);
 /// The finalization of one closing segment, as this client drives it.
 #[derive(Debug)]
 pub(super) struct Finalizing {
-    segment: SegmentId,
+    segment: Id<Segment>,
     step: Step,
     /// Failed lease requests and commits since the last answer that granted
     /// or deferred the lease.
@@ -44,7 +45,7 @@ enum Step {
     /// This client holds the lease until `until`, stamped by the next tick.
     /// The snapshot leaves once the deltas up to `horizon` are in.
     Held {
-        lease: LeaseId,
+        lease: Id<Lease>,
         horizon: Seq,
         expires_in: ambre_core::Millis,
         until: Option<Timestamp>,
@@ -58,9 +59,9 @@ enum Step {
 #[derive(Debug)]
 pub struct FinalSnapshot {
     /// The segment it finalizes.
-    pub segment: SegmentId,
+    pub segment: Id<Segment>,
     /// The lease the commit names.
-    pub lease: LeaseId,
+    pub lease: Id<Lease>,
     /// The last delta it covers, the one the relay returned.
     pub horizon: Seq,
     /// The shallow snapshot, framed as every channel snapshot is.
@@ -70,14 +71,14 @@ pub struct FinalSnapshot {
 impl ChannelState {
     /// The segment this client finalizes now: a final one whose snapshot a
     /// report dropped, or else the closing one.
-    pub fn finalizing_id(&self) -> Option<SegmentId> {
+    pub fn finalizing_id(&self) -> Option<Id<Segment>> {
         self.refinalizing.or_else(|| self.closing_id())
     }
 
     /// A report dropped the final snapshot of `segment`: finalize it again,
     /// at the horizon the relay already holds (`MURMURE-238`). `false` for a
     /// segment this copy does not hold as a final one: another member does it.
-    pub fn refinalize(&mut self, segment: SegmentId) -> bool {
+    pub fn refinalize(&mut self, segment: Id<Segment>) -> bool {
         let held = self.loaded.contains_key(&segment) && self.final_segments().contains(&segment);
         if held && self.refinalizing.is_none() {
             self.refinalizing = Some(segment);
@@ -87,7 +88,7 @@ impl ChannelState {
 
     /// The step of the segment `segment`, started at its first read. `None`
     /// for a segment this client does not finalize now.
-    fn finalize_step(&mut self, segment: SegmentId) -> Option<&mut Finalizing> {
+    fn finalize_step(&mut self, segment: Id<Segment>) -> Option<&mut Finalizing> {
         if self.finalizing_id() != Some(segment) {
             return None;
         }
@@ -107,7 +108,7 @@ impl ChannelState {
     /// The closing segment whose finalize lease to ask for at `now`
     /// (`MURMURE-067`). The first tick past the close asks at once: the
     /// relay answers how long the grace period still runs (`SRV-199`).
-    pub fn lease_to_ask(&mut self, now: Timestamp) -> Option<SegmentId> {
+    pub fn lease_to_ask(&mut self, now: Timestamp) -> Option<Id<Segment>> {
         let segment = self.finalizing_id()?;
         let finalizing = self.finalize_step(segment)?;
         match &mut finalizing.step {
@@ -127,7 +128,7 @@ impl ChannelState {
 
     /// The relay deferred the lease of `segment` by `retry_in` milliseconds:
     /// the grace period runs, or another member holds the lease.
-    pub fn lease_deferred(&mut self, segment: SegmentId, retry_in: ambre_core::Millis) {
+    pub fn lease_deferred(&mut self, segment: Id<Segment>, retry_in: ambre_core::Millis) {
         if let Some(finalizing) = self.finalize_step(segment) {
             finalizing.failures = FailureCount::ZERO;
             finalizing.step = Step::Due {
@@ -142,8 +143,8 @@ impl ChannelState {
     /// `horizon`.
     pub fn lease_granted(
         &mut self,
-        segment: SegmentId,
-        lease: LeaseId,
+        segment: Id<Segment>,
+        lease: Id<Lease>,
         horizon: Seq,
         expires_in: ambre_core::Millis,
     ) {
@@ -160,7 +161,7 @@ impl ChannelState {
 
     /// A lease request or a commit of `segment` failed. It is asked again
     /// past [`FINALIZE_RETRY`], doubled at each failure.
-    pub fn finalize_failed(&mut self, segment: SegmentId) {
+    pub fn finalize_failed(&mut self, segment: Id<Segment>) {
         if let Some(finalizing) = self.finalize_step(segment) {
             if matches!(finalizing.step, Step::Withdrawn) {
                 return;
@@ -177,7 +178,7 @@ impl ChannelState {
     /// This copy of `segment` holds an edit the relay refused: it never
     /// finalizes the segment, and leaves it to another member. A segment
     /// finalized again is withdrawn once another member finalized it first.
-    pub fn finalize_withdrawn(&mut self, segment: SegmentId) {
+    pub fn finalize_withdrawn(&mut self, segment: Id<Segment>) {
         if self.refinalizing == Some(segment) {
             self.refinalizing = None;
             self.finalizing = None;
@@ -257,7 +258,7 @@ impl ChannelState {
     /// - [`MurmureError::NotHeld`]: this client does not finalize `segment`.
     /// - [`MurmureError::NoSession`]: the PeerID of `meta` has not landed.
     /// - [`MurmureError::Crdt`]: Loro refused a write.
-    pub fn mark_final(&mut self, segment: SegmentId) -> Result<Option<DeltaBytes>, MurmureError> {
+    pub fn mark_final(&mut self, segment: Id<Segment>) -> Result<Option<DeltaBytes>, MurmureError> {
         if self.refinalizing == Some(segment) {
             self.refinalizing = None;
             self.finalizing = None;
@@ -276,7 +277,7 @@ impl ChannelState {
     /// The closing segment another member finalized, once `meta` names it
     /// `final`. It is held as a final one from here, and the closing slot is
     /// free. `None` while `meta` still names it closing.
-    pub fn settle_final(&mut self) -> Option<SegmentId> {
+    pub fn settle_final(&mut self) -> Option<Id<Segment>> {
         let segment = self.closing_id()?;
         let state = super::segment_entries(&self.meta.doc)
             .into_iter()
@@ -298,7 +299,7 @@ impl ChannelState {
         }
         if let Some(held) = self.closing.take() {
             self.loaded
-                .insert(SegmentId::from_document(held.id), held.doc);
+                .insert(Id::<Segment>::from_document(held.id), held.doc);
         }
     }
 }
@@ -308,14 +309,14 @@ impl ChannelState {
 ///
 /// # Errors
 /// [`MurmureError::Crdt`] when Loro refuses a write.
-fn record_final(meta: &LoroDoc, segment: SegmentId) -> Result<(), MurmureError> {
+fn record_final(meta: &LoroDoc, segment: Id<Segment>) -> Result<(), MurmureError> {
     let list = crate::schema::root_list(meta, Root::Segments);
     for index in 0..list.len() {
         let Some(entry) = list.get(index).and_then(crate::schema::fields_of) else {
             continue;
         };
         let id = schema::string(&entry, SegmentKey::Document)
-            .and_then(|s| SegmentId::parse_str(&s).ok());
+            .and_then(|s| Id::<Segment>::parse_str(&s).ok());
         if id == Some(segment) {
             entry.insert(SegmentKey::State, SegmentState::Final.as_str())?;
         }

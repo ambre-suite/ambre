@@ -27,7 +27,7 @@ async fn refuse_index_writes(pool: &sqlx::PgPool, count: i64) {
 
 /// The dead letters of `doc_id`, each as its number, its object key and the
 /// frame it carries.
-async fn dead_letters(state: &AppState, doc_id: DocumentId) -> Vec<(u64, String, Vec<u8>)> {
+async fn dead_letters(state: &AppState, doc_id: Id<Document>) -> Vec<(u64, String, Vec<u8>)> {
     use base64::Engine;
     let blobs: Vec<String> = state
         .redis
@@ -51,7 +51,7 @@ async fn dead_letters(state: &AppState, doc_id: DocumentId) -> Vec<(u64, String,
 }
 
 /// Drops the keys a test left for `doc_id` in the shared ephemeral store.
-async fn forget(state: &AppState, doc_id: DocumentId) {
+async fn forget(state: &AppState, doc_id: Id<Document>) {
     let _: usize = state
         .redis
         .del(crate::redis_keys::DocumentStateKeys::of(&doc_id).texts())
@@ -239,7 +239,7 @@ async fn a_replay_stopped_at_a_lost_delta_names_the_last_one_delivered(pool: sql
     sqlx::query(
         "UPDATE updates SET wire = NULL, s3_key = 'lost' WHERE document_id = $1 AND seq = 2",
     )
-    .bind(uuid::Uuid::from_bytes(*doc_id.as_uuid().as_bytes()))
+    .bind(uuid::Uuid::from_bytes(*doc_id.uuid().as_bytes()))
     .execute(&pool)
     .await
     .unwrap();

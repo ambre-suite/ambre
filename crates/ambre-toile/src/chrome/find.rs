@@ -15,8 +15,9 @@
 // canvas view handles the highlight + camera recenter off the same event.
 // ============================================================================
 
-use ambre_bus::app::toile::{ElementId, FindOptions, FindQuery, FindResults};
+use ambre_bus::app::toile::{FindOptions, FindQuery, FindResults};
 use ambre_core::StepDirection;
+use ambre_core::id::{Element, Id};
 use leptos::html;
 use leptos::prelude::*;
 
@@ -31,7 +32,7 @@ use ambre_bus::app::find::MatchIndex;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FindRequest {
     pub query: Option<FindQuery>,
-    pub from: Option<ElementId>,
+    pub from: Option<Id<Element>>,
     pub direction: StepDirection,
 }
 
@@ -75,7 +76,7 @@ pub fn FindPanel(
     });
 
     // Emit a `Find` with the current query / options, resume point and direction.
-    let emit = move |from: Option<ElementId>, direction: StepDirection| {
+    let emit = move |from: Option<Id<Element>>, direction: StepDirection| {
         let options = FindOptions {
             case: if match_case.get_untracked() {
                 ambre_core::CaseMatch::Sensitive

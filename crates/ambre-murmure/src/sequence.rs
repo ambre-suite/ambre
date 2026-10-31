@@ -10,7 +10,8 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{ByteSize, LoroPayloadRef, MessageId, Seq, SnapshotBytes};
+use ambre_core::id::{Id, Message};
+use ambre_core::{ByteSize, LoroPayloadRef, Seq, SnapshotBytes};
 use loro::{
     ContainerID, ContainerTrait, ID, ImportBlobMetadata, ImportStatus, LoroDoc, LoroError,
     VersionVector,
@@ -67,7 +68,7 @@ impl Range {
 pub(crate) struct Sequence {
     /// Each message whose number is known. The lowest wins: an operation
     /// re-sent in a later update was created by the first.
-    exact: HashMap<MessageId, Seq>,
+    exact: HashMap<Id<Message>, Seq>,
     /// The horizon of the snapshots delivered: every message they held is
     /// numbered at most this.
     covered: Seq,
@@ -194,7 +195,7 @@ impl Sequence {
         }
     }
 
-    fn adopt(&mut self, id: MessageId, seq: Seq) {
+    fn adopt(&mut self, id: Id<Message>, seq: Seq) {
         self.exact
             .entry(id)
             .and_modify(|known| *known = (*known).min(seq))
@@ -202,7 +203,7 @@ impl Sequence {
     }
 
     /// Where `id` stands.
-    pub(crate) fn position(&self, id: MessageId) -> Position {
+    pub(crate) fn position(&self, id: Id<Message>) -> Position {
         match self.exact.get(&id) {
             Some(&seq) => Position::Exact(seq),
             None if self.covered > Seq::ZERO => Position::AtMost(self.covered),
@@ -242,7 +243,7 @@ impl Sequence {
 }
 
 /// A message with the operation that created it.
-pub(crate) type Created = (MessageId, ID);
+pub(crate) type Created = (Id<Message>, ID);
 
 /// Each message of `doc` with the operation that created it. A message with
 /// no readable identifier is skipped: the view skips it too.
@@ -257,7 +258,7 @@ pub(crate) fn created(doc: &LoroDoc) -> Vec<Created> {
             return;
         };
         let Some(id) =
-            schema::string(&map, MessageKey::Id).and_then(|s| MessageId::parse_str(&s).ok())
+            schema::string(&map, MessageKey::Id).and_then(|s| Id::<Message>::parse_str(&s).ok())
         else {
             return;
         };
@@ -341,7 +342,7 @@ fn blob_meta(payload: LoroPayloadRef<'_>) -> Result<ImportBlobMetadata, LoroErro
 }
 
 /// The rows a framed snapshot carries, `None` for a bare one.
-fn table(payload: &SnapshotBytes) -> Option<impl Iterator<Item = (MessageId, Seq)> + '_> {
+fn table(payload: &SnapshotBytes) -> Option<impl Iterator<Item = (Id<Message>, Seq)> + '_> {
     let framed = split(payload)?;
     Some(
         framed
@@ -351,7 +352,7 @@ fn table(payload: &SnapshotBytes) -> Option<impl Iterator<Item = (MessageId, Seq
             .filter_map(|row| {
                 let (id, seq) = row.split_first_chunk::<16>()?;
                 let seq = Seq(u64::from_le_bytes(seq.try_into().ok()?));
-                Some((MessageId::from_bytes(*id), seq))
+                Some((Id::<Message>::from_bytes(*id), seq))
             }),
     )
 }

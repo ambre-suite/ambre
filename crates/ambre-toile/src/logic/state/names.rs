@@ -9,7 +9,7 @@ use loro::{LoroDoc, LoroMap};
 
 use ambre_core::crdt::FieldKey;
 
-use crate::logic::model::{ConnectorId, ElementId, ThreadId};
+use ambre_core::id::{Connector, Element, Id, Thread, User};
 
 ambre_core::loro_fields!(pub(crate));
 
@@ -89,7 +89,7 @@ ambre_core::crdt_names! {
 ambre_core::crdt_names! {
     /// The fields of one comment message map.
     pub(crate) enum MessageKey: FieldKey {
-        /// The author's canonical `UserId`, rendered.
+        /// The author's canonical `Id<User>`, rendered.
         Author = "author",
         /// The wall clock. The reader sees it, and nothing orders by it
         /// (`TOILE-FEAT-012`).
@@ -129,25 +129,25 @@ pub(crate) trait EntrySchema: FieldKey {
 }
 
 impl EntrySchema for ElementKey {
-    type Id = ElementId;
+    type Id = Id<Element>;
     const ROOT: Root = Root::Elements;
-    fn key(id: &ElementId) -> &str {
+    fn key(id: &Id<Element>) -> &str {
         id.as_str()
     }
 }
 
 impl EntrySchema for ConnectorKey {
-    type Id = ConnectorId;
+    type Id = Id<Connector>;
     const ROOT: Root = Root::Connectors;
-    fn key(id: &ConnectorId) -> &str {
+    fn key(id: &Id<Connector>) -> &str {
         id.as_str()
     }
 }
 
 impl EntrySchema for ThreadKey {
-    type Id = ThreadId;
+    type Id = Id<Thread>;
     const ROOT: Root = Root::Comments;
-    fn key(id: &ThreadId) -> &str {
+    fn key(id: &Id<Thread>) -> &str {
         id.as_str()
     }
 }
@@ -173,7 +173,7 @@ pub(crate) struct ReactionKey(String);
 impl ReactionKey {
     /// The key of the reaction `user` placed on `target`.
     #[must_use]
-    pub(crate) fn of(target: &ElementId, user: &ambre_bus::UserId) -> Self {
+    pub(crate) fn of(target: &Id<Element>, user: &Id<User>) -> Self {
         Self(format!("{}{REACTION_SEPARATOR}{user}", target.as_str()))
     }
 
@@ -185,14 +185,14 @@ impl ReactionKey {
 
     /// The target a stored key names, or `None` for a key with no separator.
     #[must_use]
-    pub(crate) fn target_of(key: &str) -> Option<ElementId> {
-        Self::target_half(key).map(|target| ElementId(target.to_owned()))
+    pub(crate) fn target_of(key: &str) -> Option<Id<Element>> {
+        Self::target_half(key).map(|target| Id::<Element>::from_text(target.to_owned()))
     }
 
     /// Whether a stored key names `target`. A scan of every key asks this,
     /// so it compares in place and builds no id.
     #[must_use]
-    pub(crate) fn names_target(key: &str, target: &ElementId) -> bool {
+    pub(crate) fn names_target(key: &str, target: &Id<Element>) -> bool {
         Self::target_half(key) == Some(target.as_str())
     }
 

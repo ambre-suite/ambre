@@ -14,8 +14,8 @@
 )]
 
 use ambre_bus::app::prose::{DocOffset, ProseError, ProseRefusal};
-use ambre_bus::{AppEvent, DocumentId, UiEvent};
-use ambre_core::{CommentId, ReplyId, UserId};
+use ambre_bus::{AppEvent, UiEvent};
+use ambre_core::id::{Comment, Document, Id, Reply, User};
 use ambre_prose::chrome::{self, ProseCommentsPanel, ProseSignals};
 use ambre_prose::events::{CommentReply, CommentThread, ProseEvent};
 use ambre_prose::ui::ProseUiState;
@@ -44,7 +44,7 @@ where
     container
 }
 
-fn thread(id: CommentId, replies: &[&str]) -> CommentThread {
+fn thread(id: Id<Comment>, replies: &[&str]) -> CommentThread {
     CommentThread {
         comment_id: id,
         anchor_block: None,
@@ -55,9 +55,9 @@ fn thread(id: CommentId, replies: &[&str]) -> CommentThread {
         replies: replies
             .iter()
             .map(|text| CommentReply {
-                reply_id: ReplyId::new(),
+                reply_id: Id::<Reply>::mint(),
                 author: ambre_core::DisplayName::new("Bob").ok(),
-                user_id: UserId::from_bytes([2; 16]),
+                user_id: Id::<User>::from_bytes([2; 16]),
                 created_at: ambre_bus::Timestamp(0),
                 text: (*text).to_owned(),
             })
@@ -79,7 +79,7 @@ fn input_of(root: &web_sys::Element, nth: u32) -> web_sys::HtmlInputElement {
 #[wasm_bindgen_test]
 async fn a_reply_being_typed_survives_its_thread_moving() {
     let signals = ProseSignals::new();
-    let (first, second) = (CommentId::new(), CommentId::new());
+    let (first, second) = (Id::<Comment>::mint(), Id::<Comment>::mint());
     signals.threads.set(vec![
         PanelThread {
             thread: thread(first, &["Is this right?"]),
@@ -145,7 +145,7 @@ fn a_thread_deleted_under_a_draft_is_told() {
     let owner = Owner::new();
     owner.set();
     let signals = ProseSignals::new();
-    let (kept, gone) = (CommentId::new(), CommentId::new());
+    let (kept, gone) = (Id::<Comment>::mint(), Id::<Comment>::mint());
     signals.drafts.update(|drafts| {
         drafts.insert(kept, "still here".to_owned());
         drafts.insert(gone, "half a reply".to_owned());
@@ -179,7 +179,7 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     let owner = Owner::new();
     owner.set();
     let toasts = ambre_chrome::Toasts::new();
-    let comment_id = CommentId::new();
+    let comment_id = Id::<Comment>::mint();
     let reply = ambre_bus::app::prose::ProseCommand::ReplyToComment {
         comment_id,
         text: String::new(),
@@ -188,7 +188,7 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
     chrome::notify_event(
         &toasts,
         &UiEvent::Viewport {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             event: AppEvent::Prose(ProseEvent::Error(ProseError::new(
                 ambre_bus::app::prose::RefusedAction::Command(reply.name()),
                 ProseRefusal::NoSuchComment(comment_id),
@@ -317,7 +317,7 @@ async fn the_history_rows_follow_the_reported_state() {
     });
     let report = |event: ProseEvent| {
         signals.mirror_event(&UiEvent::Viewport {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             event: AppEvent::Prose(event),
         });
     };

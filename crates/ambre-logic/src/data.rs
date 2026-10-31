@@ -24,7 +24,7 @@ impl LogicState {
     /// Every refusal reaches the user as a `ExportFailed`. A build without the
     /// export compiled in and a session whose fonts have not landed answer by
     /// name. So do a board with nothing to draw and a serializer that gave up.
-    fn export_toile_pdf(&mut self, document_id: DocumentId) {
+    fn export_toile_pdf(&mut self, document_id: Id<Document>) {
         self.settle_import(document_id);
         let Self {
             docs, export_cx, ..
@@ -64,7 +64,7 @@ impl LogicState {
     /// App-agnostic by construction: one container serves every application
     /// (`DOCFILE-007`), so the only per-app value is the event that carries the
     /// bytes out, which [`DocState::ambre_file_event`] mints.
-    fn export_ambre_file(&mut self, document_id: DocumentId) {
+    fn export_ambre_file(&mut self, document_id: Id<Document>) {
         self.settle_import(document_id);
         let Some(answer) = self
             .docs
@@ -92,7 +92,7 @@ impl LogicState {
     /// line.
     fn export_ambre_file_sealed(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         passphrase: ambre_core::Passphrase,
     ) {
         self.settle_import(document_id);
@@ -160,7 +160,7 @@ impl LogicState {
 
     /// Drop every pending seal of `document_id` (it closed, or the session
     /// ended): an answer that arrives afterwards has nowhere to go.
-    pub(crate) fn forget_pending_seals(&mut self, document_id: Option<DocumentId>) {
+    pub(crate) fn forget_pending_seals(&mut self, document_id: Option<Id<Document>>) {
         match document_id {
             Some(document_id) => self
                 .pending_seals
@@ -173,11 +173,11 @@ impl LogicState {
     /// events to the UI Thread, and forward CRDT/ephemeral payloads to Sync.
     ///
     /// The registry is **flat**. A document embedded in a Toile via a `doc_embed`
-    /// is an ordinary entry here, keyed by its own `DocumentId`. Its commands
+    /// is an ordinary entry here, keyed by its own `Id<Document>`. Its commands
     /// arrive addressed straight to it. Nesting adds no routing step. The child's
     /// view holds the child's id and emits through the same queue, so a command
     /// never travels through the parent.
-    pub(crate) fn handle_app_command(&mut self, document_id: DocumentId, command: AppCommand) {
+    pub(crate) fn handle_app_command(&mut self, document_id: Id<Document>, command: AppCommand) {
         // The store refuses an unsent change: an edit taken now could be lost
         // with it (`RESID-018`). Reading, selecting and scrolling still pass.
         if command.is_mutating() && self.edits_paused() {
@@ -304,7 +304,7 @@ impl LogicState {
     }
 
     /// The boards an import is still being applied to (`ARCH-030`).
-    pub(crate) fn boards_with_pending_work(&self) -> Vec<DocumentId> {
+    pub(crate) fn boards_with_pending_work(&self) -> Vec<Id<Document>> {
         self.docs
             .iter()
             .filter(|(_, doc)| matches!(&doc.state, DocState::Toile(s) if s.has_pending_work()))
@@ -323,7 +323,7 @@ impl LogicState {
 
     /// Apply the next slice of a board's running import and fan it out
     /// (`ARCH-030`). A document with nothing running answers nothing.
-    pub(crate) fn resume_import(&mut self, document_id: DocumentId) {
+    pub(crate) fn resume_import(&mut self, document_id: Id<Document>) {
         let Some(DocState::Toile(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
         else {
             return;
@@ -342,7 +342,7 @@ impl LogicState {
     ///
     /// A history replay still being imported lands whole first too
     /// (`SYNC-131`).
-    pub(crate) fn settle_import(&mut self, document_id: DocumentId) {
+    pub(crate) fn settle_import(&mut self, document_id: Id<Document>) {
         self.settle_replay(document_id);
         self.settle_board_import(document_id);
     }
@@ -351,7 +351,7 @@ impl LogicState {
     /// the replay, for the import of one replay slice.
     ///
     /// [`settle_import`]: Self::settle_import
-    fn settle_board_import(&mut self, document_id: DocumentId) {
+    fn settle_board_import(&mut self, document_id: Id<Document>) {
         let Some(DocState::Toile(state)) = self.docs.get_mut(&document_id).map(|d| &mut d.state)
         else {
             return;
@@ -365,7 +365,7 @@ impl LogicState {
 
     fn dispatch_toile_outcome(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         outcome: ambre_toile::ToileOutcome,
     ) {
         self.dispatch_outcome(
@@ -383,7 +383,7 @@ impl LogicState {
     /// decides which `AppEvent` variant wraps the display events.
     fn dispatch_outcome(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         display: Vec<AppEvent>,
         update: Option<ambre_core::DeltaBytes>,
         ephemeral: Option<ambre_core::EphemeralBytes>,
@@ -430,7 +430,7 @@ impl LogicState {
     /// The `RequestId` is the one Toile allocated -- it owns the correlation.
     fn lower_request(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         request: ToileRequest,
     ) -> (RequestId, RestCommand) {
         match request {
@@ -454,7 +454,7 @@ impl LogicState {
     /// silently ignores an id it no longer tracks (import undone / doc reopened).
     pub(crate) fn route_service_event(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         id: RequestId,
         evt: RestEvent,
     ) {
@@ -480,7 +480,7 @@ impl LogicState {
     /// (`toile-media`): a failed media upload aborts its pending import.
     pub(crate) fn route_service_error(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         id: RequestId,
         reason: String,
     ) {
@@ -514,7 +514,7 @@ impl LogicState {
     /// document from the relay instead (`RESID-012`).
     pub(crate) fn restore_local(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         snapshot: Option<ambre_core::SnapshotBytes>,
         deltas: Vec<ambre_core::DeltaBytes>,
         restore: Restore,
@@ -591,7 +591,7 @@ impl LogicState {
     /// in the same session, and its unsent cursor stays where it is.
     pub(crate) fn adopt_session(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         peer: ambre_core::PeerId,
         entry: ambre_core::PeerEntry,
         nonce: SessionNonce,
@@ -636,7 +636,7 @@ impl LogicState {
     /// send what they left unsent once the relay's replay is done.
     pub(crate) fn note_earlier_sessions(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         sessions: Vec<(ambre_core::PeerId, SessionNonce)>,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
@@ -657,7 +657,7 @@ impl LogicState {
     /// Runs once the relay's replay is done, since only then is its lower
     /// bound worth reading. An operation sent twice is harmless: an import
     /// skips what the document already holds.
-    pub(crate) fn send_unsent(&mut self, document_id: DocumentId) {
+    pub(crate) fn send_unsent(&mut self, document_id: Id<Document>) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
@@ -705,7 +705,7 @@ impl LogicState {
     /// under the PeerID of its signer (`AUTHOR-012`). A refused delta changes
     /// nothing (`AUTHOR-014`). The log names the document and the signer and
     /// never a byte of the payload (`ZK-001`).
-    pub(crate) fn apply_signed(&mut self, document_id: DocumentId, delta: &SignedDelta) {
+    pub(crate) fn apply_signed(&mut self, document_id: Id<Document>, delta: &SignedDelta) {
         // A channel document runs the engine's own check, which reads what
         // each operation writes (the Murmure engine spec).
         if !self.docs.contains_key(&document_id)
@@ -735,7 +735,7 @@ impl LogicState {
     /// now holds. A document left waiting for good is reported (`AUTHOR-025`).
     pub(crate) fn track_waiting(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         applied: &[(Seq, &ambre_core::DeltaBytes)],
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
@@ -752,7 +752,7 @@ impl LogicState {
     /// Tell the user, once, that a delta waits on an operation no delta
     /// carries (`AUTHOR-025`). Only after the replay: before it, the
     /// operation may still be on its way.
-    pub(crate) fn report_stalled(&mut self, document_id: DocumentId) {
+    pub(crate) fn report_stalled(&mut self, document_id: Id<Document>) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
@@ -774,7 +774,7 @@ impl LogicState {
     /// it (`AUTHOR-016`).
     fn record_seq(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         seq: Seq,
         payload: Option<&ambre_core::DeltaBytes>,
     ) {
@@ -790,7 +790,11 @@ impl LogicState {
 
     /// The batch form of [`apply_signed`](Self::apply_signed): each delta is
     /// checked on its own, and only the refused ones are left out.
-    pub(crate) fn apply_signed_batch(&mut self, document_id: DocumentId, deltas: Vec<SignedDelta>) {
+    pub(crate) fn apply_signed_batch(
+        &mut self,
+        document_id: Id<Document>,
+        deltas: Vec<SignedDelta>,
+    ) {
         if !self.docs.contains_key(&document_id) && self.apply_channel_signed(document_id, &deltas)
         {
             return;
@@ -839,7 +843,7 @@ impl LogicState {
     /// placed it, which only a channel reads.
     pub(crate) fn apply_remote(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         order: Order,
         payload: LoroPayloadRef<'_>,
     ) {
@@ -911,7 +915,7 @@ impl LogicState {
     /// channel or space document never queues a replay, so it never comes here.
     pub(crate) fn merge_batch(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payloads: &[ambre_core::DeltaBytes],
     ) {
         self.settle_board_import(document_id);
@@ -949,19 +953,19 @@ impl LogicState {
     }
 
     /// Apply a remote ephemeral payload to a document and forward presence events.
-    /// `from_user_id` is the sender's canonical `UserId`, resolved from the
+    /// `from_user_id` is the sender's canonical `Id<User>`, resolved from the
     /// authenticated `pub_key` in `ambre-sync` so presence cannot be spoofed.
     pub(crate) fn apply_ephemeral(
         &mut self,
-        document_id: DocumentId,
-        from_user_id: UserId,
+        document_id: Id<Document>,
+        from_user_id: Id<User>,
         payload: &ambre_core::EphemeralBytes,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             return;
         };
         let events: Vec<AppEvent> = match doc {
-            // Trame's own `UserId`-keyed presence is a separate slice
+            // Trame's own `Id<User>`-keyed presence is a separate slice
             // (`trame-engine`); it ignores the resolved id for now.
             DocState::Trame(state) => state
                 .apply_ephemeral(payload)
@@ -998,7 +1002,7 @@ impl LogicState {
 
     /// Tell the other Prose sessions on a document that this one is open, once
     /// it is ready (`ambre-spec-prose-schema.md` section 2).
-    pub(crate) fn announce(&mut self, document_id: DocumentId) {
+    pub(crate) fn announce(&mut self, document_id: Id<Document>) {
         let frame = match self.docs.get_mut(&document_id).map(|d| &mut d.state) {
             Some(DocState::Prose(state)) => state.announce(),
             _ => None,
@@ -1014,7 +1018,7 @@ impl LogicState {
     /// A peer stopped watching a document (`PRESENCE-014`): drop them from the
     /// document's live set and hand the view the set that remains. Ephemeral
     /// throughout -- nothing here touches the CRDT or the history.
-    pub(crate) fn peer_left(&mut self, document_id: DocumentId, user_id: UserId) {
+    pub(crate) fn peer_left(&mut self, document_id: Id<Document>, user_id: Id<User>) {
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             return;
         };
@@ -1041,7 +1045,7 @@ impl LogicState {
     /// one held with no gap below it (`SRV-083`).
     pub(crate) fn export_covered_snapshot(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) -> Option<(ambre_core::SnapshotBytes, Seq)> {
         let doc = self.docs.get(&document_id)?;
         Some((doc.state.export_snapshot(), doc.ledger.contiguous_end()))
@@ -1051,7 +1055,7 @@ impl LogicState {
     /// edit of this session (`ambre-spec-prose-schema.md` section 2). It waits
     /// for the session identity,
     /// since a write under the provisional PeerID never travels.
-    pub(crate) fn sweep_hidden(&mut self, document_id: DocumentId) {
+    pub(crate) fn sweep_hidden(&mut self, document_id: Id<Document>) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
@@ -1070,7 +1074,7 @@ impl LogicState {
     /// later snapshot must hold from its horizon on (`AUTHOR-015`).
     pub(crate) fn adopt_snapshot(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payload: &ambre_core::SnapshotBytes,
         covered: Seq,
     ) {
@@ -1095,8 +1099,8 @@ impl LogicState {
     /// folds the deltas it covers into the ledger's base.
     pub(crate) fn check_pending_snapshot(
         &mut self,
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         covered: Seq,
         payload: &ambre_core::SnapshotBytes,
         purpose: SnapshotPurpose,

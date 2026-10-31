@@ -155,12 +155,12 @@ impl Outbox {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::DocumentId;
+    use ambre_core::id::Id;
 
     /// One control command, distinguishable by the document it names.
     fn cmd(n: u8) -> LogicCommand {
         LogicCommand::CloseDocument {
-            document_id: DocumentId::from_bytes([n; 16]),
+            document_id: Id::from_bytes([n; 16]),
         }
     }
 

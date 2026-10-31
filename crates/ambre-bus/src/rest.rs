@@ -22,8 +22,8 @@
 //!
 //! # What is *not* here
 //! - **Content plane** (`AppCommand` / `AppEvent`, `MurmureCommand` /
-//!   `MurmureEvent`): document edits and viewport data, routed by `DocumentId`.
-//!   Channel commands are routed by `ChannelId` inside the Logic thread. See
+//!   `MurmureEvent`): document edits and viewport data, routed by `Id<Document>`.
+//!   Channel commands are routed by `Id<Channel>` inside the Logic thread. See
 //!   [`crate::logic`].
 //! - **Control** (`OpenDocument`, `CloseDocument`, `OpenChannel`,
 //!   `CloseChannel`): fire-and-forget, no single response to correlate -- kept
@@ -39,7 +39,8 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{DocType, DocumentId, MeetingId, Role, Timestamp, UserId};
+use crate::{DocType, Role, Timestamp};
+use ambre_core::id::{Document, Id, Meeting, User};
 
 // -----------------------------------------------------------------------------
 // Secret-carrying IPC fields (H5)
@@ -93,7 +94,7 @@ impl RequestId {
 /// in plaintext.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentSummary {
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub doc_type: DocType,
     /// Decrypted from `name_enc` by the Sync thread.
     pub name: Option<ambre_core::Name>,
@@ -107,7 +108,7 @@ pub struct DocumentSummary {
 /// Member of a document or channel.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemberInfo {
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub display_name: ambre_core::DisplayName,
     pub email: ambre_core::Email,
     pub role: Role,
@@ -164,7 +165,7 @@ impl std::fmt::Display for DraftKey {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RowPlace {
     /// A snapshot or a delta of this document.
-    Document(DocumentId),
+    Document(Id<Document>),
     /// The draft the store keeps under this key.
     Draft(DraftKey),
 }
@@ -179,7 +180,7 @@ pub struct SealedRow {
 /// User (search result).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserInfo {
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub display_name: ambre_core::DisplayName,
     pub email: ambre_core::Email,
 }
@@ -238,10 +239,10 @@ pub enum RestCommand {
         name: ambre_core::Name,
     },
     /// Delete a document. The Logic thread drops its in-memory state (hook). -> `DocumentDeleted`.
-    DeleteDocument { document_id: DocumentId },
+    DeleteDocument { document_id: Id<Document> },
     /// Rename a document. -> `DocumentRenamed`.
     RenameDocument {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         name: ambre_core::Name,
     },
 
@@ -251,13 +252,13 @@ pub enum RestCommand {
     /// the user can verify the fingerprint before any Document Key is shared.
     /// -> `InviteeKey`.
     FetchInviteeKey {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         invitee_email: ambre_core::Email,
     },
     /// Fetch the exchange key of a user the client already names, such as a
     /// member of a space, **without wrapping**. The user compares it with the
     /// pin before a direct message wraps a key for them. -> `MemberKey`.
-    FetchMemberKey { user_id: UserId },
+    FetchMemberKey { user_id: Id<User> },
     /// Phase 2 of the invite. `expect_exchange_pub_key` is the key the user confirmed
     /// (pinned) in phase 1. Sync re-fetches the invitee's key and wraps the Document Key
     /// **only if it still matches**. That closes the TOCTOU hole a compromised server holds
@@ -272,27 +273,27 @@ pub enum RestCommand {
     /// `invitee_email` is `None` for a member known by id alone, such as a
     /// member of a space: Sync then fetches the keys of `invitee` itself.
     InviteToDocument {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         invitee_email: Option<ambre_core::Email>,
-        invitee: UserId,
+        invitee: Id<User>,
         role: Role,
         expect_exchange_pub_key: ambre_core::ExchangePublicKey,
         now: Timestamp,
     },
     /// Revoke a member (triggers the full key-rotation sequence). -> `RevocationComplete`.
     RevokeFromDocument {
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
     },
     /// Leave a document: this user's own removal, and nothing else. The members
     /// who stay pay the rotation it leaves owed (`SYNC-127`). -> `DocumentLeft`.
-    LeaveDocument { document_id: DocumentId },
+    LeaveDocument { document_id: Id<Document> },
     /// List current members. -> `DocumentMembers`.
-    ListDocumentMembers { document_id: DocumentId },
+    ListDocumentMembers { document_id: Id<Document> },
     /// Update a member's role. -> `MemberRoleUpdated`.
     UpdateDocumentMemberRole {
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
         role: Role,
     },
 
@@ -306,13 +307,13 @@ pub enum RestCommand {
     /// It names no media type: the application keeps its own, and the relay
     /// learns nothing of the blob beyond its size (`SYNC-053`).
     UploadMedia {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         /// Raw (unencrypted) media bytes.
         data: ambre_core::MediaBytes,
     },
     /// Download a media file. -> `MediaDownloaded`.
     DownloadMedia {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
     /// Erase this user's upload of a media file. -> `MediaErased`.
@@ -321,7 +322,7 @@ pub enum RestCommand {
     /// (`SRV-139`). A refusal leaves nothing of this user's to erase, so it
     /// answers `MediaErased` too; only a failure to reach the relay is an error.
     EraseMedia {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
 
@@ -368,11 +369,11 @@ pub enum RestCommand {
     /// Create an ephemeral meeting room. -> `MeetingCreated`.
     CreateMeeting { name: ambre_core::Name },
     /// Join a meeting. -> `MeetingJoined`.
-    JoinMeeting { meeting_id: MeetingId },
+    JoinMeeting { meeting_id: Id<Meeting> },
     /// Leave a meeting. -> `MeetingLeft`.
-    LeaveMeeting { meeting_id: MeetingId },
+    LeaveMeeting { meeting_id: Id<Meeting> },
     /// End a meeting for all participants. -> `MeetingEnded`.
-    EndMeeting { meeting_id: MeetingId },
+    EndMeeting { meeting_id: Id<Meeting> },
 
     // -- Provider sign-in ----------------------------------------------------------
     /// Ask the relay for the address of `provider`'s authorization page.
@@ -413,7 +414,7 @@ ambre_core::define_flag! {
 pub enum RestEvent {
     // -- Session -----------------------------------------------------------------
     SessionReady {
-        user_id: UserId,
+        user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
     },
@@ -434,14 +435,14 @@ pub enum RestEvent {
     /// A document was created. The Logic thread records its `doc_type` (hook)
     /// until the first snapshot so it can build the matching state.
     DocumentCreated {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     },
     DocumentDeleted {
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
     DocumentRenamed {
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
 
     // -- Sharing -----------------------------------------------------------------
@@ -450,8 +451,8 @@ pub enum RestEvent {
     /// comparison against the `trusted_keys` store, done on the Main thread) and
     /// the already-formatted `fingerprint` string (the chrome never hashes).
     InviteeKey {
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         exchange_pub_key: ambre_core::ExchangePublicKey,
@@ -460,30 +461,30 @@ pub enum RestEvent {
     /// The answer to `FetchMemberKey`: the key the relay serves for that
     /// user, and its fingerprint, for the same comparison with the pin.
     MemberKey {
-        user_id: UserId,
+        user_id: Id<User>,
         exchange_pub_key: ambre_core::ExchangePublicKey,
         fingerprint: ambre_core::KeyFingerprint,
     },
     InviteSent {
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
         display_name: ambre_core::DisplayName,
     },
     /// Revocation initiated by **this** client is complete.
     RevocationComplete {
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
     /// This user left the document; the Sync worker closed it.
     DocumentLeft {
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
     DocumentMembers {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         members: Vec<MemberInfo>,
     },
     MemberRoleUpdated {
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
         role: Role,
     },
 
@@ -494,17 +495,17 @@ pub enum RestEvent {
 
     // -- Media -------------------------------------------------------------------
     MediaUploaded {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
     MediaDownloaded {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
         /// Decrypted raw media bytes, ready for display.
         data: ambre_core::MediaBytes,
     },
     MediaErased {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
 
@@ -544,16 +545,16 @@ pub enum RestEvent {
 
     // -- Meetings (Rendez-Vous) --------------------------------------------------
     MeetingCreated {
-        meeting_id: MeetingId,
+        meeting_id: Id<Meeting>,
     },
     MeetingJoined {
-        meeting_id: MeetingId,
+        meeting_id: Id<Meeting>,
     },
     MeetingLeft {
-        meeting_id: MeetingId,
+        meeting_id: Id<Meeting>,
     },
     MeetingEnded {
-        meeting_id: MeetingId,
+        meeting_id: Id<Meeting>,
     },
 
     // -- Provider sign-in ----------------------------------------------------------
@@ -565,7 +566,7 @@ pub enum RestEvent {
     /// The provider return was exchanged. The tokens stayed on the Sync worker;
     /// `keys_stored` says whether the next step is an unlock or a setup.
     ProviderSignedIn {
-        user_id: UserId,
+        user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         keys_stored: KeySetup,

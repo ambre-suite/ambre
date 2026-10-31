@@ -136,7 +136,7 @@ impl SyncState {
     /// Keep a document's quarantine within [`QUARANTINE_LIMIT`]. Request the
     /// missing history at the soft threshold, and drop the oldest update (by
     /// `clock`) past the hard cap, raising a `SyncWarning`.
-    pub(crate) fn enforce_quarantine_bounds(&mut self, document_id: DocumentId) {
+    pub(crate) fn enforce_quarantine_bounds(&mut self, document_id: Id<Document>) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -188,7 +188,7 @@ impl SyncState {
 
     /// Mark `snapshot_id` as known for `document_id` and release any updates that
     /// were quarantined waiting for it, in ascending `clock` order.
-    pub(crate) fn snapshot_known(&mut self, document_id: DocumentId, snapshot_id: SnapshotId) {
+    pub(crate) fn snapshot_known(&mut self, document_id: Id<Document>, snapshot_id: Id<Snapshot>) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             tracing::warn!("Sync: SnapshotAvailable for unopened doc {document_id:?}");
             return;
@@ -204,8 +204,8 @@ impl SyncState {
     /// storage: the snapshot stays unknown, and its updates stay quarantined.
     pub(crate) fn fetch_announced_snapshot(
         &mut self,
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         covered_seq: Seq,
     ) {
         let Some(doc_state) = self.documents.get(&document_id) else {
@@ -254,8 +254,8 @@ impl SyncState {
     /// or does not open, is reported and stays unknown.
     pub(crate) fn adopt_fetched_snapshot(
         &mut self,
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         covered_seq: Seq,
         blob: Option<pipeline::FetchedBlob>,
     ) {
@@ -306,8 +306,8 @@ impl SyncState {
     /// the caller posts with [`send_vouch`].
     pub(crate) fn handle_snapshot_verdict(
         &mut self,
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         purpose: SnapshotPurpose,
         verdict: SnapshotVerdict,
     ) -> Option<Vouch> {
@@ -375,8 +375,8 @@ impl SyncState {
     /// tell.
     pub(crate) fn post_snapshot_vouch(
         &mut self,
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         vouch: Vouch,
     ) {
         let Some(tx) = self.event_tx.clone() else {
@@ -408,7 +408,7 @@ impl SyncState {
     /// `true` when a check is now in flight. The verdict then tells Logic the
     /// document is ready, since a delta past the snapshot waits on it until it
     /// is adopted (`AUTHOR-025`).
-    pub(crate) fn check_held_snapshot(&mut self, document_id: DocumentId) -> bool {
+    pub(crate) fn check_held_snapshot(&mut self, document_id: Id<Document>) -> bool {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return false;
         };
@@ -446,7 +446,11 @@ impl SyncState {
 
     /// Decrypt and deliver every update quarantined under `snapshot_id`, oldest
     /// `clock` first.
-    pub(crate) fn release_quarantine(&mut self, document_id: DocumentId, snapshot_id: SnapshotId) {
+    pub(crate) fn release_quarantine(
+        &mut self,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
+    ) {
         let mut pending = {
             let Some(doc_state) = self.documents.get_mut(&document_id) else {
                 return;
@@ -491,7 +495,7 @@ impl SyncState {
         }
     }
 
-    pub(crate) fn handle_open_document(&mut self, document_id: DocumentId, doc_type: DocType) {
+    pub(crate) fn handle_open_document(&mut self, document_id: Id<Document>, doc_type: DocType) {
         // Without session keys we cannot authenticate the members fetch or unwrap
         // the document key. Opening now would insert a local-only doc with a
         // throwaway key and never hydrate. Queue it until the session is ready.
@@ -704,7 +708,7 @@ impl SyncState {
                 // snapshot upload are all parented on it). Genesis stays seeded in
                 // `SyncDocumentState::new` regardless, covering mixed histories.
                 let snapshot_id =
-                    downloaded_snapshot_id.unwrap_or_else(|| SnapshotId::genesis(doc_id));
+                    downloaded_snapshot_id.unwrap_or_else(|| Id::<Snapshot>::genesis(doc_id));
                 let _ = tx.send(SyncEvent::OpenDocumentReady {
                     document_id: doc_id,
                     doc_key,
@@ -791,9 +795,9 @@ impl SyncState {
     /// device (`SYNC-173`).
     pub(crate) fn opened_from_members(
         resp: &http::MembersResponse,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         exchange_key: &x25519_dalek::StaticSecret,
-        my_user_id: Option<UserId>,
+        my_user_id: Option<Id<User>>,
         rule: &membership_log::LogRule,
     ) -> Result<OpenedMembers, (OpenFailure, String)> {
         let (doc_key, anchor) = Self::unwrap_anchored(exchange_key, &resp.members)
@@ -826,7 +830,7 @@ impl SyncState {
     /// The reason the key is refused: the chain does not reach the named
     /// key, so the key has not reached this device (`SYNC-173`).
     pub(crate) fn named_key_holds(
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_key: &DocumentKey,
         named_key: Option<ambre_core::KeyId>,
         links: &[ambre_protocol::KeyLink],
@@ -852,7 +856,7 @@ impl SyncState {
     /// open keeps it: the operations already written must keep deriving. Without
     /// a signing key or a user, nothing is sent, and the Logic thread applies
     /// no edit.
-    pub(crate) fn issue_session_identity(&mut self, document_id: DocumentId) {
+    pub(crate) fn issue_session_identity(&mut self, document_id: Id<Document>) {
         let (Some(signing_key), Some(user)) = (self.signing_key.as_ref(), self.user_id) else {
             return;
         };
@@ -872,13 +876,13 @@ impl SyncState {
 
     /// Open a new space as a document, marked so its lazy creation tells
     /// the relay it is a space (`SYNC-170`).
-    pub(crate) fn handle_create_space(&mut self, space_id: ambre_bus::SpaceId) {
+    pub(crate) fn handle_create_space(&mut self, space_id: Id<Space>) {
         let document_id = space_id.document_id();
         self.new_spaces.insert(document_id);
         self.handle_open_document(document_id, DocType::Murmure);
     }
 
-    pub(crate) fn handle_close_document(&mut self, document_id: DocumentId) {
+    pub(crate) fn handle_close_document(&mut self, document_id: Id<Document>) {
         self.new_spaces.remove(&document_id);
         if self.ws_connected() {
             self.ws_send(&WsClientMsg::Unsubscribe { document_id });
@@ -889,7 +893,7 @@ impl SyncState {
         tracing::info!("Sync: CloseDocument {document_id:?}");
     }
 
-    pub(crate) fn handle_reconnect(&mut self, document_id: DocumentId) {
+    pub(crate) fn handle_reconnect(&mut self, document_id: Id<Document>) {
         if self.ws_connected() {
             let last_seq = self
                 .documents
@@ -917,7 +921,7 @@ impl SyncState {
     /// Replays updates that were buffered before the session/document were ready
     /// (see [`pending_pre_session_updates`](Self::pending_pre_session_updates)).
     /// Drains only the entries for `document_id`, preserving their order.
-    pub(crate) fn flush_pre_session_updates(&mut self, document_id: DocumentId) {
+    pub(crate) fn flush_pre_session_updates(&mut self, document_id: Id<Document>) {
         if self.signing_key.is_none() || self.pending_pre_session_updates.is_empty() {
             return;
         }
@@ -938,7 +942,7 @@ impl SyncState {
 
     /// An update with no summary, as most tests send one.
     #[cfg(test)]
-    pub(crate) fn handle_send_update(&mut self, document_id: DocumentId, payload: Vec<u8>) {
+    pub(crate) fn handle_send_update(&mut self, document_id: Id<Document>, payload: Vec<u8>) {
         self.send_summarized_update(document_id, payload.into(), None);
     }
 
@@ -946,7 +950,7 @@ impl SyncState {
     /// holds sealed beside it (`SYNC-113`).
     pub(crate) fn send_summarized_update(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payload: ambre_core::DeltaBytes,
         summary: Option<ActivitySummary>,
     ) {
@@ -983,7 +987,7 @@ impl SyncState {
     /// Builds the body of a delta this client writes and sends it.
     fn send_update_body(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         nonce: SessionNonce,
         summary: Option<&ambre_core::activity::ActivitySummary>,
         delta: &ambre_core::DeltaBytes,
@@ -999,7 +1003,7 @@ impl SyncState {
     /// wrote it (`AUTHOR-028`).
     pub(crate) fn handle_send_unsent(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payload: ambre_core::DeltaBytes,
         nonce: SessionNonce,
     ) {
@@ -1016,7 +1020,7 @@ impl SyncState {
     /// Seals an update body and sends it, or holds it while the document is
     /// created or owes a rotation. The body carries its nonce, so a frame
     /// sent again later keeps the PeerID it was written under.
-    pub(crate) fn send_body(&mut self, document_id: DocumentId, body: UpdateFrame) {
+    pub(crate) fn send_body(&mut self, document_id: Id<Document>, body: UpdateFrame) {
         // Each arm that drops the frame wipes it (`UpdateFrame::wipe`).
         let (Some(signing_key), Some(pub_key)) = (self.signing_key.clone(), self.author_pub_key())
         else {
@@ -1095,7 +1099,7 @@ impl SyncState {
     /// seal failed.
     fn seal_and_send(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         clock: Clock,
         body: &UpdateFrame,
         signing_key: &SigningKey,
@@ -1133,7 +1137,7 @@ impl SyncState {
     /// take the next clocks.
     pub(crate) fn resend_refused(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         refused: RefusedFrames,
         waiting: Vec<UpdateFrame>,
     ) {
@@ -1160,7 +1164,7 @@ impl SyncState {
     /// then leave again in order, from the `expected` clock on (`SYNC-147`).
     pub(crate) fn handle_clock_refused(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         expected: Clock,
         signature: Signature,
     ) {
@@ -1194,7 +1198,7 @@ impl SyncState {
     /// (`SYNC-155`, `SYNC-156`).
     pub(crate) fn handle_delta_refused(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         signature: Signature,
         code: ambre_core::RefusalCode,
     ) {
@@ -1213,7 +1217,7 @@ impl SyncState {
     /// segment (`SRV-115`). It and every later delta of the document return
     /// to the Logic thread, which moves their new messages to the active
     /// segment (`SYNC-165`). The document is not held.
-    fn handle_delta_locked(&mut self, document_id: DocumentId, signature: &Signature) {
+    fn handle_delta_locked(&mut self, document_id: Id<Document>, signature: &Signature) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -1234,7 +1238,7 @@ impl SyncState {
 
     /// Drops the delta signed `signature` and every later one, and holds the
     /// document. The first hold is reported (`SYNC-155`, `SYNC-156`).
-    fn hold_refused(&mut self, document_id: DocumentId, signature: &Signature, cause: HoldCause) {
+    fn hold_refused(&mut self, document_id: Id<Document>, signature: &Signature, cause: HoldCause) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -1253,7 +1257,7 @@ impl SyncState {
     /// fault of its own (`SRV-186`). It leaves again after a delay that
     /// doubles at each failure since the last echo. Past the budget the
     /// document holds it, as for a refusal (`SYNC-159`).
-    fn handle_delta_failed(&mut self, document_id: DocumentId, signature: Signature) {
+    fn handle_delta_failed(&mut self, document_id: Id<Document>, signature: Signature) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -1288,7 +1292,7 @@ impl SyncState {
     /// relay never took (`SYNC-159`).
     pub(crate) fn resend_failed(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         ticket: crate::generation::ResendTicket,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
@@ -1317,7 +1321,7 @@ impl SyncState {
     /// key the cache drops still opens through them (`SYNC-119`).
     pub(crate) fn install_key(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         new_key: DocumentKey,
         links: impl IntoIterator<Item = ambre_protocol::KeyLink>,
     ) {
@@ -1339,7 +1343,7 @@ impl SyncState {
     }
 
     /// Pays the rotation a document owes, in a spawned task (`SYNC-128`).
-    pub(crate) fn start_settle(&mut self, document_id: DocumentId) {
+    pub(crate) fn start_settle(&mut self, document_id: Id<Document>) {
         let previous = self
             .documents
             .get(&document_id)
@@ -1376,7 +1380,7 @@ impl SyncState {
     /// the client-generated id. Idempotent server-side and guarded by the
     /// per-doc `creating` flag, so concurrent updates issue exactly one POST.
     /// On success a [`SyncEvent::DocumentMaterialized`] flushes the buffer.
-    pub(crate) fn trigger_lazy_create(&mut self, document_id: DocumentId) {
+    pub(crate) fn trigger_lazy_create(&mut self, document_id: Id<Document>) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -1457,7 +1461,7 @@ impl SyncState {
     /// from a delta that user signed, or from a snapshot this client checked.
     pub(crate) fn handle_send_snapshot(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payload: ambre_core::SnapshotBytes,
         covered_seq: Seq,
     ) {
@@ -1500,7 +1504,7 @@ impl SyncState {
     /// when the seal fails.
     pub(crate) fn snapshot_upload(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payload: &ambre_core::SnapshotBytes,
         covered_seq: Seq,
     ) -> Result<SnapshotUpload, crate::error::SyncError> {
@@ -1536,7 +1540,7 @@ impl SyncState {
 
     pub(crate) fn handle_send_ephemeral(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payload: ambre_core::EphemeralBytes,
     ) {
         let Some(signing_key) = self.signing_key.clone() else {
@@ -1586,10 +1590,10 @@ pub(crate) async fn send_vouch(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
     base: &crate::http::ApiRoot,
-    document_id: DocumentId,
-    snapshot_id: SnapshotId,
+    document_id: Id<Document>,
+    snapshot_id: Id<Snapshot>,
     vouch: &Vouch,
-) -> Result<Option<DocumentId>, http::HttpError> {
+) -> Result<Option<Id<Document>>, http::HttpError> {
     let url = base.route(format!("/documents/{document_id}/snapshots/{snapshot_id}"));
     let post = http::Method::Post;
     match vouch {
@@ -1612,7 +1616,7 @@ pub(crate) async fn send_vouch(
 /// One sealed snapshot on its way to the relay.
 pub(crate) struct SnapshotUpload {
     /// The document it compacts.
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     /// Its author's signing key, in hex.
     pub author_pubkey: ambre_core::SigningKeyHex,
     /// The last delta it covers.
@@ -1631,7 +1635,7 @@ pub(crate) async fn upload_snapshot(
     auth: &http::AuthContext,
     base: &crate::http::ApiRoot,
     upload: SnapshotUpload,
-) -> Result<SnapshotId, http::HttpError> {
+) -> Result<Id<Snapshot>, http::HttpError> {
     let SnapshotUpload {
         document_id,
         author_pubkey,
@@ -1648,7 +1652,7 @@ pub(crate) async fn upload_snapshot(
     // The presigned link is its own credential: no session token goes there.
     http::put_sealed_via(transport, &link.upload_url, &blob).await?;
     let metadata = http::CreateSnapshotRequest {
-        snapshot_id: SnapshotId::new(),
+        snapshot_id: Id::<Snapshot>::mint(),
         author_pubkey,
         update_clocks: serde_json::json!({}),
         s3_key: link.s3_key,
@@ -1681,7 +1685,7 @@ pub(crate) async fn upload_snapshot(
 /// What an open reads out of one members answer (`SYNC-092`).
 pub(crate) struct OpenedMembers {
     pub doc_key: DocumentKey,
-    pub signing_keys: Vec<(ambre_core::PublicKey, UserId)>,
+    pub signing_keys: Vec<(ambre_core::PublicKey, Id<User>)>,
     pub role: Role,
     pub rotation_owed: ambre_core::RotationDebt,
     /// The keys the membership log lets sign a key link (`SYNC-121`).
@@ -1832,7 +1836,7 @@ mod tests {
 
     /// One members row for `uid`, its key wrapped by `wrapper` for `holder`.
     fn member_row(
-        uid: UserId,
+        uid: Id<User>,
         holder: &x25519_dalek::StaticSecret,
         wrapper: &x25519_dalek::StaticSecret,
         doc_key: &DocumentKey,
@@ -1855,8 +1859,8 @@ mod tests {
     /// the one answer handed in, and nothing else is consulted.
     #[test]
     fn the_key_the_directory_and_the_role_come_from_one_answer() {
-        let me = UserId::new();
-        let peer = UserId::new();
+        let me = Id::<User>::mint();
+        let peer = Id::<User>::mint();
         let my_xk = ambre_crypto::MasterSeed::from_array([3; 32]).derive_exchange_key();
         let peer_xk = ambre_crypto::MasterSeed::from_array([4; 32]).derive_exchange_key();
         let doc_key = DocumentKey::generate();
@@ -1870,7 +1874,7 @@ mod tests {
         };
         let opened = SyncState::opened_from_members(
             &resp,
-            DocumentId::new(),
+            Id::<Document>::mint(),
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
@@ -1878,7 +1882,7 @@ mod tests {
         .unwrap();
         assert!(opened.doc_key.id() == doc_key.id());
         assert_eq!(opened.role, Role::Editor);
-        let ids: Vec<UserId> = opened.signing_keys.iter().map(|(_, id)| *id).collect();
+        let ids: Vec<Id<User>> = opened.signing_keys.iter().map(|(_, id)| *id).collect();
         assert_eq!(ids, vec![me, peer]);
         assert_eq!(opened.rotation_owed, ambre_core::RotationDebt::Owed);
     }
@@ -1887,7 +1891,7 @@ mod tests {
     /// key is generated in its place.
     #[test]
     fn a_key_that_does_not_unwrap_opens_nothing() {
-        let me = UserId::new();
+        let me = Id::<User>::mint();
         let my_xk = ambre_crypto::MasterSeed::from_array([3; 32]).derive_exchange_key();
         let peer_xk = ambre_crypto::MasterSeed::from_array([4; 32]).derive_exchange_key();
         let mut row = member_row(
@@ -1908,7 +1912,7 @@ mod tests {
         };
         let refused = SyncState::opened_from_members(
             &resp,
-            DocumentId::new(),
+            Id::<Document>::mint(),
             &my_xk,
             Some(me),
             &membership_log::LogRule::document(),
@@ -1923,7 +1927,7 @@ mod tests {
     /// does not verify our row names no key, and the open goes on (`SYNC-111`).
     #[test]
     fn a_key_the_invitation_does_not_name_is_refused() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let named = DocumentKey::generate();
         let rotated = DocumentKey::generate();
         let signer = ambre_crypto::MasterSeed::from_array([5; 32]).derive_signing_key();
@@ -1944,14 +1948,14 @@ mod tests {
     fn setup() -> (
         SyncState,
         ambre_bus::conduit::Receiver<LogicEvent>,
-        DocumentId,
+        Id<Document>,
         DocumentKey,
         SigningKey,
-        SnapshotId,
+        Id<Snapshot>,
     ) {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::generate().derive_signing_key();
         let doc_state = SyncDocumentState::new(
@@ -1967,8 +1971,8 @@ mod tests {
     }
 
     fn make_update(
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         clock: Clock,
         payload: &[u8],
         doc_key: &DocumentKey,
@@ -2034,7 +2038,7 @@ mod tests {
             .map(|pair| pipeline::seal_link(doc, &pair[0], &pair[1], &sk).unwrap())
             .collect();
         let current = keys.last().unwrap().clone();
-        let snapshot_id = SnapshotId::new();
+        let snapshot_id = Id::<Snapshot>::mint();
         let blob = snapshot_blob(doc, snapshot_id, b"snap", &keys[0], &sk);
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
@@ -2070,8 +2074,8 @@ mod tests {
 
     /// The blob object storage holds for a snapshot of `document_id`.
     fn snapshot_blob(
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         payload: &[u8],
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
@@ -2169,7 +2173,7 @@ mod tests {
     #[test]
     fn an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer() {
         let (mut state, rx, doc, key, sk, snap) = setup();
-        let alice = UserId::new();
+        let alice = Id::<User>::mint();
         let signer = PublicKey::from_array(sk.verifying_key().to_bytes());
         state
             .documents
@@ -2220,7 +2224,7 @@ mod tests {
         let (mut state, rx, doc, _key, sk, _snap) = setup();
         state.session_nonces.clear();
         state.signing_key = Some(sk);
-        state.user_id = Some(UserId::new());
+        state.user_id = Some(Id::<User>::mint());
         let issue = |state: &mut SyncState| {
             state.issue_session_identity(doc);
             drain(&rx)
@@ -2265,7 +2269,7 @@ mod tests {
     #[test]
     fn update_with_unknown_snapshot_quarantined() {
         let (mut state, rx, doc, key, sk, _snap) = setup();
-        let unknown = SnapshotId::new();
+        let unknown = Id::<Snapshot>::mint();
         let update = make_update(doc, unknown, Clock(1), b"later", &key, &sk);
 
         state.receive_update(Seq(1), update);
@@ -2277,7 +2281,7 @@ mod tests {
     #[test]
     fn quarantine_released_in_clock_order() {
         let (mut state, rx, doc, key, sk, _snap) = setup();
-        let parent = SnapshotId::new();
+        let parent = Id::<Snapshot>::mint();
         // Arrive out of clock order: clock 5 then clock 2.
         state.receive_update(
             Seq(1),
@@ -2308,7 +2312,7 @@ mod tests {
     #[test]
     fn a_murmure_document_takes_the_quarantine_and_the_delta_order() {
         let (mut state, rx, _doc, key, sk, _snap) = setup();
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         state.documents.insert(
             doc,
             SyncDocumentState::new(
@@ -2318,7 +2322,7 @@ mod tests {
                 crate::Existence::OnRelay,
             ),
         );
-        let parent = SnapshotId::new();
+        let parent = Id::<Snapshot>::mint();
         state.receive_update(
             Seq(1),
             make_update(doc, parent, Clock(5), b"five", &key, &sk),
@@ -2345,7 +2349,7 @@ mod tests {
     #[test]
     fn quarantine_overflow_drops_oldest_and_warns() {
         let (mut state, rx, doc, key, sk, _snap) = setup();
-        let parent = SnapshotId::new();
+        let parent = Id::<Snapshot>::mint();
         for clock in 1..=(QUARANTINE_LIMIT as u64) {
             state.receive_update(
                 Seq(clock),
@@ -2367,7 +2371,7 @@ mod tests {
     #[test]
     fn a_quarantine_overflow_drops_the_lowest_clock() {
         let (mut state, _rx, doc, key, sk, _snap) = setup();
-        let parents = [SnapshotId::new(), SnapshotId::new()];
+        let parents = [Id::<Snapshot>::mint(), Id::<Snapshot>::mint()];
         // Clock 2 first, clock 1 second, then 3 up to the cap, alternating
         // between the two parents.
         let clocks = [2, 1].into_iter().chain(3..=(QUARANTINE_LIMIT as u64));
@@ -2406,7 +2410,7 @@ mod tests {
         let (mut state, _rx, doc, key, _sk, _snap) = setup();
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let snapshot_id = SnapshotId::new();
+        let snapshot_id = Id::<Snapshot>::mint();
 
         let blob = snapshot_blob(doc, snapshot_id, b"snap", &key, &_sk);
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
@@ -2453,7 +2457,7 @@ mod tests {
             document_id: doc,
             doc_key: key,
             snapshot_payload: None,
-            snapshot_id: SnapshotId::genesis(doc),
+            snapshot_id: Id::<Snapshot>::genesis(doc),
             covered_seq: Seq(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
@@ -2474,7 +2478,7 @@ mod tests {
     }
 
     /// Count of `DocumentReady` events for `doc` in a drained event list.
-    fn ready_count(events: &[LogicEvent], doc: DocumentId) -> usize {
+    fn ready_count(events: &[LogicEvent], doc: Id<Document>) -> usize {
         events
             .iter()
             .filter(
@@ -2485,13 +2489,13 @@ mod tests {
 
     /// A departure is attributed by the member directory, exactly like a cursor
     /// (`PRESENCE-014`). The relay names the key, and the key resolves to the
-    /// `UserId` the view keys presence by. A key nobody knows is dropped rather
+    /// `Id<User>` the view keys presence by. A key nobody knows is dropped rather
     /// than attributed to a guess -- the peer then ages out of the live set.
     #[test]
     fn peer_left_resolves_the_key_the_relay_named() {
         let (mut state, rx, doc, _key, signing_key, _snap) = setup();
         let pub_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
-        let alice = UserId::new();
+        let alice = Id::<User>::mint();
         state
             .documents
             .get_mut(&doc)
@@ -2534,7 +2538,7 @@ mod tests {
         let (mut state, rx, doc, _key, signing_key, snapshot) = setup();
         let author = PublicKey::from_array(signing_key.verifying_key().to_bytes());
         let reporter = PublicKey::from_array([7u8; 32]);
-        let (alice, bob) = (UserId::new(), UserId::new());
+        let (alice, bob) = (Id::<User>::mint(), Id::<User>::mint());
         let keys = &mut state
             .documents
             .get_mut(&doc)
@@ -2575,7 +2579,7 @@ mod tests {
     }
 
     /// The rows a `MembersChanged` event hands Logic, if one was sent.
-    fn rows_handed(events: &[LogicEvent]) -> Option<Vec<UserId>> {
+    fn rows_handed(events: &[LogicEvent]) -> Option<Vec<Id<User>>> {
         events.iter().find_map(|e| match e {
             LogicEvent::MembersChanged { members, .. } => {
                 Some(members.iter().map(|m| m.user_id).collect())
@@ -2584,7 +2588,7 @@ mod tests {
         })
     }
 
-    fn listed(user_id: UserId) -> MemberInfo {
+    fn listed(user_id: Id<User>) -> MemberInfo {
         MemberInfo {
             user_id,
             display_name: ambre_core::DisplayName::new("Carol").unwrap(),
@@ -2609,7 +2613,7 @@ mod tests {
         );
         assert_eq!(rows_handed(&drain(&rx)), None, "nothing before the answer");
 
-        let carol = UserId::new();
+        let carol = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
             asked: crate::generation::RequestGeneration::nth(1),
@@ -2642,7 +2646,7 @@ mod tests {
             "a crossed answer hands nothing"
         );
 
-        let elsewhere = DocumentId::new();
+        let elsewhere = Id::<Document>::mint();
         state.handle_ws_message(WsServerMsg::MembersChanged {
             document_id: elsewhere,
         });
@@ -2677,7 +2681,7 @@ mod tests {
         );
         drain(&rx);
 
-        let carol = UserId::new();
+        let carol = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
             asked: crate::generation::RequestGeneration::nth(2),
@@ -2687,7 +2691,7 @@ mod tests {
             members: Vec::new(),
             signing_keys: vec![(PublicKey::from_array([2u8; 32]), carol)],
         });
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
             asked: crate::generation::RequestGeneration::nth(1),
@@ -2723,7 +2727,7 @@ mod tests {
     #[test]
     fn a_subscription_reads_the_members_a_change_during_the_open_left_out() {
         let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
-        let carol = UserId::new();
+        let carol = Id::<User>::mint();
         assert!(
             !state.documents[&doc]
                 .signing_keys
@@ -2755,7 +2759,7 @@ mod tests {
         let handed = rows_handed(&drain(&rx));
         assert_eq!(handed, Some(vec![carol]), "an open view gets the rows too");
 
-        let local = DocumentId::new();
+        let local = Id::<Document>::mint();
         state.documents.insert(
             local,
             SyncDocumentState::new(
@@ -2765,7 +2769,7 @@ mod tests {
                 crate::Existence::LocalOnly,
             ),
         );
-        for document_id in [local, DocumentId::new()] {
+        for document_id in [local, Id::<Document>::mint()] {
             state.handle_ws_message(WsServerMsg::Subscribed { document_id });
         }
         assert_eq!(
@@ -2792,7 +2796,7 @@ mod tests {
         let (mut state, rx, doc, key, sk, _snap) = setup();
         let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let snapshot_id = SnapshotId::new();
+        let snapshot_id = Id::<Snapshot>::mint();
         let blob = snapshot_blob(doc, snapshot_id, b"snap", &key, &sk);
 
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
@@ -2855,8 +2859,8 @@ mod tests {
         let (mut state, rx, doc, key, sk, _snap) = setup();
         let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let reference = SnapshotId::new();
-        let held = SnapshotId::new();
+        let reference = Id::<Snapshot>::mint();
+        let held = Id::<Snapshot>::mint();
         state.handle_sync_event(SyncEvent::OpenDocumentReady {
             document_id: doc,
             doc_key: key.clone(),
@@ -2918,7 +2922,7 @@ mod tests {
             document_id: doc,
             doc_key: key,
             snapshot_payload: None,
-            snapshot_id: SnapshotId::genesis(doc),
+            snapshot_id: Id::<Snapshot>::genesis(doc),
             covered_seq: Seq(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
@@ -2936,7 +2940,7 @@ mod tests {
     }
 
     /// Extract the role carried by the single `DocumentReady` for `doc`.
-    fn ready_role(events: &[LogicEvent], doc: DocumentId) -> Option<Role> {
+    fn ready_role(events: &[LogicEvent], doc: Id<Document>) -> Option<Role> {
         events.iter().find_map(|e| match e {
             LogicEvent::DocumentReady { document_id, role } if *document_id == doc => Some(*role),
             _ => None,
@@ -2958,7 +2962,7 @@ mod tests {
             document_id: doc,
             doc_key: key,
             snapshot_payload: None,
-            snapshot_id: SnapshotId::genesis(doc),
+            snapshot_id: Id::<Snapshot>::genesis(doc),
             covered_seq: Seq(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
@@ -2985,7 +2989,7 @@ mod tests {
             document_id: doc,
             doc_key: key,
             snapshot_payload: None,
-            snapshot_id: SnapshotId::genesis(doc),
+            snapshot_id: Id::<Snapshot>::genesis(doc),
             covered_seq: Seq(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
@@ -3004,7 +3008,7 @@ mod tests {
     #[test]
     fn snapshot_uploaded_adopts_snapshot_id() {
         let (mut state, _rx, doc, _key, _sk, _snap) = setup();
-        let new_id = SnapshotId::new();
+        let new_id = Id::<Snapshot>::mint();
 
         state.handle_sync_event(SyncEvent::SnapshotUploaded {
             document_id: doc,
@@ -3036,7 +3040,7 @@ mod tests {
     #[test]
     fn an_announced_snapshot_releases_nothing_until_fetched() {
         let (mut state, rx, doc, key, sk, _snap) = setup();
-        let announced = SnapshotId::new();
+        let announced = Id::<Snapshot>::mint();
         state.receive_update(
             Seq(1),
             make_update(doc, announced, Clock(1), b"after", &key, &sk),
@@ -3087,7 +3091,7 @@ mod tests {
             (true, false, false),
         ] {
             let (mut state, rx, doc, key, sk, reference) = setup();
-            let held = SnapshotId::new();
+            let held = Id::<Snapshot>::mint();
             let blob = snapshot_blob(doc, held, b"base", &key, &sk);
             state.documents.get_mut(&doc).expect("open").held_snapshot = Some(HeldSnapshot {
                 snapshot_id: held,
@@ -3103,7 +3107,7 @@ mod tests {
 
             let author = if signer { &sk } else { &mallory };
             let (peer, entry) =
-                ambre_crypto::peer::session_identity(author, UserId::new(), doc, nonce);
+                ambre_crypto::peer::session_identity(author, Id::<User>::mint(), doc, nonce);
             let verdict = if verdict_is_match {
                 SnapshotVerdict::Match {
                     extras: vec![(peer, ambre_core::PeerEntryBytes::from(&entry))],
@@ -3148,7 +3152,7 @@ mod tests {
             let (mut state, rx, doc, key, author, _) = setup();
             let reporter = MasterSeed::generate().derive_signing_key();
             state.signing_key = Some(reporter.clone());
-            let pending = SnapshotId::new();
+            let pending = Id::<Snapshot>::mint();
             let blob = snapshot_blob(doc, pending, b"base", &key, &author);
             state.adopt_fetched_snapshot(doc, pending, Seq(3), Some(blob));
             drain(&rx);
@@ -3233,7 +3237,7 @@ mod tests {
             }
         };
         let link = serde_json::json!({ "upload_url": "https://store.test/o?sig=x", "s3_key": "k" });
-        let given = SnapshotId::new();
+        let given = Id::<Snapshot>::mint();
         let steps = |stored: u16| {
             vec![
                 (
@@ -3286,8 +3290,8 @@ mod tests {
     #[test]
     fn a_snapshot_that_does_not_open_stays_unknown() {
         let (mut state, rx, doc, key, sk, _snap) = setup();
-        let announced = SnapshotId::new();
-        let foreign = snapshot_blob(DocumentId::new(), announced, b"x", &key, &sk);
+        let announced = Id::<Snapshot>::mint();
+        let foreign = snapshot_blob(Id::<Document>::mint(), announced, b"x", &key, &sk);
         for blob in [
             None,
             Some(pipeline::FetchedBlob::new(b"garbage".to_vec())),
@@ -3317,7 +3321,7 @@ mod tests {
         let (mut state, _rx, doc, key, sk, _snap) = setup();
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let parent = SnapshotId::new();
+        let parent = Id::<Snapshot>::mint();
         for clock in 1..=(QUARANTINE_ALERT as u64 + 50) {
             state.receive_update(
                 Seq(clock),
@@ -3333,7 +3337,7 @@ mod tests {
         assert_eq!(asks(&ws_rx), 1, "one request for the gap");
         // The gap closes; the next one asks again.
         state.snapshot_known(doc, parent);
-        let other = SnapshotId::new();
+        let other = Id::<Snapshot>::mint();
         // The relay numbers every delta once, so the next gap takes new numbers.
         let first = QUARANTINE_ALERT as u64 + 50;
         for clock in 1..=(QUARANTINE_ALERT as u64) {
@@ -3427,7 +3431,7 @@ mod tests {
     }
 
     /// The relay refuses the delta signed `signature`, naming it.
-    fn refuse_by_name(state: &mut SyncState, doc: DocumentId, signature: Signature) {
+    fn refuse_by_name(state: &mut SyncState, doc: Id<Document>, signature: Signature) {
         state.handle_ws_message(WsServerMsg::DeltaRefused {
             document_id: doc,
             signature,
@@ -3518,12 +3522,12 @@ mod tests {
         state.signing_key = Some(sk);
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let (channel, segment) = (ChannelId::new(), ambre_bus::SegmentId::from_document(doc));
+        let (channel, segment) = (Id::<Channel>::mint(), Id::<Segment>::from_document(doc));
         let finalize = |state: &SyncState| {
             state.handle_finalize_segment(
                 channel,
                 segment,
-                ambre_bus::LeaseId::new(),
+                Id::<Lease>::mint(),
                 ambre_bus::Seq(3),
                 &ambre_core::SnapshotBytes::new(b"s".to_vec()),
             );
@@ -3593,7 +3597,7 @@ mod tests {
     /// The relay failed to sequence the delta signed `signature`.
     fn fail_sequencing(
         state: &mut SyncState,
-        doc: DocumentId,
+        doc: Id<Document>,
         signature: Signature,
     ) -> crate::generation::ResendTicket {
         state.handle_ws_message(WsServerMsg::DeltaRefused {
@@ -3905,7 +3909,7 @@ mod tests {
     /// wrapper: it reads as self-wrapped, so a copy a peer wrapped fails.
     #[test]
     fn a_copy_unwraps_against_its_wrapper_and_never_its_holder() {
-        let me = UserId::new();
+        let me = Id::<User>::mint();
         let my_xk = ambre_crypto::MasterSeed::from_array([3; 32]).derive_exchange_key();
         let peer_xk = ambre_crypto::MasterSeed::from_array([4; 32]).derive_exchange_key();
         let doc_key = DocumentKey::generate();
@@ -3967,12 +3971,12 @@ mod tests {
             state.signing_key = Some(sk);
             let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
             state.set_mock_ws(ws_tx);
-            let doc = DocumentId::new();
+            let doc = Id::<Document>::mint();
             state.handle_sync_event(SyncEvent::OpenDocumentReady {
                 document_id: doc,
                 doc_key: DocumentKey::generate(),
                 snapshot_payload: None,
-                snapshot_id: SnapshotId::genesis(doc),
+                snapshot_id: Id::<Snapshot>::genesis(doc),
                 covered_seq: Seq(0),
                 held_snapshot: None,
                 doc_type: DocType::Trame,
@@ -4030,9 +4034,9 @@ mod tests {
             state.signing_key = Some(sk.clone());
             let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
             state.set_mock_ws(ws_tx);
-            let doc = DocumentId::new();
+            let doc = Id::<Document>::mint();
             let key = DocumentKey::generate();
-            let snapshot_id = SnapshotId::new();
+            let snapshot_id = Id::<Snapshot>::mint();
             let blob = with_snapshot.then(|| snapshot_blob(doc, snapshot_id, b"s", &key, &sk));
             state.handle_sync_event(SyncEvent::OpenDocumentReady {
                 document_id: doc,
@@ -4041,7 +4045,7 @@ mod tests {
                 snapshot_id: if with_snapshot {
                     snapshot_id
                 } else {
-                    SnapshotId::genesis(doc)
+                    Id::<Snapshot>::genesis(doc)
                 },
                 covered_seq: Seq(u64::from(with_snapshot)),
                 held_snapshot: None,
@@ -4095,7 +4099,7 @@ mod tests {
             .collect();
         assert_eq!(delivered, [vec![3], vec![2]]);
 
-        let parent = SnapshotId::new();
+        let parent = Id::<Snapshot>::mint();
         state.receive_update(Seq(9), update(9, parent).update);
         state.receive_update(Seq(9), update(9, parent).update);
         assert_eq!(state.documents[&doc].quarantine_len(), 1);
@@ -4171,7 +4175,7 @@ mod tests {
     fn a_quarantined_update_is_not_opened_on_arrival() {
         let (mut state, rx, doc, _key, sk, _snap) = setup();
         let stranger = DocumentKey::generate();
-        let update = make_update(doc, SnapshotId::new(), Clock(1), b"x", &stranger, &sk);
+        let update = make_update(doc, Id::<Snapshot>::mint(), Clock(1), b"x", &stranger, &sk);
         state.receive_update(Seq(1), update);
         assert_eq!(state.documents[&doc].quarantine_len(), 1);
         assert!(drain(&rx).is_empty(), "the arrival opened the update");
@@ -4265,10 +4269,10 @@ mod tests {
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
 
-        let opens: Vec<DocumentId> = (0..3).map(|_| DocumentId::new()).collect();
+        let opens: Vec<Id<Document>> = (0..3).map(|_| Id::<Document>::mint()).collect();
         state.pending_opens = opens.iter().map(|d| (*d, DocType::Trame)).collect();
         state.flush_pending_opens();
-        let subscribed: Vec<DocumentId> = drain_ws(&ws_rx)
+        let subscribed: Vec<Id<Document>> = drain_ws(&ws_rx)
             .into_iter()
             .filter_map(|m| match m {
                 WsClientMsg::Subscribe { document_id } => Some(document_id),
@@ -4433,7 +4437,7 @@ mod tests {
     fn an_update_for_a_document_with_no_session_is_refused_aloud() {
         let (mut state, rx, _doc, _key, sk, _snap) = setup();
         state.signing_key = Some(sk);
-        let unknown = DocumentId::new();
+        let unknown = Id::<Document>::mint();
 
         state.handle_send_update(unknown, b"a channel message".to_vec());
 
@@ -4455,7 +4459,7 @@ mod tests {
     fn a_read_reaches_the_last_update_delivered_and_no_further() {
         let (mut state, _rx, doc, key, sk, snap) = setup();
         assert_eq!(state.read_up_to(doc), None, "nothing delivered yet");
-        assert_eq!(state.read_up_to(DocumentId::new()), None, "not open");
+        assert_eq!(state.read_up_to(Id::<Document>::mint()), None, "not open");
 
         state.receive_update(
             Seq(4),
@@ -4463,7 +4467,7 @@ mod tests {
         );
         assert_eq!(state.read_up_to(doc), Some(Seq(4)));
 
-        let held = make_update(doc, SnapshotId::new(), Clock(2), b"held", &key, &sk);
+        let held = make_update(doc, Id::<Snapshot>::mint(), Clock(2), b"held", &key, &sk);
         state.receive_update(Seq(5), held);
         assert_eq!(state.read_up_to(doc), None, "a held update stays unread");
     }

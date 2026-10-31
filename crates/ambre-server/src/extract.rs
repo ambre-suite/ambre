@@ -7,6 +7,7 @@
 //! answers `409` to a payload that will not decode (`SRV-178`). Every route
 //! therefore reads its body through [`Json`], never through `axum::Json`.
 
+use ambre_core::id::{Channel, Document, Entity, Id, Org, Segment, Snapshot, Space, User};
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{FromRequest, FromRequestParts, OptionalFromRequest, Path, Request};
 use axum::http::request::Parts;
@@ -74,27 +75,41 @@ pub trait PathPart: Sized {
     fn part(raw: Self::Raw) -> Result<Self, Resource>;
 }
 
-macro_rules! path_id {
-    ($($id:ty => $resource:ident),* $(,)?) => {
-        $(impl PathPart for $id {
-            type Raw = String;
-
-            fn part(raw: String) -> Result<Self, Resource> {
-                <$id>::parse_str(&raw).map_err(|_| Resource::$resource)
-            }
-        })*
-    };
+/// An entity whose identifier a route path carries, with the resource a 404 names.
+trait Routed: Entity<Repr = ambre_core::Uuid> {
+    const RESOURCE: Resource;
 }
 
-path_id!(
-    ambre_core::DocumentId => Document,
-    ambre_core::SnapshotId => Snapshot,
-    ambre_core::UserId => User,
-    ambre_core::OrgId => Organization,
-    ambre_core::ChannelId => Channel,
-    ambre_core::SpaceId => Space,
-    ambre_core::SegmentId => Segment,
-);
+impl Routed for Document {
+    const RESOURCE: Resource = Resource::Document;
+}
+impl Routed for Snapshot {
+    const RESOURCE: Resource = Resource::Snapshot;
+}
+impl Routed for User {
+    const RESOURCE: Resource = Resource::User;
+}
+impl Routed for Org {
+    const RESOURCE: Resource = Resource::Organization;
+}
+impl Routed for Channel {
+    const RESOURCE: Resource = Resource::Channel;
+}
+impl Routed for Space {
+    const RESOURCE: Resource = Resource::Space;
+}
+impl Routed for Segment {
+    const RESOURCE: Resource = Resource::Segment;
+}
+
+/// A path identifier reads as its text, and names its resource when it does not parse.
+impl<E: Routed> PathPart for Id<E> {
+    type Raw = String;
+
+    fn part(raw: String) -> Result<Self, Resource> {
+        Self::parse_str(&raw).map_err(|_| E::RESOURCE)
+    }
+}
 
 /// A content address reads as the framework reads it: it checks nothing.
 impl PathPart for ambre_core::ContentHash {
@@ -225,17 +240,15 @@ mod tests {
         let app = axum::Router::new()
             .route(
                 "/d/{doc}/u/{user}",
-                axum::routing::get(
-                    |PathId(_): PathId<(ambre_core::DocumentId, ambre_core::UserId)>| async {
-                        StatusCode::OK
-                    },
-                ),
+                axum::routing::get(|PathId(_): PathId<(Id<Document>, Id<User>)>| async {
+                    StatusCode::OK
+                }),
             )
             .route(
                 "/c/{channel}",
-                axum::routing::get(
-                    |OpaquePathId(_): OpaquePathId<ambre_core::ChannelId>| async { StatusCode::OK },
-                ),
+                axum::routing::get(|OpaquePathId(_): OpaquePathId<Id<Channel>>| async {
+                    StatusCode::OK
+                }),
             );
         let resp = app
             .oneshot(Request::get(uri).body(Body::empty()).unwrap())

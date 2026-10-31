@@ -299,7 +299,7 @@ impl SyncState {
     /// each stop (`SYNC-153`). A stop past the one before starts the budget
     /// again (`SYNC-158`). Past the budget, report it once and wait for the
     /// next reconnect (`SYNC-154`).
-    fn replay_stopped(&mut self, document_id: DocumentId, after_seq: Seq) {
+    fn replay_stopped(&mut self, document_id: Id<Document>, after_seq: Seq) {
         let stop = match self.replay_stops.get(&document_id) {
             Some(last) if after_seq <= last.after => last.count.saturating_add(1),
             _ => 1,
@@ -353,7 +353,7 @@ impl SyncState {
     /// A replay timer fired. A later stop or a reconnect since it was armed
     /// makes it stale. Otherwise ask again from the document's own cursor,
     /// which the delivered part of the replay already advanced (`SYNC-153`).
-    fn retry_replay(&mut self, document_id: DocumentId, ticket: crate::generation::ReplayTicket) {
+    fn retry_replay(&mut self, document_id: Id<Document>, ticket: crate::generation::ReplayTicket) {
         let live = self
             .replay_stops
             .get(&document_id)
@@ -1242,7 +1242,7 @@ impl SyncState {
     /// Logic thread they were removed from it, so the view reacts. It can be
     /// the `meta` of a channel never opened. Unless it is held as another
     /// kind, the user's channels are listed again (the Murmure layout spec).
-    fn document_removed(&mut self, document_id: DocumentId) {
+    fn document_removed(&mut self, document_id: Id<Document>) {
         let other_kind = self
             .documents
             .remove(&document_id)
@@ -1319,7 +1319,7 @@ impl SyncState {
                     return;
                 }
 
-                // Presence is keyed by the sender's canonical `UserId`
+                // Presence is keyed by the sender's canonical `Id<User>`
                 // (`ambre-spec-membership.md`), resolved from the authoring
                 // Ed25519 key before delivery so a peer cannot spoof another
                 // user's cursor. The client-side key directory (member signing
@@ -1577,7 +1577,7 @@ impl SyncState {
     /// Fetches this client's newly wrapped key, unwraps it and installs it.
     /// A members answer that says a rotation is owed carries no new key: a
     /// member left, and the debt is recorded instead (`SYNC-128`).
-    pub(crate) fn fetch_rotated_key(&self, document_id: DocumentId) {
+    pub(crate) fn fetch_rotated_key(&self, document_id: Id<Document>) {
         let (Some(tx), Some(ek)) = (self.event_tx.clone(), self.exchange_key.clone()) else {
             return;
         };
@@ -1635,7 +1635,7 @@ impl SyncState {
     /// (`SYNC-128`, `SYNC-129`).
     pub(crate) fn handle_key_refused(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         key_id: KeyId,
         clock: Clock,
     ) {
@@ -1660,7 +1660,8 @@ mod tests {
     use crate::http::{SecretToken, TokenPair};
     use crate::{LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState};
     use ambre_bus::DocType;
-    use ambre_core::{DocumentId, RefusalCode, Seq};
+    use ambre_core::id::{Document, Id, User};
+    use ambre_core::{RefusalCode, Seq};
     use ambre_crypto::{DocumentKey, MasterSeed};
     use ambre_protocol::ws::CloseCode;
     use ambre_protocol::ws::{WsClientMsg, WsServerMsg, decode_client_msg};
@@ -1669,7 +1670,7 @@ mod tests {
     fn with_open_document() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         state.documents.insert(
             id,
             SyncDocumentState::new(
@@ -1854,7 +1855,7 @@ mod tests {
         let (sink, _rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         let mut doc = SyncDocumentState::new(
             id,
             DocumentKey::generate(),
@@ -1912,7 +1913,7 @@ mod tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         let mut cursors = std::collections::HashMap::new();
         for last in [7, 12] {
-            let id = DocumentId::new();
+            let id = Id::<Document>::mint();
             let mut doc = SyncDocumentState::new(
                 id,
                 DocumentKey::generate(),
@@ -1923,7 +1924,7 @@ mod tests {
             state.documents.insert(id, doc);
             cursors.insert(id, Seq(last));
         }
-        let local = DocumentId::new();
+        let local = Id::<Document>::mint();
         state.documents.insert(
             local,
             SyncDocumentState::new(
@@ -1942,14 +1943,14 @@ mod tests {
             .filter_map(|bytes| decode_client_msg(&bytes).ok())
             .collect();
 
-        let subscribed: std::collections::HashSet<DocumentId> = sent
+        let subscribed: std::collections::HashSet<Id<Document>> = sent
             .iter()
             .filter_map(|m| match m {
                 WsClientMsg::Subscribe { document_id } => Some(*document_id),
                 _ => None,
             })
             .collect();
-        let pulled: std::collections::HashMap<DocumentId, Seq> = sent
+        let pulled: std::collections::HashMap<Id<Document>, Seq> = sent
             .iter()
             .filter_map(|m| match m {
                 WsClientMsg::RequestMissing {
@@ -2038,7 +2039,7 @@ mod tests {
         SyncState,
         ambre_bus::conduit::Receiver<LogicEvent>,
         ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
-        DocumentId,
+        Id<Document>,
     ) {
         let (mut state, rx) = with_open_document();
         let id = *state.documents.keys().next().unwrap();
@@ -2050,18 +2051,18 @@ mod tests {
         (state, rx, wire, id)
     }
 
-    fn stopped(document_id: DocumentId) -> SyncEvent {
+    fn stopped(document_id: Id<Document>) -> SyncEvent {
         stopped_after(document_id, 3)
     }
 
-    fn stopped_after(document_id: DocumentId, after: u64) -> SyncEvent {
+    fn stopped_after(document_id: Id<Document>, after: u64) -> SyncEvent {
         SyncEvent::WsMessage(WsServerMsg::ReplayStopped {
             document_id,
             after_seq: Seq(after),
         })
     }
 
-    fn retry(document_id: DocumentId, ticket: crate::generation::ReplayTicket) -> SyncEvent {
+    fn retry(document_id: Id<Document>, ticket: crate::generation::ReplayTicket) -> SyncEvent {
         SyncEvent::ReplayRetry {
             document_id,
             ticket,
@@ -2069,12 +2070,12 @@ mod tests {
     }
 
     /// The ticket of the timer armed for the latest stop of `id`.
-    fn armed(state: &SyncState, id: DocumentId) -> crate::generation::ReplayTicket {
+    fn armed(state: &SyncState, id: Id<Document>) -> crate::generation::ReplayTicket {
         state.replay_stops[&id].ticket
     }
 
     /// The stops counted against the budget of `id`.
-    fn counted(state: &SyncState, id: DocumentId) -> u32 {
+    fn counted(state: &SyncState, id: Id<Document>) -> u32 {
         state.replay_stops[&id].count
     }
 
@@ -2228,7 +2229,7 @@ mod tests {
     #[test]
     fn a_refused_resubscription_closes_its_document() {
         let (mut state, rx, _wire, id) = with_relay_document();
-        let me = ambre_core::UserId::new();
+        let me = Id::<User>::mint();
         state.user_id = Some(me);
         let refused = |document_id, code| {
             SyncEvent::WsMessage(WsServerMsg::Error {
@@ -2238,7 +2239,7 @@ mod tests {
         };
 
         state.handle_sync_event(refused(id, RefusalCode::RateLimited));
-        state.handle_sync_event(refused(DocumentId::new(), RefusalCode::Forbidden));
+        state.handle_sync_event(refused(Id::<Document>::mint(), RefusalCode::Forbidden));
         assert!(state.documents.contains_key(&id));
         state.handle_sync_event(refused(id, RefusalCode::Forbidden));
         assert!(!state.documents.contains_key(&id));
@@ -2269,7 +2270,7 @@ mod tests {
             })
         };
 
-        state.handle_sync_event(refused(DocumentId::new()));
+        state.handle_sync_event(refused(Id::<Document>::mint()));
         assert!(state.documents.contains_key(&id));
         state.handle_sync_event(refused(id));
         assert!(!state.documents.contains_key(&id));

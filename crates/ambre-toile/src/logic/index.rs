@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use kurbo::{Point, Rect};
 use rstar::{AABB, RTree, RTreeObject};
 
-use crate::logic::model::ElementId;
+use ambre_core::id::{Element, Id};
 
 /// The camera / viewport type lives in the `ambre-bus` IPC contract, carried by
 /// `ToileCommand::SetViewport`. It is re-exported here so the index keeps its
@@ -21,13 +21,13 @@ pub use ambre_bus::app::toile::Viewport;
 /// R-tree leaf: an element's world-space, rotation-expanded AABB plus its id.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElementBounds {
-    pub id: ElementId,
+    pub id: Id<Element>,
     rect: Rect,
 }
 
 impl ElementBounds {
     /// Build from a `kurbo::Rect` (already rotation-expanded by the caller).
-    pub fn from_rect(id: ElementId, r: Rect) -> Self {
+    pub fn from_rect(id: Id<Element>, r: Rect) -> Self {
         Self { id, rect: r }
     }
 
@@ -61,7 +61,7 @@ impl RTreeObject for ElementBounds {
 #[derive(Default)]
 pub struct SpatialIndex {
     tree: RTree<ElementBounds>,
-    leaves: HashMap<ElementId, ElementBounds>,
+    leaves: HashMap<Id<Element>, ElementBounds>,
     /// How many times a call walked every leaf. A test probe: a drag step
     /// or a deletion must leave it at zero.
     #[cfg(test)]
@@ -72,7 +72,8 @@ impl SpatialIndex {
     /// O(N) bulk build at load; asserted identical to the incremental path.
     /// A repeated id keeps its last leaf.
     pub fn build(elems: impl Iterator<Item = ElementBounds>) -> Self {
-        let leaves: HashMap<ElementId, ElementBounds> = elems.map(|b| (b.id.clone(), b)).collect();
+        let leaves: HashMap<Id<Element>, ElementBounds> =
+            elems.map(|b| (b.id.clone(), b)).collect();
         Self {
             tree: RTree::bulk_load(leaves.values().cloned().collect()),
             leaves,
@@ -83,7 +84,7 @@ impl SpatialIndex {
 
     /// O(log N + k). Ids are returned unordered; the caller paint-orders them
     /// through `layers`.
-    pub fn query_visible<'a>(&'a self, vp: &Viewport) -> impl Iterator<Item = ElementId> + 'a {
+    pub fn query_visible<'a>(&'a self, vp: &Viewport) -> impl Iterator<Item = Id<Element>> + 'a {
         let r = vp.to_world_rect();
         self.tree
             .locate_in_envelope_intersecting(&AABB::from_corners([r.x0, r.y0], [r.x1, r.y1]))
@@ -92,7 +93,7 @@ impl SpatialIndex {
 
     /// Point hit pre-filter (screen->world done by caller). Exact hit-test
     /// (rotation, path fill, stroke width) is refined in `toile-selection`.
-    pub fn query_point<'a>(&'a self, p: Point) -> impl Iterator<Item = ElementId> + 'a {
+    pub fn query_point<'a>(&'a self, p: Point) -> impl Iterator<Item = Id<Element>> + 'a {
         // Our leaves are rectangles, not points, so `locate_all_at_point` (which
         // needs a `Point` object) does not apply. A degenerate point-envelope
         // intersection query gives every leaf whose AABB contains `p`.
@@ -108,7 +109,7 @@ impl SpatialIndex {
 
     /// Remove the leaf carrying `id`, if present. O(log N) for leaves that do
     /// not overlap much: the descent follows the leaf's own envelope.
-    pub fn remove(&mut self, id: &ElementId) {
+    pub fn remove(&mut self, id: &Id<Element>) {
         let Some(leaf) = self.leaves.remove(id) else {
             return;
         };
@@ -139,7 +140,7 @@ impl SpatialIndex {
     }
 
     /// Every id in the tree, unordered. Test / rebuild helper.
-    pub fn ids(&self) -> impl Iterator<Item = ElementId> + '_ {
+    pub fn ids(&self) -> impl Iterator<Item = Id<Element>> + '_ {
         self.walked();
         self.tree.iter().map(|e| e.id.clone())
     }
@@ -167,7 +168,10 @@ mod tests {
     use kurbo::Size;
 
     fn bounds(id: &str, x: f64, y: f64, w: f64, h: f64) -> ElementBounds {
-        ElementBounds::from_rect(ElementId(id.to_owned()), Rect::new(x, y, x + w, y + h))
+        ElementBounds::from_rect(
+            Id::<Element>::from_text(id.to_owned()),
+            Rect::new(x, y, x + w, y + h),
+        )
     }
 
     #[test]
@@ -185,14 +189,14 @@ mod tests {
             size: Size::new(100.0, 100.0),
         };
         let visible: Vec<_> = idx.query_visible(&vp).collect();
-        assert_eq!(visible, vec![ElementId("a".to_owned())]);
+        assert_eq!(visible, vec![Id::<Element>::from_text("a".to_owned())]);
     }
 
     #[test]
     fn remove_then_query_is_empty() {
         let mut idx = SpatialIndex::default();
         idx.insert(bounds("a", 0.0, 0.0, 10.0, 10.0));
-        idx.remove(&ElementId("a".to_owned()));
+        idx.remove(&Id::<Element>::from_text("a".to_owned()));
         assert!(idx.is_empty());
     }
 
@@ -215,7 +219,7 @@ mod tests {
             idx.update(grid(i, 3.0));
         }
         for i in (25..5_000).step_by(50) {
-            idx.remove(&ElementId(format!("e{i}")));
+            idx.remove(&Id::<Element>::from_text(format!("e{i}")));
         }
         assert_eq!(idx.walks(), 0, "no call walked the index");
         assert_eq!(idx.len(), ambre_core::ElementCount::new(4_900));
@@ -225,7 +229,11 @@ mod tests {
             size: Size::new(2.0, 2.0),
         };
         let hit: Vec<_> = idx.query_visible(&moved).collect();
-        assert_eq!(hit, vec![ElementId("e0".to_owned())], "the leaf moved");
+        assert_eq!(
+            hit,
+            vec![Id::<Element>::from_text("e0".to_owned())],
+            "the leaf moved"
+        );
     }
 
     /// `TOILE-220`: a leaf with corners that are not numbers still leaves the
@@ -235,7 +243,7 @@ mod tests {
         let mut idx = SpatialIndex::default();
         idx.insert(bounds("a", 0.0, 0.0, 10.0, 10.0));
         idx.insert(bounds("nan", f64::NAN, 0.0, 10.0, 10.0));
-        idx.remove(&ElementId("nan".to_owned()));
+        idx.remove(&Id::<Element>::from_text("nan".to_owned()));
         assert_eq!(idx.len(), ambre_core::ElementCount::new(1));
         assert_eq!(idx.walks(), 1);
     }
@@ -281,8 +289,8 @@ mod prop {
         ]
     }
 
-    fn eid(key: u8) -> ElementId {
-        ElementId(format!("k{key}"))
+    fn eid(key: u8) -> Id<Element> {
+        Id::<Element>::from_text(format!("k{key}"))
     }
 
     /// A camera small enough to cull part of the populated area.
@@ -328,7 +336,7 @@ mod prop {
             let rebuilt = SpatialIndex::build(model.values().cloned());
             for vp in &cams {
                 let world = vp.to_world_rect();
-                let mut expected: Vec<ElementId> = model
+                let mut expected: Vec<Id<Element>> = model
                     .values()
                     .filter(|b| {
                         let r = b.rect();

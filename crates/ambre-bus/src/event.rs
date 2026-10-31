@@ -17,9 +17,11 @@ use std::fmt;
 
 use crate::sync_warning::SyncWarningCode;
 use crate::{
-    ChannelDocument, ChannelId, DocType, DocumentActivity, DocumentId, LeaseId, MemberInfo,
-    MessageId, RequestId, RestEvent, Role, SealedChannelKey, SegmentId, SnapshotId, SpaceId,
-    UserId,
+    ChannelDocument, DocType, DocumentActivity, MemberInfo, RequestId, RestEvent, Role,
+    SealedChannelKey,
+};
+use ambre_core::id::{
+    Channel, Document, Id, Lease, Meeting, Message, Segment, Snapshot, Space, User,
 };
 use ambre_core::{Seq, SessionNonce};
 
@@ -41,7 +43,7 @@ pub enum LogicEvent {
     /// document, and writes `entry` into its peer registry with its first delta.
     /// It applies no mutating command to the document before this arrives.
     SessionIdentity {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         /// The PeerID, derived from the signing key and the session nonce.
         peer: ambre_core::PeerId,
         /// The registry entry of `peer`, which the worker signed.
@@ -54,7 +56,7 @@ pub enum LogicEvent {
 
     /// Decrypted and decompressed CRDT delta, with its signer, ready for `LoroDoc::import()`.
     RemoteUpdate {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         delta: SignedDelta,
     },
 
@@ -64,13 +66,13 @@ pub enum LogicEvent {
     /// flicker in across N intermediate re-renders (one per delta). Order is preserved
     /// (server `seq` order).
     RemoteUpdateBatch {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         deltas: Vec<SignedDelta>,
     },
 
     /// Decrypted and decompressed CRDT snapshot.
     RemoteSnapshot {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payload: ambre_core::SnapshotBytes,
         /// The last delta `seq` it folds in, 0 when unknown. The Logic thread
         /// counts the deltas a later snapshot must hold from it (`AUTHOR-016`).
@@ -82,8 +84,8 @@ pub enum LogicEvent {
     /// thread compares it with the deltas it holds and answers with
     /// [`SyncCommand::SnapshotVerdict`](crate::SyncCommand::SnapshotVerdict).
     PendingSnapshot {
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         /// The last delta `seq` it claims to fold in.
         covered_seq: Seq,
         /// Decrypted and decompressed, as in `RemoteSnapshot`.
@@ -96,24 +98,24 @@ pub enum LogicEvent {
     /// `after` says whether it was the final snapshot of a segment, which
     /// a member then finalizes again (the Murmure segments spec).
     SnapshotDropped {
-        document_id: DocumentId,
-        author: Option<UserId>,
-        reporter: Option<UserId>,
+        document_id: Id<Document>,
+        author: Option<Id<User>>,
+        reporter: Option<Id<User>>,
         after: ambre_core::AfterDrop,
     },
 
     /// A thread this client holds neither in full nor light took a delta
     /// (the Murmure threads spec). The signal names the thread alone: the
     /// Logic thread finds its channel and decides what to load.
-    ThreadActivity { document_id: DocumentId },
+    ThreadActivity { document_id: Id<Document> },
 
     /// Decrypted ephemeral data (cursor, collaborator presence). `from_user_id` is the
-    /// sender's canonical `UserId`, resolved from the authenticated `pub_key` against the
+    /// sender's canonical `Id<User>`, resolved from the authenticated `pub_key` against the
     /// document's member list before delivery. Presence is therefore keyed by a spoof-proof
     /// per-user identity (`sync`, "Presence identity").
     RemoteEphemeral {
-        document_id: DocumentId,
-        from_user_id: UserId,
+        document_id: Id<Document>,
+        from_user_id: Id<User>,
         payload: ambre_core::EphemeralBytes,
     },
 
@@ -125,8 +127,8 @@ pub enum LogicEvent {
     /// Best-effort, like presence itself: a lost message leaves the peer to age out of the
     /// live set instead.
     PeerLeft {
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
     },
 
     /// Sync read the members of an open document again, on the relay's word
@@ -134,7 +136,7 @@ pub enum LogicEvent {
     /// one answer that rebuilt the directory (`SYNC-037`) serves a view too,
     /// which asks for nothing more (`SYNC-151`).
     MembersChanged {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         members: Vec<MemberInfo>,
     },
 
@@ -144,7 +146,7 @@ pub enum LogicEvent {
     /// paths, so the UI can dismiss its document-loading overlay. An empty document never
     /// produces a snapshot, so the overlay cannot key off `RemoteSnapshot`.
     DocumentReady {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         /// This client's own role on the document, resolved by Sync from the
         /// members response (`architecture`). Logic keeps it beside
         /// the live `DocState` and drops mutating commands when it is not
@@ -154,25 +156,25 @@ pub enum LogicEvent {
 
     /// WebSocket connection status for a document.
     ConnectionStatus {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         connected: ambre_core::LinkState,
     },
 
     /// The activity counted for a document not held in memory, read from the
     /// summaries alone (`RESID-005`, `RESID-014`).
     Activity {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         counters: ambre_core::activity::ActivityCounters,
     },
 
     /// A released document turned into a light subscription: the relay
     /// acknowledged every frame this client sent of it (`RESID-009`). Its
     /// local copy holds nothing the relay lacks (`RESID-019`).
-    Released { document_id: DocumentId },
+    Released { document_id: Id<Document> },
 
     /// Non-fatal warning, such as a quarantine overflow or a decrypt failure.
     SyncWarning {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         code: SyncWarningCode,
         message: String,
     },
@@ -180,32 +182,32 @@ pub enum LogicEvent {
     /// The server requests a snapshot (too many accumulated deltas).
     /// The Logic thread must produce `LoroDoc::export_snapshot()` and respond
     /// with `SyncCommand::SendSnapshot { document_id, payload }`.
-    SnapshotNeeded { document_id: DocumentId },
+    SnapshotNeeded { document_id: Id<Document> },
 
     /// A member has been revoked and consolidation is complete.
     /// Translated from `WsServerMsg::KeyRotationRequired` by the Sync thread
     /// **after** the rotation is complete (new keys in DB). Server-initiated:
     /// the Logic thread may trigger a snapshot to seal the state.
     MemberRevoked {
-        document_id: DocumentId,
-        revoked_user_id: UserId,
+        document_id: Id<Document>,
+        revoked_user_id: Id<User>,
     },
 
     /// The relay no longer holds a document this client held: a delta to it
     /// was refused as not found. Sync dropped it. The Logic thread settles
     /// what the document stood for, such as amendments a fold erased.
-    DocumentGone { document_id: DocumentId },
+    DocumentGone { document_id: Id<Document> },
 
     /// This client rotated the key of a document: a revocation or an owed
     /// rotation it paid. The Logic thread closes the active segment of the
     /// channel whose `meta` it is, so the successor opens under the new key.
-    KeyRotated { document_id: DocumentId },
+    KeyRotated { document_id: Id<Document> },
 
     /// A document was shared with this user (server push on `user:{id}`,
     /// translated from `WsServerMsg::DocumentShared`). The Logic thread forwards
     /// it to the UI, which refreshes its document list and notifies the user.
     DocumentShared {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     },
 
@@ -213,18 +215,18 @@ pub enum LogicEvent {
     /// The documents a channel groups, answering
     /// [`SyncCommand::OpenChannel`](crate::SyncCommand::OpenChannel).
     ChannelDocuments {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         documents: Vec<ChannelDocument>,
     },
     /// The relay refused the listing for another cause, or it could not be
     /// read.
     ChannelOpenFailed {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         message: String,
     },
     /// The relay refused the listing for want of membership: the user is no
     /// member of the channel any more, or it is gone (`SRV-103`).
-    ChannelRefused { channel_id: ChannelId },
+    ChannelRefused { channel_id: Id<Channel> },
     /// The relay's activity answer, per segment and thread of every channel
     /// of the user (`SRV-109`), answering [`SyncCommand::FetchActivity`] and
     /// [`SyncCommand::MarkAllRead`](crate::SyncCommand::MarkAllRead).
@@ -236,7 +238,7 @@ pub enum LogicEvent {
     /// `key` is the channel key sealed under the space key, for the catalogue
     /// of a public channel. Absent for a private one.
     ChannelCreated {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         key: Option<SealedChannelKey>,
     },
     /// The relay closed `closing`, answering
@@ -245,15 +247,15 @@ pub enum LogicEvent {
     /// whether it is the one this client asked for. A close that lost its race
     /// names the winner's, and the Sync worker deleted its own.
     SegmentClosed {
-        channel_id: ChannelId,
-        closing: SegmentId,
-        active: SegmentId,
+        channel_id: Id<Channel>,
+        closing: Id<Segment>,
+        active: Id<Segment>,
         successor: Successor,
     },
     /// The relay refused the close of `closing`, or never answered it.
     SegmentCloseFailed {
-        channel_id: ChannelId,
-        closing: SegmentId,
+        channel_id: Id<Channel>,
+        closing: Id<Segment>,
         message: String,
     },
     /// The relay registered `amendments` for the locked `segment`, answering
@@ -261,16 +263,16 @@ pub enum LogicEvent {
     /// A registration that lost its race names the winner's, and the Sync
     /// worker deleted its own (`SRV-202`).
     AmendmentsLinked {
-        channel_id: ChannelId,
-        segment: SegmentId,
-        amendments: DocumentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
     },
     /// The relay refused the creation or the registration of `amendments`
     /// for `segment`, or never answered it.
     AmendmentsLinkFailed {
-        channel_id: ChannelId,
-        segment: SegmentId,
-        amendments: DocumentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
         message: String,
     },
     /// The relay registered `thread` for `root`, a message of `segment`,
@@ -278,74 +280,74 @@ pub enum LogicEvent {
     /// A registration that lost its race names the winner's, and the Sync
     /// worker deleted its own (`SRV-214`).
     ThreadLinked {
-        channel_id: ChannelId,
-        segment: SegmentId,
-        root: MessageId,
-        thread: DocumentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
     },
     /// The relay refused the creation or the registration of `thread` for
     /// `root`, or never answered it.
     ThreadLinkFailed {
-        channel_id: ChannelId,
-        segment: SegmentId,
-        root: MessageId,
-        thread: DocumentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
         message: String,
     },
     /// The relay's answer to
     /// [`SyncCommand::TakeFinalizeLease`](crate::SyncCommand::TakeFinalizeLease).
     FinalizeLeaseAnswered {
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         answer: LeaseAnswer,
     },
     /// The relay accepted the final snapshot of `segment`, answering
     /// [`SyncCommand::FinalizeSegment`](crate::SyncCommand::FinalizeSegment).
     SegmentFinalized {
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
     },
     /// A lease request or a commit of `segment` failed. `end` says whether
     /// this copy holds an edit the relay refused, so it never finalizes the
     /// segment: another member does.
     SegmentFinalizeFailed {
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         end: ambre_core::FinalizeEnd,
         message: String,
     },
     /// The relay's answer to
     /// [`SyncCommand::TakeFoldLease`](crate::SyncCommand::TakeFoldLease).
     FoldLeaseAnswered {
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         answer: FoldAnswer,
     },
     /// The relay took the fold snapshot of `segment`, answering
     /// [`SyncCommand::FoldSegment`](crate::SyncCommand::FoldSegment).
     SegmentFolded {
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
     },
     /// A fold lease request or a fold commit of `segment` failed.
     SegmentFoldFailed {
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         message: String,
     },
     /// This client's confirmation made a fold snapshot of the segment
     /// `document_id` final, and the relay erased `amendments`, which it
     /// folds in whole (`SRV-211`).
     AmendmentsFolded {
-        document_id: DocumentId,
-        amendments: DocumentId,
+        document_id: Id<Document>,
+        amendments: Id<Document>,
     },
     /// The relay refused deltas of `document_id` for its lock. `deltas` are
     /// the Loro updates this client sent from the first one refused, in the
     /// order they left. None of them reached another member, and none leaves
     /// again: the new messages they carry go to the active segment.
     DeltasLocked {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         deltas: Vec<ambre_core::DeltaBytes>,
     },
     /// A public channel of the space has a new key, sealed under the current
@@ -353,39 +355,39 @@ pub enum LogicEvent {
     /// [`SyncCommand::RotateSpace`](crate::SyncCommand::RotateSpace). The
     /// catalogue entry takes it in place of the old one.
     ChannelKeyResealed {
-        space_id: SpaceId,
-        channel_id: ChannelId,
+        space_id: Id<Space>,
+        channel_id: Id<Channel>,
         key: SealedChannelKey,
     },
     /// The user is a member of the channel, answering
     /// [`SyncCommand::JoinChannel`](crate::SyncCommand::JoinChannel).
-    ChannelJoined { channel_id: ChannelId },
+    ChannelJoined { channel_id: Id<Channel> },
     /// The relay holds the direct message of the requested members,
     /// answering
     /// [`SyncCommand::CreateDirectMessage`](crate::SyncCommand::CreateDirectMessage).
     /// `channel_id` is the requested one when the relay created it, and the
     /// existing one's otherwise.
     DirectMessageOpened {
-        requested: ChannelId,
-        channel_id: ChannelId,
+        requested: Id<Channel>,
+        channel_id: Id<Channel>,
     },
     /// The relay deleted the channel, answering
     /// [`SyncCommand::DeleteChannel`](crate::SyncCommand::DeleteChannel).
-    ChannelDeleted { channel_id: ChannelId },
+    ChannelDeleted { channel_id: Id<Channel> },
     /// The relay removed this user from the channel, answering
     /// [`SyncCommand::LeaveChannel`](crate::SyncCommand::LeaveChannel).
-    ChannelLeft { channel_id: ChannelId },
+    ChannelLeft { channel_id: Id<Channel> },
     /// A creation, a join, a delete or a leave failed, and the relay changed
     /// nothing.
     ChannelRequestFailed {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         message: String,
     },
     /// The channels the relay holds as public in the space, answering
     /// [`SyncCommand::ListSpaceChannels`](crate::SyncCommand::ListSpaceChannels).
     SpaceChannels {
-        space_id: SpaceId,
-        channels: Vec<ChannelId>,
+        space_id: Id<Space>,
+        channels: Vec<Id<Channel>>,
     },
     /// Every channel and every space this user is a member of, answering
     /// [`SyncCommand::ListMemberChannels`](crate::SyncCommand::ListMemberChannels).
@@ -395,7 +397,7 @@ pub enum LogicEvent {
     /// names the `meta` of each channel whose key the worker holds.
     MemberChannels {
         channels: Vec<crate::MemberChannel>,
-        spaces: Vec<SpaceId>,
+        spaces: Vec<Id<Space>>,
         names: Vec<crate::ChannelName>,
         peers: Vec<crate::DirectPeers>,
         metas: Vec<crate::ChannelMeta>,
@@ -404,13 +406,13 @@ pub enum LogicEvent {
     // -- Meetings (Rendez-Vous) -- participant push -----------------------------
     /// Another participant joined the meeting.
     MeetingParticipantJoined {
-        meeting_id: crate::MeetingId,
-        user_id: UserId,
+        meeting_id: Id<Meeting>,
+        user_id: Id<User>,
     },
     /// Another participant left the meeting.
     MeetingParticipantLeft {
-        meeting_id: crate::MeetingId,
-        user_id: UserId,
+        meeting_id: Id<Meeting>,
+        user_id: Id<User>,
     },
 
     // -- Errors ----------------------------------------------------------------
@@ -419,7 +421,7 @@ pub enum LogicEvent {
     /// the channel or space opening that asked for it, or hands the failed open
     /// to the UI.
     DocumentOpenFailed {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         cause: OpenFailure,
         message: String,
     },
@@ -476,7 +478,7 @@ pub enum LeaseAnswer {
     /// This client holds the lease for `expires_in` milliseconds. Its
     /// snapshot covers the deltas up to `horizon`.
     Granted {
-        lease: LeaseId,
+        lease: Id<Lease>,
         horizon: Seq,
         expires_in: ambre_core::Millis,
     },
@@ -492,9 +494,9 @@ pub enum FoldAnswer {
     /// snapshot covers the deltas of the segment up to `horizon`, and folds
     /// `amendments` up to at least `amendments_seq`.
     Granted {
-        lease: LeaseId,
+        lease: Id<Lease>,
         horizon: Seq,
-        amendments: DocumentId,
+        amendments: Id<Document>,
         amendments_seq: Seq,
         expires_in: ambre_core::Millis,
     },
@@ -548,7 +550,7 @@ pub struct SignedDelta {
     pub peer: ambre_core::PeerId,
     /// The member the signing key resolves to, `None` when the directory does
     /// not name it (`AUTHOR-013`).
-    pub user: Option<UserId>,
+    pub user: Option<Id<User>>,
     /// What the update says of itself, when its author wrote a summary
     /// (`ambre-spec-sealed-envelope.md`, `SYNC-144`).
     pub summary: Option<crate::ActivitySummary>,

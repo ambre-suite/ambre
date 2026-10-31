@@ -11,7 +11,7 @@
 //!   **one module per app** under [`app`]: its command, its event, its shared value
 //!   and display types. Those modules (`app::trame`, `app::toile`) are re-exported
 //!   flat at the crate root. Document edits and viewport data, routed by
-//!   `DocumentId`. (See `ambre-spec-message-bus.md`.)
+//!   `Id<Document>`. (See `ambre-spec-message-bus.md`.)
 //! - **Service** (`RestCommand`/`RestEvent` + `RequestId` in [`rest`]) -- the
 //!   correlatable request/response family carried by `...::Rest { id, ... }` on all
 //!   four envelopes, defined once and forwarded verbatim.
@@ -256,10 +256,8 @@ pub use ambre_core::text_offset::{
     Utf16Offset, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte,
 };
 pub use ambre_core::{
-    ApiFailure, CategoryId, ChannelDocumentKind, ChannelId, CommentId, DocType, DocumentId, Email,
-    FootnoteId, HttpStatus, KeyFingerprint, LeaseId, MeetingId, MessageId, MetaId, Millis,
-    PageMillis, PageTime, PublicKey, RefusalCode, ReplyId, Role, SegmentId, Seq, SnapshotId,
-    SpaceId, SuggestionId, UnreadableCause, UserId, Uuid,
+    ApiFailure, ChannelDocumentKind, DocType, Email, HttpStatus, KeyFingerprint, Millis,
+    PageMillis, PageTime, PublicKey, RefusalCode, Role, Seq, UnreadableCause, Uuid,
 };
 
 #[cfg(test)]

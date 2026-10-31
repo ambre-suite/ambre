@@ -12,7 +12,9 @@ use loro::event::{ContainerDiff, Diff, DiffEvent};
 use loro::{ContainerID, Index, LoroDoc, LoroValue, Subscription};
 
 use crate::logic::index::{ElementBounds, SpatialIndex};
-use crate::logic::model::{ConnectorId, ElementId, NodeId};
+use ambre_core::id::{Connector, Element, Id};
+
+use crate::logic::model::NodeId;
 
 use super::ToileState;
 use super::codec::{expanded_aabb, map_placement, rotation_of, stored_rect};
@@ -23,7 +25,7 @@ use crate::logic::model::ElementKind;
 impl ToileState {
     /// Recompute one element's AABB from its map and mirror it into `bounds` and
     /// the R-tree.
-    pub(super) fn update_bounds(&mut self, id: &ElementId, em: &Fields<ElementKey>) {
+    pub(super) fn update_bounds(&mut self, id: &Id<Element>, em: &Fields<ElementKey>) {
         let rect = expanded_aabb(stored_rect(em), rotation_of(em));
         self.bounds.insert(id.clone(), rect);
         self.index
@@ -44,10 +46,10 @@ impl ToileState {
                     // Groups and frames name their members; the same pass
                     // indexes them, so the parent lookup costs no walk of its own.
                     if let Some(LoroValue::List(kids)) = fields.get(ElementKey::Children) {
-                        let parent = ElementId(key.clone());
+                        let parent = Id::<Element>::from_text(key.clone());
                         for kid in kids.iter() {
                             if let LoroValue::String(s) = kid {
-                                self.link_parent(&ElementId(s.to_string()), &parent);
+                                self.link_parent(&Id::<Element>::from_text(s.to_string()), &parent);
                             }
                         }
                     }
@@ -57,7 +59,7 @@ impl ToileState {
                         continue;
                     }
                     let (stored, rot) = map_placement(fields);
-                    let id = ElementId(key.clone());
+                    let id = Id::<Element>::from_text(key.clone());
                     let rect = expanded_aabb(stored, rot);
                     self.bounds.insert(id.clone(), rect);
                     leaves.push(ElementBounds::from_rect(id, rect));
@@ -106,7 +108,7 @@ impl ToileState {
 
     /// Re-read one element: its bounds, its leaf and what its `children` list
     /// names. A group's bounds are left to [`refresh_groups`](Self::refresh_groups).
-    fn refresh_element(&mut self, id: &ElementId) {
+    fn refresh_element(&mut self, id: &Id<Element>) {
         let Some(em) = self.element_map(id) else {
             self.bounds.remove(id);
             self.index.remove(id);
@@ -123,10 +125,10 @@ impl ToileState {
     /// Recompute the bounds of every group a touched element sits in, at any
     /// depth, and of every touched group, to a fixpoint. A group missing a
     /// member's bounds holds none, as after a full rebuild.
-    fn refresh_groups(&mut self, touched: &HashSet<ElementId>) {
-        let mut groups: Vec<ElementId> = Vec::new();
-        let mut seen: HashSet<ElementId> = HashSet::new();
-        let mut stack: Vec<ElementId> = touched.iter().cloned().collect();
+    fn refresh_groups(&mut self, touched: &HashSet<Id<Element>>) {
+        let mut groups: Vec<Id<Element>> = Vec::new();
+        let mut seen: HashSet<Id<Element>> = HashSet::new();
+        let mut stack: Vec<Id<Element>> = touched.iter().cloned().collect();
         while let Some(id) = stack.pop() {
             if !seen.insert(id.clone()) {
                 continue;
@@ -183,7 +185,7 @@ impl ToileState {
     }
 
     /// Record that `parent`'s `children` list names `child` once more.
-    pub(super) fn link_parent(&mut self, child: &ElementId, parent: &ElementId) {
+    pub(super) fn link_parent(&mut self, child: &Id<Element>, parent: &Id<Element>) {
         self.parents
             .entry(child.clone())
             .or_default()
@@ -195,13 +197,13 @@ impl ToileState {
     }
 
     /// Record that `parent`'s `children` list names `child` once less.
-    pub(super) fn unlink_parent(&mut self, child: &ElementId, parent: &ElementId) {
+    pub(super) fn unlink_parent(&mut self, child: &Id<Element>, parent: &Id<Element>) {
         drop_one(&mut self.parents, child, parent);
         drop_one(&mut self.members, parent, child);
     }
 
     /// Drop every entry naming `child`, once the board no longer holds it.
-    pub(super) fn forget_parents(&mut self, child: &ElementId) {
+    pub(super) fn forget_parents(&mut self, child: &Id<Element>) {
         for parent in self.parents.remove(child).unwrap_or_default() {
             drop_one(&mut self.members, &parent, child);
         }
@@ -210,14 +212,14 @@ impl ToileState {
     /// Drop every entry naming `id`, as a member and as a parent, once the
     /// board no longer holds it and no list names it. A peer refreshing the
     /// removed map drops the links its list held, so the two caches agree.
-    pub(super) fn forget_links(&mut self, id: &ElementId) {
+    pub(super) fn forget_links(&mut self, id: &Id<Element>) {
         self.forget_parents(id);
         self.relink_members(id, Vec::new());
     }
 
     /// Replace what `parent`'s `children` list names with `kids`, read back
     /// from the document after a change touched it.
-    fn relink_members(&mut self, parent: &ElementId, kids: Vec<ElementId>) {
+    fn relink_members(&mut self, parent: &Id<Element>, kids: Vec<Id<Element>>) {
         for old in self.members.get(parent).cloned().unwrap_or_default() {
             self.unlink_parent(&old, parent);
         }
@@ -229,7 +231,7 @@ impl ToileState {
     /// The groups and frames whose `children` list names `id`, stale ones
     /// included. A reader filters by kind, which also skips a parent since
     /// deleted.
-    pub(super) fn parents_of(&self, id: &ElementId) -> &[ElementId] {
+    pub(super) fn parents_of(&self, id: &Id<Element>) -> &[Id<Element>] {
         self.parents.get(id).map_or(&[], Vec::as_slice)
     }
 
@@ -281,14 +283,18 @@ impl ToileState {
     }
 
     /// The map of an element, or `None` if absent.
-    pub(super) fn element_map(&self, id: &ElementId) -> Option<Fields<ElementKey>> {
+    pub(super) fn element_map(&self, id: &Id<Element>) -> Option<Fields<ElementKey>> {
         entry::<ElementKey>(&self.doc, id)
     }
 }
 
 /// Remove one `value` from the list `map` keeps under `key`, and the key once
 /// the list is empty.
-fn drop_one(map: &mut HashMap<ElementId, Vec<ElementId>>, key: &ElementId, value: &ElementId) {
+fn drop_one(
+    map: &mut HashMap<Id<Element>, Vec<Id<Element>>>,
+    key: &Id<Element>,
+    value: &Id<Element>,
+) {
     if let Some(list) = map.get_mut(key) {
         if let Some(idx) = list.iter().position(|v| v == value) {
             list.remove(idx);
@@ -312,7 +318,7 @@ pub(super) struct Touched {
 #[derive(Debug, Default)]
 struct BoardTouched {
     /// Every element a change wrote to: its entry, or a container under it.
-    elements: HashSet<ElementId>,
+    elements: HashSet<Id<Element>>,
     /// Whether the paint order changed.
     layers: PaintOrder,
     /// `Whole` once a change under the element map the events do not place
@@ -323,7 +329,7 @@ struct BoardTouched {
 /// The arrows a change wrote.
 #[derive(Debug, Default)]
 pub(super) struct WiresTouched {
-    pub(super) ids: HashSet<ConnectorId>,
+    pub(super) ids: HashSet<Id<Connector>>,
     /// `Whole` once a change under the arrow map the events do not place under
     /// one arrow arrives. The arrow cache then reads the whole map again.
     pub(super) reach: Reach,
@@ -372,7 +378,9 @@ fn note(change: &ContainerDiff<'_>, touched: &mut Touched) {
     let board = &mut touched.board;
     if let Some(keys) = keys_under(change, Root::Elements) {
         match keys {
-            Some(keys) => board.elements.extend(keys.into_iter().map(ElementId)),
+            Some(keys) => board
+                .elements
+                .extend(keys.into_iter().map(Id::<Element>::from_text)),
             None => board.reach = Reach::Whole,
         }
         return;
@@ -380,7 +388,9 @@ fn note(change: &ContainerDiff<'_>, touched: &mut Touched) {
     let wires = &mut touched.wires;
     if let Some(keys) = keys_under(change, Root::Connectors) {
         match keys {
-            Some(keys) => wires.ids.extend(keys.into_iter().map(ConnectorId)),
+            Some(keys) => wires
+                .ids
+                .extend(keys.into_iter().map(Id::<Connector>::from_text)),
             None => wires.reach = Reach::Whole,
         }
     }
@@ -413,12 +423,13 @@ mod peer_geometry_tests {
     use loro::ExportMode;
 
     use crate::logic::command::{InitContent, ToileCommand, ToileEvent};
-    use crate::logic::model::{ElementId, ElementKind, ShapeKind};
+    use crate::logic::model::{ElementKind, ShapeKind};
+    use ambre_core::id::{Element, Id};
 
     use super::super::ToileState;
     use super::super::names::ElementKey;
 
-    fn create(st: &mut ToileState) -> ElementId {
+    fn create(st: &mut ToileState) -> Id<Element> {
         let out = st.handle_command(ToileCommand::CreateElement {
             kind: ElementKind::Shape(ShapeKind::Rect),
             at: Point::ZERO,
@@ -440,7 +451,7 @@ mod peer_geometry_tests {
     /// and return the delta a peer receives.
     fn forge(
         author: &mut ToileState,
-        id: &ElementId,
+        id: &Id<Element>,
         key: ElementKey,
         value: f64,
     ) -> ambre_core::DeltaBytes {
@@ -456,7 +467,7 @@ mod peer_geometry_tests {
         )
     }
 
-    fn board_of_eight() -> (ToileState, Vec<ElementId>) {
+    fn board_of_eight() -> (ToileState, Vec<Id<Element>>) {
         let mut st = ToileState::new();
         let ids = (0..8).map(|_| create(&mut st)).collect();
         (st, ids)

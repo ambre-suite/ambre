@@ -2,7 +2,7 @@
 //!
 //! Moving between slide A and slide B, Toile interpolates the animatable
 //! properties of elements that appear in **both** frames and share the same
-//! stable [`ElementId`]. Those are position, size, rotation, opacity and fill,
+//! stable [`Id<Element>`]. Those are position, size, rotation, opacity and fill,
 //! interpolated with an eased `lerp`. Elements only in A fade out, only in B
 //! fade in. Matching is by **stable id**, so an element the author moved /
 //! resized between two frames animates smoothly "for free": the Figma Smart
@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use ambre_core::Rgba;
 use kurbo::Rect;
 
-use crate::logic::model::ElementId;
+use ambre_core::id::{Element, Id};
 
 // The `SnapElement` / `FrameSnapshot` capture DTOs live in `ambre-bus`, so the
 // enriched `SlideChanged` event can carry them to the render thread. That
@@ -76,7 +76,7 @@ impl Phase {
 /// [`fade_in`](AnimatedElement::fade_in) / [`fade_out`](AnimatedElement::fade_out).
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnimatedElement {
-    pub id: ElementId,
+    pub id: Id<Element>,
     pub bounds: Rect,
     pub rotation: ambre_core::Radians,
     pub opacity: ambre_core::Opacity,
@@ -227,7 +227,7 @@ mod tests {
         fill: Option<Rgba>,
     ) -> SnapElement {
         SnapElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             bounds,
             rotation: ambre_core::Radians::new(rotation),
             opacity: ambre_core::Opacity::new(opacity).unwrap(),
@@ -264,7 +264,7 @@ mod tests {
         let out = smart_animate(&from, &to, at(0.5));
         assert_eq!(out.len(), 1);
         let m = &out[0];
-        assert_eq!(m.id, ElementId("e1".to_owned()));
+        assert_eq!(m.id, Id::<Element>::from_text("e1".to_owned()));
         // Geometry / rotation / opacity are the exact midpoints.
         assert_eq!(m.bounds, rect(10.0, 20.0, 20.0, 30.0));
         assert_eq!(m.rotation, ambre_core::Radians::new(1.0));
@@ -371,11 +371,11 @@ mod tests {
         // a tweened, c faded in, b faded out -> three animated elements.
         assert_eq!(out.len(), 3);
         // Order: to's order (a, c) then the fade-outs (b).
-        assert_eq!(out[0].id, ElementId("a".to_owned()));
+        assert_eq!(out[0].id, Id::<Element>::from_text("a".to_owned()));
         assert_eq!(out[0].bounds, rect(2.5, 2.5, 1.0, 1.0)); // tween midpoint
-        assert_eq!(out[1].id, ElementId("c".to_owned()));
+        assert_eq!(out[1].id, Id::<Element>::from_text("c".to_owned()));
         assert_eq!(out[1].opacity.get(), 0.5); // fade in at t=0.5
-        assert_eq!(out[2].id, ElementId("b".to_owned()));
+        assert_eq!(out[2].id, Id::<Element>::from_text("b".to_owned()));
         assert_eq!(out[2].opacity.get(), 0.5); // fade out at t=0.5
     }
 

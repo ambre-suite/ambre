@@ -5,7 +5,8 @@
 //! by name (`MURMURE-551`). A pick writes the name into the draft, and a
 //! mention over it rides with the message (`MURMURE-552`).
 
-use ambre_bus::{MentionTarget, UserId};
+use ambre_bus::MentionTarget;
+use ambre_core::id::{Id, User};
 use ambre_core::{ByteCount, ByteOffset, ViewPoint};
 
 use crate::Region;
@@ -133,10 +134,10 @@ fn matches(name: &ambre_core::DisplayName, query: &str) -> bool {
 /// order. `me` is never offered.
 pub fn offers(
     query: &str,
-    members: &[(UserId, ambre_core::DisplayName)],
-    me: Option<UserId>,
+    members: &[(Id<User>, ambre_core::DisplayName)],
+    me: Option<Id<User>>,
 ) -> Vec<Offer> {
-    let mut kept: Vec<&(UserId, ambre_core::DisplayName)> = members
+    let mut kept: Vec<&(Id<User>, ambre_core::DisplayName)> = members
         .iter()
         .filter(|(user, name)| Some(*user) != me && matches(name, query))
         .collect();
@@ -169,7 +170,7 @@ mod tests {
     #[test]
     fn an_offer_debugs_its_name_length_alone() {
         let name = ambre_core::DisplayName::new("Secretary").expect("a name");
-        let members = [(UserId::new(), name)];
+        let members = [(Id::<User>::mint(), name)];
         let found = offers("sec", &members, None);
         let shown = format!("{found:?}");
         assert!(!shown.contains("Secretary"), "{shown}");
@@ -227,7 +228,7 @@ mod tests {
     /// by name, matched on the start of any word, and never the writer.
     #[test]
     fn the_channel_leads_and_members_follow_by_name() {
-        let (alice, bob, carol) = (UserId::new(), UserId::new(), UserId::new());
+        let (alice, bob, carol) = (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
         let members = vec![
             (carol, ambre_core::DisplayName::new("carol Chen").unwrap()),
             (bob, ambre_core::DisplayName::new("Bob").unwrap()),

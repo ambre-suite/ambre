@@ -8,10 +8,9 @@ use std::collections::{HashMap, HashSet};
 use ambre_bus::{
     Mention, MentionTarget, MessageDraft, MurmureEvent, Notice, Timestamp, Unreadable,
 };
+use ambre_core::id::{Channel, Document, Id, Meta, Segment, User};
 use ambre_core::schema::SchemaError;
-use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, MetaId, SegmentId, Seq, SnapshotBytes, UserId,
-};
+use ambre_core::{DeltaBytes, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
 use crate::channel::push_segment_entry;
@@ -40,7 +39,7 @@ fn snapshot(doc: &LoroDoc) -> SnapshotBytes {
 }
 
 /// A segment document of `channel`, as a peer would have stored it.
-fn segment_doc(channel: ChannelId) -> LoroDoc {
+fn segment_doc(channel: Id<Channel>) -> LoroDoc {
     let doc = LoroDoc::new();
     schema::write_header(&doc, DocumentKind::Segment, channel, NOW).expect("header");
     doc.commit();
@@ -49,22 +48,22 @@ fn segment_doc(channel: ChannelId) -> LoroDoc {
 
 /// A stored channel with one final, one closing and one active segment.
 struct Stored {
-    channel: ChannelId,
-    meta_id: MetaId,
+    channel: Id<Channel>,
+    meta_id: Id<Meta>,
     meta: SnapshotBytes,
-    final_id: SegmentId,
-    closing_id: SegmentId,
-    active_id: SegmentId,
-    segments: HashMap<SegmentId, SnapshotBytes>,
+    final_id: Id<Segment>,
+    closing_id: Id<Segment>,
+    active_id: Id<Segment>,
+    segments: HashMap<Id<Segment>, SnapshotBytes>,
 }
 
 fn stored_channel() -> Stored {
-    let channel = ChannelId::new();
+    let channel = Id::<Channel>::mint();
     let (meta_id, final_id, closing_id, active_id) = (
-        MetaId::new(),
-        SegmentId::new(),
-        SegmentId::new(),
-        SegmentId::new(),
+        Id::<Meta>::mint(),
+        Id::<Segment>::mint(),
+        Id::<Segment>::mint(),
+        Id::<Segment>::mint(),
     );
     let meta = LoroDoc::new();
     schema::write_header(&meta, DocumentKind::Meta, channel, NOW).expect("header");
@@ -103,7 +102,7 @@ fn open(stored: &Stored) -> ChannelState {
 
 /// A second peer of the same channel, opened from the first one's documents.
 /// Who signed what `from` wrote in `segment`: `user`, under its session.
-fn signer(from: &ChannelState, segment: SegmentId, user: UserId) -> Signer {
+fn signer(from: &ChannelState, segment: Id<Segment>, user: Id<User>) -> Signer {
     Signer {
         peer: from.peer(segment.document_id()).expect("a session"),
         user: Some(user),
@@ -144,8 +143,8 @@ fn root_keys(doc: &LoroDoc) -> Vec<String> {
 
 #[test]
 fn a_channel_is_held_as_its_documents_apart() {
-    let state =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
+        .expect("create");
     assert_ne!(
         state.meta_id().document_id(),
         state.active_id().document_id()
@@ -176,7 +175,7 @@ fn a_channel_is_held_as_its_documents_apart() {
 
 #[test]
 fn every_document_carries_a_header_and_the_foundation_version() {
-    let channel = ChannelId::new();
+    let channel = Id::<Channel>::mint();
     let state = ChannelState::create(channel, ChannelType::Private, None, NOW).expect("create");
     for (id, kind) in [
         (state.meta_id().document_id(), DocumentKind::Meta),
@@ -365,7 +364,7 @@ fn a_remote_delta_reaches_the_document_it_names_and_no_other() {
 fn a_delta_for_a_document_the_channel_does_not_hold_is_refused() {
     let stored = stored_channel();
     let mut state = open(&stored);
-    let stranger = DocumentId::new();
+    let stranger = Id::<Document>::mint();
     assert_eq!(
         state
             .apply_remote(stranger, (&DeltaBytes::new(vec![1, 2, 3])).into())
@@ -389,7 +388,7 @@ fn a_delta_for_a_document_the_channel_does_not_hold_is_refused() {
 #[test]
 fn a_document_naming_another_channel_is_refused() {
     let mut stored = stored_channel();
-    let other = ChannelId::new();
+    let other = Id::<Channel>::mint();
     stored
         .segments
         .insert(stored.active_id, snapshot(&segment_doc(other)));
@@ -412,7 +411,7 @@ fn a_document_naming_another_channel_is_refused() {
 #[test]
 fn a_meta_document_of_another_channel_is_refused() {
     let stored = stored_channel();
-    let other = ChannelId::new();
+    let other = Id::<Channel>::mint();
     let refused = ChannelState::open(other, stored.meta_id, &stored.meta, &stored.segments);
     assert!(matches!(
         refused,
@@ -541,10 +540,10 @@ fn bytes_the_crdt_engine_refuses_never_reach_the_header_check() {
 
 #[test]
 fn a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author() {
-    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     let first = state.send(&draft("hello"), alice, NOW).expect("send");
     let second = state.send(&draft("again"), alice, NOW).expect("send");
     assert_eq!(first.segment, state.active_id());
@@ -562,10 +561,10 @@ fn a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author() {
 
 #[test]
 fn a_sent_message_carries_a_content_summary_with_its_mentions() {
-    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
-    let (bob, carol) = (UserId::new(), UserId::new());
+    let (bob, carol) = (Id::<User>::mint(), Id::<User>::mint());
     let with_mentions = MessageDraft {
         text: "@bob @carol @bob @channel".to_owned(),
         styles: Vec::new(),
@@ -589,13 +588,13 @@ fn a_sent_message_carries_a_content_summary_with_its_mentions() {
         ],
     };
     let sent = state
-        .send(&with_mentions, UserId::new(), NOW)
+        .send(&with_mentions, Id::<User>::mint(), NOW)
         .expect("send");
     assert_eq!(sent.summary.kind, ambre_bus::ActivityKind::Content);
     assert_eq!(sent.summary.mentions, [bob, carol]);
     assert_eq!(sent.summary.mentions_all, ambre_bus::MentionScope::All);
     let plain = state
-        .send(&draft("no one"), UserId::new(), NOW)
+        .send(&draft("no one"), Id::<User>::mint(), NOW)
         .expect("send");
     assert!(plain.summary.mentions.is_empty());
     assert_eq!(plain.summary.mentions_all, ambre_bus::MentionScope::Named);
@@ -603,11 +602,15 @@ fn a_sent_message_carries_a_content_summary_with_its_mentions() {
 
 #[test]
 fn sending_a_message_changes_no_other_message() {
-    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
-    state.send(&draft("one"), UserId::new(), NOW).expect("send");
-    state.send(&draft("two"), UserId::new(), NOW).expect("send");
+    state
+        .send(&draft("one"), Id::<User>::mint(), NOW)
+        .expect("send");
+    state
+        .send(&draft("two"), Id::<User>::mint(), NOW)
+        .expect("send");
     let list = state
         .doc(state.active_id().document_id())
         .expect("active")
@@ -616,7 +619,7 @@ fn sending_a_message_changes_no_other_message() {
         .filter_map(|i| list.get(i).map(|v| v.get_deep_value()))
         .collect();
     state
-        .send(&draft("three"), UserId::new(), NOW)
+        .send(&draft("three"), Id::<User>::mint(), NOW)
         .expect("send");
     let after: Vec<LoroValue> = (0..list.len())
         .filter_map(|i| list.get(i).map(|v| v.get_deep_value()))
@@ -627,11 +630,11 @@ fn sending_a_message_changes_no_other_message() {
 
 #[test]
 fn a_sent_delta_brings_a_peer_to_the_same_messages() {
-    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
     let mut bob = peer_of(&alice);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let sent = alice.send(&draft("hi bob"), author, NOW).expect("send");
     let events = bob
         .apply_signed(
@@ -654,11 +657,11 @@ fn a_sent_delta_brings_a_peer_to_the_same_messages() {
 /// names none (`MURMURE-507`).
 #[test]
 fn a_remote_delta_names_the_message_it_brought_once() {
-    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
     let mut bob = peer_of(&alice);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let sent = alice.send(&draft("hi bob"), author, NOW).expect("send");
     assert_eq!(alice.take_arrived(), None, "an own send");
     bob.apply_signed(
@@ -677,11 +680,11 @@ fn a_remote_delta_names_the_message_it_brought_once() {
 
 #[test]
 fn the_body_lives_in_a_text_and_no_map_holds_it() {
-    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
     state
-        .send(&draft("the body"), UserId::new(), NOW)
+        .send(&draft("the body"), Id::<User>::mint(), NOW)
         .expect("send");
     let list = state
         .doc(state.active_id().document_id())
@@ -705,11 +708,11 @@ fn the_body_lives_in_a_text_and_no_map_holds_it() {
 
 #[test]
 fn two_peers_typing_in_one_message_keep_both_texts() {
-    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
     let mut bob = peer_of(&alice);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let sent = alice.send(&draft("base"), author, NOW).expect("send");
     let by = signer(&alice, sent.segment, author);
     bob.apply_signed(sent.segment.document_id(), Seq(1), &sent.delta, by)
@@ -765,7 +768,7 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
 #[test]
 fn meta_holds_no_member_list() {
     let state = ChannelState::create(
-        ChannelId::new(),
+        Id::<Channel>::mint(),
         ChannelType::Private,
         Some(&crate::fit_name("team")),
         NOW,
@@ -789,13 +792,13 @@ fn meta_holds_no_member_list() {
 
 #[test]
 fn an_unset_property_is_an_absent_key() {
-    let unnamed =
-        ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW).expect("create");
+    let unnamed = ChannelState::create(Id::<Channel>::mint(), ChannelType::Direct, None, NOW)
+        .expect("create");
     let channel =
         crate::schema::channel(unnamed.doc(unnamed.meta_id().document_id()).expect("meta"));
     assert!(channel.get(ChannelKey::Name).is_none());
     let named = ChannelState::create(
-        ChannelId::new(),
+        Id::<Channel>::mint(),
         ChannelType::Public,
         Some(&crate::fit_name("general")),
         NOW,
@@ -827,7 +830,7 @@ fn second_member(state: &ChannelState) -> ChannelState {
 
 #[test]
 fn a_name_one_member_sets_reaches_every_member() {
-    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW)
+    let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Direct, None, NOW)
         .expect("create")
         .identify();
     let mut bob = second_member(&alice);
@@ -870,11 +873,11 @@ fn a_name_one_member_sets_reaches_every_member() {
 
 #[test]
 fn a_notice_names_the_member_who_joins_for_every_member() {
-    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW)
+    let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Direct, None, NOW)
         .expect("create")
         .identify();
     let mut bob = peer_of(&alice);
-    let (author, carol) = (UserId::new(), UserId::new());
+    let (author, carol) = (Id::<User>::mint(), Id::<User>::mint());
 
     let sent = alice.announce(carol, author, NOW).expect("announce");
     assert_eq!(sent.segment, alice.active_id());
@@ -898,11 +901,11 @@ fn a_notice_names_the_member_who_joins_for_every_member() {
 
 #[test]
 fn a_notice_of_a_kind_no_build_wrote_is_skipped() {
-    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Direct, None, NOW)
+    let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Direct, None, NOW)
         .expect("create")
         .identify();
     alice
-        .announce(UserId::new(), UserId::new(), NOW)
+        .announce(Id::<User>::mint(), Id::<User>::mint(), NOW)
         .expect("announce");
     let doc = alice.doc(alice.active_id().document_id()).expect("held");
     let Some(message) = crate::schema::root_list(doc, Root::Messages)
@@ -920,7 +923,7 @@ fn a_notice_of_a_kind_no_build_wrote_is_skipped() {
 #[test]
 fn clearing_a_name_removes_its_key() {
     let mut alice = ChannelState::create(
-        ChannelId::new(),
+        Id::<Channel>::mint(),
         ChannelType::Direct,
         Some(&crate::fit_name("trip")),
         NOW,
@@ -949,9 +952,13 @@ fn clearing_a_name_removes_its_key() {
 #[test]
 fn only_a_direct_message_takes_a_name_from_a_member() {
     for kind in [ChannelType::Private, ChannelType::Public] {
-        let mut state =
-            ChannelState::create(ChannelId::new(), kind, Some(&crate::fit_name("team")), NOW)
-                .expect("create");
+        let mut state = ChannelState::create(
+            Id::<Channel>::mint(),
+            kind,
+            Some(&crate::fit_name("team")),
+            NOW,
+        )
+        .expect("create");
         assert_eq!(
             state
                 .name_direct(Some(&crate::fit_name("other")))
@@ -976,7 +983,7 @@ fn a_search_reads_the_held_segments_and_lists_the_rest() {
         .expect("create")
         .identify();
     writer
-        .send(&draft("the Été budget"), UserId::new(), NOW)
+        .send(&draft("the Été budget"), Id::<User>::mint(), NOW)
         .expect("send");
     let older = writer
         .snapshot(writer.active_id().document_id())
@@ -984,12 +991,14 @@ fn a_search_reads_the_held_segments_and_lists_the_rest() {
     stored.segments.insert(stored.final_id, older.clone());
     let mut state = open(&stored).identify();
     for text in ["budget review", "lunch"] {
-        state.send(&draft(text), UserId::new(), NOW).expect("send");
+        state
+            .send(&draft(text), Id::<User>::mint(), NOW)
+            .expect("send");
     }
     let query = parse_query("BUDG ete").expect("two words");
     let found = |state: &ChannelState| {
         let answer = state.search(&query);
-        let matches: Vec<(SegmentId, String)> = answer
+        let matches: Vec<(Id<Segment>, String)> = answer
             .matches
             .iter()
             .map(|m| (m.segment, m.message.text.clone()))
@@ -1015,7 +1024,7 @@ fn a_search_reads_the_held_segments_and_lists_the_rest() {
     );
     assert_eq!(matches, [(stored.final_id, "the Été budget".to_owned())]);
     let budget = parse_query("budget").expect("a word");
-    let segments: Vec<SegmentId> = state
+    let segments: Vec<Id<Segment>> = state
         .search(&budget)
         .matches
         .iter()
@@ -1028,7 +1037,7 @@ fn a_search_reads_the_held_segments_and_lists_the_rest() {
 
 #[test]
 fn a_malformed_message_is_skipped_and_the_rest_still_reads() {
-    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
     let doc = state.doc(state.active_id().document_id()).expect("active");
@@ -1037,7 +1046,7 @@ fn a_malformed_message_is_skipped_and_the_rest_still_reads() {
         .expect("push");
     doc.commit();
     state
-        .send(&draft("fine"), UserId::new(), NOW)
+        .send(&draft("fine"), Id::<User>::mint(), NOW)
         .expect("send");
     let messages = state.messages(state.active_id()).expect("messages");
     assert_eq!(messages.len(), 1);
@@ -1060,7 +1069,7 @@ fn opening_takes_meta_then_its_live_segments_and_never_a_final_one() {
     let Ok(Opening::OpenSegments(asked)) = opening.ready(stored.meta_id.document_id()) else {
         panic!("meta names the live segments");
     };
-    let asked: HashSet<SegmentId> = asked.into_iter().collect();
+    let asked: HashSet<Id<Segment>> = asked.into_iter().collect();
     assert_eq!(
         asked,
         HashSet::from([stored.closing_id, stored.active_id]),
@@ -1141,7 +1150,7 @@ fn a_meta_delta_during_the_opening_reaches_the_open_channel() {
 #[test]
 fn a_meta_of_another_channel_ends_the_opening() {
     let stored = stored_channel();
-    let mut opening = OpeningChannel::new(ChannelId::new(), stored.meta_id);
+    let mut opening = OpeningChannel::new(Id::<Channel>::mint(), stored.meta_id);
     assert_eq!(
         opening.receive(stored.meta_id.document_id(), (&stored.meta).into()),
         Receipt::Kept
@@ -1340,9 +1349,9 @@ fn an_older_segment_asked_for_arrives_then_loads() {
 
 /// A stored channel with two final segments, spanning `from` to the next
 /// one, then an active one. Returns it with the two finals, oldest first.
-fn two_finals() -> (Stored, SegmentId, SegmentId) {
+fn two_finals() -> (Stored, Id<Segment>, Id<Segment>) {
     let mut stored = stored_channel();
-    let (older, newer) = (SegmentId::new(), SegmentId::new());
+    let (older, newer) = (Id::<Segment>::mint(), Id::<Segment>::mint());
     let meta = LoroDoc::new();
     schema::write_header(&meta, DocumentKind::Meta, stored.channel, NOW).expect("header");
     for (id, from, state) in [
@@ -1388,7 +1397,7 @@ fn a_band_spans_its_segment_up_to_the_next_one() {
         "a live segment is no band"
     );
     assert_eq!(
-        state.band(DocumentId::new(), Unreadable::Damaged),
+        state.band(Id::<Document>::mint(), Unreadable::Damaged),
         None,
         "nor is a document meta does not list"
     );
@@ -1438,7 +1447,7 @@ fn only_a_listed_final_segment_is_asked_again() {
     let mut state = open(&stored);
     assert_eq!(state.retry(stored.active_id), None);
     assert_eq!(state.retry(stored.closing_id), None);
-    assert_eq!(state.retry(SegmentId::new()), None);
+    assert_eq!(state.retry(Id::<Segment>::mint()), None);
     assert!(!state.lacks_closing(stored.closing_id), "held");
     assert!(!state.lacks_closing(stored.final_id), "no closing segment");
 }
@@ -1483,7 +1492,7 @@ fn an_older_segment_nobody_asked_for_is_not_ready() {
 fn a_channel_takes_the_longest_name() {
     let longest = crate::fit_name(&"\u{1F600}".repeat(ambre_core::NAME_MAX_CHARS));
     for kind in [ChannelType::Public, ChannelType::Private] {
-        let state = ChannelState::create(ChannelId::new(), kind, Some(&longest), NOW);
+        let state = ChannelState::create(Id::<Channel>::mint(), kind, Some(&longest), NOW);
         assert!(state.is_ok());
     }
 }

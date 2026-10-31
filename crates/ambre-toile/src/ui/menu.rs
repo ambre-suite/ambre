@@ -21,10 +21,11 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementCount, ElementId, ElementKind,
-    LockState, NodeId, Reaction, ReactionKind, ToileCommand, ZTarget,
+    AlignOp, DisplayElement, DisplayNode, DisplayViewport, ElementCount, ElementKind, LockState,
+    NodeId, Reaction, ReactionKind, ToileCommand, ZTarget,
 };
 use ambre_commands::CommandId;
+use ambre_core::id::{Element, Id};
 use kurbo::{Rect, Vec2};
 
 /// Diagonal offset, on each axis, of a duplicate so the copy is visibly
@@ -178,7 +179,7 @@ pub struct CtxScope {
     pub locks: LockMix,
     /// The frame that geometrically contains the whole selection (if any and not
     /// itself selected) -> Add to frame applies.
-    pub containing_frame: Option<ElementId>,
+    pub containing_frame: Option<Id<Element>>,
     /// A selected element is held by a frame, whatever its box -> Remove from
     /// frame applies (`TOILE-UI-384`).
     pub framed: FrameHeld,
@@ -251,7 +252,10 @@ impl LockMix {
 
 /// Find a selected element by id (linear over the selection's data, which the
 /// Logic thread sends whole, off-screen included -- `TOILE-UI-134`).
-fn find_element<'a>(elements: &'a [DisplayElement], id: &ElementId) -> Option<&'a DisplayElement> {
+fn find_element<'a>(
+    elements: &'a [DisplayElement],
+    id: &Id<Element>,
+) -> Option<&'a DisplayElement> {
     elements.iter().find(|e| &e.id == id)
 }
 
@@ -267,10 +271,10 @@ fn rect_contains_rect(outer: Rect, inner: Rect) -> bool {
 /// rest of the resolution path (frame lookups may later honor it); the
 /// empty-canvas case ignores everything else.
 pub fn ctx_scope_for(
-    selection: &[ElementId],
-    _group_scope: Option<&ElementId>,
+    selection: &[Id<Element>],
+    _group_scope: Option<&Id<Element>>,
     selected: &[DisplayElement],
-    framed: &[ElementId],
+    framed: &[Id<Element>],
     display: &DisplayViewport,
 ) -> CtxScope {
     if selection.is_empty() {
@@ -315,9 +319,9 @@ pub fn ctx_scope_for(
 /// front-most (visually top) frame first.
 fn containing_frame(
     display: &DisplayViewport,
-    selection: &[ElementId],
+    selection: &[Id<Element>],
     union: Rect,
-) -> Option<ElementId> {
+) -> Option<Id<Element>> {
     display.nodes.iter().rev().find_map(|n| match n {
         DisplayNode::Element(e)
             if e.kind == ElementKind::Frame
@@ -444,7 +448,7 @@ pub fn context_menu_ids(scope: &CtxScope) -> Vec<Option<CommandId>> {
 /// document itself and answers nothing for a non-group beside a group
 /// (`TOILE-264`). An empty selection sends nothing. Pure, so the chord's
 /// shape is host-tested here rather than through the key handler.
-pub fn ungroup_chord(selection: &[ElementId]) -> Option<ToileCommand> {
+pub fn ungroup_chord(selection: &[Id<Element>]) -> Option<ToileCommand> {
     (!selection.is_empty()).then(|| ToileCommand::UngroupElements {
         groups: selection.to_vec(),
     })
@@ -458,8 +462,8 @@ pub fn ungroup_chord(selection: &[ElementId]) -> Option<ToileCommand> {
 /// (`TOILE-UI-152`).
 pub fn resolve_menu_command(
     id: CommandId,
-    selection: &[ElementId],
-    _group_scope: Option<&ElementId>,
+    selection: &[Id<Element>],
+    _group_scope: Option<&Id<Element>>,
     selected: &[DisplayElement],
     display: &DisplayViewport,
 ) -> Option<Vec<ToileCommand>> {
@@ -483,7 +487,7 @@ pub fn resolve_menu_command(
         // (`TOILE-094`). A non-group id is skipped here, not left for Logic to
         // reject; a selection with no group sends nothing.
         UNGROUP => {
-            let groups: Vec<ElementId> = selection
+            let groups: Vec<Id<Element>> = selection
                 .iter()
                 .filter(|id| {
                     find_element(selected, id).is_some_and(|e| e.kind == ElementKind::Group)
@@ -554,7 +558,7 @@ pub fn resolve_menu_command(
 /// (`None`) the local user's reaction. The `Reaction` is cloned per target.
 /// `ts` is left at 0 for the MVP, and the derived tally ignores it. Ordering
 /// by time is a later concern, once a UI time source feeds the picker.
-fn react_each(selection: &[ElementId], reaction: Option<Reaction>) -> Vec<ToileCommand> {
+fn react_each(selection: &[Id<Element>], reaction: Option<Reaction>) -> Vec<ToileCommand> {
     selection
         .iter()
         .map(|id| ToileCommand::React {
@@ -565,7 +569,7 @@ fn react_each(selection: &[ElementId], reaction: Option<Reaction>) -> Vec<ToileC
 }
 
 /// The one align / distribute batch for the whole selection.
-fn align(selection: &[ElementId], op: AlignOp) -> Vec<ToileCommand> {
+fn align(selection: &[Id<Element>], op: AlignOp) -> Vec<ToileCommand> {
     vec![ToileCommand::AlignElements {
         ids: selection.to_vec(),
         op,
@@ -573,7 +577,7 @@ fn align(selection: &[ElementId], op: AlignOp) -> Vec<ToileCommand> {
 }
 
 /// One `Reorder` command per selected element, targeting `to`.
-fn reorder_each(selection: &[ElementId], to: ZTarget) -> Vec<ToileCommand> {
+fn reorder_each(selection: &[Id<Element>], to: ZTarget) -> Vec<ToileCommand> {
     selection
         .iter()
         .map(|id| ToileCommand::Reorder {
@@ -586,7 +590,7 @@ fn reorder_each(selection: &[ElementId], to: ZTarget) -> Vec<ToileCommand> {
 /// Build the `SetFrameChildren` command adding the selection to its containing
 /// frame; empty when no enclosing frame exists.
 fn add_to_frame(
-    selection: &[ElementId],
+    selection: &[Id<Element>],
     selected: &[DisplayElement],
     display: &DisplayViewport,
 ) -> Vec<ToileCommand> {
@@ -615,8 +619,8 @@ mod tests {
     };
     use kurbo::Affine;
 
-    fn eid(s: &str) -> ElementId {
-        ElementId(s.to_owned())
+    fn eid(s: &str) -> Id<Element> {
+        Id::<Element>::from_text(s.to_owned())
     }
 
     fn elem(

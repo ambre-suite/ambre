@@ -24,13 +24,14 @@ use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
 use ambre_bus::app::prose::WordCount;
-use ambre_bus::{AppEvent, DocumentId, LogicCommand, Outbox, PasteSource, SendOutcome, UiEvent};
+use ambre_bus::{AppEvent, LogicCommand, Outbox, PasteSource, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
     BusyPublisher, ContentKind, ContentRepaint, CssSize, FrameStats, InputEvent, LayerRepaint,
     NoticePublisher, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_chrome::commands::{ClipboardWrite, Modifiers};
+use ambre_core::id::{Document, Id};
 use ambre_core::{CssPoint, CssPx, ViewPoint, ViewPx};
 use ambre_draw::{Consumed, DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
@@ -74,7 +75,7 @@ fn canvas_origin() -> CssPoint {
 
 /// One open Prose document on the canvas.
 pub struct ProseView {
-    document_id: DocumentId,
+    document_id: Id<Document>,
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     /// The edits' path out: a full channel holds them here (`BUS-011`).
     outbox: Outbox,
@@ -119,7 +120,7 @@ fn view_size(size: CssSize) -> (ViewPx, ViewPx) {
 impl ProseView {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        document_id: DocumentId,
+        document_id: Id<Document>,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
         size: CssSize,
@@ -727,7 +728,7 @@ impl ProseView {
 
     /// Another document of the same type: the state starts over, and the
     /// first layout of the new one arrives from the Logic thread.
-    pub fn set_document(&mut self, document_id: DocumentId) {
+    pub fn set_document(&mut self, document_id: Id<Document>) {
         self.document_id = document_id;
         self.state = ProseUiState::default();
         self.state.resize(self.size.0, self.size.1);
@@ -807,7 +808,7 @@ mod tests {
             ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
         let pipe = TextInput::create(&document, &cell);
         let mut view = ProseView::new(
-            DocumentId::new(),
+            Id::<Document>::mint(),
             to_logic,
             from_logic,
             CssSize::new(WholePx::new(800), WholePx::new(600)),
@@ -851,7 +852,7 @@ mod tests {
             ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(1));
         let (_to_ui, from_logic) =
             ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let mut view = ProseView::new(
             document_id,
             to_logic,
@@ -916,7 +917,7 @@ mod tests {
         let (_to_ui, from_logic) =
             ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(4));
         let mut view = ProseView::new(
-            DocumentId::new(),
+            Id::<Document>::mint(),
             to_logic,
             from_logic,
             CssSize::new(WholePx::new(800), WholePx::new(600)),

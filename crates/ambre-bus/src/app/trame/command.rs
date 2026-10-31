@@ -5,7 +5,7 @@
 //! clipboard, feature payloads) live in the sibling modules and arrive via glob.
 
 use super::*;
-use crate::UserId;
+use ambre_core::id::{Id, User};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- commands (UI -> Logic)
@@ -958,11 +958,11 @@ pub enum TrameCommand {
     /// may edit it (`trame-cell-editing`, Post-MVP). Soft
     /// client-side enforcement: an official client respects it, the Blind Relay
     /// cannot. Empty `allowed_user_ids` means owner-only. Identified by stable
-    /// [`UserId`](crate::UserId), not `pub_key` (survives key rotation).
+    /// [`Id<User>`](Id), not `pub_key` (survives key rotation).
     SetProtection {
         sheet_id: SheetId,
         range: CellRect,
-        allowed_user_ids: Vec<UserId>,
+        allowed_user_ids: Vec<Id<User>>,
         description: String,
     },
 

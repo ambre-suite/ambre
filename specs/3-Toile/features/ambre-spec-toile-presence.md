@@ -17,7 +17,7 @@ The only mandatory read. Stated in user terms: no container, no type, no functio
 status values are normative in `ambre-spec-template.md`.
 
 The behaviour is horizontal and is cited, never restated. The transport, the identity resolution, the keying
-by `UserId` and the shared colour are `1-Foundations/ambre-spec-presence.md`, `PRESENCE-001` to
+by `Id<User>` and the shared colour are `1-Foundations/ambre-spec-presence.md`, `PRESENCE-001` to
 `PRESENCE-010`. So are the whole-set event and the drop of an unresolvable anchor. This document holds Toile's
 own half: the board anchor, what the overlay paints, and the trail the receiver accumulates. Trame's slice is
 `2-Trame/features/ambre-spec-trame-selection.md section 3`.
@@ -111,7 +111,7 @@ has not changed:
 pub struct PresencePayload {
     pub name:          Option<DisplayName>,  // the sender's display name, cosmetic (`PRESENCE-004`)
     pub cursor:        Option<Point>,        // world space; None = the pointer left the board
-    pub selection:     Vec<ElementId>,       // the peer's selection, drawn as ghosts
+    pub selection:     Vec<Id<Element>>,       // the peer's selection, drawn as ghosts
     pub live_stroke:   Option<Vec<StrokePoint>>, // an in-flight stroke, before it commits
     pub laser:         Option<Point>,        // one highlighter point; None = lifted
     pub present_slide: Option<SlideIndex>,   // the presenter's slide (see the presentation feature)
@@ -119,8 +119,8 @@ pub struct PresencePayload {
 ```
 
 **No identity travels in the payload**, and the receiver keys the sample by the sender's resolved
-`UserId` (`TOILE-177`, `PRESENCE-002`, `PRESENCE-003`). The board anchor is what is Toile's own:
-a world point for the pointer and the laser, and the peer's `ElementId` set for the ghosts. Both
+`Id<User>` (`TOILE-177`, `PRESENCE-002`, `PRESENCE-003`). The board anchor is what is Toile's own:
+a world point for the pointer and the laser, and the peer's `Id<Element>` set for the ghosts. Both
 survive a structural change, which is `PRESENCE-007`.
 
 **Command** (`ambre-bus`): `Presence { payload, now }`, non-mutating, answered by an ephemeral: the
@@ -153,7 +153,7 @@ before the message existed. No peer is kept for good either way.
 
 **Steps, when a peer's sample arrives:**
 
-1. the sample is decoded and keyed by the `UserId` the transport resolved, never by anything the
+1. the sample is decoded and keyed by the `Id<User>` the transport resolved, never by anything the
    payload carries (`TOILE-177`);
 2. it replaces that peer's presence whole and is stamped with the local clock (`TOILE-178`);
 3. the whole live set travels to the view, which replaces its mirror with it, trails included
@@ -163,7 +163,7 @@ before the message existed. No peer is kept for good either way.
 
 1. decode the sample, and drop the ephemeral on a decode failure -- presence is best effort
    (`TOILE-181`);
-2. record it under the sender's `UserId`, replacing that peer's previous sample;
+2. record it under the sender's `Id<User>`, replacing that peer's previous sample;
 3. emit the event, and fold it into the render thread's mirror -- where the whole live set should
    travel (`PRESENCE-009`);
 4. adopt the carried slide when this viewer follows that sender
@@ -195,7 +195,7 @@ The overlay is one pass, above all content, painted in screen space and never cu
 (`features/ambre-spec-toile-reactions.md`), so a chip is never hidden by a ghost. The pass is skipped
 whole when no peer is known.
 
-**The label is a hex handle today.** The overlay prints the first four bytes of the `UserId`, because
+**The label is a hex handle today.** The overlay prints the first four bytes of the `Id<User>`, because
 nothing hands it the display name the member list already carries (`TOILE-UI-076`).
 
 **What sends nothing.** No gesture emits `Presence`, and no tool produces a highlighter point
@@ -208,7 +208,7 @@ nothing hands it the display name the member list already carries (`TOILE-UI-076
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| The anchor is a world point for the pointer and an `ElementId` set for the ghosts | one anchor for both | it either drops the pointer to the nearest element or makes a ghost a rectangle that stops following its shape. The two halves answer two questions: a pointer is between elements as often as on one, so it has no identity to name and a world point is already invariant under everything but a pan, which is the viewer's own; a ghost outlines elements, which do have identities, and those survive a move, a restyle and a regroup (`PRESENCE-007`) |
+| The anchor is a world point for the pointer and an `Id<Element>` set for the ghosts | one anchor for both | it either drops the pointer to the nearest element or makes a ghost a rectangle that stops following its shape. The two halves answer two questions: a pointer is between elements as often as on one, so it has no identity to name and a world point is already invariant under everything but a pan, which is the viewer's own; a ghost outlines elements, which do have identities, and those survive a move, a restyle and a regroup (`PRESENCE-007`) |
 | A sample is the peer's whole presence, and a missing field means absent | a per-field patch | it needs one presence-or-absence flag per field and makes the receiver's state depend on the order samples arrive in, so two peers can disagree about which of two samples cleared what. Replacing costs the sender the fields that did not change, and buys a state that is exactly the last sample received |
 | The trail is accumulated by the receiver | streaming the whole trail in each sample | one point per frame is a fixed sample cost whatever the trail length, and a lost sample shortens the trail instead of breaking it |
 | The highlighter never becomes an element | committing the trail as a stroke | it is a pointing gesture during a discussion; an element would enter the history, the undo stack and every export |

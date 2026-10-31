@@ -12,9 +12,9 @@
 // callback the launcher maps to the matching `ToileCommand`.
 // ============================================================================
 
-use ambre_bus::UserId;
 use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
 use ambre_core::Utf16Offset;
+use ambre_core::id::{Id, User};
 use leptos::html;
 use leptos::prelude::*;
 
@@ -32,8 +32,8 @@ pub fn PresenterPanel(
     slide: RwSignal<SlidePosition>,
     notes: RwSignal<String>,
     broadcasting: RwSignal<Broadcast>,
-    following: RwSignal<Option<UserId>>,
-    presenter_peer: RwSignal<Option<UserId>>,
+    following: RwSignal<Option<Id<User>>>,
+    presenter_peer: RwSignal<Option<Id<User>>>,
     on_intent: Callback<PresenterIntent>,
 ) -> impl IntoView {
     let notes_ref = NodeRef::<html::Textarea>::new();

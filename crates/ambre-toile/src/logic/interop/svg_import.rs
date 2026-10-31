@@ -27,7 +27,7 @@
 //! rather than dropped in silence (`TOILE-IO-081`).
 //!
 //! **Groups.** The spec maps `<g>` to a Toile `group`. A group is created only via
-//! `GroupElements { ids }`, which needs the `ElementId`s the engine mints *after*
+//! `GroupElements { ids }`, which needs the `Id<Element>`s the engine mints *after*
 //! `CreateElement` is applied -- ids an offline converter cannot know. So the
 //! converter speaks in slots. It imports the children as elements, with the group's
 //! transform baked into their geometry via `abs_transform` / abs bounds so geometry
@@ -339,7 +339,7 @@ fn import_image(
 
 /// Append one `CreateElement` for an element occupying `rect`, plus its imported
 /// style (index-aligned into `batch.styles`). Return the slot index the apply
-/// pass will resolve to a freshly minted `ElementId`.
+/// pass will resolve to a freshly minted `Id<Element>`.
 ///
 /// Style rides a separate `styles` slot rather than `CreateElement` because the
 /// CRDT stores `ElementStyle` as an independent LWW register. The apply pass

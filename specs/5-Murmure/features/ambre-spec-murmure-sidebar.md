@@ -99,7 +99,7 @@ writes the catalogue (`MURMURE-286`).
 ```rust
 pub struct PersonalGroupId(Uuid);       // minted by the user's client
 pub enum SidebarGroup {
-    Category { space: SpaceId, category: Option<CategoryId> },
+    Category { space: Id<Space>, category: Option<Id<Category>> },
     Personal(PersonalGroupId),          // not built: joins with the personal sidebar
     Private,
     Direct,

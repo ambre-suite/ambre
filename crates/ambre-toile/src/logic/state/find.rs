@@ -10,7 +10,8 @@
 use ambre_core::StepDirection;
 
 use crate::logic::command::{FindOptions, FindQuery, FindResults, ToileEvent, ToileOutcome};
-use crate::logic::model::{ElementId, NodeId};
+use crate::logic::model::NodeId;
+use ambre_core::id::{Element, Id};
 
 use super::ToileState;
 use super::codec::has_type;
@@ -25,7 +26,7 @@ impl ToileState {
     pub(super) fn find(
         &self,
         query: Option<&FindQuery>,
-        from: Option<&ElementId>,
+        from: Option<&Id<Element>>,
         direction: StepDirection,
     ) -> ToileOutcome {
         let hits = query.map_or_else(Vec::new, |query| self.find_hits(query));
@@ -35,9 +36,9 @@ impl ToileState {
 
     /// Text-bearing element ids matching `query`, in paint order. The
     /// `layers` walk comes first, then any element absent from `layers`,
-    /// appended in `ElementId` order (the well-formedness fallback). A
+    /// appended in `Id<Element>` order (the well-formedness fallback). A
     /// concurrently dropped `layers` entry therefore never hides a hit.
-    fn find_hits(&self, query: &FindQuery) -> Vec<ElementId> {
+    fn find_hits(&self, query: &FindQuery) -> Vec<Id<Element>> {
         let mut hits = Vec::new();
         let mut seen = std::collections::HashSet::new();
         for node in &self.layers {
@@ -49,7 +50,7 @@ impl ToileState {
             }
         }
         // Fallback: text-bearing elements missing from `layers`, id-ordered.
-        let mut orphans: Vec<ElementId> = self
+        let mut orphans: Vec<Id<Element>> = self
             .bounds
             .keys()
             .filter(|id| !seen.contains(*id))
@@ -63,7 +64,7 @@ impl ToileState {
 
     /// Whether the element's searchable text (sticky / text body, frame title)
     /// matches `query` under the given options. Non-text elements never match.
-    fn element_matches(&self, id: &ElementId, query: &FindQuery) -> bool {
+    fn element_matches(&self, id: &Id<Element>, query: &FindQuery) -> bool {
         let Some(em) = self.element_map(id) else {
             return false;
         };
@@ -85,10 +86,10 @@ impl ToileState {
 /// A `Backward` direction steps to the previous hit, else the next. A `from`
 /// that is no longer a hit restarts at the first.
 fn next_focus(
-    hits: &[ElementId],
-    from: Option<&ElementId>,
+    hits: &[Id<Element>],
+    from: Option<&Id<Element>>,
     direction: StepDirection,
-) -> Option<ElementId> {
+) -> Option<Id<Element>> {
     let first = hits.first().cloned();
     let Some(from) = from else {
         return first;

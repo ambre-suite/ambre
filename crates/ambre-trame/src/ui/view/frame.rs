@@ -9,7 +9,7 @@ impl TrameView {
     /// route-independent plumbing (queues, text pipe, anchor, theme) and the
     /// current canvas size. Then force a full repaint and a fresh initial
     /// viewport fetch for the new document. No-op if already current.
-    pub fn set_document(&mut self, document_id: DocumentId) {
+    pub fn set_document(&mut self, document_id: Id<Document>) {
         if self.document_id == document_id {
             return;
         }

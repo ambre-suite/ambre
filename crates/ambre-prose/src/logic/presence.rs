@@ -4,7 +4,7 @@
 //! A caret never enters the CRDT, never persists and is not an undo item
 //! (`PROSE-058`, `PROSE-UI-010`). Outbound, a local position becomes an encoded
 //! `loro::Cursor` inside a postcard frame. Inbound, a frame is keyed by the
-//! sender's canonical `UserId`. `ambre-sync` resolves that id from the
+//! sender's canonical `Id<User>`. `ambre-sync` resolves that id from the
 //! authenticated public key before the frame reaches this thread, so a peer
 //! cannot assert another user's caret (`PRESENCE-002`, `PRESENCE-003`).
 //!
@@ -16,7 +16,7 @@
 use loro::cursor::{Cursor, Side};
 use loro::{ContainerTrait, TreeID};
 
-use ambre_core::UserId;
+use ambre_core::id::{Id, User};
 
 use ambre_bus::app::prose::{DocOffset, EncodedCursor};
 
@@ -92,7 +92,7 @@ impl ProseState {
     /// Whether a session of `user_id` is open on this document, as far as this
     /// peer knows.
     #[must_use]
-    pub(crate) fn is_live(&self, user_id: &UserId) -> bool {
+    pub(crate) fn is_live(&self, user_id: &Id<User>) -> bool {
         self.live.contains(user_id)
     }
 
@@ -106,7 +106,7 @@ impl ProseState {
     /// delta lands.
     pub fn apply_ephemeral(
         &mut self,
-        from_user_id: UserId,
+        from_user_id: Id<User>,
         payload: &ambre_core::EphemeralBytes,
     ) -> Vec<ProseEvent> {
         let frame: PresencePayload = match postcard::from_bytes(payload.as_bytes()) {
@@ -132,7 +132,7 @@ impl ProseState {
     }
 
     /// Forget a peer's caret, when the session says they left.
-    pub fn drop_presence(&mut self, user_id: UserId) -> Vec<ProseEvent> {
+    pub fn drop_presence(&mut self, user_id: Id<User>) -> Vec<ProseEvent> {
         self.live.remove(&user_id);
         if self.presence.remove(&user_id).is_none() {
             return Vec::new();
@@ -143,7 +143,7 @@ impl ProseState {
     /// One remote peer's last resolved caret, for a test and for the overlay's
     /// own reads.
     #[must_use]
-    pub fn presence_of(&self, user_id: UserId) -> Option<CursorPosition> {
+    pub fn presence_of(&self, user_id: Id<User>) -> Option<CursorPosition> {
         self.presence.get(&user_id).map(|(position, _)| *position)
     }
 
@@ -216,8 +216,8 @@ mod tests {
     use crate::events::ProseCommand;
     use crate::logic::ProseState;
 
-    fn a_user(byte: u8) -> UserId {
-        UserId::from_bytes([byte; 16])
+    fn a_user(byte: u8) -> Id<User> {
+        Id::<User>::from_bytes([byte; 16])
     }
 
     #[test]

@@ -7,7 +7,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use ambre_core::ChannelId;
+use ambre_core::id::{Channel, Id};
 use ambre_murmure::MessageRef;
 use ambre_murmure::chrome::Notice;
 use wasm_bindgen::JsCast;
@@ -15,7 +15,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{Notification, NotificationOptions, NotificationPermission};
 
 /// What a click on a notice runs: open its channel at its message.
-pub(crate) type Opener = Rc<dyn Fn(ChannelId, Option<MessageRef>)>;
+pub(crate) type Opener = Rc<dyn Fn(Id<Channel>, Option<MessageRef>)>;
 
 /// What the page does with a notice, given the browser's permission.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

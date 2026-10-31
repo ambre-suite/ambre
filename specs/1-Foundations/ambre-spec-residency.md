@@ -118,7 +118,7 @@ A row sealed under one session may meet another.
 ```rust
 pub struct ActivitySummary {
     pub kind: ActivityKind,              // Content, Reaction, Edit or Other
-    pub mentions: Vec<UserId>,           // the users the update names
+    pub mentions: Vec<Id<User>>,         // the users the update names
     pub mentions_all: MentionScope,      // Named, or All: every member, an `@channel`
     pub anchor: Option<ActivityAnchor>,  // an application key, for example a thread root
 }

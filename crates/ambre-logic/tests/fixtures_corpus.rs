@@ -23,7 +23,8 @@ use std::path::{Path, PathBuf};
 
 use ambre_bus::{Col, Row, TrameCommand};
 use ambre_core::docfile::{AMBRE_VERSION, DocFileError, HEADER_LEN, write_ambre_plaintext};
-use ambre_core::{DocType, DocumentId, FixtureGen, ShapeBody, seeded_document_id};
+use ambre_core::id::{Document, Id};
+use ambre_core::{DocType, FixtureGen, ShapeBody, seeded_document_id};
 use ambre_logic::DocState;
 use ambre_logic::fixtures::{
     self, FixtureError, canonical_dump, digest_of, generate_into, load_fixture_from, manifest_for,
@@ -429,7 +430,7 @@ fn the_corpus_root_is_resolved_from_the_manifest_dir_not_the_cwd() {
 #[test]
 fn every_header_failure_is_typed_and_none_of_them_panics() {
     let good = TRAME.build().into_bytes();
-    let doc_id = DocumentId::from_bytes([0x33; 16]);
+    let doc_id = Id::<Document>::from_bytes([0x33; 16]);
 
     let cases: Vec<(&str, Vec<u8>, DocFileError)> = vec![
         (
@@ -531,7 +532,7 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
     // corpus that cannot be inspected at all.
     let murmure = write_ambre_plaintext(
         DocType::Murmure,
-        DocumentId::from_bytes([0x44; 16]),
+        Id::<Document>::from_bytes([0x44; 16]),
         &ambre_core::SnapshotBytes::new(b"payload".to_vec()),
     );
     match fixtures::import_fixture(&murmure) {
@@ -542,7 +543,7 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
     // container failure, typed like any other.
     let prose = write_ambre_plaintext(
         DocType::Prose,
-        DocumentId::from_bytes([0x44; 16]),
+        Id::<Document>::from_bytes([0x44; 16]),
         &ambre_core::SnapshotBytes::new(b"payload".to_vec()),
     );
     match fixtures::import_fixture(&prose) {
@@ -681,7 +682,7 @@ fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
 
 #[test]
 fn a_toile_dump_names_nodes_by_paint_order_not_by_element_id() {
-    // An `ElementId` is `(peer, counter)` -- exactly what two documents reached by
+    // An `Id<Element>` is `(peer, counter)` -- exactly what two documents reached by
     // different routes are allowed to differ in. Z-order is user-visible, so it
     // makes the canonical index.
     let build = |peer: ambre_core::PeerId| {

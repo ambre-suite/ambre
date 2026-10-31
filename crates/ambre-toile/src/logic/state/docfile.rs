@@ -5,7 +5,8 @@
 //! two methods bind them to a live board: the snapshot on the way out, the cache
 //! rebuild on the way in.
 
-use ambre_core::{DocumentId, docfile::DocFileError, schema::SchemaError};
+use ambre_core::id::{Document, Id};
+use ambre_core::{docfile::DocFileError, schema::SchemaError};
 
 use crate::logic::interop::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 
@@ -21,7 +22,7 @@ impl ToileState {
     /// that opens empty (`TOILE-IO-069`).
     pub fn export_ambre_plaintext(
         &self,
-        doc_id: DocumentId,
+        doc_id: Id<Document>,
     ) -> Option<ambre_core::PlaintextContainer> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
@@ -42,7 +43,7 @@ impl ToileState {
     pub fn import_ambre_plaintext(
         &mut self,
         data: &ambre_core::PlaintextContainer,
-    ) -> Result<(DocumentId, Vec<ToileEvent>), DocFileError> {
+    ) -> Result<(Id<Document>, Vec<ToileEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
         // The container has said its piece; the schema register inside the
         // payload is a separate gate and it runs before any container is used
@@ -79,8 +80,8 @@ mod tests {
 
     use super::*;
 
-    fn doc_id() -> DocumentId {
-        DocumentId::from_bytes([
+    fn doc_id() -> Id<Document> {
+        Id::<Document>::from_bytes([
             0x01, 0x8f, 0x2a, 0x3b, 0x7c, 0x4d, 0x70, 0x00, 0x80, 0x00, 0x11, 0x22, 0x33, 0x44,
             0x55, 0x66,
         ])

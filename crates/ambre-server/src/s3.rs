@@ -43,6 +43,8 @@ use std::time::Duration;
 #[allow(clippy::single_component_path_imports)]
 use tracing;
 
+use ambre_core::id::{Document, Id, Snapshot};
+
 use crate::error::AppError;
 use crate::payload::Payload;
 use crate::redis_keys::{FlushLockKey, PendingKey};
@@ -90,8 +92,8 @@ store_text! {
 /// S3 object key for a snapshot blob.
 pub fn format_s3_snapshot_key(
     env_prefix: &EnvPrefix,
-    document_id: &ambre_core::DocumentId,
-    snapshot_id: &ambre_core::SnapshotId,
+    document_id: &Id<Document>,
+    snapshot_id: &Id<Snapshot>,
 ) -> ambre_core::ObjectKey {
     ambre_core::ObjectKey(format!(
         "{env_prefix}/documents/{document_id}/snapshots/{snapshot_id}"
@@ -101,7 +103,7 @@ pub fn format_s3_snapshot_key(
 /// S3 object key for a delta blob (zero-padded seq).
 pub fn format_s3_delta_key(
     env_prefix: &EnvPrefix,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     seq: ambre_core::Seq,
 ) -> ambre_core::ObjectKey {
     let seq = seq.0;
@@ -121,7 +123,7 @@ pub fn format_s3_delta_key(
 /// single, slash-free object id (which also rejects `../` traversal).
 pub fn is_valid_snapshot_key(
     env_prefix: &EnvPrefix,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     s3_key: &ambre_core::ObjectKey,
 ) -> bool {
     let expected_prefix = format!("{env_prefix}/documents/{document_id}/snapshots/");
@@ -134,7 +136,7 @@ pub fn is_valid_snapshot_key(
 /// S3 object key for an encrypted media blob (content-addressed by hash).
 pub fn format_s3_media_key(
     env_prefix: &EnvPrefix,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     content_hash: &ambre_core::ContentHash,
 ) -> ambre_core::ObjectKey {
     let content_hash = content_hash.as_str();
@@ -202,10 +204,7 @@ pub async fn generate_presigned_download_url(
 
 /// The prefix every object of one document lives under: its snapshots, its
 /// deltas and its media.
-pub fn format_s3_document_prefix(
-    env_prefix: &EnvPrefix,
-    document_id: &ambre_core::DocumentId,
-) -> S3Prefix {
+pub fn format_s3_document_prefix(env_prefix: &EnvPrefix, document_id: &Id<Document>) -> S3Prefix {
     S3Prefix::new(format!("{env_prefix}/documents/{document_id}/"))
 }
 
@@ -527,7 +526,7 @@ trait DrainSink {
 /// The production sink: the object store, and the document's dead letters.
 struct S3Sink<'a> {
     state: &'a crate::state::AppState,
-    document: ambre_core::DocumentId,
+    document: Id<Document>,
 }
 
 impl DrainSink for S3Sink<'_> {
@@ -601,7 +600,6 @@ async fn drain_front(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::{DocumentId, SnapshotId};
 
     /// The deployment prefix `text`.
     fn env(text: &str) -> EnvPrefix {
@@ -657,7 +655,7 @@ mod tests {
         }
         let mut sink = Flaky::default();
         let processed = drain_front(
-            &PendingKey::of(&DocumentId::from_bytes([9u8; 16])),
+            &PendingKey::of(&Id::<Document>::from_bytes([9u8; 16])),
             &entries,
             &mut sink,
         )
@@ -683,8 +681,8 @@ mod tests {
 
     #[test]
     fn snapshot_key_format() {
-        let doc_id = DocumentId::from_bytes([0u8; 16]);
-        let snap_id = SnapshotId::from_bytes([1u8; 16]);
+        let doc_id = Id::<Document>::from_bytes([0u8; 16]);
+        let snap_id = Id::<Snapshot>::from_bytes([1u8; 16]);
         let key = format_s3_snapshot_key(&env("dev"), &doc_id, &snap_id);
         assert!(key.as_str().starts_with("dev/documents/"));
         assert!(key.as_str().contains("/snapshots/"));
@@ -696,8 +694,8 @@ mod tests {
 
     #[test]
     fn snapshot_key_differs_per_env() {
-        let doc_id = DocumentId::from_bytes([0u8; 16]);
-        let snap_id = SnapshotId::from_bytes([1u8; 16]);
+        let doc_id = Id::<Document>::from_bytes([0u8; 16]);
+        let snap_id = Id::<Snapshot>::from_bytes([1u8; 16]);
         let dev_key = format_s3_snapshot_key(&env("dev"), &doc_id, &snap_id);
         let prod_key = format_s3_snapshot_key(&env("prod"), &doc_id, &snap_id);
         assert_ne!(dev_key, prod_key);
@@ -706,28 +704,28 @@ mod tests {
 
     #[test]
     fn delta_key_zero_pads_seq() {
-        let doc_id = DocumentId::from_bytes([2u8; 16]);
+        let doc_id = Id::<Document>::from_bytes([2u8; 16]);
         let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq(42));
         assert!(key.as_str().ends_with("deltas/0000000042"));
     }
 
     #[test]
     fn delta_key_pads_small_seq() {
-        let doc_id = DocumentId::from_bytes([2u8; 16]);
+        let doc_id = Id::<Document>::from_bytes([2u8; 16]);
         let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq(7));
         assert!(key.as_str().ends_with("deltas/0000000007"));
     }
 
     #[test]
     fn delta_key_handles_large_seq() {
-        let doc_id = DocumentId::from_bytes([2u8; 16]);
+        let doc_id = Id::<Document>::from_bytes([2u8; 16]);
         let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq(9999999999u64));
         assert!(key.as_str().ends_with("deltas/9999999999"));
     }
 
     #[test]
     fn media_key_content_addressed() {
-        let doc_id = DocumentId::from_bytes([3u8; 16]);
+        let doc_id = Id::<Document>::from_bytes([3u8; 16]);
         let hash = "abc123def456".repeat(5) + "abcd";
         let content_hash = ambre_core::ContentHash::parse(&hash).expect("a hash");
         let key = format_s3_media_key(&env("dev"), &doc_id, &content_hash);
@@ -737,14 +735,15 @@ mod tests {
 
     #[test]
     fn snapshot_key_validation_scopes_to_document() {
-        let doc = DocumentId::from_bytes([9u8; 16]);
-        let other = DocumentId::from_bytes([8u8; 16]);
-        let valid = format_s3_snapshot_key(&env("dev"), &doc, &SnapshotId::from_bytes([1u8; 16]));
+        let doc = Id::<Document>::from_bytes([9u8; 16]);
+        let other = Id::<Document>::from_bytes([8u8; 16]);
+        let valid =
+            format_s3_snapshot_key(&env("dev"), &doc, &Id::<Snapshot>::from_bytes([1u8; 16]));
         assert!(is_valid_snapshot_key(&env("dev"), &doc, &valid));
 
         // Another document's snapshot prefix is rejected (cross-document IDOR).
         let foreign =
-            format_s3_snapshot_key(&env("dev"), &other, &SnapshotId::from_bytes([1u8; 16]));
+            format_s3_snapshot_key(&env("dev"), &other, &Id::<Snapshot>::from_bytes([1u8; 16]));
         assert!(!is_valid_snapshot_key(&env("dev"), &doc, &foreign));
 
         // Wrong env prefix, path traversal, empty id, and nested paths are rejected.

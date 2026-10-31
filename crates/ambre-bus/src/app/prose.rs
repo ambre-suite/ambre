@@ -30,7 +30,8 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use ambre_core::{CommentId, FootnoteId, Pt, ReplyId, Rgb, SuggestionId, UserId};
+use ambre_core::id::{self, Comment, Footnote, Id, Reply, User};
+use ambre_core::{Pt, Rgb};
 
 use super::grid::{CellPos, Col, ColCount, RowCount};
 
@@ -820,12 +821,12 @@ impl EncodedCursor {
 
 /// One live collaborator's caret, as the view is handed it.
 ///
-/// No colour: the view derives it from the `UserId` through
+/// No colour: the view derives it from the `Id<User>` through
 /// `ambre_draw::peer::peer_color`, so a collaborator keeps one colour across
 /// Prose, Trame and Toile (`PRESENCE-004`). No serde: it moves by value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteCursor {
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub display_name: Option<ambre_core::DisplayName>,
     pub position: CursorPosition,
 }
@@ -1082,7 +1083,7 @@ pub struct FindMatch {
 /// kept for the author to review (`PROSE-FEAT-098`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct FootnoteEntry {
-    pub footnote_id: FootnoteId,
+    pub footnote_id: Id<Footnote>,
     pub ordinal: Option<FootnoteOrdinal>,
     pub text: String,
 }
@@ -1104,9 +1105,9 @@ impl fmt::Debug for FootnoteEntry {
 /// command carried (`PROSE-FEAT-077`). The stamp is display only.
 #[derive(Clone, PartialEq, Eq)]
 pub struct CommentReply {
-    pub reply_id: ReplyId,
+    pub reply_id: Id<Reply>,
     pub author: Option<ambre_core::DisplayName>,
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub created_at: crate::Timestamp,
     pub text: String,
 }
@@ -1143,7 +1144,7 @@ ambre_core::define_flag! {
 /// `PROSE-FEAT-203`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommentThread {
-    pub comment_id: CommentId,
+    pub comment_id: Id<Comment>,
     pub anchor_block: Option<BlockId>,
     pub anchor_start: DocOffset,
     pub anchor_end: DocOffset,
@@ -1242,10 +1243,10 @@ pub struct LinkSpan {
 /// spans and stays one suggestion (`PROSE-FEAT-259`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Suggestion {
-    pub suggestion_id: SuggestionId,
+    pub suggestion_id: Id<id::Suggestion>,
     pub kind: SuggestionKind,
     pub author: Option<ambre_core::DisplayName>,
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub spans: Vec<SuggestionSpan>,
 }
 
@@ -1735,12 +1736,12 @@ pub enum ProseCommand {
     },
     /// Rewrite a note's body.
     EditFootnote {
-        footnote_id: FootnoteId,
+        footnote_id: Id<Footnote>,
         new_text: String,
     },
     /// Remove a note and every call to it (`PROSE-FEAT-070`).
     DeleteFootnote {
-        footnote_id: FootnoteId,
+        footnote_id: Id<Footnote>,
     },
 
     // -- Comments (`features/ambre-spec-prose-comments.md`) --
@@ -1754,32 +1755,32 @@ pub enum ProseCommand {
     },
     /// A reply at the end of the thread, which reopens it (`PROSE-FEAT-079`).
     ReplyToComment {
-        comment_id: CommentId,
+        comment_id: Id<Comment>,
         text: String,
         now: ambre_core::Timestamp,
     },
     /// Close a thread.
     ResolveComment {
-        comment_id: CommentId,
+        comment_id: Id<Comment>,
     },
     /// Reopen a thread, with no reply added.
     ReopenComment {
-        comment_id: CommentId,
+        comment_id: Id<Comment>,
     },
     /// Remove a thread and its mark, and leave the text.
     DeleteComment {
-        comment_id: CommentId,
+        comment_id: Id<Comment>,
     },
     /// Remove one of the caller's replies, or the thread when it is the head
     /// (`PROSE-FEAT-081`).
     DeleteReply {
-        comment_id: CommentId,
-        reply_id: ReplyId,
+        comment_id: Id<Comment>,
+        reply_id: Id<Reply>,
     },
     /// Rewrite one of the caller's replies (`PROSE-FEAT-080`).
     EditCommentReply {
-        comment_id: CommentId,
-        reply_id: ReplyId,
+        comment_id: Id<Comment>,
+        reply_id: Id<Reply>,
         new_text: String,
     },
 
@@ -1791,11 +1792,11 @@ pub enum ProseCommand {
     },
     /// Apply every span of one suggestion (`PROSE-FEAT-083`).
     AcceptSuggestion {
-        suggestion_id: SuggestionId,
+        suggestion_id: Id<id::Suggestion>,
     },
     /// Cancel every span of one suggestion (`PROSE-FEAT-273`).
     RejectSuggestion {
-        suggestion_id: SuggestionId,
+        suggestion_id: Id<id::Suggestion>,
     },
     /// Apply every pending suggestion.
     AcceptAllSuggestions,
@@ -2872,7 +2873,7 @@ pub enum ProseRefusal {
     FootnoteInNote,
     /// The command names a footnote the document does not hold.
     #[error("footnote {0} is not in the document")]
-    NoSuchFootnote(FootnoteId),
+    NoSuchFootnote(Id<Footnote>),
     /// A comment asked for in a header or a footer, drawn on every page.
     #[error("a header or a footer cannot hold a comment")]
     CommentInBand,
@@ -2882,10 +2883,10 @@ pub enum ProseRefusal {
     CommentInNote,
     /// The command names a comment thread the document does not hold.
     #[error("comment {0} is not in the document")]
-    NoSuchComment(CommentId),
+    NoSuchComment(Id<Comment>),
     /// The command names a reply the thread does not hold.
     #[error("reply {0} is not in the thread")]
-    NoSuchReply(ReplyId),
+    NoSuchReply(Id<Reply>),
     /// A reply edited or deleted by someone other than its author
     /// (`PROSE-FEAT-080`, `PROSE-FEAT-198`).
     #[error("only its author can change a reply")]
@@ -3076,9 +3077,9 @@ mod tests {
         let block_id = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
         let pos = DocOffset::ZERO;
         let now = ambre_core::Timestamp::default();
-        let comment_id = CommentId::new();
-        let reply_id = ReplyId::new();
-        let footnote_id = FootnoteId::new();
+        let comment_id = Id::<Comment>::mint();
+        let reply_id = Id::<Reply>::mint();
+        let footnote_id = Id::<Footnote>::mint();
         let printed = [
             format!(
                 "{:?}",
@@ -3179,7 +3180,7 @@ mod tests {
                 CommentReply {
                     reply_id,
                     author: None,
-                    user_id: UserId::default(),
+                    user_id: Id::<User>::mint(),
                     created_at: now,
                     text: secret.clone(),
                 }

@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use ambre_core::ByteSize;
+use ambre_core::id::{Document, Id};
 
 use crate::db::{DeltaCount, InlineCap};
 use crate::error::AppError;
@@ -56,7 +57,7 @@ fn kept_after_move(tail: &[(ambre_core::Seq, Payload)]) -> usize {
 /// numbers. It sits under the document's prefix, so a delete sweeps it.
 pub fn batch_key(
     env_prefix: &crate::s3::EnvPrefix,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     first: ambre_core::Seq,
     last: ambre_core::Seq,
 ) -> ambre_core::ObjectKey {
@@ -89,7 +90,7 @@ fn decode_batch(batch: &Payload) -> Result<BTreeMap<ambre_core::Seq, Payload>, A
 /// the document is deleted.
 pub async fn move_to_batch(
     state: &AppState,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     keep: Option<usize>,
 ) -> Result<usize, AppError> {
     let mut tx = state.db.begin().await?;
@@ -123,7 +124,7 @@ pub async fn move_to_batch(
 
 /// Starts a move off the write path. A failure is logged, and the next write
 /// past the watermark starts another.
-pub fn spawn_move(state: &std::sync::Arc<AppState>, document_id: ambre_core::DocumentId) {
+pub fn spawn_move(state: &std::sync::Arc<AppState>, document_id: Id<Document>) {
     let state = std::sync::Arc::clone(state);
     tokio::spawn(async move {
         if let Err(e) = move_to_batch(&state, &document_id, None).await {
@@ -275,10 +276,11 @@ mod db_tests {
     use crate::test_helpers::{
         S3Stub, create_test_document, create_test_user, offline_s3, test_app_state, with_s3,
     };
+    use ambre_core::id::Snapshot;
     use std::sync::Arc;
 
     /// A state over `pool` whose object store is `stub`, and a fresh document.
-    async fn setup(pool: sqlx::PgPool, stub: &S3Stub) -> (Arc<AppState>, ambre_core::DocumentId) {
+    async fn setup(pool: sqlx::PgPool, stub: &S3Stub) -> (Arc<AppState>, Id<Document>) {
         let base = test_app_state(pool.clone()).await;
         let state = with_s3(&base, offline_s3(Some(&stub.endpoint)));
         let owner = create_test_user(&pool, "tail@ambre.app").await;
@@ -289,12 +291,12 @@ mod db_tests {
     /// Inserts delta `seq` with `wire` in its row, under `cap`.
     async fn inline(
         state: &AppState,
-        doc: &ambre_core::DocumentId,
+        doc: &Id<Document>,
         seq: i64,
         wire: &[u8],
         cap: InlineCap,
     ) -> InlineInsert {
-        let snap = ambre_core::SnapshotId::new();
+        let snap = Id::<Snapshot>::mint();
         let wire = Payload::new(wire.to_vec());
         crate::db::insert_inline_update(
             &state.db,
@@ -316,10 +318,7 @@ mod db_tests {
     }
 
     /// Each row's number, inline frame and batch, in order.
-    async fn homes(
-        state: &AppState,
-        doc: &ambre_core::DocumentId,
-    ) -> Vec<(i64, bool, Option<String>)> {
+    async fn homes(state: &AppState, doc: &Id<Document>) -> Vec<(i64, bool, Option<String>)> {
         crate::db::get_updates_after(
             &state.db,
             doc,

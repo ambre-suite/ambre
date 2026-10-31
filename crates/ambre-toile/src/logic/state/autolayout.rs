@@ -15,7 +15,7 @@ use loro::LoroValue;
 
 use crate::logic::autolayout::AutoLayout;
 use crate::logic::command::{ToileError, ToileEvent, ToileOutcome};
-use crate::logic::model::FrameId;
+use ambre_core::id::{Element, Frame, Id};
 
 use super::ToileState;
 use super::codec::has_type;
@@ -31,11 +31,12 @@ impl ToileState {
     /// produces neither a commit nor a delta.
     pub(super) fn set_auto_layout(
         &mut self,
-        frame: &FrameId,
+        frame: &Id<Frame>,
         layout: Option<AutoLayout>,
     ) -> ToileOutcome {
-        let Some(em) = self.element_map(frame) else {
-            return self.err_no_element(frame);
+        let element = Id::<Element>::from(frame.clone());
+        let Some(em) = self.element_map(&element) else {
+            return self.err_no_element(&element);
         };
         // Only a frame carries an auto-layout spec. A group also has `children`,
         // so the guard is on the concrete `type`, not on membership.
@@ -83,8 +84,8 @@ impl ToileState {
 
     /// The current auto-layout spec of `frame`, or `None` if it has none / is not
     /// a frame / does not exist. Test / derivation accessor.
-    pub fn auto_layout(&self, frame: &FrameId) -> Option<AutoLayout> {
-        let em = self.element_map(frame)?;
+    pub fn auto_layout(&self, frame: &Id<Frame>) -> Option<AutoLayout> {
+        let em = self.element_map(&frame.clone().into())?;
         let LoroValue::Binary(bytes) = em.get(ElementKey::Autolayout)?.into_value().ok()? else {
             return None;
         };

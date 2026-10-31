@@ -205,8 +205,8 @@ thread leaves as a return value (`PROSE-024`).
 | the media cache | decrypted picture bytes by content hash, bounded (`features/ambre-spec-prose-images.md`) | from the download route; it dies with the session |
 | the local history | the undo manager, opened over the document (`features/ambre-spec-prose-undo.md`) | never: it dies with the session |
 | the sync cursor | the last version vector exported to Sync | advanced after every export |
-| the session identity | the canonical `UserId` and the display name, seeded from `SessionReady` | per session, never in the document |
-| the peer set | every remote peer's last resolved caret, keyed by that `UserId` (`PROSE-058`) | from each inbound sample; it dies with the session |
+| the session identity | the canonical `Id<User>` and the display name, seeded from `SessionReady` | per session, never in the document |
+| the peer set | every remote peer's last resolved caret, keyed by that `Id<User>` (`PROSE-058`) | from each inbound sample; it dies with the session |
 
 ```rust
 // ambre-prose/src/logic/mod.rs
@@ -217,13 +217,13 @@ pub struct ProseState {
     media_cache:      HashMap<ContentHash, MediaBytes>,
     last_exported_vv: VersionVector,
     peer:             PeerId,
-    my_user_id:       Option<UserId>,
+    my_user_id:       Option<Id<User>>,
     my_name:          Option<DisplayName>,
-    orphans:          HashSet<CommentId>,
+    orphans:          HashSet<Id<Comment>>,
     edit_mode:        EditMode,
     burst:            Option<suggestions::Burst>,
-    presence:         HashMap<UserId, (CursorPosition, Option<DisplayName>)>,
-    live:             HashSet<UserId>,
+    presence:         HashMap<Id<User>, (CursorPosition, Option<DisplayName>)>,
+    live:             HashSet<Id<User>>,
     last_frame:       Option<EphemeralBytes>,
     owe_greeting:     bool,
     paginator:        Option<Paginator>,
@@ -266,7 +266,7 @@ impl ProseState {
 
     /// A remote presence sample. The author is the **Sync-resolved `from_user_id`**, never
     /// read from the payload (`PRESENCE-003`, `ambre-spec-membership.md`).
-    pub fn apply_ephemeral(&mut self, from_user_id: UserId, payload: &EphemeralBytes)
+    pub fn apply_ephemeral(&mut self, from_user_id: Id<User>, payload: &EphemeralBytes)
         -> Vec<ProseEvent>;
 
     /// A relay's history replay on open: one import sweep, one repaint.
@@ -445,27 +445,27 @@ pub enum ProseCommand {
 
     // -- Footnotes --
     InsertFootnote  { block_id: BlockId, pos: DocOffset, note_text: String },
-    EditFootnote    { footnote_id: FootnoteId, new_text: String },
-    DeleteFootnote  { footnote_id: FootnoteId },
+    EditFootnote    { footnote_id: Id<Footnote>, new_text: String },
+    DeleteFootnote  { footnote_id: Id<Footnote> },
 
     // -- Comments (`features/ambre-spec-prose-comments.md`) --
     /// The author is stamped by the dispatcher from the session identity, never
     /// carried here (`PROSE-FEAT-077`). `now` is a display stamp.
     AddComment       { block_id: BlockId, range: DocSpan, text: String, now: Timestamp },
     /// Reopens a resolved thread as a side effect (`PROSE-FEAT-079`).
-    ReplyToComment   { comment_id: CommentId, text: String, now: Timestamp },
-    ResolveComment   { comment_id: CommentId },
+    ReplyToComment   { comment_id: Id<Comment>, text: String, now: Timestamp },
+    ResolveComment   { comment_id: Id<Comment> },
     /// The explicit reopen, with no reply added (`PROSE-FEAT-079`).
-    ReopenComment    { comment_id: CommentId },
-    DeleteComment    { comment_id: CommentId },
+    ReopenComment    { comment_id: Id<Comment> },
+    DeleteComment    { comment_id: Id<Comment> },
     /// Deleting the opening reply deletes the thread (`PROSE-FEAT-081`).
-    DeleteReply      { comment_id: CommentId, reply_id: ReplyId },
-    EditCommentReply { comment_id: CommentId, reply_id: ReplyId, new_text: String },
+    DeleteReply      { comment_id: Id<Comment>, reply_id: Id<Reply> },
+    EditCommentReply { comment_id: Id<Comment>, reply_id: Id<Reply>, new_text: String },
 
     // -- Track changes (`features/ambre-spec-prose-track-changes.md`) --
     EnableTrackChanges   { mode: EditMode },
-    AcceptSuggestion     { suggestion_id: SuggestionId },
-    RejectSuggestion     { suggestion_id: SuggestionId },
+    AcceptSuggestion     { suggestion_id: Id<Suggestion> },
+    RejectSuggestion     { suggestion_id: Id<Suggestion> },
     AcceptAllSuggestions,
     RejectAllSuggestions,
 
@@ -700,11 +700,11 @@ pub struct PresencePayload {
 }
 
 /// What the view is handed. No serde: it moves by value. No colour either: the view derives
-/// it from the `UserId`, so a collaborator keeps one colour across the three applications
+/// it from the `Id<User>`, so a collaborator keeps one colour across the three applications
 /// (`PRESENCE-004`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteCursor {
-    pub user_id:      UserId,
+    pub user_id:      Id<User>,
     pub display_name: Option<DisplayName>,
     pub position:     CursorPosition,
 }

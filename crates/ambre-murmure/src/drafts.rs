@@ -14,10 +14,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_bus::{
-    ChannelId, DraftKey, Mention, MentionTarget, MessageDraft, MessageId, StyleMark, TextStyle,
-    UserId,
-};
+use ambre_bus::{DraftKey, Mention, MentionTarget, MessageDraft, StyleMark, TextStyle};
+use ambre_core::id::{Channel, Id, Message, User};
 use ambre_core::{CharOffset, CharSpan};
 use serde::{Deserialize, Serialize};
 
@@ -97,7 +95,7 @@ pub struct DraftShelf(Rc<RefCell<Shelf>>);
 #[derive(Default)]
 struct Shelf {
     /// Whose drafts these are, once the session names them.
-    user: Option<UserId>,
+    user: Option<Id<User>>,
     drafts: HashMap<DraftOf, MessageDraft>,
     /// Drafts written before the user was known, kept once they are.
     unsaved: Vec<DraftOf>,
@@ -114,7 +112,7 @@ struct Shelf {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Loss {
     /// The drafts of a channel and of its threads (`MURMURE-215`).
-    Channel(ChannelId),
+    Channel(Id<Channel>),
     /// Every draft: the user signed out (`MURMURE-216`).
     All,
 }
@@ -127,7 +125,7 @@ impl Shelf {
     }
 
     /// Hand the store the draft `of` as the shelf holds it now.
-    fn save(&self, user: UserId, of: DraftOf) {
+    fn save(&self, user: Id<User>, of: DraftOf) {
         let key = row_key(user, of);
         match self.drafts.get(&of) {
             Some(draft) => self.write(DraftWrite::Put {
@@ -147,7 +145,7 @@ impl DraftShelf {
 
     /// Take the rows the store keeps for `user`, read back after a reload.
     /// A draft typed before they landed keeps its text, and is saved now.
-    pub fn load(&self, user: UserId, rows: Vec<(DraftKey, DraftRow)>) {
+    pub fn load(&self, user: Id<User>, rows: Vec<(DraftKey, DraftRow)>) {
         let mut shelf = self.0.borrow_mut();
         shelf.user = Some(user);
         shelf.version = shelf.version.next();
@@ -185,7 +183,7 @@ impl DraftShelf {
 
     /// Delete the drafts of `channel` and of its threads: the user lost it
     /// (`MURMURE-215`). Another channel's stay (`MURMURE-217`).
-    pub fn forget_channel(&self, channel: ChannelId) {
+    pub fn forget_channel(&self, channel: Id<Channel>) {
         let mut shelf = self.0.borrow_mut();
         shelf.drafts.retain(|of, _| of.channel() != channel);
         shelf.unsaved.retain(|of| of.channel() != channel);
@@ -232,7 +230,7 @@ const SEPARATOR: char = '/';
 
 /// The first key of `user`'s rows, and the last: every row of theirs falls
 /// between the two.
-pub fn user_range(user: UserId) -> (DraftKey, DraftKey) {
+pub fn user_range(user: Id<User>) -> (DraftKey, DraftKey) {
     (
         DraftKey::new(format!("{user}{SEPARATOR}")),
         DraftKey::new(format!("{user}{SEPARATOR}\u{10FFFF}")),
@@ -240,7 +238,7 @@ pub fn user_range(user: UserId) -> (DraftKey, DraftKey) {
 }
 
 /// The key of the row that keeps the draft `of`, among `user`'s.
-fn row_key(user: UserId, of: DraftOf) -> DraftKey {
+fn row_key(user: Id<User>, of: DraftOf) -> DraftKey {
     DraftKey::new(match of {
         DraftOf::Channel(channel) => format!("{user}{SEPARATOR}{channel}"),
         DraftOf::Thread(channel, root) => {
@@ -251,15 +249,15 @@ fn row_key(user: UserId, of: DraftOf) -> DraftKey {
 
 /// The draft a row key of `user` names, `None` for another user's key or one
 /// that does not parse.
-fn parse_key(user: UserId, key: &DraftKey) -> Option<DraftOf> {
+fn parse_key(user: Id<User>, key: &DraftKey) -> Option<DraftOf> {
     let mut parts = key.as_str().split(SEPARATOR);
-    if UserId::parse_str(parts.next()?).ok()? != user {
+    if Id::<User>::parse_str(parts.next()?).ok()? != user {
         return None;
     }
-    let channel = ChannelId::parse_str(parts.next()?).ok()?;
+    let channel = Id::<Channel>::parse_str(parts.next()?).ok()?;
     let of = match parts.next() {
         None => DraftOf::Channel(channel),
-        Some(root) => DraftOf::Thread(channel, MessageId::parse_str(root).ok()?),
+        Some(root) => DraftOf::Thread(channel, Id::<Message>::parse_str(root).ok()?),
     };
     parts.next().is_none().then_some(of)
 }
@@ -275,7 +273,7 @@ struct Row {
 /// A mention of a row: a member, or the channel with no member.
 #[derive(Serialize, Deserialize)]
 struct RowMention {
-    user: Option<UserId>,
+    user: Option<Id<User>>,
     start: CharOffset,
     end: CharOffset,
 }
@@ -422,7 +420,7 @@ mod tests {
     /// draft (`MURMURE-210`).
     #[test]
     fn a_row_keeps_the_draft_whole() {
-        let ada = UserId::new();
+        let ada = Id::<User>::mint();
         let full = MessageDraft {
             text: "hi @Ada @channel see".to_owned(),
             mentions: vec![
@@ -483,10 +481,10 @@ mod tests {
     /// is saved once the user is known (`MURMURE-210`).
     #[test]
     fn a_reload_reads_back_the_users_rows() {
-        let (me, other) = (UserId::new(), UserId::new());
-        let (channel, root) = (ChannelId::new(), MessageId::new());
+        let (me, other) = (Id::<User>::mint(), Id::<User>::mint());
+        let (channel, root) = (Id::<Channel>::mint(), Id::<Message>::mint());
         let (typed, thread) = (
-            DraftOf::Channel(ChannelId::new()),
+            DraftOf::Channel(Id::<Channel>::mint()),
             DraftOf::Thread(channel, root),
         );
         let (shelf, log) = recorded();
@@ -525,8 +523,8 @@ mod tests {
     /// (`MURMURE-212`).
     #[test]
     fn a_change_writes_its_row_and_a_send_deletes_it() {
-        let me = UserId::new();
-        let of = DraftOf::Channel(ChannelId::new());
+        let me = Id::<User>::mint();
+        let of = DraftOf::Channel(Id::<Channel>::mint());
         let (shelf, log) = recorded();
         shelf.load(me, Vec::new());
         shelf.put(of, Some(draft("hi")));
@@ -549,15 +547,15 @@ mod tests {
     /// range covers no other channel's row (`MURMURE-217`).
     #[test]
     fn a_lost_channel_takes_its_drafts_and_no_other() {
-        let me = UserId::new();
-        let (lost, kept) = (ChannelId::new(), ChannelId::new());
+        let me = Id::<User>::mint();
+        let (lost, kept) = (Id::<Channel>::mint(), Id::<Channel>::mint());
         let (shelf, log) = recorded();
         shelf.load(me, Vec::new());
         for of in [
             DraftOf::Channel(lost),
-            DraftOf::Thread(lost, MessageId::new()),
+            DraftOf::Thread(lost, Id::<Message>::mint()),
             DraftOf::Channel(kept),
-            DraftOf::Thread(kept, MessageId::new()),
+            DraftOf::Thread(kept, Id::<Message>::mint()),
         ] {
             shelf.put(of, Some(draft("x")));
         }
@@ -570,12 +568,12 @@ mod tests {
         assert!(covered(&row_key(me, DraftOf::Channel(lost))));
         assert!(covered(&row_key(
             me,
-            DraftOf::Thread(lost, MessageId::new())
+            DraftOf::Thread(lost, Id::<Message>::mint())
         )));
         assert!(!covered(&row_key(me, DraftOf::Channel(kept))));
         assert!(!covered(&row_key(
             me,
-            DraftOf::Thread(kept, MessageId::new())
+            DraftOf::Thread(kept, Id::<Message>::mint())
         )));
         assert_eq!(shelf.get(DraftOf::Channel(lost)), None);
         assert_eq!(shelf.get(DraftOf::Channel(kept)), Some(draft("x")));
@@ -585,9 +583,9 @@ mod tests {
     /// draft after it (`MURMURE-216`).
     #[test]
     fn a_sign_out_deletes_every_draft() {
-        let of = DraftOf::Channel(ChannelId::new());
+        let of = DraftOf::Channel(Id::<Channel>::mint());
         let (shelf, log) = recorded();
-        shelf.load(UserId::new(), Vec::new());
+        shelf.load(Id::<User>::mint(), Vec::new());
         shelf.put(of, Some(draft("x")));
         shelf.sign_out();
         assert_eq!(log.borrow().last(), Some(&DraftWrite::DeleteAll));
@@ -598,10 +596,10 @@ mod tests {
     /// does.
     #[test]
     fn a_users_range_holds_their_keys_alone() {
-        let (me, other) = (UserId::new(), UserId::new());
+        let (me, other) = (Id::<User>::mint(), Id::<User>::mint());
         let (lower, upper) = user_range(me);
         let covered = |key: &DraftKey| (&lower..=&upper).contains(&key);
-        let of = DraftOf::Thread(ChannelId::new(), MessageId::new());
+        let of = DraftOf::Thread(Id::<Channel>::mint(), Id::<Message>::mint());
         assert!(covered(&row_key(me, of)));
         assert!(!covered(&row_key(other, of)));
     }

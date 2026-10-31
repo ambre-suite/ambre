@@ -8,6 +8,7 @@
     reason = "a test double fails the test that misuses it"
 )]
 
+use ambre_core::id::{Document, Id};
 use ambre_protocol::ws::{WireDecodeError, WsClientMsg, WsServerMsg, decode_client_msg};
 
 /// Bidirectional in-memory WebSocket transport for host tests.
@@ -92,7 +93,7 @@ impl MockWsTransport {
     }
 
     /// Encode and send a `Subscribed` server message for the given document.
-    pub fn send_subscribed(&self, document_id: ambre_core::DocumentId) {
+    pub fn send_subscribed(&self, document_id: Id<Document>) {
         self.send_server_msg(WsServerMsg::Subscribed { document_id });
     }
 }

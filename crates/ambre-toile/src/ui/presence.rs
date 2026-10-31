@@ -2,7 +2,7 @@
 // ============================================================================
 // Multi-user presence overlay (toile-presence). Remote presence arrives as
 // `ToileEvent::PeerPresence` (ephemeral, `toile-presence`), keyed by the
-// sender's canonical `UserId`. This module owns the render-thread mirror of
+// sender's canonical `Id<User>`. This module owns the render-thread mirror of
 // every peer's latest presence and paints it in the top overlay pass, above
 // all content and never culled:
 //
@@ -13,11 +13,11 @@
 //   * cursor + label    -- the peer's pointer with a name chip in their colour.
 //
 // Every peer's colour comes from the shared cross-app `ambre_draw::peer_color`
-// hashed over the canonical `UserId`, so a collaborator keeps one colour across
+// hashed over the canonical `Id<User>`, so a collaborator keeps one colour across
 // Prose, Trame and Toile. The paint entry point is a pure function over
 // `DrawSurface`, so it is host-testable against `RecordingSurface` with no GPU.
 //
-// End-to-end multi-user waits on SYNC P4, the `pub_key` -> `UserId` resolution
+// End-to-end multi-user waits on SYNC P4, the `pub_key` -> `Id<User>` resolution
 // that keys inbound samples (`toile-presence`). Until it lands, remote samples
 // never reach this thread, though the render pass itself is complete and
 // synthetic `PeerPresence` events exercise it today.
@@ -26,12 +26,10 @@
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
-use ambre_bus::UserId;
-use ambre_bus::app::toile::{
-    DisplayNode, DisplayViewport, ElementId, PresencePayload, PresenceUpdate,
-};
+use ambre_bus::app::toile::{DisplayNode, DisplayViewport, PresencePayload, PresenceUpdate};
 use ambre_canvas::TextCache;
 use ambre_core::DisplayName;
+use ambre_core::id::{Element, Id, User};
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DrawSurface, FontContext, Point,
     PositionedLayoutItem, Rect, Stroke, peer_color,
@@ -106,7 +104,7 @@ impl PresenceSender {
 /// `ToileEvent::PeerPresence`, drained each overlay frame by [`Self::paint`].
 #[derive(Default)]
 pub struct PeerCursors {
-    peers: HashMap<UserId, PeerState>,
+    peers: HashMap<Id<User>, PeerState>,
 }
 
 /// One peer's latest presence plus the derived laser trail. The payload carries
@@ -177,7 +175,7 @@ impl PeerCursors {
         let w2s = cam.world_to_screen();
         // Deterministic peer order so the overlay draw log is stable for tests
         // and the paint order does not flicker frame to frame.
-        let mut peers: Vec<(&UserId, &PeerState)> = self.peers.iter().collect();
+        let mut peers: Vec<(&Id<User>, &PeerState)> = self.peers.iter().collect();
         peers.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
         for (user_id, state) in peers {
             let color = peer_color(user_id);
@@ -192,7 +190,7 @@ impl PeerCursors {
 #[allow(clippy::too_many_arguments)]
 fn paint_peer<S: DrawSurface>(
     surface: &mut S,
-    user_id: &UserId,
+    user_id: &Id<User>,
     state: &PeerState,
     color: &Color,
     vp: &DisplayViewport,
@@ -289,7 +287,7 @@ pub fn laser_alpha(
 /// handle derived from the id when it carried none (`TOILE-UI-076`). A blank
 /// name is no name: the sample's decode drops it, as it would paint an empty
 /// chip.
-pub fn peer_label(user_id: &UserId, name: Option<&DisplayName>) -> DisplayName {
+pub fn peer_label(user_id: &Id<User>, name: Option<&DisplayName>) -> DisplayName {
     name.cloned()
         .unwrap_or_else(|| DisplayName::handle_of(user_id))
 }
@@ -354,7 +352,7 @@ fn paint_cursor<S: DrawSurface>(
 
 /// The world-space AABB of a displayed element, or `None` when the id is not in
 /// the culled set. An off-screen selection ghost has no box this frame.
-fn element_bounds(vp: &DisplayViewport, id: &ElementId) -> Option<Rect> {
+fn element_bounds(vp: &DisplayViewport, id: &Id<Element>) -> Option<Rect> {
     vp.nodes.iter().find_map(|n| match n {
         DisplayNode::Element(e) if &e.id == id => Some(e.bounds),
         _ => None,
@@ -392,13 +390,13 @@ mod tests {
     };
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
-    fn user(seed: u8) -> UserId {
-        UserId::from_bytes([seed; 16])
+    fn user(seed: u8) -> Id<User> {
+        Id::<User>::from_bytes([seed; 16])
     }
 
     fn elem(id: &str, bounds: Rect) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
@@ -444,7 +442,7 @@ mod tests {
 
     /// Adopt a one-peer live set at clock zero, the shape every test below used
     /// before the set replaced the per-peer update (`PRESENCE-009`).
-    fn adopt_one(cursors: &mut PeerCursors, user_id: UserId, presence: PresencePayload) {
+    fn adopt_one(cursors: &mut PeerCursors, user_id: Id<User>, presence: PresencePayload) {
         cursors.adopt(
             vec![PresenceUpdate { user_id, presence }],
             ambre_bus::PageTime(0.0),
@@ -488,7 +486,10 @@ mod tests {
             user(5),
             PresencePayload {
                 // "a" is on-board, the cull dropped "gone" -> only one box.
-                selection: vec![ElementId("a".into()), ElementId("gone".into())],
+                selection: vec![
+                    Id::<Element>::from_text("a".into()),
+                    Id::<Element>::from_text("gone".into()),
+                ],
                 ..Default::default()
             },
         );
@@ -529,7 +530,7 @@ mod tests {
             &mut cursors,
             user(5),
             PresencePayload {
-                selection: vec![ElementId("b".into())],
+                selection: vec![Id::<Element>::from_text("b".into())],
                 ..Default::default()
             },
         );
