@@ -276,12 +276,12 @@ impl Uploads {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{ChannelId, MessageId};
+    use ambre_core::id::{Channel, Id, Message};
 
     const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     fn channel() -> DraftOf {
-        DraftOf::Channel(ChannelId::new())
+        DraftOf::Channel(Id::<Channel>::mint())
     }
 
     /// A size reads in the largest unit it reaches once rounded up. So a
@@ -432,7 +432,7 @@ mod tests {
     #[test]
     fn a_thread_draft_or_a_blank_name_takes_no_file() {
         let mut uploads = Uploads::default();
-        let thread = DraftOf::Thread(ChannelId::new(), MessageId::new());
+        let thread = DraftOf::Thread(Id::<Channel>::mint(), Id::<Message>::mint());
         assert!(!begin(&mut uploads, 1, thread, "a.png"));
         assert!(!begin(&mut uploads, 2, channel(), "  "));
         assert!(uploads.pending.is_empty());

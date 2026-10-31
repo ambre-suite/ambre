@@ -1,7 +1,7 @@
 //! Why the engine refused a document, a delta or a command.
 
+use ambre_core::id::{Channel, Document, Id, Message, Segment, Space};
 use ambre_core::schema::SchemaError;
-use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, SpaceId};
 use thiserror::Error;
 
 use crate::delta::Refusal;
@@ -17,29 +17,29 @@ pub enum MurmureError {
     /// The header names another channel (`MURMURE-027`).
     #[error("document {document_id} names channel {found}, not {expected}")]
     ForeignChannel {
-        document_id: DocumentId,
-        expected: ChannelId,
-        found: ChannelId,
+        document_id: Id<Document>,
+        expected: Id<Channel>,
+        found: Id<Channel>,
     },
 
     /// The header of a space document names another space.
     #[error("document {document_id} names space {found}")]
     ForeignSpace {
-        document_id: DocumentId,
-        found: SpaceId,
+        document_id: Id<Document>,
+        found: Id<Space>,
     },
 
     /// Only a public channel enters the catalogue (`MURMURE-014`).
     #[error("channel {0} is not public, so the catalogue cannot list it")]
-    NotPublic(ChannelId),
+    NotPublic(Id<Channel>),
 
     /// Only a direct message takes a name from any member (`MURMURE-054`).
     #[error("channel {0} is not a direct message, so no member renames it")]
-    NotDirect(ChannelId),
+    NotDirect(Id<Channel>),
 
     /// The catalogue lists no channel of that identifier.
     #[error("the catalogue lists no channel {0}")]
-    NotListed(ChannelId),
+    NotListed(Id<Channel>),
 
     /// The header names another kind of document.
     #[error(
@@ -47,7 +47,7 @@ pub enum MurmureError {
         .expected.as_str()
     )]
     WrongKind {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         expected: crate::schema::DocumentKind,
         found: String,
     },
@@ -55,72 +55,72 @@ pub enum MurmureError {
     /// A header key is absent or holds a value this build cannot read.
     #[error("the header of document {document_id} has no readable `{}`", .key.as_str())]
     HeaderMalformed {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         key: crate::schema::HeaderKey,
     },
 
     /// The `meta` document lists no active segment, so no message can go
     /// anywhere.
     #[error("the meta document of channel {0} lists no active segment")]
-    NoActiveSegment(ChannelId),
+    NoActiveSegment(Id<Channel>),
 
     /// The `meta` document lists a live segment whose bytes the caller did not
     /// supply (`MURMURE-022`).
     #[error("segment {0} is live but its bytes were not supplied")]
-    SegmentMissing(DocumentId),
+    SegmentMissing(Id<Document>),
 
     /// The channel holds no document of that identifier (`MURMURE-024`).
     #[error("document {0} is not held by this channel")]
-    NotHeld(DocumentId),
+    NotHeld(Id<Document>),
 
     /// A close names a segment that is no longer the active one.
     #[error("segment {0} is not the active segment")]
-    NotActive(DocumentId),
+    NotActive(Id<Document>),
 
     /// A close while another segment of the channel is still closing, which
     /// would list two closing segments (`MURMURE-010`).
     #[error("a segment of channel {0} is still closing")]
-    StillClosing(ChannelId),
+    StillClosing(Id<Channel>),
 
     /// The document is not a final segment the `meta` document lists.
     #[error("document {0} is not an older segment of this channel")]
-    NotOlder(DocumentId),
+    NotOlder(Id<Document>),
 
     /// A final segment changes through its amendments alone, never in place.
     #[error("segment {0} is final")]
-    Final(DocumentId),
+    Final(Id<Document>),
 
     /// A change of a locked segment before the channel holds its amendments
     /// document, which the change waits for.
     #[error("segment {0} has no amendments document held")]
-    NoAmendments(SegmentId),
+    NoAmendments(Id<Segment>),
 
     /// The header of an amendments document names another segment than the
     /// one it was opened for (`MURMURE-013`).
     #[error("amendments document {0} names another segment")]
-    ForeignSegment(DocumentId),
+    ForeignSegment(Id<Document>),
 
     /// The header of a thread document names another root, or another
     /// segment, than the one it was opened for (`MURMURE-009`).
     #[error("thread document {0} names another root")]
-    ForeignRoot(DocumentId),
+    ForeignRoot(Id<Document>),
 
     /// A reply before the channel holds the thread document of its root,
     /// which the reply waits for.
     #[error("message {0} has no thread document held")]
-    NoThread(MessageId),
+    NoThread(Id<Message>),
 
     /// The segment holds no message of that identifier.
     #[error("no message {0} in the segment")]
-    NoMessage(MessageId),
+    NoMessage(Id<Message>),
 
     /// An edit or a delete of a message another user wrote (`MURMURE-085`).
     #[error("message {0} has another author")]
-    NotAuthor(MessageId),
+    NotAuthor(Id<Message>),
 
     /// An edit of a message its author deleted (`MURMURE-087`).
     #[error("message {0} is deleted")]
-    Deleted(MessageId),
+    Deleted(Id<Message>),
 
     /// A reaction that is not one emoji (`MURMURE-092`).
     #[error("a reaction that is not one emoji")]
@@ -148,7 +148,7 @@ pub enum MurmureError {
     /// The Sync worker has not issued the PeerID of the document yet, and an
     /// operation under any other never travels (`AUTHOR-029`).
     #[error("document {0} has no session identity yet")]
-    NoSession(DocumentId),
+    NoSession(Id<Document>),
 
     /// Loro refused a write or an export. Carries its message, because the
     /// Loro error types are not `Eq`.

@@ -14,8 +14,8 @@
 
 use ambre_core::{CharCount, CharOffset, Utf16Offset, char_len, char_to_utf16, utf16_to_char};
 
-use ambre_bus::UserId;
 use ambre_bus::app::toile::Broadcast;
+use ambre_core::id::{Id, User};
 
 use crate::logic::TextLen;
 use crate::logic::command::{SlideCount, SlidePosition, TextDelta};
@@ -39,7 +39,7 @@ pub enum PresenterIntent {
     /// Toggle whether this viewer broadcasts its playback position to peers.
     ToggleBroadcast(Broadcast),
     /// Follow the given presenter (`Some`) or stop following (`None`).
-    Follow(Option<UserId>),
+    Follow(Option<Id<User>>),
 }
 
 /// The note and the splice's insert print as their lengths alone (`ZK-006`).

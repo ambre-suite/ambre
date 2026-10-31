@@ -19,12 +19,11 @@ use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use ambre_bus::app::toile::{
-    ConnectorId, DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport,
-    ElementId, ElementStyle,
+    DisplayConnector, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementStyle,
 };
 use ambre_canvas::{Palette, TextCache};
-use ambre_core::Rgba;
-use ambre_core::{Doc, Px};
+use ambre_core::id::{Connector, Element, Id};
+use ambre_core::{Doc, Px, Rgba};
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DocumentWalk, DrawSurface, FontContext, ImageKey,
     ImageSource, Point, PositionedLayoutItem, Rect, Size, Stroke,
@@ -71,11 +70,11 @@ pub struct BoardView<'v> {
     pub images: &'v ImageStore,
     /// Smart Animate or gesture overrides, keyed by element id. Each replaces
     /// the element's transform, bounds, opacity and fill. Empty at rest.
-    pub anim: &'v HashMap<ElementId, AnimatedElement>,
+    pub anim: &'v HashMap<Id<Element>, AnimatedElement>,
     /// The body this view leaves out, because the inline editor paints it.
-    pub muted_body: Option<&'v ElementId>,
+    pub muted_body: Option<&'v Id<Element>>,
     /// The caption this view leaves out, for the same reason.
-    pub muted_caption: Option<&'v ConnectorId>,
+    pub muted_caption: Option<&'v Id<Connector>>,
 }
 
 /// The board walk, holding the shaping context and the layout cache it lays

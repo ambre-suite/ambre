@@ -14,11 +14,10 @@ use crate::logic::command::{
     ElementCreation, InitContent, MediaRef, ToileError, ToileEvent, ToileOutcome, ZTarget,
 };
 use crate::logic::index::ElementBounds;
-use crate::logic::model::{
-    ElementId, ElementKind, ElementStyle, LinkTarget, NodeId, ShapeKind, StrokePoint,
-};
+use crate::logic::model::{ElementKind, ElementStyle, LinkTarget, NodeId, ShapeKind, StrokePoint};
 use crate::logic::text_merge::merge_edits;
 use ambre_bus::Token;
+use ambre_core::id::{Element, Id};
 
 use super::codec::has_type;
 use super::codec::{
@@ -61,7 +60,7 @@ impl ToileState {
         size: kurbo::Size,
         content: InitContent,
         fill: Option<Rgba>,
-    ) -> Result<ElementId, ToileError> {
+    ) -> Result<Id<Element>, ToileError> {
         // Group and Drawing are not creatable here: a group is born via
         // GroupElements, a stroke via CommitStroke.
         if matches!(kind, ElementKind::Group | ElementKind::Drawing) {
@@ -183,7 +182,7 @@ impl ToileState {
     /// open (`TOILE-UI-381`). Only sticky / text elements carry that field; a
     /// request against any other kind (or a missing element) is a rejected
     /// no-op.
-    pub(super) fn set_text(&mut self, id: &ElementId, base: &str, text: &str) -> ToileOutcome {
+    pub(super) fn set_text(&mut self, id: &Id<Element>, base: &str, text: &str) -> ToileOutcome {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
@@ -214,7 +213,7 @@ impl ToileState {
     /// folded into it would be erased by any restyle of a selection the element
     /// happens to be in (`TOILE-062`). A locked element refuses the write like
     /// it refuses every other edit.
-    pub(super) fn set_link(&mut self, id: &ElementId, link: Option<LinkTarget>) -> ToileOutcome {
+    pub(super) fn set_link(&mut self, id: &Id<Element>, link: Option<LinkTarget>) -> ToileOutcome {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
@@ -235,7 +234,7 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
-    pub(super) fn move_elements(&mut self, ids: &[ElementId], delta: Vec2) -> ToileOutcome {
+    pub(super) fn move_elements(&mut self, ids: &[Id<Element>], delta: Vec2) -> ToileOutcome {
         // An id the board does not hold answers an error, not a silent skip
         // (`TOILE-194`).
         for id in ids {
@@ -279,7 +278,7 @@ impl ToileState {
     /// `move_elements` does for a drag. A locked element is dropped before the
     /// union is measured. It cannot move, and letting it set the reference edge
     /// would let a locked background swallow the whole operation (`TOILE-234`).
-    pub(super) fn align_elements(&mut self, ids: &[ElementId], op: AlignOp) -> ToileOutcome {
+    pub(super) fn align_elements(&mut self, ids: &[Id<Element>], op: AlignOp) -> ToileOutcome {
         // Selection order, deduplicated: an id repeated in the selection would
         // otherwise weigh twice in a distribution.
         let mut seen = HashSet::new();
@@ -326,7 +325,7 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
-    pub(super) fn resize_element(&mut self, id: &ElementId, new: Rect) -> ToileOutcome {
+    pub(super) fn resize_element(&mut self, id: &Id<Element>, new: Rect) -> ToileOutcome {
         let Some(em) = self.element_map(id) else {
             return self.err_no_element(id);
         };
@@ -346,7 +345,7 @@ impl ToileState {
 
     pub(super) fn rotate_element(
         &mut self,
-        id: &ElementId,
+        id: &Id<Element>,
         radians: ambre_core::Radians,
     ) -> ToileOutcome {
         let Some(em) = self.element_map(id) else {
@@ -368,7 +367,7 @@ impl ToileState {
 
     pub(super) fn restyle_elements(
         &mut self,
-        ids: &[ElementId],
+        ids: &[Id<Element>],
         style: ElementStyle,
     ) -> ToileOutcome {
         // An id the board does not hold answers an error, not a silent skip
@@ -391,7 +390,11 @@ impl ToileState {
     /// import path uses [`restyle_inner`](Self::restyle_inner), which overwrites
     /// whole. Each element keeps its own corner radius, shadow and non-bold
     /// weight (`TOILE-UI-174`).
-    pub(super) fn restyle_merge_inner(&mut self, ids: &[ElementId], style: &ElementStyle) -> bool {
+    pub(super) fn restyle_merge_inner(
+        &mut self,
+        ids: &[Id<Element>],
+        style: &ElementStyle,
+    ) -> bool {
         let mut touched = false;
         for id in ids {
             let Some(em) = self.element_map(id) else {
@@ -416,7 +419,7 @@ impl ToileState {
     /// `doc.commit()`, so an import can restyle a fresh element inside the same
     /// undo group as its `CreateElement`. Style is an independent LWW register that
     /// cannot ride the create.
-    pub(super) fn restyle_inner(&mut self, ids: &[ElementId], style: &ElementStyle) -> bool {
+    pub(super) fn restyle_inner(&mut self, ids: &[Id<Element>], style: &ElementStyle) -> bool {
         let bytes = style.to_bytes();
         let mut touched = false;
         for id in ids {
@@ -434,7 +437,7 @@ impl ToileState {
 
     pub(super) fn lock_elements(
         &mut self,
-        ids: &[ElementId],
+        ids: &[Id<Element>],
         lock: ambre_bus::app::toile::LockState,
     ) -> ToileOutcome {
         let mut touched = false;
@@ -452,7 +455,7 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
-    pub(super) fn delete_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
+    pub(super) fn delete_elements(&mut self, ids: &[Id<Element>]) -> ToileOutcome {
         // An id the board does not hold answers an error, not a silent skip
         // (`TOILE-201`).
         for id in ids {
@@ -463,7 +466,7 @@ impl ToileState {
         // A locked element refuses the delete as it refuses every other write
         // (`TOILE-033`). A group with a locked member is kept whole, since its
         // cascade would remove that member.
-        let ids: Vec<ElementId> = ids
+        let ids: Vec<Id<Element>> = ids
             .iter()
             .filter(|id| !self.holds_a_lock(id))
             .cloned()
@@ -482,7 +485,7 @@ impl ToileState {
     }
 
     /// Whether `id` or any element of its subtree is locked.
-    fn holds_a_lock(&self, id: &ElementId) -> bool {
+    fn holds_a_lock(&self, id: &Id<Element>) -> bool {
         let mut subtree = HashSet::new();
         self.collect_subtree(id, &mut subtree);
         subtree
@@ -496,14 +499,14 @@ impl ToileState {
     /// Returns whether anything was removed. The caller owns the `doc.commit()`
     /// so a deletion shares one commit and one undo item with a sibling
     /// mutation: a boolean op consuming its sources.
-    pub(super) fn delete_from_doc(&mut self, ids: &[ElementId]) -> bool {
+    pub(super) fn delete_from_doc(&mut self, ids: &[Id<Element>]) -> bool {
         // Deleting a group cascades to its members: expand the request
         // to the full subtree of every listed group before removing anything.
-        let mut expanded: HashSet<ElementId> = HashSet::new();
+        let mut expanded: HashSet<Id<Element>> = HashSet::new();
         for id in ids {
             self.collect_subtree(id, &mut expanded);
         }
-        let del: HashSet<&ElementId> = expanded.iter().collect();
+        let del: HashSet<&Id<Element>> = expanded.iter().collect();
         let mut removed_any = false;
         let elems = self.doc.get_map(Root::Elements.as_str());
         for id in &expanded {
@@ -654,8 +657,9 @@ mod inner_tests {
     use crate::logic::model::{ElementKind, ElementStyle, NodeId, ShapeKind};
     use crate::logic::state::ToileState;
     use ambre_bus::Token;
+    use ambre_core::id::{Element, Id, User};
 
-    fn rect_at(st: &mut ToileState, x: f64) -> crate::logic::model::ElementId {
+    fn rect_at(st: &mut ToileState, x: f64) -> Id<Element> {
         st.create_element_inner(
             ElementKind::Shape(ShapeKind::Rect),
             Point::new(x, 0.0),
@@ -773,7 +777,7 @@ mod inner_tests {
             Anchor, BoolOp, Cap, CommentAnchor, EndCaps, PathType, Sources, StrokePoint,
         };
         let mut st = ToileState::new();
-        st.set_user_id(ambre_core::UserId::new());
+        st.set_user_id(Id::<User>::mint());
         let a = rect_at(&mut st, 0.0);
         let b = rect_at(&mut st, 5.0);
         st.doc.commit();
@@ -869,7 +873,7 @@ mod inner_tests {
 
     /// A rect of `w` x 10 at `(x, y)`, committed on its own. Each fixture is
     /// then its own undo item, and the alignment under test is the last one.
-    fn rect(st: &mut ToileState, x: f64, y: f64, w: f64) -> crate::logic::model::ElementId {
+    fn rect(st: &mut ToileState, x: f64, y: f64, w: f64) -> Id<Element> {
         let id = st
             .create_element_inner(
                 ElementKind::Shape(ShapeKind::Rect),

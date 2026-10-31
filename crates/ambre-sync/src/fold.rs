@@ -7,7 +7,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelId, FoldAnswer, LeaseId, SegmentId, Seq};
+use ambre_bus::{FoldAnswer, Seq};
 
 use crate::updates::{SnapshotUpload, upload_snapshot};
 
@@ -16,8 +16,8 @@ pub(crate) async fn take_fold_lease(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
     base: &crate::http::ApiRoot,
-    channel_id: ChannelId,
-    segment: SegmentId,
+    channel_id: Id<Channel>,
+    segment: Id<Segment>,
 ) -> Result<FoldAnswer, http::HttpError> {
     let url = base.route(format!(
         "/channels/{channel_id}/segments/{segment}/fold-lease"
@@ -42,7 +42,7 @@ pub(crate) async fn take_fold_lease(
 /// amendments.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct FoldReach {
-    pub lease: LeaseId,
+    pub lease: Id<Lease>,
     pub amendments_seq: Seq,
 }
 
@@ -52,8 +52,8 @@ pub(crate) async fn commit_fold(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
     base: &crate::http::ApiRoot,
-    channel_id: ChannelId,
-    segment: SegmentId,
+    channel_id: Id<Channel>,
+    segment: Id<Segment>,
     reach: FoldReach,
     upload: SnapshotUpload,
 ) -> Result<(), http::HttpError> {
@@ -70,7 +70,7 @@ pub(crate) async fn commit_fold(
 
 impl SyncState {
     /// Ask the relay for the fold lease of `segment`.
-    pub(crate) fn handle_take_fold_lease(&self, channel_id: ChannelId, segment: SegmentId) {
+    pub(crate) fn handle_take_fold_lease(&self, channel_id: Id<Channel>, segment: Id<Segment>) {
         let Some(tx) = self.event_tx.clone() else {
             return self.fold_failed(channel_id, segment, "no relay on this transport");
         };
@@ -91,8 +91,8 @@ impl SyncState {
     /// edit of this client is pending on it.
     pub(crate) fn handle_fold_segment(
         &self,
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         reach: FoldReach,
         horizon: Seq,
         payload: &ambre_core::SnapshotBytes,
@@ -128,7 +128,7 @@ impl SyncState {
 
     /// Tell the Logic thread a fold lease request or a fold commit of
     /// `segment` failed.
-    pub(crate) fn fold_failed(&self, channel_id: ChannelId, segment: SegmentId, message: &str) {
+    pub(crate) fn fold_failed(&self, channel_id: Id<Channel>, segment: Id<Segment>, message: &str) {
         tracing::warn!("[Sync] fold of {segment} failed: {message}");
         self.send_to_logic(LogicEvent::SegmentFoldFailed {
             channel_id,
@@ -155,14 +155,14 @@ mod tests {
     }
 
     /// A sealed snapshot of `document_id` covering the deltas up to `horizon`.
-    fn upload(document_id: DocumentId, horizon: Seq) -> SnapshotUpload {
+    fn upload(document_id: Id<Document>, horizon: Seq) -> SnapshotUpload {
         let key = DocumentKey::generate();
         let sk = MasterSeed::generate().derive_signing_key();
         let public_data = SnapshotPublicData {
             document_id,
             pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
             key_id: key.id(),
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<Snapshot>::mint(),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
@@ -184,8 +184,8 @@ mod tests {
     /// deferral (the Murmure segments spec).
     #[tokio::test]
     async fn a_fold_lease_request_reads_the_grant_or_the_deferral() {
-        let (channel, segment) = (ChannelId::new(), SegmentId::new());
-        let (lease, amendments) = (LeaseId::new(), DocumentId::new());
+        let (channel, segment) = (Id::<Channel>::mint(), Id::<Segment>::mint());
+        let (lease, amendments) = (Id::<Lease>::mint(), Id::<Document>::mint());
         let transport = Scripted::new([
             Ok((
                 200,
@@ -236,8 +236,8 @@ mod tests {
     /// segments spec).
     #[tokio::test]
     async fn a_fold_commit_uploads_at_the_horizon_then_names_the_reach() {
-        let (channel, segment) = (ChannelId::new(), SegmentId::new());
-        let (lease, given) = (LeaseId::new(), SnapshotId::new());
+        let (channel, segment) = (Id::<Channel>::mint(), Id::<Segment>::mint());
+        let (lease, given) = (Id::<Lease>::mint(), Id::<Snapshot>::mint());
         let link = serde_json::json!({
             "upload_url": "https://store.test/o?sig=x",
             "s3_key": "snapshots/o",
@@ -283,8 +283,11 @@ mod tests {
     /// erased (the Murmure segments spec).
     #[tokio::test]
     async fn a_confirmation_that_settles_a_fold_names_the_erased_amendments() {
-        let (document, snapshot, amendments) =
-            (DocumentId::new(), SnapshotId::new(), DocumentId::new());
+        let (document, snapshot, amendments) = (
+            Id::<Document>::mint(),
+            Id::<Snapshot>::mint(),
+            Id::<Document>::mint(),
+        );
         let transport = Scripted::new([Ok((
             200,
             serde_json::json!({ "folded": amendments.to_string() }),

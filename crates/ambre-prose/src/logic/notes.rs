@@ -5,7 +5,7 @@
 //! the peer that inserts the note (`PROSE-FEAT-096`, `PROSE-087`).
 
 use ambre_bus::app::prose::DocOffset;
-use ambre_core::FootnoteId;
+use ambre_core::id::{Footnote, Id};
 use loro::{LoroMap, LoroText, TreeID, UpdateOptions};
 
 use crate::doc;
@@ -18,7 +18,7 @@ use super::ProseState;
 /// An anchor the engine mints into a carrier character: a footnote call or a
 /// cross reference.
 pub(super) enum OwnedAnchor<'a> {
-    Footnote(&'a FootnoteId),
+    Footnote(&'a Id<Footnote>),
     CrossRef(&'a crate::xref::CrossRefMark),
 }
 
@@ -78,7 +78,7 @@ impl ProseState {
     }
 
     /// Rewrite the body of note `id`, and nothing else.
-    pub(super) fn edit_footnote(&mut self, id: &FootnoteId, text: &str) -> ProseOutcome {
+    pub(super) fn edit_footnote(&mut self, id: &Id<Footnote>, text: &str) -> ProseOutcome {
         let Some(body) = note::body(&self.doc, id) else {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         };
@@ -93,11 +93,11 @@ impl ProseState {
     /// Only the call characters leave the text they sat in
     /// (`PROSE-FEAT-101`). The calls are removed from the last one back, so an
     /// earlier offset still names its character.
-    pub(super) fn delete_footnote(&mut self, id: &FootnoteId) -> ProseOutcome {
+    pub(super) fn delete_footnote(&mut self, id: &Id<Footnote>) -> ProseOutcome {
         if note::entry(&self.doc, id).is_none() {
             return ProseOutcome::refused(ProseRefusal::NoSuchFootnote(*id));
         }
-        let calls: Vec<doc::Anchor<FootnoteId>> = note::footnote_calls(&self.doc)
+        let calls: Vec<doc::Anchor<Id<Footnote>>> = note::footnote_calls(&self.doc)
             .into_iter()
             .filter(|anchor| anchor.value == *id)
             .collect();
@@ -127,7 +127,7 @@ impl ProseState {
     /// The entry of a new note, and the block holding its text. That block is a
     /// root paragraph marked as a note, so the body flow never meets it
     /// (`PROSE-FEAT-305`).
-    fn write_note(&self, id: &FootnoteId, text: &str) -> Result<(), doc::WriteError> {
+    fn write_note(&self, id: &Id<Footnote>, text: &str) -> Result<(), doc::WriteError> {
         let block = write_note_block(&self.doc, text)?;
         let annots = doc::annots(&self.doc);
         let entry = annots
@@ -226,8 +226,8 @@ mod tests {
         (state, ids)
     }
 
-    fn add(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> FootnoteId {
-        let before: Vec<FootnoteId> = state.footnotes().iter().map(|n| n.footnote_id).collect();
+    fn add(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> Id<Footnote> {
+        let before: Vec<Id<Footnote>> = state.footnotes().iter().map(|n| n.footnote_id).collect();
         state.handle_command(ProseCommand::InsertFootnote {
             block_id: block,
             pos,
@@ -454,7 +454,7 @@ mod tests {
         let (mut state, ids) = document(ambre_core::PeerId(1), &["text"]);
         let real = add(&mut state, ids[0], DocOffset::new(4), "a note");
         let annots = doc::annots(state.document());
-        let shaped_alike = FootnoteId::new();
+        let shaped_alike = Id::<Footnote>::mint();
         let entry = annots
             .insert_container(&shaped_alike.to_hyphenated(), LoroMap::new())
             .map(doc::Fields::<doc::AnnotKey>::of)
@@ -462,7 +462,7 @@ mod tests {
         entry
             .insert(doc::AnnotKey::NoteBlock, "no kind")
             .expect("a block name");
-        let other = FootnoteId::new();
+        let other = Id::<Footnote>::mint();
         let entry = annots
             .insert_container(&other.to_hyphenated(), LoroMap::new())
             .map(doc::Fields::<doc::AnnotKey>::of)

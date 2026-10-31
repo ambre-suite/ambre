@@ -1,49 +1,63 @@
 //! Serde adapters for identifier serialization.
 //!
-//! By default, identifiers serialize as arrays of bytes (transparent). These
-//! adapters serialize identifiers as hyphenated UUID strings for JSON APIs, and
-//! a key identifier as its hex form.
+//! By default, an identifier serializes as its bytes (transparent). The
+//! [`text`] adapter writes an identifier as its hyphenated UUID string for a
+//! JSON API, and a key identifier as its hex form.
 //!
-//! Each adapter module serves a bare field through `serialize`/`deserialize`,
-//! an `Option` field through its `option` submodule and a `Vec` field through
-//! its `vec` submodule:
+//! One generic adapter serves every identifier: the type of the field fixes
+//! which one. Each field shape has its own module:
+//!
+//! | Field | Module |
+//! | :--- | :--- |
+//! | bare | `text` |
+//! | `Option` | `text::option` |
+//! | `Vec` | `text::vec` |
+//! | `Option<Vec>` | `text::option_vec` |
 //!
 //! ```ignore
-//! #[serde(with = "ambre_core::serde_id::user_id::option")]
-//! user_id: Option<UserId>,
+//! #[serde(with = "ambre_core::serde_id::text::option")]
+//! user_id: Option<Id<User>>,
 //! ```
 
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::id::*;
+use crate::id::{Entity, Id};
 use crate::key_id::KeyId;
+use crate::uuid::Uuid;
 
-/// An identifier with a text form on the JSON wire.
-trait TextId: Sized {
+mod sealed {
+    /// Closes [`super::TextId`]: the identifiers with a text form are listed in
+    /// this module.
+    pub trait Sealed {}
+}
+
+/// An identifier with a text form on the JSON wire. Sealed: a `Uuid`
+/// identifier and a key identifier.
+pub trait TextId: sealed::Sealed + Sized {
+    /// The text form of the identifier.
     fn to_text(&self) -> String;
+
+    /// Parses the identifier from its text form.
+    ///
+    /// # Errors
+    ///
+    /// The reason, when `text` is not the text form of an identifier.
     fn from_text(text: &str) -> Result<Self, String>;
 }
 
-macro_rules! uuid_text_id {
-    ($($id_type:ty),* $(,)?) => {
-        $(impl TextId for $id_type {
-            fn to_text(&self) -> String {
-                self.to_string()
-            }
+impl<E: Entity<Repr = Uuid>> sealed::Sealed for Id<E> {}
+impl<E: Entity<Repr = Uuid>> TextId for Id<E> {
+    fn to_text(&self) -> String {
+        self.to_string()
+    }
 
-            fn from_text(text: &str) -> Result<Self, String> {
-                Self::parse_str(text).map_err(|error| error.to_string())
-            }
-        })*
-    };
+    fn from_text(text: &str) -> Result<Self, String> {
+        Self::parse_str(text).map_err(|error| error.to_string())
+    }
 }
 
-uuid_text_id!(
-    DocumentId, UserId, ChannelId, SpaceId, MetaId, SegmentId, CategoryId, MeetingId, MessageId,
-    SnapshotId, OrgId, LeaseId,
-);
-
+impl sealed::Sealed for KeyId {}
 impl TextId for KeyId {
     fn to_text(&self) -> String {
         self.to_hex()
@@ -54,55 +68,6 @@ impl TextId for KeyId {
     }
 }
 
-fn write<I: TextId, S: Serializer>(id: &I, serializer: S) -> Result<S::Ok, S::Error> {
-    serializer.serialize_str(&id.to_text())
-}
-
-fn read<'de, I: TextId, D: Deserializer<'de>>(deserializer: D) -> Result<I, D::Error> {
-    let text = String::deserialize(deserializer)?;
-    I::from_text(&text).map_err(D::Error::custom)
-}
-
-fn write_option<I: TextId, S: Serializer>(
-    id: &Option<I>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    id.as_ref().map(TextId::to_text).serialize(serializer)
-}
-
-fn read_option<'de, I: TextId, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Option<I>, D::Error> {
-    Option::<String>::deserialize(deserializer)?
-        .map(|text| I::from_text(&text).map_err(D::Error::custom))
-        .transpose()
-}
-
-fn write_vec<I: TextId, S: Serializer>(ids: &[I], serializer: S) -> Result<S::Ok, S::Error> {
-    serializer.collect_seq(ids.iter().map(TextId::to_text))
-}
-
-fn read_vec<'de, I: TextId, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<I>, D::Error> {
-    texts_to_ids(Vec::<String>::deserialize(deserializer)?)
-}
-
-fn write_option_vec<I: TextId, S: Serializer>(
-    ids: &Option<Vec<I>>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    ids.as_ref()
-        .map(|ids| ids.iter().map(TextId::to_text).collect::<Vec<_>>())
-        .serialize(serializer)
-}
-
-fn read_option_vec<'de, I: TextId, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Option<Vec<I>>, D::Error> {
-    Option::<Vec<String>>::deserialize(deserializer)?
-        .map(texts_to_ids)
-        .transpose()
-}
-
 fn texts_to_ids<I: TextId, E: serde::de::Error>(texts: Vec<String>) -> Result<Vec<I>, E> {
     texts
         .iter()
@@ -110,163 +75,150 @@ fn texts_to_ids<I: TextId, E: serde::de::Error>(texts: Vec<String>) -> Result<Ve
         .collect()
 }
 
-macro_rules! define_serde_adapter {
-    ($name:ident, $id_type:ty) => {
-        pub mod $name {
-            use super::*;
+/// The text adapter of an identifier.
+pub mod text {
+    use super::*;
 
-            /// Writes the identifier as its text form.
-            ///
-            /// # Errors
-            ///
-            /// Whatever `serializer` refuses.
-            pub fn serialize<S: Serializer>(
-                id: &$id_type,
-                serializer: S,
-            ) -> Result<S::Ok, S::Error> {
-                write(id, serializer)
-            }
+    /// Writes the identifier as its text form.
+    ///
+    /// # Errors
+    ///
+    /// Whatever `serializer` refuses.
+    pub fn serialize<I: TextId, S: Serializer>(id: &I, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&id.to_text())
+    }
 
-            /// Reads the identifier from its text form.
-            ///
-            /// # Errors
-            ///
-            /// A value that is not a string, or a string that is not the identifier.
-            pub fn deserialize<'de, D: Deserializer<'de>>(
-                deserializer: D,
-            ) -> Result<$id_type, D::Error> {
-                read(deserializer)
-            }
+    /// Reads the identifier from its text form.
+    ///
+    /// # Errors
+    ///
+    /// A value that is not a string, or a string that is not the identifier.
+    pub fn deserialize<'de, I: TextId, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<I, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        I::from_text(&text).map_err(D::Error::custom)
+    }
 
-            /// The adapter of an optional identifier: `null` when absent.
-            pub mod option {
-                use super::super::*;
+    /// The adapter of an optional identifier: `null` when absent.
+    pub mod option {
+        use super::super::*;
 
-                /// Writes the identifier as its text form, or `null`.
-                ///
-                /// # Errors
-                ///
-                /// Whatever `serializer` refuses.
-                pub fn serialize<S: Serializer>(
-                    id: &Option<$id_type>,
-                    serializer: S,
-                ) -> Result<S::Ok, S::Error> {
-                    write_option(id, serializer)
-                }
-
-                /// Reads the identifier from its text form, or `null`.
-                ///
-                /// # Errors
-                ///
-                /// A value that is neither `null` nor the identifier's text.
-                pub fn deserialize<'de, D: Deserializer<'de>>(
-                    deserializer: D,
-                ) -> Result<Option<$id_type>, D::Error> {
-                    read_option(deserializer)
-                }
-            }
-
-            /// The adapter of a list of identifiers.
-            pub mod vec {
-                use super::super::*;
-
-                /// Writes each identifier as its text form.
-                ///
-                /// # Errors
-                ///
-                /// Whatever `serializer` refuses.
-                pub fn serialize<S: Serializer>(
-                    ids: &[$id_type],
-                    serializer: S,
-                ) -> Result<S::Ok, S::Error> {
-                    write_vec(ids, serializer)
-                }
-
-                /// Reads each identifier from its text form.
-                ///
-                /// # Errors
-                ///
-                /// A value that is not a list, or an entry that is not the identifier.
-                pub fn deserialize<'de, D: Deserializer<'de>>(
-                    deserializer: D,
-                ) -> Result<Vec<$id_type>, D::Error> {
-                    read_vec(deserializer)
-                }
-            }
-
-            /// The adapter of an optional list of identifiers: `null` when absent.
-            pub mod option_vec {
-                use super::super::*;
-
-                /// Writes each identifier as its text form, or `null`.
-                ///
-                /// # Errors
-                ///
-                /// Whatever `serializer` refuses.
-                pub fn serialize<S: Serializer>(
-                    ids: &Option<Vec<$id_type>>,
-                    serializer: S,
-                ) -> Result<S::Ok, S::Error> {
-                    write_option_vec(ids, serializer)
-                }
-
-                /// Reads each identifier from its text form, or `null`.
-                ///
-                /// # Errors
-                ///
-                /// A value that is neither `null` nor a list of the identifier's text.
-                pub fn deserialize<'de, D: Deserializer<'de>>(
-                    deserializer: D,
-                ) -> Result<Option<Vec<$id_type>>, D::Error> {
-                    read_option_vec(deserializer)
-                }
-            }
+        /// Writes the identifier as its text form, or `null`.
+        ///
+        /// # Errors
+        ///
+        /// Whatever `serializer` refuses.
+        pub fn serialize<I: TextId, S: Serializer>(
+            id: &Option<I>,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error> {
+            id.as_ref().map(TextId::to_text).serialize(serializer)
         }
-    };
-}
 
-define_serde_adapter!(document_id, DocumentId);
-define_serde_adapter!(user_id, UserId);
-define_serde_adapter!(channel_id, ChannelId);
-define_serde_adapter!(space_id, SpaceId);
-define_serde_adapter!(meta_id, MetaId);
-define_serde_adapter!(segment_id, SegmentId);
-define_serde_adapter!(category_id, CategoryId);
-define_serde_adapter!(meeting_id, MeetingId);
-define_serde_adapter!(message_id, MessageId);
-define_serde_adapter!(snapshot_id, SnapshotId);
-define_serde_adapter!(org_id, OrgId);
-define_serde_adapter!(lease_id, LeaseId);
-define_serde_adapter!(key_id, KeyId);
+        /// Reads the identifier from its text form, or `null`.
+        ///
+        /// # Errors
+        ///
+        /// A value that is neither `null` nor the identifier's text.
+        pub fn deserialize<'de, I: TextId, D: Deserializer<'de>>(
+            deserializer: D,
+        ) -> Result<Option<I>, D::Error> {
+            Option::<String>::deserialize(deserializer)?
+                .map(|text| I::from_text(&text).map_err(D::Error::custom))
+                .transpose()
+        }
+    }
+
+    /// The adapter of a list of identifiers.
+    pub mod vec {
+        use super::super::*;
+
+        /// Writes each identifier as its text form.
+        ///
+        /// # Errors
+        ///
+        /// Whatever `serializer` refuses.
+        pub fn serialize<I: TextId, S: Serializer>(
+            ids: &[I],
+            serializer: S,
+        ) -> Result<S::Ok, S::Error> {
+            serializer.collect_seq(ids.iter().map(TextId::to_text))
+        }
+
+        /// Reads each identifier from its text form.
+        ///
+        /// # Errors
+        ///
+        /// A value that is not a list, or an entry that is not the identifier.
+        pub fn deserialize<'de, I: TextId, D: Deserializer<'de>>(
+            deserializer: D,
+        ) -> Result<Vec<I>, D::Error> {
+            texts_to_ids(Vec::<String>::deserialize(deserializer)?)
+        }
+    }
+
+    /// The adapter of an optional list of identifiers: `null` when absent.
+    pub mod option_vec {
+        use super::super::*;
+
+        /// Writes each identifier as its text form, or `null`.
+        ///
+        /// # Errors
+        ///
+        /// Whatever `serializer` refuses.
+        pub fn serialize<I: TextId, S: Serializer>(
+            ids: &Option<Vec<I>>,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error> {
+            ids.as_ref()
+                .map(|ids| ids.iter().map(TextId::to_text).collect::<Vec<_>>())
+                .serialize(serializer)
+        }
+
+        /// Reads each identifier from its text form, or `null`.
+        ///
+        /// # Errors
+        ///
+        /// A value that is neither `null` nor a list of the identifier's text.
+        pub fn deserialize<'de, I: TextId, D: Deserializer<'de>>(
+            deserializer: D,
+        ) -> Result<Option<Vec<I>>, D::Error> {
+            Option::<Vec<String>>::deserialize(deserializer)?
+                .map(texts_to_ids)
+                .transpose()
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use serde::{Deserialize, Serialize};
 
-    use crate::id::{DocumentId, OrgId, UserId};
+    use crate::id::{Document, Id, Org, User};
     use crate::key_id::KeyId;
 
     #[derive(Debug, PartialEq, Serialize, Deserialize)]
     struct Body {
-        #[serde(with = "super::document_id")]
-        document_id: DocumentId,
-        #[serde(with = "super::org_id::option")]
-        org_id: Option<OrgId>,
-        #[serde(with = "super::user_id::vec")]
-        members: Vec<UserId>,
-        #[serde(with = "super::key_id")]
+        #[serde(with = "super::text")]
+        document_id: Id<Document>,
+        #[serde(with = "super::text::option")]
+        org_id: Option<Id<Org>>,
+        #[serde(with = "super::text::vec")]
+        members: Vec<Id<User>>,
+        #[serde(with = "super::text")]
         key_id: KeyId,
-        #[serde(default, with = "super::document_id::option_vec")]
-        wanted: Option<Vec<DocumentId>>,
+        #[serde(default, with = "super::text::option_vec")]
+        wanted: Option<Vec<Id<Document>>>,
     }
 
     fn body() -> Body {
         Body {
-            document_id: DocumentId::from_bytes([0x11; 16]),
-            org_id: Some(OrgId::from_bytes([0x22; 16])),
-            members: vec![UserId::from_bytes([0x33; 16])],
+            document_id: Id::from_bytes([0x11; 16]),
+            org_id: Some(Id::from_bytes([0x22; 16])),
+            members: vec![Id::from_bytes([0x33; 16])],
             key_id: KeyId::from_array([0xab; 16]),
-            wanted: Some(vec![DocumentId::from_bytes([0x44; 16])]),
+            wanted: Some(vec![Id::from_bytes([0x44; 16])]),
         }
     }
 

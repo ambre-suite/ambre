@@ -117,13 +117,14 @@ impl Transition {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{ElementId, SnapElement};
+    use ambre_bus::app::toile::SnapElement;
     use ambre_core::Rgba;
+    use ambre_core::id::{Element, Id};
     use ambre_draw::{Rect, Size};
 
     fn snap(id: &str, bounds: Rect) -> SnapElement {
         SnapElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             bounds,
             rotation: ambre_core::Radians::ZERO,
             opacity: ambre_core::Opacity::new(1.0).unwrap(),
@@ -172,13 +173,13 @@ mod tests {
         let shared = f
             .overrides
             .iter()
-            .find(|a| a.id == ElementId("shared".into()))
+            .find(|a| a.id == Id::<Element>::from_text("shared".into()))
             .unwrap();
         assert_eq!(shared.bounds, Rect::new(0.0, 0.0, 10.0, 10.0));
         let new = f
             .overrides
             .iter()
-            .find(|a| a.id == ElementId("new".into()))
+            .find(|a| a.id == Id::<Element>::from_text("new".into()))
             .unwrap();
         assert_eq!(new.opacity.get(), 0.0);
     }
@@ -201,13 +202,13 @@ mod tests {
         let shared = f
             .overrides
             .iter()
-            .find(|a| a.id == ElementId("shared".into()))
+            .find(|a| a.id == Id::<Element>::from_text("shared".into()))
             .unwrap();
         assert_eq!(shared.bounds, Rect::new(100.0, 100.0, 110.0, 110.0));
         let new = f
             .overrides
             .iter()
-            .find(|a| a.id == ElementId("new".into()))
+            .find(|a| a.id == Id::<Element>::from_text("new".into()))
             .unwrap();
         assert!((new.opacity.get() - 1.0).abs() < 1e-6);
     }
@@ -223,7 +224,7 @@ mod tests {
         let shared = f
             .overrides
             .iter()
-            .find(|a| a.id == ElementId("shared".into()))
+            .find(|a| a.id == Id::<Element>::from_text("shared".into()))
             .unwrap();
         assert_eq!(shared.bounds, Rect::new(50.0, 50.0, 60.0, 60.0));
         assert_eq!(f.cam.center, Point::new(52.5, 52.5));

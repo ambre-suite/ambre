@@ -25,7 +25,7 @@ fn web_embed_layer() -> Option<web_sys::HtmlElement> {
 /// owner their (throwaway) chrome signals need. Given the embedded document's id,
 /// type and child canvas size, it wires a demultiplexed Logic->UI queue and
 /// returns the view. `FrameHost` stays app-agnostic: it only calls this.
-pub type MakeChild = Rc<dyn Fn(DocumentId, DocType, Size) -> AppView>;
+pub type MakeChild = Rc<dyn Fn(Id<Document>, DocType, Size) -> AppView>;
 
 /// Rewrite an input event for the focused child ("Input focus"). Pointer
 /// coordinates are mapped from the canvas into the child's pixel space through
@@ -87,14 +87,14 @@ fn remap_with(ev: &InputEvent, to_child: impl Fn(Point) -> Option<Point>) -> Opt
 /// `pump` answers whether the child changed on its own. Returns whether the
 /// board must recomposite: a new child, a resize, or a pumped change.
 fn reconcile_children<C>(
-    children: &mut HashMap<ElementId, C>,
-    sizes: &mut HashMap<ElementId, ambre_core::Size<Px<WholeCss>>>,
+    children: &mut HashMap<Id<Element>, C>,
+    sizes: &mut HashMap<Id<Element>, ambre_core::Size<Px<WholeCss>>>,
     embeds: &[VisibleEmbed],
     mut make: impl FnMut(&VisibleEmbed) -> C,
     mut resize: impl FnMut(&mut C, ambre_core::Size<Px<WholeCss>>),
     mut pump: impl FnMut(&mut C) -> bool,
 ) -> bool {
-    let live: HashSet<ElementId> = embeds.iter().map(|e| e.element.clone()).collect();
+    let live: HashSet<Id<Element>> = embeds.iter().map(|e| e.element.clone()).collect();
     children.retain(|id, _| live.contains(id));
     sizes.retain(|id, _| live.contains(id));
 
@@ -130,7 +130,7 @@ fn reconcile_children<C>(
 fn paint_children<S: DrawSurface + ?Sized, C>(
     surface: &mut S,
     embeds: &[VisibleEmbed],
-    children: &mut HashMap<ElementId, C>,
+    children: &mut HashMap<Id<Element>, C>,
     mut paint: impl FnMut(&mut C, &mut S),
 ) {
     for e in embeds {
@@ -187,10 +187,10 @@ pub struct FrameHost {
     /// paint is one per embed. Keyed by document, two boxes of different sizes
     /// resized one view against each other every frame. Only one of them was ever
     /// the right size for it.
-    children: HashMap<ElementId, AppView>,
+    children: HashMap<Id<Element>, AppView>,
     /// The last logical canvas size each child was resized to. A moved or zoomed
     /// embed only triggers a child `resize` when its box actually changes.
-    child_sizes: HashMap<ElementId, ambre_core::Size<Px<WholeCss>>>,
+    child_sizes: HashMap<Id<Element>, ambre_core::Size<Px<WholeCss>>>,
     /// The launcher's child-view factory (see [`MakeChild`]). `None` for a host
     /// that never embeds (or before the launcher installs it).
     make_child: Option<MakeChild>,
@@ -401,7 +401,7 @@ impl FrameHost {
     }
 
     /// Switch the active document on the live view, keeping the GPU surface.
-    pub fn set_document(&mut self, document_id: DocumentId) {
+    pub fn set_document(&mut self, document_id: Id<Document>) {
         self.view.set_document(document_id);
     }
 
@@ -708,20 +708,20 @@ impl FrameHost {
 #[cfg(test)]
 mod tests {
     use super::{paint_children, reconcile_children, remap_with, send_faces};
+    use ambre_bus::DocType;
     use ambre_bus::LogicCommand;
-    use ambre_bus::app::toile::ElementId;
-    use ambre_bus::{DocType, DocumentId};
     use ambre_canvas::InputEvent;
     use ambre_chrome::commands::{Key, KeyChar, Modifiers};
+    use ambre_core::id::{Document, Element, Id};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use ambre_draw::{Affine, Color, DrawSurface, Point, Rect, Size};
     use ambre_toile::ui::embed::VisibleEmbed;
     use std::collections::HashMap;
     use wasm_bindgen_test::wasm_bindgen_test;
 
-    fn embed(element: &str, document_id: DocumentId, to_screen: Affine) -> VisibleEmbed {
+    fn embed(element: &str, document_id: Id<Document>, to_screen: Affine) -> VisibleEmbed {
         VisibleEmbed {
-            element: ElementId(element.to_owned()),
+            element: Id::<Element>::from_text(element.to_owned()),
             document_id,
             doc_type: DocType::Trame,
             screen_rect: Rect::new(10.0, 20.0, 110.0, 80.0),
@@ -835,12 +835,12 @@ mod tests {
     /// for its own element, and a third reconcile keeps them both.
     #[wasm_bindgen_test]
     fn two_embeds_of_one_document_are_two_children() {
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         let embeds = [
             embed("a", doc, Affine::IDENTITY),
             embed("b", doc, Affine::IDENTITY),
         ];
-        let mut children: HashMap<ElementId, String> = HashMap::new();
+        let mut children: HashMap<Id<Element>, String> = HashMap::new();
         let mut sizes = HashMap::new();
         let mut made = Vec::new();
         reconcile_children(
@@ -848,23 +848,23 @@ mod tests {
             &mut sizes,
             &embeds,
             |e| {
-                made.push(e.element.0.clone());
-                e.element.0.clone()
+                made.push(e.element.as_str().to_owned());
+                e.element.as_str().to_owned()
             },
             |_, _| {},
             |_| false,
         );
         assert_eq!(children.len(), 2, "two embeds of one document share a view");
         assert_eq!(made, ["a", "b"]);
-        assert_eq!(children[&ElementId("b".to_owned())], "b");
+        assert_eq!(children[&Id::<Element>::from_text("b".to_owned())], "b");
     }
 
     /// A child that changed on its own makes the board
     /// recomposite, and a quiet frame does not.
     #[wasm_bindgen_test]
     fn a_child_that_changed_on_its_own_repaints_the_board() {
-        let embeds = [embed("a", DocumentId::new(), Affine::IDENTITY)];
-        let mut children: HashMap<ElementId, u32> = HashMap::new();
+        let embeds = [embed("a", Id::<Document>::mint(), Affine::IDENTITY)];
+        let mut children: HashMap<Id<Element>, u32> = HashMap::new();
         let mut sizes = HashMap::new();
         let mut pass = |changed: bool| {
             reconcile_children(
@@ -891,8 +891,9 @@ mod tests {
     #[wasm_bindgen_test]
     fn a_child_paints_inside_its_embeds_clip_and_transform() {
         let turned = Affine::translate((40.0, 30.0)) * Affine::rotate(0.5);
-        let embeds = [embed("a", DocumentId::new(), turned)];
-        let mut children: HashMap<ElementId, ()> = HashMap::from([(ElementId("a".to_owned()), ())]);
+        let embeds = [embed("a", Id::<Document>::mint(), turned)];
+        let mut children: HashMap<Id<Element>, ()> =
+            HashMap::from([(Id::<Element>::from_text("a".to_owned()), ())]);
         let mut surface = RecordingSurface::new();
         let red = Color::from_rgba8(255, 0, 0, 255);
         paint_children(&mut surface, &embeds, &mut children, |_, s| {

@@ -136,7 +136,7 @@ impl Snapshot {
     ///
     /// The parent proof is deliberately NOT required to be non-empty: the first
     /// snapshot of a document has the genesis base as its parent. That first
-    /// snapshot carries no proof (see [`ambre_core::SnapshotId::genesis`]).
+    /// snapshot carries no proof (see [`ambre_core::Id::genesis`]).
     ///
     /// # Errors
     ///
@@ -211,17 +211,18 @@ pub struct SeqUpdate {
 mod validate_tests {
     use super::*;
     use crate::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
-    use ambre_core::{DocumentId, KeyId, PublicKey, SnapshotId};
+    use ambre_core::Id;
+    use ambre_core::{KeyId, PublicKey};
 
     fn update(cipher: Vec<u8>, clock: u64) -> Update {
         Update {
             ciphertext: Ciphertext(cipher),
             nonce: Nonce([0u8; 24]),
             public_data: UpdatePublicData {
-                document_id: DocumentId::from_bytes([1u8; 16]),
+                document_id: Id::from_bytes([1u8; 16]),
                 pub_key: PublicKey::from_array([2u8; 32]),
                 key_id: KeyId::from_array([4u8; 16]),
-                snapshot_id: SnapshotId::from_bytes([3u8; 16]),
+                snapshot_id: Id::from_bytes([3u8; 16]),
                 clock: Clock(clock),
             },
             commitment_tag: CommitmentTag([0u8; 32]),
@@ -234,7 +235,7 @@ mod validate_tests {
             ciphertext: Ciphertext(cipher),
             nonce: Nonce([0u8; 24]),
             public_data: EphemeralPublicData {
-                document_id: DocumentId::from_bytes([1u8; 16]),
+                document_id: Id::from_bytes([1u8; 16]),
                 pub_key: PublicKey::from_array([2u8; 32]),
                 key_id: KeyId::from_array([4u8; 16]),
                 counter: Counter(counter),
@@ -309,10 +310,10 @@ mod validate_tests {
             ciphertext: Ciphertext(cipher),
             nonce: Nonce([0u8; 24]),
             public_data: SnapshotPublicData {
-                document_id: DocumentId::from_bytes([1u8; 16]),
+                document_id: Id::from_bytes([1u8; 16]),
                 pub_key: PublicKey::from_array([2u8; 32]),
                 key_id: KeyId::from_array([4u8; 16]),
-                snapshot_id: SnapshotId::from_bytes([3u8; 16]),
+                snapshot_id: Id::from_bytes([3u8; 16]),
                 parent_snapshot_proof: proof,
                 parent_snapshot_update_clocks: clocks,
             },

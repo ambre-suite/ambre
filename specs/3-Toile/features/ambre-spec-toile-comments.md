@@ -115,7 +115,7 @@ reply mints a rival container (`TOILE-029`).
 
 ```rust
 pub enum CommentAnchor {
-    Element(ElementId),        // the pin tracks the element as it moves
+    Element(Id<Element>),        // the pin tracks the element as it moves
     Point(kurbo::Point),       // a free world point, for a remark on empty board
 }
 ```
@@ -147,7 +147,7 @@ before opening it; every other body arrives on `CommentThreadData` alone (`TOILE
    message count and its resolved flag, and no body (`TOILE-026`, `TOILE-205`);
 3. skip a thread whose anchor element is gone, without touching it (`TOILE-025`).
 
-**Why the author is a `UserId`.** A message must carry the person, not the session: the same argument
+**Why the author is an `Id<User>`.** A message must carry the person, not the session: the same argument
 as a reaction, and it is written once in
 `features/ambre-spec-toile-reactions.md section 5` (`TOILE-FEAT-014`).
 

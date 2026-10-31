@@ -11,8 +11,9 @@
 // Pure geometry -- host-tested, no `cfg(wasm32)`, no GPU.
 // ============================================================================
 
-use ambre_bus::app::toile::{ConnectorId, DisplayNode};
+use ambre_bus::app::toile::DisplayNode;
 use ambre_core::BoardLength;
+use ambre_core::id::{Connector, Id};
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurve, ParamCurveArclen, PathSeg};
 
@@ -77,7 +78,7 @@ pub fn connector_at(
     nodes: &[DisplayNode],
     world_pt: Point,
     pick: super::viewport::BoardLength,
-) -> Option<ConnectorId> {
+) -> Option<Id<Connector>> {
     nodes
         .iter()
         .rev()
@@ -116,7 +117,7 @@ mod tests {
 
     fn conn(id: &str, path: BezPath, label: &str) -> DisplayNode {
         DisplayNode::Connector(DisplayConnector {
-            id: ConnectorId(id.to_owned()),
+            id: Id::<Connector>::from_text(id.to_owned()),
             path,
             style: ElementStyle::default(),
             arrows: EndCaps {
@@ -162,7 +163,7 @@ mod tests {
         let nodes = vec![conn("c1", line((0.0, 0.0), (100.0, 0.0)), "")];
         assert_eq!(
             connector_at(&nodes, Point::new(50.0, 1.0), pick()),
-            Some(ConnectorId("c1".into()))
+            Some(Id::<Connector>::from_text("c1".into()))
         );
         assert_eq!(connector_at(&nodes, Point::new(50.0, 40.0), pick()), None);
     }
@@ -175,7 +176,7 @@ mod tests {
         let captioned = vec![conn("c1", line((0.0, 0.0), (100.0, 0.0)), "owns")];
         assert_eq!(
             connector_at(&captioned, far, pick()),
-            Some(ConnectorId("c1".into()))
+            Some(Id::<Connector>::from_text("c1".into()))
         );
         // The same box on an uncaptioned arrow is not a target: an empty
         // caption paints nothing, so nothing there is clickable.
@@ -193,7 +194,7 @@ mod tests {
         ];
         assert_eq!(
             connector_at(&nodes, Point::new(50.0, 0.0), pick()),
-            Some(ConnectorId("over".into()))
+            Some(Id::<Connector>::from_text("over".into()))
         );
     }
 }

@@ -189,7 +189,7 @@ resolve and are tested like every other menu entry
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
 | One flat map keyed by target and user together | a sub-map per target, created by the first reactor | two users reacting at once on a fresh element create two rival containers and the merge keeps one. The root map always exists, so the flat shape writes two keys and both survive; ids never contain the separator, so the target is recovered by splitting |
-| Keyed by `UserId`, never `PeerID` | keying by the writing peer | a per-session key would let one user count twice and would strand the entry on the next session. A reaction is a decision by a person, and it must survive a reload, a key rotation and a second device |
+| Keyed by `Id<User>`, never `PeerID` | keying by the writing peer | a per-session key would let one user count twice and would strand the entry on the next session. A reaction is a decision by a person, and it must survive a reload, a key rotation and a second device |
 | The tally is derived, never stored | a counter per emoji, incremented on write | a stored count is a second truth that drifts the first time a write is lost or replayed. Deriving it costs one pass and can be wrong in one place only |
 | A deleted target keeps its entries | deleting the entries with their target | the delete may be undone, and destroying data on a read is how a concurrent edit loses work. The entries are skipped at derivation and reclaimed by compaction |
 | A reaction is an undo item | excluding it from the history, as a comment is (`features/ambre-spec-toile-comments.md section 3`) | a reaction is a write to the document like any other, and the history is the one place a mistaken write is corrected |

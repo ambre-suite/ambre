@@ -8,8 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::UserId;
 use crate::envelope::Signature;
+use crate::id::{Id, User};
 
 /// Length of a session nonce, in bytes.
 pub const SESSION_NONCE_LEN: usize = 16;
@@ -103,7 +103,7 @@ crate::envelope::fixed_bytes!(SessionNonce, SESSION_NONCE_LEN);
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct PeerEntry {
     /// The user the entry claims.
-    pub user: UserId,
+    pub user: Id<User>,
     /// The nonce the PeerID derives from.
     pub nonce: SessionNonce,
     /// The signature of `user` over the document, the PeerID and the nonce.
@@ -130,7 +130,7 @@ impl PeerEntry {
         let (nonce, rest) = rest.split_first_chunk::<SESSION_NONCE_LEN>()?;
         let signature: [u8; ENTRY_SIGNATURE_LEN] = rest.try_into().ok()?;
         Some(Self {
-            user: UserId::from_bytes(*user),
+            user: Id::<User>::from_bytes(*user),
             nonce: SessionNonce(*nonce),
             signature: Signature(signature),
         })
@@ -229,7 +229,7 @@ mod tests {
     #[test]
     fn an_entry_reads_back_and_a_truncated_one_does_not() {
         let entry = PeerEntry {
-            user: UserId::from_bytes([3; 16]),
+            user: Id::<User>::from_bytes([3; 16]),
             nonce: SessionNonce([5; SESSION_NONCE_LEN]),
             signature: Signature([7; ENTRY_SIGNATURE_LEN]),
         };
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn an_entry_crosses_the_bus_as_its_registry_bytes() {
         let entry = PeerEntry {
-            user: UserId::from_bytes([3; 16]),
+            user: Id::<User>::from_bytes([3; 16]),
             nonce: SessionNonce([5; SESSION_NONCE_LEN]),
             signature: Signature([7; ENTRY_SIGNATURE_LEN]),
         };

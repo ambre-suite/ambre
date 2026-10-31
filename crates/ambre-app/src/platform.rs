@@ -758,7 +758,7 @@ pub(crate) fn open_plaintext_container(
 fn read_container(
     container: &ambre_core::PlaintextContainer,
     toasts: Toasts,
-) -> Option<(DocumentId, ambre_bus::DocType, ambre_core::SnapshotBytes)> {
+) -> Option<(Id<Document>, ambre_bus::DocType, ambre_core::SnapshotBytes)> {
     let header = match ambre_core::docfile::read_ambre_plaintext(container) {
         Ok(header) => header,
         Err(e) => {
@@ -782,7 +782,7 @@ fn read_container(
 /// Store a container's sealed payload as the document's copy, and navigate
 /// to it.
 async fn store_container(
-    document_id: DocumentId,
+    document_id: Id<Document>,
     doc_type: ambre_bus::DocType,
     sealed: ambre_core::SealedRowBytes,
     toasts: Toasts,

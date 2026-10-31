@@ -15,8 +15,9 @@
 )]
 
 use ambre_bus::app::toile::{
-    Broadcast, DeckFrame, DeckView, ElementId, PresentMode, SlideCount, SlideIndex, SlidePosition,
+    Broadcast, DeckFrame, DeckView, PresentMode, SlideCount, SlideIndex, SlidePosition,
 };
+use ambre_core::id::{Frame, Id};
 use ambre_toile::chrome::{DeckIntent, DeckPanel, PresenterIntent, PresenterPanel};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
@@ -80,7 +81,7 @@ async fn a_peer_note_write_keeps_the_caret() {
 #[wasm_bindgen_test]
 async fn deck_panel_lists_the_slides_in_order() {
     let frame = |id: &str, name: &str| DeckFrame {
-        id: ElementId(id.to_owned()),
+        id: Id::<Frame>::from_text(id.to_owned()),
         name: name.to_owned(),
     };
     let view = RwSignal::new(DeckView {

@@ -1,4 +1,4 @@
-//! Connector geometry. A connector references a source and target [`ElementId`]
+//! Connector geometry. A connector references a source and target [`Id<Element>`]
 //! plus an [`Anchor`] on each. Its path is **pure client compute**, recomputed
 //! at derivation from the current element bounds, never a CRDT mutation on
 //! element move. This keeps drags to a single register write and makes
@@ -9,15 +9,17 @@ use std::collections::HashMap;
 use ambre_core::BoardLength;
 use kurbo::{BezPath, Point, Rect};
 
-use crate::logic::model::{Anchor, ConnectorId, ElementId, EndCaps, PathType};
+use ambre_core::id::{self, Element, Id};
+
+use crate::logic::model::{Anchor, EndCaps, PathType};
 
 /// A resolved connector, materialized from its CRDT `LoroMap` for routing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Connector {
-    pub id: ConnectorId,
-    pub from: ElementId,
+    pub id: Id<id::Connector>,
+    pub from: Id<Element>,
     pub from_anch: Anchor,
-    pub to: ElementId,
+    pub to: Id<Element>,
     pub to_anch: Anchor,
     pub path_type: PathType,
     pub arrows: EndCaps,
@@ -44,7 +46,7 @@ impl Connector {
     /// Route against the current element bounds. `None` when an endpoint element
     /// was deleted -- the connector is then dropped from the `DisplayViewport`
     /// and, if the deletion was local, garbage-collected.
-    pub fn route(&self, bounds: &HashMap<ElementId, Rect>) -> Option<BezPath> {
+    pub fn route(&self, bounds: &HashMap<Id<Element>, Rect>) -> Option<BezPath> {
         let a = anchor_point(bounds.get(&self.from)?, self.from_anch);
         let b = anchor_point(bounds.get(&self.to)?, self.to_anch);
         Some(match self.path_type {
@@ -59,7 +61,7 @@ impl Connector {
     /// A box the routed path never leaves, without routing it: the endpoints,
     /// and for a curve its two control points too. `None` when an endpoint
     /// element was deleted, like [`route`](Self::route).
-    pub fn hull(&self, bounds: &HashMap<ElementId, Rect>) -> Option<Rect> {
+    pub fn hull(&self, bounds: &HashMap<Id<Element>, Rect>) -> Option<Rect> {
         let a = anchor_point(bounds.get(&self.from)?, self.from_anch);
         let b = anchor_point(bounds.get(&self.to)?, self.to_anch);
         let ends = Rect::from_points(a, b);
@@ -207,19 +209,25 @@ mod tests {
         Rect::new(x, y, x + w, y + h)
     }
 
-    fn two_boxes() -> HashMap<ElementId, Rect> {
+    fn two_boxes() -> HashMap<Id<Element>, Rect> {
         let mut m = HashMap::new();
-        m.insert(ElementId("a".into()), rect(0.0, 0.0, 100.0, 100.0));
-        m.insert(ElementId("b".into()), rect(300.0, 0.0, 100.0, 100.0));
+        m.insert(
+            Id::<Element>::from_text("a".into()),
+            rect(0.0, 0.0, 100.0, 100.0),
+        );
+        m.insert(
+            Id::<Element>::from_text("b".into()),
+            rect(300.0, 0.0, 100.0, 100.0),
+        );
         m
     }
 
     fn conn(path_type: PathType) -> Connector {
         Connector {
-            id: ConnectorId("c".into()),
-            from: ElementId("a".into()),
+            id: Id::<id::Connector>::from_text("c".into()),
+            from: Id::<Element>::from_text("a".into()),
             from_anch: Anchor::Right,
-            to: ElementId("b".into()),
+            to: Id::<Element>::from_text("b".into()),
             to_anch: Anchor::Left,
             path_type,
             arrows: EndCaps {
@@ -253,7 +261,10 @@ mod tests {
     fn the_hull_holds_the_routed_path() {
         use kurbo::Shape;
         let mut b = two_boxes();
-        b.insert(ElementId("b".into()), rect(300.0, 250.0, 100.0, 100.0));
+        b.insert(
+            Id::<Element>::from_text("b".into()),
+            rect(300.0, 250.0, 100.0, 100.0),
+        );
         let sides = [
             Anchor::Top,
             Anchor::Bottom,
@@ -284,7 +295,7 @@ mod tests {
     #[test]
     fn missing_endpoint_yields_none() {
         let mut b = two_boxes();
-        b.remove(&ElementId("b".into()));
+        b.remove(&Id::<Element>::from_text("b".into()));
         assert!(conn(PathType::Straight).route(&b).is_none());
     }
 }

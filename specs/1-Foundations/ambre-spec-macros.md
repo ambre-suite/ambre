@@ -197,7 +197,7 @@ pub enum Trigger {
 
 /// One approval, kept in the running user's settings.
 pub struct Approval {
-    pub document: DocumentId,
+    pub document: Id<Document>,
     pub digest: [u8; 32],
     pub granted: Vec<Capability>,
     pub source: ApprovalSource,

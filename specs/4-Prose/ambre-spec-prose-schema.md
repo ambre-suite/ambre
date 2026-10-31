@@ -209,7 +209,7 @@ function is total (`PROSE-007`).
 | `anchor_start`, `anchor_end` | `i64` | the cached span, in the block's own offsets | comment | built |
 | `resolved` | `bool` | whether the thread is closed | comment | built |
 | `author` | String | the self-asserted display name, stamped by the local session | suggestion | built |
-| `user_id` | String | the canonical `UserId` of the author, from the session identity. Ownership is read from it | suggestion | built |
+| `user_id` | String | the canonical `Id<User>` of the author, from the session identity. Ownership is read from it | suggestion | built |
 | `replies` | List | the thread, the opening comment first. A comment's author is the one its opening reply names | comment | built |
 | `block_id` | String | the `TreeID` of the block holding the note's text (`PROSE-FEAT-305`) | footnote | built |
 | `name`, `block_id`, `range` | -- | the deferred bookmark fields | bookmark | design |

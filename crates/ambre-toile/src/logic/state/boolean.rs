@@ -14,7 +14,9 @@ use loro::{LoroMap, LoroValue};
 
 use crate::logic::boolean::{FLATTEN_TOL, boolean_op};
 use crate::logic::command::{BoolOp, Sources, ToileError, ToileEvent, ToileOutcome};
-use crate::logic::model::{ElementId, ElementKind, ElementStyle, NodeId, ShapeKind};
+use ambre_core::id::{Element, Id};
+
+use crate::logic::model::{ElementKind, ElementStyle, NodeId, ShapeKind};
 
 use super::ToileState;
 use super::codec::has_type;
@@ -33,7 +35,7 @@ impl ToileState {
     pub(super) fn boolean_op(
         &mut self,
         op: BoolOp,
-        ids: &[ElementId],
+        ids: &[Id<Element>],
         keep: Sources,
     ) -> ToileOutcome {
         // Resolve the eligible sources to world-space paths, in selection order.
@@ -156,14 +158,9 @@ mod tests {
     };
     use crate::logic::model::{ElementKind, ShapeKind};
     use crate::logic::state::ToileState;
+    use ambre_core::id::{Element, Id};
 
-    fn add_rect(
-        st: &mut ToileState,
-        x: f64,
-        y: f64,
-        w: f64,
-        h: f64,
-    ) -> crate::logic::model::ElementId {
+    fn add_rect(st: &mut ToileState, x: f64, y: f64, w: f64, h: f64) -> Id<Element> {
         let out = st.handle_command(ToileCommand::CreateElement {
             kind: ElementKind::Shape(ShapeKind::Rect),
             at: Point::new(x, y),

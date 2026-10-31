@@ -17,7 +17,7 @@ impl SyncState {
     pub(crate) fn handle_fetch_invitee_key(
         &self,
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         invitee_email: ambre_core::Email,
     ) {
         let event_tx = self.event_tx.clone();
@@ -52,7 +52,7 @@ impl SyncState {
 
     /// Fetch the exchange key of `user_id`, wrapping nothing. Delegates to
     /// [`sharing::fetch_member_key_task`], as the invitee's fetch does.
-    pub(crate) fn handle_fetch_member_key(&self, id: Generation<Request>, user_id: UserId) {
+    pub(crate) fn handle_fetch_member_key(&self, id: Generation<Request>, user_id: Id<User>) {
         let logic_tx = self.logic_tx.clone();
         let Some(tx) = self.event_tx.clone() else {
             let _ = logic_tx.send(LogicEvent::ApiError {
@@ -80,9 +80,9 @@ impl SyncState {
     pub(crate) fn handle_invite_to_document(
         &self,
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         invitee_email: Option<ambre_core::Email>,
-        invitee: UserId,
+        invitee: Id<User>,
         role: Role,
         expect_exchange_pub_key: ambre_core::ExchangePublicKey,
     ) {
@@ -102,7 +102,7 @@ impl SyncState {
                 id,
                 RestEvent::InviteSent {
                     document_id,
-                    user_id: UserId::new(),
+                    user_id: Id::<User>::mint(),
                     display_name: invitee_email
                         .and_then(|email| ambre_core::DisplayName::cut_to_fit(&email.0))
                         .unwrap_or_else(|| ambre_core::DisplayName::handle_of(&invitee)),
@@ -164,8 +164,8 @@ impl SyncState {
     pub(crate) fn handle_revoke_from_document(
         &self,
         id: Generation<Request>,
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
     ) {
         let event_tx = self.event_tx.clone();
         let logic_tx = self.logic_tx.clone();
@@ -233,7 +233,7 @@ impl SyncState {
 
     /// Leaves a document: DELETEs this user's own share and nothing else
     /// (`SYNC-127`, `SYNC-130`). [`SyncEvent::DocumentLeft`] closes it locally.
-    pub(crate) fn handle_leave_document(&self, id: Generation<Request>, document_id: DocumentId) {
+    pub(crate) fn handle_leave_document(&self, id: Generation<Request>, document_id: Id<Document>) {
         let (Some(tx), Some(author), Some(exchange_key)) = (
             self.event_tx.clone(),
             self.author(),
@@ -271,7 +271,7 @@ impl SyncState {
     pub(crate) fn handle_list_document_members(
         &mut self,
         id: Option<Generation<Request>>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) {
         // Number the listing, so an answer older than the directory held
         // changes nothing (`SYNC-037`). A document not open holds no directory.
@@ -317,8 +317,8 @@ impl SyncState {
     pub(crate) fn handle_update_document_member_role(
         &self,
         id: Generation<Request>,
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
         role: Role,
     ) {
         let logic_tx = self.logic_tx.clone();

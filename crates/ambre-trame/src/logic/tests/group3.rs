@@ -337,11 +337,12 @@ fn merge_follows_structural_insert() {
 #[test]
 fn edit_emits_send_update_through_sink() {
     use crate::test_support::MockSyncHandle;
-    use ambre_bus::{DocumentId, SyncCommand};
+    use ambre_bus::SyncCommand;
+    use ambre_core::id::{Document, Id};
 
     let mut state = TrameState::new();
     let sync = MockSyncHandle::new();
-    let doc = DocumentId::new();
+    let doc = Id::<Document>::mint();
 
     let outcome = state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -366,9 +367,9 @@ fn edit_emits_send_update_through_sink() {
 #[test]
 fn two_peers_converge_via_mock_sync() {
     use crate::test_support::MockSyncHandle;
-    use ambre_bus::DocumentId;
+    use ambre_core::id::{Document, Id};
 
-    let doc = DocumentId::new();
+    let doc = Id::<Document>::mint();
     let mut a = TrameState::new();
     let mut b = TrameState::new();
     let sync = MockSyncHandle::new();

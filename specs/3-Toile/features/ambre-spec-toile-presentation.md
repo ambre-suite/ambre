@@ -155,7 +155,7 @@ splices one frame's notes. `base` is the note the splice was measured against. L
 a note a peer moved meanwhile, and answers `NotesChanged` when the result differs from the panel's.
 
 **Events** (`ambre-bus`): `SlideChanged(SlideChange)`, `PresentModeChanged(bool)`,
-`PresentBroadcastChanged(bool)` and `FollowingChanged(Option<UserId>)`. The engine owns the board and
+`PresentBroadcastChanged(bool)` and `FollowingChanged(Option<Id<User>>)`. The engine owns the board and
 the render thread owns none, so the slide event carries everything the camera pass needs:
 
 ```rust
@@ -165,14 +165,14 @@ pub struct SlideChange {
     pub from:       FrameSnapshot,     // the previous slide's children, empty on entry
     pub to:         FrameSnapshot,     // the new slide's children
     pub to_rect:    Option<Rect>,      // the camera fit target, None when the frame is gone
-    pub frame:      Option<ElementId>, // the note-edit target
+    pub frame:      Option<Id<Element>>, // the note-edit target
     pub notes:      String,            // that frame's notes, seeding the editor
     pub transition: Duration,          // the deck's own length (`TOILE-FEAT-028`)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SnapElement {
-    pub id:       ElementId,
+    pub id:       Id<Element>,
     pub bounds:   Rect,       // the unrotated element box, world space
     pub rotation: Radians,
     pub opacity:  Opacity,

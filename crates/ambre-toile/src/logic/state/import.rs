@@ -25,7 +25,8 @@ use crate::logic::interop::{
     ImportGroupSlot, ImportRef, ImportReport, Limits, MediaBlob, import_raster, import_svg,
     place_batch_at,
 };
-use crate::logic::model::{ElementId, ElementStyle};
+use crate::logic::model::ElementStyle;
+use ambre_core::id::{Element, Id};
 
 use super::ToileState;
 use super::names::{Fields, MediaKey, Root};
@@ -120,9 +121,9 @@ pub(super) struct ImportJob {
     media: Vec<MediaBlob>,
     report: ImportReport,
     /// The element each create slot minted, `None` when it was rejected.
-    slot_ids: Vec<Option<ElementId>>,
+    slot_ids: Vec<Option<Id<Element>>>,
     /// The group each group entry built, `None` when it was not.
-    group_ids: Vec<Option<ElementId>>,
+    group_ids: Vec<Option<Id<Element>>>,
     /// Units applied so far, across the four phases in order.
     done: ImportUnitCount,
 }
@@ -446,7 +447,7 @@ impl ToileState {
     /// Apply one unit of the running import. The units run in a strict order,
     /// so every slot or group reference resolves before it is used:
     ///
-    /// 1. **creates** -> `create_element_inner`, minting an [`ElementId`] per slot;
+    /// 1. **creates** -> `create_element_inner`, minting an [`Id<Element>`] per slot;
     /// 2. **styles** -> `restyle_inner` on the slot's fresh element (style is an
     ///    independent LWW register, so it cannot ride the create);
     /// 3. **groups** -> `group_inner`, innermost-first, so a `Group(i)` member
@@ -508,7 +509,7 @@ impl ToileState {
     fn apply_import_group(&mut self, job: &mut ImportJob, rank: ImportGroupSlot) {
         let unit = rank.to_usize();
         if let Some(group) = job.groups.get(unit) {
-            let members: Vec<ElementId> = group
+            let members: Vec<Id<Element>> = group
                 .members
                 .iter()
                 .filter_map(|r| self.resolve_ref(*r, &job.slot_ids, &job.group_ids))
@@ -558,14 +559,14 @@ impl ToileState {
         }
     }
 
-    /// Resolve an [`ImportRef`] to a live [`ElementId`], or `None` if its slot or
+    /// Resolve an [`ImportRef`] to a live [`Id<Element>`], or `None` if its slot or
     /// group was not created, or a peer deleted it between two slices.
     fn resolve_ref(
         &self,
         r: ImportRef,
-        slot_ids: &[Option<ElementId>],
-        group_ids: &[Option<ElementId>],
-    ) -> Option<ElementId> {
+        slot_ids: &[Option<Id<Element>>],
+        group_ids: &[Option<Id<Element>>],
+    ) -> Option<Id<Element>> {
         let id = match r {
             ImportRef::Slot(i) => slot_ids.get(i.to_usize()).cloned().flatten(),
             ImportRef::Group(i) => group_ids.get(i.to_usize()).cloned().flatten(),
@@ -867,7 +868,7 @@ mod tests {
     // -- command path (fast / async / failure) --------------------------------
 
     use ambre_bus::RestEvent;
-    use ambre_core::DocumentId;
+    use ambre_core::id::{Document, Id};
     use std::io::Cursor;
 
     use crate::logic::command::{Request, ToileEvent, ToileOutcome, ToileRequest};
@@ -1043,7 +1044,7 @@ mod tests {
         let done = st.handle_service_event(
             id,
             RestEvent::MediaUploaded {
-                document_id: DocumentId::new(),
+                document_id: Id::<Document>::mint(),
                 content_hash: hash_of("realhash"),
             },
         );
@@ -1080,7 +1081,7 @@ mod tests {
         st.handle_service_event(
             first_upload_id(&out),
             RestEvent::MediaUploaded {
-                document_id: DocumentId::new(),
+                document_id: Id::<Document>::mint(),
                 content_hash: hash_of("realhash"),
             },
         );
@@ -1120,7 +1121,7 @@ mod tests {
         st.handle_service_event(
             first_upload_id(&out),
             RestEvent::MediaUploaded {
-                document_id: DocumentId::new(),
+                document_id: Id::<Document>::mint(),
                 content_hash: hash_of("realhash"),
             },
         );
@@ -1177,7 +1178,7 @@ mod tests {
         let out = st.handle_service_event(
             ambre_bus::next_request(),
             RestEvent::MediaUploaded {
-                document_id: DocumentId::new(),
+                document_id: Id::<Document>::mint(),
                 content_hash: hash_of("orphan"),
             },
         );

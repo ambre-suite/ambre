@@ -23,7 +23,8 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::app::toile::{ElementId, WebAddress};
+use ambre_bus::app::toile::WebAddress;
+use ambre_core::id::{Element, Id};
 use ambre_toile::ui::embed::VisibleWebEmbed;
 use wasm_bindgen::JsCast;
 
@@ -47,11 +48,11 @@ const PERMISSIONS: &str = "";
 /// (`TOILE-UI-097`).
 #[derive(Default)]
 pub struct WebFrames {
-    frames: HashMap<ElementId, web_sys::HtmlIFrameElement>,
+    frames: HashMap<Id<Element>, web_sys::HtmlIFrameElement>,
     /// The address each frame was last pointed at, so a board redraw does not
     /// reload a page that has not changed. Reloading on every frame would make
     /// an embedded page unusable.
-    urls: HashMap<ElementId, WebAddress>,
+    urls: HashMap<Id<Element>, WebAddress>,
 }
 
 impl WebFrames {
@@ -60,7 +61,7 @@ impl WebFrames {
     /// launcher put over the canvas.
     pub fn sync(&mut self, layer: &web_sys::HtmlElement, embeds: &[VisibleWebEmbed]) {
         // Drop what is no longer drawn, taking its page with it.
-        let live: std::collections::HashSet<&ElementId> =
+        let live: std::collections::HashSet<&Id<Element>> =
             embeds.iter().map(|e| &e.element).collect();
         self.frames.retain(|id, frame| {
             let keep = live.contains(id);
@@ -162,7 +163,8 @@ fn place(frame: &web_sys::HtmlIFrameElement, e: &VisibleWebEmbed) {
 #[cfg(test)]
 mod tests {
     use super::WebFrames;
-    use ambre_bus::app::toile::{ElementId, WebAddress};
+    use ambre_bus::app::toile::WebAddress;
+    use ambre_core::id::{Element, Id};
     use ambre_draw::{Affine, Rect, Size};
     use ambre_toile::ui::embed::VisibleWebEmbed;
     use wasm_bindgen::JsCast;
@@ -182,7 +184,7 @@ mod tests {
             .dyn_into()
             .expect("an element");
         let embed = VisibleWebEmbed {
-            element: ElementId("page".to_owned()),
+            element: Id::<Element>::from_text("page".to_owned()),
             // `.invalid` never resolves, so the test reaches no network.
             url: WebAddress::parse("https://example.invalid").expect("a safe address"),
             screen_rect: Rect::new(0.0, 0.0, 200.0, 100.0),

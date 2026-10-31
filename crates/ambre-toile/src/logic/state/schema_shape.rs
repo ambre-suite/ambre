@@ -40,7 +40,8 @@ use std::collections::BTreeSet;
 use kurbo::{BezPath, Point, Size};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
-use ambre_bus::{DocType, DocumentId, UserId};
+use ambre_bus::DocType;
+use ambre_core::id::{Document, Element, Id, User};
 use ambre_core::schema::{migration_peer, step_fingerprint};
 
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
@@ -50,8 +51,8 @@ use crate::logic::command::{
 };
 use crate::logic::interop::{ContentHash, MediaBlob};
 use crate::logic::model::{
-    Anchor, ElementId, ElementKind, ElementStyle, EndCaps, FontSpec, LinkTarget, NodeId, PathType,
-    Shadow, ShapeKind, StrokePoint,
+    Anchor, ElementKind, ElementStyle, EndCaps, FontSpec, LinkTarget, NodeId, PathType, Shadow,
+    ShapeKind, StrokePoint,
 };
 use crate::logic::schema::{MIGRATIONS, SCHEMA_VERSION};
 
@@ -298,12 +299,12 @@ fn postcard_layouts() -> Vec<(String, String)> {
         ),
         (
             format!("elements/{ANY}/link#frame"),
-            hex(&LinkTarget::Frame(ElementId("e".to_owned())).to_bytes()),
+            hex(&LinkTarget::Frame(Id::<Element>::from_text("e".to_owned())).to_bytes()),
         ),
         (
             format!("elements/{ANY}/link#document"),
             hex(&LinkTarget::Document {
-                document_id: DocumentId::from_bytes([1; 16]),
+                document_id: Id::<Document>::from_bytes([1; 16]),
                 doc_type: DocType::Toile,
             }
             .to_bytes()),
@@ -313,7 +314,9 @@ fn postcard_layouts() -> Vec<(String, String)> {
         (format!("connectors/{ANY}/style"), hex(&style.to_bytes())),
         (
             format!("comments/{ANY}/anchor#element"),
-            hex(&encode(&CommentAnchor::Element(ElementId("e".to_owned())))),
+            hex(&encode(&CommentAnchor::Element(Id::<Element>::from_text(
+                "e".to_owned(),
+            )))),
         ),
         (
             format!("comments/{ANY}/anchor#point"),
@@ -445,7 +448,7 @@ pub(super) fn schema_names() -> Vec<String> {
 }
 
 /// The id of the element a command reports as created.
-fn created(outcome: &ToileOutcome) -> ElementId {
+fn created(outcome: &ToileOutcome) -> Id<Element> {
     outcome
         .display
         .iter()
@@ -465,7 +468,7 @@ fn created(outcome: &ToileOutcome) -> ElementId {
 /// having it.
 pub(super) fn board_of_every_key() -> ToileState {
     let mut st = ToileState::with_peer(ambre_core::PeerId(1));
-    st.set_user_id(UserId::from_bytes([7; 16]));
+    st.set_user_id(Id::<User>::from_bytes([7; 16]));
 
     let create = |st: &mut ToileState, kind, at: Point, content, correlate| {
         created(&st.handle_command(ToileCommand::CreateElement {
@@ -498,6 +501,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         InitContent::None,
         None,
     );
+    let slide = st.frame(&frame).expect("a frame");
     let _image = create(
         &mut st,
         ElementKind::Image,
@@ -520,7 +524,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         ElementKind::DocEmbed,
         Point::new(80.0, 200.0),
         InitContent::DocEmbed {
-            document_id: DocumentId::from_bytes([1; 16]),
+            document_id: Id::<Document>::from_bytes([1; 16]),
             doc_type: DocType::Toile,
         },
         None,
@@ -563,7 +567,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         name: "Slide".to_owned(),
     });
     st.handle_command(ToileCommand::SetAutoLayout {
-        frame: frame.clone(),
+        frame: slide.clone(),
         layout: Some(AutoLayout {
             direction: Direction::Horizontal,
             gap: ambre_core::BoardLength::new(8.0),
@@ -573,10 +577,10 @@ pub(super) fn board_of_every_key() -> ToileState {
         }),
     });
     st.handle_command(ToileCommand::SetSlideOrder {
-        order: vec![frame.clone()],
+        order: vec![slide.clone()],
     });
     st.handle_command(ToileCommand::EditNotes {
-        frame: frame.clone(),
+        frame: slide,
         base: String::new(),
         delta: TextDelta {
             at: CharOffset::ZERO,

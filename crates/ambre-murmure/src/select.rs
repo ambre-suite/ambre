@@ -6,9 +6,9 @@
 //! above, where an index does not. The paint resolves a pointer into an end,
 //! since only the layout knows which byte lies under it.
 
-use ambre_bus::{Deletion, Timestamp, UserId};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan};
-use ambre_core::{Point, Px, View};
+use ambre_bus::{Deletion, Timestamp};
+use ambre_core::id::{Id, User};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, Point, Px, View};
 
 use crate::list::{ListRow, ListRowVec, MessageList, RowKey, UNKNOWN_MEMBER, row_of};
 
@@ -95,7 +95,7 @@ impl TextSelection {
     pub fn copied(
         &self,
         list: &MessageList,
-        name_of: &dyn Fn(UserId) -> Option<ambre_core::DisplayName>,
+        name_of: &dyn Fn(Id<User>) -> Option<ambre_core::DisplayName>,
         time_of: &dyn Fn(Timestamp) -> String,
     ) -> Option<String> {
         let keys = list.keys();
@@ -131,20 +131,20 @@ impl TextSelection {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::SegmentId;
+    use ambre_core::id::Segment;
 
     use super::*;
     use crate::list::tests::message;
 
     fn list(bodies: &[&str]) -> MessageList {
-        let ada = UserId::new();
+        let ada = Id::<User>::mint();
         let mut list = MessageList::default();
         let messages = bodies
             .iter()
             .enumerate()
             .map(|(i, body)| message(ada, ambre_bus::Timestamp(i as u64 * 60_000), body))
             .collect();
-        list.absorb(SegmentId::new(), messages);
+        list.absorb(Id::<Segment>::mint(), messages);
         list
     }
 
@@ -230,11 +230,11 @@ mod tests {
     #[test]
     fn a_copy_holds_only_text_a_member_wrote() {
         let mut list = list(&["hello", "", "again"]);
-        let mut edited = message(UserId::new(), ambre_bus::Timestamp(200_000), "again");
+        let mut edited = message(Id::<User>::mint(), ambre_bus::Timestamp(200_000), "again");
         edited.edited = ambre_bus::Revision::Edited;
-        let mut gone = message(UserId::new(), ambre_bus::Timestamp(100_000), "");
+        let mut gone = message(Id::<User>::mint(), ambre_bus::Timestamp(100_000), "");
         gone.deleted = ambre_bus::Deletion::Deleted;
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         list.absorb(segment, vec![gone, edited]);
         let rows = list.keys().len().get();
         let all = TextSelection {
@@ -247,7 +247,7 @@ mod tests {
         assert!(copied.ends_with("\nagain"), "{copied}");
         let stale = TextSelection {
             anchor: Spot {
-                row: RowKey::Band(SegmentId::new()),
+                row: RowKey::Band(Id::<Segment>::mint()),
                 byte: ByteOffset::ZERO,
             },
             focus: all.focus,

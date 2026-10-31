@@ -290,7 +290,7 @@ The user touches no drawing call. What they see of this document is that two des
 | When a frame runs, and which layers it rebuilds | `ambre-spec-frame.md` |
 | The fonts, the glyph atlases and the decoded images the calls consume | `ambre-spec-render-assets.md` |
 | What a high-density display changes about a tessellation tolerance | `ambre-spec-high-density.md` |
-| How a peer's colour is derived from a `UserId` | `ambre-spec-presence.md section 3` |
+| How a peer's colour is derived from an `Id<User>` | `ambre-spec-presence.md section 3` |
 | The crate graph these rules are read off, and the binary budget | `ambre-spec-architecture.md sections 2.E and 5.E` |
 | What each application puts in its exported page, and what it drops | `2-Trame/features/ambre-spec-trame-pdf-export.md`, `3-Toile/features/ambre-spec-toile-pdf-export.md`, `4-Prose/features/ambre-spec-prose-pdf-export.md` |
 | Which crate holds which test belt, and what runs in CI | `ambre-spec-testing.md section 6` |

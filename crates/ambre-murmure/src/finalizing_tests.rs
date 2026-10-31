@@ -5,7 +5,8 @@
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, SnapshotVerdict, Timestamp};
-use ambre_core::{ChannelId, LeaseId, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId};
+use ambre_core::id::{Channel, Id, Lease, Segment, User};
+use ambre_core::{PeerEntryBytes, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::schema::{MessageKey, Root};
@@ -29,17 +30,17 @@ fn draft(text: &str) -> MessageDraft {
 
 /// A channel of one-message segments, holding `texts` in a closing segment.
 /// Returns it with that segment.
-fn closed_with(texts: &[&str]) -> (ChannelState, SegmentId) {
-    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+fn closed_with(texts: &[&str]) -> (ChannelState, Id<Segment>) {
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .with_segment_size(crate::MessageCount::of_len(texts.len()))
         .identify();
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     for text in texts {
         state.send(&draft(text), author, NOW).expect("send");
     }
     let closing = state.wants_close().expect("full");
-    let successor = SegmentId::new();
+    let successor = Id::<Segment>::mint();
     state
         .close_into(closing, successor, crate::Successor::Created, NOW)
         .expect("close");
@@ -56,7 +57,7 @@ fn closed_with(texts: &[&str]) -> (ChannelState, SegmentId) {
 
 /// A second member's copy of `state`, opened from its live documents.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, SnapshotBytes> = state
+    let segments: HashMap<Id<Segment>, SnapshotBytes> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -72,7 +73,7 @@ fn peer_of(state: &ChannelState) -> ChannelState {
 
 /// Delete the whole body of the message at `index` of `segment`, as an edit
 /// before the finalization would.
-fn erase_body(state: &ChannelState, segment: SegmentId, index: usize) {
+fn erase_body(state: &ChannelState, segment: Id<Segment>, index: usize) {
     let doc = state.doc(segment.document_id()).expect("held");
     let Some(message) = crate::schema::root_list(doc, Root::Messages)
         .get(index)
@@ -99,7 +100,7 @@ fn holds(bytes: &[u8], word: &str) -> bool {
 /// than it never reaches a final segment.
 #[test]
 fn a_closing_segment_asks_for_its_lease_as_the_relay_says() {
-    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
     assert_eq!(state.lease_to_ask(NOW), None, "no segment is closing");
@@ -158,7 +159,7 @@ fn the_lease_holder_seals_a_shallow_snapshot_at_the_horizon() {
         "the history keeps it"
     );
 
-    let lease = LeaseId::new();
+    let lease = Id::<Lease>::mint();
     assert_eq!(state.lease_to_ask(NOW), Some(closing));
     state.lease_granted(
         closing,
@@ -203,7 +204,7 @@ fn a_lease_that_runs_out_is_asked_again() {
     assert_eq!(state.lease_to_ask(NOW), Some(closing));
     state.lease_granted(
         closing,
-        LeaseId::new(),
+        Id::<Lease>::mint(),
         ambre_core::Seq(9),
         ambre_core::Millis(LEASE_MS),
     );
@@ -234,7 +235,7 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
     alice.lease_granted(
         closing,
-        LeaseId::new(),
+        Id::<Lease>::mint(),
         ambre_core::Seq(2),
         ambre_core::Millis(LEASE_MS),
     );
@@ -254,7 +255,7 @@ fn an_accepted_commit_marks_the_segment_final_for_every_member() {
             closing,
             before[0].id,
             &ambre_bus::Emoji::from("\u{1F44D}"),
-            UserId::new(),
+            Id::<User>::mint(),
             at(1)
         ),
         Err(crate::MurmureError::Final(_))
@@ -291,7 +292,7 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
     alice.lease_granted(
         closing,
-        LeaseId::new(),
+        Id::<Lease>::mint(),
         ambre_core::Seq(2),
         ambre_core::Millis(LEASE_MS),
     );
@@ -305,13 +306,13 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
     assert_eq!(bob.settle_final(), Some(closing));
 
     assert!(
-        !bob.refinalize(SegmentId::new()),
+        !bob.refinalize(Id::<Segment>::mint()),
         "a segment he does not hold"
     );
     assert!(bob.refinalize(closing));
     assert_eq!(bob.finalizing_id(), Some(closing));
     assert_eq!(bob.lease_to_ask(NOW), Some(closing));
-    let lease = LeaseId::new();
+    let lease = Id::<Lease>::mint();
     bob.lease_granted(
         closing,
         lease,
@@ -344,14 +345,14 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
 /// Alice's channel of two-message segments, and Bob's copy of it holding
 /// her first `received` deltas, numbered as the relay delivered them. Alice
 /// then closes the segment, and seals its final snapshot at the horizon 2.
-fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, SnapshotBytes) {
-    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+fn finalized_for(received: u64) -> (ChannelState, ChannelState, Id<Segment>, SnapshotBytes) {
+    let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .with_segment_size(crate::MessageCount::new(2))
         .identify();
     let mut bob = peer_of(&alice);
     let segment = alice.active_id();
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let signer = Signer {
         peer: alice.peer(segment.document_id()).expect("a session"),
         user: Some(author),
@@ -365,12 +366,17 @@ fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, Snaps
     }
     let closing = alice.wants_close().expect("full");
     alice
-        .close_into(closing, SegmentId::new(), crate::Successor::Created, NOW)
+        .close_into(
+            closing,
+            Id::<Segment>::mint(),
+            crate::Successor::Created,
+            NOW,
+        )
         .expect("close");
     assert_eq!(alice.lease_to_ask(NOW), Some(closing));
     alice.lease_granted(
         closing,
-        LeaseId::new(),
+        Id::<Lease>::mint(),
         ambre_core::Seq(2),
         ambre_core::Millis(LEASE_MS),
     );
@@ -383,7 +389,11 @@ fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, Snaps
 
 /// A shallow snapshot of `state`'s copy of `segment` after `forge` wrote on
 /// a fork of it.
-fn forged(state: &ChannelState, segment: SegmentId, forge: impl FnOnce(&LoroDoc)) -> SnapshotBytes {
+fn forged(
+    state: &ChannelState,
+    segment: Id<Segment>,
+    forge: impl FnOnce(&LoroDoc),
+) -> SnapshotBytes {
     let fork = state.doc(segment.document_id()).expect("held").fork();
     forge(&fork);
     fork.commit();

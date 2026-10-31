@@ -12,8 +12,8 @@
 //!
 //! # Three planes, one envelope
 //! - **Content** ([`LogicCommand::App`], [`LogicCommand::Channel`]): document
-//!   edits / viewport requests, routed by `DocumentId` inside the Logic thread,
-//!   and channel commands, routed by `ChannelId`. [`AppCommand`] and
+//!   edits / viewport requests, routed by `Id<Document>` inside the Logic thread,
+//!   and channel commands, routed by `Id<Channel>`. [`AppCommand`] and
 //!   [`MurmureCommand`] are closed sums: adding a document type is adding a
 //!   variant. No trait object, no `Any`, no crate cycle -- this module depends
 //!   only on `ambre-core`.
@@ -24,9 +24,10 @@
 //!   kept explicit.
 
 use crate::{
-    ChannelId, DirectMember, DirectMessageDraft, DocType, DocumentId, MurmureCommand, Request,
-    RestCommand, SpaceCommand, SpaceId, Timestamp,
+    DirectMember, DirectMessageDraft, DocType, MurmureCommand, Request, RestCommand, SpaceCommand,
+    Timestamp,
 };
+use ambre_core::id::{Channel, Document, Id, Space};
 use ambre_core::{Generation, SessionNonce};
 
 // The typed application data plane carried by `LogicCommand::App` lives per-app under
@@ -68,7 +69,7 @@ pub enum LogicCommand {
     /// `document_id` and replies with [`crate::ui::UiEvent::Viewport`] /
     /// [`crate::ui::UiEvent::Presence`] events.
     App {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         /// Typed application command (schema owned by [`crate::logic`]).
         command: AppCommand,
     },
@@ -80,14 +81,14 @@ pub enum LogicCommand {
     /// command writes. A typed variant in place of an opaque payload, so no envelope
     /// carries a channel message as bytes (`BUS-028`).
     Channel {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         command: MurmureCommand,
     },
 
     /// Command for an open Murmure space: its catalogue, and the public
     /// channels it lists. Addressed to the space, which is one document.
     Space {
-        space_id: SpaceId,
+        space_id: Id<Space>,
         command: SpaceCommand,
     },
 
@@ -96,7 +97,7 @@ pub enum LogicCommand {
     /// never reaches Sync or the server -- it lets an edit survive a refresh
     /// without a network round-trip.
     RestoreLocalSnapshot {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         /// Document kind, known from the boot URL route (`/trame/<id>`). Lets the
         /// handler materialise the live document if the restore wins the startup
         /// race against [`OpenDocument`](LogicCommand::OpenDocument).
@@ -120,7 +121,7 @@ pub enum LogicCommand {
     /// Local-only, from the Main thread, like
     /// [`RestoreLocalSnapshot`](LogicCommand::RestoreLocalSnapshot).
     LocalStoreFull {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         room: StoreRoom,
     },
 
@@ -142,7 +143,7 @@ pub enum LogicCommand {
     /// loads snapshot + deltas, and opens a WebSocket subscription. The first
     /// [`crate::ui::UiEvent::Viewport`] after this indicates the document is ready.
     OpenDocument {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         /// Document kind, known from the URL route (`/trame/<id>`). Carried so a
         /// not-yet-on-server document can be lazily created with the right type
         /// on its first modification.
@@ -151,15 +152,15 @@ pub enum LogicCommand {
 
     /// Close the real-time sync session for a document. The Logic thread drops
     /// the in-memory state; the Sync thread unsubscribes and zeroizes the key.
-    CloseDocument { document_id: DocumentId },
+    CloseDocument { document_id: Id<Document> },
 
     /// Open a channel: its `meta` document, then its live segments, each an
     /// ordinary document session (the Murmure engine spec).
-    OpenChannel { channel_id: ChannelId },
+    OpenChannel { channel_id: Id<Channel> },
 
     /// Close a channel: the Logic thread drops its state and closes each of
     /// its documents.
-    CloseChannel { channel_id: ChannelId },
+    CloseChannel { channel_id: Id<Channel> },
 
     /// Open the direct message of this user and `draft.members`, created
     /// when none holds exactly them (the Murmure channels spec). Answered by
@@ -175,7 +176,7 @@ pub enum LogicCommand {
     /// Answered as a [`crate::RestCommand::InviteToDocument`] under `id`.
     InviteToChannel {
         id: Generation<Request>,
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         invitee: DirectMember,
         /// The instant the user confirmed, which stamps a notice.
         now: Timestamp,
@@ -184,7 +185,7 @@ pub enum LogicCommand {
     /// Create a space: a new space document, with the user as its owner and
     /// only member (the Murmure spaces spec). The space opens at once.
     CreateSpace {
-        space_id: SpaceId,
+        space_id: Id<Space>,
         name: ambre_core::Name,
         /// The instant of the creation, stamped by the view.
         now: Timestamp,
@@ -192,10 +193,10 @@ pub enum LogicCommand {
 
     /// Open a space: its document, then its catalogue as a
     /// [`crate::SpaceEvent::Catalogue`].
-    OpenSpace { space_id: SpaceId },
+    OpenSpace { space_id: Id<Space> },
 
     /// Close a space and the session of its document.
-    CloseSpace { space_id: SpaceId },
+    CloseSpace { space_id: Id<Space> },
 
     /// Ask which channels hold something new, for the sidebar at start
     /// (the Murmure unread spec). Loads no document: answered by
@@ -234,7 +235,7 @@ pub enum LogicCommand {
 /// Application-specific command, UI Thread -> Logic thread.
 ///
 /// Carried inside [`LogicCommand::App`]. The Logic dispatcher matches the
-/// variant, routes it to the `DocumentId`'s document state, and produces zero or
+/// variant, routes it to the `Id<Document>`'s document state, and produces zero or
 /// more [`AppEvent`](crate::ui::AppEvent)s.
 #[derive(Debug, Clone)]
 pub enum AppCommand {

@@ -254,7 +254,7 @@ impl DocState {
     pub fn import_snapshot(&mut self, payload: &SnapshotBytes) -> Result<Vec<AppEvent>, SchemaError>;
 
     /// Lift the per-application `export_snapshot` to the enum. `LogicState`'s
-    /// takes a `DocumentId` and needs a live registry entry, so it cannot serve
+    /// takes an `Id<Document>` and needs a live registry entry, so it cannot serve
     /// the bare `DocState` the round trip quantifies over (`FIXTURE-013`).
     pub fn export_snapshot(&self) -> SnapshotBytes;
 }
@@ -279,10 +279,10 @@ pub fn canonical_dump(state: &DocState) -> String;
 pub fn corpus_root() -> Result<PathBuf, FixtureError>;
 
 /// Load a committed fixture by name -- the entry point every consumer uses.
-pub fn load_fixture(name: &str) -> Result<(DocumentId, DocState), FixtureError>;
+pub fn load_fixture(name: &str) -> Result<(Id<Document>, DocState), FixtureError>;
 
 /// The same, against a caller-supplied directory: what a test drives.
-pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState), FixtureError>;
+pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(Id<Document>, DocState), FixtureError>;
 
 /// The production import path over bytes already in hand: `read_ambre_plaintext`
 /// for the header, `DocState::new(doc_type)` for the empty state, then the
@@ -295,7 +295,7 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(DocumentId, DocState
 /// rejection off that vector would accept a corrupt artifact and hand back an
 /// empty document. The application importer returns a typed error instead,
 /// carried out verbatim (`FIXTURE-014`).
-pub fn import_fixture(container: &PlaintextContainer) -> Result<(DocumentId, DocState), FixtureError>;
+pub fn import_fixture(container: &PlaintextContainer) -> Result<(Id<Document>, DocState), FixtureError>;
 
 pub fn artifact_path(dir: &Path, name: &str) -> PathBuf;
 pub fn manifest_path(dir: &Path, name: &str) -> PathBuf;

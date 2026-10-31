@@ -70,7 +70,7 @@ impl Rig {
         let clock = TestClock::default();
         let theme = ThemeControl::default();
         let view = TrameView::new(
-            DocumentId::new(),
+            Id::<Document>::mint(),
             tx,
             rx,
             ambre_core::Px::<ambre_core::Surface>::new(1200.0),
@@ -132,7 +132,7 @@ impl Rig {
     /// Answer as the Logic thread does, and run the frame that reads it.
     fn answer(&mut self, event: TrameEvent) {
         let sent = self.from_logic.try_send(UiEvent::Viewport {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             event: AppEvent::Trame(event),
         });
         assert!(sent.is_ok(), "the view's inbound channel is open");

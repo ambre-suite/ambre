@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{DocumentId, SnapshotId, UserId};
+use ambre_core::id::{Document, Id, Snapshot, User};
 use ambre_protocol::messages::{Seq, Update};
 use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 
@@ -23,18 +23,18 @@ use ambre_protocol::ws::{WsClientMsg, WsServerMsg};
 pub struct MockBlindRelay {
     /// Documents managed by this relay: client set -> list of updates (with
     /// their global sequence number).
-    documents: HashMap<DocumentId, DocumentState>,
+    documents: HashMap<Id<Document>, DocumentState>,
     /// Connected clients: user_id -> (client_tx for server->client msgs).
-    clients: HashMap<UserId, ambre_bus::conduit::UnboundedSender<WsServerMsg>>,
+    clients: HashMap<Id<User>, ambre_bus::conduit::UnboundedSender<WsServerMsg>>,
     /// Global sequence number, monotonically increasing per relay instance.
     next_seq: Seq,
 }
 
 struct DocumentState {
     updates: Vec<(Seq, Update)>,
-    snapshots: Vec<SnapshotId>,
+    snapshots: Vec<Id<Snapshot>>,
     #[allow(dead_code)]
-    subscribers: Vec<UserId>,
+    subscribers: Vec<Id<User>>,
 }
 
 impl MockBlindRelay {
@@ -51,7 +51,7 @@ impl MockBlindRelay {
     /// and receives `WsServerMsg` events on the returned receiver.
     pub fn connect(
         &mut self,
-        user_id: UserId,
+        user_id: Id<User>,
     ) -> (
         ambre_bus::conduit::UnboundedSender<ambre_protocol::WireFrame>,
         ambre_bus::conduit::Receiver<WsServerMsg>,
@@ -167,7 +167,7 @@ impl MockBlindRelay {
     }
 
     /// Create a snapshot for a document and notify subscribers.
-    pub fn create_snapshot(&mut self, document_id: DocumentId, snapshot_id: SnapshotId) {
+    pub fn create_snapshot(&mut self, document_id: Id<Document>, snapshot_id: Id<Snapshot>) {
         let state = self
             .documents
             .entry(document_id)
@@ -198,7 +198,6 @@ impl Default for MockBlindRelay {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::DocumentId;
     use ambre_core::PublicKey;
     use ambre_protocol::messages::Clock;
     use ambre_protocol::public_data::UpdatePublicData;
@@ -207,9 +206,9 @@ mod tests {
     #[test]
     fn relay_forwards_update_to_all_subscribers() {
         let mut relay = MockBlindRelay::new();
-        let user_a = UserId::new();
-        let user_b = UserId::new();
-        let doc = DocumentId::new();
+        let user_a = Id::<User>::mint();
+        let user_b = Id::<User>::mint();
+        let doc = Id::<Document>::mint();
 
         let (_tx_a, rx_a) = relay.connect(user_a);
         let (_tx_b, rx_b) = relay.connect(user_b);
@@ -221,7 +220,7 @@ mod tests {
                 document_id: doc,
                 pub_key: PublicKey::from_array([1u8; 32]),
                 key_id: ambre_core::KeyId::from_array([2u8; 16]),
-                snapshot_id: SnapshotId::new(),
+                snapshot_id: Id::<Snapshot>::mint(),
                 clock: Clock(1),
             },
             commitment_tag: ambre_protocol::messages::CommitmentTag([0u8; 32]),

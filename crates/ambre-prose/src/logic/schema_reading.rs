@@ -503,7 +503,7 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     if let Some(thread) = reader
         .comments()
         .into_iter()
-        .find(|t| *t.comment_id.as_uuid() == id)
+        .find(|t| t.comment_id.uuid() == id)
     {
         let anchor = thread.anchor_block.map(crate::events::tree_id);
         return Some(match field {
@@ -530,7 +530,7 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     if let Some(note) = reader
         .footnotes()
         .into_iter()
-        .find(|n| *n.footnote_id.as_uuid() == id)
+        .find(|n| n.footnote_id.uuid() == id)
     {
         return Some(match field {
             doc::AnnotKey::Kind => format!("footnote {:?}", note.ordinal.map(FootnoteOrdinal::get)),
@@ -541,7 +541,7 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
     let suggestion = reader
         .suggestions()
         .into_iter()
-        .find(|s| *s.suggestion_id.as_uuid() == id)?;
+        .find(|s| s.suggestion_id.uuid() == id)?;
     Some(match field {
         doc::AnnotKey::Kind => format!("a suggested {:?}", suggestion.kind),
         doc::AnnotKey::Author => {
@@ -611,7 +611,7 @@ fn mark_reading(
             crate::band::resolve(&reader.doc, block, crate::events::PageIndex::ZERO, pages)
         )
     } else if mark == crate::mark::MarkRoot::Footnote.as_str() {
-        let id = ambre_core::FootnoteId::parse_str(stored.string()?).ok();
+        let id = ambre_core::Id::<ambre_core::id::Footnote>::parse_str(stored.string()?).ok();
         match reader
             .footnotes()
             .into_iter()
@@ -633,7 +633,7 @@ fn mark_reading(
             None => "refers to nothing".to_owned(),
         }
     } else if let Some(thread) = mark.strip_prefix("cm:") {
-        let id = ambre_core::CommentId::parse_str(thread).ok();
+        let id = ambre_core::Id::<ambre_core::id::Comment>::parse_str(thread).ok();
         match reader
             .comments()
             .into_iter()

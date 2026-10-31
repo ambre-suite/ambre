@@ -71,8 +71,8 @@ use std::collections::{HashMap, HashSet};
 use kurbo::Rect;
 use loro::{ExportMode, LoroDoc, LoroValue, UndoManager, VersionVector};
 
-use ambre_bus::UserId;
 use ambre_bus::app::toile::{ElementCount, IdCounter};
+use ambre_core::id::{Connector, Element, Frame, Id, Thread, User};
 use ambre_core::schema::SchemaError;
 use ambre_core::{HistoryStep, Rgba};
 
@@ -81,9 +81,7 @@ use crate::logic::command::{
     ToileError, ToileEvent, ToileOutcome,
 };
 use crate::logic::index::{SpatialIndex, Viewport};
-use crate::logic::model::{
-    ConnectorId, ElementId, ElementKind, ElementStyle, FrameId, NodeId, PlaybackState,
-};
+use crate::logic::model::{ElementKind, ElementStyle, NodeId, PlaybackState};
 use crate::logic::schema;
 use crate::logic::text_merge::Edit;
 
@@ -105,17 +103,17 @@ pub struct ToileState {
     index: SpatialIndex,
     /// Rotation-expanded world AABB per element; feeds culling + connector
     /// routing. Derived, never authoritative.
-    bounds: HashMap<ElementId, Rect>,
+    bounds: HashMap<Id<Element>, Rect>,
     /// Materialized paint order, mirrored from the `layers` list.
     layers: Vec<NodeId>,
     /// The groups and frames whose `children` list names each element, one
     /// entry per occurrence, in discovery order. Derived, never authoritative:
     /// a read skips an entry whose parent the board no longer holds, so
     /// finding an element's parent never walks the board (`TOILE-056`).
-    parents: HashMap<ElementId, Vec<ElementId>>,
+    parents: HashMap<Id<Element>, Vec<Id<Element>>>,
     /// The reverse of `parents`: what each parent's `children` list names.
     /// A remote change to a list relinks its parent from it (`TOILE-092`).
-    members: HashMap<ElementId, Vec<ElementId>>,
+    members: HashMap<Id<Element>, Vec<Id<Element>>>,
     /// What the document was written since the caches last read it, noted by
     /// the subscription below.
     touched: caches::TouchedSink,
@@ -124,9 +122,9 @@ pub struct ToileState {
     /// Every arrow's ends and reach, for the cull (`TOILE-045`). Brought in
     /// step on read from what the subscription noted, hence the `RefCell`:
     /// the derivation that reads it takes `&self`.
-    wires: std::cell::RefCell<HashMap<ConnectorId, connectors::Wire>>,
+    wires: std::cell::RefCell<HashMap<Id<Connector>, connectors::Wire>>,
     /// The arrows the cache dropped since the last answer named them.
-    wires_gone: std::cell::RefCell<Vec<ConnectorId>>,
+    wires_gone: std::cell::RefCell<Vec<Id<Connector>>>,
     /// How many times the whole element map has been resolved. A cost probe a
     /// test reads to show a read walks no board (`TOILE-056`); a `Cell`, since
     /// the reads that would walk take `&self`.
@@ -146,24 +144,24 @@ pub struct ToileState {
     undo: UndoManager,
     /// Canonical per-user identifier, seeded from `LogicEvent::SessionReady`
     /// by the dispatcher. `None` until the session carries an authenticated
-    /// user. A stable `UserId`, NOT `peer`, which is per-session / per-device
+    /// user. A stable `Id<User>`, NOT `peer`, which is per-session / per-device
     /// and only mints element ids. It keys this peer's own persisted reactions
     /// (`toile-reactions`) and tags outbound presence with a stable identity.
     /// Same field as `trame-engine`.
-    my_user_id: Option<UserId>,
+    my_user_id: Option<Id<User>>,
     /// This session's display name, seeded from `SessionReady` beside the
-    /// `UserId` and stamped on every outbound presence sample
+    /// `Id<User>` and stamped on every outbound presence sample
     /// (`TOILE-UI-076`). Cosmetic: it decides neither identity nor colour
     /// (`PRESENCE-004`).
     my_name: Option<ambre_core::DisplayName>,
     /// Remote peers' latest presence (cursors, live strokes, lasers, selections)
-    /// and the local clock each was last seen at, keyed by canonical `UserId`.
+    /// and the local clock each was last seen at, keyed by canonical `Id<User>`.
     /// Ephemeral: never in Loro, never persisted, rebuilt from inbound samples.
     /// The local peer's own presence is not stored here (the UI draws its own
     /// cursor). The map drops a peer whose last sample is older than the TTL,
     /// which is how a departure travels with no departure signal
     /// (`TOILE-185`).
-    presence: HashMap<UserId, (PresencePayload, ambre_core::PageTime)>,
+    presence: HashMap<Id<User>, (PresencePayload, ambre_core::PageTime)>,
     /// The latest wall clock a local `Presence` command carried, and the only
     /// clock this thread has (`toile-presence`). Monotonic: it never moves
     /// backwards, whatever the machine's own clock does.
@@ -183,7 +181,7 @@ pub struct ToileState {
     /// an inbound presence sample from `u` that carries a `present_slide` moves this
     /// viewer's active slide; a manual navigation clears it ("take control").
     /// Local role, never in Loro and never synced.
-    following: Option<UserId>,
+    following: Option<Id<User>>,
     /// Imports awaiting media-upload confirmations (`toile-media`). An
     /// import that carries raster media waits here until every blob's real
     /// blake2b returns from Sync. The whole import therefore stays one atomic
@@ -289,8 +287,8 @@ impl ToileState {
     /// to [`export_ambre_plaintext`](Self::export_ambre_plaintext).
     ///
     /// * **`PeerID`** -- `LoroDoc::new()` draws one at random. Construction
-    ///   caches [`peer`](Self::peer) and mints it into every [`ElementId`] /
-    ///   [`ConnectorId`], so an unpinned peer changes the board's *content*, not
+    ///   caches [`peer`](Self::peer) and mints it into every [`Id<Element>`] /
+    ///   [`Id<Connector>`], so an unpinned peer changes the board's *content*, not
     ///   merely its encoding.
     /// * **Commit timestamps** -- Loro records one per commit unless told not to.
     ///
@@ -431,21 +429,21 @@ impl ToileState {
         true
     }
 
-    /// Seed the canonical `UserId` from `LogicEvent::SessionReady`. Called
+    /// Seed the canonical `Id<User>` from `LogicEvent::SessionReady`. Called
     /// by the dispatcher once the session carries an authenticated user;
     /// idempotent (a re-login with the same account is a no-op). Keys this
     /// peer's reactions (`toile-reactions`) and tags outbound presence.
-    pub fn set_user_id(&mut self, user_id: UserId) {
+    pub fn set_user_id(&mut self, user_id: Id<User>) {
         self.my_user_id = Some(user_id);
     }
 
-    /// The canonical `UserId` for this session, when a user has signed in.
-    pub fn user_id(&self) -> Option<UserId> {
+    /// The canonical `Id<User>` for this session, when a user has signed in.
+    pub fn user_id(&self) -> Option<Id<User>> {
         self.my_user_id
     }
 
     /// Seed this session's display name, from the same `SessionReady` that
-    /// carries the `UserId`. It rides every outbound presence sample so a
+    /// carries the `Id<User>`. It rides every outbound presence sample so a
     /// collaborator reads a name rather than a hex prefix (`TOILE-UI-076`), and
     /// it decides nothing (`PRESENCE-004`).
     pub fn set_display_name(&mut self, name: ambre_core::DisplayName) {
@@ -460,7 +458,7 @@ impl ToileState {
 
     /// The presenter this viewer is currently following, if any. Test /
     /// integration accessor.
-    pub fn following(&self) -> Option<UserId> {
+    pub fn following(&self) -> Option<Id<User>> {
         self.following
     }
 
@@ -474,12 +472,16 @@ impl ToileState {
         Ok(next)
     }
 
-    pub(super) fn mint_element_id(&mut self) -> Result<ElementId, ToileError> {
-        Ok(ElementId::mint(self.peer, self.next_counter()?))
+    pub(super) fn mint_element_id(&mut self) -> Result<Id<Element>, ToileError> {
+        Ok(Id::<Element>::mint_from(self.peer, self.next_counter()?))
     }
 
-    pub(super) fn mint_connector_id(&mut self) -> Result<ConnectorId, ToileError> {
-        Ok(ConnectorId::mint(self.peer, self.next_counter()?))
+    pub(super) fn mint_connector_id(&mut self) -> Result<Id<Connector>, ToileError> {
+        Ok(Id::<Connector>::mint_from(self.peer, self.next_counter()?))
+    }
+
+    pub(super) fn mint_thread_id(&mut self) -> Result<Id<Thread>, ToileError> {
+        Ok(Id::<Thread>::mint_from(self.peer, self.next_counter()?))
     }
 
     // -- command dispatch ------------------------------------------------------
@@ -926,7 +928,7 @@ impl ToileState {
     /// Every write that can move the deck without naming it calls this: a
     /// history step, a remote delta, a deleted frame. The panel holds no
     /// authoritative state, and it would otherwise show a deck nobody has.
-    pub(super) fn deck_change(&self, before: &[FrameId]) -> Option<ToileEvent> {
+    pub(super) fn deck_change(&self, before: &[Id<Frame>]) -> Option<ToileEvent> {
         (self.slide_order() != before).then_some(ToileEvent::DeckChanged)
     }
 
@@ -934,8 +936,8 @@ impl ToileState {
     /// and is not any more (`TOILE-165`). Every write that can strand an arrow
     /// without naming it calls this: a remote delta, a history step, a peer's
     /// deletion. The re-aim path announces its own.
-    pub(super) fn newly_dangling(&self, before: &HashSet<ConnectorId>) -> Vec<ToileEvent> {
-        let mut fresh: Vec<ConnectorId> = self
+    pub(super) fn newly_dangling(&self, before: &HashSet<Id<Connector>>) -> Vec<ToileEvent> {
+        let mut fresh: Vec<Id<Connector>> = self
             .dangling_connectors()
             .into_iter()
             .filter(|id| !before.contains(id))
@@ -951,7 +953,7 @@ impl ToileState {
 
     /// The speaker notes of the slide on screen, read before a write this
     /// viewer did not make (`TOILE-UI-316`). `None` when no slide resolves.
-    pub(super) fn active_notes(&self) -> Option<(FrameId, String)> {
+    pub(super) fn active_notes(&self) -> Option<(Id<Frame>, String)> {
         let frame = self
             .slide_order()
             .get(self.playback.active.to_index()?)
@@ -966,7 +968,7 @@ impl ToileState {
     /// this: a remote delta, a history step. The editor is otherwise seeded by
     /// the slide event alone, so a co-author's writing stays invisible until
     /// the slide changes.
-    pub(super) fn notes_change(&self, before: &Option<(FrameId, String)>) -> Option<ToileEvent> {
+    pub(super) fn notes_change(&self, before: &Option<(Id<Frame>, String)>) -> Option<ToileEvent> {
         let (frame, notes) = self.active_notes()?;
         match before {
             Some((f, n)) if *f == frame && *n == notes => None,
@@ -983,7 +985,7 @@ impl ToileState {
 
     // -- selection aggregates -----------------------------------
 
-    fn selection_stats(&self, ids: &[ElementId], kind: StatsRequestKind) -> ToileOutcome {
+    fn selection_stats(&self, ids: &[Id<Element>], kind: StatsRequestKind) -> ToileOutcome {
         let mut union: Option<Rect> = None;
         let mut count = ElementCount::ZERO;
         // Empty ids = whole-board extent: the union of every element's bounds.
@@ -1027,7 +1029,7 @@ impl ToileState {
     /// `TOILE-UI-134`). It also names the ids a frame holds, which the menu
     /// cannot read off a box (`TOILE-UI-384`). Last, it names the ids the board
     /// no longer holds, which the view drops from its selection (`TOILE-UI-385`).
-    fn selection_data(&self, ids: &[ElementId]) -> ToileOutcome {
+    fn selection_data(&self, ids: &[Id<Element>]) -> ToileOutcome {
         let elements = ids
             .iter()
             .filter_map(|id| self.display_element(id))
@@ -1060,10 +1062,10 @@ impl ToileState {
         let LoroValue::Map(entries) = elems.get_value() else {
             return ToileOutcome::display_only(vec![ToileEvent::BoardIds(Vec::new())]);
         };
-        let mut ids: Vec<ElementId> = entries
+        let mut ids: Vec<Id<Element>> = entries
             .keys()
             .filter_map(|key| {
-                let id = ElementId(key.to_string());
+                let id = Id::<Element>::from_text(key.to_string());
                 let em = self.element_map(&id)?;
                 if codec::locked(&em) || codec::has_type(&em, ElementKind::Group) {
                     None
@@ -1175,13 +1177,13 @@ impl ToileState {
         }
     }
 
-    pub(super) fn err_no_element(&self, id: &ElementId) -> ToileOutcome {
+    pub(super) fn err_no_element(&self, id: &Id<Element>) -> ToileOutcome {
         ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NoSuchElement(
             id.clone(),
         ))])
     }
 
-    pub(super) fn err_no_connector(&self, id: &ConnectorId) -> ToileOutcome {
+    pub(super) fn err_no_connector(&self, id: &Id<Connector>) -> ToileOutcome {
         ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NoSuchConnector(
             id.clone(),
         ))])
@@ -1211,14 +1213,14 @@ impl ToileState {
             v.sort_by(|a, b| a.0.cmp(&b.0));
             v.into_iter().map(|(k, v)| format!("{k:?}={v:?}")).collect()
         }
-        let lists = |m: &HashMap<ElementId, Vec<ElementId>>| {
+        let lists = |m: &HashMap<Id<Element>, Vec<Id<Element>>>| {
             sorted(m.iter().map(|(k, v)| {
                 let mut v = v.clone();
                 v.sort();
                 (k.clone(), v)
             }))
         };
-        let mut leaves: Vec<ElementId> = self.index.ids().collect();
+        let mut leaves: Vec<Id<Element>> = self.index.ids().collect();
         leaves.sort();
         format!(
             "bounds {:?}\nleaves {leaves:?}\nparents {:?}\nmembers {:?}\nlayers {:?}",
@@ -1247,20 +1249,20 @@ impl ToileState {
     }
 
     /// Derived world AABB of an element. Test helper.
-    pub fn bounds_of(&self, id: &ElementId) -> Option<Rect> {
+    pub fn bounds_of(&self, id: &Id<Element>) -> Option<Rect> {
         self.bounds.get(id).copied()
     }
 
     /// The decoded style register of an element, or the default when absent.
     /// Test helper.
-    pub fn style_of(&self, id: &ElementId) -> ElementStyle {
+    pub fn style_of(&self, id: &Id<Element>) -> ElementStyle {
         self.element_map(id)
             .map(|em| self.style_read(codec::bin_of(&em, ElementKey::Style).as_deref()))
             .unwrap_or_default()
     }
 
     /// Membership of a frame / group, in `children` order. Test helper.
-    pub fn membership_of(&self, id: &ElementId) -> Vec<ElementId> {
+    pub fn membership_of(&self, id: &Id<Element>) -> Vec<Id<Element>> {
         self.children_of(id)
     }
 
@@ -1274,7 +1276,12 @@ impl ToileState {
     /// back. Test helper: it exists to forge the state a newer or broken peer
     /// could merge into us, which no command of ours can produce.
     #[cfg(test)]
-    pub(crate) fn debug_set_element_field(&mut self, id: &ElementId, key: ElementKey, value: &str) {
+    pub(crate) fn debug_set_element_field(
+        &mut self,
+        id: &Id<Element>,
+        key: ElementKey,
+        value: &str,
+    ) {
         if let Some(em) = self.element_map(id) {
             let _ = em.insert(key, value);
         }
@@ -1327,10 +1334,10 @@ impl ToileState {
     }
 
     /// Connector ids currently in the CRDT, sorted. Test helper.
-    pub fn connector_ids(&self) -> Vec<ConnectorId> {
+    pub fn connector_ids(&self) -> Vec<Id<Connector>> {
         let mut ids = Vec::new();
         if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
-            ids.extend(m.keys().map(|k| ConnectorId(k.clone())));
+            ids.extend(m.keys().map(|k| Id::<Connector>::from_text(k.clone())));
         }
         ids.sort();
         ids

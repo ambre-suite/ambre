@@ -18,7 +18,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::app::prose::{DocOffset, FootnoteOrdinal, HeadingLevel};
-use ambre_core::FootnoteId;
+use ambre_core::id::{Footnote, Id};
 use loro::{LoroValue, TreeID};
 
 use ambre_bus::app::prose::{
@@ -314,7 +314,7 @@ fn marked_of(run: &IrRun) -> MarkedRun {
 }
 
 /// A run of the document as the form holds it.
-fn ir_run(run: MarkedRun, notes: &HashMap<FootnoteId, FootnoteOrdinal>) -> IrRun {
+fn ir_run(run: MarkedRun, notes: &HashMap<Id<Footnote>, FootnoteOrdinal>) -> IrRun {
     let mut out = IrRun::plain(run.text);
     for (key, value) in run.marks {
         let on = !matches!(value, LoroValue::Null | LoroValue::Bool(false));
@@ -340,7 +340,7 @@ fn ir_run(run: MarkedRun, notes: &HashMap<FootnoteId, FootnoteOrdinal>) -> IrRun
             "ref" => out.cross_ref = Referencing::Reference,
             "fn" => {
                 if let LoroValue::String(id) = value
-                    && let Ok(id) = FootnoteId::parse_str(&id)
+                    && let Ok(id) = Id::<Footnote>::parse_str(&id)
                 {
                     out.footnote_ref = notes.get(&id).copied();
                 }
@@ -356,7 +356,7 @@ impl ProseState {
     /// reads (`PROSE-IO-046`). It writes nothing (`PROSE-IO-017`).
     pub(crate) fn walk(&self) -> ProseIr {
         let tree = doc::blocks(&self.doc);
-        let notes: HashMap<FootnoteId, FootnoteOrdinal> =
+        let notes: HashMap<Id<Footnote>, FootnoteOrdinal> =
             crate::note::ordinals(&self.doc).into_iter().collect();
         let bands = doc::read_bands(&self.doc);
         let mut footnotes = Vec::new();
@@ -387,7 +387,7 @@ impl ProseState {
         &self,
         tree: &loro::LoroTree,
         parent: Option<TreeID>,
-        notes: &HashMap<FootnoteId, FootnoteOrdinal>,
+        notes: &HashMap<Id<Footnote>, FootnoteOrdinal>,
     ) -> Vec<IrBlock> {
         let ids = match parent {
             None => doc::roots(tree),
@@ -402,7 +402,7 @@ impl ProseState {
         &self,
         tree: &loro::LoroTree,
         id: TreeID,
-        notes: &HashMap<FootnoteId, FootnoteOrdinal>,
+        notes: &HashMap<Id<Footnote>, FootnoteOrdinal>,
     ) -> Option<IrBlock> {
         let runs = || -> Vec<IrRun> {
             self.body_of(&id)

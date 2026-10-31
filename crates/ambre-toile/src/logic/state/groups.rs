@@ -6,12 +6,13 @@
 
 use std::collections::HashSet;
 
+use ambre_core::id::{Element, Id};
 use kurbo::Rect;
 use loro::{LoroMap, LoroMovableList, LoroValue};
 
 use crate::logic::command::{ToileError, ToileEvent, ToileOutcome};
 use crate::logic::index::ElementBounds;
-use crate::logic::model::{ElementId, ElementKind, NodeId};
+use crate::logic::model::{ElementKind, NodeId};
 use ambre_bus::app::toile::{ElementCount, FRAME_NAME_MAX};
 
 use super::ToileState;
@@ -26,7 +27,7 @@ impl ToileState {
     /// are first removed from it (a node belongs to at most one group). The group
     /// `NodeId` is inserted into `layers` just below its lowest member so the
     /// members keep painting above it in their current relative order.
-    pub(super) fn group_elements(&mut self, ids: &[ElementId]) -> ToileOutcome {
+    pub(super) fn group_elements(&mut self, ids: &[Id<Element>]) -> ToileOutcome {
         // A refusal is loud, never silent (`TOILE-055`): fewer than two
         // distinct members, or no fresh id.
         let id = match self.group_inner(ids) {
@@ -56,9 +57,9 @@ impl ToileState {
     /// the one import undo group (`toile-import-export`). Intermediate cache reads
     /// (`prune_empty_groups`, `rematerialize_layers`) are pure and stay here so the
     /// `insert_at` computation sees the detached state.
-    pub(super) fn group_inner(&mut self, ids: &[ElementId]) -> Result<ElementId, ToileError> {
+    pub(super) fn group_inner(&mut self, ids: &[Id<Element>]) -> Result<Id<Element>, ToileError> {
         // Keep only existing, distinct members, in the request order.
-        let mut members: Vec<ElementId> = Vec::new();
+        let mut members: Vec<Id<Element>> = Vec::new();
         for id in ids {
             if self.bounds.contains_key(id) && !members.contains(id) {
                 members.push(id.clone());
@@ -87,7 +88,7 @@ impl ToileState {
         // A member leaves every parent it sat in, a frame included, since
         // it belongs to one at most (`TOILE-149`). When every member sat in one
         // frame, the new group takes their place in it.
-        let frame_of = |m: &ElementId| {
+        let frame_of = |m: &Id<Element>| {
             self.parents_of(m)
                 .iter()
                 .find(|p| self.is_frame(p))
@@ -113,7 +114,7 @@ impl ToileState {
             let _ = elements.delete(id.as_str());
             return Err(refused());
         };
-        let held: Vec<&ElementId> = members
+        let held: Vec<&Id<Element>> = members
             .iter()
             .filter(|m| children.push(m.as_str()).is_ok())
             .collect();
@@ -175,7 +176,7 @@ impl ToileState {
     /// and the user asked to ungroup what can be (`TOILE-264`). A list with no
     /// group answers one error, naming its first id. An id the board does not
     /// hold always answers its own error (`TOILE-160`).
-    pub(super) fn ungroup_elements(&mut self, groups: &[ElementId]) -> ToileOutcome {
+    pub(super) fn ungroup_elements(&mut self, groups: &[Id<Element>]) -> ToileOutcome {
         let mut display = Vec::new();
         let mut unbound = Vec::new();
         let mut not_a_group = None;
@@ -203,7 +204,7 @@ impl ToileState {
             return ToileOutcome::display_only(display);
         }
         // One rewrite of the paint order for the whole list, not one per group.
-        let gone: HashSet<&ElementId> = unbound.iter().copied().collect();
+        let gone: HashSet<&Id<Element>> = unbound.iter().copied().collect();
         self.strip_layers(|node| !matches!(node, NodeId::Element(e) if gone.contains(e)));
         // A frame that took children clamps them above it (`TOILE-011`). The
         // clamp lands in the same commit, so it undoes with the membership.
@@ -226,7 +227,7 @@ impl ToileState {
     /// checked that `group` is a group, and owns the paint order, the commit
     /// and the caches. Answers the frame that took the children, if one did,
     /// so the caller can clamp them above it once the group's node is gone.
-    fn unbind_group(&mut self, group: &ElementId) -> Option<ElementId> {
+    fn unbind_group(&mut self, group: &Id<Element>) -> Option<Id<Element>> {
         let children = self.children_of(group);
         // The group's own parent takes the children (`TOILE-157`): its
         // enclosing group, else the frame that holds it. Concurrent adds can
@@ -277,9 +278,9 @@ impl ToileState {
     /// One undo item.
     pub(super) fn set_frame_children(
         &mut self,
-        frame: &ElementId,
-        add: &[ElementId],
-        remove: &[ElementId],
+        frame: &Id<Element>,
+        add: &[Id<Element>],
+        remove: &[Id<Element>],
     ) -> ToileOutcome {
         let Some(fm) = self.element_map(frame) else {
             return self.err_no_element(frame);
@@ -337,8 +338,8 @@ impl ToileState {
     /// element dragged out of its frame's box is still that frame's member. A
     /// concurrent add can leave one id in two lists, so every list is swept.
     /// Nothing held writes nothing. One commit, so one undo item.
-    pub(super) fn remove_from_frames(&mut self, ids: &[ElementId]) -> ToileOutcome {
-        let gone: HashSet<&str> = ids.iter().map(ElementId::as_str).collect();
+    pub(super) fn remove_from_frames(&mut self, ids: &[Id<Element>]) -> ToileOutcome {
+        let gone: HashSet<&str> = ids.iter().map(Id::<Element>::as_str).collect();
         let mut changed = false;
         for frame in &self.frame_ids() {
             let Some(list) = self.children_list(frame) else {
@@ -353,7 +354,7 @@ impl ToileState {
                     && gone.contains(s.as_str())
                 {
                     if list.delete(idx, 1).is_ok() {
-                        self.unlink_parent(&ElementId(s.to_string()), frame);
+                        self.unlink_parent(&Id::<Element>::from_text(s.to_string()), frame);
                     }
                     changed = true;
                 }
@@ -367,7 +368,7 @@ impl ToileState {
     }
 
     /// Every frame in paint order.
-    fn frame_ids(&self) -> Vec<ElementId> {
+    fn frame_ids(&self) -> Vec<Id<Element>> {
         self.layers
             .iter()
             .filter_map(|node| match node {
@@ -383,7 +384,7 @@ impl ToileState {
     /// An id the board no longer holds is no member, though a list still names
     /// it (`TOILE-272`). A frame add concurrent with the delete leaves that
     /// entry, and so does a board the delete of an earlier build wrote.
-    pub(super) fn framed_among(&self, ids: &[ElementId]) -> Vec<ElementId> {
+    pub(super) fn framed_among(&self, ids: &[Id<Element>]) -> Vec<Id<Element>> {
         ids.iter()
             .filter(|id| self.element_map(id).is_some())
             .filter(|id| self.parents_of(id).iter().any(|p| self.is_frame(p)))
@@ -394,7 +395,7 @@ impl ToileState {
     /// The title a frame carries, `None` until it is named or for no frame.
     /// Test / integration accessor; every surface reads it off the display
     /// payload instead.
-    pub fn frame_name(&self, frame: &ElementId) -> Option<String> {
+    pub fn frame_name(&self, frame: &Id<Element>) -> Option<String> {
         self.element_map(frame)
             .and_then(|em| str_of(&em, ElementKey::Name))
     }
@@ -408,7 +409,7 @@ impl ToileState {
     /// did not change writes nothing (`TOILE-250`), and an element that is not
     /// a frame is refused (`TOILE-251`). One commit, so one undo item
     /// (`TOILE-248`).
-    pub(super) fn rename_frame(&mut self, frame: &ElementId, name: &str) -> ToileOutcome {
+    pub(super) fn rename_frame(&mut self, frame: &Id<Element>, name: &str) -> ToileOutcome {
         let Some(fm) = self.element_map(frame) else {
             return self.err_no_element(frame);
         };
@@ -444,8 +445,8 @@ impl ToileState {
     /// by them once moved the wrong node forever. Each move here takes one child
     /// entry from below the frame's first entry, so the loop ends within the
     /// list's length.
-    fn enforce_frame_zorder(&self, frame: &ElementId) {
-        let children: HashSet<ElementId> = self.children_of(frame).into_iter().collect();
+    fn enforce_frame_zorder(&self, frame: &Id<Element>) {
+        let children: HashSet<Id<Element>> = self.children_of(frame).into_iter().collect();
         if children.is_empty() {
             return;
         }
@@ -487,7 +488,7 @@ impl ToileState {
     // -- tree helpers ----------------------------------------------------------
 
     /// The `children` movable-list handle of a group / frame element, if present.
-    fn children_list(&self, id: &ElementId) -> Option<LoroMovableList> {
+    fn children_list(&self, id: &Id<Element>) -> Option<LoroMovableList> {
         self.element_map(id)?
             .get(ElementKey::Children)?
             .into_container()
@@ -497,14 +498,14 @@ impl ToileState {
     }
 
     /// Member element ids of a group / frame, in `children` order.
-    pub(super) fn children_of(&self, id: &ElementId) -> Vec<ElementId> {
+    pub(super) fn children_of(&self, id: &Id<Element>) -> Vec<Id<Element>> {
         let mut out = Vec::new();
         if let Some(list) = self.children_list(id)
             && let LoroValue::List(items) = list.get_deep_value()
         {
             for v in items.iter() {
                 if let LoroValue::String(s) = v {
-                    out.push(ElementId(s.to_string()));
+                    out.push(Id::<Element>::from_text(s.to_string()));
                 }
             }
         }
@@ -516,7 +517,7 @@ impl ToileState {
     /// wins. The cache holds parents in arrival order, which differs per peer,
     /// so the first entry would not converge (`TOILE-266`). Read from the
     /// parent cache, never from a walk of the board (`TOILE-056`).
-    pub(super) fn enclosing_group(&self, id: &ElementId) -> Option<ElementId> {
+    pub(super) fn enclosing_group(&self, id: &Id<Element>) -> Option<Id<Element>> {
         self.parents_of(id)
             .iter()
             .filter(|p| self.is_group(p))
@@ -528,7 +529,7 @@ impl ToileState {
     /// a group or a frame. Two concurrent adds leave one id on a list twice.
     /// The cache forgets the link even when `parent` is gone, as a
     /// cascading delete leaves it.
-    pub(super) fn remove_child(&mut self, parent: &ElementId, child: &ElementId) {
+    pub(super) fn remove_child(&mut self, parent: &Id<Element>, child: &Id<Element>) {
         let Some(list) = self.children_list(parent) else {
             self.unlink_parent(child, parent);
             return;
@@ -544,8 +545,8 @@ impl ToileState {
     fn delete_entries(
         &mut self,
         list: &LoroMovableList,
-        parent: &ElementId,
-        child: &ElementId,
+        parent: &Id<Element>,
+        child: &Id<Element>,
     ) -> ElementCount {
         let LoroValue::List(items) = list.get_deep_value() else {
             return ElementCount::ZERO;
@@ -570,7 +571,7 @@ impl ToileState {
     /// element contributes itself; a group recurses into its children. A peer
     /// can write a group into its own subtree, so each group is entered once
     /// (`TOILE-276`).
-    pub(super) fn collect_leaves(&self, id: &ElementId, out: &mut HashSet<ElementId>) {
+    pub(super) fn collect_leaves(&self, id: &Id<Element>, out: &mut HashSet<Id<Element>>) {
         self.collect_leaves_once(id, out, &mut HashSet::new());
     }
 
@@ -578,9 +579,9 @@ impl ToileState {
     /// `entered`.
     fn collect_leaves_once(
         &self,
-        id: &ElementId,
-        out: &mut HashSet<ElementId>,
-        entered: &mut HashSet<ElementId>,
+        id: &Id<Element>,
+        out: &mut HashSet<Id<Element>>,
+        entered: &mut HashSet<Id<Element>>,
     ) {
         if !self.is_group(id) {
             out.insert(id.clone());
@@ -592,7 +593,7 @@ impl ToileState {
     }
 
     /// Append `id` and every descendant (groups included) to `out`.
-    pub(super) fn collect_subtree(&self, id: &ElementId, out: &mut HashSet<ElementId>) {
+    pub(super) fn collect_subtree(&self, id: &Id<Element>, out: &mut HashSet<Id<Element>>) {
         if !out.insert(id.clone()) {
             return;
         }
@@ -603,7 +604,7 @@ impl ToileState {
         }
     }
 
-    fn is_group(&self, id: &ElementId) -> bool {
+    fn is_group(&self, id: &Id<Element>) -> bool {
         self.element_map(id)
             .map(|em| has_type(&em, ElementKind::Group))
             .unwrap_or(false)
@@ -618,14 +619,14 @@ impl ToileState {
     /// Runs inside the caller's single `doc.commit()` so it stays one undo item.
     pub(super) fn prune_empty_groups(&mut self) {
         loop {
-            let empties: Vec<ElementId> = {
+            let empties: Vec<Id<Element>> = {
                 let mut v = Vec::new();
                 if let LoroValue::Map(m) = self.walk_elements() {
                     for (key, val) in m.iter() {
                         if matches!(val, LoroValue::Map(f)
                             if value_has_type(FieldValues::of(f), ElementKind::Group))
                         {
-                            let id = ElementId(key.clone());
+                            let id = Id::<Element>::from_text(key.clone());
                             if self.children_of(&id).is_empty() {
                                 v.push(id);
                             }
@@ -637,7 +638,7 @@ impl ToileState {
             if empties.is_empty() {
                 break;
             }
-            let removed: HashSet<ElementId> = empties.iter().cloned().collect();
+            let removed: HashSet<Id<Element>> = empties.iter().cloned().collect();
             let elems = self.doc.get_map(Root::Elements.as_str());
             for id in &empties {
                 let _ = elems.delete(id.as_str());
@@ -658,14 +659,14 @@ impl ToileState {
     /// fixpoint (nested groups resolve bottom-up). Group geometry is derived and
     /// lives only in the `bounds` / R-tree caches, never in the CRDT.
     pub(super) fn recompute_groups(&mut self) {
-        let groups: Vec<(ElementId, Vec<ElementId>)> = {
+        let groups: Vec<(Id<Element>, Vec<Id<Element>>)> = {
             let mut v = Vec::new();
             if let LoroValue::Map(m) = self.walk_elements() {
                 for (key, val) in m.iter() {
                     if let LoroValue::Map(fields) = val
                         && value_has_type(FieldValues::of(fields), ElementKind::Group)
                     {
-                        let id = ElementId(key.clone());
+                        let id = Id::<Element>::from_text(key.clone());
                         let kids = self.children_of(&id);
                         v.push((id, kids));
                     }
@@ -711,11 +712,12 @@ mod tests {
     use kurbo::{Point, Size};
 
     use crate::logic::command::{InitContent, ToileCommand, ToileEvent, ToileOutcome};
-    use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
+    use crate::logic::model::{ElementKind, NodeId, ShapeKind};
+    use ambre_core::id::{Element, Id};
 
     use super::super::{Root, ToileState};
 
-    pub(super) fn create(st: &mut ToileState, kind: ElementKind) -> ElementId {
+    pub(super) fn create(st: &mut ToileState, kind: ElementKind) -> Id<Element> {
         let out: ToileOutcome = st.handle_command(ToileCommand::CreateElement {
             kind,
             at: Point::ZERO,
@@ -754,7 +756,7 @@ mod tests {
             add: vec![r.clone()],
             remove: vec![],
         });
-        let at = |id: &ElementId| {
+        let at = |id: &Id<Element>| {
             st.layer_order()
                 .iter()
                 .position(|n| n == &NodeId::Element(id.clone()))
@@ -763,7 +765,7 @@ mod tests {
     }
 
     /// Bind `ids` into a group and name it.
-    fn group(st: &mut ToileState, ids: Vec<ElementId>) -> ElementId {
+    fn group(st: &mut ToileState, ids: Vec<Id<Element>>) -> Id<Element> {
         st.handle_command(ToileCommand::GroupElements { ids: ids.clone() });
         let first = ids.first().expect("a group binds members");
         st.enclosing_group(first).expect("the binding made a group")
@@ -777,7 +779,7 @@ mod tests {
     fn a_group_cycle_a_peer_writes_ends_a_move_and_an_alignment() {
         let mut peer = ToileState::new();
         let rect = ElementKind::Shape(ShapeKind::Rect);
-        let leaves: Vec<ElementId> = (0..4).map(|_| create(&mut peer, rect)).collect();
+        let leaves: Vec<Id<Element>> = (0..4).map(|_| create(&mut peer, rect)).collect();
         let g1 = group(&mut peer, leaves.iter().take(2).cloned().collect());
         let g2 = group(&mut peer, leaves.iter().skip(2).cloned().collect());
         let mut st = ToileState::new();
@@ -819,7 +821,8 @@ mod tests {
 #[cfg(not(target_arch = "wasm32"))]
 mod cache_tests {
     use crate::logic::command::{ToileCommand, ToileError};
-    use crate::logic::model::{ElementId, ElementKind, ShapeKind};
+    use crate::logic::model::{ElementKind, ShapeKind};
+    use ambre_core::id::{Element, Id};
 
     use super::super::ToileState;
     use super::tests::create;
@@ -833,7 +836,7 @@ mod cache_tests {
         fresh.debug_caches()
     }
 
-    fn frame_with(st: &mut ToileState, child: &ElementId) -> ElementId {
+    fn frame_with(st: &mut ToileState, child: &Id<Element>) -> Id<Element> {
         let frame = create(st, ElementKind::Frame);
         st.handle_command(ToileCommand::SetFrameChildren {
             frame: frame.clone(),
@@ -886,7 +889,7 @@ mod cache_tests {
 
         assert!(st.membership_of(&group).is_empty(), "the group is gone");
         for child in [&x, &y] {
-            assert_eq!(st.parents_of(child), &[] as &[ElementId], "{child:?}");
+            assert_eq!(st.parents_of(child), &[] as &[Id<Element>], "{child:?}");
         }
         assert_eq!(st.debug_caches(), rebuilt_caches(&st));
     }
@@ -952,12 +955,12 @@ mod cache_tests {
             add: vec![],
             remove: vec![gone.clone()],
         });
-        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new());
+        assert_eq!(st.membership_of(&frame), Vec::<Id<Element>>::new());
         assert_eq!(st.debug_caches(), rebuilt_caches(&st));
 
         let mut st = load();
         st.handle_command(ToileCommand::DeleteElements { ids: vec![frame] });
-        assert_eq!(st.parents_of(&gone), &[] as &[ElementId]);
+        assert_eq!(st.parents_of(&gone), &[] as &[Id<Element>]);
         assert_eq!(st.debug_caches(), rebuilt_caches(&st));
     }
 }

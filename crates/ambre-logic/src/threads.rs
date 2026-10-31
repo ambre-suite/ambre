@@ -7,13 +7,13 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelId, MentionCount, MessageId, MurmureEvent, SegmentId, Seq, Timestamp};
+use ambre_bus::{MentionCount, MurmureEvent, Seq, Timestamp};
 use ambre_murmure::{ChannelState, Replied};
 
 impl LogicState {
     /// Hand the Sync worker what a reply wrote, and the view what it shows.
     /// That is the thread, the copy in the channel, and the root's new head.
-    pub(crate) fn send_reply(&mut self, channel_id: ChannelId, replied: Replied, now: Timestamp) {
+    pub(crate) fn send_reply(&mut self, channel_id: Id<Channel>, replied: Replied, now: Timestamp) {
         let Replied { reply, copy, head } = replied;
         self.send_to_sync(SyncCommand::SendUpdate {
             document_id: reply.document,
@@ -47,10 +47,10 @@ impl LogicState {
     /// its bytes. What waited on a lost one waits on the winner (`SRV-214`).
     pub(crate) fn thread_linked(
         &mut self,
-        channel_id: ChannelId,
-        segment: SegmentId,
-        root: MessageId,
-        thread: DocumentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
     ) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
@@ -95,9 +95,9 @@ impl LogicState {
     /// creates a thread again.
     pub(crate) fn thread_link_failed(
         &mut self,
-        channel_id: ChannelId,
-        root: MessageId,
-        thread: DocumentId,
+        channel_id: Id<Channel>,
+        root: Id<Message>,
+        thread: Id<Document>,
         message: &str,
     ) {
         tracing::warn!("Logic: thread of {root} on {channel_id} failed: {message}");
@@ -110,7 +110,7 @@ impl LogicState {
 
     /// Open each thread a held root names, so its head reads its count. A
     /// thread counted from its summaries until now counts from its marks.
-    pub(crate) fn open_threads(&mut self, channel_id: ChannelId) {
+    pub(crate) fn open_threads(&mut self, channel_id: Id<Channel>) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -128,7 +128,7 @@ impl LogicState {
     /// channel holds or loads hears the delta on its own topic. Any other is
     /// watched from its summaries, once the activity answer names its
     /// channel. Nothing loads it: its root is not on screen.
-    pub(crate) fn thread_activity(&mut self, thread: DocumentId) {
+    pub(crate) fn thread_activity(&mut self, thread: Id<Document>) {
         if self.follows_thread(thread) {
             return;
         }
@@ -155,7 +155,7 @@ impl LogicState {
     }
 
     /// Whether this client holds, loads or watches `thread`.
-    fn follows_thread(&self, thread: DocumentId) -> bool {
+    fn follows_thread(&self, thread: Id<Document>) -> bool {
         self.watched_threads.contains_key(&thread)
             || self.channels.values().any(|channel| channel.holds(thread))
     }
@@ -163,7 +163,7 @@ impl LogicState {
     /// Count `thread` as a light subscription from its read cursor, under
     /// the key of its channel's `meta`. A channel this session neither
     /// opened nor closed shows the relay's mark alone, as its segments do.
-    fn watch_thread(&mut self, channel_id: ChannelId, thread: DocumentId) {
+    fn watch_thread(&mut self, channel_id: Id<Channel>, thread: Id<Document>) {
         let Some(meta) = self
             .channels
             .get(&channel_id)
@@ -195,7 +195,7 @@ impl LogicState {
     /// Returns whether `thread` is watched.
     pub(crate) fn count_thread(
         &mut self,
-        thread: DocumentId,
+        thread: Id<Document>,
         counters: ambre_core::activity::ActivityCounters,
     ) -> bool {
         let Some(watched) = self.watched_threads.get_mut(&thread) else {
@@ -225,13 +225,13 @@ impl LogicState {
     }
 
     /// The mentions the watched threads of `channel_id` counted.
-    pub(crate) fn thread_mentions(&self, channel_id: ChannelId) -> MentionCount {
+    pub(crate) fn thread_mentions(&self, channel_id: Id<Channel>) -> MentionCount {
         mentions_of(&self.watched_threads, channel_id)
     }
 
     /// End the light subscription of each thread of `channel_id` watched.
-    pub(crate) fn end_watched_threads(&mut self, channel_id: ChannelId) {
-        let ended: Vec<DocumentId> = self
+    pub(crate) fn end_watched_threads(&mut self, channel_id: Id<Channel>) {
+        let ended: Vec<Id<Document>> = self
             .watched_threads
             .iter()
             .filter(|(_, watched)| watched.channel_id == channel_id)
@@ -244,7 +244,7 @@ impl LogicState {
     }
 
     /// The thread `document_id` arrived: the view reads its replies.
-    pub(crate) fn show_thread(&self, channel_id: ChannelId, document_id: DocumentId) {
+    pub(crate) fn show_thread(&self, channel_id: Id<Channel>, document_id: Id<Document>) {
         let Some(event) = self
             .channels
             .get(&channel_id)
@@ -261,15 +261,15 @@ impl LogicState {
 #[derive(Debug)]
 pub(crate) struct WatchedThread {
     /// The channel the thread counts on.
-    channel_id: ChannelId,
+    channel_id: Id<Channel>,
     /// The replies past the read cursor that mention this user.
     mentions: MentionCount,
 }
 
 /// The mentions the watched threads of `channel_id` counted.
 pub(crate) fn mentions_of(
-    watched: &HashMap<DocumentId, WatchedThread>,
-    channel_id: ChannelId,
+    watched: &HashMap<Id<Document>, WatchedThread>,
+    channel_id: Id<Channel>,
 ) -> MentionCount {
     watched
         .values()

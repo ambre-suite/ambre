@@ -4,7 +4,8 @@
 use crate::Receipt;
 use ambre_bus::CharSpan;
 use ambre_bus::{MessageDraft, MessageView, StyleMark, TextStyle, Timestamp};
-use ambre_core::{ChannelId, Seq, UserId};
+use ambre_core::Seq;
+use ambre_core::id::{Channel, Id, User};
 use loro::{Container, LoroText, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{Mark, MessageKey, Root};
@@ -13,11 +14,11 @@ use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Se
 const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
 /// Alice's channel, created empty, and the user she writes for.
-fn alice() -> (ChannelState, UserId) {
-    let state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+fn alice() -> (ChannelState, Id<User>) {
+    let state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
-    (state, UserId::new())
+    (state, Id::<User>::mint())
 }
 
 /// A member opening `state`'s channel from its snapshots, with a session.
@@ -62,7 +63,7 @@ fn draft(text: &str, styles: Vec<StyleMark>) -> MessageDraft {
 }
 
 /// Hand what `from` wrote, signed by `author`, to `to` under number `seq`.
-fn deliver(to: &mut ChannelState, from: &ChannelState, author: UserId, sent: &Sent, seq: u64) {
+fn deliver(to: &mut ChannelState, from: &ChannelState, author: Id<User>, sent: &Sent, seq: u64) {
     let document_id = sent.segment.document_id();
     let signer = Signer {
         peer: from.peer(document_id).expect("a session"),

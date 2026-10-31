@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::app::prose::DocSpan;
-use ambre_core::{CommentId, ReplyId};
+use ambre_core::id::{Comment, Id, Reply};
 use loro::{LoroList, LoroMap, LoroText, TreeID, UpdateOptions};
 
 use crate::comment::{self, ReplySlot, Span};
@@ -78,7 +78,7 @@ impl ProseState {
     /// (`PROSE-FEAT-190`, `PROSE-FEAT-079`).
     pub(super) fn reply_to_comment(
         &mut self,
-        id: &CommentId,
+        id: &Id<Comment>,
         text: &str,
         now: ambre_core::Timestamp,
     ) -> ProseOutcome {
@@ -103,7 +103,7 @@ impl ProseState {
     /// Close or reopen thread `id`, whoever opened it (`PROSE-FEAT-187`).
     pub(super) fn set_thread_state(
         &mut self,
-        id: &CommentId,
+        id: &Id<Comment>,
         state: ambre_core::ThreadState,
     ) -> ProseOutcome {
         let Some(entry) = comment::entry(&self.doc, id) else {
@@ -120,7 +120,7 @@ impl ProseState {
     ///
     /// Only this thread's key is taken off, so another thread over the same
     /// characters keeps its span (`PROSE-FEAT-201`).
-    pub(super) fn delete_comment(&mut self, id: &CommentId) -> ProseOutcome {
+    pub(super) fn delete_comment(&mut self, id: &Id<Comment>) -> ProseOutcome {
         if comment::entry(&self.doc, id).is_none() {
             return ProseOutcome::refused(ProseRefusal::NoSuchComment(*id));
         }
@@ -133,7 +133,7 @@ impl ProseState {
     /// Remove reply `reply` of thread `id`, or the thread when the reply is
     /// its head (`PROSE-FEAT-197`, `PROSE-FEAT-081`). Only its author may
     /// (`PROSE-FEAT-198`).
-    pub(super) fn delete_reply(&mut self, id: &CommentId, reply: &ReplyId) -> ProseOutcome {
+    pub(super) fn delete_reply(&mut self, id: &Id<Comment>, reply: &Id<Reply>) -> ProseOutcome {
         let (list, index) = match self.own_reply(id, reply) {
             Ok(found) => found,
             Err(outcome) => return outcome,
@@ -154,8 +154,8 @@ impl ProseState {
     /// (`PROSE-FEAT-195`, `PROSE-FEAT-080`).
     pub(super) fn edit_reply(
         &mut self,
-        id: &CommentId,
-        reply: &ReplyId,
+        id: &Id<Comment>,
+        reply: &Id<Reply>,
         text: &str,
     ) -> ProseOutcome {
         let (list, index) = match self.own_reply(id, reply) {
@@ -220,7 +220,7 @@ impl ProseState {
         self.write_anchors(&ids, &spans)
     }
 
-    fn write_anchors(&self, ids: &[CommentId], spans: &HashMap<CommentId, Span>) -> bool {
+    fn write_anchors(&self, ids: &[Id<Comment>], spans: &HashMap<Id<Comment>, Span>) -> bool {
         let mut wrote = false;
         for id in ids {
             let (Some(entry), Some(span)) = (comment::entry(&self.doc, id), spans.get(id)) else {
@@ -241,7 +241,7 @@ impl ProseState {
     /// The entry of a new thread: its kind, its anchor, open, no reply yet.
     fn write_thread(
         &self,
-        id: &CommentId,
+        id: &Id<Comment>,
         span: Span,
     ) -> Result<doc::Fields<doc::AnnotKey>, doc::WriteError> {
         let annots = doc::annots(&self.doc);
@@ -277,7 +277,7 @@ impl ProseState {
             .map(doc::Fields::<doc::ReplyKey>::of)?;
         reply.insert(
             doc::ReplyKey::Id,
-            self.ids.mint::<ReplyId>().to_hyphenated(),
+            self.ids.mint::<Id<Reply>>().to_hyphenated(),
         )?;
         reply.insert(
             doc::ReplyKey::Author,
@@ -299,8 +299,8 @@ impl ProseState {
     /// peer running other code writes to the CRDT directly.
     fn own_reply(
         &self,
-        id: &CommentId,
-        reply: &ReplyId,
+        id: &Id<Comment>,
+        reply: &Id<Reply>,
     ) -> Result<(LoroList, ReplySlot), ProseOutcome> {
         let entry = comment::entry(&self.doc, id)
             .ok_or_else(|| ProseOutcome::refused(ProseRefusal::NoSuchComment(*id)))?;
@@ -322,7 +322,7 @@ impl ProseState {
     }
 
     /// Take thread `id`'s mark off every run it covers, then its entry.
-    fn remove_thread(&self, id: &CommentId) -> Result<(), doc::WriteError> {
+    fn remove_thread(&self, id: &Id<Comment>) -> Result<(), doc::WriteError> {
         let key = comment::mark_key(id);
         let runs = comment::runs(&self.doc, &comment::text_blocks(&self.doc));
         for (_, span) in runs.iter().filter(|(thread, _)| thread == id) {
@@ -349,11 +349,11 @@ mod tests {
     use super::*;
     use crate::events::{BlockId, CommentThread, ProseCommand};
     use ambre_bus::app::prose::DocOffset;
-    use ambre_core::UserId;
+    use ambre_core::id::User;
     use proptest::prelude::*;
 
-    const ALICE: UserId = UserId::from_bytes([1; 16]);
-    const BOB: UserId = UserId::from_bytes([2; 16]);
+    const ALICE: Id<User> = Id::from_bytes([1; 16]);
+    const BOB: Id<User> = Id::from_bytes([2; 16]);
 
     fn refusal(outcome: &ProseOutcome) -> Option<ProseRefusal> {
         outcome.display.iter().find_map(|event| match event {
@@ -363,7 +363,7 @@ mod tests {
     }
 
     /// A one-paragraph document holding `text`, written by `user`.
-    fn document(peer: ambre_core::PeerId, user: UserId, text: &str) -> (ProseState, BlockId) {
+    fn document(peer: ambre_core::PeerId, user: Id<User>, text: &str) -> (ProseState, BlockId) {
         let mut state = ProseState::with_peer(peer).expect("a document");
         state.set_user_id(user);
         state.set_display_name(ambre_core::DisplayName::new(&format!("user {peer}")).unwrap());
@@ -377,7 +377,7 @@ mod tests {
     }
 
     /// A second peer holding `from`'s document, signed in as `user`.
-    fn join(from: &ProseState, peer: ambre_core::PeerId, user: UserId) -> ProseState {
+    fn join(from: &ProseState, peer: ambre_core::PeerId, user: Id<User>) -> ProseState {
         let mut state = ProseState::with_peer(peer).expect("a document");
         state.set_user_id(user);
         state
@@ -394,8 +394,8 @@ mod tests {
         outcome
     }
 
-    fn open(state: &mut ProseState, block: BlockId, range: (u32, u32), text: &str) -> CommentId {
-        let before: Vec<CommentId> = state.comments().iter().map(|t| t.comment_id).collect();
+    fn open(state: &mut ProseState, block: BlockId, range: (u32, u32), text: &str) -> Id<Comment> {
+        let before: Vec<Id<Comment>> = state.comments().iter().map(|t| t.comment_id).collect();
         state.handle_command(ProseCommand::AddComment {
             block_id: block,
             range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
@@ -410,7 +410,7 @@ mod tests {
             .expect("a new thread")
     }
 
-    fn thread(state: &ProseState, id: CommentId) -> CommentThread {
+    fn thread(state: &ProseState, id: Id<Comment>) -> CommentThread {
         state
             .comments()
             .into_iter()
@@ -418,14 +418,14 @@ mod tests {
             .expect("the thread")
     }
 
-    fn span(state: &ProseState, id: CommentId) -> (u32, u32) {
+    fn span(state: &ProseState, id: Id<Comment>) -> (u32, u32) {
         let t = thread(state, id);
         (t.anchor_start.get(), t.anchor_end.get())
     }
 
     fn reply(
         state: &mut ProseState,
-        id: CommentId,
+        id: Id<Comment>,
         text: &str,
         now: ambre_core::Timestamp,
     ) -> ProseOutcome {
@@ -436,7 +436,7 @@ mod tests {
         })
     }
 
-    fn texts(state: &ProseState, id: CommentId) -> Vec<String> {
+    fn texts(state: &ProseState, id: Id<Comment>) -> Vec<String> {
         thread(state, id)
             .replies
             .into_iter()
@@ -444,7 +444,7 @@ mod tests {
             .collect()
     }
 
-    fn cache(state: &ProseState, id: CommentId) -> Option<Span> {
+    fn cache(state: &ProseState, id: Id<Comment>) -> Option<Span> {
         comment::entry(&state.doc, &id).and_then(|entry| comment::cached(&entry))
     }
 
@@ -805,7 +805,7 @@ mod tests {
                 now: ambre_core::Timestamp(11),
             },
         );
-        let ids = |state: &ProseState| -> Vec<CommentId> {
+        let ids = |state: &ProseState| -> Vec<Id<Comment>> {
             state.comments().iter().map(|t| t.comment_id).collect()
         };
         assert_eq!(ids(&alice), vec![id]);

@@ -56,8 +56,9 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::id::{Document, Id};
 use crate::{
-    Ciphertext, DocType, DocumentId, Nonce, PickedContainer, PlaintextContainer, SealedContainer,
+    Ciphertext, DocType, Nonce, PickedContainer, PlaintextContainer, SealedContainer,
     SnapshotBytes, Uuid,
 };
 
@@ -191,7 +192,7 @@ pub struct AmbreHeader {
     /// re-dispatches on mismatch (dispatch rule) rather than coercing.
     pub doc_type: DocType,
     /// Document identity, UUID v7.
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     /// Offset 22 onward: the raw Loro snapshot, uncompressed and unencrypted.
     pub payload: crate::SnapshotBytes,
 }
@@ -365,7 +366,7 @@ pub fn classify<F: ContainerFile>(file: &F) -> Result<ContainerKind, DocFileErro
 /// version, because there is no backward-compatible write mode.
 pub fn write_ambre_plaintext(
     doc_type: DocType,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     payload: &SnapshotBytes,
 ) -> PlaintextContainer {
     let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
@@ -421,7 +422,7 @@ pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileErr
         DocType::from_u8(raw_type).ok_or(DocFileError::UnknownDocType { found: raw_type })?;
     // Infallible: the slice is exactly 16 bytes wide by construction.
     let document_id = Uuid::from_slice(&head[DOCUMENT_ID_AT..])
-        .map(DocumentId::from_uuid)
+        .map(Id::<Document>::from_uuid)
         .map_err(|_| DocFileError::TruncatedHeader)?;
     Ok(AmbreHeader {
         version,
@@ -692,8 +693,8 @@ mod tests {
         0x01,
     ];
 
-    fn doc_id() -> DocumentId {
-        DocumentId::from_bytes(DOC_ID)
+    fn doc_id() -> Id<Document> {
+        Id::<Document>::from_bytes(DOC_ID)
     }
 
     fn plain(bytes: &[u8]) -> PlaintextContainer {

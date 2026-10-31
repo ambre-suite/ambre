@@ -10,9 +10,9 @@ use loro::{LoroMap, LoroValue};
 
 use crate::logic::command::{End, ToileError, ToileEvent, ToileOutcome};
 use crate::logic::connector::Connector;
-use crate::logic::model::{
-    Anchor, ConnectorId, ElementId, ElementStyle, EndCaps, NodeId, PathType,
-};
+use ambre_core::id::{self, Element, Id};
+
+use crate::logic::model::{Anchor, ElementStyle, EndCaps, NodeId, PathType};
 
 use crate::logic::text_merge::merge_edits;
 use crate::ui::label::LABEL_W;
@@ -36,9 +36,9 @@ impl ToileState {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn create_connector(
         &mut self,
-        from: ElementId,
+        from: Id<Element>,
         from_anch: Anchor,
-        to: ElementId,
+        to: Id<Element>,
         to_anch: Anchor,
         path_type: PathType,
         arrows: EndCaps,
@@ -68,13 +68,13 @@ impl ToileState {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn create_connector_inner(
         &mut self,
-        from: ElementId,
+        from: Id<Element>,
         from_anch: Anchor,
-        to: ElementId,
+        to: Id<Element>,
         to_anch: Anchor,
         path_type: PathType,
         arrows: EndCaps,
-    ) -> Result<ConnectorId, ToileError> {
+    ) -> Result<Id<id::Connector>, ToileError> {
         let id = self.mint_connector_id()?;
         let conns = self.doc.get_map(Root::Connectors.as_str());
         let Ok(cm) = conns
@@ -99,9 +99,9 @@ impl ToileState {
 
     pub(super) fn retarget_connector(
         &mut self,
-        id: ConnectorId,
+        id: Id<id::Connector>,
         endpoint: End,
-        to: ElementId,
+        to: Id<Element>,
         anch: Anchor,
     ) -> ToileOutcome {
         let Some(cm) = self.connector_map(&id) else {
@@ -131,7 +131,7 @@ impl ToileState {
     /// unconditional once the arrow resolves.
     pub(super) fn restyle_connector(
         &mut self,
-        id: ConnectorId,
+        id: Id<id::Connector>,
         style: ElementStyle,
     ) -> ToileOutcome {
         let Some(cm) = self.connector_map(&id) else {
@@ -152,7 +152,7 @@ impl ToileState {
     /// while the other's editor is open (`TOILE-263`).
     pub(super) fn set_connector_label(
         &mut self,
-        id: ConnectorId,
+        id: Id<id::Connector>,
         base: &str,
         text: &str,
     ) -> ToileOutcome {
@@ -168,7 +168,7 @@ impl ToileState {
         self.emit_with_update(vec![self.viewport_event()])
     }
 
-    pub(super) fn delete_connector(&mut self, id: ConnectorId) -> ToileOutcome {
+    pub(super) fn delete_connector(&mut self, id: Id<id::Connector>) -> ToileOutcome {
         let conns = self.doc.get_map(Root::Connectors.as_str());
         if conns.get(id.as_str()).is_none() {
             return self.err_no_connector(&id);
@@ -182,11 +182,11 @@ impl ToileState {
 
     /// The stored record of one arrow, read straight from the document.
     #[cfg(test)]
-    pub(crate) fn connector_of(&self, id: &ConnectorId) -> Option<Connector> {
+    pub(crate) fn connector_of(&self, id: &Id<id::Connector>) -> Option<Connector> {
         read_connector(id.clone(), &self.connector_map(id)?)
     }
 
-    pub(super) fn connector_map(&self, id: &ConnectorId) -> Option<Fields<ConnectorKey>> {
+    pub(super) fn connector_map(&self, id: &Id<id::Connector>) -> Option<Fields<ConnectorKey>> {
         entry::<ConnectorKey>(&self.doc, id)
     }
 
@@ -194,7 +194,7 @@ impl ToileState {
     /// (`TOILE-165`). Read before and after a write this viewer did not make,
     /// so the ones that just went dangling can be announced. It reads the
     /// arrow cache, not the document.
-    pub(super) fn dangling_connectors(&self) -> HashSet<ConnectorId> {
+    pub(super) fn dangling_connectors(&self) -> HashSet<Id<id::Connector>> {
         self.wires()
             .iter()
             .filter(|(_, w)| {
@@ -207,7 +207,7 @@ impl ToileState {
     /// The arrow cache, first brought in step with every arrow the document
     /// was written since the last read. The subscription notes each one, so
     /// no write path keeps the cache by hand (`TOILE-045`).
-    pub(super) fn wires(&self) -> Ref<'_, HashMap<ConnectorId, Wire>> {
+    pub(super) fn wires(&self) -> Ref<'_, HashMap<Id<id::Connector>, Wire>> {
         let noted = std::mem::take(
             &mut self
                 .touched
@@ -218,7 +218,7 @@ impl ToileState {
         let whole = noted.reach == super::caches::Reach::Whole;
         if whole || !noted.ids.is_empty() {
             let mut wires = self.wires.borrow_mut();
-            let mut ids: Vec<ConnectorId> = noted.ids.into_iter().collect();
+            let mut ids: Vec<Id<id::Connector>> = noted.ids.into_iter().collect();
             if whole {
                 // Every arrow the cache held, and every one the map holds.
                 ids.extend(wires.keys().cloned());
@@ -226,7 +226,7 @@ impl ToileState {
                     self.doc
                         .get_map(Root::Connectors.as_str())
                         .keys()
-                        .map(|k| ConnectorId(k.to_string())),
+                        .map(|k| Id::<id::Connector>::from_text(k.to_string())),
                 );
             }
             let mut gone = self.wires_gone.borrow_mut();
@@ -256,7 +256,7 @@ impl ToileState {
     }
 
     /// One arrow, read whole from the document, or `None` once it is gone.
-    fn read_wire(&self, id: &ConnectorId) -> Option<Wire> {
+    fn read_wire(&self, id: &Id<id::Connector>) -> Option<Wire> {
         let cm = self.connector_map(id)?;
         let conn = read_connector(id.clone(), &cm)?;
         let stroke = ambre_core::BoardLength::new(f64::from(
@@ -272,7 +272,10 @@ impl ToileState {
     }
 
     /// Ids of every connector referencing one of `del` at either endpoint.
-    pub(super) fn connectors_touching(&self, del: &HashSet<&ElementId>) -> HashSet<ConnectorId> {
+    pub(super) fn connectors_touching(
+        &self,
+        del: &HashSet<&Id<Element>>,
+    ) -> HashSet<Id<id::Connector>> {
         let mut out = HashSet::new();
         if let LoroValue::Map(m) = self.doc.get_map(Root::Connectors.as_str()).get_deep_value() {
             for (key, v) in m.iter() {
@@ -280,11 +283,11 @@ impl ToileState {
                     let f = FieldValues::<ConnectorKey>::of(f);
                     let touches = |key| {
                         map_str(f, key)
-                            .map(ElementId)
+                            .map(Id::<Element>::from_text)
                             .is_some_and(|id| del.contains(&id))
                     };
                     if touches(ConnectorKey::From) || touches(ConnectorKey::To) {
-                        out.insert(ConnectorId(key.clone()));
+                        out.insert(Id::<id::Connector>::from_text(key.clone()));
                     }
                 }
             }

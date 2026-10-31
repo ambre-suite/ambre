@@ -186,16 +186,16 @@ fn rect_to_screen(b: Rect, w2s: &Affine) -> Rect {
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{
-        DisplayElement, DisplayGeom, ElementId, ElementKind, ElementStyle, ReactionCount,
-        ShapeKind, Viewport,
+        DisplayElement, DisplayGeom, ElementKind, ElementStyle, ReactionCount, ShapeKind, Viewport,
     };
     use ambre_canvas::theme::LIGHT;
+    use ambre_core::id::{Element, Id};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use std::collections::BTreeMap;
 
     fn elem(id: &str, bounds: Rect) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
@@ -209,7 +209,7 @@ mod tests {
 
     fn vp_with(
         nodes: Vec<DisplayNode>,
-        reactions: BTreeMap<ElementId, ReactionTally>,
+        reactions: BTreeMap<Id<Element>, ReactionTally>,
     ) -> DisplayViewport {
         DisplayViewport {
             version: ambre_core::Generation::ZERO,
@@ -258,7 +258,10 @@ mod tests {
     fn chip_row_paints_only_tallied_elements() {
         let a = Rect::new(0.0, 0.0, 40.0, 40.0);
         let mut reactions = BTreeMap::new();
-        reactions.insert(ElementId("a".into()), tally(&[("x", 2)], 0, 0));
+        reactions.insert(
+            Id::<Element>::from_text("a".into()),
+            tally(&[("x", 2)], 0, 0),
+        );
         let vp = vp_with(
             vec![elem("a", a), elem("b", Rect::new(80.0, 0.0, 120.0, 40.0))],
             reactions,
@@ -279,7 +282,10 @@ mod tests {
     #[test]
     fn a_badge_keeps_one_screen_size_through_the_zoom() {
         let mut reactions = BTreeMap::new();
-        reactions.insert(ElementId("a".into()), tally(&[("x", 2)], 1, 1));
+        reactions.insert(
+            Id::<Element>::from_text("a".into()),
+            tally(&[("x", 2)], 1, 1),
+        );
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
         let near = ViewportTransform::new(ambre_draw::Size::new(800.0, 800.0));
         let far = ViewportTransform {
@@ -305,7 +311,10 @@ mod tests {
     #[test]
     fn votes_collapse_into_one_trailing_chip() {
         let mut reactions = BTreeMap::new();
-        reactions.insert(ElementId("a".into()), tally(&[("x", 1), ("y", 2)], -2, 3));
+        reactions.insert(
+            Id::<Element>::from_text("a".into()),
+            tally(&[("x", 1), ("y", 2)], -2, 3),
+        );
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
         let pills = pills(
             &vp,

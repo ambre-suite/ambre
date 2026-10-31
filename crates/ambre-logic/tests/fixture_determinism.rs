@@ -22,7 +22,7 @@
 )]
 
 use ambre_bus::{CellPos, Col, DocType, Row, TrameCommand};
-use ambre_core::DocumentId;
+use ambre_core::id::{Document, Id};
 use ambre_logic::DocState;
 use ambre_prose::{ProseCommand, ProseState};
 use ambre_toile::ToileState;
@@ -37,12 +37,12 @@ use kurbo::{Point, Size};
 const SEED: u64 = 0x0BAD_C0FF_EE0D_D00D;
 
 /// The `document_id` the header carries. Pinned rather than minted. A UUID v7 is
-/// time-ordered and partly random (I1's third entropy source). `DocumentId::new()`
+/// time-ordered and partly random (I1's third entropy source). `Id::<Document>::mint()`
 /// here would defeat the byte comparison before the payload was even reached.
 /// The seed-derived form lives in `ambre_core::fixtures::seeded_document_id`,
 /// which is fixture code and belted there.
-fn doc_id() -> DocumentId {
-    DocumentId::from_bytes([
+fn doc_id() -> Id<Document> {
+    Id::<Document>::from_bytes([
         0x01, 0x8f, 0x2a, 0x3b, 0x7c, 0x4d, 0x70, 0x00, 0x80, 0x00, 0xde, 0xad, 0xbe, 0xef, 0x00,
         0x11,
     ])
@@ -57,7 +57,7 @@ fn doc_id() -> DocumentId {
 
 /// A workbook with literals, a formula chain over them, a second sheet and a
 /// merge. Enough that a lost op shows up in the bytes.
-fn build_trame(seed: u64, doc_id: DocumentId) -> Vec<u8> {
+fn build_trame(seed: u64, doc_id: Id<Document>) -> Vec<u8> {
     let mut state = TrameState::with_peer(ambre_core::PeerId(seed));
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -87,7 +87,7 @@ fn build_trame(seed: u64, doc_id: DocumentId) -> Vec<u8> {
 
 /// A board with several shapes and a frame, so the dump and the shape summary
 /// have more than one node kind to report.
-fn build_toile(seed: u64, doc_id: DocumentId) -> Vec<u8> {
+fn build_toile(seed: u64, doc_id: Id<Document>) -> Vec<u8> {
     let mut state = ToileState::with_peer(ambre_core::PeerId(seed));
     for i in 0..4 {
         state.handle_command(ToileCommand::CreateElement {
@@ -142,7 +142,7 @@ fn the_document_id_is_part_of_what_the_digest_covers() {
     // The header is inside the artifact, so a different `document_id` is a
     // different fixture even at identical payload. C8: the digest covers the
     // whole file, header included.
-    let other = DocumentId::from_bytes([0x22; 16]);
+    let other = Id::<Document>::from_bytes([0x22; 16]);
     assert_ne!(build_trame(SEED, doc_id()), build_trame(SEED, other));
     assert_eq!(
         build_trame(SEED, doc_id())[22..],

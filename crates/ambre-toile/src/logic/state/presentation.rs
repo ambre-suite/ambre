@@ -3,7 +3,7 @@
 //! ordinary element and this side panel orders frames into a slide thread.
 //!
 //! The split that drives this module. The **sequence** (which frames, in what
-//! order) is **CRDT**: a `LoroMovableList<FrameId>` under a `presentation` map,
+//! order) is **CRDT**: a `LoroMovableList<Id<Frame>>` under a `presentation` map,
 //! shared and convergent. The **playback** (which slide this viewer is on, focus
 //! mode) is **local/ephemeral**: a plain field on `ToileState`, never in Loro and
 //! never synced. This mirrors the durable-intent vs momentary-gesture split
@@ -11,7 +11,7 @@
 
 use std::collections::HashSet;
 
-use ambre_bus::UserId;
+use ambre_core::id::{Element, Frame, Id, User};
 use ambre_core::{CharCount, char_len};
 use loro::{LoroDoc, LoroMovableList, LoroText, LoroValue};
 
@@ -28,7 +28,7 @@ use crate::logic::command::{
     SlideChange, SlideCount, SlideIndex, SlidePosition, TextDelta, ToileError, ToileEvent,
     ToileOutcome,
 };
-use crate::logic::model::{ElementId, ElementKind, FrameId, NodeId};
+use crate::logic::model::{ElementKind, NodeId};
 use crate::logic::text_merge::{Merge, merge_edits};
 
 use super::codec::has_type;
@@ -45,14 +45,14 @@ impl ToileState {
     // -- sequence (CRDT,) -------------------------------------------------
 
     /// Replace the shared slide sequence with `order`. Repeated frame ids are
-    /// de-duplicated (idempotent membership). A dangling FrameId is left in the
+    /// de-duplicated (idempotent membership). A dangling Id<Frame> is left in the
     /// list and skipped at derivation like a dangling connector, so no
     /// frame-existence check happens here. CRDT and undoable: one `doc.commit()`
     /// is one undo item. The local playback cursor is clamped to the new deck
     /// length.
-    pub(super) fn set_slide_order(&mut self, order: &[FrameId]) -> ToileOutcome {
+    pub(super) fn set_slide_order(&mut self, order: &[Id<Frame>]) -> ToileOutcome {
         // De-duplicate, keeping first occurrence (idempotent membership).
-        let mut target: Vec<&FrameId> = Vec::new();
+        let mut target: Vec<&Id<Frame>> = Vec::new();
         for id in order {
             if !target.contains(&id) {
                 target.push(id);
@@ -95,32 +95,41 @@ impl ToileState {
         let deck = self.slide_order();
         let slides: Vec<DeckFrame> = deck
             .iter()
-            .filter(|id| self.is_frame(id))
+            .filter(|id| self.is_frame(&Id::<Element>::from((*id).clone())))
             .map(|id| self.deck_frame(id))
             .collect();
         let off_deck: Vec<DeckFrame> = self
             .layer_order()
             .iter()
             .filter_map(|node| match node {
-                NodeId::Element(id) => Some(id),
+                NodeId::Element(id) => self.frame(id),
                 NodeId::Connector(_) => None,
             })
-            .filter(|id| self.is_frame(id) && !deck.contains(id))
-            .map(|id| self.deck_frame(id))
+            .filter(|frame| !deck.contains(frame))
+            .map(|frame| self.deck_frame(&frame))
             .collect();
         ToileOutcome::display_only(vec![ToileEvent::DeckData(DeckView { slides, off_deck })])
     }
 
     /// Whether `id` still names a frame on the board.
-    pub(super) fn is_frame(&self, id: &ElementId) -> bool {
+    pub(super) fn is_frame(&self, id: &Id<Element>) -> bool {
         self.element_map(id)
             .is_some_and(|em| has_type(&em, ElementKind::Frame))
     }
 
+    /// The frame `id` names, or `None` when no element carries `id` or the
+    /// element is not a frame. The one checked conversion from an element id
+    /// to a frame id. `Id::<Frame>::from_text` decodes a stored text, and the
+    /// engine checks the kind again where that id lands.
+    pub fn frame(&self, id: &Id<Element>) -> Option<Id<Frame>> {
+        self.is_frame(id)
+            .then(|| Id::<Frame>::from_text(id.as_str().to_owned()))
+    }
+
     /// One deck row: the frame's id and its title, empty until it is named.
-    fn deck_frame(&self, id: &ElementId) -> DeckFrame {
+    fn deck_frame(&self, id: &Id<Frame>) -> DeckFrame {
         let name = self
-            .element_map(id)
+            .element_map(&id.clone().into())
             .and_then(|em| str_of(&em, ElementKey::Name))
             .unwrap_or_default();
         DeckFrame {
@@ -131,7 +140,7 @@ impl ToileState {
 
     /// The shared slide sequence, in playback order. Empty if no deck exists.
     /// Test / integration accessor.
-    pub fn slide_order(&self) -> Vec<FrameId> {
+    pub fn slide_order(&self) -> Vec<Id<Frame>> {
         slide_order_of(&self.order_list())
     }
 
@@ -247,7 +256,7 @@ impl ToileState {
     /// delta. If `Some(u)` and a broadcast slide from `u` is already known, snap to
     /// it at once (glide via `SlideChanged`). Otherwise the follower snaps on the
     /// next inbound sample.
-    pub(super) fn follow_presenter(&mut self, who: Option<UserId>) -> ToileOutcome {
+    pub(super) fn follow_presenter(&mut self, who: Option<Id<User>>) -> ToileOutcome {
         self.following = who;
         let mut display = vec![ToileEvent::FollowingChanged(who)];
         if let Some(u) = who
@@ -276,13 +285,17 @@ impl ToileState {
     ) -> SlideChange {
         let order = self.slide_order();
         let slide = |i: SlideIndex| i.to_index().and_then(|i| order.get(i));
-        let snap = |i: SlideIndex| slide(i).map(|f| self.frame_snapshot(f)).unwrap_or_default();
+        let snap = |i: SlideIndex| {
+            slide(i)
+                .map(|f| self.frame_snapshot(&f.clone().into()))
+                .unwrap_or_default()
+        };
         let frame = slide(to_idx).cloned();
         SlideChange {
             position: SlidePosition::new(to_idx, SlideCount::from_len(order.len())),
             from: from_idx.map(snap).unwrap_or_default(),
             to: snap(to_idx),
-            to_rect: slide(to_idx).and_then(|f| self.element_rect(f)),
+            to_rect: slide(to_idx).and_then(|f| self.element_rect(&f.clone().into())),
             // A slide with no notes shows none.
             notes: frame
                 .as_ref()
@@ -376,12 +389,13 @@ impl ToileState {
     /// panel is told the merged note (`TOILE-FEAT-088`).
     pub(super) fn edit_notes(
         &mut self,
-        frame: &FrameId,
+        frame: &Id<Frame>,
         base: &str,
         delta: &TextDelta,
     ) -> ToileOutcome {
-        let Some(em) = self.element_map(frame) else {
-            return self.err_no_element(frame);
+        let element = Id::<Element>::from(frame.clone());
+        let Some(em) = self.element_map(&element) else {
+            return self.err_no_element(&element);
         };
         // Only a frame carries notes; `children` is seeded at frame birth.
         if em.get(ElementKey::Children).is_none() {
@@ -431,8 +445,8 @@ impl ToileState {
 
     /// The current speaker notes of `frame` as a plain string, `None` when the
     /// frame has no notes yet or does not exist.
-    pub fn notes(&self, frame: &FrameId) -> Option<String> {
-        self.element_map(frame)
+    pub fn notes(&self, frame: &Id<Frame>) -> Option<String> {
+        self.element_map(&frame.clone().into())
             .and_then(|em| em.get(ElementKey::Notes))
             .and_then(|v| v.into_container().ok())
             .and_then(|c| c.into_text().ok())
@@ -447,7 +461,7 @@ impl ToileState {
     /// (`ui::view`). The page is clipped to that frame rect, so the PDF matches
     /// what the audience sees.
     ///
-    /// A dangling `FrameId` (present in the deck but with no element) is
+    /// A dangling `Id<Frame>` (present in the deck but with no element) is
     /// skipped like a dangling connector. An empty deck
     /// falls back to a single, unclipped page fitted to the whole board content.
     /// A board with no content at all yields no pages, and the caller's
@@ -468,10 +482,10 @@ impl ToileState {
             cam
         };
 
-        let slides: Vec<(FrameId, Rect)> = self
+        let slides: Vec<(Id<Frame>, Rect)> = self
             .slide_order()
             .into_iter()
-            .filter_map(|f| self.element_rect(&f).map(|r| (f, r)))
+            .filter_map(|f| self.element_rect(&f.clone().into()).map(|r| (f, r)))
             .collect();
 
         if slides.is_empty() {
@@ -516,13 +530,16 @@ impl ToileState {
     ///
     /// A deletion naming no slide writes nothing: deleting a note must leave
     /// the deck untouched, and an empty deck has nothing to prune.
-    pub(super) fn drop_slides(&mut self, deleted: &HashSet<&ElementId>) -> bool {
+    pub(super) fn drop_slides(&mut self, deleted: &HashSet<&Id<Element>>) -> bool {
         let list = self.order_list();
         let before = slide_order_of(&list);
         if before.is_empty() {
             return false;
         }
-        let kept: Vec<&FrameId> = before.iter().filter(|id| !deleted.contains(id)).collect();
+        let kept: Vec<&Id<Frame>> = before
+            .iter()
+            .filter(|id| !deleted.contains(&Id::<Element>::from((*id).clone())))
+            .collect();
         if kept.len() == before.len() {
             return false;
         }
@@ -600,12 +617,12 @@ fn notes_text_or_seed(em: &Fields<ElementKey>) -> Option<LoroText> {
 }
 
 /// Read the slide order's frame ids, in order.
-fn slide_order_of(list: &LoroMovableList) -> Vec<FrameId> {
+fn slide_order_of(list: &LoroMovableList) -> Vec<Id<Frame>> {
     let mut out = Vec::new();
     if let LoroValue::List(items) = list.get_deep_value() {
         for v in items.iter() {
             if let LoroValue::String(s) = v {
-                out.push(ElementId(s.to_string()));
+                out.push(Id::<Frame>::from_text(s.to_string()));
             }
         }
     }
@@ -613,21 +630,19 @@ fn slide_order_of(list: &LoroMovableList) -> Vec<FrameId> {
 }
 
 #[cfg(test)]
-#[cfg(feature = "pdf")]
-mod pdf_tests {
+mod frame_tests {
     use kurbo::{Point, Size};
 
     use crate::logic::command::{InitContent, ToileCommand, ToileEvent};
-    use crate::logic::interop::PageSize;
-    use crate::logic::model::{ElementId, ElementKind, FrameId};
+    use crate::logic::model::ElementKind;
     use crate::logic::state::ToileState;
+    use ambre_core::id::{Element, Frame, Id};
 
-    /// Create a frame at `(x, y)` sized `w x h` and return its minted id.
-    fn frame_at(st: &mut ToileState, x: f64, y: f64, w: f64, h: f64) -> FrameId {
+    fn create(st: &mut ToileState, kind: ElementKind) -> Id<Element> {
         let out = st.handle_command(ToileCommand::CreateElement {
-            kind: ElementKind::Frame,
-            at: Point::new(x, y),
-            size: Size::new(w, h),
+            kind,
+            at: Point::ZERO,
+            size: Size::new(100.0, 100.0),
             content: InitContent::None,
             fill: None,
             correlate: None,
@@ -638,7 +653,58 @@ mod pdf_tests {
                 ToileEvent::ElementCreated { id, .. } => Some(id),
                 _ => None,
             })
-            .expect("frame creation yields an id")
+            .expect("creation yields an id")
+    }
+
+    /// A frame reads back as its frame id; a sticky and an unknown id do not.
+    #[test]
+    fn only_an_existing_frame_reads_as_a_frame() {
+        let mut st = ToileState::new();
+        let frame = create(&mut st, ElementKind::Frame);
+        let sticky = create(&mut st, ElementKind::Sticky);
+        assert_eq!(
+            st.frame(&frame),
+            Some(Id::<Frame>::from_text(frame.as_str().to_owned()))
+        );
+        assert_eq!(st.frame(&sticky), None, "a sticky is not a frame");
+        assert_eq!(
+            st.frame(&Id::<Element>::from_text("ghost".to_owned())),
+            None,
+            "an unknown id is not a frame"
+        );
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "pdf")]
+mod pdf_tests {
+    use kurbo::{Point, Size};
+
+    use crate::logic::command::{InitContent, ToileCommand, ToileEvent};
+    use crate::logic::interop::PageSize;
+    use crate::logic::model::ElementKind;
+    use crate::logic::state::ToileState;
+    use ambre_core::id::{Element, Frame, Id};
+
+    /// Create a frame at `(x, y)` sized `w x h` and return its minted id.
+    fn frame_at(st: &mut ToileState, x: f64, y: f64, w: f64, h: f64) -> Id<Frame> {
+        let out = st.handle_command(ToileCommand::CreateElement {
+            kind: ElementKind::Frame,
+            at: Point::new(x, y),
+            size: Size::new(w, h),
+            content: InitContent::None,
+            fill: None,
+            correlate: None,
+        });
+        let id = out
+            .display
+            .into_iter()
+            .find_map(|e| match e {
+                ToileEvent::ElementCreated { id, .. } => Some(id),
+                _ => None,
+            })
+            .expect("frame creation yields an id");
+        st.frame(&id).expect("a frame")
     }
 
     /// One page is produced per slide in the deck, in playback order, each
@@ -658,14 +724,14 @@ mod pdf_tests {
         );
     }
 
-    /// A dangling `FrameId` in the deck (no such element) is skipped at
+    /// A dangling `Id<Frame>` in the deck (no such element) is skipped at
     /// derivation, so it produces no page.
     #[test]
     fn dangling_frame_is_skipped() {
         let mut st = ToileState::new();
         let a = frame_at(&mut st, 0.0, 0.0, 200.0, 100.0);
         st.handle_command(ToileCommand::SetSlideOrder {
-            order: vec![a, ElementId("ghost".to_owned())],
+            order: vec![a, Id::<Frame>::from_text("ghost".to_owned())],
         });
 
         let pages = st.pdf_pages(PageSize::default());
@@ -694,7 +760,7 @@ mod pdf_tests {
     }
 
     /// Create a rect shape at `(x, y)` sized `w x h` and return its minted id.
-    fn shape_at(st: &mut ToileState, x: f64, y: f64, w: f64, h: f64) -> ElementId {
+    fn shape_at(st: &mut ToileState, x: f64, y: f64, w: f64, h: f64) -> Id<Element> {
         let out = st.handle_command(ToileCommand::CreateElement {
             kind: ElementKind::Shape(crate::logic::model::ShapeKind::Rect),
             at: Point::new(x, y),
@@ -753,7 +819,7 @@ mod pdf_tests {
             "the neighbour is in view of the page camera"
         );
         // The walk clips in board units, under the page camera.
-        let frame = st.bounds_of(&a).expect("frame bounds");
+        let frame = st.bounds_of(&a.clone().into()).expect("frame bounds");
         let neighbour = st.bounds_of(&near).expect("shape bounds");
 
         let ops = record(page);
@@ -779,8 +845,8 @@ mod pdf_tests {
         let mut st = ToileState::new();
         let a = frame_at(&mut st, 0.0, 0.0, 200.0, 100.0);
         let b = frame_at(&mut st, 500.0, 0.0, 200.0, 100.0);
-        let ra = st.bounds_of(&a);
-        let rb = st.bounds_of(&b);
+        let ra = st.bounds_of(&a.clone().into());
+        let rb = st.bounds_of(&b.clone().into());
 
         for order in [vec![b.clone(), a.clone()], vec![a.clone(), b.clone()]] {
             st.handle_command(ToileCommand::SetSlideOrder {

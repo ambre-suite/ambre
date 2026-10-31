@@ -8,12 +8,11 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use ambre_bus::{
-    Attachment, ChannelId, Deletion, DocumentId, LogicCommand, MessageId, MessageView,
-    MurmureCommand, MurmureEvent, Notice, Reaction, Revision, SegmentId, TextStyle, Timestamp,
-    UiEvent, Unreadable, UserId,
+    Attachment, Deletion, LogicCommand, MessageView, MurmureCommand, MurmureEvent, Notice,
+    Reaction, Revision, TextStyle, Timestamp, UiEvent, Unreadable,
 };
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec};
-use ambre_core::{Px, View};
+use ambre_core::id::{self, Channel, Document, Id, Message, User};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec, Px, View};
 
 use crate::MessageCount;
 
@@ -74,7 +73,7 @@ pub struct MessageList {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Segment {
-    id: SegmentId,
+    id: Id<id::Segment>,
     messages: Vec<MessageView>,
     /// The band that stands for the segment while it could not open
     /// (`MURMURE-218`). Its messages, once they arrive, take its place.
@@ -126,12 +125,12 @@ impl MessageList {
     /// another segment moves to `segment`. A new one comes after the messages
     /// of its segment. A segment the list does not hold takes its place by
     /// the time of its first message, so an older one lands above.
-    pub fn absorb(&mut self, segment: SegmentId, messages: Vec<MessageView>) {
+    pub fn absorb(&mut self, segment: Id<id::Segment>, messages: Vec<MessageView>) {
         let Some(first) = messages.first() else {
             return;
         };
         let first = first.ts;
-        let incoming: HashSet<MessageId> = messages.iter().map(|m| m.id).collect();
+        let incoming: HashSet<Id<Message>> = messages.iter().map(|m| m.id).collect();
         for other in self.segments.iter_mut().filter(|s| s.id != segment) {
             other.messages.retain(|m| !incoming.contains(&m.id));
         }
@@ -144,7 +143,7 @@ impl MessageList {
         }) else {
             return;
         };
-        let mut index: HashMap<MessageId, usize> =
+        let mut index: HashMap<Id<Message>, usize> =
             held.iter().enumerate().map(|(i, m)| (m.id, i)).collect();
         for message in messages {
             match index.get(&message.id).and_then(|&i| held.get_mut(i)) {
@@ -159,7 +158,7 @@ impl MessageList {
 
     /// Show `segment`, which could not open, as one band (`MURMURE-218`).
     /// A segment whose messages the list holds keeps them.
-    pub fn unreadable(&mut self, segment: SegmentId, band: Band) {
+    pub fn unreadable(&mut self, segment: Id<id::Segment>, band: Band) {
         let at = self.place(segment, band.from);
         if let Some(held) = self.segments.get_mut(at)
             && held.messages.is_empty()
@@ -170,7 +169,7 @@ impl MessageList {
 
     /// Where `segment` sits: where the list holds it, or a new empty slot
     /// placed by `start`, so an older segment lands above.
-    fn place(&mut self, segment: SegmentId, start: Timestamp) -> usize {
+    fn place(&mut self, segment: Id<id::Segment>, start: Timestamp) -> usize {
         if let Some(at) = self.segments.iter().position(|s| s.id == segment) {
             return at;
         }
@@ -218,13 +217,13 @@ impl MessageList {
 
     /// The oldest segment the list holds, read or shown as a band. The one
     /// before it is the next to load (`MURMURE-191`).
-    pub fn oldest_segment(&self) -> Option<SegmentId> {
+    pub fn oldest_segment(&self) -> Option<Id<id::Segment>> {
         self.segments.first().map(|s| s.id)
     }
 
     /// The segment that holds `message`, `None` when the list holds no such
     /// message.
-    pub fn segment_of(&self, message: MessageId) -> Option<SegmentId> {
+    pub fn segment_of(&self, message: Id<Message>) -> Option<Id<id::Segment>> {
         self.segments
             .iter()
             .find(|s| s.messages.iter().any(|m| m.id == message))
@@ -311,8 +310,8 @@ pub enum Row<'a> {
 /// What names a row across loads: its message, or the segment of its band.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RowKey {
-    Message(MessageId),
-    Band(SegmentId),
+    Message(Id<Message>),
+    Band(Id<id::Segment>),
 }
 
 /// One style over the body a row shows, in bytes of that body.
@@ -395,7 +394,7 @@ impl<'a> Row<'a> {
     /// time in the reader's language and zone (`MURMURE-418`).
     pub fn words(
         &self,
-        name_of: impl Fn(UserId) -> Option<ambre_core::DisplayName>,
+        name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>,
         time_of: impl Fn(Timestamp) -> String,
     ) -> RowWords {
         let (message, header) = match *self {
@@ -462,7 +461,7 @@ impl<'a> Row<'a> {
     /// its words.
     pub fn announcement(
         &self,
-        name_of: impl Fn(UserId) -> Option<ambre_core::DisplayName>,
+        name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>,
         time_of: impl Fn(Timestamp) -> String,
     ) -> String {
         let Some(message) = self.message() else {
@@ -688,17 +687,21 @@ fn at_bottom(
 /// The message lists of a page: each open channel, and each thread its view
 /// received.
 #[derive(Debug, Clone, Default)]
+#[expect(
+    clippy::type_complexity,
+    reason = "each `Id<_>` names its kind, and no alias may hide it"
+)]
 pub struct Conversations {
-    channels: HashMap<ChannelId, MessageList>,
+    channels: HashMap<Id<Channel>, MessageList>,
     /// Each thread by its channel and its root, with its document.
-    threads: HashMap<(ChannelId, MessageId), (DocumentId, MessageList)>,
+    threads: HashMap<(Id<Channel>, Id<Message>), (Id<Document>, MessageList)>,
     /// The first unread message of each channel, as the Logic thread last
     /// named it (`MURMURE-499`). Absent while its count is unknown.
-    first_unread: HashMap<ChannelId, Option<MessageId>>,
+    first_unread: HashMap<Id<Channel>, Option<Id<Message>>>,
     /// The other members typing in each channel, in its composer or in a
     /// thread's by its root, as the Logic thread last named them. A place
     /// where nobody types is absent, and so is a channel with none.
-    typing: HashMap<ChannelId, HashMap<Option<MessageId>, Vec<UserId>>>,
+    typing: HashMap<Id<Channel>, HashMap<Option<Id<Message>>, Vec<Id<User>>>>,
 }
 
 impl Conversations {
@@ -725,7 +728,7 @@ impl Conversations {
                     .threads
                     .entry((channel_id, root))
                     .or_insert_with(|| (thread, MessageList::default()));
-                list.absorb(SegmentId::from_document(thread), messages);
+                list.absorb(Id::<id::Segment>::from_document(thread), messages);
                 true
             }
             MurmureEvent::Unreadable {
@@ -749,7 +752,7 @@ impl Conversations {
                 let threads = in_threads
                     .into_iter()
                     .map(|(root, users)| (Some(root), users));
-                let places: HashMap<Option<MessageId>, Vec<UserId>> =
+                let places: HashMap<Option<Id<Message>>, Vec<Id<User>>> =
                     std::iter::once((None, typing))
                         .chain(threads)
                         .filter(|(_, users)| !users.is_empty())
@@ -774,18 +777,18 @@ impl Conversations {
     }
 
     /// The list of an open channel.
-    pub fn channel(&self, channel: ChannelId) -> Option<&MessageList> {
+    pub fn channel(&self, channel: Id<Channel>) -> Option<&MessageList> {
         self.channels.get(&channel)
     }
 
     /// The list of the thread of `root`: the same list a channel shows
     /// (`MURMURE-420`).
-    pub fn thread(&self, channel: ChannelId, root: MessageId) -> Option<&MessageList> {
+    pub fn thread(&self, channel: Id<Channel>, root: Id<Message>) -> Option<&MessageList> {
         self.threads.get(&(channel, root)).map(|(_, list)| list)
     }
 
     /// The document of the thread of `root`.
-    pub fn thread_document(&self, channel: ChannelId, root: MessageId) -> Option<DocumentId> {
+    pub fn thread_document(&self, channel: Id<Channel>, root: Id<Message>) -> Option<Id<Document>> {
         self.threads
             .get(&(channel, root))
             .map(|&(document, _)| document)
@@ -793,14 +796,14 @@ impl Conversations {
 
     /// The first unread message of `channel`: `Some(None)` when all is
     /// read, `None` while the Logic thread named none yet.
-    pub fn first_unread(&self, channel: ChannelId) -> Option<Option<MessageId>> {
+    pub fn first_unread(&self, channel: Id<Channel>) -> Option<Option<Id<Message>>> {
         self.first_unread.get(&channel).copied()
     }
 
     /// The other members typing in `channel`, or in its thread under `root`
     /// (`MURMURE-537`). In the order the Logic thread gave, so the line never
     /// reorders between two draws.
-    pub fn typing(&self, channel: ChannelId, root: Option<MessageId>) -> &[UserId] {
+    pub fn typing(&self, channel: Id<Channel>, root: Option<Id<Message>>) -> &[Id<User>] {
         self.typing
             .get(&channel)
             .and_then(|places| places.get(&root))
@@ -817,13 +820,21 @@ impl Conversations {
 pub struct UnreadLine {
     /// The channel on screen, and the message the line sits above once
     /// known.
-    held: Option<(ChannelId, Option<Option<MessageId>>)>,
+    #[expect(
+        clippy::type_complexity,
+        reason = "each `Id<_>` names its kind, and no alias may hide it"
+    )]
+    held: Option<(Id<Channel>, Option<Option<Id<Message>>>)>,
 }
 
 impl UnreadLine {
     /// The message the line sits above while `shown` is on screen. A new
     /// channel starts over, and its first known value then holds.
-    pub fn above(&mut self, shown: Option<ChannelId>, talks: &Conversations) -> Option<MessageId> {
+    pub fn above(
+        &mut self,
+        shown: Option<Id<Channel>>,
+        talks: &Conversations,
+    ) -> Option<Id<Message>> {
         let Some(channel) = shown else {
             self.held = None;
             return None;
@@ -838,7 +849,7 @@ impl UnreadLine {
 
     /// The message the line sits above in `channel` at the last paint, with
     /// no lookup. `None` off that channel, or with no line.
-    pub fn held(&self, channel: ChannelId) -> Option<MessageId> {
+    pub fn held(&self, channel: Id<Channel>) -> Option<Id<Message>> {
         match self.held {
             Some((held, Some(known))) if held == channel => known,
             _ => None,
@@ -851,14 +862,14 @@ impl UnreadLine {
 /// `MURMURE-497`).
 #[derive(Debug, Clone, Default)]
 pub struct ReadMarks {
-    channels: HashMap<ChannelId, MessageId>,
-    threads: HashMap<DocumentId, MessageId>,
+    channels: HashMap<Id<Channel>, Id<Message>>,
+    threads: HashMap<Id<Document>, Id<Message>>,
 }
 
 impl ReadMarks {
     /// The list drew the latest message of `channel`. The command that
     /// marks the channel read, unless it already did for this message.
-    pub fn drawn(&mut self, channel: ChannelId, latest: MessageId) -> Option<LogicCommand> {
+    pub fn drawn(&mut self, channel: Id<Channel>, latest: Id<Message>) -> Option<LogicCommand> {
         (self.channels.insert(channel, latest) != Some(latest)).then_some(LogicCommand::Channel {
             channel_id: channel,
             command: MurmureCommand::MarkRead,
@@ -869,9 +880,9 @@ impl ReadMarks {
     /// that marks the thread read, unless it already did for this reply.
     pub fn thread_drawn(
         &mut self,
-        channel: ChannelId,
-        thread: DocumentId,
-        latest: MessageId,
+        channel: Id<Channel>,
+        thread: Id<Document>,
+        latest: Id<Message>,
     ) -> Option<LogicCommand> {
         (self.threads.insert(thread, latest) != Some(latest)).then_some(LogicCommand::Channel {
             channel_id: channel,
@@ -887,9 +898,9 @@ pub(crate) mod tests {
     use super::*;
 
     /// A message of `author`, written at `ts` milliseconds.
-    pub(crate) fn message(author: UserId, ts: ambre_core::Timestamp, text: &str) -> MessageView {
+    pub(crate) fn message(author: Id<User>, ts: ambre_core::Timestamp, text: &str) -> MessageView {
         MessageView {
-            id: MessageId::new(),
+            id: Id::<Message>::mint(),
             author,
             ts,
             text: text.to_owned(),
@@ -958,8 +969,12 @@ pub(crate) mod tests {
     /// `MURMURE-220`).
     #[test]
     fn an_unreadable_segment_shows_as_one_band_in_its_place() {
-        let author = UserId::new();
-        let (older, unread, newer) = (SegmentId::new(), SegmentId::new(), SegmentId::new());
+        let author = Id::<User>::mint();
+        let (older, unread, newer) = (
+            Id::<id::Segment>::mint(),
+            Id::<id::Segment>::mint(),
+            Id::<id::Segment>::mint(),
+        );
         let mut list = MessageList::default();
         list.absorb(newer, vec![message(author, ambre_bus::Timestamp(30), "c")]);
         list.absorb(older, vec![message(author, ambre_bus::Timestamp(10), "a")]);
@@ -995,8 +1010,8 @@ pub(crate) mod tests {
     /// never hides messages the list holds.
     #[test]
     fn messages_replace_the_band_of_their_segment() {
-        let author = UserId::new();
-        let (segment, read) = (SegmentId::new(), SegmentId::new());
+        let author = Id::<User>::mint();
+        let (segment, read) = (Id::<id::Segment>::mint(), Id::<id::Segment>::mint());
         let mut list = MessageList::default();
         list.unreadable(segment, band(Unreadable::Damaged, 10, None));
         assert!(!list.is_empty());
@@ -1021,8 +1036,8 @@ pub(crate) mod tests {
     /// at the top, whichever segment arrives first (`MURMURE-182`).
     #[test]
     fn segments_read_oldest_at_the_top_whatever_their_order_of_arrival() {
-        let author = UserId::new();
-        let (closing, active) = (SegmentId::new(), SegmentId::new());
+        let author = Id::<User>::mint();
+        let (closing, active) = (Id::<id::Segment>::mint(), Id::<id::Segment>::mint());
         let mut list = MessageList::default();
         list.absorb(
             active,
@@ -1049,8 +1064,8 @@ pub(crate) mod tests {
     /// segment moves there: the list never shows it twice (`MURMURE-182`).
     #[test]
     fn a_changed_message_takes_its_place_and_a_moved_one_leaves_its_old_segment() {
-        let author = UserId::new();
-        let (old, new) = (SegmentId::new(), SegmentId::new());
+        let author = Id::<User>::mint();
+        let (old, new) = (Id::<id::Segment>::mint(), Id::<id::Segment>::mint());
         let mut list = MessageList::default();
         let first = message(author, ambre_bus::Timestamp(10), "a");
         let second = message(author, ambre_bus::Timestamp(20), "b");
@@ -1074,12 +1089,12 @@ pub(crate) mod tests {
     /// (`MURMURE-183`).
     #[test]
     fn one_author_inside_the_span_shares_one_header() {
-        let (ada, bob) = (UserId::new(), UserId::new());
+        let (ada, bob) = (Id::<User>::mint(), Id::<User>::mint());
         let mut list = MessageList::default();
         let mut notice = message(ada, ambre_bus::Timestamp(2_000), "");
         notice.notice = Some(Notice::MemberAdded { member: bob });
         list.absorb(
-            SegmentId::new(),
+            Id::<id::Segment>::mint(),
             vec![
                 message(ada, ambre_bus::Timestamp(0), "a"),
                 message(ada, ambre_bus::Timestamp(GROUP_SPAN.0), "b"),
@@ -1095,10 +1110,10 @@ pub(crate) mod tests {
     /// A clock that runs back keeps the group: the span saturates.
     #[test]
     fn a_clock_running_back_keeps_the_group() {
-        let ada = UserId::new();
+        let ada = Id::<User>::mint();
         let mut list = MessageList::default();
         list.absorb(
-            SegmentId::new(),
+            Id::<id::Segment>::mint(),
             vec![
                 message(ada, ambre_bus::Timestamp(1_000), "a"),
                 message(ada, ambre_bus::Timestamp(10), "b"),
@@ -1111,7 +1126,7 @@ pub(crate) mod tests {
     /// author's name, never a char of either: both are plaintext.
     #[test]
     fn a_row_debugs_its_lengths_alone() {
-        let message = message(UserId::new(), ambre_bus::Timestamp(7), "secret body");
+        let message = message(Id::<User>::mint(), ambre_bus::Timestamp(7), "secret body");
         let row = words(&message, true);
         let shown = format!("{row:?}");
         assert!(
@@ -1126,7 +1141,7 @@ pub(crate) mod tests {
     /// (`MURMURE-185`).
     #[test]
     fn a_deleted_message_shows_a_muted_line() {
-        let mut gone = message(UserId::new(), ambre_bus::Timestamp(7), "");
+        let mut gone = message(Id::<User>::mint(), ambre_bus::Timestamp(7), "");
         gone.deleted = ambre_bus::Deletion::Deleted;
         let row = words(&gone, true);
         assert_eq!(row.body, DELETED);
@@ -1144,11 +1159,11 @@ pub(crate) mod tests {
     /// alone (`MURMURE-186`).
     #[test]
     fn an_edited_message_carries_the_marker() {
-        let mut edited = message(UserId::new(), ambre_bus::Timestamp(0), "fixed");
+        let mut edited = message(Id::<User>::mint(), ambre_bus::Timestamp(0), "fixed");
         edited.edited = ambre_bus::Revision::Edited;
         assert_eq!(words(&edited, false).body, format!("fixed {EDITED}"));
         let plain = words(
-            &message(UserId::new(), ambre_bus::Timestamp(0), "plain"),
+            &message(Id::<User>::mint(), ambre_bus::Timestamp(0), "plain"),
             false,
         );
         assert_eq!(plain.body, "plain");
@@ -1163,14 +1178,14 @@ pub(crate) mod tests {
     fn a_message_is_announced_with_its_author_its_time_and_its_text() {
         let name_of = |_| ambre_core::DisplayName::new("Ada").ok();
         let time_of = |ts: Timestamp| format!("t{}", ts.0);
-        let mut grouped = message(UserId::new(), ambre_bus::Timestamp(7), "hello");
+        let mut grouped = message(Id::<User>::mint(), ambre_bus::Timestamp(7), "hello");
         let row = Row::Message {
             message: &grouped,
             header: Header::Joined,
         };
         assert_eq!(row.announcement(name_of, time_of), "Ada, t7: hello");
         grouped.thread = Some(ThreadHead {
-            document: DocumentId::new(),
+            document: Id::<Document>::mint(),
             replies: ambre_bus::ReplyCount::new(2),
             last_replier: None,
         });
@@ -1194,9 +1209,9 @@ pub(crate) mod tests {
     /// does not know reads under the stand-in name.
     #[test]
     fn a_notice_names_the_member_and_an_unknown_one_reads_as_a_member() {
-        let mut notice = message(UserId::new(), ambre_bus::Timestamp(0), "");
+        let mut notice = message(Id::<User>::mint(), ambre_bus::Timestamp(0), "");
         notice.notice = Some(Notice::MemberAdded {
-            member: UserId::new(),
+            member: Id::<User>::mint(),
         });
         let row = words(&notice, false);
         assert_eq!(row.body, "Ada joined the conversation");
@@ -1222,9 +1237,9 @@ pub(crate) mod tests {
     /// A root counts its replies once its thread holds one.
     #[test]
     fn a_root_counts_its_replies() {
-        let mut root = message(UserId::new(), ambre_bus::Timestamp(0), "root");
+        let mut root = message(Id::<User>::mint(), ambre_bus::Timestamp(0), "root");
         let head = |replies| ThreadHead {
-            document: DocumentId::new(),
+            document: Id::<Document>::mint(),
             replies: ambre_bus::ReplyCount::new(replies),
             last_replier: None,
         };
@@ -1240,9 +1255,9 @@ pub(crate) mod tests {
     /// and a screen reader hears it after the text (`MURMURE-532`).
     #[test]
     fn a_reply_sent_to_the_channel_too_names_its_thread() {
-        let mut copy = message(UserId::new(), ambre_bus::Timestamp(0), "ok");
+        let mut copy = message(Id::<User>::mint(), ambre_bus::Timestamp(0), "ok");
         assert_eq!(words(&copy, false).replies, None);
-        copy.also_in_thread = Some(DocumentId::new());
+        copy.also_in_thread = Some(Id::<Document>::mint());
         assert_eq!(words(&copy, false).replies.as_deref(), Some(FROM_THREAD));
         let row = Row::Message {
             message: &copy,
@@ -1424,8 +1439,8 @@ pub(crate) mod tests {
     /// segment is the first the list holds, read or not (`MURMURE-191`).
     #[test]
     fn each_row_has_a_key_and_the_oldest_segment_leads() {
-        let author = UserId::new();
-        let (older, newer) = (SegmentId::new(), SegmentId::new());
+        let author = Id::<User>::mint();
+        let (older, newer) = (Id::<id::Segment>::mint(), Id::<id::Segment>::mint());
         let mut list = MessageList::default();
         assert_eq!(list.oldest_segment(), None);
         let later = message(author, ambre_bus::Timestamp(30), "c");
@@ -1442,9 +1457,9 @@ pub(crate) mod tests {
     /// The band the Logic thread names lands in the list of its channel.
     #[test]
     fn an_unreadable_event_lands_as_a_band() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let mut talks = Conversations::default();
-        let segment = SegmentId::new();
+        let segment = Id::<id::Segment>::mint();
         assert!(talks.absorb(UiEvent::Channel {
             channel_id: channel,
             event: MurmureEvent::Unreadable {
@@ -1465,16 +1480,16 @@ pub(crate) mod tests {
     /// drops both (`MURMURE-420`).
     #[test]
     fn a_thread_fills_its_own_list_and_leaving_drops_the_channel() {
-        let (channel, other) = (ChannelId::new(), ChannelId::new());
-        let author = UserId::new();
+        let (channel, other) = (Id::<Channel>::mint(), Id::<Channel>::mint());
+        let author = Id::<User>::mint();
         let root = message(author, ambre_bus::Timestamp(0), "root");
         let mut talks = Conversations::default();
-        let document = DocumentId::new();
+        let document = Id::<Document>::mint();
         let ev = |channel_id, event| UiEvent::Channel { channel_id, event };
         assert!(talks.absorb(ev(
             channel,
             MurmureEvent::Messages {
-                segment: SegmentId::new(),
+                segment: Id::<id::Segment>::mint(),
                 messages: vec![root.clone()],
             },
         )));
@@ -1489,7 +1504,7 @@ pub(crate) mod tests {
         assert!(talks.absorb(ev(
             other,
             MurmureEvent::Messages {
-                segment: SegmentId::new(),
+                segment: Id::<id::Segment>::mint(),
                 messages: vec![message(author, ambre_bus::Timestamp(2), "elsewhere")],
             },
         )));
@@ -1518,8 +1533,8 @@ pub(crate) mod tests {
     /// (`MURMURE-115`).
     #[test]
     fn a_drawn_latest_message_marks_the_channel_read_once() {
-        let channel = ChannelId::new();
-        let (first, second) = (MessageId::new(), MessageId::new());
+        let channel = Id::<Channel>::mint();
+        let (first, second) = (Id::<Message>::mint(), Id::<Message>::mint());
         let mut marks = ReadMarks::default();
         let read = |command: Option<LogicCommand>| {
             matches!(command, Some(LogicCommand::Channel {
@@ -1536,8 +1551,8 @@ pub(crate) mod tests {
     /// apart from its channel (`MURMURE-497`).
     #[test]
     fn a_drawn_last_reply_marks_the_thread_read_once() {
-        let (channel, thread) = (ChannelId::new(), DocumentId::new());
-        let (first, second) = (MessageId::new(), MessageId::new());
+        let (channel, thread) = (Id::<Channel>::mint(), Id::<Document>::mint());
+        let (first, second) = (Id::<Message>::mint(), Id::<Message>::mint());
         let mut marks = ReadMarks::default();
         let read = |command: Option<LogicCommand>| {
             matches!(command, Some(LogicCommand::Channel {
@@ -1558,8 +1573,8 @@ pub(crate) mod tests {
     /// on screen, and starts over on another channel (`MURMURE-184`).
     #[test]
     fn the_unread_line_holds_while_its_channel_stays_on_screen() {
-        let (channel, other) = (ChannelId::new(), ChannelId::new());
-        let first = MessageId::new();
+        let (channel, other) = (Id::<Channel>::mint(), Id::<Channel>::mint());
+        let first = Id::<Message>::mint();
         let mut talks = Conversations::default();
         let named = |talks: &mut Conversations, channel_id, message| {
             let event = MurmureEvent::FirstUnread { message };

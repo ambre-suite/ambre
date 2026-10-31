@@ -204,15 +204,11 @@ ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::F64.0 | field | f6
 ambre-bus | src/app/toile.rs | crate::app::toile | ClipValue::Str.0 | field | String	newtype-inner	clipboard field value variant
 ambre-bus | src/app/toile.rs | crate::app::toile | CommentMessage.body | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | CommentSummary.preview | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ConnectorId.0 | field | String	newtype-inner	ElementId/ConnectorId newtype and its mint
-ambre-bus | src/app/toile.rs | crate::app::toile | ConnectorId::as_str() | ret | &str	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | DeckFrame.name | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayConnector.label | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Frame.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Sticky.0 | field | String	free-text	user text
 ambre-bus | src/app/toile.rs | crate::app::toile | DisplayGeom::Text.0 | field | String	free-text	user text
-ambre-bus | src/app/toile.rs | crate::app::toile | ElementId.0 | field | String	newtype-inner	ElementId/ConnectorId newtype and its mint
-ambre-bus | src/app/toile.rs | crate::app::toile | ElementId::as_str() | ret | &str	newtype-inner	ElementId/ConnectorId newtype and its mint
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementKind::type_tag() | ret | &'static str	generic	the codec of an enum that carries data: the type tag the store holds and the reader matches back, where every shape maps to one tag
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::to_bytes() | ret | Vec<u8>	generic	byte codec
 ambre-bus | src/app/toile.rs | crate::app::toile | ElementStyle::try_from_bytes(bytes) | param | &[u8]	generic	byte codec
@@ -832,6 +828,56 @@ ambre-core | src/font.rs | crate::font | FontWeight::get() | ret | u16	newtype-i
 ambre-core | src/font.rs | crate::font | FontWeight::is_bold() | ret | bool	generic	predicate result
 ambre-core | src/font.rs | crate::font | FontWeight::new(value) | param | u16	newtype-inner	newtype inner, accessor or constructor
 ambre-core | src/font.rs | crate::font | InvalidFontWeight.0 | field | u16	newtype-inner	the refused value an error reports
+ambre-core | src/id.rs | crate::id | <Category as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Category as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Channel as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Channel as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Comment as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Comment as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Connector as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Connector as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
+ambre-core | src/id.rs | crate::id | <Document as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Document as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Element as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Element as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
+ambre-core | src/id.rs | crate::id | <Footnote as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Footnote as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Frame as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Frame as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
+ambre-core | src/id.rs | crate::id | <Id<E> as From<Uuid>>::from(uuid) | param | Uuid	newtype-inner	the Uuid an identifier wraps
+ambre-core | src/id.rs | crate::id | <Id<E> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/id.rs | crate::id | <Lease as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Lease as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Meeting as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Meeting as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Message as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Message as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Meta as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Meta as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Org as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Org as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Reply as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Reply as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Segment as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Segment as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Snapshot as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Snapshot as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Space as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Space as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Suggestion as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Suggestion as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | <Thread as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <Thread as Entity>::Repr | assoc | String	newtype-inner	the value an Id of this kind holds: the text a peer mints
+ambre-core | src/id.rs | crate::id | <User as Entity>::NAME | const | &'static str	free-text	the kind name an identifier prints through Debug, for a log line
+ambre-core | src/id.rs | crate::id | <User as Entity>::Repr | assoc | Uuid	newtype-inner	the value an Id of this kind holds
+ambre-core | src/id.rs | crate::id | Id<E>::as_bytes() | ret | &[u8;16]	newtype-inner	the 16 bytes of the Uuid an identifier holds
+ambre-core | src/id.rs | crate::id | Id<E>::as_str() | ret | &str	newtype-inner	the minted text a Toile identifier holds
+ambre-core | src/id.rs | crate::id | Id<E>::from_bytes(bytes) | param | [u8;16]	newtype-inner	the 16 bytes of the Uuid an identifier holds
+ambre-core | src/id.rs | crate::id | Id<E>::from_text(text) | param | String	newtype-inner	the minted text a Toile identifier holds, read back from the document
+ambre-core | src/id.rs | crate::id | Id<E>::from_uuid(uuid) | param | Uuid	newtype-inner	the Uuid an identifier wraps
+ambre-core | src/id.rs | crate::id | Id<E>::parse_str(s) | param | &str	newtype-inner	the identifier's own UUID text, read back
+ambre-core | src/id.rs | crate::id | Id<E>::to_hyphenated() | ret | String	newtype-inner	the identifier's own hyphenated UUID text
+ambre-core | src/id.rs | crate::id | Id<E>::uuid() | ret | Uuid	newtype-inner	the Uuid an identifier holds, its one way out
 ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	generic	length of the [u8;N] KeyId array, read only as an array length in KeyId's own signatures; a crate that frames a key id uses KeyId::SIZE and KeyId::split_from
 ambre-core | src/key_id.rs | crate::key_id | KeyId.0 | field | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
 ambre-core | src/key_id.rs | crate::key_id | KeyId::as_array() | ret | &[u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
@@ -942,6 +988,9 @@ ambre-core | src/serde_enums.rs | crate::serde_enums::channel_document_kind | de
 ambre-core | src/serde_enums.rs | crate::serde_enums::doc_type | deserialize::WORDS | const | &[&str]	generic	serde deserializer: the words of a closed set
 ambre-core | src/serde_enums.rs | crate::serde_enums::role | deserialize::WORDS | const | &[&str]	generic	serde deserializer: the words of a closed set
 ambre-core | src/serde_enums.rs | crate::serde_enums::space_flag | is_personal() | ret | bool	generic	predicate result: the serde skip test of a DocumentScope flag
+ambre-core | src/serde_id.rs | crate::serde_id | <Id<E> as TextId>::from_text() | ret | Result<Self,String>	free-text	the fixed message of UuidError, which read hands serde's de::Error::custom
+ambre-core | src/serde_id.rs | crate::serde_id | <Id<E> as TextId>::from_text(text) | param | &str	newtype-inner	the identifier's own UUID text, read back
+ambre-core | src/serde_id.rs | crate::serde_id | <Id<E> as TextId>::to_text() | ret | String	newtype-inner	the identifier's own UUID text
 ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text() | ret | Result<Self,String>	free-text	the fixed message of KeyIdError, which read hands serde's de::Error::custom
 ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text(text) | param | &str	newtype-inner	KeyId's own hex spelling, read back
 ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::to_text() | ret | String	newtype-inner	KeyId's own hex spelling
@@ -1717,7 +1766,7 @@ ambre-prose | src/band.rs | crate::band | field_value() | ret | String	free-text
 ambre-prose | src/band.rs | crate::band | format_date() | ret | String	free-text	a date as a band field draws it, in the document's language
 ambre-prose | src/band.rs | crate::band | months() | ret | Option<[&'static str;12]>	free-text	the twelve month names a band date draws, for a language that has them here
 ambre-prose | src/band.rs | crate::band | resolve() | ret | String	free-text	the text of a band as drawn on one page, its fields filled in
-ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.drafts | field | RwSignal<HashMap<CommentId,String>>	free-text	the reply the user is typing in each thread's field, keyed by its thread
+ambre-prose | src/chrome/mod.rs | crate::chrome | ProseSignals.drafts | field | RwSignal<HashMap<Id<Comment>,String>>	free-text	the reply the user is typing in each thread's field, keyed by its thread
 ambre-prose | src/chrome/notify.rs | crate::chrome::notify | is_refused_reply() | ret | bool	generic	whether a refusal turned down a reply because its thread is gone
 ambre-prose | src/commands.rs | crate::commands | bold_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
 ambre-prose | src/commands.rs | crate::commands | code_title() | ret | String	free-text	the title the command palette shows for this command, in the locale
@@ -1999,7 +2048,7 @@ ambre-prose | src/view/a11y.rs | crate::view::a11y | ProseUiState::caret_announc
 ambre-prose | src/view/a11y.rs | crate::view::a11y | TEXT_LIMIT | const | usize	local	the most characters of a block the private accessible label takes, read by one take
 ambre-prose | src/view/annotate.rs | crate::view::annotate | AnnotationIntent::Reply.text | field | String	free-text	the text of a reply the user typed in a thread's field; Debug prints its length alone
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::hover() | ret | bool	generic	whether the hovered suggestion changed under the pointer
-ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_drafts(drafts) | param | &HashMap<CommentId,String>	free-text	the reply the user is typing in each thread's field, keyed by its thread
+ambre-prose | src/view/annotate.rs | crate::view::annotate | ProseUiState::lost_drafts(drafts) | param | &HashMap<Id<Comment>,String>	free-text	the reply the user is typing in each thread's field, keyed by its thread
 ambre-prose | src/view/annotate.rs | crate::view::annotate | ScreenRect::contains() | ret | bool	generic	whether a point falls inside a rectangle on screen
 ambre-prose | src/view/cache.rs | crate::view::cache | <PaintTick as GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
 ambre-prose | src/ui.rs | crate::ui | <DraftRevision as ambre_core::GenerationKind>::NAME | const | &'static str	free-text	the family name a generation prints through Debug, for a log line
@@ -2093,7 +2142,6 @@ ambre-server | src/db/mod.rs | crate::db | decode_role(word) | param | &str	gene
 ambre-server | src/db/mod.rs | crate::db | decode_role_opt(word) | param | Option<String>	generic	generic codec/parser/bytes API
 ambre-server | src/db/mod.rs | crate::db | decode_seq(value) | param | i64	generic	generic codec/parser/bytes API
 ambre-server | src/db/mod.rs | crate::db | id_to_uuid() | ret | uuid::Uuid	generic	generic codec/parser/bytes API
-ambre-server | src/db/mod.rs | crate::db | id_to_uuid(id) | param | impl Into<ambre_core::Uuid>	generic	generic codec/parser/bytes API
 ambre-server | src/db/mod.rs | crate::db | uuid_row_to_id(u) | param | uuid::Uuid	generic	generic codec/parser/bytes API
 ambre-server | src/db/mod.rs | crate::db | uuid_to_core() | ret | ambre_core::Uuid	generic	generic codec/parser/bytes API
 ambre-server | src/db/mod.rs | crate::db | uuid_to_core(u) | param | uuid::Uuid	generic	generic codec/parser/bytes API
@@ -2113,6 +2161,8 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareThreshold as TryFrom<i16
 ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal::new(count) | param | i16	newtype-inner	the validated constructor of ShareTotal: a count below 1 is refused
 ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal::get() | ret | i16	newtype-inner	newtype inner, accessor or constructor
 ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareTotal as TryFrom<i16>>::try_from(count) | param | i16	newtype-inner	the smallint the fallible constructor of ShareTotal validates, as a row or a request body carries it
+ambre-server | src/extract.rs | crate::extract | <Id<E> as PathPart>::Raw | assoc | String	foreign-api	the path segment text axum extracts, before the parse into the identifier
+ambre-server | src/extract.rs | crate::extract | <Id<E> as PathPart>::part(raw) | param | String	newtype-inner	the identifier's own UUID text, read back from a route path
 ambre-server | src/error.rs | crate::error | AppError::BadRequest.0 | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Conflict.detail | field | String	free-text	user text or error message
 ambre-server | src/error.rs | crate::error | AppError::Internal.0 | field | String	free-text	user text or error message
@@ -2464,12 +2514,12 @@ ambre-toile | src/logic/state/groups.rs | crate::logic::state::groups | ToileSta
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::handle_service_error(reason) | param | String	free-text	error reason text from ApiError, shown in a toast
 ambre-toile | src/logic/state/import.rs | crate::logic::state::import | ToileState::has_pending_work() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState.undecodable | field | std::cell::Cell<bool>	local	private latch: whether a stored value failed to decode; read only by the notice of this state
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(FrameId,String)>	free-text	label, message or user text
+ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::active_notes() | ret | Option<(Id<Frame>,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::adopt_session() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_push_layer_raw(s) | param | &str	generic	debug/test accessor over raw fields
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::debug_raw_layers() | ret | Vec<String>	generic	debug/test accessor over raw fields
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::note_undecodable(bytes) | param | &[u8]	generic	opaque bytes handed to a parser/encoder/decoder
-ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::notes_change(before) | param | &Option<(FrameId,String)>	free-text	label, message or user text
+ambre-toile | src/logic/state/mod.rs | crate::logic::state | ToileState::notes_change(before) | param | &Option<(Id<Frame>,String)>	free-text	label, message or user text
 ambre-toile | src/logic/state/mod.rs | crate::logic::state | waits_for_import() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <ConnectorKey as EntrySchema>::key() | ret | &str	foreign-api	a connector id as the Loro connectors map keys its entry
 ambre-toile | src/logic/state/names.rs | crate::logic::state::names | <ElementKey as EntrySchema>::key() | ret | &str	foreign-api	an element id as the Loro elements map keys its entry
@@ -2605,7 +2655,7 @@ ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine.pen_dragging | fiel
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::escape() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::is_active() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | ToolMachine::pressed_empty_board() | ret | bool	generic	predicate or handled-flag result
-ambre-toile | src/ui/tool.rs | crate::ui::tool | double_click_edit(editable) | param | impl Fn(&ElementId)->bool	generic	predicate over typed ids, the caller's filter
+ambre-toile | src/ui/tool.rs | crate::ui::tool | double_click_edit(editable) | param | impl Fn(&Id<Element>)->bool	generic	predicate over typed ids, the caller's filter
 ambre-toile | src/ui/tool.rs | crate::ui::tool | drop_missing() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/tool.rs | crate::ui::tool | is_group() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/view.rs | crate::ui::view | EDIT_LOST | const | &str	free-text	label, message or user text

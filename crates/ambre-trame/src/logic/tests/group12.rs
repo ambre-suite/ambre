@@ -546,7 +546,7 @@ fn a_save_leaves_the_document_alone() {
     let before = state.doc.len_ops();
     let version = state.doc.oplog_vv();
     let snapshot = state.export_snapshot();
-    let file = state.export_ambre_plaintext(ambre_core::DocumentId::from_bytes([7; 16]));
+    let file = state.export_ambre_plaintext(ambre_core::Id::from_bytes([7; 16]));
     assert!(file.is_some_and(|f| !f.is_empty()));
     assert_eq!(state.doc.len_ops(), before);
     assert_eq!(state.doc.oplog_vv(), version);

@@ -3,6 +3,7 @@ use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use ambre_core::Role;
+use ambre_core::id::{Document, Id, Space, User};
 
 use crate::auth::{self};
 use crate::db;
@@ -53,8 +54,8 @@ fn validate_email(email: &ambre_core::Email) -> Result<(), AppError> {
 /// pair (kept in client memory) and the newly assigned user ID.
 #[derive(serde::Serialize)]
 pub struct SetupAccountResponse {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub access_token: ambre_protocol::ws::AccessToken,
     pub refresh_token: ambre_protocol::ws::RefreshToken,
     pub access_expires_in: ambre_core::Seconds,
@@ -99,8 +100,8 @@ pub async fn setup_account(
 /// Authenticated user profile returned by GET /auth/me.
 #[derive(serde::Serialize)]
 pub struct MeResponse {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub email: ambre_core::Email,
     pub display_name: ambre_core::DisplayName,
 }
@@ -162,10 +163,10 @@ pub async fn logout(
 /// copy of the document key.
 #[derive(serde::Serialize)]
 pub struct DocumentSummaryJson {
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub id: ambre_core::DocumentId,
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub owner_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub id: Id<Document>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub owner_id: Id<User>,
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
     pub name_enc: Option<ambre_core::SealedName>,
@@ -230,8 +231,8 @@ pub struct CreateDocumentRequest {
     pub doc_key_enc: ambre_core::WrappedDocKey,
     /// Optional client-generated document id (lazy creation). When present the
     /// server materializes the row under this id idempotently.
-    #[serde(default, with = "ambre_core::serde_id::document_id::option")]
-    pub document_id: Option<ambre_core::DocumentId>,
+    #[serde(default, with = "ambre_core::serde_id::text::option")]
+    pub document_id: Option<Id<Document>>,
     /// The first entry of the membership log, signed by the creator
     /// (`SYNC-132`).
     #[serde(default)]
@@ -243,8 +244,8 @@ pub struct CreateDocumentRequest {
 }
 #[derive(serde::Serialize)]
 pub struct CreateDocumentResponse {
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub document_id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub document_id: Id<Document>,
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
 }
@@ -312,7 +313,7 @@ pub async fn create_document(
         if req.space == ambre_core::DocumentScope::Space
             && doc.doc_type == ambre_core::DocType::Murmure
         {
-            db::register_space(&state.db, &ambre_core::SpaceId::from_document(doc_id)).await?;
+            db::register_space(&state.db, &Id::<Space>::from_document(doc_id)).await?;
         }
     }
     tracing::info!(document_id = %doc_id, owner_id = %s.user_id, doc_type = %req.doc_type, created, "document create");
@@ -327,10 +328,10 @@ pub async fn create_document(
 /// Full document details including the calling user's membership info.
 #[derive(serde::Serialize)]
 pub struct GetDocumentResponse {
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub id: ambre_core::DocumentId,
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub owner_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub id: Id<Document>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub owner_id: Id<User>,
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
     pub name_enc: Option<ambre_core::SealedName>,
@@ -344,7 +345,7 @@ pub struct GetDocumentResponse {
 pub async fn get_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
     // The extractor refuses an anonymous caller before the register is read, so
     // no query runs on behalf of nobody (`SRV-018`).
@@ -387,7 +388,7 @@ pub struct RenameDocumentRequest {
 pub async fn rename_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<RenameDocumentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -406,7 +407,7 @@ pub async fn rename_document(
 pub async fn delete_document(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     let m = db::get_document_member(&state.db, &doc_id, &s.user_id)
@@ -427,8 +428,8 @@ pub async fn delete_document(
 /// User info returned by search.
 #[derive(serde::Serialize)]
 pub struct UserInfoJson {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub id: Id<User>,
     pub email: ambre_core::Email,
     /// Whether the email was provider-verified (OIDC) vs self-asserted at
     /// `/auth/setup` (#3). The share UI should flag an unverified recipient for
@@ -495,7 +496,7 @@ pub async fn search_users(
 pub async fn get_pubkeys(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(uid): PathId<ambre_core::UserId>,
+    PathId(uid): PathId<Id<User>>,
 ) -> Result<impl IntoResponse, AppError> {
     let _s = auth;
     let u = db::get_user(&state.db, &uid)
@@ -526,8 +527,8 @@ pub async fn get_pubkeys(
 /// its own entry by `exchange_pub_key` and unwraps `doc_key_enc` via ECDH.
 #[derive(serde::Serialize)]
 pub struct MemberInfoJson {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub email: ambre_core::Email,
     /// Whether the member's email was provider-verified (#3). Additive field;
     /// older clients ignore it.
@@ -547,7 +548,7 @@ pub struct MemberInfoJson {
 pub async fn list_document_members(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     // A non-member and an absent document draw the same 404 (`SRV-005`). The
@@ -623,7 +624,7 @@ pub struct UpdateMemberRoleRequest {
 pub async fn update_document_member_role(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, target)): PathId<(ambre_core::DocumentId, ambre_core::UserId)>,
+    PathId((doc_id, target)): PathId<(Id<Document>, Id<User>)>,
     Json(req): Json<UpdateMemberRoleRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;

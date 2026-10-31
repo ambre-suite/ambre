@@ -1,3 +1,4 @@
+use ambre_core::id::{Id, User};
 use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::middleware::Next;
@@ -66,7 +67,7 @@ impl std::fmt::Display for InstanceId {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum RateBucket {
     /// The user the access token names.
-    User(ambre_core::UserId),
+    User(Id<User>),
     /// The address the request comes from, as the socket or the proxy states
     /// it.
     Peer(Peer),
@@ -500,8 +501,8 @@ mod tests {
     }
 
     /// A bearer header for a fresh caller, under `jwt`.
-    fn bearer_for(jwt: &crate::jwt::JwtKeys) -> (ambre_core::UserId, String) {
-        let user = ambre_core::UserId::new();
+    fn bearer_for(jwt: &crate::jwt::JwtKeys) -> (Id<User>, String) {
+        let user = Id::<User>::mint();
         let now = crate::s3::unix_now();
         let claims = crate::jwt::Claims {
             sub: user,
@@ -556,7 +557,7 @@ mod tests {
     /// never share a window.
     #[test]
     fn a_bucket_names_its_kind_in_the_key() {
-        let user = ambre_core::UserId::new();
+        let user = Id::<User>::mint();
         assert_eq!(RateBucket::User(user).to_string(), format!("user:{user}"));
         assert_eq!(
             RateBucket::Peer(addr("10.0.0.1")).to_string(),

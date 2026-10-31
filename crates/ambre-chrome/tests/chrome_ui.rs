@@ -842,7 +842,7 @@ async fn palette_entry_comes_first_and_hands_back_its_key() {
     let open = RwSignal::new(Openness::Open);
     let chosen: RwSignal<Option<ambre_chrome::PaletteKey>> = RwSignal::new(None);
     let invoked: RwSignal<Option<CommandId>> = RwSignal::new(None);
-    let key = ambre_chrome::PaletteKey::Channel(ambre_core::ChannelId::from_bytes([7; 16]));
+    let key = ambre_chrome::PaletteKey::Channel(ambre_core::Id::from_bytes([7; 16]));
     let entries = Signal::stored(vec![ambre_chrome::PaletteEntry {
         key,
         label: "budget".to_owned(),

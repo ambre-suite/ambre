@@ -4,6 +4,7 @@ use axum::extract::FromRequestParts;
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
 
+use ambre_core::id::{Id, User};
 use ambre_protocol::ws::AccessToken;
 
 use crate::error::AppError;
@@ -18,7 +19,7 @@ use crate::state::AppState;
 #[derive(Debug, Clone)]
 pub struct AuthSession {
     /// User the token belongs to.
-    pub user_id: ambre_core::UserId,
+    pub user_id: Id<User>,
     /// Cached Ed25519 public key. It avoids a Postgres lookup per WS message,
     /// and binds every authored `Update` to this session identity (see the WS
     /// `handle_update` author-key check).
@@ -45,7 +46,7 @@ pub fn bearer_token(parts: &Parts) -> Option<AccessToken> {
 #[derive(Debug, Clone)]
 pub struct AccountSession {
     /// User the token belongs to.
-    pub user_id: ambre_core::UserId,
+    pub user_id: Id<User>,
     /// `None` until the account registers its keys.
     pub signing_pubkey: Option<ambre_core::PublicKey>,
 }
@@ -135,7 +136,7 @@ pub struct TokenPair {
 /// placeholder key is never minted in its place (`SRV-027`).
 pub async fn issue_session(
     state: &AppState,
-    user_id: ambre_core::UserId,
+    user_id: Id<User>,
     signing_pubkey: Option<ambre_core::PublicKey>,
 ) -> Result<TokenPair, AppError> {
     let now = crate::s3::unix_now();

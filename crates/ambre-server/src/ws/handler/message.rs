@@ -6,14 +6,14 @@ use super::*;
 
 /// The answer to a refused wire message: its code and its document alone
 /// (`SRV-183`). The detail reaches the log at debug, never the wire.
-pub(crate) fn refusal(document_id: Option<DocumentId>, code: RefusalCode) -> WsServerMsg {
+pub(crate) fn refusal(document_id: Option<Id<Document>>, code: RefusalCode) -> WsServerMsg {
     WsServerMsg::Error { document_id, code }
 }
 
 /// Sends [`refusal`] and logs `detail`, which holds no content (`SRV-170`).
 pub(crate) async fn refuse(
     outbound_tx: &mpsc::Sender<Payload>,
-    document_id: Option<DocumentId>,
+    document_id: Option<Id<Document>>,
     code: RefusalCode,
     detail: &str,
 ) {
@@ -74,13 +74,13 @@ pub(crate) fn contiguous_prefix(
 /// left. Accepted, they would land ahead of the refused delta they build on.
 /// So the socket drops them until the author answers the refusal.
 #[derive(Debug, Default)]
-pub(crate) struct ClockFences(HashMap<DocumentId, ambre_protocol::messages::Signature>);
+pub(crate) struct ClockFences(HashMap<Id<Document>, ambre_protocol::messages::Signature>);
 
 impl ClockFences {
     /// The delta signed `signature` was refused for its clock.
     pub(crate) fn raise(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         signature: ambre_protocol::messages::Signature,
     ) {
         self.0.insert(document_id, signature);
@@ -106,7 +106,7 @@ impl ClockFences {
     }
 
     /// Whether the socket drops this document's deltas.
-    pub(crate) fn holds(&self, document_id: &DocumentId) -> bool {
+    pub(crate) fn holds(&self, document_id: &Id<Document>) -> bool {
         self.0.contains_key(document_id)
     }
 
@@ -115,7 +115,7 @@ impl ClockFences {
     /// answer to an earlier refusal never opens a later fence.
     pub(crate) fn answer(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         signature: &ambre_protocol::messages::Signature,
     ) {
         if self.0.get(&document_id) == Some(signature) {
@@ -124,7 +124,7 @@ impl ClockFences {
     }
 
     /// The socket left the document: nothing it sends there is read.
-    pub(crate) fn forget(&mut self, document_id: &DocumentId) {
+    pub(crate) fn forget(&mut self, document_id: &Id<Document>) {
         self.0.remove(document_id);
     }
 }
@@ -168,7 +168,7 @@ pub(crate) fn update_refusal(update: &ambre_protocol::Update, e: &AppError) -> W
 
 /// The frame a refused subscription answers. A store failure reaches the
 /// client as a bare internal error, its cause kept to the log (`SRV-096`).
-pub(crate) fn subscribe_refusal(document_id: DocumentId, e: &AppError) -> WsServerMsg {
+pub(crate) fn subscribe_refusal(document_id: Id<Document>, e: &AppError) -> WsServerMsg {
     if e.is_infrastructure() {
         tracing::error!("subscribe access check failed doc={document_id}: {e}");
         return refusal(Some(document_id), RefusalCode::InternalError);
@@ -182,7 +182,7 @@ pub(crate) fn subscribe_refusal(document_id: DocumentId, e: &AppError) -> WsServ
 pub(crate) async fn handle_subscribe(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     outbound_tx: &mpsc::Sender<Payload>,
 ) {
     let role = match verify_document_access(&state.db, document_id, conn.user_id).await {
@@ -281,7 +281,7 @@ pub(crate) async fn handle_subscribe(
     let _ = outbound_tx.send(ack).await;
 }
 
-pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: DocumentId) {
+pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: Id<Document>) {
     conn.doc_subscriptions.remove(&document_id);
     conn.doc_access_verified_at.remove(&document_id);
     conn.doc_write.remove(&document_id);
@@ -304,7 +304,7 @@ pub(crate) fn handle_unsubscribe(conn: &mut WsConnectionState, document_id: Docu
 /// happened before this message existed.
 pub(crate) async fn announce_departure(
     state: &Arc<AppState>,
-    document_id: &DocumentId,
+    document_id: &Id<Document>,
     signing_pubkey: &ambre_core::PublicKey,
 ) {
     let pub_key_hex = ambre_core::SigningKeyHex::encode(signing_pubkey);
@@ -559,7 +559,7 @@ const INDEX_WRITE_BACKOFF: [Duration; 3] = [
 /// row already written, so a retry never doubles one.
 async fn store_index_row(
     state: &Arc<AppState>,
-    doc_id: DocumentId,
+    doc_id: Id<Document>,
     update: &ambre_protocol::Update,
     seq: ambre_core::Seq,
     s3_key: &ambre_core::ObjectKey,
@@ -670,7 +670,7 @@ pub(crate) async fn handle_ephemeral(
 pub(crate) async fn handle_request_missing(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     after_seq: ambre_protocol::messages::Seq,
     outbound_tx: &mpsc::Sender<Payload>,
 ) {
@@ -852,7 +852,7 @@ pub(crate) async fn handle_request_missing(
 async fn membership_still_valid(
     state: &Arc<AppState>,
     conn: &mut WsConnectionState,
-    doc_id: DocumentId,
+    doc_id: Id<Document>,
 ) -> bool {
     let fresh = conn
         .doc_access_verified_at
@@ -889,8 +889,8 @@ async fn membership_still_valid(
 /// role, so callers can gate write operations on it.
 pub(crate) async fn verify_document_access(
     pool: &sqlx::PgPool,
-    document_id: DocumentId,
-    user_id: UserId,
+    document_id: Id<Document>,
+    user_id: Id<User>,
 ) -> Result<ambre_core::Role, AppError> {
     let m = db::get_document_member(pool, &document_id, &user_id)
         .await?
@@ -901,7 +901,8 @@ pub(crate) async fn verify_document_access(
 #[cfg(test)]
 mod postcard_tests {
     use super::refusal;
-    use ambre_core::{DocumentId, PublicKey, RefusalCode, SnapshotId};
+    use ambre_core::id::{Document, Id, Snapshot};
+    use ambre_core::{PublicKey, RefusalCode};
     use ambre_protocol::messages::{
         Ciphertext, Clock, CommitmentTag, Counter, Ephemeral, Nonce, Seq, SeqUpdate, Signature,
         Update,
@@ -917,10 +918,10 @@ mod postcard_tests {
             ciphertext: Ciphertext(vec![1, 2, 3]),
             nonce: Nonce([4u8; 24]),
             public_data: UpdatePublicData {
-                document_id: DocumentId::from_bytes([5u8; 16]),
+                document_id: Id::<Document>::from_bytes([5u8; 16]),
                 pub_key: PublicKey::from_array([6u8; 32]),
                 key_id: ambre_core::KeyId::from_array([0u8; 16]),
-                snapshot_id: SnapshotId::from_bytes([7u8; 16]),
+                snapshot_id: Id::<Snapshot>::from_bytes([7u8; 16]),
                 clock: Clock(42),
             },
             commitment_tag: CommitmentTag([8u8; 32]),
@@ -933,7 +934,7 @@ mod postcard_tests {
             ciphertext: Ciphertext(vec![10, 11]),
             nonce: Nonce([12u8; 24]),
             public_data: EphemeralPublicData {
-                document_id: DocumentId::from_bytes([13u8; 16]),
+                document_id: Id::<Document>::from_bytes([13u8; 16]),
                 pub_key: PublicKey::from_array([14u8; 32]),
                 key_id: ambre_core::KeyId::from_array([0u8; 16]),
                 counter: Counter(15),
@@ -946,7 +947,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_client_subscribe() {
         let msg = WsClientMsg::Subscribe {
-            document_id: DocumentId::from_bytes([0u8; 16]),
+            document_id: Id::<Document>::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
         assert_eq!(bytes.as_bytes()[0], ambre_protocol::CURRENT_VERSION.as_u8());
@@ -957,7 +958,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_client_unsubscribe() {
         let msg = WsClientMsg::Unsubscribe {
-            document_id: DocumentId::from_bytes([1u8; 16]),
+            document_id: Id::<Document>::from_bytes([1u8; 16]),
         };
         let decoded = decode_client_msg(&encode_client_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsClientMsg::Unsubscribe { .. }));
@@ -982,7 +983,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_client_request_missing() {
         let msg = WsClientMsg::RequestMissing {
-            document_id: DocumentId::from_bytes([1u8; 16]),
+            document_id: Id::<Document>::from_bytes([1u8; 16]),
             after_seq: Seq(5),
         };
         let decoded = decode_client_msg(&encode_client_msg(&msg)).unwrap();
@@ -992,7 +993,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_server_subscribed() {
         let msg = WsServerMsg::Subscribed {
-            document_id: DocumentId::from_bytes([2u8; 16]),
+            document_id: Id::<Document>::from_bytes([2u8; 16]),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::Subscribed { .. }));
@@ -1018,7 +1019,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_server_missing_updates() {
         let msg = WsServerMsg::MissingUpdates {
-            document_id: DocumentId::from_bytes([3u8; 16]),
+            document_id: Id::<Document>::from_bytes([3u8; 16]),
             updates: vec![SeqUpdate {
                 seq: Seq(1),
                 update: make_update(),
@@ -1031,7 +1032,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_server_snapshot_required() {
         let msg = WsServerMsg::SnapshotRequired {
-            document_id: DocumentId::from_bytes([4u8; 16]),
+            document_id: Id::<Document>::from_bytes([4u8; 16]),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::SnapshotRequired { .. }));
@@ -1040,8 +1041,8 @@ mod postcard_tests {
     #[test]
     fn roundtrip_server_snapshot_available() {
         let msg = WsServerMsg::SnapshotAvailable {
-            document_id: DocumentId::from_bytes([5u8; 16]),
-            snapshot_id: SnapshotId::from_bytes([6u8; 16]),
+            document_id: Id::<Document>::from_bytes([5u8; 16]),
+            snapshot_id: Id::<Snapshot>::from_bytes([6u8; 16]),
             covered_seq: Seq(9),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
@@ -1051,7 +1052,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_server_key_rotation_required() {
         let msg = WsServerMsg::KeyRotationRequired {
-            document_id: DocumentId::from_bytes([7u8; 16]),
+            document_id: Id::<Document>::from_bytes([7u8; 16]),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::KeyRotationRequired { .. }));
@@ -1060,7 +1061,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_server_document_revoked() {
         let msg = WsServerMsg::DocumentRevoked {
-            document_id: DocumentId::from_bytes([9u8; 16]),
+            document_id: Id::<Document>::from_bytes([9u8; 16]),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::DocumentRevoked { .. }));
@@ -1068,7 +1069,7 @@ mod postcard_tests {
 
     #[test]
     fn roundtrip_server_error() {
-        let doc = DocumentId::from_bytes([3u8; 16]);
+        let doc = Id::<Document>::from_bytes([3u8; 16]);
         let msg = refusal(Some(doc), RefusalCode::Conflict);
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         match decoded {
@@ -1083,7 +1084,7 @@ mod postcard_tests {
     #[test]
     fn version_byte_is_the_current_version() {
         let msg = WsClientMsg::Subscribe {
-            document_id: DocumentId::from_bytes([0u8; 16]),
+            document_id: Id::<Document>::from_bytes([0u8; 16]),
         };
         let bytes = encode_client_msg(&msg);
         assert_eq!(bytes.as_bytes()[0], 0x01);
@@ -1113,7 +1114,7 @@ mod postcard_tests {
 #[cfg(test)]
 mod ephemeral_binding_tests {
     use super::*;
-    use ambre_core::{DocumentId, PublicKey};
+    use ambre_core::PublicKey;
     use ambre_protocol::messages::{
         Ciphertext, CommitmentTag, Counter, Ephemeral, Nonce, Signature,
     };
@@ -1145,11 +1146,11 @@ mod ephemeral_binding_tests {
         }))
     }
 
-    fn conn_with(session_key: PublicKey, doc_id: DocumentId) -> WsConnectionState {
+    fn conn_with(session_key: PublicKey, doc_id: Id<Document>) -> WsConnectionState {
         let mut doc_subscriptions = HashSet::new();
         doc_subscriptions.insert(doc_id);
         WsConnectionState {
-            user_id: UserId::new(),
+            user_id: Id::<User>::mint(),
             signing_pubkey: session_key,
             doc_subscriptions,
             // Seed the membership cache as freshly verified. These unit tests then
@@ -1171,7 +1172,7 @@ mod ephemeral_binding_tests {
     /// An unsigned ephemeral (all-zero signature) under `pub_key`. Used only for
     /// the forged-author-key path, which is dropped by the identity check before
     /// the signature is ever examined.
-    fn unsigned_ephemeral(pub_key: PublicKey, doc_id: DocumentId) -> Ephemeral {
+    fn unsigned_ephemeral(pub_key: PublicKey, doc_id: Id<Document>) -> Ephemeral {
         Ephemeral {
             ciphertext: Ciphertext(vec![1, 2, 3]),
             nonce: Nonce([0u8; 24]),
@@ -1191,7 +1192,7 @@ mod ephemeral_binding_tests {
     pub(super) fn signed_ephemeral(
         signing_key: &ed25519_dalek::SigningKey,
         pub_key: &PublicKey,
-        doc_id: DocumentId,
+        doc_id: Id<Document>,
         ciphertext: Vec<u8>,
     ) -> Ephemeral {
         use ed25519_dalek::Signer;
@@ -1225,7 +1226,7 @@ mod ephemeral_binding_tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[21u8; 32]);
         let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
         let forged_key = PublicKey::from_array([2u8; 32]);
@@ -1271,7 +1272,7 @@ mod ephemeral_binding_tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[23u8; 32]);
         let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
         let presence_key = format!("doc:{doc_id}:presence");
@@ -1300,7 +1301,7 @@ mod ephemeral_binding_tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[22u8; 32]);
         let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
         let presence_key = format!("doc:{doc_id}:presence");
@@ -1336,7 +1337,7 @@ mod ephemeral_binding_tests {
             ephemeral_max_size: ambre_core::ByteSize(8),
             ..Default::default()
         });
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let signing_key = ed25519_dalek::SigningKey::from_bytes(&[23u8; 32]);
         let session_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
         let presence_key = format!("doc:{doc_id}:presence");
@@ -1366,7 +1367,7 @@ mod ephemeral_binding_tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let key = PublicKey::from_array([31u8; 32]);
         let key_hex = ambre_core::SigningKeyHex::encode(&key);
         let presence_key = format!("doc:{doc_id}:presence");
@@ -1435,7 +1436,8 @@ mod ephemeral_binding_tests {
 #[cfg(test)]
 mod delta_size_cap_tests {
     use super::*;
-    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+    use ambre_core::PublicKey;
+    use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
@@ -1467,11 +1469,11 @@ mod delta_size_cap_tests {
         }))
     }
 
-    fn conn_with(session_key: PublicKey, doc_id: DocumentId) -> WsConnectionState {
+    fn conn_with(session_key: PublicKey, doc_id: Id<Document>) -> WsConnectionState {
         let mut doc_subscriptions = HashSet::new();
         doc_subscriptions.insert(doc_id);
         WsConnectionState {
-            user_id: UserId::new(),
+            user_id: Id::<User>::mint(),
             signing_pubkey: session_key,
             doc_subscriptions,
             // Seed the membership cache as freshly verified. These unit tests then
@@ -1490,7 +1492,7 @@ mod delta_size_cap_tests {
         }
     }
 
-    fn update_with(pub_key: PublicKey, doc_id: DocumentId, cipher_len: usize) -> Update {
+    fn update_with(pub_key: PublicKey, doc_id: Id<Document>, cipher_len: usize) -> Update {
         Update {
             ciphertext: Ciphertext(vec![0u8; cipher_len]),
             nonce: Nonce([0u8; 24]),
@@ -1498,7 +1500,7 @@ mod delta_size_cap_tests {
                 document_id: doc_id,
                 pub_key,
                 key_id: ambre_core::KeyId::from_array([0u8; 16]),
-                snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+                snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
                 clock: Clock(1),
             },
             commitment_tag: CommitmentTag([0u8; 32]),
@@ -1514,7 +1516,7 @@ mod delta_size_cap_tests {
         let Some(state) = test_state(1024).await else {
             return;
         };
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let session_key = PublicKey::from_array([1u8; 32]);
         let mut empty = update_with(session_key.clone(), doc_id, 16);
         empty.ciphertext = Ciphertext(Vec::new());
@@ -1557,7 +1559,7 @@ mod delta_size_cap_tests {
         let Some(state) = test_state(8).await else {
             return;
         };
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let session_key = PublicKey::from_array([1u8; 32]);
         let pending_key = format!("doc:{doc_id}:pending");
         let _ = state.redis.del([&pending_key]).await;
@@ -1603,7 +1605,7 @@ mod delta_size_cap_tests {
         let Some(state) = test_state(1024).await else {
             return;
         };
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let session_key = PublicKey::from_array([1u8; 32]);
         let pending_key = format!("doc:{doc_id}:pending");
         let _ = state.redis.del([&pending_key]).await;
@@ -1666,7 +1668,7 @@ mod delta_size_cap_tests {
             )),
             oidc_clients: Arc::new(std::collections::HashMap::new()),
         });
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let session_key = PublicKey::from_array([1u8; 32]);
 
         // A fresh doc_id with no rows in the durable index: the very first page
@@ -1706,7 +1708,8 @@ mod delta_size_cap_tests {
 mod access_tests {
     use super::*;
     use crate::test_helpers::{create_test_document, create_test_user};
-    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+    use ambre_core::PublicKey;
+    use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
     use ambre_protocol::public_data::UpdatePublicData;
     use ambre_protocol::ws::{WsServerMsg, decode_server_msg};
@@ -1734,9 +1737,9 @@ mod access_tests {
     /// A connection of `user_id`, subscribed to `doc_id` as a writer, whose
     /// membership was verified `age` ago.
     fn conn_of(
-        user_id: UserId,
+        user_id: Id<User>,
         key: PublicKey,
-        doc_id: DocumentId,
+        doc_id: Id<Document>,
         age: Duration,
     ) -> WsConnectionState {
         let verified = Instant::now()
@@ -1755,7 +1758,7 @@ mod access_tests {
         }
     }
 
-    fn update_for(pub_key: PublicKey, doc_id: DocumentId) -> Update {
+    fn update_for(pub_key: PublicKey, doc_id: Id<Document>) -> Update {
         Update {
             ciphertext: Ciphertext(vec![1, 2, 3]),
             nonce: Nonce([0u8; 24]),
@@ -1763,7 +1766,7 @@ mod access_tests {
                 document_id: doc_id,
                 pub_key,
                 key_id: ambre_core::KeyId::from_array([0u8; 16]),
-                snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+                snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
                 clock: Clock(1),
             },
             commitment_tag: CommitmentTag([0u8; 32]),
@@ -1783,7 +1786,7 @@ mod access_tests {
     }
 
     /// A document with its owner and one editor, the editor's id returned.
-    async fn shared_document(pool: &sqlx::PgPool) -> (DocumentId, UserId) {
+    async fn shared_document(pool: &sqlx::PgPool) -> (Id<Document>, Id<User>) {
         let owner = create_test_user(pool, "owner@ambre.app").await;
         let editor = create_test_user(pool, "editor@ambre.app").await;
         let doc_id = create_test_document(pool, owner, "toile").await;
@@ -1995,7 +1998,8 @@ mod access_tests {
 #[cfg(test)]
 mod ed25519_tests {
     use super::*;
-    use ambre_core::{DocumentId, PublicKey, SnapshotId};
+    use ambre_core::PublicKey;
+    use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
     use ambre_protocol::public_data::UpdatePublicData;
     use ed25519_dalek::{Signer, SigningKey};
@@ -2012,10 +2016,10 @@ mod ed25519_tests {
         let pubkey = PublicKey::from_array(pubkey_bytes);
 
         let public_data = UpdatePublicData {
-            document_id: DocumentId::from_bytes([0u8; 16]),
+            document_id: Id::<Document>::from_bytes([0u8; 16]),
             pub_key: pubkey.clone(),
             key_id: ambre_core::KeyId::from_array([0u8; 16]),
-            snapshot_id: SnapshotId::from_bytes([1u8; 16]),
+            snapshot_id: Id::<Snapshot>::from_bytes([1u8; 16]),
             clock: Clock(1),
         };
         let nonce = Nonce([3u8; 24]);
@@ -2102,10 +2106,10 @@ mod ed25519_tests {
             ciphertext: Ciphertext(vec![1u8]),
             nonce: Nonce([0u8; 24]),
             public_data: UpdatePublicData {
-                document_id: DocumentId::from_bytes([0u8; 16]),
+                document_id: Id::<Document>::from_bytes([0u8; 16]),
                 pub_key: pubkey,
                 key_id: ambre_core::KeyId::from_array([0u8; 16]),
-                snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+                snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
                 clock: Clock(0),
             },
             commitment_tag: CommitmentTag([0u8; 32]),
@@ -2126,10 +2130,10 @@ mod ed25519_tests {
         let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
 
         let public_data = UpdatePublicData {
-            document_id: DocumentId::from_bytes([0u8; 16]),
+            document_id: Id::<Document>::from_bytes([0u8; 16]),
             pub_key: pubkey.clone(),
             key_id: ambre_core::KeyId::from_array([0u8; 16]),
-            snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+            snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
             clock: Clock(0),
         };
         let nonce = Nonce([0u8; 24]);
@@ -2159,7 +2163,7 @@ mod ed25519_tests {
     fn sign_ephemeral(
         signing_key: &SigningKey,
         pubkey: &PublicKey,
-        doc_id: DocumentId,
+        doc_id: Id<Document>,
         ciphertext: Vec<u8>,
     ) -> ambre_protocol::Ephemeral {
         use ambre_protocol::messages::Counter;
@@ -2192,7 +2196,7 @@ mod ed25519_tests {
     fn valid_ephemeral_signature_is_accepted() {
         let signing_key = SigningKey::from_bytes(&[11u8; 32]);
         let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
-        let doc_id = DocumentId::from_bytes([9u8; 16]);
+        let doc_id = Id::<Document>::from_bytes([9u8; 16]);
         let eph = sign_ephemeral(&signing_key, &pubkey, doc_id, vec![1, 2, 3, 4]);
         verify_ephemeral_signature(&pubkey, &eph).expect("valid ephemeral signature accepted");
     }
@@ -2201,7 +2205,7 @@ mod ed25519_tests {
     fn tampered_ephemeral_ciphertext_rejects_signature() {
         let signing_key = SigningKey::from_bytes(&[12u8; 32]);
         let pubkey = PublicKey::from_array(signing_key.verifying_key().to_bytes());
-        let doc_id = DocumentId::from_bytes([9u8; 16]);
+        let doc_id = Id::<Document>::from_bytes([9u8; 16]);
         let mut eph = sign_ephemeral(&signing_key, &pubkey, doc_id, vec![1, 2, 3, 4]);
         // Flip the ciphertext after signing: the signature must no longer verify.
         eph.ciphertext = Ciphertext(vec![9, 9, 9, 9]);
@@ -2216,7 +2220,7 @@ mod ed25519_tests {
             ciphertext: Ciphertext(vec![1, 2, 3]),
             nonce: Nonce([0u8; 24]),
             public_data: ambre_protocol::public_data::EphemeralPublicData {
-                document_id: DocumentId::from_bytes([0u8; 16]),
+                document_id: Id::<Document>::from_bytes([0u8; 16]),
                 pub_key: pubkey.clone(),
                 key_id: ambre_core::KeyId::from_array([0u8; 16]),
                 counter: ambre_protocol::messages::Counter(1),
@@ -2240,10 +2244,10 @@ mod refusal_tests {
                 ciphertext: Ciphertext(vec![seq as u8]),
                 nonce: Nonce([0u8; 24]),
                 public_data: ambre_protocol::public_data::UpdatePublicData {
-                    document_id: DocumentId::new(),
+                    document_id: Id::<Document>::mint(),
                     pub_key: ambre_core::PublicKey::from_array([1u8; 32]),
                     key_id: ambre_core::KeyId::from_array([0u8; 16]),
-                    snapshot_id: ambre_core::SnapshotId::from_bytes([0u8; 16]),
+                    snapshot_id: Id::<ambre_core::id::Snapshot>::from_bytes([0u8; 16]),
                     clock: Clock(seq),
                 },
                 commitment_tag: CommitmentTag([0u8; 32]),
@@ -2304,8 +2308,8 @@ mod refusal_tests {
     #[test]
     fn a_refused_clock_fences_the_socket_until_its_answer() {
         use ambre_protocol::messages::Signature;
-        let doc = DocumentId::new();
-        let other = DocumentId::new();
+        let doc = Id::<Document>::mint();
+        let other = Id::<Document>::mint();
         let mut fences = ClockFences::default();
         fences.raise(doc, Signature([1; 64]));
         assert!(fences.holds(&doc) && !fences.holds(&other));
@@ -2381,7 +2385,7 @@ mod refusal_tests {
     /// store's text. A plain refusal still reads as forbidden.
     #[test]
     fn a_refused_subscription_carries_no_store_text() {
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         let cause = AppError::Database(sqlx::Error::Protocol(
             "relation \"document_members\" does not exist".into(),
         ));
@@ -2442,7 +2446,8 @@ mod hot_tail_tests {
     use crate::test_helpers::{
         S3Stub, create_test_document, create_test_user, offline_s3, test_app_state, with_s3,
     };
-    use ambre_core::{PublicKey, SnapshotId};
+    use ambre_core::PublicKey;
+    use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
@@ -2452,7 +2457,7 @@ mod hot_tail_tests {
         pool: sqlx::PgPool,
         stub: &S3Stub,
         key: &ed25519_dalek::SigningKey,
-    ) -> (Arc<AppState>, WsConnectionState, DocumentId) {
+    ) -> (Arc<AppState>, WsConnectionState, Id<Document>) {
         let state = with_s3(
             &*test_app_state(pool.clone()).await,
             offline_s3(Some(&stub.endpoint)),
@@ -2476,7 +2481,7 @@ mod hot_tail_tests {
     /// Delta `clock` of `doc_id`, `len` bytes of ciphertext, signed by `key`.
     pub(super) fn signed_update(
         key: &ed25519_dalek::SigningKey,
-        doc_id: DocumentId,
+        doc_id: Id<Document>,
         clock: u64,
         len: usize,
     ) -> Update {
@@ -2485,7 +2490,7 @@ mod hot_tail_tests {
             document_id: doc_id,
             pub_key: PublicKey::from_array(key.verifying_key().to_bytes()),
             key_id: ambre_core::KeyId::from_array([0u8; 16]),
-            snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+            snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
             clock: Clock(clock),
         };
         let ciphertext = vec![u8::try_from(clock % 256).unwrap(); len];
@@ -2509,7 +2514,7 @@ mod hot_tail_tests {
     pub(super) async fn replay(
         state: &Arc<AppState>,
         conn: &mut WsConnectionState,
-        doc_id: DocumentId,
+        doc_id: Id<Document>,
     ) -> Vec<Vec<u8>> {
         conn.last_replay_at.clear();
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
@@ -2695,16 +2700,17 @@ mod hot_tail_tests {
 mod channel_gate_tests {
     use super::*;
     use crate::test_helpers::test_app_state;
-    use ambre_core::{ChannelId, DocumentId, PublicKey, SnapshotId};
+    use ambre_core::PublicKey;
+    use ambre_core::id::Snapshot;
     use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Signature, Update};
     use ambre_protocol::public_data::UpdatePublicData;
     use rustis::commands::{GenericCommands, ListCommands};
 
-    fn uuid_of(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
-        uuid::Uuid::from_bytes(*id.into().as_bytes())
+    fn uuid_of<E: ambre_core::id::Entity<Repr = ambre_core::Uuid>>(id: Id<E>) -> uuid::Uuid {
+        uuid::Uuid::from_bytes(*id.uuid().as_bytes())
     }
 
-    fn conn_of(user_id: UserId, session_key: PublicKey) -> WsConnectionState {
+    fn conn_of(user_id: Id<User>, session_key: PublicKey) -> WsConnectionState {
         WsConnectionState {
             user_id,
             signing_pubkey: session_key,
@@ -2722,10 +2728,10 @@ mod channel_gate_tests {
     /// granted `role` on `meta`. Returns the segment.
     async fn segment_of_channel(
         pool: &sqlx::PgPool,
-        owner: UserId,
-        member: Option<(UserId, ambre_core::Role)>,
-    ) -> DocumentId {
-        let channel = ChannelId::new();
+        owner: Id<User>,
+        member: Option<(Id<User>, ambre_core::Role)>,
+    ) -> Id<Document> {
+        let channel = Id::<Channel>::mint();
         sqlx::query("INSERT INTO channels (id) VALUES ($1)")
             .bind(uuid_of(channel))
             .execute(pool)
@@ -2769,7 +2775,7 @@ mod channel_gate_tests {
         segment
     }
 
-    fn update_on(pub_key: PublicKey, doc_id: DocumentId) -> Update {
+    fn update_on(pub_key: PublicKey, doc_id: Id<Document>) -> Update {
         Update {
             ciphertext: Ciphertext(vec![0u8; 16]),
             nonce: Nonce([0u8; 24]),
@@ -2777,7 +2783,7 @@ mod channel_gate_tests {
                 document_id: doc_id,
                 pub_key,
                 key_id: ambre_core::KeyId::from_array([0u8; 16]),
-                snapshot_id: SnapshotId::from_bytes([0u8; 16]),
+                snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
                 clock: Clock(1),
             },
             commitment_tag: CommitmentTag([0u8; 32]),
@@ -2896,9 +2902,14 @@ mod channel_gate_tests {
             .expect("read")
             .expect("a channel");
         let thread = crate::test_helpers::create_test_document(&pool, owner, "murmure").await;
-        db::register_thread(&pool, &channel, ambre_core::MessageId::new(), thread)
-            .await
-            .expect("registered");
+        db::register_thread(
+            &pool,
+            &channel,
+            Id::<ambre_core::id::Message>::mint(),
+            thread,
+        )
+        .await
+        .expect("registered");
         let state = test_app_state(pool).await;
         let key = ed25519_dalek::SigningKey::from_bytes(&[61u8; 32]);
         let mut conn = conn_of(owner, PublicKey::from_array(key.verifying_key().to_bytes()));

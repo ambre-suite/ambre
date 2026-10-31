@@ -1,6 +1,6 @@
 //! Reactions / votes for [`ToileState`](super::ToileState) (`toile-reactions`).
 //! Placing an emoji reaction or a vote on an element or frame is shared,
-//! persisted state, keyed by target + canonical `UserId`. One user has exactly
+//! persisted state, keyed by target + canonical `Id<User>`. One user has exactly
 //! one entry per target (a re-vote is LWW on their own key), and tallies are
 //! convergent.
 //!
@@ -17,11 +17,11 @@
 //! containers. Loro's map register would keep only one, silently dropping the
 //! loser's reactions. The root `reactions` map, by contrast, is a deterministic
 //! root container that always exists, so concurrent inserts under distinct
-//! composite keys all survive (verified). `ElementId`s are hex + `_` and
-//! `UserId`s are hyphenated UUIDs, so neither contains `/`. The composite key is
+//! composite keys all survive (verified). `Id<Element>`s are hex + `_` and
+//! `Id<User>`s are hyphenated UUIDs, so neither contains `/`. The composite key is
 //! unambiguous, and `target` is recovered by splitting on the first `/`.
 //!
-//! Keyed by `UserId`, never `PeerID`: a reaction is a per-user decision that must
+//! Keyed by `Id<User>`, never `PeerID`: a reaction is a per-user decision that must
 //! survive reload and multi-device use. The tally (count per emoji, vote totals)
 //! is **derived on read** ([`reaction_tally`](ToileState::reaction_tally)), never
 //! stored, so it can never drift from the entry set. A reaction on a
@@ -34,8 +34,8 @@ use loro::LoroValue;
 
 use crate::ToileError;
 use crate::logic::command::{Reaction, ReactionKind, ReactionTally, ToileEvent, ToileOutcome};
-use crate::logic::model::{ElementId, TargetId};
 use ambre_bus::app::toile::ReactionCount;
+use ambre_core::id::{Element, Id};
 
 use super::ToileState;
 use super::names::{ReactionKey, Root};
@@ -72,13 +72,17 @@ fn accumulate(
 
 impl ToileState {
     /// Place, change or remove the local user's reaction on `target`.
-    /// Keyed by the canonical `UserId`, so a re-vote is LWW on this peer's own
+    /// Keyed by the canonical `Id<User>`, so a re-vote is LWW on this peer's own
     /// key. `reaction: None` deletes the user's own entry. No target-existence
     /// check happens here (a dangling target is skipped only at derivation, like
     /// a dangling connector). CRDT and undoable: one `doc.commit()` is one
     /// undo item. A pure no-op (removing an absent entry, or re-writing a
     /// byte-identical value) produces neither a commit nor a delta.
-    pub(super) fn react(&mut self, target: &TargetId, reaction: Option<Reaction>) -> ToileOutcome {
+    pub(super) fn react(
+        &mut self,
+        target: &Id<Element>,
+        reaction: Option<Reaction>,
+    ) -> ToileOutcome {
         // Without an authenticated identity there is no key to write the per-user
         // entry under. The UI cannot reach this pre-`SessionReady`; guard anyway.
         let Some(user_id) = self.my_user_id else {
@@ -123,7 +127,7 @@ impl ToileState {
     /// per-user entries. A deleted target (no element map) yields an empty tally:
     /// its orphan entries are skipped at derivation, never rendered, never
     /// destroyed. Scans the shared `reactions` map for the target's prefix.
-    pub fn reaction_tally(&self, target: &TargetId) -> ReactionTally {
+    pub fn reaction_tally(&self, target: &Id<Element>) -> ReactionTally {
         // Skip a deleted / never-created target ("reactions on a deleted
         // target"): its entries may still exist but are not rendered.
         if self.element_map(target).is_none() {
@@ -159,11 +163,11 @@ impl ToileState {
     /// the first `/`.
     pub(super) fn reaction_tallies(
         &self,
-        visible: &HashSet<ElementId>,
-    ) -> BTreeMap<TargetId, ReactionTally> {
-        let mut emoji: BTreeMap<TargetId, BTreeMap<ambre_bus::Emoji, ReactionCount>> =
+        visible: &HashSet<Id<Element>>,
+    ) -> BTreeMap<Id<Element>, ReactionTally> {
+        let mut emoji: BTreeMap<Id<Element>, BTreeMap<ambre_bus::Emoji, ReactionCount>> =
             BTreeMap::new();
-        let mut tallies: BTreeMap<TargetId, ReactionTally> = BTreeMap::new();
+        let mut tallies: BTreeMap<Id<Element>, ReactionTally> = BTreeMap::new();
         if let LoroValue::Map(entries) = self.doc.get_map(Root::Reactions.as_str()).get_deep_value()
         {
             for (k, value) in entries.iter() {
@@ -197,7 +201,7 @@ impl ToileState {
 
     /// The local user's own reaction on `target`, if any. UI toggle / test
     /// accessor.
-    pub fn my_reaction(&self, target: &TargetId) -> Option<Reaction> {
+    pub fn my_reaction(&self, target: &Id<Element>) -> Option<Reaction> {
         let user_id = self.my_user_id?;
         let key = ReactionKey::of(target, &user_id);
         let LoroValue::Binary(bytes) = self

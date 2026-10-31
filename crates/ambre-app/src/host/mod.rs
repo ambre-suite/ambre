@@ -35,8 +35,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
-use ambre_bus::app::toile::ElementId;
-use ambre_bus::{DocType, DocumentId, LogicCommand, PasteSource};
+use ambre_bus::{DocType, LogicCommand, PasteSource};
 use ambre_canvas::{
     ContentRepaint, DensityWatch, FATAL_BACKDROP, FrameStats, GpuState, InputEvent, Layer,
     LayerRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache, TextInput, Tick,
@@ -44,8 +43,8 @@ use ambre_canvas::{
     start_raf_loop,
 };
 use ambre_chrome::commands::ClipboardWrite;
-use ambre_core::CanvasId;
-use ambre_core::{Device, Px, View, WholeCss};
+use ambre_core::id::{Document, Element, Id};
+use ambre_core::{CanvasId, Device, Px, View, WholeCss};
 use ambre_draw::{Consumed, DrawSurface, Point, Rect, Size};
 use ambre_toile::ui::ToileView;
 use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
@@ -540,7 +539,7 @@ impl AppView {
     }
 
     /// Swap the active document in place, keeping the GPU surface.
-    fn set_document(&mut self, document_id: DocumentId) {
+    fn set_document(&mut self, document_id: Id<Document>) {
         match self {
             AppView::Trame(v) => v.set_document(document_id),
             AppView::Toile(v) => v.set_document(document_id),
@@ -574,7 +573,7 @@ impl AppView {
     /// event to. The element rather than its document: two embeds of one
     /// document are two child views (`TOILE-UI-097`). `None` off a Toile, or
     /// when the board itself consumed the event.
-    fn child_route(&self) -> Option<ElementId> {
+    fn child_route(&self) -> Option<Id<Element>> {
         match self {
             AppView::Toile(v) => v.child_route(),
             AppView::Trame(_) | AppView::Prose(_) | AppView::Murmure(_) => None,
@@ -619,12 +618,12 @@ impl AppView {
 /// Main-thread only (`!Send`), like every canvas handle.
 #[derive(Clone)]
 pub struct DocSwitcher {
-    set: Rc<dyn Fn(DocumentId)>,
+    set: Rc<dyn Fn(Id<Document>)>,
 }
 
 impl DocSwitcher {
     /// Point the canvas at `document_id`. A no-op if it is already current.
-    pub fn set_document(&self, document_id: DocumentId) {
+    pub fn set_document(&self, document_id: Id<Document>) {
         (self.set)(document_id);
     }
 }

@@ -34,8 +34,8 @@ use std::collections::{BTreeSet, HashMap};
 use ambre_bus::{MentionTarget, Notice, StyleMark, TextStyle};
 use ambre_core::Uuid;
 use ambre_core::authorship::PeerEntry;
+use ambre_core::id::{Category, Channel, Id};
 use ambre_core::schema::verdict;
-use ambre_core::{CategoryId, ChannelId};
 use loro::{Container, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::channel::{folded_amendments, header_fold, read_messages};
@@ -593,7 +593,7 @@ fn recorded_thread_reading(reader: &Reader<'_>, stored: &Stored) -> Option<Strin
 
 /// The reading of one category field, through the list the view is given.
 fn category_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
-    let id = CategoryId::parse_str(stored.key(0)?).ok()?;
+    let id = Id::<Category>::parse_str(stored.key(0)?).ok()?;
     let categories = reader.space.categories();
     let rank = categories.iter().position(|c| c.id == id)?;
     let category = &categories[rank];
@@ -606,7 +606,7 @@ fn category_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
 
 /// The reading of one catalogue field, through the list the view is given.
 fn catalogue_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
-    let channel_id = ChannelId::parse_str(stored.key(0)?).ok()?;
+    let channel_id = Id::<Channel>::parse_str(stored.key(0)?).ok()?;
     let catalogue = reader.space.catalogue();
     let rank = catalogue.iter().position(|e| e.channel_id == channel_id)?;
     let entry = &catalogue[rank];

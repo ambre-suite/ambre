@@ -2,6 +2,8 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
+use ambre_core::id::{Document, Id};
+
 use crate::auth;
 use crate::db;
 use crate::error::{AppError, Resource};
@@ -31,7 +33,7 @@ pub struct UploadUrlResponse {
 pub async fn media_upload_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<UploadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -78,7 +80,7 @@ pub struct DownloadUrlResponse {
 pub async fn media_download_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<DownloadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -116,7 +118,7 @@ pub struct ConfirmUploadRequest {
 pub async fn media_confirm_upload(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<ConfirmUploadRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -171,7 +173,7 @@ pub struct MediaConfirmed {
 pub async fn media_erase(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, content_hash)): PathId<(ambre_core::DocumentId, ambre_core::ContentHash)>,
+    PathId((doc_id, content_hash)): PathId<(Id<Document>, ambre_core::ContentHash)>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     db::get_document_member(&state.db, &doc_id, &s.user_id)

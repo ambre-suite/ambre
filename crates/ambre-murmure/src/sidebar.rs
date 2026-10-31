@@ -11,7 +11,8 @@ use ambre_bus::{
     CatalogPosition, CatalogueEntry, CategoryView, ChannelActivity, ChannelName, ChannelPlace,
     DirectPeers, MemberChannel, MentionCount, UnreadCount,
 };
-use ambre_core::{CategoryId, ChannelId, SpaceId, StepDirection};
+use ambre_core::StepDirection;
+use ambre_core::id::{Category, Channel, Id, Space};
 
 /// The section of the sidebar an entry sits in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,8 +20,8 @@ pub enum SidebarGroup {
     /// The joined public channels of one category of a space. `None` holds
     /// the channels outside every category.
     Category {
-        space: SpaceId,
-        category: Option<CategoryId>,
+        space: Id<Space>,
+        category: Option<Id<Category>>,
     },
     /// The private channels the user belongs to, in every space.
     Private,
@@ -67,7 +68,7 @@ impl Activity {
 /// One channel of the sidebar.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SidebarEntry {
-    pub channel: ChannelId,
+    pub channel: Id<Channel>,
     /// Absent until a catalogue or the open channel names it.
     pub name: Option<ambre_core::Name>,
     pub activity: Activity,
@@ -99,25 +100,25 @@ struct Catalogue {
 pub struct Sidebar {
     members: Vec<MemberChannel>,
     /// The spaces in the order the user's channels first named them.
-    spaces: Vec<SpaceId>,
-    catalogues: HashMap<SpaceId, Catalogue>,
-    activity: HashMap<ChannelId, Activity>,
+    spaces: Vec<Id<Space>>,
+    catalogues: HashMap<Id<Space>, Catalogue>,
+    activity: HashMap<Id<Channel>, Activity>,
     /// What each open channel read in its meta, none when it holds no name.
-    names: HashMap<ChannelId, Option<ambre_core::Name>>,
+    names: HashMap<Id<Channel>, Option<ambre_core::Name>>,
     /// The names the relay's listing carried sealed, for channels not open
     /// (`MURMURE-490`). What meta reads always wins over them.
-    hints: HashMap<ChannelId, ambre_core::Name>,
+    hints: HashMap<Id<Channel>, ambre_core::Name>,
     /// The other members of each direct message, by display name, which a
     /// direct message nobody named shows (`MURMURE-492`).
-    peers: HashMap<ChannelId, Vec<ambre_core::DisplayName>>,
+    peers: HashMap<Id<Channel>, Vec<ambre_core::DisplayName>>,
     /// The spaces whose open failed. The next listing naming one opens it
     /// anew (`MURMURE-550`).
-    unopened: Vec<SpaceId>,
+    unopened: Vec<Id<Space>>,
 }
 
 impl std::fmt::Debug for Sidebar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let peers: HashMap<&ChannelId, usize> = self
+        let peers: HashMap<&Id<Channel>, usize> = self
             .peers
             .iter()
             .map(|(channel, names)| (channel, names.len()))
@@ -143,8 +144,8 @@ impl Sidebar {
     pub fn set_member_channels(
         &mut self,
         channels: Vec<MemberChannel>,
-        spaces: &[SpaceId],
-    ) -> Vec<SpaceId> {
+        spaces: &[Id<Space>],
+    ) -> Vec<Id<Space>> {
         let named = channels.iter().filter_map(|channel| match channel.place {
             ChannelPlace::Public(space) | ChannelPlace::Private(space) => Some(space),
             ChannelPlace::Direct => None,
@@ -165,7 +166,7 @@ impl Sidebar {
 
     /// A space that could not open. Its joined channels stay drawn, and the
     /// next listing naming it opens it anew (`MURMURE-550`).
-    pub fn space_failed(&mut self, space: SpaceId) {
+    pub fn space_failed(&mut self, space: Id<Space>) {
         if self.spaces.contains(&space) && !self.unopened.contains(&space) {
             self.unopened.push(space);
         }
@@ -174,7 +175,7 @@ impl Sidebar {
     /// Take the catalogue of an open space, whole.
     pub fn set_catalogue(
         &mut self,
-        space: SpaceId,
+        space: Id<Space>,
         name: Option<ambre_core::Name>,
         categories: Vec<CategoryView>,
         channels: Vec<CatalogueEntry>,
@@ -201,7 +202,7 @@ impl Sidebar {
     }
 
     /// Take the name an open channel read.
-    pub fn set_name(&mut self, channel: ChannelId, name: Option<ambre_core::Name>) {
+    pub fn set_name(&mut self, channel: Id<Channel>, name: Option<ambre_core::Name>) {
         self.names.insert(channel, name);
     }
 
@@ -222,7 +223,7 @@ impl Sidebar {
     }
 
     /// Drop a channel the user left, or the relay deleted.
-    pub fn forget(&mut self, channel: ChannelId) {
+    pub fn forget(&mut self, channel: Id<Channel>) {
         self.members.retain(|m| m.channel_id != channel);
         self.activity.remove(&channel);
         self.names.remove(&channel);
@@ -232,9 +233,9 @@ impl Sidebar {
 
     /// Drop a space the user lost, with its catalogue and every channel of
     /// it, joined or to join. Returns the channels dropped (`MURMURE-488`).
-    pub fn forget_space(&mut self, space: SpaceId) -> Vec<ChannelId> {
+    pub fn forget_space(&mut self, space: Id<Space>) -> Vec<Id<Channel>> {
         self.spaces.retain(|s| *s != space);
-        let mut dropped: Vec<ChannelId> = self
+        let mut dropped: Vec<Id<Channel>> = self
             .catalogues
             .remove(&space)
             .map(|c| c.channels.iter().map(|e| e.channel_id).collect())
@@ -256,12 +257,12 @@ impl Sidebar {
     }
 
     /// Whether the user belongs to the channel.
-    pub fn is_member(&self, channel: ChannelId) -> bool {
+    pub fn is_member(&self, channel: Id<Channel>) -> bool {
         self.members.iter().any(|m| m.channel_id == channel)
     }
 
     /// Whether a channel of the user is a direct message.
-    pub fn is_direct(&self, channel: ChannelId) -> bool {
+    pub fn is_direct(&self, channel: Id<Channel>) -> bool {
         self.members
             .iter()
             .any(|m| m.channel_id == channel && m.place == ChannelPlace::Direct)
@@ -272,7 +273,7 @@ impl Sidebar {
     /// catalogue entry. A channel whose meta reads no name drops its hint.
     /// A direct message with no name shows its other members, composed here
     /// and never stored (`MURMURE-492`).
-    pub fn name_of(&self, channel: ChannelId) -> Option<ambre_core::Name> {
+    pub fn name_of(&self, channel: Id<Channel>) -> Option<ambre_core::Name> {
         let read = match self.names.get(&channel) {
             Some(read) => read.clone(),
             None => self.hints.get(&channel).cloned(),
@@ -300,7 +301,7 @@ impl Sidebar {
     /// The space whose members a public channel shows: the place the listing
     /// gave a joined one, else the catalogue that lists it. A private channel
     /// or a direct message has members of its own, so it shows none.
-    pub fn public_space_of(&self, channel: ChannelId) -> Option<SpaceId> {
+    pub fn public_space_of(&self, channel: Id<Channel>) -> Option<Id<Space>> {
         let joined = self.members.iter().find(|m| m.channel_id == channel);
         match joined.map(|m| m.place) {
             Some(ChannelPlace::Public(space)) => Some(space),
@@ -310,7 +311,7 @@ impl Sidebar {
     }
 
     /// Where a channel of the user lies, as the listing gave it.
-    pub fn place_of(&self, channel: ChannelId) -> Option<ChannelPlace> {
+    pub fn place_of(&self, channel: Id<Channel>) -> Option<ChannelPlace> {
         self.members
             .iter()
             .find(|m| m.channel_id == channel)
@@ -318,19 +319,19 @@ impl Sidebar {
     }
 
     /// The spaces of the user, in the order the sidebar draws them.
-    pub fn spaces(&self) -> &[SpaceId] {
+    pub fn spaces(&self) -> &[Id<Space>] {
         &self.spaces
     }
 
     /// The open space whose catalogue lists the channel, to join it there.
-    pub fn listed_in(&self, channel: ChannelId) -> Option<SpaceId> {
+    pub fn listed_in(&self, channel: Id<Channel>) -> Option<Id<Space>> {
         self.catalogues
             .iter()
             .find(|(_, c)| c.channels.iter().any(|e| e.channel_id == channel))
             .map(|(space, _)| *space)
     }
 
-    fn entry(&self, channel: ChannelId) -> SidebarEntry {
+    fn entry(&self, channel: Id<Channel>) -> SidebarEntry {
         SidebarEntry {
             channel,
             name: self.name_of(channel),
@@ -346,13 +347,13 @@ impl Sidebar {
         let mut sections = Vec::new();
         for &space in &self.spaces {
             let catalogue = self.catalogues.get(&space);
-            let joined: Vec<ChannelId> = self
+            let joined: Vec<Id<Channel>> = self
                 .members
                 .iter()
                 .filter(|m| m.place == ChannelPlace::Public(space))
                 .map(|m| m.channel_id)
                 .collect();
-            let listed = |id: ChannelId| {
+            let listed = |id: Id<Channel>| {
                 catalogue.and_then(|c| c.channels.iter().find(|e| e.channel_id == id))
             };
             let mut categories: Vec<&CategoryView> = catalogue
@@ -365,7 +366,7 @@ impl Sidebar {
                     .map(|c| (Some(c.id), Some(c.name.clone()))),
             );
             for (category, title) in groups {
-                let mut channels: Vec<ChannelId> = joined
+                let mut channels: Vec<Id<Channel>> = joined
                     .iter()
                     .copied()
                     .filter(|&id| listed(id).and_then(|e| e.category) == category)
@@ -423,9 +424,9 @@ impl Sidebar {
     /// no other channel has activity.
     pub fn next_with_activity(
         &self,
-        from: Option<ChannelId>,
+        from: Option<Id<Channel>>,
         direction: StepDirection,
-    ) -> Option<ChannelId> {
+    ) -> Option<Id<Channel>> {
         let mut order: Vec<SidebarEntry> = self
             .sections()
             .into_iter()
@@ -460,7 +461,7 @@ enum Placed {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Rank {
     placed: Placed,
-    channel: ChannelId,
+    channel: Id<Channel>,
 }
 
 impl Ord for Rank {
@@ -478,7 +479,7 @@ impl PartialOrd for Rank {
 }
 
 /// The rank of the public channel `channel`, listed by `entry` or not yet.
-fn rank(entry: Option<&CatalogueEntry>, channel: ChannelId) -> Rank {
+fn rank(entry: Option<&CatalogueEntry>, channel: Id<Channel>) -> Rank {
     let placed = entry.map_or(Placed::Unlisted, |e| Placed::At(e.position));
     Rank { placed, channel }
 }
@@ -511,7 +512,7 @@ mod tests {
             ambre_core::DisplayName::new("Secretary").expect("a name"),
             ambre_core::DisplayName::new("Treasurer").expect("a name"),
         ];
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         sidebar.set_peers(&[DirectPeers { channel_id, names }]);
         let shown = format!("{sidebar:?}");
         assert!(
@@ -521,16 +522,16 @@ mod tests {
         assert!(shown.contains(&format!("{channel_id:?}: 2")), "{shown}");
     }
 
-    fn public(space: SpaceId) -> (ChannelId, MemberChannel) {
-        let channel_id = ChannelId::new();
+    fn public(space: Id<Space>) -> (Id<Channel>, MemberChannel) {
+        let channel_id = Id::<Channel>::mint();
         let place = ChannelPlace::Public(space);
         (channel_id, MemberChannel { channel_id, place })
     }
 
     fn listed(
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         name: &str,
-        category: Option<CategoryId>,
+        category: Option<Id<Category>>,
         position: u32,
     ) -> CatalogueEntry {
         CatalogueEntry {
@@ -555,11 +556,11 @@ mod tests {
     /// direct message show none.
     #[test]
     fn a_public_channel_shows_the_members_of_its_space_and_no_other_channel_does() {
-        let space = SpaceId::new();
+        let space = Id::<Space>::mint();
         let (general, general_m) = public(space);
-        let private = ChannelId::new();
-        let direct = ChannelId::new();
-        let to_join = ChannelId::new();
+        let private = Id::<Channel>::mint();
+        let direct = Id::<Channel>::mint();
+        let to_join = Id::<Channel>::mint();
         let mut sidebar = Sidebar::default();
         sidebar.set_member_channels(
             vec![
@@ -585,7 +586,7 @@ mod tests {
         assert_eq!(sidebar.public_space_of(to_join), Some(space));
         assert_eq!(sidebar.public_space_of(private), None);
         assert_eq!(sidebar.public_space_of(direct), None);
-        assert_eq!(sidebar.public_space_of(ChannelId::new()), None);
+        assert_eq!(sidebar.public_space_of(Id::<Channel>::mint()), None);
         assert_eq!(sidebar.spaces(), [space]);
     }
 
@@ -594,12 +595,12 @@ mod tests {
     /// messages follow (`MURMURE-163`).
     #[test]
     fn the_sidebar_groups_public_channels_by_category_then_private_then_direct() {
-        let space = SpaceId::new();
+        let space = Id::<Space>::mint();
         let (general, general_m) = public(space);
         let (sales, sales_m) = public(space);
         let (leads, leads_m) = public(space);
-        let private = ChannelId::new();
-        let direct = ChannelId::new();
+        let private = Id::<Channel>::mint();
+        let direct = Id::<Channel>::mint();
         let mut sidebar = Sidebar::default();
         let fresh = sidebar.set_member_channels(
             vec![
@@ -618,7 +619,7 @@ mod tests {
             &[space],
         );
         assert_eq!(fresh, vec![space], "the space is opened once");
-        let team = CategoryId::new();
+        let team = Id::<Category>::mint();
         sidebar.set_catalogue(
             space,
             Some(ambre_core::Name::new("Acme").unwrap()),
@@ -679,9 +680,9 @@ mod tests {
     /// one, even one at the last rank a position holds.
     #[test]
     fn an_unlisted_channel_comes_after_one_listed_at_the_last_rank() {
-        let space = SpaceId::new();
-        let last = ChannelId::from_bytes([0xff; 16]);
-        let unlisted = ChannelId::from_bytes([0; 16]);
+        let space = Id::<Space>::mint();
+        let last = Id::<Channel>::from_bytes([0xff; 16]);
+        let unlisted = Id::<Channel>::from_bytes([0; 16]);
         let place = ChannelPlace::Public(space);
         let mut sidebar = Sidebar::default();
         sidebar.set_member_channels(
@@ -703,7 +704,7 @@ mod tests {
             Vec::new(),
             vec![listed(last, "last", None, u32::MAX)],
         );
-        let order: Vec<ChannelId> = sidebar.sections()[0]
+        let order: Vec<Id<Channel>> = sidebar.sections()[0]
             .entries
             .iter()
             .map(|e| e.channel)
@@ -715,9 +716,9 @@ mod tests {
     /// joined one, and leaves that section once joined (`MURMURE-164`).
     #[test]
     fn a_channel_to_join_sits_apart_from_the_joined_ones() {
-        let space = SpaceId::new();
+        let space = Id::<Space>::mint();
         let (general, general_m) = public(space);
-        let random = ChannelId::new();
+        let random = Id::<Channel>::mint();
         let mut sidebar = Sidebar::default();
         sidebar.set_member_channels(vec![general_m], &[space]);
         sidebar.set_catalogue(
@@ -739,7 +740,7 @@ mod tests {
             Some(space),
             "joined in its space"
         );
-        assert_eq!(sidebar.listed_in(ChannelId::new()), None);
+        assert_eq!(sidebar.listed_in(Id::<Channel>::mint()), None);
 
         sidebar.set_member_channels(
             vec![
@@ -761,9 +762,9 @@ mod tests {
     /// (`MURMURE-486`).
     #[test]
     fn a_space_with_no_channel_of_the_user_shows_its_channels_to_join() {
-        let (space, other) = (SpaceId::new(), SpaceId::new());
+        let (space, other) = (Id::<Space>::mint(), Id::<Space>::mint());
         let (general, general_m) = public(other);
-        let random = ChannelId::new();
+        let random = Id::<Channel>::mint();
         let mut sidebar = Sidebar::default();
         let fresh = sidebar.set_member_channels(vec![general_m], &[space, other]);
         assert_eq!(fresh, vec![other, space], "each space opens once");
@@ -796,7 +797,7 @@ mod tests {
     /// failed twice, is asked no more than once (`MURMURE-550`).
     #[test]
     fn a_space_that_failed_opens_anew_on_the_next_listing() {
-        let space = SpaceId::new();
+        let space = Id::<Space>::mint();
         let (general, general_m) = public(space);
         let mut sidebar = Sidebar::default();
         assert_eq!(
@@ -805,7 +806,7 @@ mod tests {
         );
         sidebar.space_failed(space);
         sidebar.space_failed(space);
-        sidebar.space_failed(SpaceId::new());
+        sidebar.space_failed(Id::<Space>::mint());
         let drawn = sidebar.sections();
         assert_eq!(drawn[0].entries[0].channel, general, "still drawn");
         assert_eq!(
@@ -826,10 +827,14 @@ mod tests {
     /// and the direct messages stay (`MURMURE-488`).
     #[test]
     fn a_space_lost_leaves_the_sidebar_with_every_channel_of_it() {
-        let (space, other) = (SpaceId::new(), SpaceId::new());
+        let (space, other) = (Id::<Space>::mint(), Id::<Space>::mint());
         let (general, general_m) = public(space);
         let (kept, kept_m) = public(other);
-        let (random, private, direct) = (ChannelId::new(), ChannelId::new(), ChannelId::new());
+        let (random, private, direct) = (
+            Id::<Channel>::mint(),
+            Id::<Channel>::mint(),
+            Id::<Channel>::mint(),
+        );
         let mut sidebar = Sidebar::default();
         let place = |channel_id, place| MemberChannel { channel_id, place };
         sidebar.set_member_channels(
@@ -857,7 +862,7 @@ mod tests {
         let mut expected = vec![general, random, private];
         expected.sort_unstable_by_key(|c| *c.as_bytes());
         assert_eq!(dropped, expected);
-        let shown: Vec<ChannelId> = sidebar
+        let shown: Vec<Id<Channel>> = sidebar
             .sections()
             .iter()
             .flat_map(|s| s.entries.iter().map(|e| e.channel))
@@ -873,8 +878,8 @@ mod tests {
     /// name. A forgotten channel keeps no hint (`MURMURE-490`).
     #[test]
     fn a_hint_names_a_channel_until_its_meta_reads_one() {
-        let space = SpaceId::new();
-        let (board, other) = (ChannelId::new(), ChannelId::new());
+        let space = Id::<Space>::mint();
+        let (board, other) = (Id::<Channel>::mint(), Id::<Channel>::mint());
         let hint = |channel_id, name: &str| ChannelName {
             channel_id,
             name: ambre_core::Name::new(name).unwrap(),
@@ -928,7 +933,7 @@ mod tests {
     /// (`MURMURE-492`).
     #[test]
     fn an_unnamed_direct_message_shows_its_other_members() {
-        let (direct, lonely) = (ChannelId::new(), ChannelId::new());
+        let (direct, lonely) = (Id::<Channel>::mint(), Id::<Channel>::mint());
         let mut sidebar = Sidebar::default();
         let place = |channel_id| MemberChannel {
             channel_id,
@@ -988,10 +993,10 @@ mod tests {
     /// opened or not: the listing is whole (`MURMURE-489`).
     #[test]
     fn a_channel_absent_from_a_listing_leaves_the_sidebar() {
-        let space = SpaceId::new();
+        let space = Id::<Space>::mint();
         let (general, general_m) = public(space);
         let board = MemberChannel {
-            channel_id: ChannelId::new(),
+            channel_id: Id::<Channel>::mint(),
             place: ChannelPlace::Private(space),
         };
         let mut sidebar = Sidebar::default();
@@ -1009,7 +1014,7 @@ mod tests {
     /// answer keeps its own.
     #[test]
     fn a_mark_shows_before_the_count_and_the_count_replaces_it() {
-        let space = SpaceId::new();
+        let space = Id::<Space>::mint();
         let (a, a_m) = public(space);
         let (b, b_m) = public(space);
         let mut sidebar = Sidebar::default();
@@ -1061,11 +1066,11 @@ mod tests {
     /// starts from and the channels to join (`MURMURE-176`).
     #[test]
     fn a_jump_opens_the_next_channel_with_activity_in_sidebar_order() {
-        let space = SpaceId::new();
+        let space = Id::<Space>::mint();
         let (a, a_m) = public(space);
         let (b, b_m) = public(space);
         let (c, c_m) = public(space);
-        let open = ChannelId::new();
+        let open = Id::<Channel>::mint();
         let mut sidebar = Sidebar::default();
         sidebar.set_member_channels(vec![c_m, a_m, b_m], &[space]);
         sidebar.set_catalogue(

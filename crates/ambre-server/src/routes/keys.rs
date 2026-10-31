@@ -63,7 +63,7 @@ pub async fn store_master_keys(
     // access to its own shared documents. A legitimate passphrase change keeps the
     // seed and goes through `rotate_master_keys`, which touches only enc + salt. A
     // re-store here is always a mistake, and is rejected.
-    let uid = uuid::Uuid::from_bytes(*s.user_id.as_uuid().as_bytes());
+    let uid = uuid::Uuid::from_bytes(*s.user_id.uuid().as_bytes());
     let result = sqlx::query(
         "UPDATE users SET master_key_enc = $2, master_key_salt = $3, signing_pubkey = $4, exchange_pubkey = $5 WHERE id = $1 AND master_key_enc IS NULL"
     )

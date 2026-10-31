@@ -43,7 +43,7 @@ pub fn run_with<F, C, P>(
 ) -> DocSwitcher
 where
     F: FnOnce(ambre_core::Size<Px<WholeCss>>, TextInput) -> AppView,
-    C: Fn(DocumentId, DocType, Size, TextInput) -> AppView + 'static,
+    C: Fn(Id<Document>, DocType, Size, TextInput) -> AppView + 'static,
     P: FnMut() + 'static,
 {
     tracing::info!("Ambre UI thread starting");

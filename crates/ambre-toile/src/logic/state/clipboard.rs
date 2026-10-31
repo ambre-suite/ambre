@@ -12,7 +12,9 @@ use crate::logic::command::{
     ClipConnector, ClipElement, ClipMembership, ClipSlot, ClipSlotVec, ClipboardPayload,
     ToileEvent, ToileOutcome,
 };
-use crate::logic::model::{ConnectorId, ElementId, NodeId};
+use ambre_core::id::{Connector, Element, Id};
+
+use crate::logic::model::NodeId;
 
 use super::ToileState;
 use super::codec::{capture_scalars, map_str, write_clip_fields};
@@ -21,7 +23,7 @@ use super::names::{ConnectorKey, ElementKey, FieldValues, Fields, Root};
 impl ToileState {
     /// Read the selection into a self-contained, id-free payload. Non-mutating:
     /// the UI stashes the result and may mirror it to the OS clipboard.
-    pub(super) fn copy_elements(&self, ids: &[ElementId]) -> ToileOutcome {
+    pub(super) fn copy_elements(&self, ids: &[Id<Element>]) -> ToileOutcome {
         ToileOutcome::display_only(vec![ToileEvent::Clipboard(self.build_clipboard(ids))])
     }
 
@@ -32,7 +34,7 @@ impl ToileState {
     }
 
     /// Copy + paste fused into a single undo item, offset by `delta`.
-    pub(super) fn duplicate_elements(&mut self, ids: &[ElementId], delta: Vec2) -> ToileOutcome {
+    pub(super) fn duplicate_elements(&mut self, ids: &[Id<Element>], delta: Vec2) -> ToileOutcome {
         let payload = self.build_clipboard(ids);
         self.insert_clipboard(&payload, delta)
     }
@@ -41,15 +43,15 @@ impl ToileState {
     /// Elements are captured in z-order and referenced by slot; connectors survive
     /// only when both endpoints are captured; group / frame membership is remapped
     /// to slots.
-    fn build_clipboard(&self, ids: &[ElementId]) -> ClipboardPayload {
+    fn build_clipboard(&self, ids: &[Id<Element>]) -> ClipboardPayload {
         // A copied group carries its members: expand every id to its full subtree.
-        let mut set: HashSet<ElementId> = HashSet::new();
+        let mut set: HashSet<Id<Element>> = HashSet::new();
         for id in ids {
             self.collect_subtree(id, &mut set);
         }
         // Stable slot order = z-order, filtered to the captured set (a captured
         // node absent from `layers` still gets a trailing slot, defensively).
-        let mut order: Vec<ElementId> = self
+        let mut order: Vec<Id<Element>> = self
             .layers
             .iter()
             .filter_map(|n| match n {
@@ -62,7 +64,7 @@ impl ToileState {
                 order.push(id.clone());
             }
         }
-        let slot_of: HashMap<ElementId, ClipSlot> = order
+        let slot_of: HashMap<Id<Element>, ClipSlot> = order
             .iter()
             .cloned()
             .enumerate()
@@ -90,8 +92,8 @@ impl ToileState {
             };
             // A copied frame carries its notes, empty when it holds none.
             let notes = self
-                .is_frame(id)
-                .then(|| self.notes(id).unwrap_or_default());
+                .frame(id)
+                .map(|frame| self.notes(&frame).unwrap_or_default());
             elements.push(ClipElement { fields, notes });
             // Group / frame membership -> child slots (captured children only).
             let child_slots: Vec<ClipSlot> = self
@@ -120,7 +122,9 @@ impl ToileState {
             for (_key, v) in m.iter() {
                 if let LoroValue::Map(f) = v {
                     let f = FieldValues::<ConnectorKey>::of(f);
-                    let slot = |key| map_str(f, key).and_then(|id| slot_of.get(&ElementId(id)));
+                    let slot = |key| {
+                        map_str(f, key).and_then(|id| slot_of.get(&Id::<Element>::from_text(id)))
+                    };
                     if let (Some(&from_slot), Some(&to_slot)) =
                         (slot(ConnectorKey::From), slot(ConnectorKey::To))
                     {
@@ -155,14 +159,14 @@ impl ToileState {
         // Mint every fresh id up front so membership / connectors can remap slots
         // to new ids before anything is written. A session out of fresh ids
         // thus refuses the whole paste, and writes nothing.
-        let new_ids: ClipSlotVec<ElementId> = match (0..payload.elements.len())
+        let new_ids: ClipSlotVec<Id<Element>> = match (0..payload.elements.len())
             .map(|_| self.mint_element_id())
             .collect()
         {
             Ok(ids) => ids,
             Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
         };
-        let new_conns: Vec<ConnectorId> = match (0..payload.connectors.len())
+        let new_conns: Vec<Id<Connector>> = match (0..payload.connectors.len())
             .map(|_| self.mint_connector_id())
             .collect()
         {

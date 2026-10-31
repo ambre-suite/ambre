@@ -14,7 +14,8 @@
 // pure path<->`Route` mapping reused by the router shell.
 // ============================================================================
 
-use ambre_bus::{DocType, DocumentId};
+use ambre_bus::DocType;
+use ambre_core::id::{Document, Id};
 
 /// The page the URL resolves to.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,13 +25,13 @@ pub enum Route {
     /// A specific document, with its type known from the path.
     Doc {
         doc_type: DocType,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
 }
 
 impl Route {
     /// The routed document, if this is a document route.
-    pub fn doc(&self) -> Option<(DocType, DocumentId)> {
+    pub fn doc(&self) -> Option<(DocType, Id<Document>)> {
         match self {
             Route::Doc {
                 doc_type,
@@ -42,7 +43,7 @@ impl Route {
 
     /// The document the route binds the engine to. A Murmure page binds none:
     /// it opens the channels its sidebar selects, never a document by address.
-    pub fn document(&self) -> Option<(DocType, DocumentId)> {
+    pub fn document(&self) -> Option<(DocType, Id<Document>)> {
         self.doc()
             .filter(|(doc_type, _)| *doc_type != DocType::Murmure)
     }
@@ -55,11 +56,11 @@ impl Route {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step {
     /// The document the Logic thread closes.
-    pub close: Option<DocumentId>,
+    pub close: Option<Id<Document>>,
     /// The document the Logic thread opens.
-    pub open: Option<(DocType, DocumentId)>,
+    pub open: Option<(DocType, Id<Document>)>,
     /// The document the canvas shows, or `None` to freeze it at home.
-    pub show: Option<DocumentId>,
+    pub show: Option<Id<Document>>,
 }
 
 /// The step from the previous route to the current one, or `None` when the
@@ -106,7 +107,7 @@ pub fn parse(path: &str) -> Route {
     let mut segments = path.split('/').filter(|s| !s.is_empty());
     match (segments.next(), segments.next()) {
         (Some(type_slug), Some(id_str)) => {
-            match (slug_to_type(type_slug), DocumentId::parse_str(id_str)) {
+            match (slug_to_type(type_slug), Id::<Document>::parse_str(id_str)) {
                 (Some(doc_type), Ok(document_id)) => Route::Doc {
                     doc_type,
                     document_id,
@@ -119,7 +120,7 @@ pub fn parse(path: &str) -> Route {
 }
 
 /// The canonical path for a document route (for example `/trame/<uuid>`).
-pub fn doc_path(doc_type: DocType, document_id: DocumentId) -> String {
+pub fn doc_path(doc_type: DocType, document_id: Id<Document>) -> String {
     format!("/{}/{}", type_slug(doc_type), document_id)
 }
 
@@ -165,7 +166,7 @@ mod tests {
             DocType::Toile,
             DocType::Murmure,
         ] {
-            let id = DocumentId::new();
+            let id = Id::<Document>::mint();
             let route = parse(&doc_path(doc_type, id));
             assert_eq!(
                 route,
@@ -181,7 +182,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn path_doc_roundtrip() {
         // `parse` is the exact inverse of `doc_path` on every doc type.
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         assert_eq!(
             parse(&doc_path(DocType::Trame, id)),
             Route::Doc {
@@ -193,7 +194,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     fn unknown_slug_falls_back_to_landing() {
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         assert_eq!(parse(&format!("/widget/{id}")), Route::Landing);
     }
 
@@ -205,7 +206,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn trailing_and_extra_segments_tolerated() {
         // A trailing slash leaves the two leading segments intact.
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         assert_eq!(
             parse(&format!("/trame/{id}/")),
             Route::Doc {
@@ -226,7 +227,7 @@ mod tests {
     fn a_route_walk_reuses_the_one_engine() {
         // `ARCH-010`, `ARCH-016`: every route change is a close, an open and a
         // show on the live engine. A second engine has no step to come from.
-        let (a, b) = (DocumentId::new(), DocumentId::new());
+        let (a, b) = (Id::<Document>::mint(), Id::<Document>::mint());
         let doc = |document_id| Route::Doc {
             doc_type: DocType::Trame,
             document_id,
@@ -245,7 +246,7 @@ mod tests {
             steps.push(step(prev, cur));
             prev = Some(cur);
         }
-        let s = |close, open: Option<DocumentId>, show| {
+        let s = |close, open: Option<Id<Document>>, show| {
             Some(Step {
                 close,
                 open: open.map(|id| (DocType::Trame, id)),
@@ -269,7 +270,7 @@ mod tests {
     fn a_murmure_page_opens_no_document() {
         let page = Route::Doc {
             doc_type: DocType::Murmure,
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
         };
         assert_eq!(page.document(), None);
         assert_eq!(

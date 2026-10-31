@@ -10,10 +10,11 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    DisplayElement, DisplayNode, DisplayViewport, ElementId, LinkTarget, PresentMode,
+    DisplayElement, DisplayNode, DisplayViewport, LinkTarget, PresentMode,
 };
 use ambre_commands::Modifiers;
-use ambre_core::{DocType, DocumentId};
+use ambre_core::DocType;
+use ambre_core::id::{Document, Element, Id};
 use ambre_draw::{Point, Rect};
 
 /// Side of the link badge, in screen pixels. Painted in screen space so it is
@@ -32,13 +33,13 @@ pub enum LinkAction {
     /// not measured. It may sit outside the culled frame, which is exactly the
     /// case a link to it is for. So the board is asked for its bounds, and a
     /// frame it no longer holds answers nothing (`TOILE-064`).
-    GoToFrame(ElementId),
+    GoToFrame(Id<Element>),
     /// Hand the address to the shell, which opens it in a sandboxed tab. The
     /// board never fetches it (`TOILE-065`, `TOILE-110`).
     OpenUrl(ambre_core::LinkUrl),
     /// Ask the shell to open another document (`TOILE-114`).
     OpenDocument {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     },
 }
@@ -66,7 +67,7 @@ impl LinkAction {
 pub enum ShellNav {
     Url(ambre_core::LinkUrl),
     Document {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     },
 }
@@ -121,7 +122,7 @@ pub fn link_at(
     display: &DisplayViewport,
     world: Point,
     pick: super::viewport::BoardLength,
-) -> Option<(ElementId, LinkTarget)> {
+) -> Option<(Id<Element>, LinkTarget)> {
     display
         .nodes
         .iter()
@@ -152,7 +153,7 @@ mod tests {
 
     fn elem(id: &str, bounds: Rect, link: Option<LinkTarget>) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
@@ -197,7 +198,7 @@ mod tests {
     /// than measured.
     #[test]
     fn each_target_means_one_navigation() {
-        let f = ElementId("frame".into());
+        let f = Id::<Element>::from_text("frame".into());
         assert_eq!(
             LinkAction::of(&LinkTarget::Frame(f.clone())),
             LinkAction::GoToFrame(f)
@@ -206,7 +207,7 @@ mod tests {
             LinkAction::of(&LinkTarget::Url("https://example.org/".into())),
             LinkAction::OpenUrl("https://example.org/".into())
         );
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         assert_eq!(
             LinkAction::of(&LinkTarget::Document {
                 document_id: id,
@@ -240,7 +241,7 @@ mod tests {
         );
         assert_eq!(
             hit,
-            Some((ElementId("under".into()), url)),
+            Some((Id::<Element>::from_text("under".into()), url)),
             "an unlinked element on top does not swallow the link below it"
         );
         assert!(
@@ -257,7 +258,7 @@ mod tests {
     #[test]
     fn only_the_outbound_halves_reach_the_shell() {
         assert_eq!(
-            LinkAction::GoToFrame(ElementId("f".into())).shell_nav(),
+            LinkAction::GoToFrame(Id::<Element>::from_text("f".into())).shell_nav(),
             None
         );
         assert_eq!(

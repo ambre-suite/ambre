@@ -6,10 +6,11 @@
 //! peer_id = first 64 bits of BLAKE2b(b"ambre-peer-v1" || signing_pubkey || nonce)
 //! ```
 
+use ambre_core::PublicKey;
 use ambre_core::authorship::{
     ENTRY_SIGNATURE_LEN, PeerEntry, PeerId, SESSION_NONCE_LEN, SessionNonce,
 };
-use ambre_core::{DocumentId, PublicKey, UserId};
+use ambre_core::id::{Document, Id, User};
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 
@@ -47,7 +48,7 @@ pub fn derive_peer_id(signing_pub: &PublicKey, nonce: &SessionNonce) -> PeerId {
 
 /// The bytes a registry entry signs: the document, the PeerID and the nonce,
 /// behind their own domain. Every field has a fixed length.
-fn entry_transcript(document: DocumentId, peer: PeerId, nonce: &SessionNonce) -> Vec<u8> {
+fn entry_transcript(document: Id<Document>, peer: PeerId, nonce: &SessionNonce) -> Vec<u8> {
     let mut msg = Vec::with_capacity(ENTRY_DOMAIN.len() + 16 + 8 + SessionNonce::SIZE.as_len());
     msg.extend_from_slice(ENTRY_DOMAIN);
     msg.extend_from_slice(document.as_bytes());
@@ -60,8 +61,8 @@ fn entry_transcript(document: DocumentId, peer: PeerId, nonce: &SessionNonce) ->
 #[must_use]
 pub fn session_identity(
     signing_key: &SigningKey,
-    user: UserId,
-    document: DocumentId,
+    user: Id<User>,
+    document: Id<Document>,
     nonce: SessionNonce,
 ) -> (PeerId, PeerEntry) {
     let own = PublicKey::from_array(signing_key.verifying_key().to_bytes());
@@ -85,7 +86,7 @@ pub fn session_identity(
 #[must_use]
 pub fn entry_resolves(
     entry: &PeerEntry,
-    document: DocumentId,
+    document: Id<Document>,
     peer: PeerId,
     user_key: &PublicKey,
 ) -> bool {
@@ -112,10 +113,10 @@ pub fn entry_resolves(
 #[must_use]
 pub fn resolve_peer(
     entry: Option<&PeerEntry>,
-    document: DocumentId,
+    document: Id<Document>,
     peer: PeerId,
-    key_of: impl Fn(UserId) -> Option<PublicKey>,
-) -> Option<UserId> {
+    key_of: impl Fn(Id<User>) -> Option<PublicKey>,
+) -> Option<Id<User>> {
     let entry = entry?;
     let key = key_of(entry.user)?;
     entry_resolves(entry, document, peer, &key).then_some(entry.user)
@@ -164,11 +165,11 @@ mod tests {
     fn an_entry_resolves_to_the_user_who_signed_it_alone() {
         let alice = key(1);
         let mallory = key(2);
-        let alice_id = UserId::from_bytes([1; 16]);
-        let mallory_id = UserId::from_bytes([2; 16]);
-        let document = DocumentId::from_bytes([4; 16]);
+        let alice_id = Id::<User>::from_bytes([1; 16]);
+        let mallory_id = Id::<User>::from_bytes([2; 16]);
+        let document = Id::<Document>::from_bytes([4; 16]);
         let (peer, entry) = session_identity(&alice, alice_id, document, draw_nonce());
-        let keys = |user: UserId| {
+        let keys = |user: Id<User>| {
             if user == alice_id {
                 Some(public(&alice))
             } else if user == mallory_id {
@@ -184,7 +185,7 @@ mod tests {
         // An absent entry resolves to nobody.
         assert_eq!(resolve_peer(None, document, peer, keys), None);
         // The same entry under another document does not verify.
-        let other = DocumentId::from_bytes([5; 16]);
+        let other = Id::<Document>::from_bytes([5; 16]);
         assert_eq!(resolve_peer(Some(&entry), other, peer, keys), None);
         // Mallory claims Alice for one of her own PeerIDs: the PeerID does not
         // derive from Alice's key.

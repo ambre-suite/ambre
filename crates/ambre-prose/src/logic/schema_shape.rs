@@ -475,7 +475,7 @@ fn hide_the_rule(state: &mut ProseState) {
 
 /// A comment thread on `root`, with one reply after its opening one.
 fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
-    state.set_user_id(ambre_core::UserId::from_bytes([7; 16]));
+    state.set_user_id(ambre_core::Id::from_bytes([7; 16]));
     state.handle_command(ProseCommand::AddComment {
         block_id: root,
         range: DocSpan::from_usize_range(0..1),

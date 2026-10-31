@@ -6,10 +6,9 @@
 //! by glob from the sibling command modules of `crate::app::trame`.
 
 use super::{CellPos, CellRect, Col, ColCount, EditSession, MergeSpan, Row, RowCount, SheetName};
-use crate::UserId;
 use crate::token::Token;
-use ambre_core::Rgb;
-use ambre_core::{Doc, Px};
+use ambre_core::id::{Id, User};
+use ambre_core::{Doc, Px, Rgb};
 
 // -----------------------------------------------------------------------------
 // Trame (spreadsheet) -- events (Logic -> UI)
@@ -432,11 +431,11 @@ pub enum TrameEvent {
     /// (`trame-cell-editing`). The delta IS applied (CRDT convergence is
     /// mandatory) but the UI is warned. `from_user_id` is the offending author's
     /// stable
-    /// [`UserId`](crate::UserId).
+    /// [`Id<User>`](Id).
     ProtectionViolationWarning {
         row: Row,
         col: Col,
-        from_user_id: UserId,
+        from_user_id: Id<User>,
         description: String,
     },
 }
@@ -885,7 +884,7 @@ mod tests {
                 TrameEvent::ProtectionViolationWarning {
                     row: at.0,
                     col: at.1,
-                    from_user_id: crate::UserId::default(),
+                    from_user_id: Id::<User>::mint(),
                     description: secret.clone(),
                 }
             ),

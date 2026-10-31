@@ -6,7 +6,8 @@
 //! the text (`MURMURE-103`).
 
 use ambre_bus::{Mention, MentionTarget, MessageDraft};
-use ambre_core::{ChannelId, CharOffset, CharSpan, MemberCount, UserId, char_len};
+use ambre_core::id::{Channel, Id, User};
+use ambre_core::{CharOffset, CharSpan, MemberCount, char_len};
 use loro::{LoroDoc, LoroText, LoroValue, TextDelta};
 
 use crate::error::MurmureError;
@@ -15,7 +16,7 @@ use crate::schema::Mark;
 use crate::style;
 
 /// The value a mark stores for `target`: the user, or the channel itself.
-fn value_of(target: MentionTarget, channel: ChannelId) -> String {
+fn value_of(target: MentionTarget, channel: Id<Channel>) -> String {
     match target {
         MentionTarget::User(user) => user.to_string(),
         MentionTarget::Channel => channel.to_string(),
@@ -24,14 +25,14 @@ fn value_of(target: MentionTarget, channel: ChannelId) -> String {
 
 /// What a stored mark names, or `None` for a value that names neither a user
 /// nor this channel.
-fn target_of(value: &LoroValue, channel: ChannelId) -> Option<MentionTarget> {
+fn target_of(value: &LoroValue, channel: Id<Channel>) -> Option<MentionTarget> {
     let LoroValue::String(value) = value else {
         return None;
     };
     if **value == channel.to_string() {
         return Some(MentionTarget::Channel);
     }
-    UserId::parse_str(value).ok().map(MentionTarget::User)
+    Id::<User>::parse_str(value).ok().map(MentionTarget::User)
 }
 
 /// Whether every range of `mentions` holds chars of `text`.
@@ -51,7 +52,7 @@ pub(crate) fn write(
     doc: &LoroDoc,
     content: &LoroText,
     mentions: &[Mention],
-    channel: ChannelId,
+    channel: Id<Channel>,
 ) -> Result<(), MurmureError> {
     if mentions.is_empty() {
         return Ok(());
@@ -69,7 +70,7 @@ pub(crate) fn write(
 
 /// The mentions `content` carries, in text order (`MURMURE-103`). A read,
 /// never a write (`MURMURE-152`).
-pub(crate) fn read(content: &LoroText, channel: ChannelId) -> Vec<Mention> {
+pub(crate) fn read(content: &LoroText, channel: Id<Channel>) -> Vec<Mention> {
     let mut mentions = Vec::new();
     let mut at = CharOffset::ZERO;
     for span in content.to_delta() {
@@ -118,7 +119,7 @@ pub enum Screened {
 /// whether the author confirmed an `@channel`.
 pub fn screen(
     draft: MessageDraft,
-    members: Option<&[UserId]>,
+    members: Option<&[Id<User>]>,
     confirmed: ambre_bus::Confirmation,
 ) -> Screened {
     let Some(members) = members else {
@@ -144,7 +145,7 @@ pub fn screen(
 /// `draft` with no mark for a user outside `members`: their text stays
 /// (`MURMURE-099`). `None` before the relay has listed them keeps every
 /// mention, as [`screen`] does.
-pub fn members_only(mut draft: MessageDraft, members: Option<&[UserId]>) -> MessageDraft {
+pub fn members_only(mut draft: MessageDraft, members: Option<&[Id<User>]>) -> MessageDraft {
     if let Some(members) = members {
         draft.mentions.retain(|mention| match mention.target {
             MentionTarget::User(user) => members.contains(&user),
@@ -156,7 +157,7 @@ pub fn members_only(mut draft: MessageDraft, members: Option<&[UserId]>) -> Mess
 
 /// Whether `mentions` names `me`, or the channel and so every member
 /// (`MURMURE-233`).
-pub(crate) fn names(mentions: &[Mention], me: UserId) -> bool {
+pub(crate) fn names(mentions: &[Mention], me: Id<User>) -> bool {
     mentions.iter().any(|m| match m.target {
         MentionTarget::User(user) => user == me,
         MentionTarget::Channel => true,

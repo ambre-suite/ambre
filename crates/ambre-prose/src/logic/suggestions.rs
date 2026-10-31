@@ -6,7 +6,7 @@
 //! takes back the text, the mark and the entry together.
 
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
-use ambre_core::SuggestionId;
+use ambre_core::id::{Id, Suggestion};
 use loro::{LoroMap, TreeID};
 
 use crate::doc;
@@ -29,7 +29,7 @@ pub(super) enum Verdict {
 /// (`PROSE-FEAT-085`), and starts another when it does not (`PROSE-FEAT-086`).
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Burst {
-    id: SuggestionId,
+    id: Id<Suggestion>,
     kind: SuggestionKind,
     block: TreeID,
     start: DocOffset,
@@ -233,7 +233,7 @@ impl ProseState {
     /// `PROSE-FEAT-274`).
     pub(super) fn resolve_suggestion(
         &mut self,
-        id: &SuggestionId,
+        id: &Id<Suggestion>,
         verdict: Verdict,
     ) -> ProseOutcome {
         match self.settle_suggestion(id, verdict) {
@@ -251,7 +251,7 @@ impl ProseState {
     /// the command starts: the command runs to its end before any remote
     /// delta is read.
     pub(super) fn resolve_all(&mut self, verdict: Verdict) -> ProseOutcome {
-        let ids: Vec<SuggestionId> = self
+        let ids: Vec<Id<Suggestion>> = self
             .suggestions()
             .into_iter()
             .map(|s| s.suggestion_id)
@@ -280,7 +280,7 @@ impl ProseState {
     /// mark and its entry all go (`PROSE-FEAT-004`).
     fn settle_suggestion(
         &mut self,
-        id: &SuggestionId,
+        id: &Id<Suggestion>,
         verdict: Verdict,
     ) -> Result<Settled, doc::WriteError> {
         let spans: Vec<_> = suggest::spans(&self.doc, &suggest::text_blocks(&self.doc))
@@ -379,8 +379,8 @@ impl ProseState {
 
     /// What a delete does to one run, read from the entries its marks point
     /// at and never from where the run sits (`PROSE-FEAT-260`).
-    fn treatment(&self, run: &suggest::Run, me: Option<ambre_core::UserId>) -> Treatment {
-        let owned_by_me = |id: &SuggestionId| {
+    fn treatment(&self, run: &suggest::Run, me: Option<Id<ambre_core::id::User>>) -> Treatment {
+        let owned_by_me = |id: &Id<Suggestion>| {
             suggest::entry(&self.doc, id)
                 .and_then(|entry| suggest::owner(&entry))
                 .is_some_and(|owner| Some(owner) == me)
@@ -412,7 +412,7 @@ impl ProseState {
         block: &TreeID,
         start: DocOffset,
         end: DocOffset,
-    ) -> Option<SuggestionId> {
+    ) -> Option<Id<Suggestion>> {
         let burst = self.burst?;
         let touches =
             burst.kind == kind && burst.block == *block && start <= burst.end && end >= burst.start;
@@ -421,7 +421,7 @@ impl ProseState {
 
     fn extend_burst(
         &mut self,
-        id: SuggestionId,
+        id: Id<Suggestion>,
         kind: SuggestionKind,
         block: &TreeID,
         start: DocOffset,
@@ -453,7 +453,7 @@ impl ProseState {
     fn after_delete(
         &mut self,
         plan: &[(TreeID, DocOffset, DocOffset, Treatment)],
-        id: Option<SuggestionId>,
+        id: Option<Id<Suggestion>>,
     ) {
         let removed = plan
             .iter()
@@ -481,9 +481,9 @@ impl ProseState {
     /// A new suggestion's entry: its kind and its author, from the session's
     /// identity and never from a command (`PROSE-FEAT-262`,
     /// `PROSE-FEAT-082`).
-    fn write_entry(&self) -> Result<SuggestionId, doc::WriteError> {
+    fn write_entry(&self) -> Result<Id<Suggestion>, doc::WriteError> {
         let user = self.my_user_id.ok_or(doc::WriteError::NoIdentity)?;
-        let id: SuggestionId = self.ids.mint();
+        let id: Id<Suggestion> = self.ids.mint();
         let entry = doc::annots(&self.doc)
             .insert_container(&id.to_hyphenated(), LoroMap::new())
             .map(doc::Fields::<doc::AnnotKey>::of)?;
@@ -504,11 +504,11 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, ProseEvent, Suggestion};
-    use ambre_core::UserId;
+    use ambre_core::id::{self, User};
     use proptest::prelude::*;
 
-    const ALICE: UserId = UserId::from_bytes([1; 16]);
-    const BOB: UserId = UserId::from_bytes([2; 16]);
+    const ALICE: Id<User> = Id::from_bytes([1; 16]);
+    const BOB: Id<User> = Id::from_bytes([2; 16]);
 
     fn refusal(outcome: &ProseOutcome) -> Option<ProseRefusal> {
         outcome.display.iter().find_map(|event| match event {
@@ -521,7 +521,7 @@ mod tests {
     /// mode off.
     fn document(
         peer: ambre_core::PeerId,
-        user: UserId,
+        user: Id<User>,
         texts: &[&str],
     ) -> (ProseState, Vec<BlockId>) {
         let mut state = ProseState::with_peer(peer).expect("a document");
@@ -556,7 +556,7 @@ mod tests {
         (state, ids)
     }
 
-    fn join(from: &ProseState, peer: ambre_core::PeerId, user: UserId) -> ProseState {
+    fn join(from: &ProseState, peer: ambre_core::PeerId, user: Id<User>) -> ProseState {
         let mut state = ProseState::with_peer(peer).expect("a document");
         state.set_user_id(user);
         state
@@ -1055,7 +1055,7 @@ mod tests {
         state.handle_command(ProseCommand::Undo);
         assert_eq!(text(&state, ids[0]), "Hello");
         assert!(state.suggestions().is_empty());
-        assert!(crate::suggest::entry(&state.doc, &SuggestionId::new()).is_none());
+        assert!(crate::suggest::entry(&state.doc, &Id::<id::Suggestion>::mint()).is_none());
         assert_eq!(doc::annots(&state.doc).len(), 0);
     }
 

@@ -19,16 +19,18 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::app::toile::{ElementId, PresencePayload, ToileCommand, Viewport as ToileViewport};
+use ambre_bus::app::toile::{PresencePayload, ToileCommand, Viewport as ToileViewport};
 use ambre_bus::next_request;
 use ambre_bus::{
-    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelId, ChannelMeta,
-    ChannelName, ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, DocumentId,
-    FoldAnswer, LeaseAnswer, LeaseId, LogicEvent, MemberChannel, MemberInfo, MemberStanding,
-    MessageId, OpenFailure, RestCommand, RestEvent, Role, SelectionKind, SyncCommand, Timestamp,
-    TrameCommand, UserId,
+    ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelMeta,
+    ChannelName, ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, FoldAnswer,
+    LeaseAnswer, LogicEvent, MemberChannel, MemberInfo, MemberStanding, OpenFailure, RestCommand,
+    RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand,
 };
 use ambre_bus::{Col, ColCount, Decimals, DecimalsStep, Row, RowCount};
+use ambre_core::id::{
+    Channel, Document, Element, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
+};
 use ambre_core::{BoardLength, Generation};
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
@@ -234,8 +236,8 @@ fn roundtrip_event(evt: &LogicEvent) {
 
 #[test]
 fn sync_command_roundtrips_through_postcard() {
-    let doc = DocumentId::new();
-    let chan = ChannelId::new();
+    let doc = Id::<Document>::mint();
+    let chan = Id::<Channel>::mint();
     roundtrip_sync(&SyncCommand::Rest {
         id: Generation::nth(42),
         cmd: RestCommand::CreateDocument {
@@ -258,7 +260,7 @@ fn sync_command_roundtrips_through_postcard() {
         payload: ambre_core::DeltaBytes::new(vec![7]),
         summary: Some(ActivitySummary {
             kind: ActivityKind::Content,
-            mentions: vec![UserId::new()],
+            mentions: vec![Id::<User>::mint()],
             mentions_all: ambre_bus::MentionScope::All,
             anchor: ActivityAnchor::new(vec![1, 2]),
         }),
@@ -270,15 +272,15 @@ fn sync_command_roundtrips_through_postcard() {
     });
     roundtrip_sync(&SyncCommand::OpenChannel {
         channel_id: chan,
-        listed_in: Some(ambre_core::SpaceId::new()),
+        listed_in: Some(Id::<Space>::mint()),
     });
     roundtrip_sync(&SyncCommand::Shutdown);
 }
 
 #[test]
 fn logic_event_roundtrips_through_postcard() {
-    let doc = DocumentId::new();
-    let user = UserId::new();
+    let doc = Id::<Document>::mint();
+    let user = Id::<User>::mint();
     roundtrip_event(&LogicEvent::Rest {
         id: Some(Generation::nth(7)),
         evt: RestEvent::DocumentCreated {
@@ -293,10 +295,10 @@ fn logic_event_roundtrips_through_postcard() {
             payload: ambre_core::DeltaBytes::new(vec![3, 1, 4, 1, 5, 9]),
             nonce: ambre_core::SessionNonce([2; 16]),
             peer: ambre_core::PeerId(7),
-            user: Some(UserId::from_bytes([1; 16])),
+            user: Some(Id::<User>::from_bytes([1; 16])),
             summary: Some(ambre_bus::ActivitySummary {
                 kind: ambre_bus::ActivityKind::Content,
-                mentions: vec![UserId::from_bytes([3; 16])],
+                mentions: vec![Id::<User>::from_bytes([3; 16])],
                 mentions_all: ambre_bus::MentionScope::Named,
                 anchor: None,
             }),
@@ -436,21 +438,20 @@ const EVENT_VARIANTS: usize = 55;
 #[test]
 fn every_envelope_variant_roundtrips_through_postcard() {
     use ambre_bus::{
-        ChannelDocument, ChannelDocumentKind, DirectMember, DocumentActivity, MeetingId, MetaId,
-        SealedChannelKey, SegmentId, Seq, SignedDelta, SnapshotId, SnapshotPurpose,
-        SnapshotVerdict, SpaceId,
+        ChannelDocument, ChannelDocumentKind, DirectMember, DocumentActivity, SealedChannelKey,
+        Seq, SignedDelta, SnapshotPurpose, SnapshotVerdict,
     };
     use ambre_core::SessionNonce;
     use std::collections::BTreeSet;
 
-    let doc = DocumentId::new();
-    let chan = ChannelId::new();
-    let direct = ChannelId::new();
-    let space = SpaceId::new();
-    let meta = MetaId::from_document(DocumentId::new());
-    let segment = SegmentId::from_document(DocumentId::new());
-    let user = UserId::new();
-    let snapshot = SnapshotId::genesis(doc);
+    let doc = Id::<Document>::mint();
+    let chan = Id::<Channel>::mint();
+    let direct = Id::<Channel>::mint();
+    let space = Id::<Space>::mint();
+    let meta = Id::<Meta>::from_document(Id::<Document>::mint());
+    let segment = Id::<Segment>::from_document(Id::<Document>::mint());
+    let user = Id::<User>::mint();
+    let snapshot = Id::<Snapshot>::genesis(doc);
     let delta = SignedDelta {
         seq: ambre_bus::Seq(3),
         payload: ambre_core::DeltaBytes::new(vec![1, 2, 255]),
@@ -538,20 +539,20 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             meta,
             closing: segment,
-            successor: SegmentId::from_document(DocumentId::new()),
+            successor: Id::<Segment>::from_document(Id::<Document>::mint()),
         },
         SyncCommand::CreateAmendments {
             channel_id: chan,
             meta,
             segment,
-            amendments: DocumentId::new(),
+            amendments: Id::<Document>::mint(),
         },
         SyncCommand::CreateThread {
             channel_id: chan,
             meta,
             segment,
-            root: MessageId::new(),
-            thread: DocumentId::new(),
+            root: Id::<Message>::mint(),
+            thread: Id::<Document>::mint(),
         },
         SyncCommand::TakeFinalizeLease {
             channel_id: chan,
@@ -560,7 +561,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::FinalizeSegment {
             channel_id: chan,
             segment,
-            lease: LeaseId::new(),
+            lease: Id::<Lease>::mint(),
             horizon: ambre_bus::Seq(42),
             payload: ambre_core::SnapshotBytes::new(vec![4; 3]),
         },
@@ -571,7 +572,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::FoldSegment {
             channel_id: chan,
             segment,
-            lease: LeaseId::new(),
+            lease: Id::<Lease>::mint(),
             horizon: ambre_bus::Seq(42),
             amendments_seq: ambre_bus::Seq(7),
             payload: ambre_core::SnapshotBytes::new(vec![5; 3]),
@@ -743,7 +744,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::SegmentClosed {
             channel_id: chan,
             closing: segment,
-            active: SegmentId::from_document(DocumentId::new()),
+            active: Id::<Segment>::from_document(Id::<Document>::mint()),
             successor: ambre_bus::app::murmure::Successor::Fetched,
         },
         LogicEvent::SegmentCloseFailed {
@@ -754,32 +755,32 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::AmendmentsLinked {
             channel_id: chan,
             segment,
-            amendments: DocumentId::new(),
+            amendments: Id::<Document>::mint(),
         },
         LogicEvent::AmendmentsLinkFailed {
             channel_id: chan,
             segment,
-            amendments: DocumentId::new(),
+            amendments: Id::<Document>::mint(),
             message: "refused".to_owned(),
         },
         LogicEvent::ThreadLinked {
             channel_id: chan,
             segment,
-            root: MessageId::new(),
-            thread: DocumentId::new(),
+            root: Id::<Message>::mint(),
+            thread: Id::<Document>::mint(),
         },
         LogicEvent::ThreadLinkFailed {
             channel_id: chan,
             segment,
-            root: MessageId::new(),
-            thread: DocumentId::new(),
+            root: Id::<Message>::mint(),
+            thread: Id::<Document>::mint(),
             message: "refused".to_owned(),
         },
         LogicEvent::FinalizeLeaseAnswered {
             channel_id: chan,
             segment,
             answer: LeaseAnswer::Granted {
-                lease: LeaseId::new(),
+                lease: Id::<Lease>::mint(),
                 horizon: ambre_bus::Seq(42),
                 expires_in: ambre_core::Millis(30_000),
             },
@@ -798,9 +799,9 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             answer: FoldAnswer::Granted {
-                lease: LeaseId::new(),
+                lease: Id::<Lease>::mint(),
                 horizon: ambre_bus::Seq(42),
-                amendments: DocumentId::new(),
+                amendments: Id::<Document>::mint(),
                 amendments_seq: ambre_bus::Seq(7),
                 expires_in: ambre_core::Millis(30_000),
             },
@@ -816,7 +817,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::AmendmentsFolded {
             document_id: segment.document_id(),
-            amendments: DocumentId::new(),
+            amendments: Id::<Document>::mint(),
         },
         LogicEvent::DeltasLocked {
             document_id: segment.document_id(),
@@ -825,7 +826,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::ChannelJoined { channel_id: chan },
         LogicEvent::DirectMessageOpened {
             requested: chan,
-            channel_id: ChannelId::new(),
+            channel_id: Id::<Channel>::mint(),
         },
         LogicEvent::ChannelDeleted { channel_id: chan },
         LogicEvent::ChannelLeft { channel_id: chan },
@@ -859,16 +860,16 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             }],
             metas: vec![ChannelMeta {
                 channel_id: chan,
-                meta: MetaId::from_document(doc),
+                meta: Id::<Meta>::from_document(doc),
                 last: Some(Seq(5)),
             }],
         },
         LogicEvent::MeetingParticipantJoined {
-            meeting_id: MeetingId::new(),
+            meeting_id: Id::<Meeting>::mint(),
             user_id: user,
         },
         LogicEvent::MeetingParticipantLeft {
-            meeting_id: MeetingId::new(),
+            meeting_id: Id::<Meeting>::mint(),
             user_id: user,
         },
         LogicEvent::DocumentOpenFailed {
@@ -945,9 +946,9 @@ fn request_id_echo_is_preserved_across_the_hop() {
     let cmd = SyncCommand::Rest {
         id,
         cmd: RestCommand::InviteToDocument {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             invitee_email: Some(ambre_bus::Email::from("x@y.z")),
-            invitee: UserId::new(),
+            invitee: Id::<User>::mint(),
             role: Role::Editor,
             expect_exchange_pub_key: ambre_core::ExchangePublicKey::from_array([0u8; 32]),
             now: Timestamp(0),
@@ -1034,7 +1035,7 @@ fn writing_commands_are_mutating() {
         AppCommand::Toile(ToileCommand::Undo),
         // Reacting writes a per-user CRDT entry (`toile-reactions`): not presence.
         AppCommand::Toile(ToileCommand::React {
-            target: ElementId::mint(
+            target: Id::<Element>::mint_from(
                 ambre_core::PeerId(1),
                 ambre_bus::app::toile::IdCounter::new(1),
             ),
@@ -1049,7 +1050,7 @@ fn writing_commands_are_mutating() {
 /// A registry entry whose every byte is `fill`; no test checks its signature.
 fn an_entry(fill: u8) -> ambre_core::PeerEntry {
     ambre_core::PeerEntry {
-        user: ambre_core::UserId::from_bytes([fill; 16]),
+        user: Id::<User>::from_bytes([fill; 16]),
         nonce: ambre_core::SessionNonce([fill; 16]),
         signature: ambre_core::Signature([fill; 64]),
     }

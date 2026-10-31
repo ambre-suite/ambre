@@ -13,9 +13,10 @@ use loro::{Container, LoroText, LoroValue, ValueOrContainer};
 use crate::logic::command::{ClipBytes, ClipValue, InitContent, MediaRef};
 use crate::logic::connector::Connector;
 use crate::logic::interop::Limits;
+use ambre_core::id::{self, Element, Id};
+
 use crate::logic::model::{
-    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind,
-    StrokePoint, UnitFraction,
+    Anchor, ElementKind, ElementStyle, EndCaps, PathType, ShapeKind, StrokePoint, UnitFraction,
 };
 
 use super::names::{ConnectorKey, ElementKey, FieldValues, Fields};
@@ -280,9 +281,9 @@ pub(super) fn doc_type_from_tag(s: &str) -> Option<ambre_core::DocType> {
 #[allow(clippy::too_many_arguments)]
 pub(super) fn write_connector(
     cm: &Fields<ConnectorKey>,
-    from: &ElementId,
+    from: &Id<Element>,
     from_anch: Anchor,
-    to: &ElementId,
+    to: &Id<Element>,
     to_anch: Anchor,
     path_type: PathType,
     arrows: EndCaps,
@@ -336,13 +337,16 @@ pub(super) fn connector_label_or_seed(cm: &Fields<ConnectorKey>) -> Option<LoroT
 /// One connector, read from its map. An endpoint the map lacks names no
 /// element, so the arrow reads as dangling (`TOILE-165`). A missing anchor or
 /// path type reads as the default one.
-pub(super) fn read_connector(id: ConnectorId, cm: &Fields<ConnectorKey>) -> Option<Connector> {
+pub(super) fn read_connector(
+    id: Id<id::Connector>,
+    cm: &Fields<ConnectorKey>,
+) -> Option<Connector> {
     let text = |key| str_of(cm, key).unwrap_or_default();
     Some(Connector {
         id,
-        from: ElementId(text(ConnectorKey::From)),
+        from: Id::<Element>::from_text(text(ConnectorKey::From)),
         from_anch: decode_anchor(&text(ConnectorKey::FromAnch)),
-        to: ElementId(text(ConnectorKey::To)),
+        to: Id::<Element>::from_text(text(ConnectorKey::To)),
         to_anch: decode_anchor(&text(ConnectorKey::ToAnch)),
         path_type: decode_path_type(&text(ConnectorKey::PathType)),
         // A connector that stores no cap draws none at that end.

@@ -31,11 +31,10 @@ use ambre_bus::{
     Attachment, ByteSize, ContentHash, MediaType, Mention, MentionTarget, MessageDraft,
     SealedChannelKey, StyleMark, TextStyle, Timestamp, Topic,
 };
+use ambre_core::PeerEntryBytes;
 use ambre_core::authorship::{ENTRY_SIGNATURE_LEN, PeerEntry, SESSION_NONCE_LEN, SessionNonce};
+use ambre_core::id::{Category, Channel, Document, Id, Message, Segment, Space, User};
 use ambre_core::schema::{migration_peer, step_fingerprint};
-use ambre_core::{
-    CategoryId, ChannelId, DocumentId, MessageId, PeerEntryBytes, SegmentId, SpaceId, UserId,
-};
 use loro::{Container, ExportMode, LoroDoc, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{DocumentKind, MIGRATIONS, SCHEMA_VERSION};
@@ -65,10 +64,10 @@ pub(crate) const AMENDMENTS_PEER: u64 = 0x15;
 pub(crate) const THREAD_PEER: u64 = 0x16;
 
 /// The user who writes every document of the scenario.
-pub(crate) const AUTHOR: UserId = UserId::from_bytes([0xa1; 16]);
+pub(crate) const AUTHOR: Id<User> = Id::<User>::from_bytes([0xa1; 16]);
 
 /// The member the scenario's notice announces.
-pub(crate) const MEMBER: UserId = UserId::from_bytes([0xb2; 16]);
+pub(crate) const MEMBER: Id<User> = Id::<User>::from_bytes([0xb2; 16]);
 
 /// The registry entry the scenario's session carries: its author, a fixed
 /// nonce and a fixed signature, so the stored bytes are the same each run.
@@ -198,7 +197,7 @@ impl Shape {
 /// message in the active segment, with a reaction.
 pub(crate) fn channel_of_every_key() -> ChannelState {
     let mut state = ChannelState::create(
-        ChannelId::new(),
+        Id::<Channel>::mint(),
         ChannelType::Public,
         Some(&crate::fit_name("general")),
         Timestamp(1_700_000_000_000),
@@ -276,7 +275,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
 
 /// Start the thread of `root`, link it as the relay does, and reply in it
 /// with a copy sent to the channel.
-fn reply_in_thread(state: &mut ChannelState, segment: SegmentId, root: MessageId) {
+fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Message>) {
     let ThreadTarget::Create(thread) = state
         .reply_target(root, Timestamp(1_700_000_000_005))
         .expect("target")
@@ -309,17 +308,17 @@ fn reply_in_thread(state: &mut ChannelState, segment: SegmentId, root: MessageId
 
 /// The root of the scenario's thread: the first message of its segment. It
 /// is read from the stored list, so a belt that breaks its body finds it.
-pub(crate) fn scenario_root(state: &ChannelState) -> Option<MessageId> {
+pub(crate) fn scenario_root(state: &ChannelState) -> Option<Id<Message>> {
     let doc = state.doc(amended(state).0.document_id())?;
     let message = crate::schema::root_list(doc, crate::schema::Root::Messages)
         .get(0)
         .and_then(crate::schema::fields_of)?;
     let id = crate::schema::string(&message, crate::schema::MessageKey::Id)?;
-    MessageId::parse_str(&id).ok()
+    Id::<Message>::parse_str(&id).ok()
 }
 
 /// The thread document of the scenario: the one of its first message.
-pub(crate) fn scenario_thread(state: &ChannelState) -> DocumentId {
+pub(crate) fn scenario_thread(state: &ChannelState) -> Id<Document> {
     scenario_root(state)
         .and_then(|root| state.thread_id(root))
         .expect("the first message has a thread")
@@ -327,8 +326,8 @@ pub(crate) fn scenario_thread(state: &ChannelState) -> DocumentId {
 
 /// Close `segment`, lock it as the relay does, and amend it: the first
 /// message edited, the third one deleted.
-fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
-    let successor = SegmentId::new();
+fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
+    let successor = Id::<Segment>::mint();
     state
         .close_into(
             segment,
@@ -410,7 +409,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: SegmentId) {
 
 /// The segment of the scenario that holds its messages, and its
 /// amendments document.
-pub(crate) fn amended(state: &ChannelState) -> (SegmentId, DocumentId) {
+pub(crate) fn amended(state: &ChannelState) -> (Id<Segment>, Id<Document>) {
     let segment = state
         .closing_id()
         .expect("the scenario's segment is closing");
@@ -422,7 +421,7 @@ pub(crate) fn amended(state: &ChannelState) -> (SegmentId, DocumentId) {
 /// and a listed channel with a topic and a category.
 pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
     let mut space = SpaceState::create(
-        SpaceId::new(),
+        Id::<Space>::mint(),
         &crate::fit_name("Acme"),
         Timestamp(1_700_000_000_000),
     )
@@ -430,7 +429,7 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
     space
         .adopt_session(ambre_core::PeerId(SPACE_PEER), PeerEntryBytes::new(entry()))
         .expect("adopt");
-    let category = CategoryId::new();
+    let category = Id::<Category>::mint();
     space
         .put_category(
             category,

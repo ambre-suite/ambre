@@ -18,8 +18,9 @@
 // ============================================================================
 
 use super::tool::Tool;
-use ambre_bus::app::toile::{CommentAnchor, CommentPin, DisplayViewport, ThreadId};
+use ambre_bus::app::toile::{CommentAnchor, CommentPin, DisplayViewport};
 use ambre_canvas::{Palette, TextCache};
+use ambre_core::id::{Id, Thread};
 use ambre_draw::{
     Affine, Alignment, Brush, Color, DrawSurface, FontContext, Point, PositionedLayoutItem, Rect,
     Stroke,
@@ -70,7 +71,7 @@ pub fn pin_circle(at: Point, w2s: &Affine) -> Circle {
 /// The caller runs this **before** the element hit-test. A pin over a note
 /// therefore takes the click, and the note under it stays unselected
 /// (`TOILE-UI-082`, `TOILE-UI-308`).
-pub fn hit_pin(pins: &[CommentPin], w2s: &Affine, screen: Point) -> Option<ThreadId> {
+pub fn hit_pin(pins: &[CommentPin], w2s: &Affine, screen: Point) -> Option<Id<Thread>> {
     pins.iter()
         .rev()
         .find(|pin| {
@@ -87,7 +88,7 @@ pub fn hit_pin(pins: &[CommentPin], w2s: &Affine, screen: Point) -> Option<Threa
 #[derive(Clone, Debug, PartialEq)]
 pub enum BoardPress {
     /// The press landed on this thread's pin.
-    Thread(ThreadId),
+    Thread(Id<Thread>),
     /// The press is the board's: a gesture, a selection, a placement.
     Board,
 }
@@ -238,16 +239,16 @@ pub enum CommentIntent {
     /// Abandon the draft composer without opening a thread.
     Discard,
     /// Append a message to an open thread.
-    Reply { thread: ThreadId, body: String },
+    Reply { thread: Id<Thread>, body: String },
     /// Resolve a thread, or reopen it.
     Resolve {
-        thread: ThreadId,
+        thread: Id<Thread>,
         state: ThreadState,
     },
     /// Open a thread from the board-wide list, bringing the camera to its anchor
     /// (`TOILE-UI-309`).
     Focus {
-        thread: ThreadId,
+        thread: Id<Thread>,
         anchor: CommentAnchor,
     },
 }
@@ -312,7 +313,7 @@ pub fn pin_rect(at: Point, w2s: &Affine) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::{ElementId, Viewport};
+    use ambre_bus::app::toile::Viewport;
     use ambre_canvas::PointerButton;
     use ambre_canvas::theme::LIGHT;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
@@ -320,7 +321,7 @@ mod tests {
     /// `TOILE-289`: an intent's debug form prints a body's length, none of it.
     #[test]
     fn an_intent_debug_form_prints_no_body() {
-        let thread = ElementId("t".to_owned());
+        let thread = Id::<Thread>::from_text("t".to_owned());
         let post = format!("{:?}", CommentIntent::Post("secret plan".to_owned()));
         let reply = format!(
             "{:?}",
@@ -337,7 +338,7 @@ mod tests {
 
     fn pin(id: &str, at: Point, messages: u32, resolved: ambre_core::ThreadState) -> CommentPin {
         CommentPin {
-            thread: ElementId(id.to_owned()),
+            thread: Id::<Thread>::from_text(id.to_owned()),
             at,
             messages: ambre_bus::app::toile::ThreadMessageCount::new(messages),
             resolved,
@@ -386,7 +387,7 @@ mod tests {
         let centre = pin_circle(pins[0].at, &w2s).center;
         assert_eq!(
             hit_pin(&pins, &w2s, centre),
-            Some(ElementId("t1".to_owned()))
+            Some(Id::<Thread>::from_text("t1".to_owned()))
         );
         let outside = Point::new(centre.x + f64::from(PIN_RADIUS.get()) + 2.0, centre.y);
         assert_eq!(hit_pin(&pins, &w2s, outside), None);
@@ -404,7 +405,7 @@ mod tests {
         ];
         assert_eq!(
             hit_pin(&pins, &w2s, pin_circle(at, &w2s).center),
-            Some(ElementId("over".to_owned()))
+            Some(Id::<Thread>::from_text("over".to_owned()))
         );
     }
 
@@ -480,7 +481,7 @@ mod tests {
         let on_pin = pin_circle(at, &w2s).center;
         assert_eq!(
             press_target(Tool::Select, PointerButton::Primary, &pins, &w2s, on_pin),
-            BoardPress::Thread(ElementId("t1".to_owned()))
+            BoardPress::Thread(Id::<Thread>::from_text("t1".to_owned()))
         );
         // Off the pin, with another button, or with a creation tool armed: the
         // press is the board's.

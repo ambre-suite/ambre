@@ -177,14 +177,15 @@ pub(crate) fn paint_page<S: DrawSurface>(
 mod tests {
     use super::*;
     use ambre_bus::app::toile::{
-        DisplayElement, DisplayGeom, DisplayNode, ElementId, ElementKind, ElementStyle, ShapeKind,
+        DisplayElement, DisplayGeom, DisplayNode, ElementKind, ElementStyle, ShapeKind,
     };
     use ambre_canvas::Theme;
+    use ambre_core::id::{Element, Id};
     use ambre_draw::Affine;
 
     fn rect_node(id: &str, bounds: Rect) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
@@ -275,7 +276,7 @@ mod tests {
         page.viewport
             .nodes
             .push(DisplayNode::Element(DisplayElement {
-                id: ElementId("t".to_owned()),
+                id: Id::<Element>::from_text("t".to_owned()),
                 kind: ElementKind::Text,
                 transform: Affine::IDENTITY,
                 bounds: Rect::new(100.0, 10.0, 190.0, 40.0),

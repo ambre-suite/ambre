@@ -158,7 +158,7 @@ No command exports. The four import commands carry no drop point (`TOILE-IO-023`
 carries progress either: each slice of a large import repaints the board, and the drawing grows on
 screen (`TOILE-IO-028`).
 
-**The batch a converter produces.** A converter runs offline and cannot name an `ElementId`, which
+**The batch a converter produces.** A converter runs offline and cannot name an `Id<Element>`, which
 the engine mints only when a create is applied. So it speaks in slots, and the apply pass resolves
 them:
 

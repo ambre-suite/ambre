@@ -70,11 +70,11 @@ pub mod fixtures;
 
 use ambre_bus::conduit::{Doorbell, Receiver, WorkerSender};
 use ambre_bus::{
-    AppCommand, AppEvent, DocType, DocumentId, LogicCommand, LogicEvent, Request, RestCommand,
-    RestEvent, Role, Seq, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SyncCommand,
-    UiEvent, UserId,
+    AppCommand, AppEvent, DocType, LogicCommand, LogicEvent, Request, RestCommand, RestEvent, Role,
+    Seq, SignedDelta, SnapshotPurpose, SnapshotVerdict, SyncCommand, UiEvent,
 };
 
+use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::schema::SchemaError;
 use ambre_core::{Generation, SessionNonce};
 
@@ -256,7 +256,7 @@ impl DocState {
     /// The file name is a constant per application, like every other export in
     /// the suite (`board.svg`, `deck.pdf`). The document's own name is encrypted
     /// and lives on the Sync thread, which this one cannot read (`ZK-001`).
-    fn ambre_file_event(&self, document_id: DocumentId) -> AppEvent {
+    fn ambre_file_event(&self, document_id: Id<Document>) -> AppEvent {
         match self.ambre_file_bytes(document_id) {
             Some((filename, data)) => {
                 self.export_complete_event(filename, ambre_core::FileBytes::from(data))
@@ -277,7 +277,7 @@ impl DocState {
     /// at all (`TOILE-IO-069`).
     fn ambre_file_bytes(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) -> Option<(ambre_core::ExportFilename, ambre_core::PlaintextContainer)> {
         let (stem, plaintext) = match self {
             DocState::Trame(state) => ("workbook", state.export_ambre_plaintext(document_id)?),
@@ -342,7 +342,7 @@ impl DocState {
     /// **Production code, ungated** (`FIXTURE-007`), and the other half of the
     /// round trip asserts on every variant.
     /// `LogicState::export_covered_snapshot` cannot serve that belt: it takes a
-    /// `DocumentId` and needs a live registry entry, where the belt quantifies
+    /// `Id<Document>` and needs a live registry entry, where the belt quantifies
     /// over a bare `DocState`.
     pub fn export_snapshot(&self) -> ambre_core::SnapshotBytes {
         match self {
@@ -362,10 +362,10 @@ impl DocState {
         }
     }
 
-    /// Seed the canonical `UserId` into the underlying app state once the
+    /// Seed the canonical `Id<User>` into the underlying app state once the
     /// session is authenticated. Only apps that key per-user state on it react;
     /// Trame's own `my_user_id` (`trame-engine`) is a separate slice.
-    fn set_user_id(&mut self, user_id: UserId) {
+    fn set_user_id(&mut self, user_id: Id<User>) {
         match self {
             DocState::Toile(state) => state.set_user_id(user_id),
             DocState::Prose(state) => state.set_user_id(user_id),
@@ -405,7 +405,7 @@ impl DocState {
         }
     }
 
-    /// Seed the session's display name beside the `UserId`, from the same
+    /// Seed the session's display name beside the `Id<User>`, from the same
     /// `SessionReady`. Toile stamps it on every outbound presence sample, so a
     /// collaborator reads a name rather than a hex prefix (`TOILE-UI-076`). It
     /// is cosmetic and decides nothing (`PRESENCE-004`).
@@ -585,7 +585,7 @@ impl LiveDoc {
 impl LogicState {
     /// Open a document as the client does, Sync's answer included: the
     /// `OpenDocument`, then the session identity Sync issues for it.
-    pub(crate) fn open_with_identity(&mut self, document_id: DocumentId, doc_type: DocType) {
+    pub(crate) fn open_with_identity(&mut self, document_id: Id<Document>, doc_type: DocType) {
         self.handle_logic_command(LogicCommand::OpenDocument {
             document_id,
             doc_type,
@@ -595,7 +595,7 @@ impl LogicState {
 
     /// The session identity Sync would issue for `document_id`, under a PeerID
     /// no other call of this test binary hands out.
-    pub(crate) fn grant_identity(&mut self, document_id: DocumentId) -> ambre_core::PeerId {
+    pub(crate) fn grant_identity(&mut self, document_id: Id<Document>) -> ambre_core::PeerId {
         let peer = test_peer();
         self.handle_logic_event(LogicEvent::SessionIdentity {
             document_id,
@@ -621,7 +621,7 @@ fn test_entry(peer: ambre_core::PeerId) -> ambre_core::PeerEntry {
     let mut user = [0; 16];
     user[..8].copy_from_slice(&peer.0.to_le_bytes());
     ambre_core::PeerEntry {
-        user: UserId::from_bytes(user),
+        user: Id::<User>::from_bytes(user),
         nonce: SessionNonce([0; 16]),
         signature: ambre_core::Signature([0; 64]),
     }
@@ -735,116 +735,116 @@ struct LogicState {
     /// for local persistence. The Main thread owns the IndexedDB store, whose
     /// callbacks need a live event loop this blocking loop cannot offer. Here we
     /// only export the bytes and hand them over.
-    to_persist: WorkerSender<(DocumentId, PersistWrite)>,
+    to_persist: WorkerSender<(Id<Document>, PersistWrite)>,
     /// Live document state, keyed by `document_id`.
     ///
     /// Pre-seeded on `OpenDocument` (which carries the `doc_type`) so UI edits
     /// route immediately, before any snapshot/delta arrives. Removed on
     /// `CloseDocument` / `DeleteDocument` / `Logout`.
-    docs: HashMap<DocumentId, LiveDoc>,
+    docs: HashMap<Id<Document>, LiveDoc>,
     /// Open Murmure channels, keyed by `channel_id`. Apart from `docs`: a
     /// channel is several documents, and a remote delta finds its channel by
     /// the document it names (the Murmure engine spec). Removed on `CloseChannel` and
     /// `Logout`.
-    channels: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
+    channels: HashMap<Id<Channel>, ambre_murmure::ChannelState>,
     /// Channels on their way to open (the Murmure engine spec). `None` while
     /// the relay has not listed the documents yet. Moved to `channels` once
     /// every live document is in, and removed on a failure, `CloseChannel` or
     /// `Logout`.
-    opening: HashMap<ambre_bus::ChannelId, Option<ambre_murmure::OpeningChannel>>,
+    opening: HashMap<Id<Channel>, Option<ambre_murmure::OpeningChannel>>,
     /// The relay's number of each delta a channel document took in, so its
     /// snapshot names the last delta it folds in (`SRV-083`). Keyed by
     /// document, dropped with its channel.
-    channel_ledgers: HashMap<DocumentId, snapshot_check::SeqLedger>,
+    channel_ledgers: HashMap<Id<Document>, snapshot_check::SeqLedger>,
     /// This user's read cursor on each channel document (the Murmure unread
     /// spec). The relay's activity answer sets it, and this client's own
     /// marks move it. Cleared on `Logout`.
-    read_cursors: HashMap<DocumentId, channels::ReadCursor>,
+    read_cursors: HashMap<Id<Document>, channels::ReadCursor>,
     /// Channels whose view closed: their documents left memory, and Sync
     /// counts them from their summaries alone (`RESID-004`). Removed on a
     /// reopen, a delete, a leave or `Logout`.
-    closed_channels: HashMap<ambre_bus::ChannelId, channels::ClosedChannel>,
+    closed_channels: HashMap<Id<Channel>, channels::ClosedChannel>,
     /// The channel of each segment and thread the relay's activity answer
     /// listed, so a thread's signal finds its channel (the Murmure threads
     /// spec). Cleared on `Logout`.
-    document_channels: HashMap<DocumentId, ambre_bus::ChannelId>,
+    document_channels: HashMap<Id<Document>, Id<Channel>>,
     /// The threads this client does not hold, counted from their summaries
     /// as light subscriptions. Removed when the thread opens, or with its
     /// channel.
-    watched_threads: HashMap<DocumentId, threads::WatchedThread>,
+    watched_threads: HashMap<Id<Document>, threads::WatchedThread>,
     /// The signalled threads whose channel the next activity answer names.
-    unplaced_threads: HashSet<DocumentId>,
+    unplaced_threads: HashSet<Id<Document>>,
     /// The channels of the user this session may watch unopened (the
     /// Murmure notifications spec). Cleared on `Logout`.
     listed_channels: unopened::ListedChannels,
     /// The close each open channel asked of the Sync worker, with the time
     /// of the send that filled its segment (the Murmure segments spec).
     /// Removed on the answer, and with the channel.
-    closing_segments: HashMap<ambre_bus::ChannelId, ambre_bus::Timestamp>,
+    closing_segments: HashMap<Id<Channel>, ambre_bus::Timestamp>,
     /// The successor each channel's close names, kept across a failed close
     /// so the next ask registers the one already created. Removed once the
     /// relay answers, and with the channel.
-    close_successors: HashMap<ambre_bus::ChannelId, ambre_bus::SegmentId>,
+    close_successors: HashMap<Id<Channel>, Id<Segment>>,
     /// The edits and deletes a segment's lock refused, owed again as
     /// amendments. They leave at the channel's next tick, which stamps them.
     /// Removed with the channel.
-    owed_replays: HashMap<ambre_bus::ChannelId, Vec<ambre_murmure::Replay>>,
+    owed_replays: HashMap<Id<Channel>, Vec<ambre_murmure::Replay>>,
     /// Who watches each open channel and who types in it, with this client's
     /// own samples (the Murmure typing and presence spec). Taken on the
     /// first tick, removed with the channel and on `Logout`.
-    channel_watchers: HashMap<ambre_bus::ChannelId, ambre_murmure::Watchers>,
+    channel_watchers: HashMap<Id<Channel>, ambre_murmure::Watchers>,
     /// The members of each open or opening channel, as Sync lists them for
     /// its `meta` (`SYNC-150`). The `@` list offers them, and a mention of
     /// anyone else notifies no one (the Murmure mentions spec). Removed with
     /// the channel and on `Logout`.
-    channel_members: HashMap<ambre_bus::ChannelId, Vec<ambre_bus::MemberInfo>>,
+    channel_members: HashMap<Id<Channel>, Vec<ambre_bus::MemberInfo>>,
     /// Open Murmure spaces, keyed by `space_id`: one document each, apart
     /// from `docs` (the Murmure spaces spec). Removed on `CloseSpace` and
     /// `Logout`.
-    spaces: HashMap<ambre_bus::SpaceId, spaces::OpenSpace>,
+    spaces: HashMap<Id<Space>, spaces::OpenSpace>,
     /// Spaces on their way to open, with the payloads and the member rows
     /// that arrived before their document was ready.
-    space_opening: HashMap<ambre_bus::SpaceId, spaces::Opening>,
+    space_opening: HashMap<Id<Space>, spaces::Opening>,
     /// Public channels the relay is creating, until it answers.
-    creating: HashMap<ambre_bus::ChannelId, spaces::Creating>,
+    creating: HashMap<Id<Channel>, spaces::Creating>,
     /// Self-joins the relay has not answered yet, with their space.
-    joining: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    joining: HashMap<Id<Channel>, Id<Space>>,
     /// Channel deletes the relay has not answered yet, with their space.
-    deleting: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    deleting: HashMap<Id<Channel>, Id<Space>>,
     /// Channel leaves the relay has not answered yet, with their space.
-    leaving: HashMap<ambre_bus::ChannelId, ambre_bus::SpaceId>,
+    leaving: HashMap<Id<Channel>, Id<Space>>,
     /// Leaves of a space held while its owner role passes on (the Murmure
     /// spaces spec). Each is keyed by the role change this thread asked for,
     /// and holds the leave the view asked for.
-    handing_off: HashMap<Generation<Request>, (Generation<Request>, DocumentId)>,
+    handing_off: HashMap<Generation<Request>, (Generation<Request>, Id<Document>)>,
     /// The erases of a deleted message's files the relay has not answered,
     /// each with the document its file is stored under and its address.
-    erasing: HashMap<Generation<Request>, (DocumentId, ambre_core::ContentHash)>,
+    erasing: HashMap<Generation<Request>, (Id<Document>, ambre_core::ContentHash)>,
     /// The erases that did not reach the relay, asked again on the next
     /// connection (`ambre-spec-murmure-attachments.md`).
-    erase_owed: Vec<(DocumentId, ambre_core::ContentHash)>,
+    erase_owed: Vec<(Id<Document>, ambre_core::ContentHash)>,
     /// The images fetched for a preview the relay has not answered, each
     /// with the channel whose view asked.
-    picturing: HashMap<Generation<Request>, (ambre_bus::ChannelId, ambre_bus::ContentHash)>,
+    picturing: HashMap<Generation<Request>, (Id<Channel>, ambre_bus::ContentHash)>,
     /// Direct message requests the relay has not answered yet, keyed by the
     /// channel id each minted, with the channel it would create.
-    direct: HashMap<ambre_bus::ChannelId, ambre_murmure::ChannelState>,
+    direct: HashMap<Id<Channel>, ambre_murmure::ChannelState>,
     /// The whole content of a document this client created, sent as its first
     /// update once the Sync worker holds its session.
-    unsent: HashMap<DocumentId, ambre_core::DeltaBytes>,
+    unsent: HashMap<Id<Document>, ambre_core::DeltaBytes>,
     /// The session identity Sync issued for a channel or a space document
     /// that no open channel or space holds yet, adopted once one does
     /// (`AUTHOR-002`).
-    murmure_identities: HashMap<DocumentId, (ambre_core::PeerId, ambre_core::PeerEntry)>,
+    murmure_identities: HashMap<Id<Document>, (ambre_core::PeerId, ambre_core::PeerEntry)>,
     /// The channel and space commands that write a document whose session
     /// identity has not landed, in the order they came (`AUTHOR-026`).
-    murmure_waiting: HashMap<DocumentId, Vec<channels::HeldCommand>>,
+    murmure_waiting: HashMap<Id<Document>, Vec<channels::HeldCommand>>,
     /// Canonical per-user identifier, captured from `LogicEvent::SessionReady`
     /// `None` until the session is authenticated. Seeded into every open
     /// `DocState` on arrival, and into any document opened afterwards. An app
     /// that keys per-user state (Toile reactions, presence identity) always has
     /// it before the first edit.
-    my_user_id: Option<UserId>,
+    my_user_id: Option<Id<User>>,
     /// The session's display name, from the same `SessionReady`. Seeded into a
     /// document opened afterwards, so a board opened later still labels this
     /// peer's cursor (`TOILE-UI-076`).
@@ -855,7 +855,7 @@ struct LogicState {
     /// instead of forwarding it to the UI. UI-issued requests are absent from
     /// this map and forward verbatim, exactly as before. An entry is inserted
     /// when a `ToileRequest` is lowered and removed when its response arrives.
-    rest_routes: HashMap<Generation<Request>, DocumentId>,
+    rest_routes: HashMap<Generation<Request>, Id<Document>>,
     /// Sealed `.ambre` exports awaiting the Sync worker's answer
     /// (`DOCFILE-014`): the document whose file the worker holds, and the name
     /// the download will carry. A separate map from
@@ -885,20 +885,20 @@ struct LogicState {
     /// What each document written during the current pass is owed once the
     /// pass ends: a layout, a snapshot, or both (`ARCH-017`). A burst of
     /// keystrokes then costs one layout and one export, not one per key.
-    owed: HashMap<DocumentId, Owed>,
+    owed: HashMap<Id<Document>, Owed>,
     /// The documents that left memory when their view closed, each with the
     /// horizon its local copy holds. Sync keeps a light subscription for each
     /// (`RESID-004`), and a reopen resumes after the horizon (`RESID-010`).
-    evicted: HashMap<DocumentId, Seq>,
+    evicted: HashMap<Id<Document>, Seq>,
     /// The documents whose unsent change the browser refuses to store. While
     /// any is, no local edit is taken (`RESID-018`).
-    store_full: HashSet<DocumentId>,
+    store_full: HashSet<Id<Document>>,
 }
 
 /// A sealed export waiting for the Sync worker's bytes: the document it
 /// belongs to, and the name of the file the download will carry.
 struct PendingSeal {
-    document_id: DocumentId,
+    document_id: Id<Document>,
     filename: ambre_core::ExportFilename,
 }
 
@@ -917,7 +917,7 @@ impl LogicState {
     fn new(
         to_ui: WorkerSender<UiEvent>,
         to_sync: WorkerSender<SyncCommand>,
-        to_persist: WorkerSender<(DocumentId, PersistWrite)>,
+        to_persist: WorkerSender<(Id<Document>, PersistWrite)>,
     ) -> Self {
         Self {
             to_ui,
@@ -975,23 +975,23 @@ impl LogicState {
     /// Owe the view a document's layout. Called after every path that writes
     /// the document or its faces, so the view never lays text out itself
     /// (`PROSE-UI-006`). The layout leaves once, when the pass ends.
-    fn owe_layout(&mut self, document_id: DocumentId) {
+    fn owe_layout(&mut self, document_id: Id<Document>) {
         self.owed.entry(document_id).or_default().layout = true;
     }
 
     /// Owe local persistence a snapshot of a document the pass changed.
-    fn owe_snapshot(&mut self, document_id: DocumentId) {
+    fn owe_snapshot(&mut self, document_id: Id<Document>) {
         self.owed.entry(document_id).or_default().snapshot = true;
     }
 
     /// Owe local persistence one change the pass made to a document.
-    fn owe_delta(&mut self, document_id: DocumentId, delta: ambre_core::DeltaBytes) {
+    fn owe_delta(&mut self, document_id: Id<Document>, delta: ambre_core::DeltaBytes) {
         self.owed.entry(document_id).or_default().deltas.push(delta);
     }
 
     /// Hand every document the pass wrote its owed answers (`ARCH-017`).
     fn answer_pass(&mut self) {
-        let owed: Vec<DocumentId> = self.owed.keys().copied().collect();
+        let owed: Vec<Id<Document>> = self.owed.keys().copied().collect();
         for document_id in owed {
             self.answer_document(document_id, AnswerFor::Open);
         }
@@ -1004,7 +1004,7 @@ impl LogicState {
     /// The save is the pass's deltas. A snapshot takes their place when one
     /// was asked for, once the log is long enough, or when a close finds the
     /// log holding anything. A document already closed is owed nothing.
-    fn answer_document(&mut self, document_id: DocumentId, moment: AnswerFor) {
+    fn answer_document(&mut self, document_id: Id<Document>, moment: AnswerFor) {
         let owed = self.owed.remove(&document_id).unwrap_or_default();
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
@@ -1050,7 +1050,7 @@ impl LogicState {
 
     /// Hand one write to the Main thread for local persistence. Best-effort: a
     /// dropped receiver only means no local save, so it is non-fatal.
-    fn send_to_persist(&self, document_id: DocumentId, write: PersistWrite) {
+    fn send_to_persist(&self, document_id: Id<Document>, write: PersistWrite) {
         if self.to_persist.send((document_id, write)).is_err() {
             tracing::warn!("[Logic->Persist] receiver dropped, write not saved");
         }
@@ -1148,7 +1148,7 @@ pub fn run(
     to_ui: WorkerSender<UiEvent>,
     to_sync: WorkerSender<SyncCommand>,
     from_sync: Receiver<LogicEvent>,
-    to_persist: WorkerSender<(DocumentId, PersistWrite)>,
+    to_persist: WorkerSender<(Id<Document>, PersistWrite)>,
 ) {
     tracing::info!("Ambre Logic thread starting");
     let Some(waiter) = bell.bind() else {
@@ -1259,11 +1259,11 @@ mod pass_tests {
     struct Rig {
         state: LogicState,
         ui: Receiver<UiEvent>,
-        persist: Receiver<(DocumentId, PersistWrite)>,
+        persist: Receiver<(Id<Document>, PersistWrite)>,
         /// What local persistence was handed before the test began.
         saved: Vec<PersistWrite>,
         _sync: Receiver<SyncCommand>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         block: ambre_bus::app::prose::BlockId,
     }
 
@@ -1293,7 +1293,7 @@ mod pass_tests {
         let (to_sync, sync) = test_link();
         let (to_persist, persist) = test_link();
         let mut state = LogicState::new(to_ui, to_sync, to_persist);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
         state.answer_pass();
         let block = match &state.docs[&document_id].state {
@@ -1370,7 +1370,7 @@ mod pass_tests {
         }
         let (to_persist, _persist) = test_link();
         let mut state = LogicState::new(test_link().0, test_link().0, to_persist);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.handle_logic_command(LogicCommand::RestoreLocalSnapshot {
             document_id,
             doc_type: DocType::Prose,
@@ -1520,17 +1520,17 @@ mod pass_tests {
     /// A state with one open board, and the queues a pass drains.
     struct Board {
         state: LogicState,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_ui: Receiver<LogicCommand>,
         from_sync: Receiver<LogicEvent>,
-        persist: Receiver<(DocumentId, PersistWrite)>,
+        persist: Receiver<(Id<Document>, PersistWrite)>,
     }
 
     fn board() -> Board {
         let (to_persist, persist) = test_link();
         let mut state = LogicState::new(test_link().0, test_link().0, to_persist);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Toile);
         state.answer_pass();
         let (to_logic, from_ui) = ambre_bus::conduit::to_worker(
@@ -1551,7 +1551,7 @@ mod pass_tests {
         }
     }
 
-    fn import(document_id: DocumentId, n: usize) -> LogicCommand {
+    fn import(document_id: Id<Document>, n: usize) -> LogicCommand {
         LogicCommand::App {
             document_id,
             command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::ImportSvg {
@@ -1561,7 +1561,7 @@ mod pass_tests {
         }
     }
 
-    fn elements(state: &LogicState, document_id: DocumentId) -> ambre_core::ElementCount {
+    fn elements(state: &LogicState, document_id: Id<Document>) -> ambre_core::ElementCount {
         match &state.docs[&document_id].state {
             DocState::Toile(board) => board.element_count(),
             other => panic!("the registry opened {other:?}"),
@@ -1712,7 +1712,7 @@ mod authorship_tests {
         state: LogicState,
         sync: Receiver<SyncCommand>,
         ui: Receiver<UiEvent>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         peer: ambre_core::PeerId,
     }
 
@@ -1723,7 +1723,7 @@ mod authorship_tests {
         let (to_persist, persist) = test_link();
         std::mem::forget(persist);
         let mut state = LogicState::new(to_ui, to_sync, to_persist);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.handle_logic_command(LogicCommand::OpenDocument {
             document_id,
             doc_type: DocType::Trame,
@@ -1901,7 +1901,7 @@ mod authorship_tests {
     /// hands it on, and both end on the same document.
     #[test]
     fn two_tabs_of_one_user_converge_as_two_users_do() {
-        let user = Some(UserId::new());
+        let user = Some(Id::<User>::mint());
         let mut tabs = [rig(), rig()];
         assert_ne!(tabs[0].peer, tabs[1].peer, "two tabs share a PeerID");
         let sent = [edit(&mut tabs[0], "left"), edit(&mut tabs[1], "right")];
@@ -2004,7 +2004,7 @@ mod authorship_tests {
     fn verdict(rig: &mut Rig, payload: Vec<u8>, covered: u64) -> SnapshotVerdict {
         rig.state.handle_logic_event(LogicEvent::PendingSnapshot {
             document_id: rig.document_id,
-            snapshot_id: SnapshotId::genesis(rig.document_id),
+            snapshot_id: Id::<Snapshot>::genesis(rig.document_id),
             covered_seq: ambre_core::Seq(covered),
             payload: payload.into(),
             purpose: SnapshotPurpose::Confirm,
@@ -2149,12 +2149,12 @@ mod authorship_tests {
 
     /// One open document still waiting for its session identity, with the
     /// receiver of its local persistence.
-    fn unidentified(doc_type: DocType) -> (Rig, Receiver<(DocumentId, PersistWrite)>) {
+    fn unidentified(doc_type: DocType) -> (Rig, Receiver<(Id<Document>, PersistWrite)>) {
         let (to_ui, ui) = test_link();
         let (to_sync, sync) = test_link();
         let (to_persist, persist) = test_link();
         let mut state = LogicState::new(to_ui, to_sync, to_persist);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.handle_logic_command(LogicCommand::OpenDocument {
             document_id,
             doc_type,

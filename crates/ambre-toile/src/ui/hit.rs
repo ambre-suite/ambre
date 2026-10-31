@@ -10,7 +10,8 @@
 // Pure geometry -- host-tested, no `cfg(wasm32)`, no GPU.
 // ============================================================================
 
-use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, ElementId};
+use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode};
+use ambre_core::id::{Element, Id};
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurveNearest, Shape};
 
@@ -74,7 +75,7 @@ pub fn frame_title_at(
     nodes: &[DisplayNode],
     screen_pt: Point,
     cam: &ViewportTransform,
-) -> Option<ElementId> {
+) -> Option<Id<Element>> {
     // Reverse paint order: the band drawn last is the one on top, so it takes
     // the press where two overlap.
     super::render::frame_bands(nodes, cam)
@@ -161,7 +162,11 @@ fn point_segment_distance(p: Point, a: Point, b: Point) -> BoardLength {
 /// The top-most element hit by `world_pt`: nodes are back-to-front, so the last
 /// element that passes `exact_hit` wins (first hit walking front-to-back).
 /// `pick` is the pointer's reach in world units (see [`pick_floor`]).
-pub fn hit_topmost(nodes: &[DisplayNode], world_pt: Point, pick: BoardLength) -> Option<ElementId> {
+pub fn hit_topmost(
+    nodes: &[DisplayNode],
+    world_pt: Point,
+    pick: BoardLength,
+) -> Option<Id<Element>> {
     nodes
         .iter()
         .rev()
@@ -204,7 +209,7 @@ fn rotated_aabb(e: &DisplayElement) -> Rect {
 /// must actually intersect the geometry. Locked elements and groups are skipped.
 /// Containment reads the **rotated** box, the shape the user sees
 /// (`TOILE-UI-237`), not the unrotated `bounds`.
-pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<ElementId> {
+pub fn marquee_hits(nodes: &[DisplayNode], rect: Rect) -> Vec<Id<Element>> {
     nodes
         .iter()
         .filter_map(|n| match n {
@@ -248,7 +253,7 @@ mod tests {
 
     fn elem(geom: DisplayGeom, bounds: Rect, transform: Affine) -> DisplayElement {
         DisplayElement {
-            id: ElementId("p_1".to_owned()),
+            id: Id::<Element>::from_text("p_1".to_owned()),
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform,
             bounds,
@@ -388,7 +393,7 @@ mod tests {
                 Rect::new(0.0, 0.0, 100.0, 100.0),
                 Affine::IDENTITY,
             );
-            e.id = ElementId("back".to_owned());
+            e.id = Id::<Element>::from_text("back".to_owned());
             e
         });
         let front = DisplayNode::Element({
@@ -397,7 +402,7 @@ mod tests {
                 Rect::new(0.0, 0.0, 100.0, 100.0),
                 Affine::IDENTITY,
             );
-            e.id = ElementId("front".to_owned());
+            e.id = Id::<Element>::from_text("front".to_owned());
             e
         });
         let nodes = vec![back, front];
@@ -407,7 +412,7 @@ mod tests {
                 Point::new(50.0, 50.0),
                 pick_floor(&ViewportTransform::default())
             ),
-            Some(ElementId("front".to_owned()))
+            Some(Id::<Element>::from_text("front".to_owned()))
         );
     }
 
@@ -419,7 +424,7 @@ mod tests {
                 Rect::new(10.0, 10.0, 40.0, 40.0),
                 Affine::IDENTITY,
             );
-            e.id = ElementId("a".to_owned());
+            e.id = Id::<Element>::from_text("a".to_owned());
             e
         });
         let b = DisplayNode::Element({
@@ -428,11 +433,11 @@ mod tests {
                 Rect::new(500.0, 500.0, 540.0, 540.0),
                 Affine::IDENTITY,
             );
-            e.id = ElementId("b".to_owned());
+            e.id = Id::<Element>::from_text("b".to_owned());
             e
         });
         let hits = marquee_hits(&[a, b], Rect::new(0.0, 0.0, 100.0, 100.0));
-        assert_eq!(hits, vec![ElementId("a".to_owned())]);
+        assert_eq!(hits, vec![Id::<Element>::from_text("a".to_owned())]);
     }
 
     /// `TOILE-UI-238`: a marquee takes neither a locked element nor a group
@@ -442,7 +447,7 @@ mod tests {
     fn a_marquee_skips_a_locked_element_and_a_group_node() {
         let node = |id: &str, geom: DisplayGeom, locked: ambre_bus::app::toile::LockState| {
             let mut e = elem(geom, Rect::new(10.0, 10.0, 40.0, 40.0), Affine::IDENTITY);
-            e.id = ElementId(id.to_owned());
+            e.id = Id::<Element>::from_text(id.to_owned());
             e.locked = locked;
             DisplayNode::Element(e)
         };
@@ -464,7 +469,7 @@ mod tests {
             ),
         ];
         let hits = marquee_hits(&nodes, Rect::new(0.0, 0.0, 100.0, 100.0));
-        assert_eq!(hits, vec![ElementId("free".to_owned())]);
+        assert_eq!(hits, vec![Id::<Element>::from_text("free".to_owned())]);
     }
 
     /// `TOILE-UI-237`: a rotated element is judged by the shape the user sees,
@@ -478,7 +483,7 @@ mod tests {
                 Rect::new(-50.0, -5.0, 50.0, 5.0),
                 Affine::rotate(std::f64::consts::FRAC_PI_2),
             );
-            e.id = ElementId("tilted".to_owned());
+            e.id = Id::<Element>::from_text("tilted".to_owned());
             e
         });
         // Over the unrotated tip (x 40..55): off the rotated shape, a miss.
@@ -492,6 +497,6 @@ mod tests {
             std::slice::from_ref(&tilted),
             Rect::new(-10.0, -60.0, 10.0, 60.0),
         );
-        assert_eq!(hit, vec![ElementId("tilted".to_owned())]);
+        assert_eq!(hit, vec![Id::<Element>::from_text("tilted".to_owned())]);
     }
 }

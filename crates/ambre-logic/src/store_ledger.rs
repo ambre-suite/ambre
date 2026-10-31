@@ -8,9 +8,9 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::DocumentId;
 use ambre_core::ByteSize;
 use ambre_core::Generation;
+use ambre_core::id::{Document, Id};
 use ambre_core::residency::{Delivery, Held, Mutability, Residency, ViewTick};
 
 use crate::SealedWrite;
@@ -51,7 +51,7 @@ pub enum Refusal {
     /// (`RESID-017`).
     Retry {
         /// The copies to delete, in the order they leave.
-        evict: Vec<DocumentId>,
+        evict: Vec<Id<Document>>,
     },
     /// The write carries a change the relay has not acknowledged and nothing
     /// is left to free: editing stops until it is sent (`RESID-018`).
@@ -140,7 +140,7 @@ impl Meta {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Observed {
     /// The copies to delete so the store fits its budget (`RESID-002`).
-    pub evict: Vec<DocumentId>,
+    pub evict: Vec<Id<Document>>,
     /// Whether the document's [`Meta`] changed, so its row is written again.
     pub record: RowChange,
 }
@@ -160,8 +160,8 @@ ambre_core::define_flag! {
 /// first (`RESID-002`, `RESID-007`, `RESID-008`).
 #[derive(Debug, Clone)]
 pub struct StoreLedger {
-    residency: Residency<DocumentId>,
-    costs: HashMap<DocumentId, Cost>,
+    residency: Residency<Id<Document>>,
+    costs: HashMap<Id<Document>, Cost>,
     budget: ByteSize,
 }
 
@@ -186,7 +186,7 @@ impl StoreLedger {
     ///
     /// Any write marks the document unsent: only the relay's acknowledgement,
     /// [`SealedWrite::Sent`], clears it (`RESID-019`).
-    pub fn observe(&mut self, id: DocumentId, write: &SealedWrite) -> Observed {
+    pub fn observe(&mut self, id: Id<Document>, write: &SealedWrite) -> Observed {
         let before = self.meta(id);
         let mut cost = self.costs.get(&id).copied().unwrap_or_default();
         match write {
@@ -224,7 +224,7 @@ impl StoreLedger {
     }
 
     /// Record what `id` costs, and mark it unsent when a write changed it.
-    fn charge(&mut self, id: DocumentId, cost: Cost, unsent: Delivery) {
+    fn charge(&mut self, id: Id<Document>, cost: Cost, unsent: Delivery) {
         self.costs.insert(id, cost);
         self.residency.hold(id, cost.total());
         if unsent == Delivery::Unsent {
@@ -238,10 +238,10 @@ impl StoreLedger {
     ///
     /// A copy named to leave is never `id`, and never a document with a
     /// change the relay has not acknowledged (`RESID-019`).
-    pub fn refused(&mut self, id: DocumentId, need: ByteSize, attempt: QuotaAttempt) -> Refusal {
+    pub fn refused(&mut self, id: Id<Document>, need: ByteSize, attempt: QuotaAttempt) -> Refusal {
         if attempt == QuotaAttempt::First {
             let room = self.residency.bytes().saturating_sub(need);
-            let evict: Vec<DocumentId> = self
+            let evict: Vec<Id<Document>> = self
                 .residency
                 .evictions(room)
                 .into_iter()
@@ -263,19 +263,19 @@ impl StoreLedger {
 
     /// Record whether the application marks a document immutable
     /// (`RESID-007`).
-    pub fn set_immutable(&mut self, id: DocumentId, immutable: Mutability) {
+    pub fn set_immutable(&mut self, id: Id<Document>, immutable: Mutability) {
         self.residency.set_immutable(id, immutable);
     }
 
     /// Stop counting a document whose copy left the store.
-    pub fn forget(&mut self, id: DocumentId) {
+    pub fn forget(&mut self, id: Id<Document>) {
         self.residency.release(id);
         self.costs.remove(&id);
     }
 
     /// Whether the document carries a change the relay has not acknowledged.
     #[must_use]
-    pub fn unsent(&self, id: DocumentId) -> bool {
+    pub fn unsent(&self, id: Id<Document>) -> bool {
         self.residency
             .get(id)
             .is_some_and(|held| held.unsent == Delivery::Unsent)
@@ -289,7 +289,7 @@ impl StoreLedger {
 
     /// The row the store keeps for `id`, if it holds it.
     #[must_use]
-    pub fn meta(&self, id: DocumentId) -> Option<Meta> {
+    pub fn meta(&self, id: Id<Document>) -> Option<Meta> {
         let held = self.residency.get(id)?;
         Some(Meta {
             cost: self.costs.get(&id).copied().unwrap_or_default(),
@@ -300,7 +300,7 @@ impl StoreLedger {
     }
 
     /// Count a document as an earlier run left it. No view shows it yet.
-    pub fn restore(&mut self, id: DocumentId, meta: Meta) {
+    pub fn restore(&mut self, id: Id<Document>, meta: Meta) {
         let mut held = Held::default();
         held.bytes = meta.cost.total();
         held.immutable = meta.immutable;
@@ -315,13 +315,13 @@ mod tests {
     use super::*;
     use ambre_core::SealedRowBytes;
 
-    fn doc(n: u8) -> DocumentId {
-        DocumentId::from_bytes([n; 16])
+    fn doc(n: u8) -> Id<Document> {
+        Id::from_bytes([n; 16])
     }
 
     /// A document written once, then acknowledged by the relay and closed.
     /// Returns every copy that left on the way.
-    fn settled(ledger: &mut StoreLedger, id: DocumentId, bytes: usize) -> Vec<DocumentId> {
+    fn settled(ledger: &mut StoreLedger, id: Id<Document>, bytes: usize) -> Vec<Id<Document>> {
         [
             SealedWrite::Shown,
             SealedWrite::Snapshot(SealedRowBytes::new(vec![0; bytes])),

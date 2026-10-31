@@ -16,10 +16,10 @@
 use std::collections::HashMap;
 
 use ambre_bus::app::toile::{
-    ConnectorId, DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, PresentMode,
-    ShapeKind,
+    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, PresentMode, ShapeKind,
 };
 use ambre_canvas::{Palette, TextCache};
+use ambre_core::id::{Connector, Element, Id};
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, DocumentWalk, DrawSurface, FontContext, Point,
     PositionedLayoutItem, Rect, Stroke,
@@ -94,7 +94,7 @@ pub fn paint_content<S: DrawSurface>(
     // id, each replaces the element's transform / bounds / opacity / fill for
     // this frame. Empty when no transition is active. Fade-only ids (a new / gone
     // element) still appear here so their opacity ramp is honored.
-    anim: &HashMap<ElementId, AnimatedElement>,
+    anim: &HashMap<Id<Element>, AnimatedElement>,
     // Presentation focus mode: the UI hides the board grid so the audience
     // sees only the slide content.
     mode: PresentMode,
@@ -138,9 +138,9 @@ pub fn paint_content<S: DrawSurface>(
 /// rotate / move is in flight, else the angle baked into its display transform.
 /// `0.0` when the id is not in the culled set.
 fn selection_rotation(
-    id: &ElementId,
+    id: &Id<Element>,
     vp: &DisplayViewport,
-    gesture: &HashMap<ElementId, AnimatedElement>,
+    gesture: &HashMap<Id<Element>, AnimatedElement>,
 ) -> ambre_core::Radians {
     if let Some(a) = gesture.get(id) {
         return a.rotation;
@@ -171,21 +171,21 @@ fn selection_rotation(
 #[allow(clippy::too_many_arguments)]
 pub fn paint_overlay<S: DrawSurface>(
     surface: &mut S,
-    selection: &[ElementId],
+    selection: &[Id<Element>],
     vp: &DisplayViewport,
     cam: &ViewportTransform,
     palette: &Palette,
     preview: Option<&Preview>,
-    find_hits: &[ElementId],
-    find_focus: Option<&ElementId>,
+    find_hits: &[Id<Element>],
+    find_focus: Option<&Id<Element>>,
     // Live transform overrides for an in-flight resize / rotate / move. When an
     // entry exists for a selected id, the selection box + handles follow its
     // preview bounds instead of the committed geometry. They stay glued to the
     // object during the drag. Empty at rest.
-    gesture: &HashMap<ElementId, AnimatedElement>,
+    gesture: &HashMap<Id<Element>, AnimatedElement>,
     // The selected arrow, if one is (`toile-connectors`). Exclusive with
     // `selection`, so at most one of the two boxes is drawn.
-    arrow: Option<&ConnectorId>,
+    arrow: Option<&Id<Connector>>,
     mode: PresentMode,
 ) {
     if mode.is_presenting() {
@@ -342,7 +342,7 @@ fn paint_preview<S: DrawSurface>(
 
 /// The world-space AABB of a displayed element, or `None` when the id is not in
 /// the culled set (an off-screen match).
-fn element_bounds(vp: &DisplayViewport, id: &ElementId) -> Option<Rect> {
+fn element_bounds(vp: &DisplayViewport, id: &Id<Element>) -> Option<Rect> {
     vp.nodes.iter().find_map(|n| match n {
         DisplayNode::Element(e) if &e.id == id => Some(e.bounds),
         _ => None,
@@ -354,9 +354,9 @@ fn element_bounds(vp: &DisplayViewport, id: &ElementId) -> Option<Rect> {
 /// preview bounds, otherwise its committed display bounds. `None` when nothing
 /// selected is in the culled set.
 fn selection_preview_bounds(
-    selection: &[ElementId],
+    selection: &[Id<Element>],
     vp: &DisplayViewport,
-    gesture: &HashMap<ElementId, AnimatedElement>,
+    gesture: &HashMap<Id<Element>, AnimatedElement>,
 ) -> Option<Rect> {
     if gesture.is_empty() {
         return selection_bounds(selection, vp);
@@ -382,8 +382,8 @@ fn selection_preview_bounds(
 /// stands out as the current match.
 fn paint_find_highlights<S: DrawSurface>(
     surface: &mut S,
-    hits: &[ElementId],
-    focus: Option<&ElementId>,
+    hits: &[Id<Element>],
+    focus: Option<&Id<Element>>,
     vp: &DisplayViewport,
     cam: &ViewportTransform,
     palette: &Palette,
@@ -411,7 +411,7 @@ fn paint_find_highlights<S: DrawSurface>(
 /// selection feedback (`toile-connectors`).
 fn paint_arrow_selection<S: DrawSurface>(
     surface: &mut S,
-    id: &ConnectorId,
+    id: &Id<Connector>,
     vp: &DisplayViewport,
     cam: &ViewportTransform,
     palette: &Palette,
@@ -638,7 +638,7 @@ mod tests {
         sticky_font_size, sticky_or_style_font_size, style_color,
     };
     use ambre_bus::app::toile::{
-        DisplayConnector, DisplayElement, ElementId, ElementKind, ElementStyle, ShapeKind,
+        DisplayConnector, DisplayElement, ElementKind, ElementStyle, ShapeKind,
     };
     use ambre_core::Px;
     use ambre_core::Rgba;
@@ -647,7 +647,7 @@ mod tests {
 
     fn elem(id: &str, geom: DisplayGeom, bounds: Rect) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
@@ -816,9 +816,9 @@ mod tests {
         // Override "a" with a half-opacity blue fill at a tweened rect; leave "b".
         let mut anim = HashMap::new();
         anim.insert(
-            ElementId("a".into()),
+            Id::<Element>::from_text("a".into()),
             AnimatedElement {
-                id: ElementId("a".into()),
+                id: Id::<Element>::from_text("a".into()),
                 bounds: Rect::new(20.0, 20.0, 70.0, 70.0),
                 rotation: ambre_core::Radians::ZERO,
                 opacity: ambre_core::Opacity::new(0.5).unwrap(),
@@ -869,7 +869,7 @@ mod tests {
             ..ElementStyle::default()
         };
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind,
             transform: Affine::IDENTITY,
             bounds: Rect::new(0.0, 0.0, 100.0, 80.0),
@@ -917,7 +917,7 @@ mod tests {
             viewport: Default::default(),
             nodes: vec![
                 DisplayNode::Connector(DisplayConnector {
-                    id: ConnectorId("c".into()),
+                    id: Id::<Connector>::from_text("c".into()),
                     path,
                     style: ElementStyle::default(),
                     arrows: ambre_bus::app::toile::EndCaps {
@@ -1252,7 +1252,7 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[ElementId("r".into())],
+            &[Id::<Element>::from_text("r".into())],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
@@ -1288,7 +1288,7 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[ElementId("g".into())],
+            &[Id::<Element>::from_text("g".into())],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
@@ -1331,7 +1331,10 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[ElementId("a".into()), ElementId("b".into())],
+            &[
+                Id::<Element>::from_text("a".into()),
+                Id::<Element>::from_text("b".into()),
+            ],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
@@ -1458,12 +1461,12 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[ElementId("r".into())],
+            &[Id::<Element>::from_text("r".into())],
             &vp,
             &cam(),
             &LIGHT_PALETTE,
             None,
-            &[ElementId("r".into())],
+            &[Id::<Element>::from_text("r".into())],
             None,
             &HashMap::new(),
             None,
@@ -1495,9 +1498,9 @@ mod tests {
         let preview_bounds = Rect::new(0.0, 0.0, 90.0, 70.0);
         let mut gesture = HashMap::new();
         gesture.insert(
-            ElementId("r".into()),
+            Id::<Element>::from_text("r".into()),
             AnimatedElement {
-                id: ElementId("r".into()),
+                id: Id::<Element>::from_text("r".into()),
                 bounds: preview_bounds,
                 rotation: ambre_core::Radians::ZERO,
                 opacity: ambre_core::Opacity::new(1.0).unwrap(),
@@ -1508,7 +1511,7 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[ElementId("r".into())],
+            &[Id::<Element>::from_text("r".into())],
             &vp,
             &cam,
             &LIGHT_PALETTE,
@@ -1542,7 +1545,7 @@ mod tests {
             reactions: Default::default(),
             viewport: Default::default(),
             nodes: vec![DisplayNode::Connector(DisplayConnector {
-                id: ConnectorId("c".into()),
+                id: Id::<Connector>::from_text("c".into()),
                 path,
                 style: ElementStyle::default(),
                 arrows: ambre_bus::app::toile::EndCaps {
@@ -1553,7 +1556,7 @@ mod tests {
             })],
         };
         let mut surface = RecordingSurface::new();
-        let selected = ConnectorId("c".into());
+        let selected = Id::<Connector>::from_text("c".into());
         paint_overlay(
             &mut surface,
             &[],
@@ -1643,7 +1646,7 @@ mod tests {
             nodes: Vec::new(),
         };
         let mut surface = RecordingSurface::new();
-        let selected = ConnectorId("gone".into());
+        let selected = Id::<Connector>::from_text("gone".into());
         paint_overlay(
             &mut surface,
             &[],
@@ -1674,7 +1677,10 @@ mod tests {
             ],
         };
         let mut surface = RecordingSurface::new();
-        let hits = vec![ElementId("a".into()), ElementId("b".into())];
+        let hits = vec![
+            Id::<Element>::from_text("a".into()),
+            Id::<Element>::from_text("b".into()),
+        ];
         paint_overlay(
             &mut surface,
             &[],
@@ -1683,7 +1689,7 @@ mod tests {
             &LIGHT_PALETTE,
             None,
             &hits,
-            Some(&ElementId("b".into())),
+            Some(&Id::<Element>::from_text("b".into())),
             &HashMap::new(),
             None,
             PresentMode::Editing,
@@ -1714,7 +1720,7 @@ mod tests {
             ],
         };
         let mut surface = RecordingSurface::new();
-        let hits = ["a", "b", "c"].map(|s| ElementId(s.into()));
+        let hits = ["a", "b", "c"].map(|s| Id::<Element>::from_text(s.into()));
         paint_overlay(
             &mut surface,
             &[],
@@ -1723,7 +1729,7 @@ mod tests {
             &LIGHT_PALETTE,
             None,
             &hits,
-            Some(&ElementId("b".into())),
+            Some(&Id::<Element>::from_text("b".into())),
             &HashMap::new(),
             None,
             PresentMode::Editing,
@@ -1756,7 +1762,7 @@ mod tests {
             * Affine::rotate(theta)
             * Affine::translate(-c.to_vec2());
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Sticky,
             transform,
             bounds,
@@ -1788,7 +1794,7 @@ mod tests {
         let mut surface = RecordingSurface::new();
         paint_overlay(
             &mut surface,
-            &[ElementId("r".into())],
+            &[Id::<Element>::from_text("r".into())],
             &vp,
             &cam,
             &LIGHT_PALETTE,
@@ -1864,7 +1870,7 @@ mod tests {
     struct Pass {
         editing: Option<crate::ui::edit::EditTarget>,
         images: ImageStore,
-        anim: HashMap<ElementId, AnimatedElement>,
+        anim: HashMap<Id<Element>, AnimatedElement>,
         present: PresentMode,
     }
 
@@ -1920,7 +1926,7 @@ mod tests {
         path.move_to(from);
         path.line_to(to);
         DisplayNode::Connector(DisplayConnector {
-            id: ConnectorId(id.into()),
+            id: Id::<Connector>::from_text(id.into()),
             path,
             style: ElementStyle {
                 stroke: Some(stroke),
@@ -2049,7 +2055,7 @@ mod tests {
             "a group paints nothing"
         );
         let doc = DisplayGeom::DocEmbed {
-            document_id: ambre_bus::DocumentId::new(),
+            document_id: Id::<ambre_core::id::Document>::mint(),
             doc_type: ambre_bus::DocType::Trame,
             focused: ambre_bus::app::toile::InputFocus::Board,
         };
@@ -2153,7 +2159,7 @@ mod tests {
             Rect::new(100.0, 0.0, 140.0, 20.0),
         );
         let tween = AnimatedElement {
-            id: ElementId("a".into()),
+            id: Id::<Element>::from_text("a".into()),
             bounds: Rect::new(20.0, 30.0, 80.0, 60.0),
             rotation: ambre_core::Radians::new(0.5),
             opacity: ambre_core::Opacity::new(1.0).unwrap(),
@@ -2217,7 +2223,9 @@ mod tests {
             &vp,
             &cam(),
             &Pass {
-                editing: Some(crate::ui::edit::EditTarget::Element(ElementId("a".into()))),
+                editing: Some(crate::ui::edit::EditTarget::Element(
+                    Id::<Element>::from_text("a".into()),
+                )),
                 ..Pass::default()
             },
         );
@@ -2291,7 +2299,10 @@ mod tests {
             elem("b", DisplayGeom::Rect, Rect::new(100.0, 80.0, 150.0, 120.0)),
         ]);
         let mut surface = RecordingSurface::new();
-        let selection = [ElementId("a".into()), ElementId("b".into())];
+        let selection = [
+            Id::<Element>::from_text("a".into()),
+            Id::<Element>::from_text("b".into()),
+        ];
         paint_overlay(
             &mut surface,
             &selection,
@@ -2336,7 +2347,10 @@ mod tests {
             Rect::new(0.0, 0.0, 50.0, 50.0),
         )]);
         let mut surface = RecordingSurface::new();
-        let hits = [ElementId("far".into()), ElementId("a".into())];
+        let hits = [
+            Id::<Element>::from_text("far".into()),
+            Id::<Element>::from_text("a".into()),
+        ];
         paint_overlay(
             &mut surface,
             &[],

@@ -5,7 +5,7 @@ use crate::Receipt;
 use ambre_bus::{
     Attachment, ByteSize, ContentHash, MediaType, MessageDraft, MurmureEvent, Timestamp,
 };
-use ambre_core::{ChannelId, UserId};
+use ambre_core::id::{Channel, Id, User};
 
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel};
 
@@ -29,7 +29,7 @@ fn plain(text: &str) -> MessageDraft {
 }
 
 fn channel() -> ChannelState {
-    ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify()
 }
@@ -62,7 +62,7 @@ fn open_from(state: &ChannelState) -> ChannelState {
 #[test]
 fn a_file_travels_by_its_address_and_reads_back_whole() {
     let mut state = channel();
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     let files = [file('a', "plan.png"), file('b', "map.png")];
     let sent = state
         .send_attached(&plain(""), &files, alice, NOW)
@@ -82,7 +82,7 @@ fn a_file_travels_by_its_address_and_reads_back_whole() {
 #[test]
 fn a_file_with_no_name_writes_nothing() {
     let mut state = channel();
-    let refused = state.send_attached(&plain("hi"), &[file('a', " ")], UserId::new(), NOW);
+    let refused = state.send_attached(&plain("hi"), &[file('a', " ")], Id::<User>::mint(), NOW);
     assert_eq!(refused.err(), Some(MurmureError::BadAttachment));
     assert!(state.messages(state.active_id()).expect("held").is_empty());
 }
@@ -91,7 +91,7 @@ fn a_file_with_no_name_writes_nothing() {
 #[test]
 fn a_deleted_message_carries_no_file() {
     let mut state = channel();
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     state
         .send_attached(&plain("x"), &[file('a', "a.png")], alice, NOW)
         .expect("send");
@@ -109,8 +109,8 @@ fn a_deleted_message_carries_no_file() {
 #[test]
 fn a_delete_names_the_files_no_other_own_message_carries() {
     let mut state = channel();
-    let alice = UserId::new();
-    let bob = UserId::new();
+    let alice = Id::<User>::mint();
+    let bob = Id::<User>::mint();
     let (a, b, c) = (file('a', "a.png"), file('b', "b.png"), file('c', "c.png"));
     state
         .send_attached(&plain("1"), &[a.clone(), b.clone(), a.clone()], alice, NOW)

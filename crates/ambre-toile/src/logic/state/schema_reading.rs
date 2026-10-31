@@ -45,10 +45,9 @@ use super::{
 };
 use crate::logic::autolayout::AutoLayout;
 use crate::logic::command::{CommentAnchor, DisplayGeom};
-use crate::logic::model::{
-    ConnectorId, ElementId, ElementStyle, FontSpec, LinkTarget, NodeId, Shadow,
-};
+use crate::logic::model::{ElementStyle, FontSpec, LinkTarget, NodeId, Shadow};
 use crate::logic::schema::SCHEMA_VERSION;
+use ambre_core::id::{Connector, Element, Frame, Id, Thread};
 
 /// The frozen readings, one section per `SCHEMA_VERSION`.
 const FROZEN: &str = include_str!("../../../schema/readings.txt");
@@ -313,7 +312,7 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
             ))
         }
         Root::PresentationOrder => {
-            let frame = ElementId(stored.string()?.to_owned());
+            let frame = Id::<Frame>::from_text(stored.string()?.to_owned());
             Some(format!("slide {}", place(&reader.slide_order(), &frame)?))
         }
         Root::Layers => {
@@ -329,7 +328,7 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         Root::Comments => comment_reading(reader, stored),
         Root::Reactions => {
             let (target, _user) = stored.key(0)?.split_once('/')?;
-            let tally = reader.reaction_tally(&ElementId(target.to_owned()));
+            let tally = reader.reaction_tally(&Id::<Element>::from_text(target.to_owned()));
             let emoji: Vec<(&str, u32)> = tally
                 .emoji
                 .iter()
@@ -353,7 +352,7 @@ fn reading(reader: &ToileState, stored: &Stored) -> Option<String> {
 /// The reading of a value under one element, through the element the display
 /// paints and the frame readers.
 fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
-    let id = ElementId(stored.key(0)?.to_owned());
+    let id = Id::<Element>::from_text(stored.key(0)?.to_owned());
     let field = ElementKey::parse(stored.key(1)?)?;
     let shown = reader.display_element(&id)?;
     let bounds = shown.bounds;
@@ -410,7 +409,7 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
             ))
         }
         (ElementKey::Children, _) => {
-            let child = ElementId(stored.string()?.to_owned());
+            let child = Id::<Element>::from_text(stored.string()?.to_owned());
             let members = reader.membership_of(&id);
             Some(format!(
                 "member {} of {}",
@@ -420,9 +419,14 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
         }
         (ElementKey::Notes, _) => Some(format!(
             "speaker notes {:?}",
-            reader.notes(&id).unwrap_or_default()
+            reader
+                .frame(&id)
+                .and_then(|frame| reader.notes(&frame))
+                .unwrap_or_default()
         )),
-        (ElementKey::Autolayout, _) => Some(layout_reading(&reader.auto_layout(&id)?)),
+        (ElementKey::Autolayout, _) => {
+            Some(layout_reading(&reader.auto_layout(&reader.frame(&id)?)?))
+        }
         _ => None,
     }
 }
@@ -430,7 +434,7 @@ fn element_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
 /// The reading of a value under one connector, through the arrow the display
 /// paints along the route the cull takes.
 fn connector_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
-    let id = ConnectorId(stored.key(0)?.to_owned());
+    let id = Id::<Connector>::from_text(stored.key(0)?.to_owned());
     let connector = reader.connector_of(&id)?;
     let route = connector.route(&reader.bounds)?;
     let shown = reader.display_connector(&id, route.clone())?;
@@ -460,7 +464,7 @@ fn connector_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
 /// The reading of a value under one comment thread, through the thread a
 /// reader opens.
 fn comment_reading(reader: &ToileState, stored: &Stored) -> Option<String> {
-    let thread = reader.comment_thread(&ElementId(stored.key(0)?.to_owned()))?;
+    let thread = reader.comment_thread(&Id::<Thread>::from_text(stored.key(0)?.to_owned()))?;
     match ThreadKey::parse(stored.key(1)?)? {
         ThreadKey::Anchor => Some(match &thread.anchor {
             CommentAnchor::Element(element) => format!("pinned to element {}", element.as_str()),

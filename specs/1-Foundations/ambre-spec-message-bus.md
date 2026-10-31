@@ -113,10 +113,10 @@ travels towards the downstream worker and an `Event` always flows back.
 
 ```rust
 pub enum LogicCommand {
-    App { document_id: DocumentId, command: AppCommand },   // content
-    Channel { channel_id: ChannelId, command: MurmureCommand }, // content, a channel
+    App { document_id: Id<Document>, command: AppCommand },   // content
+    Channel { channel_id: Id<Channel>, command: MurmureCommand }, // content, a channel
     Rest { id: Generation<Request>, cmd: RestCommand },     // service, relayed
-    OpenDocument { document_id: DocumentId, doc_type: DocType },
+    OpenDocument { document_id: Id<Document>, doc_type: DocType },
     // control and local restore variants, one per fire-and-forget operation
 }
 pub enum AppCommand { Trame(TrameCommand), Toile(ToileCommand), Prose(ProseCommand) }

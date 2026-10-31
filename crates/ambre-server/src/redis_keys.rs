@@ -7,7 +7,7 @@
 
 use std::fmt;
 
-use ambre_core::DocumentId;
+use ambre_core::id::{Document, Id};
 
 /// Defines one key of a document's state, `doc:{id}:{slot}`.
 macro_rules! doc_keys {
@@ -18,7 +18,7 @@ macro_rules! doc_keys {
 
         impl $name {
             /// The key of `document`.
-            pub fn of(document: &DocumentId) -> Self {
+            pub fn of(document: &Id<Document>) -> Self {
                 Self(format!(concat!("doc:{}:", $slot), document))
             }
 
@@ -64,13 +64,13 @@ doc_keys! {
 /// so the key keeps the document it names.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PendingKey {
-    document: DocumentId,
+    document: Id<Document>,
     text: String,
 }
 
 impl PendingKey {
     /// The pending list of `document`.
-    pub fn of(document: &DocumentId) -> Self {
+    pub fn of(document: &Id<Document>) -> Self {
         Self {
             document: *document,
             text: format!("doc:{document}:pending"),
@@ -81,12 +81,12 @@ impl PendingKey {
     /// writes: another slot, or an identifier in another form.
     pub fn parse(text: &str) -> Option<Self> {
         let id = text.strip_prefix("doc:")?.strip_suffix(":pending")?;
-        let key = Self::of(&DocumentId::parse_str(id).ok()?);
+        let key = Self::of(&Id::<Document>::parse_str(id).ok()?);
         (key.text == text).then_some(key)
     }
 
     /// The document whose list this is.
-    pub fn document(&self) -> DocumentId {
+    pub fn document(&self) -> Id<Document> {
         self.document
     }
 
@@ -130,7 +130,7 @@ pub struct DocumentStateKeys {
 
 impl DocumentStateKeys {
     /// The keys of `document`.
-    pub fn of(document: &DocumentId) -> Self {
+    pub fn of(document: &Id<Document>) -> Self {
         Self {
             seq: SeqKey::of(document),
             clocks: ClocksKey::of(document),
@@ -166,12 +166,12 @@ mod tests {
 
     #[test]
     fn a_pending_key_reads_back_only_in_the_form_the_relay_writes() {
-        let document = DocumentId::from_bytes([7u8; 16]);
+        let document = Id::<Document>::from_bytes([7u8; 16]);
         let key = PendingKey::of(&document);
         assert_eq!(key.as_str(), format!("doc:{document}:pending"));
         assert_eq!(PendingKey::parse(key.as_str()), Some(key.clone()));
         assert_eq!(key.document(), document);
-        let simple = document.as_uuid().to_string().replace('-', "");
+        let simple = document.uuid().to_string().replace('-', "");
         for text in [
             format!("doc:{document}:gone"),
             format!("doc:{simple}:pending"),
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn each_slot_names_its_own_key() {
-        let document = DocumentId::from_bytes([1u8; 16]);
+        let document = Id::<Document>::from_bytes([1u8; 16]);
         let keys = DocumentStateKeys::of(&document);
         let gone = GoneKey::of(&document);
         let lock = FlushLockKey::of(&document);

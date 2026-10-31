@@ -8,6 +8,8 @@ use openidconnect::{
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ambre_core::id::{Id, User};
+
 use crate::error::AppError;
 
 /// Concrete OIDC client type with all endpoint URLs set from provider discovery.
@@ -80,8 +82,8 @@ ambre_core::define_flag! {
 /// Returned by `POST /auth/{provider}/callback` after successful authentication.
 #[derive(serde::Serialize)]
 pub struct CallbackResponse {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub email: ambre_core::Email,
     pub display_name: ambre_core::DisplayName,
     /// [`SignIn::NewUser`] when the user row holds no master key yet. The

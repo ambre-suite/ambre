@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::CommentId;
+use ambre_core::id::{Comment, Id};
 use ambre_core::{Css, Point, Px, View};
 use leptos::prelude::*;
 
@@ -56,7 +56,7 @@ pub struct ProseSignals {
     pub threads: RwSignal<Vec<PanelThread>>,
     /// The reply being typed in each thread's field, by thread. It outlives
     /// the card, so a thread that moves keeps it (`PROSE-UI-231`).
-    pub drafts: RwSignal<HashMap<CommentId, String>>,
+    pub drafts: RwSignal<HashMap<Id<Comment>, String>>,
     /// The suggestion under the pointer, for the popover.
     pub hovered: RwSignal<Option<HoveredSuggestion>>,
     /// What the chrome asked for, until the view drains it.
@@ -190,7 +190,7 @@ pub fn ProseCommentsPanel(signals: ProseSignals) -> impl IntoView {
 /// One thread: its replies, a field to answer, and a button to resolve it.
 /// It reads its thread from the published list, so a move or a new reply
 /// updates it in place.
-fn thread_card(comment_id: CommentId, signals: ProseSignals) -> impl IntoView {
+fn thread_card(comment_id: Id<Comment>, signals: ProseSignals) -> impl IntoView {
     let send = move |intent| signals.intent.set(Some(intent));
     let entry = Memo::new(move |_| {
         signals.threads.with(|threads| {

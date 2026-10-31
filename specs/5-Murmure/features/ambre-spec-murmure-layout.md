@@ -116,14 +116,14 @@ The channel list is a Murmure view inside it, not a second drawer.
 ```rust
 pub enum MurmurePane {
     ChannelList,
-    Channel { channel: ChannelId, at: Option<MessageRef> },
-    Thread { channel: ChannelId, root: MessageRef },
-    Members { channel: ChannelId },
+    Channel { channel: Id<Channel>, at: Option<MessageRef> },
+    Thread { channel: Id<Channel>, root: MessageRef },
+    Members { channel: Id<Channel> },
 }
-pub struct MessageRef { pub segment: SegmentId, pub message: MessageId }
+pub struct MessageRef { pub segment: Id<Segment>, pub message: Id<Message> }
 pub struct SidebarSection { pub group: SidebarGroup, pub title: Option<Name>, pub entries: Vec<SidebarEntry> }
-pub struct SidebarEntry { pub channel: ChannelId, pub name: Option<Name>, pub activity: Activity }
-pub enum SidebarGroup { Category { space: SpaceId, category: Option<CategoryId> }, Private, Direct, ToJoin }
+pub struct SidebarEntry { pub channel: Id<Channel>, pub name: Option<Name>, pub activity: Activity }
+pub enum SidebarGroup { Category { space: Id<Space>, category: Option<Id<Category>> }, Private, Direct, ToJoin }
 pub enum Activity { None, Some, Count { messages: UnreadCount, mentions: MentionCount } }
 ```
 

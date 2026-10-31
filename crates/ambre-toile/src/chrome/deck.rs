@@ -10,7 +10,8 @@
 // DOM names no command queue, and the panel keeps no order of its own.
 // ============================================================================
 
-use ambre_bus::app::toile::{DeckView, FrameId, SlideCount, SlideIndex};
+use ambre_bus::app::toile::{DeckView, SlideCount, SlideIndex};
+use ambre_core::id::{Frame, Id};
 use leptos::prelude::*;
 use wasm_bindgen::JsCast as _;
 
@@ -22,7 +23,7 @@ use crate::ui::deck::{DeckIntent, Move, deck_label};
 /// command and one undo item rather than one per keystroke (`TOILE-248`).
 fn name_handler(
     on_intent: Callback<DeckIntent>,
-    frame: FrameId,
+    frame: Id<Frame>,
 ) -> impl Fn(web_sys::Event) + 'static {
     move |ev: web_sys::Event| {
         let Some(field) = ev

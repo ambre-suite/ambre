@@ -21,6 +21,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{
     BoardFrameCount, BoardLength, ConnectorCount, DocType, ElementCount, FixtureGen, FixtureName,
     FixtureSeed, FixtureShape, GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
@@ -30,9 +31,7 @@ use loro::LoroValue;
 use kurbo::{Point, Size};
 
 use crate::logic::command::{ClipboardPayload, InitContent, ToileCommand, ToileEvent, ZTarget};
-use crate::logic::model::{
-    Anchor, ConnectorId, ElementId, ElementKind, EndCaps, NodeId, PathType, ShapeKind,
-};
+use crate::logic::model::{Anchor, ElementKind, EndCaps, NodeId, PathType, ShapeKind};
 
 use super::ToileState;
 use super::codec::value_has_type;
@@ -85,7 +84,7 @@ impl ToileState {
     /// length mismatch.
     ///
     /// **Nodes are walked in paint order and named by their position in it**, not
-    /// by their [`ElementId`](crate::logic::model::ElementId). An id is `(peer,
+    /// by their [`Id<Element>`](ambre_core::id::Id). An id is `(peer,
     /// counter)`, and is therefore exactly what two documents reached by
     /// different routes are allowed to differ in. Z-order *is* user-visible, so
     /// it makes a canonical index. Every id-valued field -- a connector endpoint,
@@ -298,7 +297,7 @@ fn build_shapes_and_frame(state: &mut ToileState) {
         InitContent::None,
     );
     let shapes = [ShapeKind::Rect, ShapeKind::Ellipse, ShapeKind::Triangle];
-    let ids: Vec<ElementId> = (0..6)
+    let ids: Vec<Id<Element>> = (0..6)
         .map(|i| {
             create(
                 state,
@@ -341,7 +340,7 @@ fn build_shapes_and_frame(state: &mut ToileState) {
 /// connector's endpoints. The canonical dump rewrites each such field to a paint
 /// index. Two documents built by different routes then compare equal.
 fn build_connectors_and_groups(state: &mut ToileState) {
-    let ids: Vec<ElementId> = (0..4)
+    let ids: Vec<Id<Element>> = (0..4)
         .map(|i| {
             create(
                 state,
@@ -394,7 +393,7 @@ fn create(
     at: Point,
     size: Size,
     content: InitContent,
-) -> ElementId {
+) -> Id<Element> {
     let outcome = state.handle_command(ToileCommand::CreateElement {
         kind,
         at,
@@ -419,7 +418,7 @@ fn create(
 /// no connector id. Reading is not writing: `FIXTURE-004` forbids a generator
 /// *building* through the containers, and this one still builds through
 /// `handle_command` alone.
-fn last_connector(state: &ToileState) -> ConnectorId {
+fn last_connector(state: &ToileState) -> Id<Connector> {
     state
         .layer_order()
         .iter()
@@ -550,7 +549,7 @@ fn build_spread_board(
     const ROWS: u32 = 20;
     let (tiles, tile_pitch, element_pitch) = (tiles.get(), tile_pitch.get(), element_pitch.get());
     let kinds = [ShapeKind::Rect, ShapeKind::Ellipse, ShapeKind::Triangle];
-    let ids: Vec<ElementId> = (0..ROWS)
+    let ids: Vec<Id<Element>> = (0..ROWS)
         .flat_map(|row| (0..COLS).map(move |col| (row, col)))
         .enumerate()
         .map(|(index, (row, col))| {
@@ -585,7 +584,7 @@ fn build_spread_board(
 ///
 /// `None` when the reply carries no payload. A generator drives a command it
 /// chose itself, so that is a defect here rather than a runtime condition.
-fn copy_payload(state: &mut ToileState, ids: Vec<ElementId>) -> Option<ClipboardPayload> {
+fn copy_payload(state: &mut ToileState, ids: Vec<Id<Element>>) -> Option<ClipboardPayload> {
     state
         .handle_command(ToileCommand::CopyElements { ids })
         .display
@@ -643,7 +642,7 @@ fn build_deck(state: &mut ToileState, slides: ambre_bus::app::toile::SlideCount)
             add: children,
             remove: Vec::new(),
         });
-        order.push(frame);
+        order.extend(state.frame(&frame));
     }
     state.handle_command(ToileCommand::SetSlideOrder { order });
 }

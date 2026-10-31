@@ -13,6 +13,7 @@
 
 use ambre_bus::{DocType, LogicEvent, Request, RestCommand, RestEvent, SyncCommand, next_request};
 use ambre_core::Generation;
+use ambre_core::id::{Document, Id};
 use ambre_sync::mock::MockWsTransport;
 
 fn drain_rest(
@@ -296,7 +297,7 @@ fn open_document_subscribes_via_mock_ws() {
     );
     rx.try_iter().count(); // drain SessionReady
 
-    let doc_id = ambre_core::DocumentId::new();
+    let doc_id = Id::<Document>::mint();
     state.handle_command(SyncCommand::OpenDocument {
         document_id: doc_id,
         doc_type: DocType::Trame,
@@ -336,7 +337,7 @@ fn close_document_unsubscribes_via_mock_ws() {
     );
     rx.try_iter().count();
 
-    let doc_id = ambre_core::DocumentId::new();
+    let doc_id = Id::<Document>::mint();
     state.handle_command(SyncCommand::OpenDocument {
         document_id: doc_id,
         doc_type: DocType::Trame,
@@ -371,7 +372,7 @@ fn send_update_after_open_document_encrypts_and_sends() {
     );
     rx.try_iter().count();
 
-    let doc_id = ambre_core::DocumentId::new();
+    let doc_id = Id::<Document>::mint();
     state.handle_command(SyncCommand::OpenDocument {
         document_id: doc_id,
         doc_type: DocType::Trame,
@@ -511,7 +512,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
 #[test]
 fn a_sealed_file_round_trips_through_the_service_plane() {
     let (mut state, rx, _mock) = setup(false);
-    let doc_id = ambre_core::DocumentId::new();
+    let doc_id = Id::<Document>::mint();
     let plaintext = ambre_core::write_ambre_plaintext(
         DocType::Prose,
         doc_id,
@@ -573,7 +574,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
     let (mut state, rx, _mock) = setup(false);
     let plaintext = ambre_core::write_ambre_plaintext(
         DocType::Prose,
-        ambre_core::DocumentId::new(),
+        Id::<Document>::mint(),
         &ambre_core::SnapshotBytes::new(b"body".to_vec()),
     );
 
@@ -634,7 +635,7 @@ fn opening_a_plaintext_file_fails_without_deriving_a_key() {
     let (mut state, rx, _mock) = setup(false);
     let plaintext = ambre_core::write_ambre_plaintext(
         DocType::Prose,
-        ambre_core::DocumentId::new(),
+        Id::<Document>::mint(),
         &ambre_core::SnapshotBytes::new(b"body".to_vec()),
     );
 

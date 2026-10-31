@@ -9,17 +9,18 @@
 
 use std::collections::HashSet;
 
-use ambre_bus::{ChannelId, DocumentId, LogicEvent, SealedChannelKey, SpaceId};
+use ambre_bus::{LogicEvent, SealedChannelKey};
+use ambre_core::id::{Channel, Document, Id, Space};
 
 use crate::SyncState;
 use crate::channels::{sealed_under, unseal_channel_key};
 
 /// The catalogue of one open space, as the Logic thread last handed it.
 pub(crate) struct SpaceRotation {
-    space_id: SpaceId,
-    channels: Vec<(ChannelId, SealedChannelKey)>,
+    space_id: Id<Space>,
+    channels: Vec<(Id<Channel>, SealedChannelKey)>,
     /// The channels whose rotation runs, so a second drive starts none twice.
-    in_flight: HashSet<ChannelId>,
+    in_flight: HashSet<Id<Channel>>,
 }
 
 /// What a drive of one space's rotation does next.
@@ -30,7 +31,7 @@ enum Step {
     /// The space key owes a rotation: pay it before any channel.
     Settle,
     /// Re-key these channels, whose entries name an older space key.
-    Rotate(Vec<(ChannelId, SealedChannelKey)>),
+    Rotate(Vec<(Id<Channel>, SealedChannelKey)>),
 }
 
 impl SyncState {
@@ -38,8 +39,8 @@ impl SyncState {
     /// administers. A rotation already running keeps running.
     pub(crate) fn handle_rotate_space(
         &mut self,
-        space_id: SpaceId,
-        channels: Vec<(ChannelId, SealedChannelKey)>,
+        space_id: Id<Space>,
+        channels: Vec<(Id<Channel>, SealedChannelKey)>,
     ) {
         let document_id = space_id.document_id();
         let in_flight = self
@@ -61,7 +62,7 @@ impl SyncState {
     /// Moves the rotation of the space `document_id` one step: pay the space
     /// debt, else re-key each stale channel. A document that is no space
     /// this client administers does nothing.
-    pub(crate) fn drive_space_rotation(&mut self, document_id: DocumentId) {
+    pub(crate) fn drive_space_rotation(&mut self, document_id: Id<Document>) {
         match self.space_step(document_id) {
             Step::Nothing => {}
             Step::Settle => {
@@ -82,7 +83,7 @@ impl SyncState {
     }
 
     /// What the rotation of the space `document_id` does next.
-    fn space_step(&self, document_id: DocumentId) -> Step {
+    fn space_step(&self, document_id: Id<Document>) -> Step {
         let (Some(rotation), Some(space)) = (
             self.space_rotations.get(&document_id),
             self.documents.get(&document_id),
@@ -115,8 +116,8 @@ impl SyncState {
     /// this client cannot open is left as it is, and reported.
     fn start_channel_rotation(
         &mut self,
-        document_id: DocumentId,
-        channel_id: ChannelId,
+        document_id: Id<Document>,
+        channel_id: Id<Channel>,
         sealed: &SealedChannelKey,
     ) {
         let Some(space) = self.documents.get(&document_id) else {
@@ -172,8 +173,8 @@ impl SyncState {
     /// stale, for the next drive.
     pub(crate) fn channel_rotated(
         &mut self,
-        space_id: SpaceId,
-        channel_id: ChannelId,
+        space_id: Id<Space>,
+        channel_id: Id<Channel>,
         result: Result<SealedChannelKey, crate::http::HttpError>,
     ) {
         if let Some(rotation) = self.space_rotations.get_mut(&space_id.document_id()) {
@@ -209,10 +210,10 @@ mod tests {
     /// A state holding the open space `space_id` under `space_key`, at
     /// `role`, with the catalogue `channels`.
     fn space(
-        space_id: SpaceId,
+        space_id: Id<Space>,
         space_key: &DocumentKey,
         role: Role,
-        channels: Vec<(ChannelId, SealedChannelKey)>,
+        channels: Vec<(Id<Channel>, SealedChannelKey)>,
     ) -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
@@ -236,7 +237,7 @@ mod tests {
         (state, rx)
     }
 
-    fn entry(channel_id: ChannelId, space_key: &DocumentKey) -> SealedChannelKey {
+    fn entry(channel_id: Id<Channel>, space_key: &DocumentKey) -> SealedChannelKey {
         let anchor = EntryDigest([7; 32]);
         seal_channel_key(channel_id, &DocumentKey::generate(), space_key, anchor).unwrap()
     }
@@ -245,7 +246,11 @@ mod tests {
     /// the space drives anything (the Murmure spaces spec).
     #[test]
     fn a_space_debt_is_paid_before_any_channel() {
-        let (old, space_id, channel) = (DocumentKey::generate(), SpaceId::new(), ChannelId::new());
+        let (old, space_id, channel) = (
+            DocumentKey::generate(),
+            Id::<Space>::mint(),
+            Id::<Channel>::mint(),
+        );
         let catalogue = vec![(channel, entry(channel, &old))];
         let (mut state, _rx) = space(space_id, &DocumentKey::generate(), Role::Owner, catalogue);
         let document_id = space_id.document_id();
@@ -256,7 +261,7 @@ mod tests {
         doc.role = Role::Viewer;
         assert_eq!(state.space_step(document_id), Step::Nothing, "a viewer");
         assert_eq!(
-            state.space_step(DocumentId::new()),
+            state.space_step(Id::<Document>::mint()),
             Step::Nothing,
             "no space"
         );
@@ -271,9 +276,9 @@ mod tests {
         let (old, new, space_id) = (
             DocumentKey::generate(),
             DocumentKey::generate(),
-            SpaceId::new(),
+            Id::<Space>::mint(),
         );
-        let (stale, current) = (ChannelId::new(), ChannelId::new());
+        let (stale, current) = (Id::<Channel>::mint(), Id::<Channel>::mint());
         let catalogue = vec![(stale, entry(stale, &old)), (current, entry(current, &new))];
         let (mut state, rx) = space(space_id, &new, Role::Editor, catalogue.clone());
         let document_id = space_id.document_id();
@@ -311,7 +316,11 @@ mod tests {
     /// A new catalogue keeps the rotations already running.
     #[test]
     fn a_new_catalogue_keeps_the_rotations_running() {
-        let (key, space_id, channel) = (DocumentKey::generate(), SpaceId::new(), ChannelId::new());
+        let (key, space_id, channel) = (
+            DocumentKey::generate(),
+            Id::<Space>::mint(),
+            Id::<Channel>::mint(),
+        );
         let (mut state, _rx) = space(space_id, &key, Role::Viewer, Vec::new());
         let document_id = space_id.document_id();
         let rotation = state.space_rotations.get_mut(&document_id).unwrap();

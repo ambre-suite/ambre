@@ -1,10 +1,8 @@
 //! Fundamental types shared by all Ambre crates.
 //!
 //! - [`Uuid`]: UUIDv7 wrapper (`[u8; 16]`)
-//! - [`DocumentId`], [`UserId`], [`ChannelId`], [`SpaceId`], [`MetaId`], [`SegmentId`],
-//!   [`CategoryId`], [`MeetingId`], [`SnapshotId`], and the Prose annotation ids
-//!   [`FootnoteId`], [`CommentId`], [`ReplyId`], [`SuggestionId`]:
-//!   strongly-typed identifiers (distinct newtypes over `Uuid`)
+//! - [`Id`]: the strongly-typed identifier, one generic type over an entity
+//!   marker of [`id`], such as `Id<Document>` or `Id<Element>`
 //! - [`DocType`]: enum of document types (Prose, Trame, Toile, Murmure)
 //! - [`PublicKey`], [`ExchangePublicKey`]: `[u8; 32]` wrappers for Ed25519 and X25519
 //! - [`Seq`]: the relay's sequence number of a document
@@ -133,10 +131,7 @@ pub use font::{
     Underline, Weight, WordBreak,
 };
 pub use generation::{Generation, GenerationKind, Issuer, SharedIssuer};
-pub use id::{
-    CategoryId, ChannelId, CommentId, DocumentId, FootnoteId, LeaseId, MeetingId, MessageId,
-    MetaId, OrgId, ReplyId, SegmentId, SnapshotId, SpaceId, SuggestionId, UserId,
-};
+pub use id::{DocumentScoped, Entity, Id, IdRepr};
 pub use key_hex::{ExchangeKeyHex, SignatureHex, SigningKeyHex};
 pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};
 pub use lang::LangTag;

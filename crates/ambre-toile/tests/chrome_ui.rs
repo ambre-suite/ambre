@@ -26,19 +26,19 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::UserId;
 use ambre_bus::app::toile::TextDelta;
 use ambre_bus::app::toile::{
     Broadcast, CommentAnchor, CommentMessage, CommentSummary, CommentThread, DeckFrame, DeckView,
-    ElementCount, ElementId, PresencePayload, PresenceUpdate, PresentMode, SlideCount, SlideIndex,
+    ElementCount, PresencePayload, PresenceUpdate, PresentMode, SlideCount, SlideIndex,
     SlidePosition, ToileCommand, ToileEvent,
 };
-use ambre_bus::{AppCommand, AppEvent, DocumentId, UiEvent};
+use ambre_bus::{AppCommand, AppEvent, UiEvent};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
 use ambre_chrome::{ToastHost, Toasts};
 use ambre_commands::CommandId;
+use ambre_core::id::{Document, Frame, Id, Thread, User};
 use ambre_core::{CharCount, CharOffset};
 use ambre_core::{Doc, Scale, View};
 use ambre_draw::Rect;
@@ -412,7 +412,7 @@ fn undo_state_mirrors_into_command_store() {
     );
 
     let ev = UiEvent::Viewport {
-        document_id: ambre_core::DocumentId::new(),
+        document_id: Id::<Document>::mint(),
         event: AppEvent::Toile(ToileEvent::UndoState {
             undo: ambre_core::Availability::Enabled,
             redo: ambre_core::Availability::Disabled,
@@ -571,8 +571,8 @@ fn mount_presenter_follow(
     count: usize,
     notes: &str,
     broadcasting: bool,
-    following: Option<UserId>,
-    presenter_peer: Option<UserId>,
+    following: Option<Id<User>>,
+    presenter_peer: Option<Id<User>>,
 ) -> (web_sys::Element, RwSignal<Option<PresenterIntent>>) {
     let open = RwSignal::new(if open {
         PresentMode::Presenting
@@ -721,7 +721,7 @@ fn presenter_follow_button_hidden_without_presenter() {
 fn presenter_follow_button_fires_with_peer() {
     let owner = Owner::new();
     owner.set();
-    let peer = UserId::new();
+    let peer = Id::<User>::mint();
     // A peer is broadcasting and we are not following: clicking follows it.
     let (root, fired) = mount_presenter_follow(true, 0, 3, "", false, None, Some(peer));
     assert!(click_by_aria(&root, "Follow presenter"));
@@ -748,7 +748,7 @@ fn presenter_follow_button_fires_with_peer() {
 /// A deck row for the fixtures below: an id and a title.
 fn deck_frame(id: &str, name: &str) -> DeckFrame {
     DeckFrame {
-        id: ElementId(id.to_owned()),
+        id: Id::<Frame>::from_text(id.to_owned()),
         name: name.to_owned(),
     }
 }
@@ -802,7 +802,7 @@ fn deck_panel_edits_fire_intents() {
     add.click();
     assert_eq!(
         fired.get_untracked(),
-        Some(DeckIntent::Add(ElementId("c".to_owned())))
+        Some(DeckIntent::Add(Id::<Frame>::from_text("c".to_owned())))
     );
     root.remove();
 }
@@ -833,7 +833,7 @@ fn deck_panel_names_a_frame() {
     assert_eq!(
         fired.get_untracked(),
         Some(DeckIntent::Rename(
-            ElementId("a".to_owned()),
+            Id::<Frame>::from_text("a".to_owned()),
             "Agenda".to_owned()
         ))
     );
@@ -843,7 +843,7 @@ fn deck_panel_names_a_frame() {
     assert_eq!(
         fired.get_untracked(),
         Some(DeckIntent::Rename(
-            ElementId("c".to_owned()),
+            Id::<Frame>::from_text("c".to_owned()),
             "Roadmap".to_owned()
         ))
     );
@@ -875,7 +875,7 @@ fn mount_notified(event: ToileEvent) -> web_sys::Element {
     ambre_toile::chrome::notify_event(
         &toasts,
         &UiEvent::Viewport {
-            document_id: ambre_core::DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             event: AppEvent::Toile(event),
         },
     );
@@ -963,7 +963,7 @@ fn a_refused_export_says_why() {
 /// dialogs' state and where a placed embed is published.
 fn mount_choosers(
     docs: Vec<ambre_toile::chrome::DocChoice>,
-    here: ambre_bus::DocumentId,
+    here: Id<Document>,
 ) -> (
     web_sys::Element,
     ambre_toile::chrome::ToileDialogs,
@@ -1016,7 +1016,7 @@ fn click_in(root: &web_sys::Element, selector: &str, label: &str) -> bool {
 #[wasm_bindgen_test]
 fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
     use ambre_toile::chrome::{AddressError, EmbedTarget};
-    let (root, dialogs, placed) = mount_choosers(Vec::new(), ambre_bus::DocumentId::new());
+    let (root, dialogs, placed) = mount_choosers(Vec::new(), Id::<Document>::mint());
     dialogs.embed_web_open.set(ambre_chrome::Openness::Open);
 
     dialogs.embed_web_text.set("javascript:alert(1)".to_owned());
@@ -1053,10 +1053,10 @@ fn the_web_dialog_places_a_normalised_address_and_keeps_a_refusal() {
 /// and a pick places a reference to the document it names.
 #[wasm_bindgen_test]
 fn the_document_picker_places_a_reference_and_never_offers_the_open_board() {
-    use ambre_bus::{DocType, DocumentId};
+    use ambre_bus::DocType;
     use ambre_toile::chrome::{DocChoice, EmbedTarget};
-    let here = DocumentId::new();
-    let other = DocumentId::new();
+    let here = Id::<Document>::mint();
+    let other = Id::<Document>::mint();
     let docs = vec![
         DocChoice {
             document_id: here,
@@ -1100,7 +1100,7 @@ fn the_document_picker_places_a_reference_and_never_offers_the_open_board() {
 
 fn summary(id: &str, preview: &str) -> CommentSummary {
     CommentSummary {
-        id: ElementId(id.to_owned()),
+        id: Id::<Thread>::from_text(id.to_owned()),
         anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         resolved: ambre_core::ThreadState::Open,
         messages: ambre_bus::app::toile::ThreadMessageCount::new(1),
@@ -1135,11 +1135,11 @@ async fn the_comment_panel_shows_what_the_board_answered() {
 
     list.set(vec![summary("t3", "third")]);
     open.set(Some(CommentThread {
-        id: ElementId("t3".to_owned()),
+        id: Id::<Thread>::from_text("t3".to_owned()),
         anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         resolved: ambre_core::ThreadState::Open,
         messages: vec![CommentMessage {
-            author: UserId::new(),
+            author: Id::<User>::mint(),
             ts: ambre_core::Timestamp(0),
             body: "read back".to_owned(),
         }],
@@ -1152,7 +1152,7 @@ async fn the_comment_panel_shows_what_the_board_answered() {
     assert_eq!(
         fired.get_untracked(),
         Some(CommentIntent::Focus {
-            thread: ElementId("t3".to_owned()),
+            thread: Id::<Thread>::from_text("t3".to_owned()),
             anchor: CommentAnchor::Point(kurbo::Point::new(10.0, 20.0)),
         })
     );
@@ -1252,13 +1252,13 @@ fn relay() -> ToileRelay {
 /// `ev` as the launcher hands it to the relay.
 fn board_event(ev: ToileEvent) -> UiEvent {
     UiEvent::Viewport {
-        document_id: DocumentId::new(),
+        document_id: Id::<Document>::mint(),
         event: AppEvent::Toile(ev),
     }
 }
 
 /// One peer of the live set, broadcasting `slide` or not.
-fn peer(user_id: UserId, slide: Option<u32>) -> PresenceUpdate {
+fn peer(user_id: Id<User>, slide: Option<u32>) -> PresenceUpdate {
     PresenceUpdate {
         user_id,
         presence: PresencePayload {
@@ -1273,7 +1273,7 @@ fn peer(user_id: UserId, slide: Option<u32>) -> PresenceUpdate {
 #[wasm_bindgen_test]
 fn the_presenter_is_named_only_while_it_broadcasts() {
     let relay = relay();
-    let (alice, bob) = (UserId::new(), UserId::new());
+    let (alice, bob) = (Id::<User>::mint(), Id::<User>::mint());
     relay.absorb(&board_event(ToileEvent::PeerPresence(vec![
         peer(bob, None),
         peer(alice, Some(2)),
@@ -1311,8 +1311,8 @@ fn a_note_edit_with_no_frame_on_screen_is_refused() {
         relay.command(edit()).is_none(),
         "an edit with no frame left"
     );
-    let frame = ElementId("f".to_owned());
-    relay.presenter_frame.set(Some(frame.clone()));
+    let frame = Id::<Frame>::from_text("f".to_owned());
+    relay.presenter_frame.set(Some(frame.clone().into()));
     assert!(matches!(
         relay.command(edit()),
         Some(AppCommand::Toile(ToileCommand::EditNotes { frame: f, .. })) if f == frame

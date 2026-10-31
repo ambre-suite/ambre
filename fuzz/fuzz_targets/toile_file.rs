@@ -3,8 +3,9 @@
 //! container, so the input reaches the schema gate and the CRDT engine.
 #![no_main]
 
+use ambre_core::id::{Document, Id};
 use ambre_core::{
-    DeltaBytes, DocType, DocumentId, FileBytes, SnapshotBytes, Uuid, docfile::write_ambre_plaintext,
+    DeltaBytes, DocType, FileBytes, SnapshotBytes, Uuid, docfile::write_ambre_plaintext,
 };
 use ambre_toile::ToileState;
 use ambre_toile::logic::interop::{Limits, import_raster, import_svg};
@@ -17,7 +18,7 @@ fuzz_target!(|data: &[u8]| {
     let _ = import_raster(&picked, &limits);
     let file = write_ambre_plaintext(
         DocType::Toile,
-        DocumentId::from_uuid(Uuid::from_bytes([7; 16])),
+        Id::<Document>::from_uuid(Uuid::from_bytes([7; 16])),
         &SnapshotBytes::new(data.to_vec()),
     );
     let _ = ToileState::new().import_ambre_plaintext(&file);

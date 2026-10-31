@@ -329,8 +329,8 @@ registers, and the other is answered the winner (`SRV-195`). A close while a seg
 5. The deltas stay until another member client confirms the snapshot against them (`SRV-118`).
    A false snapshot therefore loses nothing, however long the confirmation takes.
 
-The lease names the segment by its `SegmentId`, and the commit carries the lease and its
-`SnapshotId`, whose horizon the relay checks. The durations are rows of
+The lease names the segment by its `Id<Segment>`, and the commit carries the lease and its
+`Id<Snapshot>`, whose horizon the relay checks. The durations are rows of
 `ambre-spec-budgets.md section 8`.
 
 **A rotation's lock.** A rotation of a channel key flags each open segment of the channel

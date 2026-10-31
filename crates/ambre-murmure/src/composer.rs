@@ -28,12 +28,13 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::{
-    Attachment, ChannelId, LogicCommand, Mention, MessageAt, MessageDraft, MessageId,
-    MurmureCommand, ReplyEcho, StyleMark, TextStyle, Timestamp, UserId,
+    Attachment, LogicCommand, Mention, MessageAt, MessageDraft, MurmureCommand, ReplyEcho,
+    StyleMark, TextStyle, Timestamp,
 };
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
 use ambre_commands::{Key, KeyBinding, KeyChar, Modifiers};
+use ambre_core::id::{Channel, Id, Message, User};
 use ambre_core::{
     ByteCount, ByteOffset, CharSpan, HistoryStep, byte_span_to_chars, byte_to_char, char_len,
     char_span_to_bytes,
@@ -271,13 +272,13 @@ impl History {
 /// of the channel. A thread's draft is not its channel's (`MURMURE-525`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DraftOf {
-    Channel(ChannelId),
-    Thread(ChannelId, MessageId),
+    Channel(Id<Channel>),
+    Thread(Id<Channel>, Id<Message>),
 }
 
 impl DraftOf {
     /// The channel the draft writes in.
-    pub fn channel(self) -> ChannelId {
+    pub fn channel(self) -> Id<Channel> {
         match self {
             Self::Channel(channel) | Self::Thread(channel, _) => channel,
         }
@@ -292,8 +293,8 @@ impl DraftOf {
     }
 }
 
-impl From<ChannelId> for DraftOf {
-    fn from(channel: ChannelId) -> Self {
+impl From<Id<Channel>> for DraftOf {
+    fn from(channel: Id<Channel>) -> Self {
         Self::Channel(channel)
     }
 }
@@ -301,7 +302,7 @@ impl From<ChannelId> for DraftOf {
 /// A message the composer of a channel holds for an edit.
 struct Editing {
     at: MessageAt,
-    message: MessageId,
+    message: Id<Message>,
     /// The text the message read when the edit began, and its styles.
     original: String,
     original_styles: Vec<StyleMark>,
@@ -373,9 +374,9 @@ pub enum Sent {
     },
     /// An edit of a message of the member (`MURMURE-203`).
     Edit {
-        channel: ChannelId,
+        channel: Id<Channel>,
         at: MessageAt,
-        message: MessageId,
+        message: Id<Message>,
         draft: MessageDraft,
     },
 }
@@ -1044,7 +1045,7 @@ impl Composer {
 
     /// Hand the `@` list the members of its channel, and keep the choice on
     /// the list. `me` is never offered (`MURMURE-551`).
-    pub fn offer(&mut self, members: &[(UserId, ambre_core::DisplayName)], me: Option<UserId>) {
+    pub fn offer(&mut self, members: &[(Id<User>, ambre_core::DisplayName)], me: Option<Id<User>>) {
         if let Some(asking) = &mut self.asking {
             asking.offers = OfferVec::from(offers(&asking.query, members, me));
             asking.chosen = asking.chosen.within(asking.offers.len());
@@ -1053,7 +1054,7 @@ impl Composer {
 
     /// The channel whose members the open `@` list wants, `None` while no
     /// list is open.
-    pub fn asks_members_of(&self) -> Option<ChannelId> {
+    pub fn asks_members_of(&self) -> Option<Id<Channel>> {
         self.asking.as_ref().map(|asking| asking.of.channel())
     }
 

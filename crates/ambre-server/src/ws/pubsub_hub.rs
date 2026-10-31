@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::time::Duration;
 
+use ambre_core::id::{Channel, Document, Id, User};
 use futures_util::StreamExt;
 use rustis::commands::PubSubCommands;
 use tokio::sync::{mpsc, oneshot};
@@ -36,19 +37,19 @@ pub struct Topic(String);
 
 impl Topic {
     /// A document's live broadcasts.
-    pub fn document(document_id: &ambre_core::DocumentId) -> Self {
+    pub fn document(document_id: &Id<Document>) -> Self {
         Self(format!("doc:{document_id}"))
     }
 
     /// A user's personal events, such as a document shared with them. Every
     /// connection subscribes to its own for the whole session.
-    pub fn user(user_id: &ambre_core::UserId) -> Self {
+    pub fn user(user_id: &Id<User>) -> Self {
         Self(format!("user:{user_id}"))
     }
 
     /// The activity of a channel's threads. Every socket watching a document
     /// of the channel subscribes to it (`SRV-161`).
-    pub fn channel(channel_id: &ambre_core::ChannelId) -> Self {
+    pub fn channel(channel_id: &Id<Channel>) -> Self {
         Self(format!("channel:{channel_id}"))
     }
 
@@ -333,7 +334,7 @@ pub(crate) mod tests {
     async fn a_frame_from_one_instance_reaches_a_subscriber_of_the_other(pool: sqlx::PgPool) {
         let one = crate::test_helpers::test_app_state(pool).await;
         let other = crate::test_helpers::second_instance(&one).await;
-        let document_id = ambre_core::DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let topic = Topic::document(&document_id);
 
         let (there_tx, mut there) = mpsc::channel(8);

@@ -6,7 +6,8 @@
 //! writes the same entries, so two writers converge on one successor.
 
 use ambre_bus::{MurmureEvent, Timestamp};
-use ambre_core::{ByteSize, DeltaBytes, FailureCount, Millis, PeerEntryBytes, SegmentId};
+use ambre_core::id::{Id, Segment};
+use ambre_core::{ByteSize, DeltaBytes, FailureCount, Millis, PeerEntryBytes};
 use loro::{ExportMode, LoroDoc};
 
 use super::{
@@ -57,7 +58,7 @@ const SUCCESSOR_FAILURES: FailureCount = FailureCount::new(5);
 /// (`MURMURE-482`).
 #[derive(Debug)]
 pub(super) struct Retry {
-    segment: SegmentId,
+    segment: Id<Segment>,
     failures: FailureCount,
     /// Stamped by the first tick past the failure: the engine reads no clock.
     at: Option<Timestamp>,
@@ -74,7 +75,7 @@ pub struct Closed {
     /// The successor to open, when this client did not create it. Its bytes
     /// then go to [`ChannelState::apply_remote`], and
     /// [`ChannelState::segment_ready`] admits it once they are all in.
-    pub fetch: Option<SegmentId>,
+    pub fetch: Option<Id<Segment>>,
 }
 
 impl ChannelState {
@@ -102,7 +103,7 @@ impl ChannelState {
     /// close then (`SRV-196`), and the finalization frees the slot. A closing
     /// segment `meta` lists but the channel opened without counts too
     /// (`MURMURE-503`).
-    pub fn wants_close(&mut self) -> Option<SegmentId> {
+    pub fn wants_close(&mut self) -> Option<Id<Segment>> {
         if self.close_asked == CloseAsk::Asked || self.closing.is_some() || self.successor.is_some()
         {
             return None;
@@ -182,8 +183,8 @@ impl ChannelState {
     /// - [`MurmureError::Crdt`]: Loro refused a write.
     pub fn close_into(
         &mut self,
-        closing: SegmentId,
-        active: SegmentId,
+        closing: Id<Segment>,
+        active: Id<Segment>,
         successor: Successor,
         now: Timestamp,
     ) -> Result<Closed, MurmureError> {
@@ -218,7 +219,7 @@ impl ChannelState {
     /// The successor `meta` names once another client closed the active
     /// segment, to fetch (`MURMURE-065`). `None` when `meta` names no new
     /// active segment, or when it is already on its way.
-    pub fn successor_to_open(&mut self) -> Option<SegmentId> {
+    pub fn successor_to_open(&mut self) -> Option<Id<Segment>> {
         let live = live_segments(&self.meta.doc, self.channel_id).ok()?;
         if live.active == self.active_id() || live.closing != Some(self.active_id()) {
             return None;
@@ -228,7 +229,7 @@ impl ChannelState {
 
     /// Wait for the bytes of `successor`. Messages still go to the active
     /// segment meanwhile, which takes them while it closes.
-    fn await_successor(&mut self, successor: SegmentId) -> Option<SegmentId> {
+    fn await_successor(&mut self, successor: Id<Segment>) -> Option<Id<Segment>> {
         if self.successor.is_some() || self.closing.is_some() {
             return None;
         }
@@ -241,7 +242,7 @@ impl ChannelState {
     /// once it is admitted. Returns whether the document is that successor.
     pub(super) fn note_successor_session(
         &mut self,
-        segment: SegmentId,
+        segment: Id<Segment>,
         peer: ambre_core::PeerId,
         entry: PeerEntryBytes,
     ) -> bool {
@@ -253,13 +254,13 @@ impl ChannelState {
     }
 
     /// Whether `segment` is the successor still arriving.
-    pub(super) fn is_successor(&self, segment: SegmentId) -> bool {
+    pub(super) fn is_successor(&self, segment: Id<Segment>) -> bool {
         self.successor == Some(segment)
     }
 
     /// Forget the successor that could not open. A later tick fetches it
     /// again (`MURMURE-482`).
-    pub(super) fn forget_successor(&mut self, segment: SegmentId) {
+    pub(super) fn forget_successor(&mut self, segment: Id<Segment>) {
         if self.successor == Some(segment) {
             self.successor = None;
             self.successor_session = None;
@@ -268,7 +269,7 @@ impl ChannelState {
     }
 
     /// Count one more failure of `segment`, timed by the next tick.
-    pub(super) fn successor_failed(&mut self, segment: SegmentId) {
+    pub(super) fn successor_failed(&mut self, segment: Id<Segment>) {
         match &mut self.successor_retry {
             Some(retry) if retry.segment == segment => {
                 retry.failures = retry.failures.incremented();
@@ -291,7 +292,7 @@ impl ChannelState {
     ///
     /// Messages still go to the active segment meanwhile, never to the
     /// successor that did not open.
-    pub fn successor_to_retry(&mut self, now: Timestamp) -> Option<SegmentId> {
+    pub fn successor_to_retry(&mut self, now: Timestamp) -> Option<Id<Segment>> {
         if self.successor.is_some() || self.closing.is_some() {
             return None;
         }
@@ -315,7 +316,7 @@ impl ChannelState {
     /// segment. The old active segment is the closing one now.
     pub(super) fn successor_ready(
         &mut self,
-        segment: SegmentId,
+        segment: Id<Segment>,
         arrivals: Vec<Arrival>,
     ) -> Result<MurmureEvent, MurmureError> {
         self.successor = None;
@@ -348,8 +349,8 @@ impl ChannelState {
 /// [`MurmureError::Crdt`] when Loro refuses a write.
 fn record_close(
     meta: &LoroDoc,
-    closing: SegmentId,
-    active: SegmentId,
+    closing: Id<Segment>,
+    active: Id<Segment>,
     now: Timestamp,
 ) -> Result<(), MurmureError> {
     let list = crate::schema::root_list(meta, Root::Segments);
@@ -359,7 +360,7 @@ fn record_close(
             continue;
         };
         let id = schema::string(&entry, SegmentKey::Document)
-            .and_then(|s| SegmentId::parse_str(&s).ok());
+            .and_then(|s| Id::<Segment>::parse_str(&s).ok());
         if id == Some(closing) {
             entry.insert(SegmentKey::State, SegmentState::Closing.as_str())?;
         } else if id == Some(active) {

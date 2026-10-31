@@ -9,8 +9,8 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelId, MemberInfo, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SpaceCommand,
-    SpaceEvent, SpaceId, Timestamp,
+    MemberInfo, PrivateChannelDraft, PublicChannelDraft, SealedChannelKey, SpaceCommand,
+    SpaceEvent, Timestamp,
 };
 use ambre_core::Name;
 use ambre_murmure::{
@@ -26,10 +26,10 @@ pub(crate) struct OpenSpace {
     /// The catalogue entries as they stood when this client asked the relay
     /// which channels it holds. Only these may be unlisted on its answer:
     /// an entry listed since names a channel the relay held by then.
-    checked: Option<Vec<ChannelId>>,
+    checked: Option<Vec<Id<Channel>>>,
     /// The role of each member, as Sync's last listing gave them: the last
     /// owner hands the role on before leaving (the Murmure spaces spec).
-    roles: Vec<(UserId, Role)>,
+    roles: Vec<(Id<User>, Role)>,
 }
 
 /// A space on its way to open, with what arrived before its document was
@@ -50,7 +50,7 @@ enum NewChannel {
 
 /// A channel the relay is creating, until it answers.
 pub(crate) struct Creating {
-    space_id: SpaceId,
+    space_id: Id<Space>,
     channel: ChannelState,
     /// What the catalogue will list, for a public channel. `None` for a
     /// private one, which no catalogue lists.
@@ -62,7 +62,7 @@ impl LogicState {
     /// owner on the first upload. It is written again under its PeerID once
     /// its identity lands, and its whole content leaves once the Sync worker
     /// holds the document.
-    pub(crate) fn create_space(&mut self, space_id: SpaceId, name: &Name, now: Timestamp) {
+    pub(crate) fn create_space(&mut self, space_id: Id<Space>, name: &Name, now: Timestamp) {
         if self.spaces.contains_key(&space_id) || self.space_opening.contains_key(&space_id) {
             return;
         }
@@ -87,7 +87,7 @@ impl LogicState {
 
     /// Open a space the relay holds. Its payloads wait until the document is
     /// ready, then open it whole.
-    pub(crate) fn open_space(&mut self, space_id: SpaceId) {
+    pub(crate) fn open_space(&mut self, space_id: Id<Space>) {
         if self.spaces.contains_key(&space_id) || self.space_opening.contains_key(&space_id) {
             return;
         }
@@ -99,7 +99,7 @@ impl LogicState {
     }
 
     /// Drop a space, open or opening, with the channels it was creating.
-    pub(crate) fn close_space(&mut self, space_id: SpaceId) {
+    pub(crate) fn close_space(&mut self, space_id: Id<Space>) {
         let held = self.spaces.remove(&space_id).is_some();
         let opening = self.space_opening.remove(&space_id).is_some();
         self.creating.retain(|_, c| c.space_id != space_id);
@@ -117,7 +117,7 @@ impl LogicState {
     /// Send the whole content of a document this client created, once the
     /// Sync worker holds it: the first update creates it on the relay. The
     /// commands that waited on it follow.
-    pub(crate) fn flush_unsent(&mut self, document_id: DocumentId) {
+    pub(crate) fn flush_unsent(&mut self, document_id: Id<Document>) {
         if let Some(payload) = self.unsent.remove(&document_id) {
             self.send_to_sync(SyncCommand::SendUpdate {
                 document_id,
@@ -132,11 +132,13 @@ impl LogicState {
     /// `None` when no open space holds that document.
     pub(crate) fn adopt_space_session(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         peer: ambre_core::PeerId,
         entry: &ambre_core::PeerEntry,
     ) -> Option<Result<Option<ambre_core::DeltaBytes>, ambre_murmure::MurmureError>> {
-        let space = self.spaces.get_mut(&SpaceId::from_document(document_id))?;
+        let space = self
+            .spaces
+            .get_mut(&Id::<Space>::from_document(document_id))?;
         Some(
             space
                 .state
@@ -146,8 +148,8 @@ impl LogicState {
 
     /// The document of a space is ready. Returns `false` when no space asked
     /// for it.
-    pub(crate) fn space_document_ready(&mut self, document_id: DocumentId, role: Role) -> bool {
-        let space_id = SpaceId::from_document(document_id);
+    pub(crate) fn space_document_ready(&mut self, document_id: Id<Document>, role: Role) -> bool {
+        let space_id = Id::<Space>::from_document(document_id);
         if let Some(space) = self.spaces.get_mut(&space_id) {
             space.role = role;
             self.space_live(space_id);
@@ -193,8 +195,12 @@ impl LogicState {
 
     /// The document of a space could not open. Returns `false` when no space
     /// asked for it.
-    pub(crate) fn space_document_failed(&mut self, document_id: DocumentId, message: &str) -> bool {
-        let space_id = SpaceId::from_document(document_id);
+    pub(crate) fn space_document_failed(
+        &mut self,
+        document_id: Id<Document>,
+        message: &str,
+    ) -> bool {
+        let space_id = Id::<Space>::from_document(document_id);
         if self.space_opening.remove(&space_id).is_none() && !self.spaces.contains_key(&space_id) {
             return false;
         }
@@ -203,7 +209,7 @@ impl LogicState {
         true
     }
 
-    fn space_open_failed(&self, space_id: SpaceId, message: String) {
+    fn space_open_failed(&self, space_id: Id<Space>, message: String) {
         tracing::warn!("Logic: space {space_id} failed to open: {message}");
         self.send_to_ui(UiEvent::Space {
             space_id,
@@ -215,10 +221,10 @@ impl LogicState {
     /// `false` when no space, open or opening, holds it.
     pub(crate) fn apply_space_remote(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payloads: &[ambre_core::LoroPayloadRef<'_>],
     ) -> bool {
-        let space_id = SpaceId::from_document(document_id);
+        let space_id = Id::<Space>::from_document(document_id);
         if let Some(opening) = self.space_opening.get_mut(&space_id) {
             opening
                 .payloads
@@ -241,9 +247,9 @@ impl LogicState {
     /// relay's number of the last delta it folds in (`SRV-083`).
     pub(crate) fn space_snapshot(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) -> Option<(ambre_core::SnapshotBytes, Seq)> {
-        let space = self.spaces.get(&SpaceId::from_document(document_id))?;
+        let space = self.spaces.get(&Id::<Space>::from_document(document_id))?;
         let payload = space
             .state
             .snapshot()
@@ -257,7 +263,7 @@ impl LogicState {
     }
 
     /// Hand the view the name, the categories and the catalogue of a space.
-    fn show_catalogue(&self, space_id: SpaceId) {
+    fn show_catalogue(&self, space_id: Id<Space>) {
         let Some(space) = self.spaces.get(&space_id) else {
             return;
         };
@@ -293,8 +299,8 @@ impl LogicState {
     /// (the Murmure spaces spec).
     pub(crate) fn channel_resealed(
         &mut self,
-        space_id: SpaceId,
-        channel_id: ChannelId,
+        space_id: Id<Space>,
+        channel_id: Id<Channel>,
         key: &SealedChannelKey,
     ) {
         let Some(space) = self.spaces.get_mut(&space_id) else {
@@ -314,7 +320,7 @@ impl LogicState {
         }
     }
 
-    fn channel_failed(&self, space_id: SpaceId, channel_id: ChannelId, message: String) {
+    fn channel_failed(&self, space_id: Id<Space>, channel_id: Id<Channel>, message: String) {
         tracing::warn!("Logic: channel {channel_id} of space {space_id}: {message}");
         self.send_to_ui(UiEvent::Space {
             space_id,
@@ -326,7 +332,7 @@ impl LogicState {
     }
 
     /// Run one command on an open space (`BUS-027`).
-    pub(crate) fn handle_space_command(&mut self, space_id: SpaceId, command: SpaceCommand) {
+    pub(crate) fn handle_space_command(&mut self, space_id: Id<Space>, command: SpaceCommand) {
         let Some(space) = self.spaces.get(&space_id) else {
             tracing::warn!("Logic: command for space {space_id}, which is not open; dropped");
             return;
@@ -455,7 +461,7 @@ impl LogicState {
     /// The document of a space is live (the Murmure members spec). Show this
     /// user online to the other members. The member rows come from Sync,
     /// which reads them once its subscription holds (`SYNC-150`).
-    fn space_live(&mut self, space_id: SpaceId) {
+    fn space_live(&mut self, space_id: Id<Space>) {
         self.send_presence(space_id);
         self.check_catalogue(space_id);
     }
@@ -464,11 +470,11 @@ impl LogicState {
     /// admin then drops an entry that outlived its channel (the Murmure
     /// spaces spec). A viewer writes no catalogue, and an empty one has
     /// nothing to drop.
-    fn check_catalogue(&mut self, space_id: SpaceId) {
+    fn check_catalogue(&mut self, space_id: Id<Space>) {
         let Some(space) = self.spaces.get_mut(&space_id) else {
             return;
         };
-        let listed: Vec<ChannelId> = space
+        let listed: Vec<Id<Channel>> = space
             .state
             .catalogue()
             .iter()
@@ -483,7 +489,7 @@ impl LogicState {
 
     /// The relay's channels of the space. Unlist each entry checked when
     /// this client asked and absent from the answer: its channel is gone.
-    pub(crate) fn space_channels(&mut self, space_id: SpaceId, channels: &[ChannelId]) {
+    pub(crate) fn space_channels(&mut self, space_id: Id<Space>, channels: &[Id<Channel>]) {
         let Some(space) = self.spaces.get_mut(&space_id) else {
             return;
         };
@@ -513,7 +519,7 @@ impl LogicState {
 
     /// Send this user's presence sample on the space document, and on no
     /// other: only the members of the space hold its key.
-    fn send_presence(&self, space_id: SpaceId) {
+    fn send_presence(&self, space_id: Id<Space>) {
         self.send_to_sync(SyncCommand::SendEphemeral {
             document_id: space_id.document_id(),
             payload: presence_sample(),
@@ -526,10 +532,10 @@ impl LogicState {
     /// the last rows until it is open (the Murmure members spec).
     pub(crate) fn space_members_changed(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         members: Vec<MemberInfo>,
     ) -> bool {
-        let space_id = SpaceId::from_document(document_id);
+        let space_id = Id::<Space>::from_document(document_id);
         if let Some(opening) = self.space_opening.get_mut(&space_id) {
             opening.members = Some(members);
             return true;
@@ -544,7 +550,7 @@ impl LogicState {
     }
 
     /// These rows become the member list of a space.
-    fn set_space_rows(&mut self, space_id: SpaceId, members: Vec<MemberInfo>) {
+    fn set_space_rows(&mut self, space_id: Id<Space>, members: Vec<MemberInfo>) {
         let Some(space) = self.spaces.get_mut(&space_id) else {
             return;
         };
@@ -567,10 +573,10 @@ impl LogicState {
     pub(crate) fn hand_off_before_leave(
         &mut self,
         leave: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) -> bool {
         let (Some(space), Some(me)) = (
-            self.spaces.get(&SpaceId::from_document(document_id)),
+            self.spaces.get(&Id::<Space>::from_document(document_id)),
             self.my_user_id,
         ) else {
             return false;
@@ -622,7 +628,7 @@ impl LogicState {
     }
 
     /// Hand the view the member list of a space.
-    fn show_members(&self, space_id: SpaceId) {
+    fn show_members(&self, space_id: Id<Space>) {
         let Some(space) = self.spaces.get(&space_id) else {
             return;
         };
@@ -642,11 +648,11 @@ impl LogicState {
     /// a newcomer sees who is online without waiting a refresh period.
     pub(crate) fn space_presence_heard(
         &mut self,
-        document_id: DocumentId,
-        from: UserId,
+        document_id: Id<Document>,
+        from: Id<User>,
         payload: &ambre_core::EphemeralBytes,
     ) -> bool {
-        let space_id = SpaceId::from_document(document_id);
+        let space_id = Id::<Space>::from_document(document_id);
         if self.space_opening.contains_key(&space_id) {
             return true;
         }
@@ -669,8 +675,8 @@ impl LogicState {
     /// The departure of another connection of this user turns no one
     /// offline. This connection answers with its sample, so the other
     /// members see this user online again.
-    pub(crate) fn space_peer_left(&mut self, document_id: DocumentId, user: UserId) -> bool {
-        let space_id = SpaceId::from_document(document_id);
+    pub(crate) fn space_peer_left(&mut self, document_id: Id<Document>, user: Id<User>) -> bool {
+        let space_id = Id::<Space>::from_document(document_id);
         if self.space_opening.contains_key(&space_id) {
             return true;
         }
@@ -686,7 +692,7 @@ impl LogicState {
     }
 
     /// The session names this user: every open space shows them online.
-    pub(crate) fn spaces_know_me(&mut self, me: UserId) {
+    pub(crate) fn spaces_know_me(&mut self, me: Id<User>) {
         for space in self.spaces.values_mut() {
             space.roster.set_me(me);
         }
@@ -695,7 +701,7 @@ impl LogicState {
     /// Ask the relay for a new channel, and hold it until the relay answers.
     /// A public channel comes with its catalogue entry. A private one comes
     /// with its name, sealed beside meta so it shows before the channel opens.
-    fn create_channel(&mut self, space_id: SpaceId, channel: ChannelState, kind: NewChannel) {
+    fn create_channel(&mut self, space_id: Id<Space>, channel: ChannelState, kind: NewChannel) {
         let channel_id = channel.channel_id();
         let (listing, name) = match kind {
             NewChannel::Public(draft) => (Some(draft), None),
@@ -724,7 +730,7 @@ impl LogicState {
     }
 
     /// The open space whose catalogue lists `channel_id`, if any.
-    pub(crate) fn listing_space(&self, channel_id: ChannelId) -> Option<SpaceId> {
+    pub(crate) fn listing_space(&self, channel_id: Id<Channel>) -> Option<Id<Space>> {
         self.spaces
             .iter()
             .find(|(_, space)| space.state.sealed_key(channel_id).is_ok())
@@ -734,7 +740,11 @@ impl LogicState {
     /// The relay holds the new channel. List a public one in the catalogue
     /// with its sealed key, and send the first content of its two documents.
     /// A private one writes no catalogue.
-    pub(crate) fn channel_created(&mut self, channel_id: ChannelId, key: Option<SealedChannelKey>) {
+    pub(crate) fn channel_created(
+        &mut self,
+        channel_id: Id<Channel>,
+        key: Option<SealedChannelKey>,
+    ) {
         let Some(Creating {
             space_id,
             channel,
@@ -776,7 +786,7 @@ impl LogicState {
     }
 
     /// The relay made this user a member of the channel: open it.
-    pub(crate) fn channel_joined(&mut self, channel_id: ChannelId) {
+    pub(crate) fn channel_joined(&mut self, channel_id: Id<Channel>) {
         let Some(space_id) = self.joining.remove(&channel_id) else {
             return;
         };
@@ -790,7 +800,7 @@ impl LogicState {
     /// The relay deleted the channel: drop it, open or opening, and end the
     /// session of each document, so the Sync worker forgets their keys. A
     /// public one leaves the catalogue.
-    pub(crate) fn channel_deleted(&mut self, channel_id: ChannelId) {
+    pub(crate) fn channel_deleted(&mut self, channel_id: Id<Channel>) {
         let Some(space_id) = self.deleting.remove(&channel_id) else {
             return;
         };
@@ -815,7 +825,7 @@ impl LogicState {
 
     /// The relay removed this user from the channel: drop it as a delete
     /// does. The catalogue keeps a public one, for the next member to join.
-    pub(crate) fn channel_left(&mut self, channel_id: ChannelId) {
+    pub(crate) fn channel_left(&mut self, channel_id: Id<Channel>) {
         let Some(space_id) = self.leaving.remove(&channel_id) else {
             return;
         };
@@ -829,8 +839,8 @@ impl LogicState {
     /// The relay removed this user from `document_id`. Is it a space held
     /// here? Then the user left it, an owner removed them, or it was deleted.
     /// The space closes, and the view learns it (the Murmure spaces spec).
-    pub(crate) fn space_revoked(&mut self, document_id: DocumentId) {
-        let space_id = SpaceId::from_document(document_id);
+    pub(crate) fn space_revoked(&mut self, document_id: Id<Document>) {
+        let space_id = Id::<Space>::from_document(document_id);
         if !self.spaces.contains_key(&space_id) && !self.space_opening.contains_key(&space_id) {
             return;
         }
@@ -846,8 +856,8 @@ impl LogicState {
     /// left it from another client, or its owner deleted it. A leave or a
     /// delete asked here ends on the notice, so an answer lost after it keeps
     /// nothing.
-    pub(crate) fn channel_revoked(&mut self, document_id: DocumentId) {
-        let meta = ambre_bus::MetaId::from_document(document_id);
+    pub(crate) fn channel_revoked(&mut self, document_id: Id<Document>) {
+        let meta = Id::<Meta>::from_document(document_id);
         let open = self
             .channels
             .iter()
@@ -884,7 +894,7 @@ impl LogicState {
     /// Drop a channel, open, opening or closed, with its read cursors. The
     /// session or light subscription of each document ends, so the Sync
     /// worker forgets their keys.
-    fn drop_channel(&mut self, channel_id: ChannelId) {
+    fn drop_channel(&mut self, channel_id: Id<Channel>) {
         let cursored = match (
             self.channels.get(&channel_id),
             self.closed_channels.get(&channel_id),
@@ -903,7 +913,7 @@ impl LogicState {
     /// A creation, a join, a delete or a leave failed on the relay, which
     /// changed nothing. A channel the user asked to delete or to leave stays
     /// as it was.
-    pub(crate) fn channel_request_failed(&mut self, channel_id: ChannelId, message: String) {
+    pub(crate) fn channel_request_failed(&mut self, channel_id: Id<Channel>, message: String) {
         if self.direct.remove(&channel_id).is_some() {
             return self.direct_failed(channel_id, message);
         }
@@ -926,7 +936,8 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{CategoryId, Role, Topic};
+    use ambre_bus::{Role, Topic};
+    use ambre_core::id::Category;
 
     const NOW: Timestamp = Timestamp(1_700_000_000_000);
 
@@ -947,7 +958,7 @@ mod tests {
         std::iter::from_fn(|| rx.try_recv().ok()).collect()
     }
 
-    fn ready(state: &mut LogicState, document_id: DocumentId, role: Role) {
+    fn ready(state: &mut LogicState, document_id: Id<Document>, role: Role) {
         state.handle_logic_event(LogicEvent::DocumentReady { document_id, role });
     }
 
@@ -961,7 +972,7 @@ mod tests {
 
     fn draft(name: &str) -> PublicChannelDraft {
         PublicChannelDraft {
-            channel_id: ChannelId::new(),
+            channel_id: Id::<Channel>::mint(),
             name: named(name),
             topic: Topic::new("the weekly figures"),
             category: None,
@@ -980,7 +991,7 @@ mod tests {
         })
     }
 
-    fn updates_of(sent: &[SyncCommand], document: DocumentId) -> usize {
+    fn updates_of(sent: &[SyncCommand], document: Id<Document>) -> usize {
         sent.iter()
             .filter(|c| matches!(c, SyncCommand::SendUpdate { document_id, .. } if *document_id == document))
             .count()
@@ -991,8 +1002,8 @@ mod tests {
         state: &mut LogicState,
         ui: &Receiver<UiEvent>,
         sync: &Receiver<SyncCommand>,
-    ) -> SpaceId {
-        let space_id = SpaceId::new();
+    ) -> Id<Space> {
+        let space_id = Id::<Space>::mint();
         state.handle_logic_command(LogicCommand::CreateSpace {
             space_id,
             name: Name::new("Acme").unwrap(),
@@ -1047,7 +1058,7 @@ mod tests {
     #[test]
     fn a_new_space_shows_at_once_and_uploads_whole_once_its_session_is_ready() {
         let (mut state, ui, sync) = harness();
-        let space_id = SpaceId::new();
+        let space_id = Id::<Space>::mint();
         state.handle_logic_command(LogicCommand::CreateSpace {
             space_id,
             name: Name::new("Acme").unwrap(),
@@ -1106,7 +1117,7 @@ mod tests {
     #[test]
     fn a_space_opens_from_the_payloads_before_its_ready_signal() {
         let (mut state, ui, sync) = harness();
-        let space_id = SpaceId::new();
+        let space_id = Id::<Space>::mint();
         let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         let _ = drain(&sync);
@@ -1134,7 +1145,7 @@ mod tests {
     #[test]
     fn a_space_with_nothing_readable_fails_to_open() {
         let (mut state, ui, sync) = harness();
-        let space_id = SpaceId::new();
+        let space_id = Id::<Space>::mint();
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         let _ = drain(&sync);
         ready(&mut state, space_id.document_id(), Role::Editor);
@@ -1194,7 +1205,7 @@ mod tests {
             1,
             "one catalogue write"
         );
-        let opened: Vec<DocumentId> = sent
+        let opened: Vec<Id<Document>> = sent
             .iter()
             .filter_map(|c| match c {
                 SyncCommand::OpenDocument { document_id, .. } => Some(*document_id),
@@ -1234,7 +1245,7 @@ mod tests {
     #[test]
     fn a_viewer_creates_no_channel_and_adds_no_category() {
         let (mut state, ui, sync) = harness();
-        let space_id = SpaceId::new();
+        let space_id = Id::<Space>::mint();
         let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
@@ -1255,7 +1266,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::Space {
             space_id,
             command: SpaceCommand::AddCategory {
-                category_id: CategoryId::new(),
+                category_id: Id::<Category>::mint(),
                 name: Name::new("Teams").unwrap(),
                 position: ambre_bus::CatalogPosition::FIRST,
             },
@@ -1309,10 +1320,10 @@ mod tests {
     #[test]
     fn a_private_channel_writes_no_catalogue() {
         let (mut state, ui, sync) = harness();
-        let space_id = SpaceId::new();
+        let space_id = Id::<Space>::mint();
         let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         opened_space(&mut state, &stored, Role::Viewer, &ui, &sync);
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
 
         state.handle_logic_command(LogicCommand::Space {
             space_id,
@@ -1383,11 +1394,11 @@ mod tests {
     /// catalogue, and opens the channel once the relay accepted the member.
     #[test]
     fn a_self_join_hands_the_sealed_key_to_sync_and_writes_no_catalogue() {
-        let space_id = SpaceId::new();
+        let space_id = Id::<Space>::mint();
         let mut alice =
             identified_space(SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create"));
         let listed = ChannelState::create(
-            ChannelId::new(),
+            Id::<Channel>::mint(),
             ChannelType::Public,
             Some(&fit_name("general")),
             NOW,
@@ -1461,12 +1472,12 @@ mod tests {
 
     /// Bob's client opens a space where Alice listed one channel under
     /// `sealed(9)`, at `role`. Returns it with its Sync queue drained.
-    fn listed_space_as(role: Role) -> (LogicState, SpaceId, ChannelId, Receiver<SyncCommand>) {
-        let space_id = SpaceId::new();
+    fn listed_space_as(role: Role) -> (LogicState, Id<Space>, Id<Channel>, Receiver<SyncCommand>) {
+        let space_id = Id::<Space>::mint();
         let mut alice =
             identified_space(SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create"));
         let listed = ChannelState::create(
-            ChannelId::new(),
+            Id::<Channel>::mint(),
             ChannelType::Public,
             Some(&fit_name("general")),
             NOW,
@@ -1493,8 +1504,8 @@ mod tests {
     /// Whether `sent` hands Sync the catalogue of `space_id` as `channels`.
     fn hands(
         sent: &[SyncCommand],
-        space_id: SpaceId,
-        channels: &[(ChannelId, SealedChannelKey)],
+        space_id: Id<Space>,
+        channels: &[(Id<Channel>, SealedChannelKey)],
     ) -> bool {
         sent.iter().any(|c| {
             matches!(c, SyncCommand::RotateSpace { space_id: s, channels: held }
@@ -1543,7 +1554,7 @@ mod tests {
         bob.handle_logic_event(resealed);
         assert_eq!(updates_of(&drain(&sync), space_id.document_id()), 0);
         bob.handle_logic_event(LogicEvent::ChannelKeyResealed {
-            space_id: SpaceId::new(),
+            space_id: Id::<Space>::mint(),
             channel_id,
             key: sealed(8),
         });
@@ -1556,11 +1567,11 @@ mod tests {
     /// ready: its id, `meta` and first segment.
     fn public_channel(
         state: &mut LogicState,
-        space_id: SpaceId,
+        space_id: Id<Space>,
         name: &str,
         ui: &Receiver<UiEvent>,
         sync: &Receiver<SyncCommand>,
-    ) -> (ChannelId, DocumentId, DocumentId) {
+    ) -> (Id<Channel>, Id<Document>, Id<Document>) {
         let draft = draft(name);
         let channel_id = draft.channel_id;
         state.handle_logic_command(LogicCommand::Space {
@@ -1610,7 +1621,7 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::ChannelDeleted { channel_id });
         let sent = drain(&sync);
-        let mut closed: Vec<DocumentId> = sent
+        let mut closed: Vec<Id<Document>> = sent
             .iter()
             .filter_map(|c| match c {
                 SyncCommand::CloseDocument { document_id } => Some(*document_id),
@@ -1632,7 +1643,7 @@ mod tests {
                 if *id == channel_id
         )));
         let (_, catalogue) = last_catalogue(&shown).expect("the catalogue");
-        let listed: Vec<ChannelId> = catalogue.iter().map(|e| e.channel_id).collect();
+        let listed: Vec<Id<Channel>> = catalogue.iter().map(|e| e.channel_id).collect();
         assert_eq!(listed, [kept]);
 
         // An answer nobody here asked for drops nothing.
@@ -1666,7 +1677,7 @@ mod tests {
         });
         assert_eq!(updates_of(&drain(&sync), space_id.document_id()), 1);
         let (_, catalogue) = last_catalogue(&drain(&ui)).expect("the catalogue");
-        let mut listed: Vec<ChannelId> = catalogue.iter().map(|e| e.channel_id).collect();
+        let mut listed: Vec<Id<Channel>> = catalogue.iter().map(|e| e.channel_id).collect();
         listed.sort_by_key(|id| *id.as_bytes());
         let mut expected = [kept, late];
         expected.sort_by_key(|id| *id.as_bytes());
@@ -1704,7 +1715,7 @@ mod tests {
     #[test]
     fn a_delete_ends_on_the_relays_notice() {
         let (mut state, ui, sync) = harness();
-        let me = UserId::new();
+        let me = Id::<User>::mint();
         state.my_user_id = Some(me);
         let space_id = created_space(&mut state, &ui, &sync);
         let (channel_id, meta, _) = public_channel(&mut state, space_id, "budget", &ui, &sync);
@@ -1812,7 +1823,7 @@ mod tests {
         assert!(state.channels.contains_key(&channel_id));
 
         state.handle_logic_event(LogicEvent::ChannelLeft { channel_id });
-        let mut closed: Vec<DocumentId> = drain(&sync)
+        let mut closed: Vec<Id<Document>> = drain(&sync)
             .iter()
             .map(|c| match c {
                 SyncCommand::CloseDocument { document_id } => *document_id,
@@ -1846,7 +1857,7 @@ mod tests {
     #[test]
     fn a_leave_from_another_client_drops_the_channel_here() {
         let (mut state, ui, sync) = harness();
-        let me = UserId::new();
+        let me = Id::<User>::mint();
         state.my_user_id = Some(me);
         let space_id = created_space(&mut state, &ui, &sync);
         let (channel_id, meta, segment) =
@@ -1857,7 +1868,7 @@ mod tests {
             revoked_user_id,
         };
 
-        state.handle_logic_event(revoked(kept_meta, UserId::new()));
+        state.handle_logic_event(revoked(kept_meta, Id::<User>::mint()));
         state.handle_logic_event(revoked(segment, me));
         assert!(
             drain(&sync).is_empty(),
@@ -1867,7 +1878,7 @@ mod tests {
         let _ = drain(&ui);
 
         state.handle_logic_event(revoked(meta, me));
-        let mut closed: Vec<DocumentId> = drain(&sync)
+        let mut closed: Vec<Id<Document>> = drain(&sync)
             .iter()
             .map(|c| match c {
                 SyncCommand::CloseDocument { document_id } => *document_id,
@@ -1958,7 +1969,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::Space {
             space_id,
             command: SpaceCommand::JoinChannel {
-                channel_id: ChannelId::new(),
+                channel_id: Id::<Channel>::mint(),
             },
         });
         assert!(drain(&sync).is_empty());
@@ -1973,7 +1984,7 @@ mod tests {
 
     #[test]
     fn a_remote_catalogue_delta_reaches_the_open_space() {
-        let space_id = SpaceId::new();
+        let space_id = Id::<Space>::mint();
         let mut alice =
             identified_space(SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create"));
         let first = alice.export_all().expect("export");
@@ -1987,7 +1998,7 @@ mod tests {
         let _ = (drain(&ui), drain(&sync));
 
         let listed = ChannelState::create(
-            ChannelId::new(),
+            Id::<Channel>::mint(),
             ChannelType::Public,
             Some(&fit_name("general")),
             NOW,
@@ -2048,7 +2059,7 @@ mod tests {
     }
 
     /// Every presence sample sent, with the document it went on.
-    fn samples(sent: &[SyncCommand]) -> Vec<(DocumentId, ambre_core::EphemeralBytes)> {
+    fn samples(sent: &[SyncCommand]) -> Vec<(Id<Document>, ambre_core::EphemeralBytes)> {
         sent.iter()
             .filter_map(|c| match c {
                 SyncCommand::SendEphemeral {
@@ -2061,7 +2072,7 @@ mod tests {
     }
 
     /// The member listing this thread asked for, with the document it names.
-    fn member_request(sent: &[SyncCommand]) -> Option<(Generation<Request>, DocumentId)> {
+    fn member_request(sent: &[SyncCommand]) -> Option<(Generation<Request>, Id<Document>)> {
         sent.iter().find_map(|c| match c {
             SyncCommand::Rest {
                 id,
@@ -2071,7 +2082,7 @@ mod tests {
         })
     }
 
-    fn member(user_id: UserId, name: &str) -> MemberInfo {
+    fn member(user_id: Id<User>, name: &str) -> MemberInfo {
         MemberInfo {
             user_id,
             display_name: ambre_core::DisplayName::new(name).unwrap(),
@@ -2088,8 +2099,8 @@ mod tests {
         ui: &Receiver<UiEvent>,
         sync: &Receiver<SyncCommand>,
         members: Vec<MemberInfo>,
-    ) -> SpaceId {
-        let space_id = SpaceId::new();
+    ) -> Id<Space> {
+        let space_id = Id::<Space>::mint();
         let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
@@ -2112,8 +2123,8 @@ mod tests {
 
     fn sample_from(
         state: &mut LogicState,
-        space_id: SpaceId,
-        from: UserId,
+        space_id: Id<Space>,
+        from: Id<User>,
         payload: ambre_core::EphemeralBytes,
     ) {
         state.handle_logic_event(LogicEvent::RemoteEphemeral {
@@ -2129,7 +2140,7 @@ mod tests {
     #[test]
     fn opening_a_space_sends_this_users_presence_on_its_document_alone() {
         let (mut state, _ui, sync) = harness();
-        let space_id = SpaceId::new();
+        let space_id = Id::<Space>::mint();
         let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
@@ -2154,7 +2165,7 @@ mod tests {
     #[test]
     fn the_member_list_holds_the_rows_of_the_space_document_and_opens_nothing_else() {
         let (mut state, ui, sync) = harness();
-        let space_id = SpaceId::new();
+        let space_id = Id::<Space>::mint();
         let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
@@ -2165,7 +2176,7 @@ mod tests {
         let _ = drain(&sync);
         ready(&mut state, space_id.document_id(), Role::Editor);
         let sent = drain(&sync);
-        let (alice, bob) = (UserId::new(), UserId::new());
+        let (alice, bob) = (Id::<User>::mint(), Id::<User>::mint());
         state.handle_logic_event(LogicEvent::MembersChanged {
             document_id: space_id.document_id(),
             members: vec![member(bob, "Bob"), member(alice, "Alice")],
@@ -2173,7 +2184,7 @@ mod tests {
         let shown = drain(&ui);
         assert!(!shown.iter().any(|e| matches!(e, UiEvent::Rest { .. })));
         let members = last_members(&shown).expect("a member list");
-        let ids: Vec<UserId> = members.iter().map(|m| m.user_id).collect();
+        let ids: Vec<Id<User>> = members.iter().map(|m| m.user_id).collect();
         assert_eq!(ids, [alice, bob]);
         assert!(members.iter().all(|m| m.presence == Presence::Offline));
         let opened = sent
@@ -2189,7 +2200,7 @@ mod tests {
     #[test]
     fn a_change_of_members_while_the_space_is_open_reads_the_rows_again() {
         let (mut state, ui, sync) = harness();
-        let (alice, bob, carol) = (UserId::new(), UserId::new(), UserId::new());
+        let (alice, bob, carol) = (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
         let space_id = space_with(
             &mut state,
             &ui,
@@ -2206,12 +2217,12 @@ mod tests {
             member(carol, "Carol"),
         ]));
         let members = last_members(&drain(&ui)).expect("a member list");
-        let ids: Vec<UserId> = members.iter().map(|m| m.user_id).collect();
+        let ids: Vec<Id<User>> = members.iter().map(|m| m.user_id).collect();
         assert_eq!(ids, [alice, carol]);
 
         // A document no space holds asks for nothing.
         state.handle_logic_event(LogicEvent::MembersChanged {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             members: Vec::new(),
         });
         assert!(member_request(&drain(&sync)).is_none());
@@ -2223,7 +2234,7 @@ mod tests {
     #[test]
     fn a_change_of_members_hands_the_rows_and_costs_the_space_no_request() {
         let (mut state, ui, sync) = harness();
-        let (alice, carol) = (UserId::new(), UserId::new());
+        let (alice, carol) = (Id::<User>::mint(), Id::<User>::mint());
         let space_id = space_with(&mut state, &ui, &sync, vec![member(alice, "Alice")]);
 
         state.handle_logic_event(LogicEvent::MembersChanged {
@@ -2232,7 +2243,7 @@ mod tests {
         });
         assert!(member_request(&drain(&sync)).is_none(), "no request");
         let members = last_members(&drain(&ui)).expect("a member list");
-        let ids: Vec<UserId> = members.iter().map(|m| m.user_id).collect();
+        let ids: Vec<Id<User>> = members.iter().map(|m| m.user_id).collect();
         assert_eq!(ids, [alice, carol]);
     }
 
@@ -2241,8 +2252,8 @@ mod tests {
     #[test]
     fn an_opening_space_asks_for_no_rows_and_shows_the_last_ones_sync_read() {
         let (mut state, ui, sync) = harness();
-        let (alice, bob) = (UserId::new(), UserId::new());
-        let space_id = SpaceId::new();
+        let (alice, bob) = (Id::<User>::mint(), Id::<User>::mint());
+        let space_id = Id::<Space>::mint();
         let stored = SpaceState::create(space_id, &fit_name("Acme"), NOW).expect("create");
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         let changed = |members| LogicEvent::MembersChanged {
@@ -2264,7 +2275,7 @@ mod tests {
         ready(&mut state, space_id.document_id(), Role::Editor);
         assert!(member_request(&drain(&sync)).is_none(), "no listing asked");
         let members = last_members(&drain(&ui)).expect("the rows at open");
-        let ids: Vec<UserId> = members.iter().map(|m| m.user_id).collect();
+        let ids: Vec<Id<User>> = members.iter().map(|m| m.user_id).collect();
         assert_eq!(ids, [alice, bob]);
     }
 
@@ -2274,7 +2285,7 @@ mod tests {
     #[test]
     fn a_sample_shows_its_member_online_and_a_newcomer_is_answered_once() {
         let (mut state, ui, sync) = harness();
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
         sample_from(&mut state, space_id, bob, ambre_murmure::presence_sample());
         let members = last_members(&drain(&ui)).expect("a member list");
@@ -2291,7 +2302,7 @@ mod tests {
     #[test]
     fn a_member_with_no_sample_within_the_expiry_shows_offline() {
         let (mut state, ui, sync) = harness();
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
         sample_from(&mut state, space_id, bob, ambre_murmure::presence_sample());
         let _ = (drain(&ui), drain(&sync));
@@ -2320,7 +2331,7 @@ mod tests {
     #[test]
     fn a_departure_turns_its_member_offline_and_another_tab_of_this_user_answers() {
         let (mut state, ui, sync) = harness();
-        let (me, bob) = (UserId::new(), UserId::new());
+        let (me, bob) = (Id::<User>::mint(), Id::<User>::mint());
         state.my_user_id = Some(me);
         let space_id = space_with(
             &mut state,
@@ -2336,7 +2347,7 @@ mod tests {
             user_id: bob,
         });
         let members = last_members(&drain(&ui)).expect("a member list");
-        let presence = |id: UserId| members.iter().find(|m| m.user_id == id).map(|m| m.presence);
+        let presence = |id: Id<User>| members.iter().find(|m| m.user_id == id).map(|m| m.presence);
         assert_eq!(presence(bob), Some(Presence::Offline));
         assert_eq!(presence(me), Some(Presence::Online));
 
@@ -2353,7 +2364,7 @@ mod tests {
     #[test]
     fn a_sample_that_does_not_decode_is_dropped() {
         let (mut state, ui, sync) = harness();
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         let space_id = space_with(&mut state, &ui, &sync, vec![member(bob, "Bob")]);
         sample_from(
             &mut state,
@@ -2368,7 +2379,7 @@ mod tests {
     // --- The last owner leaving ---
 
     /// `member` at `role`.
-    fn at(user_id: UserId, role: Role) -> MemberInfo {
+    fn at(user_id: Id<User>, role: Role) -> MemberInfo {
         MemberInfo {
             role,
             ..member(user_id, "m")
@@ -2381,12 +2392,12 @@ mod tests {
     #[test]
     fn the_last_owner_hands_the_role_on_before_leaving() {
         let (mut state, ui, sync) = harness();
-        let me = UserId::from_bytes([5; 16]);
+        let me = Id::<User>::from_bytes([5; 16]);
         state.my_user_id = Some(me);
         let (low, high, viewer) = (
-            UserId::from_bytes([1; 16]),
-            UserId::from_bytes([2; 16]),
-            UserId::from_bytes([0; 16]),
+            Id::<User>::from_bytes([1; 16]),
+            Id::<User>::from_bytes([2; 16]),
+            Id::<User>::from_bytes([0; 16]),
         );
         let rows = vec![
             at(me, Role::Owner),
@@ -2457,8 +2468,8 @@ mod tests {
     /// owner stays, no one else stays, or the document is no open space.
     #[test]
     fn a_leave_another_owner_covers_goes_at_once() {
-        let me = UserId::from_bytes([5; 16]);
-        let other = UserId::from_bytes([6; 16]);
+        let me = Id::<User>::from_bytes([5; 16]);
+        let other = Id::<User>::from_bytes([6; 16]);
         for rows in [
             vec![at(me, Role::Owner), at(other, Role::Owner)],
             vec![at(me, Role::Owner)],
@@ -2467,7 +2478,7 @@ mod tests {
             let (mut state, ui, sync) = harness();
             state.my_user_id = Some(me);
             let space_id = space_with(&mut state, &ui, &sync, rows);
-            for document_id in [space_id.document_id(), DocumentId::new()] {
+            for document_id in [space_id.document_id(), Id::<Document>::mint()] {
                 state.handle_logic_command(LogicCommand::Rest {
                     id: ambre_bus::next_request(),
                     cmd: RestCommand::LeaveDocument { document_id },
@@ -2489,15 +2500,15 @@ mod tests {
     #[test]
     fn a_space_the_user_lost_closes_and_the_view_learns_it() {
         let (mut state, ui, sync) = harness();
-        let me = UserId::new();
+        let me = Id::<User>::mint();
         state.my_user_id = Some(me);
         let space_id = created_space(&mut state, &ui, &sync);
         let revoked = |document_id, revoked_user_id| LogicEvent::MemberRevoked {
             document_id,
             revoked_user_id,
         };
-        state.handle_logic_event(revoked(space_id.document_id(), UserId::new()));
-        state.handle_logic_event(revoked(DocumentId::new(), me));
+        state.handle_logic_event(revoked(space_id.document_id(), Id::<User>::mint()));
+        state.handle_logic_event(revoked(Id::<Document>::mint(), me));
         assert!(state.spaces.contains_key(&space_id), "kept");
         assert!(drain(&sync).is_empty());
         let _ = drain(&ui);

@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{CommentId, SuggestionId};
+use ambre_core::id::{Comment, Id, Suggestion};
 use ambre_core::{Doc, Point, Px, View};
 
 use crate::events::{
@@ -37,7 +37,7 @@ impl ScreenRect {
 /// The suggestion under the pointer, and the piece of it the pointer is on.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HoveredSuggestion {
-    pub suggestion_id: SuggestionId,
+    pub suggestion_id: Id<Suggestion>,
     pub kind: SuggestionKind,
     pub rect: ScreenRect,
 }
@@ -45,7 +45,7 @@ pub struct HoveredSuggestion {
 /// Where a comment thread's anchor starts, for the panel to line it up with.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ThreadAnchor {
-    pub comment_id: CommentId,
+    pub comment_id: Id<Comment>,
     /// The anchor's top on the canvas.
     pub y: Px<View>,
 }
@@ -68,20 +68,20 @@ pub struct PanelThread {
 pub enum AnnotationIntent {
     /// Bring a thread's anchor into view.
     Focus {
-        comment_id: CommentId,
+        comment_id: Id<Comment>,
     },
     Reply {
-        comment_id: CommentId,
+        comment_id: Id<Comment>,
         text: String,
     },
     Resolve {
-        comment_id: CommentId,
+        comment_id: Id<Comment>,
     },
     Accept {
-        suggestion_id: SuggestionId,
+        suggestion_id: Id<Suggestion>,
     },
     Reject {
-        suggestion_id: SuggestionId,
+        suggestion_id: Id<Suggestion>,
     },
 }
 
@@ -312,8 +312,8 @@ impl ProseUiState {
     #[must_use]
     pub fn lost_drafts(
         &self,
-        drafts: &HashMap<CommentId, String>,
-    ) -> Vec<(CommentId, Option<LostReply>)> {
+        drafts: &HashMap<Id<Comment>, String>,
+    ) -> Vec<(Id<Comment>, Option<LostReply>)> {
         drafts
             .iter()
             .filter_map(|(id, text)| {
@@ -406,7 +406,7 @@ impl ProseUiState {
 mod tests {
     use crate::layout::run::{RunOffset, RunSpan};
     use ambre_bus::app::prose::DocOffset;
-    use ambre_core::{CommentId, SuggestionId, UserId};
+    use ambre_core::id::{self, Comment, Id, User};
     use ambre_core::{Doc, Point, Px, View};
 
     fn px(value: f32) -> Px<View> {
@@ -441,10 +441,10 @@ mod tests {
 
     fn suggestion(block: BlockId, kind: SuggestionKind, start: u32, end: u32) -> Suggestion {
         Suggestion {
-            suggestion_id: SuggestionId::new(),
+            suggestion_id: Id::<id::Suggestion>::mint(),
             kind,
             author: ambre_core::DisplayName::new("Ann").ok(),
-            user_id: UserId::from_bytes([3; 16]),
+            user_id: Id::<User>::from_bytes([3; 16]),
             spans: vec![SuggestionSpan {
                 block_id: block,
                 start: DocOffset::new(start),
@@ -506,7 +506,7 @@ mod tests {
         let mut ui = view(3);
         let (a, c) = (text_block(&ui, 0), text_block(&ui, 2));
         let thread = |block, resolved| CommentThread {
-            comment_id: CommentId::new(),
+            comment_id: Id::<Comment>::mint(),
             anchor_block: Some(block),
             anchor_start: DocOffset::new(4),
             anchor_end: DocOffset::new(9),
@@ -547,7 +547,7 @@ mod tests {
         let mut ui = view(3);
         let (a, c) = (text_block(&ui, 0), text_block(&ui, 2));
         let thread = |block| CommentThread {
-            comment_id: CommentId::new(),
+            comment_id: Id::<Comment>::mint(),
             anchor_block: Some(block),
             anchor_start: DocOffset::ZERO,
             anchor_end: DocOffset::new(3),
@@ -573,7 +573,7 @@ mod tests {
         use crate::events::ProseCommand;
         let mut ui = view(80);
         let far = text_block(&ui, 60);
-        let id = CommentId::new();
+        let id = Id::<Comment>::mint();
         ui.apply_event(&ProseEvent::CommentsUpdated {
             threads: vec![CommentThread {
                 comment_id: id,
@@ -617,7 +617,7 @@ mod tests {
             ),
             Some(ProseCommand::ResolveComment { comment_id: id })
         );
-        let suggestion = SuggestionId::new();
+        let suggestion = Id::<id::Suggestion>::mint();
         assert_eq!(
             ui.take_intent(
                 AnnotationIntent::Accept {
@@ -648,7 +648,7 @@ mod tests {
         let mut ui = view(3);
         let a = text_block(&ui, 0);
         let thread = || CommentThread {
-            comment_id: CommentId::new(),
+            comment_id: Id::<Comment>::mint(),
             anchor_block: Some(a),
             anchor_start: DocOffset::new(4),
             anchor_end: DocOffset::new(9),

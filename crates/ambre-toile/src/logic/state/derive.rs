@@ -14,9 +14,10 @@ use crate::logic::command::{
     Viewport,
 };
 use crate::logic::connector::outline_meets;
+use ambre_core::id::{Connector, Document, Element, Id};
+
 use crate::logic::model::{
-    ConnectorId, ElementId, ElementKind, ElementStyle, LinkTarget, ShapeKind, StrokePoint,
-    UnitFraction,
+    ElementKind, ElementStyle, LinkTarget, ShapeKind, StrokePoint, UnitFraction,
 };
 use crate::logic::stroke::smooth_stroke;
 
@@ -75,14 +76,14 @@ impl ToileState {
     /// `SetViewport` from the live UI thread. Read-only, so the same
     /// `ToileState` can be walked from any camera.
     pub(super) fn derive_viewport_at(&self, vp: Viewport) -> DisplayViewport {
-        let visible: HashSet<ElementId> = self.index.query_visible(&vp).collect();
+        let visible: HashSet<Id<Element>> = self.index.query_visible(&vp).collect();
         let frame = vp.to_world_rect();
         let wires = self.wires();
         // An arrow is culled like an element (`TOILE-045`). The box of its
         // cached ends goes first, before the document is read. Then the
         // routed outline decides, since a diagonal's box overstates it
         // (`TOILE-207`). Its reach widens the frame, so a caption counts.
-        let meets = |id: &ConnectorId| {
+        let meets = |id: &Id<Connector>| {
             wires.get(id).and_then(|w| {
                 let wide = frame.inflate(w.reach.get(), w.reach.get());
                 let hull = w.conn.hull(&self.bounds)?;
@@ -94,8 +95,8 @@ impl ToileState {
         // Every visible element the order lists, so the omitted remainder is the
         // difference, not a second pass over the element map (`TOILE-058`).
         // Borrowed from the order rather than cloned: this walk runs on every
-        // camera, and an `ElementId` owns a heap string.
-        let mut listed: HashSet<&ElementId> = HashSet::new();
+        // camera, and an `Id<Element>` owns a heap string.
+        let mut listed: HashSet<&Id<Element>> = HashSet::new();
         for node in &self.layers {
             match node {
                 crate::logic::model::NodeId::Element(id) if visible.contains(id) => {
@@ -119,7 +120,7 @@ impl ToileState {
         // The order lists every visible element on a board no concurrent change
         // tore, so the common camera stops on the count and sorts nothing.
         if listed.len() < visible.len() {
-            let mut omitted: Vec<&ElementId> =
+            let mut omitted: Vec<&Id<Element>> =
                 visible.iter().filter(|id| !listed.contains(*id)).collect();
             omitted.sort();
             for id in omitted {
@@ -152,7 +153,7 @@ impl ToileState {
     /// [`display_element`](Self::display_element) so the tween matches what the
     /// renderer paints. A child whose element map is gone is skipped. Read-only:
     /// this derives the two snapshots the camera pass feeds to `smart_animate`.
-    pub fn frame_snapshot(&self, frame: &ElementId) -> FrameSnapshot {
+    pub fn frame_snapshot(&self, frame: &Id<Element>) -> FrameSnapshot {
         let elements = self
             .children_of(frame)
             .into_iter()
@@ -182,7 +183,7 @@ impl ToileState {
     /// group) of `id`, or `None` if the element map is gone. Mirrors the geometry
     /// branch of [`display_element`](Self::display_element); used by the
     /// presentation camera pass as the fit target for a slide.
-    pub(crate) fn element_rect(&self, id: &ElementId) -> Option<Rect> {
+    pub(crate) fn element_rect(&self, id: &Id<Element>) -> Option<Rect> {
         let em = self.element_map(id)?;
         if has_type(&em, ElementKind::Group) {
             Some(self.bounds.get(id).copied().unwrap_or_default())
@@ -191,7 +192,7 @@ impl ToileState {
         }
     }
 
-    pub(super) fn display_element(&self, id: &ElementId) -> Option<DisplayElement> {
+    pub(super) fn display_element(&self, id: &Id<Element>) -> Option<DisplayElement> {
         let em = self.element_map(id)?;
         // A group has no stored geometry: its bounds are the derived member union
         // Read them from the derived cache.
@@ -258,7 +259,7 @@ impl ToileState {
                 // the node still paints a placeholder rather than vanishing.
                 match (
                     str_of(em, ElementKey::DocId)
-                        .and_then(|id| ambre_core::DocumentId::parse_str(&id).ok()),
+                        .and_then(|id| Id::<Document>::parse_str(&id).ok()),
                     str_of(em, ElementKey::DocType).and_then(|tag| doc_type_from_tag(&tag)),
                 ) {
                     (Some(document_id), Some(doc_type)) => DisplayGeom::DocEmbed {
@@ -327,7 +328,7 @@ impl ToileState {
     /// The arrow `id` as the UI paints it, along the outline the cull routed.
     pub(super) fn display_connector(
         &self,
-        id: &ConnectorId,
+        id: &Id<Connector>,
         path: BezPath,
     ) -> Option<DisplayConnector> {
         let cm = self.connector_map(id)?;
@@ -355,11 +356,10 @@ mod tests {
     use loro::LoroValue;
 
     use crate::logic::command::DisplayGeom;
-    use crate::logic::model::{
-        ElementId, ElementKind, ElementStyle, NodeId, ShapeKind, StrokePoint,
-    };
+    use crate::logic::model::{ElementKind, ElementStyle, NodeId, ShapeKind, StrokePoint};
     use crate::logic::state::names::ElementKey;
     use crate::logic::state::{BoardKey, ToileState};
+    use ambre_core::id::{Element, Id};
 
     fn rect_at(x: f64, y: f64) -> ToileCommand {
         ToileCommand::CreateElement {
@@ -372,7 +372,7 @@ mod tests {
         }
     }
 
-    fn create_rect(st: &mut ToileState, x: f64) -> ElementId {
+    fn create_rect(st: &mut ToileState, x: f64) -> Id<Element> {
         st.handle_command(rect_at(x, 0.0))
             .display
             .into_iter()
@@ -383,7 +383,7 @@ mod tests {
             .expect("CreateElement must report the element it minted")
     }
 
-    fn painted_elements(vp: &DisplayViewport) -> Vec<ElementId> {
+    fn painted_elements(vp: &DisplayViewport) -> Vec<Id<Element>> {
         vp.nodes
             .iter()
             .filter_map(|n| match n {
@@ -445,7 +445,7 @@ mod tests {
     fn an_omitted_element_paints_last_in_id_order() {
         let mut st = ToileState::new();
         let listed = create_rect(&mut st, 0.0);
-        let omitted: Vec<ElementId> = (1..=4)
+        let omitted: Vec<Id<Element>> = (1..=4)
             .map(|i| create_rect(&mut st, f64::from(i) * 40.0))
             .collect();
         for id in &omitted {

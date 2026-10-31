@@ -58,7 +58,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `MURMURE`
 **CRDT containers.** none: a link names a message and holds none of it.
 
 ```rust
-pub struct MessageLink { pub channel: ChannelId, pub message: MessageRef }  // no key, no text
+pub struct MessageLink { pub channel: Id<Channel>, pub message: MessageRef }  // no key, no text
 ```
 
 **A link is an address, not an invitation.** It names three identifiers (`MURMURE-348`). A reader

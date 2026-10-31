@@ -3,7 +3,8 @@
 //! These fields are visible to the Blind Relay and are used for routing, integrity
 //! verification, and conflict resolution without decrypting the payload.
 
-use ambre_core::{ChainHash, DocumentId, KeyId, PublicKey, SnapshotId};
+use ambre_core::id::{Document, Id, Snapshot};
+use ambre_core::{ChainHash, KeyId, PublicKey};
 use serde::{Deserialize, Serialize};
 
 use crate::messages::{Clock, Counter};
@@ -12,13 +13,13 @@ use crate::messages::{Clock, Counter};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdatePublicData {
     /// Document identifier.
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     /// Ed25519 public key of the author.
     pub pub_key: PublicKey,
     /// Identifier of the document key that sealed the update (`SYNC-125`).
     pub key_id: KeyId,
     /// Snapshot identifier that this update is based on.
-    pub snapshot_id: SnapshotId,
+    pub snapshot_id: Id<Snapshot>,
     /// Monotonic logical clock (Lamport timestamp) of the author for this document.
     pub clock: Clock,
 }
@@ -27,13 +28,13 @@ pub struct UpdatePublicData {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnapshotPublicData {
     /// Document identifier.
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     /// Ed25519 public key of the snapshot creator.
     pub pub_key: PublicKey,
     /// Identifier of the document key that sealed the snapshot (`SYNC-125`).
     pub key_id: KeyId,
     /// Unique identifier of this snapshot.
-    pub snapshot_id: SnapshotId,
+    pub snapshot_id: Id<Snapshot>,
     /// BLAKE2b hash chain proving integrity of the parent snapshot without
     /// decrypting it. `None` on the first snapshot, whose parent is the
     /// genesis base.
@@ -50,7 +51,7 @@ pub struct SnapshotPublicData {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EphemeralPublicData {
     /// Document identifier.
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     /// Ed25519 public key of the sender.
     pub pub_key: PublicKey,
     /// Identifier of the document key that sealed the frame (`SYNC-125`).

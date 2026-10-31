@@ -4,10 +4,9 @@
 use std::rc::Rc;
 
 use ambre_bus::conduit::{Sender, local};
-use ambre_bus::{
-    ChannelId, MessageId, MessageView, MurmureEvent, SegmentId, Timestamp, UiEvent, UserId,
-};
+use ambre_bus::{MessageView, MurmureEvent, Timestamp, UiEvent};
 use ambre_canvas::{TextInput, ThemeControl};
+use ambre_core::id::{Channel, Id, Message, Segment, User};
 
 use crate::MurmurePane;
 use crate::drafts::DraftShelf;
@@ -15,7 +14,7 @@ use crate::view::{MurmureView, PageReads};
 
 /// The Logic thread's word that `watching` watch `channel_id`, and no one
 /// types in it.
-pub fn watchers(channel_id: ChannelId, watching: Vec<UserId>) -> UiEvent {
+pub fn watchers(channel_id: Id<Channel>, watching: Vec<Id<User>>) -> UiEvent {
     UiEvent::Channel {
         channel_id,
         event: MurmureEvent::Watchers {
@@ -32,7 +31,7 @@ pub fn channel_of(
     texts: &[&str],
     size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>,
 ) -> (MurmureView, Sender<UiEvent>) {
-    let channel_id = ChannelId::new();
+    let channel_id = Id::<Channel>::mint();
     let reads = PageReads {
         pane: Rc::new(move || MurmurePane::Channel {
             channel: channel_id,
@@ -65,12 +64,12 @@ pub fn channel_of(
     };
     let (events, from_logic) = local(ambre_bus::conduit::ChannelCapacity::new(8));
     let view = MurmureView::new(Some(from_logic), None, reads, size, ThemeControl::default());
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let messages = texts
         .iter()
         .enumerate()
         .map(|(i, text)| MessageView {
-            id: MessageId::new(),
+            id: Id::<Message>::mint(),
             author,
             ts: Timestamp(i as u64),
             text: (*text).to_owned(),
@@ -85,7 +84,7 @@ pub fn channel_of(
             also_in_thread: None,
         })
         .collect();
-    let segment = SegmentId::new();
+    let segment = Id::<Segment>::mint();
     let event = MurmureEvent::Messages { segment, messages };
     let _ = events.try_send(UiEvent::Channel { channel_id, event });
     (view, events)

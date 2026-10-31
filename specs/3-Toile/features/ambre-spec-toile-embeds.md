@@ -27,7 +27,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TOILE-088` | `INV` | A web page on the board MUST reach neither the board, its keys nor its storage. | README pillar "E2EE"; this spec section 4 | `ambre_toile::ui::embed::address_tests::a_scheme_that_could_run_in_the_boards_stead_is_refused`; `ambre_toile::ui::embed::address_tests::a_scheme_hidden_behind_a_control_character_is_refused`; `ambre_toile::ui::embed::address_tests::plain_http_is_refused_and_not_upgraded`; `ambre_app::host::web_embed::tests::a_web_embed_runs_sandboxed_in_an_opaque_origin` -- the frame's sandbox, `allow` and referrer attributes | none | verified |
 | `TOILE-267` | `INV` | An address a peer wrote MUST pass the same check as a typed one before a frame loads it. | this spec section 4; `TOILE-088` | `ambre_toile::logic::convergence_tests::a_peers_unsafe_web_address_never_reaches_a_frame` -- a `javascript:`, `data:`, `blob:`, `http` and empty address written past the commands; `ambre_bus::app::toile::tests::a_received_address_is_checked_again`; type-level -- `WebAddress::parse` is the only constructor, and deserialisation goes through it | none | verified |
 | `TOILE-224` | `INV` | Which embed is entered MUST be this user's own view state: a peer entering an embed MUST NOT change what this user has focused. | this spec section 5 | `ambre_toile::logic::convergence_tests::doc_embed_reference_survives_the_crdt_round_trip` -- it reads no embed as entered, whatever the document holds, so no field carries it | none | verified |
-| `TOILE-UI-016` | `INV` | At most one embed MUST hold focus. | this spec section 3 | `ambre_toile::ui::embed::tests::only_the_focused_embed_comes_back_focused`; type-level -- the focus is one `Option<ElementId>`, so a second is unrepresentable | none | verified |
+| `TOILE-UI-016` | `INV` | At most one embed MUST hold focus. | this spec section 3 | `ambre_toile::ui::embed::tests::only_the_focused_embed_comes_back_focused`; type-level -- the focus is one `Option<Id<Element>>`, so a second is unrepresentable | none | verified |
 | `TOILE-UI-090` | `INV` | One session MUST serve one nested document, however many embeds point at it. | this spec section 3 | `ambre_toile::ui::embed::tests::a_visible_embed_opens_once_and_only_once`; `ambre_toile::ui::embed::tests::two_embeds_of_the_same_document_share_one_session` | none | verified |
 | `TOILE-UI-095` | `INV` | The board MUST NOT name the child's view type. | `ambre-spec-architecture.md section 4` | crate-graph -- `ambre-toile` does not depend on `ambre-app`, so no signature in the crate can name `AppView` | none | verified |
 | `TOILE-UI-098` | `INV` | A child's events MUST NOT reach the parent's view or the board's chrome. | this spec section 3 | `ambre_app::fan_out_tests::a_childs_event_never_reaches_the_board` | none | verified |
@@ -158,10 +158,10 @@ rotate, delete and reorder cost this feature nothing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VisibleEmbed {
     /// The board element carrying the reference: the focus and hit-test key.
-    pub element: ElementId,
+    pub element: Id<Element>,
     /// The embedded document: the key into the child views, and the id the
     /// child's own commands are addressed to.
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub doc_type: DocType,
     /// Where to paint, in screen pixels: the axis-aligned box of the
     /// element's quad.
@@ -192,7 +192,7 @@ pub const CLICK_SLOP: f64 = 4.0;
 /// Builds a child view for a nested document. Only the launcher can: it alone
 /// may name every application's view type. Given the document, its type and the
 /// child canvas size, it wires a private event queue and returns the view.
-pub type MakeChild = Rc<dyn Fn(DocumentId, DocType, Size) -> AppView>;
+pub type MakeChild = Rc<dyn Fn(Id<Document>, DocType, Size) -> AppView>;
 ```
 
 **Steps, once per frame:**

@@ -131,7 +131,7 @@ A PeerID of `u64::MAX` is moved to the value below it, because Loro reserves tha
 pub struct PeerId(pub u64);
 pub struct SessionNonce(pub [u8; 16]);
 pub struct PeerEntry {
-    pub user: UserId,
+    pub user: Id<User>,
     pub nonce: SessionNonce,
     pub signature: Signature,  // by `user`, over the document, the PeerID and the nonce
 }

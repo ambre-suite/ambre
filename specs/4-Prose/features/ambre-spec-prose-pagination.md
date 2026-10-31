@@ -176,7 +176,7 @@ pub struct BlockLayout {
 
 /// A footnote placed at the foot of a page.
 pub struct FootnoteLayout {
-    pub footnote_id:  FootnoteId,
+    pub footnote_id:  Id<Footnote>,
     /// The block whose line calls the note.
     pub block_id:     TreeID,
     /// Sequential across the whole document, assigned in pass 0.

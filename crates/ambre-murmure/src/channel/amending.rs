@@ -9,9 +9,8 @@
 //! (`MURMURE-013`, `MURMURE-253`).
 
 use ambre_bus::{Deletion, MessageDraft, MessageView, MurmureEvent, ThreadHead, Timestamp};
-use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, MessageId, PeerEntryBytes, SegmentId, Seq, UserId,
-};
+use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
+use ambre_core::{DeltaBytes, PeerEntryBytes, Seq};
 use loro::{
     Container, LoroDoc, LoroList, LoroMap, LoroText, LoroValue, UpdateOptions, ValueOrContainer,
 };
@@ -30,7 +29,7 @@ use crate::{mention, style};
 #[derive(Debug)]
 pub(super) struct Pending {
     /// The locked segment it amends.
-    pub(super) segment: SegmentId,
+    pub(super) segment: Id<Segment>,
     /// Its payloads, in the order they came.
     pub(super) arrivals: Vec<Arrival>,
     /// The identity issued for it, adopted once it is admitted.
@@ -38,7 +37,7 @@ pub(super) struct Pending {
 }
 
 impl Pending {
-    fn of(segment: SegmentId) -> Self {
+    fn of(segment: Id<Segment>) -> Self {
         Self {
             segment,
             arrivals: Vec::new(),
@@ -51,7 +50,7 @@ impl Pending {
 impl ChannelState {
     /// Wait for the bytes of `amendments` of `segment`, though `meta` marks
     /// them folded: the schema belts read them as a second peer does.
-    pub(crate) fn expect_amendments(&mut self, segment: SegmentId, amendments: DocumentId) {
+    pub(crate) fn expect_amendments(&mut self, segment: Id<Segment>, amendments: Id<Document>) {
         self.amendments_pending
             .insert(amendments, Pending::of(segment));
     }
@@ -71,13 +70,13 @@ pub(super) enum Change<'a> {
 pub enum ChangeTarget {
     /// The live segment itself, or the amendments document the channel
     /// holds or is loading for its locked segment.
-    Write(DocumentId),
+    Write(Id<Document>),
     /// The amendments document `meta` names for the locked segment, now
     /// asked for: the change waits until it is held.
-    Open(DocumentId),
+    Open(Id<Document>),
     /// A new amendments document, held here with no session. The Sync worker
     /// creates it on the relay and links it to the segment (`SRV-201`).
-    Create(DocumentId),
+    Create(Id<Document>),
 }
 
 /// What a link of an amendments document produced.
@@ -91,14 +90,14 @@ pub struct Linked {
     pub open: super::LinkedOpening,
     /// This client's own document, which lost the race to another member's
     /// (`SRV-202`). What waited on it waits on the winner.
-    pub replaced: Option<DocumentId>,
+    pub replaced: Option<Id<Document>>,
 }
 
 impl ChannelState {
     /// Whether a change of a message of `segment` goes to an amendment: the
     /// segment is final, or the relay locked it while it was closing. A
     /// segment `meta` names amendments for was locked by then.
-    pub(super) fn amendable(&self, segment: SegmentId) -> bool {
+    pub(super) fn amendable(&self, segment: Id<Segment>) -> bool {
         self.loaded.contains_key(&segment)
             || self.locked.contains(&segment)
             || named_amendments(&self.meta.doc, segment).is_some()
@@ -106,12 +105,12 @@ impl ChannelState {
 
     /// The amendments document the channel holds for `segment`.
     #[cfg(test)]
-    pub(crate) fn amendments_id(&self, segment: SegmentId) -> Option<DocumentId> {
+    pub(crate) fn amendments_id(&self, segment: Id<Segment>) -> Option<Id<Document>> {
         self.amendments.get(&segment).map(|held| held.id)
     }
 
     /// The locked segment the held amendments document `document_id` amends.
-    pub(super) fn amended_by(&self, document_id: DocumentId) -> Option<SegmentId> {
+    pub(super) fn amended_by(&self, document_id: Id<Document>) -> Option<Id<Segment>> {
         self.amendments
             .iter()
             .find(|(_, held)| held.id == document_id)
@@ -130,7 +129,7 @@ impl ChannelState {
     /// document.
     pub fn change_target(
         &mut self,
-        segment: SegmentId,
+        segment: Id<Segment>,
         now: Timestamp,
     ) -> Result<ChangeTarget, MurmureError> {
         if !self.amendable(segment) {
@@ -146,7 +145,7 @@ impl ChannelState {
             self.amendments_pending.insert(id, Pending::of(segment));
             return Ok(ChangeTarget::Open(id));
         }
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         let created = Created::Amendments { segment, now };
         let doc = LoroDoc::new();
         created.write(&doc, self.channel_id)?;
@@ -159,7 +158,7 @@ impl ChannelState {
     }
 
     /// The amendments document still arriving for `segment`.
-    fn loading_amendments(&self, segment: SegmentId) -> Option<DocumentId> {
+    fn loading_amendments(&self, segment: Id<Segment>) -> Option<Id<Document>> {
         self.amendments_pending
             .iter()
             .find(|(_, pending)| pending.segment == segment)
@@ -177,8 +176,8 @@ impl ChannelState {
     /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
     pub fn amendments_linked(
         &mut self,
-        segment: SegmentId,
-        amendments: DocumentId,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
     ) -> Result<Linked, MurmureError> {
         let replaced = self
             .amendments
@@ -205,7 +204,7 @@ impl ChannelState {
     /// The link of this client's own `amendments` to `segment` failed. It is
     /// dropped, so the next change creates one again. Returns `false` when
     /// the channel holds no such document.
-    pub fn amendments_failed(&mut self, segment: SegmentId, amendments: DocumentId) -> bool {
+    pub fn amendments_failed(&mut self, segment: Id<Segment>, amendments: Id<Document>) -> bool {
         let own = self
             .amendments
             .get(&segment)
@@ -221,8 +220,8 @@ impl ChannelState {
     /// segment.
     fn name_amendments(
         &mut self,
-        segment: SegmentId,
-        amendments: DocumentId,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
     ) -> Result<Option<DeltaBytes>, MurmureError> {
         let Some(entry) = segment_entry(&self.meta.doc, segment) else {
             return Ok(None);
@@ -240,7 +239,7 @@ impl ChannelState {
     /// holds, and that it neither holds nor loads. Each is asked for now:
     /// open it, and [`ChannelState::older_ready`] admits it. A document two
     /// entries name is asked for the first one alone.
-    pub fn amendments_to_open(&mut self) -> Vec<DocumentId> {
+    pub fn amendments_to_open(&mut self) -> Vec<Id<Document>> {
         let mut asked = Vec::new();
         for (segment, id) in amendments_entries(&self.meta.doc) {
             if self.doc(segment.document_id()).is_none()
@@ -260,7 +259,7 @@ impl ChannelState {
     /// Returns `false` when no such document is arriving.
     pub(super) fn note_amendments_session(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         peer: ambre_core::PeerId,
         entry: PeerEntryBytes,
     ) -> bool {
@@ -280,7 +279,7 @@ impl ChannelState {
     /// another one, and every refusal of the header check.
     pub(super) fn amendments_ready(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         pending: Pending,
     ) -> Result<MurmureEvent, MurmureError> {
         let segment = pending.segment;
@@ -297,7 +296,7 @@ impl ChannelState {
             |doc| delta::import_arrivals(doc, pending.arrivals, document_id, rules),
         )?;
         let named = schema::string(&crate::schema::header(&doc), HeaderKey::Segment)
-            .and_then(|s| SegmentId::parse_str(&s).ok());
+            .and_then(|s| Id::<Segment>::parse_str(&s).ok());
         if named != Some(segment) {
             return Err(MurmureError::ForeignSegment(document_id));
         }
@@ -311,7 +310,7 @@ impl ChannelState {
     }
 
     /// Whether `document_id` is an amendments document, held or arriving.
-    pub(super) fn is_amendments(&self, document_id: DocumentId) -> bool {
+    pub(super) fn is_amendments(&self, document_id: Id<Document>) -> bool {
         self.amendments_pending.contains_key(&document_id) || self.amended_by(document_id).is_some()
     }
 
@@ -327,7 +326,7 @@ impl ChannelState {
     /// changes nothing, and [`MurmureError::Crdt`] for bytes Loro refuses.
     pub(super) fn apply_amendment(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         seq: Seq,
         payload: &DeltaBytes,
         signer: Signer,
@@ -385,9 +384,9 @@ impl ChannelState {
     /// - [`MurmureError::Crdt`]: Loro refused a write or the export.
     pub(super) fn amend(
         &mut self,
-        segment: SegmentId,
-        message: MessageId,
-        user: UserId,
+        segment: Id<Segment>,
+        message: Id<Message>,
+        user: Id<User>,
         change: Change<'_>,
     ) -> Result<Option<Sent>, MurmureError> {
         let view = self
@@ -450,7 +449,7 @@ fn write_edit(
     doc: &LoroDoc,
     entry: &Fields<AmendmentKey>,
     draft: &MessageDraft,
-    channel: ChannelId,
+    channel: Id<Channel>,
 ) -> Result<(), MurmureError> {
     // A mergeable child would escape the authorship check, which owns a
     // container by the operation that created it.
@@ -481,7 +480,7 @@ pub(super) fn entry_content(entry: &Fields<AmendmentKey>) -> Option<LoroText> {
 /// Read each amendment of `amendments` over the message it names. A delete
 /// empties the body and marks the message deleted. An edit replaces the body
 /// and marks it edited. A message deleted in its segment stays deleted.
-pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channel: ChannelId) {
+pub(super) fn overlay(amendments: &LoroDoc, messages: &mut [MessageView], channel: Id<Channel>) {
     overlay_named_threads(amendments, messages);
     let root = crate::schema::root_map(amendments, Root::Amendments);
     if root.is_empty() {
@@ -529,13 +528,13 @@ fn overlay_named_threads(amendments: &LoroDoc, messages: &mut [MessageView]) {
 }
 
 /// The thread `amendments` records for `root`, `None` when it records none.
-pub(super) fn recorded_thread(amendments: &LoroDoc, root: MessageId) -> Option<DocumentId> {
+pub(super) fn recorded_thread(amendments: &LoroDoc, root: Id<Message>) -> Option<Id<Document>> {
     let threads = crate::schema::root_map(amendments, Root::Threads);
-    DocumentId::parse_str(&schema::string_value(threads.get(&root.to_string()))?).ok()
+    Id::<Document>::parse_str(&schema::string_value(threads.get(&root.to_string()))?).ok()
 }
 
 /// Every root `amendments` records a thread for, with that thread.
-pub(super) fn recorded_threads(amendments: &LoroDoc) -> Vec<(MessageId, DocumentId)> {
+pub(super) fn recorded_threads(amendments: &LoroDoc) -> Vec<(Id<Message>, Id<Document>)> {
     let mut recorded = Vec::new();
     amendments
         .get_map(Root::Threads.as_str())
@@ -543,9 +542,10 @@ pub(super) fn recorded_threads(amendments: &LoroDoc) -> Vec<(MessageId, Document
             let ValueOrContainer::Value(LoroValue::String(value)) = value else {
                 return;
             };
-            if let (Ok(root), Ok(thread)) =
-                (MessageId::parse_str(key), DocumentId::parse_str(&value))
-            {
+            if let (Ok(root), Ok(thread)) = (
+                Id::<Message>::parse_str(key),
+                Id::<Document>::parse_str(&value),
+            ) {
                 recorded.push((root, thread));
             }
         });
@@ -553,7 +553,7 @@ pub(super) fn recorded_threads(amendments: &LoroDoc) -> Vec<(MessageId, Document
 }
 
 /// The first entry of `meta.segments` that lists `segment`.
-pub(super) fn segment_entry(meta: &LoroDoc, segment: SegmentId) -> Option<Fields<SegmentKey>> {
+pub(super) fn segment_entry(meta: &LoroDoc, segment: Id<Segment>) -> Option<Fields<SegmentKey>> {
     let wanted = segment.to_string();
     let list: LoroList = crate::schema::root_list(meta, Root::Segments);
     (0..list.len()).find_map(|index| {
@@ -565,36 +565,36 @@ pub(super) fn segment_entry(meta: &LoroDoc, segment: SegmentId) -> Option<Fields
 
 /// The amendments document `meta` names for `segment`, `None` when it names
 /// none, or only the one a fold erased.
-pub(super) fn named_amendments(meta: &LoroDoc, segment: SegmentId) -> Option<DocumentId> {
+pub(super) fn named_amendments(meta: &LoroDoc, segment: Id<Segment>) -> Option<Id<Document>> {
     live_amendments(&segment_entry(meta, segment)?)
 }
 
 /// The amendments document a segment entry names, unless a fold erased it.
-fn live_amendments(entry: &Fields<SegmentKey>) -> Option<DocumentId> {
+fn live_amendments(entry: &Fields<SegmentKey>) -> Option<Id<Document>> {
     let named = schema::string(entry, SegmentKey::Amendments)?;
     if schema::string(entry, SegmentKey::Folded).as_deref() == Some(named.as_str()) {
         return None;
     }
-    DocumentId::parse_str(&named).ok()
+    Id::<Document>::parse_str(&named).ok()
 }
 
 /// The amendments document `meta` marks folded for `segment`.
-pub(crate) fn folded_amendments(meta: &LoroDoc, segment: SegmentId) -> Option<DocumentId> {
+pub(crate) fn folded_amendments(meta: &LoroDoc, segment: Id<Segment>) -> Option<Id<Document>> {
     let entry = segment_entry(meta, segment)?;
-    DocumentId::parse_str(&schema::string(&entry, SegmentKey::Folded)?).ok()
+    Id::<Document>::parse_str(&schema::string(&entry, SegmentKey::Folded)?).ok()
 }
 
 /// Every segment `meta` names an amendments document for, with that
 /// document, in list order.
-fn amendments_entries(meta: &LoroDoc) -> Vec<(SegmentId, DocumentId)> {
+fn amendments_entries(meta: &LoroDoc) -> Vec<(Id<Segment>, Id<Document>)> {
     let list: LoroList = crate::schema::root_list(meta, Root::Segments);
-    let mut entries: Vec<(SegmentId, DocumentId)> = Vec::new();
+    let mut entries: Vec<(Id<Segment>, Id<Document>)> = Vec::new();
     list.for_each(|item| {
         let Some(entry) = crate::schema::fields_of(item) else {
             return;
         };
         let segment = schema::string(&entry, SegmentKey::Document)
-            .and_then(|s| SegmentId::parse_str(&s).ok());
+            .and_then(|s| Id::<Segment>::parse_str(&s).ok());
         let amendments = live_amendments(&entry);
         if let (Some(segment), Some(amendments)) = (segment, amendments)
             && !entries.iter().any(|(listed, _)| *listed == segment)

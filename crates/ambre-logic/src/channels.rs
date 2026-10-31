@@ -7,12 +7,12 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelId, ChannelMatches,
-    DocumentActivity, HeldReply, HeldSend, MessageAt, MetaId, MurmureCommand, MurmureEvent,
+    ChannelActivity, ChannelDocument, ChannelDocumentKind, ChannelMatches, DocumentActivity,
+    HeldReply, HeldSend, MessageAt, MurmureCommand, MurmureEvent,
 };
 use ambre_bus::{
-    MemberInfo, Mention, MentionCount, MentionTarget, MessageId, OpenFailure, SegmentId, Seq,
-    SignedDelta, UnreadCount, Unreadable,
+    MemberInfo, Mention, MentionCount, MentionTarget, OpenFailure, Seq, SignedDelta, UnreadCount,
+    Unreadable,
 };
 use ambre_core::Name;
 use ambre_murmure::{
@@ -35,27 +35,27 @@ pub(crate) struct ReadCursor {
 #[derive(Debug)]
 pub(crate) struct ClosedChannel {
     /// The channel's `meta`, whose activity may name a new segment.
-    meta: MetaId,
+    meta: Id<Meta>,
     /// The documents released at close, and the segments watched since,
     /// each a light subscription now.
-    documents: Vec<DocumentId>,
+    documents: Vec<Id<Document>>,
     /// The final segments not held at close, whose cursors a drop forgets.
-    finals: Vec<DocumentId>,
+    finals: Vec<Id<Document>>,
     /// The counts at close, `None` when they were not known then.
     base: Option<Counts>,
     /// The messages and the mentions each document's summaries counted
     /// since the close.
-    counted: HashMap<DocumentId, Counts>,
+    counted: HashMap<Id<Document>, Counts>,
     /// The horizon of each document's copy in the local store, until a
     /// reopen asks for it.
-    copies: HashMap<DocumentId, Seq>,
+    copies: HashMap<Id<Document>, Seq>,
     /// The copies a reopen is reading back, each with its horizon.
-    reading: HashMap<DocumentId, Seq>,
+    reading: HashMap<Id<Document>, Seq>,
 }
 
 /// Every document of an open channel that may carry a read cursor: those it
 /// holds, and its final segments.
-pub(crate) fn cursored_documents(channel: &ChannelState) -> Vec<DocumentId> {
+pub(crate) fn cursored_documents(channel: &ChannelState) -> Vec<Id<Document>> {
     let mut documents = channel.document_ids();
     for segment in channel.final_segments() {
         if !documents.contains(&segment.document_id()) {
@@ -68,7 +68,7 @@ pub(crate) fn cursored_documents(channel: &ChannelState) -> Vec<DocumentId> {
 /// Notes a payload that an opening did not keep. Each caller asks
 /// `expects` first, so a refusal means the two answers disagree. A debug
 /// trace records it, and nothing else changes.
-fn trace_receipt(document_id: DocumentId, receipt: Receipt) {
+fn trace_receipt(document_id: Id<Document>, receipt: Receipt) {
     if receipt == Receipt::NotExpected {
         tracing::debug!("Logic: an opening did not expect a payload of {document_id}");
     }
@@ -79,10 +79,10 @@ fn trace_receipt(document_id: DocumentId, receipt: Receipt) {
 /// (the Murmure messages spec).
 fn change_ask(
     channel: &mut ChannelState,
-    channel_id: ChannelId,
-    segment: SegmentId,
+    channel_id: Id<Channel>,
+    segment: Id<Segment>,
     now: ambre_bus::Timestamp,
-) -> Result<(DocumentId, Option<SyncCommand>), MurmureError> {
+) -> Result<(Id<Document>, Option<SyncCommand>), MurmureError> {
     Ok(match channel.change_target(segment, now)? {
         ChangeTarget::Write(id) => (id, None),
         ChangeTarget::Open(id) => (
@@ -108,7 +108,7 @@ impl ClosedChannel {
     /// A channel this session never opened, counted from its light
     /// subscriptions (the Murmure notifications spec). Nothing is known of
     /// its count, and no copy of it is in the local store.
-    pub(crate) fn watched(meta: MetaId, documents: Vec<DocumentId>) -> Self {
+    pub(crate) fn watched(meta: Id<Meta>, documents: Vec<Id<Document>>) -> Self {
         Self {
             meta,
             documents,
@@ -121,18 +121,18 @@ impl ClosedChannel {
     }
 
     /// Whether the channel held `document_id` at close.
-    pub(crate) fn holds(&self, document_id: DocumentId) -> bool {
+    pub(crate) fn holds(&self, document_id: Id<Document>) -> bool {
         self.documents.contains(&document_id)
     }
 
     /// The channel's `meta`.
-    pub(crate) fn meta(&self) -> MetaId {
+    pub(crate) fn meta(&self) -> Id<Meta> {
         self.meta
     }
 
     /// Count a document the channel did not hold at close, a segment
     /// opened since (the Murmure unread spec). Returns whether it is new.
-    pub(crate) fn watch(&mut self, document_id: DocumentId) -> bool {
+    pub(crate) fn watch(&mut self, document_id: Id<Document>) -> bool {
         if self.holds(document_id) {
             return false;
         }
@@ -141,7 +141,7 @@ impl ClosedChannel {
     }
 
     /// Every document whose read cursor the channel may carry.
-    pub(crate) fn cursored(&self) -> Vec<DocumentId> {
+    pub(crate) fn cursored(&self) -> Vec<Id<Document>> {
         self.documents.iter().chain(&self.finals).copied().collect()
     }
 
@@ -151,7 +151,7 @@ impl ClosedChannel {
     /// the mark the view holds: `None`.
     pub(crate) fn mark(
         &self,
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         threads: MentionCount,
     ) -> Option<ChannelActivity> {
         let since = self
@@ -198,7 +198,7 @@ impl Counts {
 
     /// The mark these counts give the channel. A mention in a thread marks
     /// it with no unread message in its segments.
-    fn activity(self, channel_id: ChannelId) -> ChannelActivity {
+    fn activity(self, channel_id: Id<Channel>) -> ChannelActivity {
         ChannelActivity {
             channel_id,
             active: ambre_bus::Activity::from_bool(
@@ -215,9 +215,9 @@ impl Counts {
 #[derive(Debug)]
 pub(crate) enum HeldCommand {
     /// A command of an open channel.
-    Channel(ChannelId, MurmureCommand),
+    Channel(Id<Channel>, MurmureCommand),
     /// A command of an open space.
-    Space(ambre_bus::SpaceId, ambre_bus::SpaceCommand),
+    Space(Id<Space>, ambre_bus::SpaceCommand),
     /// An invite into a direct message, held until its notice can be
     /// written (the Murmure channels spec).
     Invite(Generation<Request>, ambre_bus::RestCommand),
@@ -230,8 +230,8 @@ pub(crate) enum HeldCommand {
 /// mentions spec).
 fn counts_of(
     channel: &ChannelState,
-    cursors: &HashMap<DocumentId, ReadCursor>,
-    me: UserId,
+    cursors: &HashMap<Id<Document>, ReadCursor>,
+    me: Id<User>,
 ) -> Option<Counts> {
     let held = channel.held_segments();
     let mut count = Counts::default();
@@ -267,7 +267,7 @@ const NAME_NOT_CHANGED: &str = "The name could not be changed.";
 impl LogicState {
     /// The mark of an open channel, counted, or `None` when its count is
     /// not known yet.
-    pub(crate) fn counted(&self, channel_id: ChannelId) -> Option<ChannelActivity> {
+    pub(crate) fn counted(&self, channel_id: Id<Channel>) -> Option<ChannelActivity> {
         let channel = self.channels.get(&channel_id)?;
         let counts = counts_of(channel, &self.read_cursors, self.my_user_id?)?;
         Some(
@@ -278,7 +278,7 @@ impl LogicState {
     }
 
     /// Hand the view the count of an open channel, once it is known.
-    fn emit_count(&self, channel_id: ChannelId) {
+    fn emit_count(&self, channel_id: Id<Channel>) {
         if let Some(mark) = self.counted(channel_id) {
             self.send_to_ui(UiEvent::ChannelActivity {
                 channels: vec![mark],
@@ -289,14 +289,14 @@ impl LogicState {
 
     /// Hand the view the first unread message of an open channel, once its
     /// count is known. The line of the message list sits above it.
-    fn emit_first_unread(&self, channel_id: ChannelId) {
+    fn emit_first_unread(&self, channel_id: Id<Channel>) {
         let (Some(channel), Some(me)) = (self.channels.get(&channel_id), self.my_user_id) else {
             return;
         };
         if counts_of(channel, &self.read_cursors, me).is_none() {
             return;
         }
-        let read_of = |segment: SegmentId| {
+        let read_of = |segment: Id<Segment>| {
             self.read_cursors
                 .get(&segment.document_id())
                 .map_or(Seq::ZERO, |cursor| cursor.read)
@@ -308,7 +308,7 @@ impl LogicState {
 
     /// Ask the relay for the documents of a channel (the Murmure engine spec).
     /// A channel already open or opening is left as it is.
-    pub(crate) fn open_channel(&mut self, channel_id: ChannelId) {
+    pub(crate) fn open_channel(&mut self, channel_id: Id<Channel>) {
         if self.channels.contains_key(&channel_id) || self.opening.contains_key(&channel_id) {
             return;
         }
@@ -348,11 +348,11 @@ impl LogicState {
     /// stale, and dropped.
     pub(crate) fn adopt_murmure_session(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         peer: ambre_core::PeerId,
         entry: ambre_core::PeerEntry,
     ) {
-        let space = ambre_bus::SpaceId::from_document(document_id);
+        let space = Id::<Space>::from_document(document_id);
         let expected = self.channels.values().any(|c| c.holds(document_id))
             || self
                 .opening
@@ -373,7 +373,7 @@ impl LogicState {
     ///
     /// A document this client created comes back whole, written under its
     /// PeerID: its first update, sent once the Sync worker holds it.
-    pub(crate) fn settle_murmure_session(&mut self, document_id: DocumentId) {
+    pub(crate) fn settle_murmure_session(&mut self, document_id: Id<Document>) {
         let Some((peer, entry)) = self.murmure_identities.get(&document_id).cloned() else {
             return;
         };
@@ -400,13 +400,13 @@ impl LogicState {
     /// Whether a command may write `document_id` now: its identity landed,
     /// and a document this client created has left whole. A delta sent
     /// before that first update would reach a relay that holds no document.
-    pub(crate) fn murmure_writable(&self, document_id: DocumentId, identified: bool) -> bool {
+    pub(crate) fn murmure_writable(&self, document_id: Id<Document>, identified: bool) -> bool {
         identified && !self.unsent.contains_key(&document_id)
     }
 
     /// Hold a command until `document_id` may be written. Past the cap the
     /// command is dropped and logged, so the ones held keep their order.
-    pub(crate) fn wait_for_session(&mut self, document_id: DocumentId, command: HeldCommand) {
+    pub(crate) fn wait_for_session(&mut self, document_id: Id<Document>, command: HeldCommand) {
         let waiting = self.murmure_waiting.entry(document_id).or_default();
         if waiting.len() >= HELD_EDITS_LIMIT {
             tracing::warn!("Logic: too many edits wait on {document_id}; dropped");
@@ -417,7 +417,7 @@ impl LogicState {
 
     /// Run, in their order, the commands that waited on `document_id`. One
     /// that still cannot write waits again.
-    pub(crate) fn release_waiting(&mut self, document_id: DocumentId) {
+    pub(crate) fn release_waiting(&mut self, document_id: Id<Document>) {
         for waiting in self
             .murmure_waiting
             .remove(&document_id)
@@ -439,7 +439,7 @@ impl LogicState {
 
     /// Forget what waited on a document whose session ended. An invite held
     /// for its notice is refused, so the view does not wait for it.
-    pub(crate) fn forget_murmure_session(&mut self, document_id: DocumentId) {
+    pub(crate) fn forget_murmure_session(&mut self, document_id: Id<Document>) {
         self.murmure_identities.remove(&document_id);
         self.unsent.remove(&document_id);
         for held in self
@@ -458,7 +458,7 @@ impl LogicState {
     /// summaries count the channel's new messages (`RESID-004`, `RESID-006`).
     /// A channel still opening ends the session
     /// of each document it asked for.
-    pub(crate) fn close_channel(&mut self, channel_id: ChannelId) {
+    pub(crate) fn close_channel(&mut self, channel_id: Id<Channel>) {
         let Some(channel) = self.channels.remove(&channel_id) else {
             return self.end_channel(channel_id);
         };
@@ -520,7 +520,7 @@ impl LogicState {
     /// Ask the Sync worker for one document of an opening channel. A document
     /// the channel left in the local store is read back first, and opens
     /// once its copy lands (the Murmure engine spec).
-    fn open_channel_document(&mut self, channel_id: ChannelId, document_id: DocumentId) {
+    fn open_channel_document(&mut self, channel_id: Id<Channel>, document_id: Id<Document>) {
         if let Some(closed) = self.closed_channels.get_mut(&channel_id)
             && let Some(horizon) = closed.copies.remove(&document_id)
         {
@@ -545,7 +545,7 @@ impl LogicState {
     /// subscription, so the open fetches the document whole (`RESID-012`).
     pub(crate) fn channel_copy_landed(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         snapshot: Option<ambre_core::SnapshotBytes>,
         deltas: &[ambre_core::DeltaBytes],
     ) {
@@ -589,7 +589,7 @@ impl LogicState {
     }
 
     /// Whether a reopening channel is reading back the copy of `document_id`.
-    pub(crate) fn reads_channel_copy(&self, document_id: DocumentId) -> bool {
+    pub(crate) fn reads_channel_copy(&self, document_id: Id<Document>) -> bool {
         self.closed_channels
             .values()
             .any(|closed| closed.reading.contains_key(&document_id))
@@ -597,14 +597,14 @@ impl LogicState {
 
     /// A reopened channel is open: the record of its close goes, and the
     /// light subscription of each document it no longer holds ends.
-    fn settle_reopen(&mut self, channel_id: ChannelId) {
+    fn settle_reopen(&mut self, channel_id: Id<Channel>) {
         let Some(closed) = self.closed_channels.remove(&channel_id) else {
             return;
         };
         let Some(channel) = self.channels.get(&channel_id) else {
             return;
         };
-        let left: Vec<DocumentId> = closed
+        let left: Vec<Id<Document>> = closed
             .documents
             .into_iter()
             .filter(|id| !channel.holds(*id))
@@ -616,7 +616,7 @@ impl LogicState {
 
     /// End a channel, open, opening or closed: the session or the light
     /// subscription of each of its documents ends, so Sync forgets its key.
-    pub(crate) fn end_channel(&mut self, channel_id: ChannelId) {
+    pub(crate) fn end_channel(&mut self, channel_id: Id<Channel>) {
         self.end_light_channel(channel_id);
         self.end_watched_threads(channel_id);
         self.channel_watchers.remove(&channel_id);
@@ -640,7 +640,7 @@ impl LogicState {
     }
 
     /// End the light subscriptions a closed channel left, if it left any.
-    pub(crate) fn end_light_channel(&mut self, channel_id: ChannelId) {
+    pub(crate) fn end_light_channel(&mut self, channel_id: Id<Channel>) {
         let Some(closed) = self.closed_channels.remove(&channel_id) else {
             return;
         };
@@ -654,7 +654,7 @@ impl LogicState {
     /// Returns whether a closed channel holds the document.
     pub(crate) fn count_closed(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         counters: ambre_core::activity::ActivityCounters,
     ) -> bool {
         let Some((&channel_id, closed)) = self
@@ -694,7 +694,11 @@ impl LogicState {
 
     /// The relay listed the documents of a channel: open its `meta` first,
     /// which names the live segments (the Murmure engine spec).
-    pub(crate) fn channel_listed(&mut self, channel_id: ChannelId, documents: &[ChannelDocument]) {
+    pub(crate) fn channel_listed(
+        &mut self,
+        channel_id: Id<Channel>,
+        documents: &[ChannelDocument],
+    ) {
         // A closed channel was listed again for a segment opened since.
         if !self.opening.contains_key(&channel_id) {
             return self.watch_listed(channel_id, documents);
@@ -713,13 +717,13 @@ impl LogicState {
         };
         *slot = Some(OpeningChannel::new(
             channel_id,
-            MetaId::from_document(meta.document_id),
+            Id::<Meta>::from_document(meta.document_id),
         ));
         self.open_channel_document(channel_id, meta.document_id);
     }
 
     /// Tell the view a channel could not open. Nothing of it is held.
-    pub(crate) fn channel_open_failed(&self, channel_id: ChannelId, message: String) {
+    pub(crate) fn channel_open_failed(&self, channel_id: Id<Channel>, message: String) {
         tracing::warn!("Logic: channel {channel_id} failed to open: {message}");
         self.send_to_ui(UiEvent::Channel {
             channel_id,
@@ -730,7 +734,7 @@ impl LogicState {
     /// The relay refused the listing for want of membership. The user left
     /// the channel, or it went, by a request whose answer never came back.
     /// Nothing of it was held yet, so the view alone learns it is gone.
-    pub(crate) fn channel_refused(&mut self, channel_id: ChannelId) {
+    pub(crate) fn channel_refused(&mut self, channel_id: Id<Channel>) {
         if self.opening.remove(&channel_id).is_none() {
             return;
         }
@@ -744,7 +748,7 @@ impl LogicState {
 
     /// A document of a channel has all its bytes. Returns `false` when no
     /// channel, open or opening, asked for it.
-    pub(crate) fn channel_document_ready(&mut self, document_id: DocumentId) -> bool {
+    pub(crate) fn channel_document_ready(&mut self, document_id: Id<Document>) -> bool {
         if let Some((&channel_id, channel)) =
             self.channels.iter_mut().find(|(_, c)| c.holds(document_id))
         {
@@ -806,8 +810,8 @@ impl LogicState {
     /// for: those the open channel does not hold are closed.
     fn advance_opening(
         &mut self,
-        channel_id: ChannelId,
-        asked: Vec<DocumentId>,
+        channel_id: Id<Channel>,
+        asked: Vec<Id<Document>>,
         result: Result<Opening, MurmureError>,
     ) {
         match result {
@@ -865,7 +869,7 @@ impl LogicState {
 
     /// Move the seek for the root of a copy one step (the Murmure threads
     /// spec). It opens the next older segment, or tells the view the root.
-    fn advance_seek(&mut self, channel_id: ChannelId) {
+    fn advance_seek(&mut self, channel_id: Id<Channel>) {
         let Some(step) = self
             .channels
             .get_mut(&channel_id)
@@ -905,7 +909,7 @@ impl LogicState {
     /// channel asked for it.
     pub(crate) fn channel_document_failed(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         cause: OpenFailure,
         message: &str,
     ) -> bool {
@@ -961,7 +965,7 @@ impl LogicState {
 
     /// Drop an opening that failed, end the session of each document it asked
     /// for, and tell the view.
-    fn end_opening(&mut self, channel_id: ChannelId, message: String) {
+    fn end_opening(&mut self, channel_id: Id<Channel>, message: String) {
         if let Some(Some(opening)) = self.opening.remove(&channel_id) {
             for document_id in opening.document_ids() {
                 self.forget_murmure_session(document_id);
@@ -976,7 +980,7 @@ impl LogicState {
     /// the last delta it folds in (`SRV-083`).
     pub(crate) fn channel_snapshot(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) -> Option<(ambre_core::SnapshotBytes, Seq)> {
         let channel = self.channels.values().find(|c| c.holds(document_id))?;
         let payload = channel
@@ -995,8 +999,8 @@ impl LogicState {
     /// document no open channel holds is not answered.
     pub(crate) fn check_channel_snapshot(
         &mut self,
-        document_id: DocumentId,
-        snapshot_id: ambre_bus::SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         covered: Seq,
         payload: &ambre_core::SnapshotBytes,
         purpose: ambre_bus::SnapshotPurpose,
@@ -1036,7 +1040,7 @@ impl LogicState {
     /// open or opening. A document neither holds is not noted.
     pub(crate) fn record_channel_seq(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         seq: Seq,
         payload: Option<&ambre_core::DeltaBytes>,
     ) {
@@ -1050,7 +1054,7 @@ impl LogicState {
 
     /// Note a snapshot the relay served for a channel or a space document.
     /// A reopen resumes after the deltas it covers (`RESID-010`).
-    pub(crate) fn note_murmure_snapshot(&mut self, document_id: DocumentId, covered: Seq) {
+    pub(crate) fn note_murmure_snapshot(&mut self, document_id: Id<Document>, covered: Seq) {
         if self.holds_murmure(document_id) {
             self.channel_ledgers
                 .entry(document_id)
@@ -1060,8 +1064,8 @@ impl LogicState {
     }
 
     /// Whether an open or opening channel or space holds `document_id`.
-    fn holds_murmure(&self, document_id: DocumentId) -> bool {
-        let space = ambre_bus::SpaceId::from_document(document_id);
+    fn holds_murmure(&self, document_id: Id<Document>) -> bool {
+        let space = Id::<Space>::from_document(document_id);
         self.channels.values().any(|c| c.holds(document_id))
             || self
                 .opening
@@ -1074,7 +1078,7 @@ impl LogicState {
 
     /// The question an unconfirmed `@channel` past the threshold asks, with
     /// the send it holds. `None` lets the command run.
-    fn held_send(&self, channel_id: ChannelId, command: &MurmureCommand) -> Option<MurmureEvent> {
+    fn held_send(&self, channel_id: Id<Channel>, command: &MurmureCommand) -> Option<MurmureEvent> {
         let (draft, attachments, reply) = match command {
             MurmureCommand::SendMessage {
                 draft,
@@ -1101,7 +1105,7 @@ impl LogicState {
         if !draft.mentions.iter().any(all) {
             return None;
         }
-        let members: Vec<UserId> = self
+        let members: Vec<Id<User>> = self
             .channel_members
             .get(&channel_id)?
             .iter()
@@ -1131,7 +1135,7 @@ impl LogicState {
     /// its activity summary (the Murmure messages spec). The event goes to the view.
     pub(crate) fn handle_channel_command(
         &mut self,
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         command: MurmureCommand,
     ) {
         // An `@channel` past the threshold is asked about before anything
@@ -1291,7 +1295,7 @@ impl LogicState {
                 // A mention of anyone outside the channel is no mark (the
                 // Murmure mentions spec). The `@channel` question was asked
                 // on the way in.
-                let members: Option<Vec<UserId>> = self
+                let members: Option<Vec<Id<User>>> = self
                     .channel_members
                     .get(&channel_id)
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
@@ -1517,7 +1521,7 @@ impl LogicState {
                 };
                 // A mention of anyone outside the channel is no mark. An edit
                 // notifies no one, so an `@channel` asks for nothing.
-                let members: Option<Vec<UserId>> = self
+                let members: Option<Vec<Id<User>>> = self
                     .channel_members
                     .get(&channel_id)
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
@@ -1593,7 +1597,7 @@ impl LogicState {
             } => {
                 // A reply is screened as a message is: a copy to the channel
                 // notifies it as one (the Murmure threads spec).
-                let members: Option<Vec<UserId>> = self
+                let members: Option<Vec<Id<User>>> = self
                     .channel_members
                     .get(&channel_id)
                     .map(|rows| rows.iter().map(|row| row.user_id).collect());
@@ -1659,7 +1663,7 @@ impl LogicState {
     /// Send a sample of this user on the `meta` document of a channel, and on
     /// no other. Only its members hold that key (the Murmure typing and
     /// presence spec), and an ephemeral reaches no history.
-    fn send_sample(&self, meta: DocumentId, sample: Sample) {
+    fn send_sample(&self, meta: Id<Document>, sample: Sample) {
         self.send_to_sync(SyncCommand::SendEphemeral {
             document_id: meta,
             payload: sample.bytes(),
@@ -1667,7 +1671,7 @@ impl LogicState {
     }
 
     /// Hand the view who watches a channel and who types in it.
-    fn show_watchers(&self, channel_id: ChannelId) {
+    fn show_watchers(&self, channel_id: Id<Channel>) {
         let Some(watchers) = self.channel_watchers.get(&channel_id) else {
             return;
         };
@@ -1688,7 +1692,7 @@ impl LogicState {
     /// channel hands them to the view, and an opening one at its open.
     pub(crate) fn channel_members_changed(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         members: Vec<MemberInfo>,
     ) -> Option<Vec<MemberInfo>> {
         let opening = self.opening.iter().find_map(|(&channel_id, opening)| {
@@ -1708,7 +1712,7 @@ impl LogicState {
     }
 
     /// Hand the view the members of a channel, once Sync listed them.
-    fn show_channel_members(&self, channel_id: ChannelId) {
+    fn show_channel_members(&self, channel_id: Id<Channel>) {
         if let Some(members) = self.channel_members.get(&channel_id) {
             self.send_to_ui(UiEvent::Channel {
                 channel_id,
@@ -1720,7 +1724,7 @@ impl LogicState {
     }
 
     /// The open channel whose `meta` is `document_id`.
-    pub(crate) fn channel_of_meta(&self, document_id: DocumentId) -> Option<ChannelId> {
+    pub(crate) fn channel_of_meta(&self, document_id: Id<Document>) -> Option<Id<Channel>> {
         self.channels
             .iter()
             .find(|(_, channel)| channel.meta_id().document_id() == document_id)
@@ -1735,8 +1739,8 @@ impl LogicState {
     /// once, so a newcomer sees who watches without waiting a refresh period.
     pub(crate) fn channel_sample_heard(
         &mut self,
-        document_id: DocumentId,
-        from: UserId,
+        document_id: Id<Document>,
+        from: Id<User>,
         payload: &ambre_core::EphemeralBytes,
     ) -> bool {
         let Some(channel_id) = self.channel_of_meta(document_id) else {
@@ -1764,7 +1768,7 @@ impl LogicState {
     ///
     /// Another connection of this user leaving turns no one away: this one
     /// answers with its sample, so the other members still see it.
-    pub(crate) fn channel_peer_left(&mut self, document_id: DocumentId, user: UserId) -> bool {
+    pub(crate) fn channel_peer_left(&mut self, document_id: Id<Document>, user: Id<User>) -> bool {
         let Some(channel_id) = self.channel_of_meta(document_id) else {
             return false;
         };
@@ -1784,7 +1788,7 @@ impl LogicState {
     /// with its summary. The view takes the segment's messages (the Murmure
     /// reactions and messages specs). A change that wrote nothing sends
     /// nothing.
-    fn send_change(&self, channel_id: ChannelId, reacted: Result<Option<Sent>, MurmureError>) {
+    fn send_change(&self, channel_id: Id<Channel>, reacted: Result<Option<Sent>, MurmureError>) {
         match reacted {
             Ok(Some(sent)) => {
                 self.send_to_sync(SyncCommand::SendUpdate {
@@ -1811,7 +1815,7 @@ impl LogicState {
     /// cursor of each segment listed after it to the start. A message the
     /// relay has not numbered exactly cannot place a cursor, so the mark is
     /// refused rather than guessed.
-    fn mark_unread(&mut self, channel_id: ChannelId, segment: SegmentId, message: MessageId) {
+    fn mark_unread(&mut self, channel_id: Id<Channel>, segment: Id<Segment>, message: Id<Message>) {
         let Some(channel) = self.channels.get(&channel_id) else {
             return;
         };
@@ -1853,7 +1857,7 @@ impl LogicState {
     /// from those cursors.
     pub(crate) fn channel_activity(&mut self, documents: &[DocumentActivity]) {
         let mut channels: Vec<ChannelActivity> = Vec::new();
-        let mut index: HashMap<ChannelId, usize> = HashMap::new();
+        let mut index: HashMap<Id<Channel>, usize> = HashMap::new();
         for document in documents {
             self.document_channels
                 .insert(document.document_id, document.channel_id);
@@ -1902,7 +1906,7 @@ impl LogicState {
     /// the drop as it does for a document.
     pub(crate) fn apply_channel_remote(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         payloads: &[(Option<Order>, ambre_core::LoroPayloadRef<'_>)],
     ) -> bool {
         // A channel still opening keeps the bytes until the document is ready.
@@ -1952,7 +1956,7 @@ impl LogicState {
     /// open or opening channel holds the document.
     pub(crate) fn apply_channel_signed(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         deltas: &[SignedDelta],
     ) -> bool {
         let signer = |delta: &SignedDelta| Signer {
@@ -2096,12 +2100,12 @@ impl LogicState {
 mod tests {
     use super::*;
     use ambre_bus::{
-        ActivityKind, Attachment, ByteSize, ContentHash, FoldAnswer, LeaseAnswer, LeaseId,
-        MediaType, Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand, RestEvent,
-        SegmentId, Timestamp,
+        ActivityKind, Attachment, ByteSize, ContentHash, FoldAnswer, LeaseAnswer, MediaType,
+        Mention, MentionTarget, MessageDraft, MurmureEvent, RestCommand, RestEvent, Timestamp,
     };
     use ambre_core::CharSpan;
     use ambre_core::Px;
+    use ambre_core::id::Lease;
     use ambre_murmure::ChannelType;
 
     const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -2113,7 +2117,7 @@ mod tests {
     }
 
     /// What Logic hands the local store.
-    type StoreRx = Receiver<(DocumentId, PersistWrite)>;
+    type StoreRx = Receiver<(Id<Document>, PersistWrite)>;
 
     /// The harness, with what Logic hands the local store.
     fn harness_with_store() -> (
@@ -2133,7 +2137,7 @@ mod tests {
         )
     }
 
-    fn signed_in(state: &mut LogicState, user: UserId) {
+    fn signed_in(state: &mut LogicState, user: Id<User>) {
         state.handle_logic_event(LogicEvent::Rest {
             id: None,
             evt: RestEvent::SessionReady {
@@ -2144,8 +2148,8 @@ mod tests {
         });
     }
 
-    fn open_channel(state: &mut LogicState) -> (ChannelId, SegmentId) {
-        let channel_id = ChannelId::new();
+    fn open_channel(state: &mut LogicState) -> (Id<Channel>, Id<Segment>) {
+        let channel_id = Id::<Channel>::mint();
         let channel =
             ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
         let active = channel.active_id();
@@ -2169,11 +2173,11 @@ mod tests {
     #[test]
     fn a_channel_command_reaches_its_engine_and_leaves_as_a_delta_and_an_event() {
         let (mut state, ui, sync) = harness();
-        let alice = UserId::new();
+        let alice = Id::<User>::mint();
         signed_in(&mut state, alice);
         let _ = std::iter::from_fn(|| ui.try_recv().ok()).count();
         let (channel_id, active) = open_channel(&mut state);
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
 
         state.handle_logic_command(LogicCommand::Channel {
             channel_id,
@@ -2237,9 +2241,9 @@ mod tests {
     #[test]
     fn a_message_before_the_identity_waits_then_leaves_under_it() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let _ = drain(&ui);
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         let channel =
             ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create");
         let active = channel.active_id().document_id();
@@ -2294,9 +2298,9 @@ mod tests {
     #[test]
     fn a_remote_delta_reaches_the_channel_that_holds_its_document() {
         let (mut alice, _, alice_sync) = harness();
-        let author = UserId::new();
+        let author = Id::<User>::mint();
         signed_in(&mut alice, author);
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         alice.hold_channel(
             ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
         );
@@ -2362,9 +2366,9 @@ mod tests {
     #[test]
     fn a_message_of_another_member_is_news_and_names_a_mention() {
         let (mut alice, _, alice_sync) = harness();
-        let author = UserId::new();
+        let author = Id::<User>::mint();
         signed_in(&mut alice, author);
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         alice.hold_channel(
             ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
         );
@@ -2380,7 +2384,7 @@ mod tests {
         let copy =
             ChannelState::open(channel_id, original.meta_id(), &meta, &segments).expect("open");
         let (mut bob, bob_ui, _) = harness();
-        let bob_id = UserId::new();
+        let bob_id = Id::<User>::mint();
         signed_in(&mut bob, bob_id);
         bob.hold_channel(copy);
         drain(&bob_ui);
@@ -2422,7 +2426,7 @@ mod tests {
                 },
             ));
         }
-        let news = |bob: &mut LogicState, (document_id, delta): (DocumentId, SignedDelta)| {
+        let news = |bob: &mut LogicState, (document_id, delta): (Id<Document>, SignedDelta)| {
             bob.handle_logic_event(LogicEvent::RemoteUpdate { document_id, delta });
             drain(&bob_ui)
                 .into_iter()
@@ -2488,8 +2492,8 @@ mod tests {
 
     /// A closed channel with a cursor on each held segment: its count at
     /// close was zero.
-    fn closed_counted(state: &mut LogicState) -> (ChannelId, SegmentId, MetaId) {
-        signed_in(state, UserId::new());
+    fn closed_counted(state: &mut LogicState) -> (Id<Channel>, Id<Segment>, Id<Meta>) {
+        signed_in(state, Id::<User>::mint());
         let (channel_id, active) = open_channel(state);
         let meta = state.channels[&channel_id].meta_id();
         state.read_cursors.insert(
@@ -2601,7 +2605,7 @@ mod tests {
     #[test]
     fn a_closed_channel_with_no_count_is_marked_by_a_counted_message() {
         let (mut state, ui, _sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, active) = open_channel(&mut state);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
         drain(&ui);
@@ -2688,7 +2692,7 @@ mod tests {
         drain(&store);
 
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
-        let copies: HashMap<DocumentId, ambre_core::SnapshotBytes> = drain(&store)
+        let copies: HashMap<Id<Document>, ambre_core::SnapshotBytes> = drain(&store)
             .into_iter()
             .filter_map(|(id, write)| match write {
                 PersistWrite::Snapshot(copy) => Some((id, copy)),
@@ -2696,7 +2700,7 @@ mod tests {
             })
             .collect();
         assert_eq!(copies.len(), 2, "each document reaches the store");
-        let horizons: HashMap<DocumentId, Seq> = drain(&sync)
+        let horizons: HashMap<Id<Document>, Seq> = drain(&sync)
             .into_iter()
             .filter_map(|command| match command {
                 SyncCommand::ReleaseDocument {
@@ -2719,7 +2723,7 @@ mod tests {
             [Sent::List(channel_id)],
             "meta waits on its copy"
         );
-        let read_back = |rx: &Receiver<(DocumentId, PersistWrite)>, id: DocumentId| {
+        let read_back = |rx: &Receiver<(Id<Document>, PersistWrite)>, id: Id<Document>| {
             matches!(
                 drain(rx).as_slice(),
                 [(asked, PersistWrite::ReadBack { doc_type: DocType::Murmure })] if *asked == id
@@ -2783,8 +2787,8 @@ mod tests {
     }
 
     /// A channel as the relay stores it: one message in its active segment.
-    fn stored_channel() -> (ChannelId, ChannelState) {
-        let channel_id = ChannelId::new();
+    fn stored_channel() -> (Id<Channel>, ChannelState) {
+        let channel_id = Id::<Channel>::mint();
         let mut channel = crate::identified(
             ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
         );
@@ -2795,7 +2799,7 @@ mod tests {
                     mentions: Vec::new(),
                     styles: Vec::new(),
                 },
-                UserId::new(),
+                Id::<User>::mint(),
                 NOW,
             )
             .expect("send");
@@ -2816,7 +2820,7 @@ mod tests {
     }
 
     /// The relay serves a document: its snapshot, then its ready signal.
-    fn serve(state: &mut LogicState, stored: &ChannelState, document_id: DocumentId) {
+    fn serve(state: &mut LogicState, stored: &ChannelState, document_id: Id<Document>) {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id,
             covered_seq: ambre_core::Seq(1),
@@ -2832,10 +2836,10 @@ mod tests {
     /// follow: `SyncCommand` carries secrets, so it has no `PartialEq`.
     #[derive(Debug, PartialEq)]
     enum Sent {
-        List(ChannelId),
-        Open(DocumentId),
-        Close(DocumentId),
-        Release(DocumentId),
+        List(Id<Channel>),
+        Open(Id<Document>),
+        Close(Id<Document>),
+        Release(Id<Document>),
         Other,
     }
 
@@ -2905,7 +2909,7 @@ mod tests {
     #[test]
     fn a_channel_no_catalogue_lists_admits_no_self_join() {
         let (mut state, _, sync) = harness();
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
         assert!(matches!(
             drain(&sync).as_slice(),
@@ -2919,7 +2923,7 @@ mod tests {
     #[test]
     fn a_refused_listing_tells_the_view_and_holds_nothing() {
         let (mut state, ui, _) = harness();
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
         state.handle_logic_event(LogicEvent::ChannelOpenFailed {
             channel_id,
@@ -2941,7 +2945,7 @@ mod tests {
     #[test]
     fn a_channel_the_relay_refuses_to_open_is_dropped() {
         let (mut state, ui, sync) = harness();
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
         let _ = drain(&sync);
         state.handle_logic_event(LogicEvent::ChannelRefused { channel_id });
@@ -2957,7 +2961,7 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::ChannelRefused { channel_id });
         state.handle_logic_event(LogicEvent::ChannelRefused {
-            channel_id: ChannelId::new(),
+            channel_id: Id::<Channel>::mint(),
         });
         assert!(drain(&ui).is_empty());
     }
@@ -2996,7 +3000,7 @@ mod tests {
     fn a_meta_of_another_channel_ends_the_opening() {
         let (mut state, ui, sync) = harness();
         let (_, stored) = stored_channel();
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         state.handle_logic_command(LogicCommand::OpenChannel { channel_id });
         state.handle_logic_event(LogicEvent::ChannelDocuments {
             channel_id,
@@ -3049,7 +3053,7 @@ mod tests {
     #[test]
     fn marking_a_channel_read_moves_its_live_segments_and_clears_its_mark() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let _ = drain(&ui);
         let (channel_id, active) = open_channel(&mut state);
 
@@ -3089,10 +3093,10 @@ mod tests {
     #[test]
     fn an_activity_answer_marks_each_channel_once_and_opens_nothing() {
         let (mut state, ui, sync) = harness();
-        let (quiet, busy) = (ChannelId::new(), ChannelId::new());
+        let (quiet, busy) = (Id::<Channel>::mint(), Id::<Channel>::mint());
         let entry = |channel_id, active| DocumentActivity {
             channel_id,
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             kind: ChannelDocumentKind::Segment,
             active,
             read: Seq::ZERO,
@@ -3149,15 +3153,15 @@ mod tests {
 
         let channels = vec![
             ambre_bus::MemberChannel {
-                channel_id: ChannelId::new(),
-                place: ambre_bus::ChannelPlace::Private(ambre_bus::SpaceId::new()),
+                channel_id: Id::<Channel>::mint(),
+                place: ambre_bus::ChannelPlace::Private(Id::<Space>::mint()),
             },
             ambre_bus::MemberChannel {
-                channel_id: ChannelId::new(),
+                channel_id: Id::<Channel>::mint(),
                 place: ambre_bus::ChannelPlace::Direct,
             },
         ];
-        let spaces = vec![ambre_bus::SpaceId::new()];
+        let spaces = vec![Id::<Space>::mint()];
         let names = vec![ambre_bus::ChannelName {
             channel_id: channels[0].channel_id,
             name: ambre_core::Name::new("board").unwrap(),
@@ -3173,7 +3177,7 @@ mod tests {
             peers: peers.clone(),
             metas: vec![ambre_bus::ChannelMeta {
                 channel_id: channels[0].channel_id,
-                meta: MetaId::new(),
+                meta: Id::<Meta>::mint(),
                 last: None,
             }],
         });
@@ -3216,16 +3220,16 @@ mod tests {
     struct Members {
         alice: ChannelState,
         /// The user Alice writes as, and signs as.
-        author: UserId,
+        author: Id<User>,
         bob: LogicState,
         bob_ui: Receiver<UiEvent>,
         bob_sync: Receiver<SyncCommand>,
-        channel_id: ChannelId,
-        active: SegmentId,
+        channel_id: Id<Channel>,
+        active: Id<Segment>,
     }
 
     fn members() -> Members {
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         let alice = crate::identified(
             ChannelState::create(channel_id, ChannelType::Public, None, NOW).expect("create"),
         );
@@ -3237,12 +3241,12 @@ mod tests {
         let meta = alice.snapshot(alice.meta_id().document_id()).expect("meta");
         let copy = ChannelState::open(channel_id, alice.meta_id(), &meta, &segments).expect("open");
         let (mut bob, bob_ui, bob_sync) = harness();
-        signed_in(&mut bob, UserId::new());
+        signed_in(&mut bob, Id::<User>::mint());
         bob.hold_channel(copy);
         let _ = drain(&bob_ui);
         Members {
             alice,
-            author: UserId::new(),
+            author: Id::<User>::mint(),
             bob,
             bob_ui,
             bob_sync,
@@ -3308,7 +3312,7 @@ mod tests {
 
         /// Every first unread message the view was handed for the channel
         /// since the last call.
-        fn firsts(&self) -> Vec<Option<MessageId>> {
+        fn firsts(&self) -> Vec<Option<Id<Message>>> {
             drain(&self.bob_ui)
                 .into_iter()
                 .filter_map(|e| match e {
@@ -3321,7 +3325,7 @@ mod tests {
                 .collect()
         }
 
-        fn message_ids(&self) -> Vec<MessageId> {
+        fn message_ids(&self) -> Vec<Id<Message>> {
             self.bob.channels[&self.channel_id]
                 .messages(self.active)
                 .expect("messages")
@@ -3330,7 +3334,7 @@ mod tests {
                 .collect()
         }
 
-        fn mark_unread(&mut self, message: MessageId) {
+        fn mark_unread(&mut self, message: Id<Message>) {
             self.bob.handle_logic_command(LogicCommand::Channel {
                 channel_id: self.channel_id,
                 command: MurmureCommand::MarkUnread {
@@ -3341,7 +3345,7 @@ mod tests {
         }
 
         /// The cursors Bob asked the relay to move since the last call.
-        fn moved(&self) -> Vec<Vec<(SegmentId, Seq)>> {
+        fn moved(&self) -> Vec<Vec<(Id<Segment>, Seq)>> {
             drain(&self.bob_sync)
                 .into_iter()
                 .filter_map(|c| match c {
@@ -3440,7 +3444,7 @@ mod tests {
                     mentions: Vec::new(),
                     styles: Vec::new(),
                 },
-                UserId::new(),
+                Id::<User>::mint(),
                 NOW,
             )
             .expect("send");
@@ -3510,8 +3514,8 @@ mod tests {
     fn a_message_with_no_exact_number_is_not_marked_unread() {
         let mut m = members();
         m.answer(0);
-        m.mark_unread(MessageId::new());
-        assert_eq!(m.moved(), Vec::<Vec<(SegmentId, Seq)>>::new());
+        m.mark_unread(Id::<Message>::mint());
+        assert_eq!(m.moved(), Vec::<Vec<(Id<Segment>, Seq)>>::new());
     }
 
     /// Marking a message unread moves no cursor of another channel.
@@ -3540,7 +3544,7 @@ mod tests {
     #[test]
     fn a_search_covers_every_open_channel_and_leaves_nothing() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let first = open_channel(&mut state);
         let second = open_channel(&mut state);
         for ((channel_id, _), text) in [(first, "the budget"), (second, "lunch")] {
@@ -3561,7 +3565,11 @@ mod tests {
             panic!("one answer, got {shown:?}");
         };
         assert_eq!(query.as_str(), "Budget");
-        let mut answered: Vec<(ChannelId, Vec<SegmentId>, u32, Vec<String>)> = channels
+        #[expect(
+            clippy::type_complexity,
+            reason = "each `Id<_>` names its kind, and no alias may hide it"
+        )]
+        let mut answered: Vec<(Id<Channel>, Vec<Id<Segment>>, u32, Vec<String>)> = channels
             .iter()
             .map(|c| {
                 let texts = c.matches.iter().map(|m| m.message.text.clone()).collect();
@@ -3591,7 +3599,7 @@ mod tests {
     #[test]
     fn a_reaction_leaves_with_its_summary_and_a_removal_with_it() {
         let (mut state, ui, sync) = harness();
-        let me = UserId::new();
+        let me = Id::<User>::mint();
         signed_in(&mut state, me);
         let (channel_id, segment) = open_channel(&mut state);
         state.handle_logic_command(LogicCommand::Channel {
@@ -3638,7 +3646,7 @@ mod tests {
             else {
                 panic!("the messages, got {shown:?}");
             };
-            let reacted: Vec<UserId> = messages[0]
+            let reacted: Vec<Id<User>> = messages[0]
                 .reactions
                 .iter()
                 .flat_map(|r| r.users.clone())
@@ -3660,8 +3668,8 @@ mod tests {
     #[test]
     fn an_edit_and_a_delete_leave_as_edits_and_show_the_message() {
         let (mut state, ui, sync) = harness();
-        let me = UserId::new();
-        let bob = UserId::new();
+        let me = Id::<User>::mint();
+        let bob = Id::<User>::mint();
         signed_in(&mut state, me);
         let (channel_id, segment) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
@@ -3687,7 +3695,7 @@ mod tests {
                 mentions: vec![
                     mention(MentionTarget::User(bob), CharSpan::from_usize_range(6..10)),
                     mention(
-                        MentionTarget::User(UserId::new()),
+                        MentionTarget::User(Id::<User>::mint()),
                         CharSpan::from_usize_range(11..15),
                     ),
                 ],
@@ -3768,7 +3776,7 @@ mod tests {
     /// The erase a delete asks for, as `(request, document, file)`.
     fn erases(
         sent: &[SyncCommand],
-    ) -> Vec<(Generation<Request>, DocumentId, ambre_core::ContentHash)> {
+    ) -> Vec<(Generation<Request>, Id<Document>, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3789,7 +3797,7 @@ mod tests {
     #[test]
     fn a_file_uploads_and_downloads_under_the_channels_meta() {
         let (mut state, _ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         let file = ContentHash::parse(&"cd".repeat(32)).expect("a content hash");
@@ -3833,7 +3841,7 @@ mod tests {
     #[test]
     fn a_delete_erases_its_file_and_retries_on_the_next_connection() {
         let (mut state, ui, sync) = harness();
-        let me = UserId::new();
+        let me = Id::<User>::mint();
         signed_in(&mut state, me);
         let (channel_id, segment) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
@@ -3926,7 +3934,7 @@ mod tests {
     /// The image of a preview, as `(request, document, file)`.
     fn downloads(
         sent: &[SyncCommand],
-    ) -> Vec<(Generation<Request>, DocumentId, ambre_core::ContentHash)> {
+    ) -> Vec<(Generation<Request>, Id<Document>, ambre_core::ContentHash)> {
         sent.iter()
             .filter_map(|command| match command {
                 SyncCommand::Rest {
@@ -3947,7 +3955,7 @@ mod tests {
     #[test]
     fn a_preview_is_fetched_once_and_reaches_the_view_decoded() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         let file = ContentHash::parse(&"cd".repeat(32)).expect("a content hash");
@@ -4034,7 +4042,7 @@ mod tests {
         Timestamp(NOW.0 + offset)
     }
 
-    fn command(state: &mut LogicState, channel_id: ChannelId, command: MurmureCommand) {
+    fn command(state: &mut LogicState, channel_id: Id<Channel>, command: MurmureCommand) {
         state.handle_logic_command(LogicCommand::Channel {
             channel_id,
             command,
@@ -4043,7 +4051,7 @@ mod tests {
 
     /// The ephemerals that left for the Sync worker, by document. Any other
     /// command fails the test.
-    fn ephemerals(sync: &Receiver<SyncCommand>) -> Vec<(DocumentId, ambre_core::EphemeralBytes)> {
+    fn ephemerals(sync: &Receiver<SyncCommand>) -> Vec<(Id<Document>, ambre_core::EphemeralBytes)> {
         drain(sync)
             .into_iter()
             .map(|sent| match sent {
@@ -4056,7 +4064,11 @@ mod tests {
             .collect()
     }
 
-    fn watchers(ui: &Receiver<UiEvent>) -> Vec<(ChannelId, Vec<UserId>, Vec<UserId>)> {
+    #[expect(
+        clippy::type_complexity,
+        reason = "each `Id<_>` names its kind, and no alias may hide it"
+    )]
+    fn watchers(ui: &Receiver<UiEvent>) -> Vec<(Id<Channel>, Vec<Id<User>>, Vec<Id<User>>)> {
         drain(ui)
             .into_iter()
             .filter_map(|event| match event {
@@ -4072,7 +4084,7 @@ mod tests {
             .collect()
     }
 
-    fn hear(state: &mut LogicState, document_id: DocumentId, from: UserId, sample: Sample) {
+    fn hear(state: &mut LogicState, document_id: Id<Document>, from: Id<User>, sample: Sample) {
         state.handle_logic_event(LogicEvent::RemoteEphemeral {
             document_id,
             from_user_id: from,
@@ -4087,7 +4099,7 @@ mod tests {
     #[test]
     fn a_channel_tick_sends_its_watching_sample_on_its_meta_alone() {
         let (mut state, _ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _active) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         drain(&sync);
@@ -4112,7 +4124,7 @@ mod tests {
     #[test]
     fn typing_leaves_as_an_ephemeral_and_writes_no_document() {
         let (mut state, _ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _active) = open_channel(&mut state);
         let channel = &state.channels[&channel_id];
         let meta = channel.meta_id().document_id();
@@ -4153,13 +4165,13 @@ mod tests {
     #[test]
     fn typing_in_a_thread_names_its_root() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _active) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
         drain(&sync);
         drain(&ui);
-        let root = MessageId::new();
+        let root = Id::<Message>::mint();
         for thread in [None, Some(root)] {
             let typing = MurmureCommand::Typing { now: NOW, thread };
             command(&mut state, channel_id, typing);
@@ -4167,7 +4179,7 @@ mod tests {
         let sent = [Sample::Typing, Sample::TypingIn(root)].map(|s| (meta, s.bytes()));
         assert_eq!(ephemerals(&sync), sent);
 
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         hear(&mut state, meta, bob, Sample::TypingIn(root));
         let shown: Vec<_> = drain(&ui)
             .into_iter()
@@ -4191,14 +4203,14 @@ mod tests {
     #[test]
     fn a_sample_heard_shows_its_member_until_the_expiry_or_a_leave() {
         let (mut state, ui, sync) = harness();
-        let me = UserId::new();
+        let me = Id::<User>::mint();
         signed_in(&mut state, me);
         let (channel_id, _active) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
         drain(&sync);
         drain(&ui);
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
 
         hear(&mut state, meta, bob, Sample::Typing);
         assert_eq!(watchers(&ui), [(channel_id, vec![bob], vec![bob])]);
@@ -4227,7 +4239,7 @@ mod tests {
     #[test]
     fn a_sample_shows_in_its_own_channel_alone() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (first, _) = open_channel(&mut state);
         let (second, _) = open_channel(&mut state);
         let meta_of = |state: &LogicState, id| state.channels[&id].meta_id().document_id();
@@ -4244,14 +4256,14 @@ mod tests {
             ]
         );
         drain(&ui);
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         hear(&mut state, first_meta, bob, Sample::Watching);
         assert_eq!(watchers(&ui), [(first, vec![bob], Vec::new())]);
     }
 
     // --- The members of a channel, and the mentions they screen ---
 
-    fn member(user_id: UserId) -> MemberInfo {
+    fn member(user_id: Id<User>) -> MemberInfo {
         MemberInfo {
             user_id,
             display_name: ambre_core::DisplayName::new("bob").unwrap(),
@@ -4262,7 +4274,7 @@ mod tests {
     }
 
     /// The channel events that reached the view.
-    fn channel_events(ui: &Receiver<UiEvent>) -> Vec<(ChannelId, MurmureEvent)> {
+    fn channel_events(ui: &Receiver<UiEvent>) -> Vec<(Id<Channel>, MurmureEvent)> {
         drain(ui)
             .into_iter()
             .filter_map(|event| match event {
@@ -4292,13 +4304,13 @@ mod tests {
     #[test]
     fn the_members_of_a_channel_reach_the_view_and_screen_its_mentions() {
         let (mut state, ui, sync) = harness();
-        let alice = UserId::new();
+        let alice = Id::<User>::mint();
         signed_in(&mut state, alice);
         let (channel_id, _active) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         drain(&ui);
         drain(&sync);
-        let (bob, eve) = (UserId::new(), UserId::new());
+        let (bob, eve) = (Id::<User>::mint(), Id::<User>::mint());
         let members = vec![member(alice), member(bob)];
         state.handle_logic_event(LogicEvent::MembersChanged {
             document_id: meta,
@@ -4328,12 +4340,12 @@ mod tests {
     #[test]
     fn an_at_channel_past_the_threshold_asks_before_it_sends() {
         let (mut state, ui, sync) = harness();
-        let alice = UserId::new();
+        let alice = Id::<User>::mint();
         signed_in(&mut state, alice);
         let (channel_id, active) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id().document_id();
         let members: Vec<MemberInfo> = (0..=ambre_murmure::CONFIRM_CHANNEL_PAST.get())
-            .map(|_| member(UserId::new()))
+            .map(|_| member(Id::<User>::mint()))
             .collect();
         state.handle_logic_event(LogicEvent::MembersChanged {
             document_id: meta,
@@ -4403,9 +4415,9 @@ mod tests {
     // --- The close of a full segment ---
 
     /// An open channel whose segments close past `size` messages.
-    fn small_channel(state: &mut LogicState, size: usize) -> (ChannelId, SegmentId) {
-        signed_in(state, UserId::new());
-        let channel_id = ChannelId::new();
+    fn small_channel(state: &mut LogicState, size: usize) -> (Id<Channel>, Id<Segment>) {
+        signed_in(state, Id::<User>::mint());
+        let channel_id = Id::<Channel>::mint();
         let channel = ChannelState::create(channel_id, ChannelType::Public, None, NOW)
             .expect("create")
             .with_segment_size(ambre_murmure::MessageCount::of_len(size));
@@ -4415,7 +4427,7 @@ mod tests {
     }
 
     /// The closes Logic asked of the Sync worker.
-    fn closes(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, SegmentId)> {
+    fn closes(sync: &Receiver<SyncCommand>) -> Vec<(Id<Segment>, Id<Segment>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -4481,7 +4493,7 @@ mod tests {
         state.handle_logic_event(LogicEvent::SegmentClosed {
             channel_id,
             closing,
-            active: SegmentId::new(),
+            active: Id::<Segment>::mint(),
             successor: ambre_murmure::Successor::Created,
         });
         assert_eq!(state.channels[&channel_id].active_id(), old);
@@ -4510,7 +4522,7 @@ mod tests {
         let (channel_id, old) = small_channel(&mut state, 100);
         command(&mut state, channel_id, send("one", Vec::new()));
         state.handle_logic_event(LogicEvent::KeyRotated {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
         });
         command(&mut state, channel_id, MurmureCommand::Tick { now: NOW });
         assert!(closes(&sync).is_empty(), "another document rotated");
@@ -4529,7 +4541,7 @@ mod tests {
     fn closed_channel(
         state: &mut LogicState,
         sync: &Receiver<SyncCommand>,
-    ) -> (ChannelId, SegmentId) {
+    ) -> (Id<Channel>, Id<Segment>) {
         let (channel_id, _old) = small_channel(state, 1);
         command(state, channel_id, send("one", Vec::new()));
         let [(closing, successor)] = closes(sync).try_into().expect("one close");
@@ -4544,7 +4556,7 @@ mod tests {
     }
 
     /// The finalize commands Logic sent: a lease request names no horizon.
-    fn finalizes(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, Option<ambre_core::Seq>)> {
+    fn finalizes(sync: &Receiver<SyncCommand>) -> Vec<(Id<Segment>, Option<ambre_core::Seq>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -4596,7 +4608,7 @@ mod tests {
             channel_id,
             segment: closing,
             answer: LeaseAnswer::Granted {
-                lease: LeaseId::new(),
+                lease: Id::<Lease>::mint(),
                 horizon: ambre_core::Seq(1),
                 expires_in: ambre_core::Millis(30_000),
             },
@@ -4631,8 +4643,8 @@ mod tests {
     fn finalize_at_one(
         state: &mut LogicState,
         sync: &Receiver<SyncCommand>,
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         now: Timestamp,
     ) {
         command(state, channel_id, MurmureCommand::Tick { now });
@@ -4641,7 +4653,7 @@ mod tests {
             channel_id,
             segment,
             answer: LeaseAnswer::Granted {
-                lease: LeaseId::new(),
+                lease: Id::<Lease>::mint(),
                 horizon: ambre_core::Seq(1),
                 expires_in: ambre_core::Millis(30_000),
             },
@@ -4661,7 +4673,7 @@ mod tests {
     fn unloaded_final(
         state: &mut LogicState,
         sync: &Receiver<SyncCommand>,
-    ) -> (ChannelId, SegmentId, SegmentId) {
+    ) -> (Id<Channel>, Id<Segment>, Id<Segment>) {
         let (channel_id, closed) = closed_channel(state, sync);
         state.record_channel_seq(closed.document_id(), ambre_core::Seq(1), None);
         finalize_at_one(state, sync, channel_id, closed, NOW);
@@ -4690,8 +4702,8 @@ mod tests {
         LogicState,
         Receiver<UiEvent>,
         Receiver<SyncCommand>,
-        ChannelId,
-        SegmentId,
+        Id<Channel>,
+        Id<Segment>,
     ) {
         let (mut first, _first_ui, first_sync) = harness();
         let (channel_id, closing) = closed_channel(&mut first, &first_sync);
@@ -4746,7 +4758,7 @@ mod tests {
         )));
     }
 
-    fn bands(ui: &Receiver<UiEvent>) -> Vec<(SegmentId, Unreadable)> {
+    fn bands(ui: &Receiver<UiEvent>) -> Vec<(Id<Segment>, Unreadable)> {
         drain(ui)
             .into_iter()
             .filter_map(|e| match e {
@@ -4881,7 +4893,7 @@ mod tests {
         drain(&sync);
         drain(&ui);
 
-        let (author, reporter) = (UserId::new(), UserId::new());
+        let (author, reporter) = (Id::<User>::mint(), Id::<User>::mint());
         let dropped = |state: &mut LogicState, after| {
             state.handle_logic_event(LogicEvent::SnapshotDropped {
                 document_id: closing.document_id(),
@@ -4982,7 +4994,7 @@ mod tests {
     fn locked_channel(
         state: &mut LogicState,
         sync: &Receiver<SyncCommand>,
-    ) -> (ChannelId, SegmentId, MessageId) {
+    ) -> (Id<Channel>, Id<Segment>, Id<Message>) {
         let (channel_id, closing) = closed_channel(state, sync);
         let active = state.channels[&channel_id].active_id();
         state.grant_identity(active.document_id());
@@ -4996,8 +5008,8 @@ mod tests {
     }
 
     fn edit_to(
-        segment: SegmentId,
-        message: MessageId,
+        segment: Id<Segment>,
+        message: Id<Message>,
         text: &str,
         now: Timestamp,
     ) -> MurmureCommand {
@@ -5014,7 +5026,7 @@ mod tests {
     }
 
     /// The amendments document Logic asked the Sync worker to create.
-    fn created_amendments(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, DocumentId)> {
+    fn created_amendments(sync: &Receiver<SyncCommand>) -> Vec<(Id<Segment>, Id<Document>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -5149,7 +5161,7 @@ mod tests {
             edit_to(closing, message, "two", at(1)),
         );
         let [(_, mine)] = created_amendments(&sync).try_into().expect("one create");
-        let winner = DocumentId::new();
+        let winner = Id::<Document>::mint();
         state.handle_logic_event(LogicEvent::AmendmentsLinked {
             channel_id,
             segment: closing,
@@ -5191,7 +5203,7 @@ mod tests {
     // --- The fold of the amendments of a final segment ---
 
     /// The fold commands Logic sent: a lease request names no reach.
-    fn folds(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, Option<ambre_core::Seq>)> {
+    fn folds(sync: &Receiver<SyncCommand>) -> Vec<(Id<Segment>, Option<ambre_core::Seq>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -5212,7 +5224,7 @@ mod tests {
     fn amended_channel(
         state: &mut LogicState,
         sync: &Receiver<SyncCommand>,
-    ) -> (ChannelId, SegmentId, MessageId, DocumentId) {
+    ) -> (Id<Channel>, Id<Segment>, Id<Message>, Id<Document>) {
         let (channel_id, closing) = closed_channel(state, sync);
         state.record_channel_seq(closing.document_id(), ambre_core::Seq(1), None);
         finalize_at_one(state, sync, channel_id, closing, NOW);
@@ -5266,7 +5278,7 @@ mod tests {
             channel_id,
             segment,
             answer: FoldAnswer::Granted {
-                lease: LeaseId::new(),
+                lease: Id::<Lease>::mint(),
                 horizon: ambre_core::Seq(1),
                 amendments,
                 amendments_seq: ambre_core::Seq(0),
@@ -5346,7 +5358,7 @@ mod tests {
         let (mut state, _ui, sync) = harness();
         let (channel_id, segment, _, amendments) = amended_channel(&mut state, &sync);
         state.handle_logic_event(LogicEvent::DocumentGone {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
         });
         state.handle_logic_event(LogicEvent::DocumentGone {
             document_id: segment.document_id(),
@@ -5427,13 +5439,13 @@ mod tests {
     fn channel_verdict(
         state: &mut LogicState,
         sync: &Receiver<SyncCommand>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         covered: Seq,
         payload: Vec<u8>,
     ) -> SnapshotVerdict {
         state.handle_logic_event(LogicEvent::PendingSnapshot {
             document_id,
-            snapshot_id: ambre_bus::SnapshotId::genesis(document_id),
+            snapshot_id: Id::<Snapshot>::genesis(document_id),
             covered_seq: covered,
             payload: payload.into(),
             purpose: ambre_bus::SnapshotPurpose::Confirm,
@@ -5537,7 +5549,7 @@ mod tests {
         let mut bob = crate::identified(
             ChannelState::open(channel_id, meta, &meta_bytes, &segments).expect("bob"),
         );
-        let successor = SegmentId::new();
+        let successor = Id::<Segment>::mint();
         let closed = bob
             .close_into(old, successor, ambre_murmure::Successor::Created, NOW)
             .expect("bob closes");
@@ -5575,7 +5587,7 @@ mod tests {
         let mut bob = crate::identified(
             ChannelState::open(channel_id, meta, &meta_bytes, &segments).expect("bob"),
         );
-        let successor = SegmentId::new();
+        let successor = Id::<Segment>::mint();
         let closed = bob
             .close_into(old, successor, ambre_murmure::Successor::Created, NOW)
             .expect("bob closes");
@@ -5620,7 +5632,7 @@ mod tests {
         });
         assert_eq!(sent(&sync), [Sent::List(channel_id)]);
 
-        let successor = SegmentId::new();
+        let successor = Id::<Segment>::mint();
         let listing = || LogicEvent::ChannelDocuments {
             channel_id,
             documents: vec![
@@ -5668,7 +5680,7 @@ mod tests {
 
     // --- The threads of a channel ---
 
-    fn reply_to(root: MessageId, text: &str, also_in_channel: bool) -> MurmureCommand {
+    fn reply_to(root: Id<Message>, text: &str, also_in_channel: bool) -> MurmureCommand {
         MurmureCommand::Reply {
             root,
             draft: MessageDraft {
@@ -5687,7 +5699,9 @@ mod tests {
     }
 
     /// The thread documents Logic asked the Sync worker to create.
-    fn created_threads(sync: &Receiver<SyncCommand>) -> Vec<(SegmentId, MessageId, DocumentId)> {
+    fn created_threads(
+        sync: &Receiver<SyncCommand>,
+    ) -> Vec<(Id<Segment>, Id<Message>, Id<Document>)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -5707,7 +5721,7 @@ mod tests {
     fn rooted_channel(
         state: &mut LogicState,
         sync: &Receiver<SyncCommand>,
-    ) -> (ChannelId, SegmentId, MessageId) {
+    ) -> (Id<Channel>, Id<Segment>, Id<Message>) {
         let (channel_id, active) = open_channel(state);
         command(state, channel_id, send("root", Vec::new()));
         drain(sync);
@@ -5721,7 +5735,7 @@ mod tests {
     #[test]
     fn a_first_reply_waits_for_the_thread_it_creates() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, active, root) = rooted_channel(&mut state, &sync);
         drain(&ui);
         command(&mut state, channel_id, reply_to(root, "a reply", true));
@@ -5752,7 +5766,7 @@ mod tests {
             document_id: thread,
             role: ambre_bus::Role::Owner,
         });
-        let updates: Vec<(DocumentId, bool)> = drain(&sync)
+        let updates: Vec<(Id<Document>, bool)> = drain(&sync)
             .into_iter()
             .filter_map(|c| match c {
                 SyncCommand::SendUpdate {
@@ -5790,7 +5804,7 @@ mod tests {
 
     /// A change on the reply of `root`, in its thread: a react, an edit or a
     /// delete by `kind`.
-    fn thread_change(root: MessageId, reply: MessageId, kind: &str) -> MurmureCommand {
+    fn thread_change(root: Id<Message>, reply: Id<Message>, kind: &str) -> MurmureCommand {
         let at = MessageAt::Thread(root);
         match kind {
             "react" => MurmureCommand::React {
@@ -5828,7 +5842,7 @@ mod tests {
     #[test]
     fn a_change_on_a_reply_leaves_for_its_thread() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, active, root) = rooted_channel(&mut state, &sync);
         command(&mut state, channel_id, reply_to(root, "a reply", false));
         let [(segment, _, thread)] = created_threads(&sync).try_into().expect("one create");
@@ -5853,7 +5867,7 @@ mod tests {
         let reply = messages[0].id;
         for kind in ["react", "unreact", "edit", "delete"] {
             command(&mut state, channel_id, thread_change(root, reply, kind));
-            let sent: Vec<DocumentId> = drain(&sync)
+            let sent: Vec<Id<Document>> = drain(&sync)
                 .into_iter()
                 .filter_map(|c| match c {
                     SyncCommand::SendUpdate { document_id, .. } => Some(document_id),
@@ -5884,7 +5898,7 @@ mod tests {
         command(
             &mut state,
             channel_id,
-            thread_change(MessageId::new(), reply, "edit"),
+            thread_change(Id::<Message>::mint(), reply, "edit"),
         );
         assert!(drain(&sync).is_empty(), "a thread not held takes nothing");
         assert!(state.murmure_waiting.is_empty());
@@ -5895,7 +5909,7 @@ mod tests {
     #[test]
     fn a_copy_follows_the_edit_and_the_delete_of_its_reply() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, active, root) = rooted_channel(&mut state, &sync);
         command(&mut state, channel_id, reply_to(root, "a reply", true));
         let [(segment, _, thread)] = created_threads(&sync).try_into().expect("one create");
@@ -5927,7 +5941,7 @@ mod tests {
             ("delete", vec![thread, active.document_id()]),
         ] {
             command(&mut state, channel_id, thread_change(root, reply, kind));
-            let sent: Vec<DocumentId> = drain(&sync)
+            let sent: Vec<Id<Document>> = drain(&sync)
                 .into_iter()
                 .filter_map(|c| match c {
                     SyncCommand::SendUpdate { document_id, .. } => Some(document_id),
@@ -5958,11 +5972,11 @@ mod tests {
     #[test]
     fn a_lost_or_failed_thread_link_moves_the_reply_to_another_document() {
         let (mut state, _ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, segment, root) = rooted_channel(&mut state, &sync);
         command(&mut state, channel_id, reply_to(root, "two", false));
         let [(_, _, mine)] = created_threads(&sync).try_into().expect("one create");
-        let winner = DocumentId::new();
+        let winner = Id::<Document>::mint();
         state.handle_logic_event(LogicEvent::ThreadLinked {
             channel_id,
             segment,
@@ -6125,7 +6139,7 @@ mod tests {
         });
         assert!(found, "the view is told the root");
 
-        let unknown = DocumentId::new();
+        let unknown = Id::<Document>::mint();
         command(
             &mut state,
             channel_id,
@@ -6177,7 +6191,7 @@ mod tests {
                 command: MurmureCommand::MarkThreadRead { thread },
             });
         };
-        mark(&mut m, DocumentId::new());
+        mark(&mut m, Id::<Document>::mint());
         assert!(drain(&m.bob_sync).is_empty());
         mark(&mut m, thread);
         let asked = drain(&m.bob_sync);
@@ -6206,7 +6220,7 @@ mod tests {
 
     /// Bob holds a thread of the channel with one reply of Alice's that
     /// mentions him, and has read every segment. Returns the thread.
-    fn held_mention(m: &mut Members) -> DocumentId {
+    fn held_mention(m: &mut Members) -> Id<Document> {
         m.deliver("root", 1);
         let root = m.alice.messages(m.active).expect("held")[0].id;
         let ThreadTarget::Create(thread) = m.alice.reply_target(root, NOW).expect("target") else {
@@ -6268,14 +6282,14 @@ mod tests {
     /// the last of each thread, in their order.
     #[test]
     fn a_batch_keeps_the_last_answer_of_each_list() {
-        let segment = SegmentId::new();
-        let (first, second) = (DocumentId::new(), DocumentId::new());
-        let root = MessageId::new();
+        let segment = Id::<Segment>::mint();
+        let (first, second) = (Id::<Document>::mint(), Id::<Document>::mint());
+        let root = Id::<Message>::mint();
         let list = || MurmureEvent::Messages {
             segment,
             messages: Vec::new(),
         };
-        let replies = |thread: DocumentId| MurmureEvent::ThreadMessages {
+        let replies = |thread: Id<Document>| MurmureEvent::ThreadMessages {
             root,
             thread,
             messages: Vec::new(),
@@ -6300,7 +6314,7 @@ mod tests {
     // --- A thread not open ---
 
     /// The relay's activity answer, naming `documents` of `channel_id`.
-    fn answer(state: &mut LogicState, channel_id: ChannelId, documents: &[(DocumentId, Seq)]) {
+    fn answer(state: &mut LogicState, channel_id: Id<Channel>, documents: &[(Id<Document>, Seq)]) {
         state.handle_logic_event(LogicEvent::ChannelActivity {
             documents: documents
                 .iter()
@@ -6316,7 +6330,7 @@ mod tests {
         });
     }
 
-    fn watched(sync: &Receiver<SyncCommand>) -> Vec<(DocumentId, MetaId, Seq)> {
+    fn watched(sync: &Receiver<SyncCommand>) -> Vec<(Id<Document>, Id<Meta>, Seq)> {
         drain(sync)
             .into_iter()
             .filter_map(|c| match c {
@@ -6341,11 +6355,11 @@ mod tests {
     #[test]
     fn a_signalled_thread_is_watched_from_its_read_cursor() {
         let (mut state, _ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _) = open_channel(&mut state);
         let meta = state.channels[&channel_id].meta_id();
         drain(&sync);
-        let (thread, gone) = (DocumentId::new(), DocumentId::new());
+        let (thread, gone) = (Id::<Document>::mint(), Id::<Document>::mint());
         for document_id in [thread, gone] {
             state.handle_logic_event(LogicEvent::ThreadActivity { document_id });
         }
@@ -6362,7 +6376,7 @@ mod tests {
         assert!(drain(&sync).is_empty(), "a watched thread was asked again");
 
         // A thread the channel already places is watched at once.
-        let placed = DocumentId::new();
+        let placed = Id::<Document>::mint();
         answer(&mut state, channel_id, &[(placed, Seq(0))]);
         state.handle_logic_event(LogicEvent::ThreadActivity {
             document_id: placed,
@@ -6376,10 +6390,10 @@ mod tests {
     #[test]
     fn a_signal_on_a_held_thread_or_an_unopened_channel_watches_nothing() {
         let (mut state, _ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, active) = open_channel(&mut state);
-        let unopened = ChannelId::new();
-        let thread = DocumentId::new();
+        let unopened = Id::<Channel>::mint();
+        let thread = Id::<Document>::mint();
         answer(&mut state, unopened, &[(thread, Seq(0))]);
         drain(&sync);
         for document_id in [active.document_id(), thread] {
@@ -6405,7 +6419,7 @@ mod tests {
         );
         let mut threads = Vec::new();
         for channel_id in [closed, open] {
-            let thread = DocumentId::new();
+            let thread = Id::<Document>::mint();
             answer(&mut state, channel_id, &[(thread, Seq(0))]);
             state.handle_logic_event(LogicEvent::ThreadActivity {
                 document_id: thread,
@@ -6453,10 +6467,10 @@ mod tests {
     #[test]
     fn a_watched_thread_marks_a_closed_channel_and_ends_with_it() {
         let (mut state, ui, sync) = harness();
-        signed_in(&mut state, UserId::new());
+        signed_in(&mut state, Id::<User>::mint());
         let (channel_id, _) = open_channel(&mut state);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
-        let thread = DocumentId::new();
+        let thread = Id::<Document>::mint();
         answer(&mut state, channel_id, &[(thread, Seq(0))]);
         state.handle_logic_event(LogicEvent::ThreadActivity {
             document_id: thread,

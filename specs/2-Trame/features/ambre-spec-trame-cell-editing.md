@@ -28,7 +28,7 @@ status values are normative in `ambre-spec-template.md`.
 | `TRAME-UI-050` | `INV` | The editor MUST hold no buffer of its own: every buffer operation resolves to the shared text core. | this spec section 3 | type-level -- `CellEditor` owns a `TextEditor` and nothing else, and reaches it through `Deref` and `DerefMut`, so no second buffer can exist; `ambre_trame::ui::grid::tests::editor_parity::parity_caret_motion_and_insert`; `::parity_shift_selection`; `::parity_select_replace_and_delete`; `::parity_backspace_and_delete_forward`; `::parity_selection_collapse_on_arrows` -- the behaviour equal to the core's | none | verified |
 | `TRAME-UI-055` | `INV` | The formula bar and the in-cell editor MUST show one buffer, never two. | this spec section 4 | `ambre_trame::ui::view::view_tests::the_bar_and_the_cell_show_one_buffer` -- without the focus the bar reads the buffer, and with it the buffer reads the bar | none | verified |
 | `TRAME-UI-155` | `INV` | An edit session MUST open on a user gesture alone. | this spec section 4 | `ambre_trame::ui::view::tests::only_a_typed_text_opens_an_edit_from_the_formula_bar` -- the decision; `ambre_trame::ui::view::view_tests::only_a_text_typed_in_the_bar_opens_a_session` -- the frame sync feeding it: the focus alone opens nothing | none | verified |
-| `TRAME-FEAT-024` | `INV` | Protection MUST identify its owner by `UserId`, never by `pub_key`. | this spec section 3 | not built | unbuilt -- lands with the `Range protection` Story (`ambre-roadmap.md` post-V1) | unimplemented |
+| `TRAME-FEAT-024` | `INV` | Protection MUST identify its owner by `Id<User>`, never by `pub_key`. | this spec section 3 | not built | unbuilt -- lands with the `Range protection` Story (`ambre-roadmap.md` post-V1) | unimplemented |
 | `TRAME-UI-010` | `OBS` | An optimistic commit MUST NOT display the formula source as its own result. | this spec section 3 | `ambre_trame::ui::grid::tests::group2::optimistic_commit_does_not_echo_formula_as_result` | none | verified |
 | `TRAME-UI-091` | `OBS` | The formula bar MUST show the reference of the cell the edit will reach. | this spec section 4 | `ambre_trame::ui::view::view_tests::the_bar_names_the_active_cell` | none | verified |
 
@@ -237,7 +237,7 @@ pub enum ValidationOnInvalid {
 test uses the author the Sync thread resolved and handed down, never an identity read out of the
 payload. A
 violation raises a warning and changes nothing else (`TRAME-FEAT-022`, `TRAME-FEAT-023`). Identity
-is the `UserId` the session carries, never a public key, which rotates (`TRAME-FEAT-024`).
+is the `Id<User>` the session carries, never a public key, which rotates (`TRAME-FEAT-024`).
 
 **Code.** `chrome/commands.rs` turns each refusal event into a toast, and is the only part built.
 The command variants exist in `ambre-bus`; `logic/commands.rs` answers them with an empty outcome.
