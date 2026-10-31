@@ -20,7 +20,7 @@ fn cell(row: u32, col: u32, filtered: ambre_bus::RowFilter) -> DisplayCell {
 /// An answer carrying these cells, with no size of its own.
 fn answer(version: u64, cells: Vec<DisplayCell>) -> TrameEvent {
     TrameEvent::ViewportData {
-        version: ambre_bus::ViewportVersion(version),
+        version: ambre_core::Generation::nth(version),
         row_start: Row::new(0),
         col_start: Col::new(0),
         col_widths: vec![],
@@ -140,11 +140,11 @@ fn a_default_size_in_an_answer_clears_the_stored_one() {
         row_heights: vec![ambre_core::DocPx::new(height as f32)],
         cells: vec![],
     };
-    state.on_viewport_data(sized(ambre_bus::ViewportVersion(0), 200.0, 45.0));
+    state.on_viewport_data(sized(ambre_core::Generation::ZERO, 200.0, 45.0));
     assert_eq!(state.col_width_of(Col::new(2)).get(), 200.0);
     assert_eq!(state.row_height_of(Row::new(3)).get(), 45.0);
     let (width, height) = (f64::from(COL_WIDTH.get()), f64::from(ROW_HEIGHT.get()));
-    state.on_viewport_data(sized(ambre_bus::ViewportVersion(1), width, height));
+    state.on_viewport_data(sized(ambre_core::Generation::nth(1), width, height));
     assert_eq!(state.col_width_of(Col::new(2)).get(), width);
     assert_eq!(state.row_height_of(Row::new(3)).get(), height);
     assert!(

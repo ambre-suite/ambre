@@ -27,8 +27,8 @@ use crate::{
 use ambre_bus::{AppCommand, MentionState};
 use ambre_bus::{
     ChannelMatches, ChannelPlace, DirectMessageEvent, LogicCommand, MemberView, MessageAt,
-    MurmureCommand, MurmureEvent, Presence, RequestId, RestCommand, RestEvent, SpaceCommand,
-    SpaceEvent, TextStyle, Timestamp, UiEvent,
+    MurmureCommand, MurmureEvent, Presence, RestCommand, RestEvent, SpaceCommand, SpaceEvent,
+    TextStyle, Timestamp, UiEvent,
 };
 use ambre_chrome::{
     CommandHandler, FormatBar, FormatControl, KeyRoute, MenuEntry, PaletteEntry, PaletteKey,
@@ -1176,7 +1176,7 @@ impl MurmureRelay {
                 other.then(|| {
                     self.inviting.set(None);
                     LogicCommand::Rest {
-                        id: RequestId::next(),
+                        id: ambre_bus::next_request(),
                         cmd: RestCommand::FetchMemberKey { user_id },
                     }
                 })
@@ -1337,7 +1337,7 @@ impl MurmureRelay {
         }
         self.inviting.set(Some((user, channel)));
         Some(LogicCommand::Rest {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             cmd: RestCommand::FetchMemberKey { user_id: user },
         })
     }

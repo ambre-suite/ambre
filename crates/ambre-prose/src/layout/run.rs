@@ -1037,30 +1037,11 @@ impl PartialEq for ShapedRun {
 /// The stamp the paginator puts on each layout it shapes. It only grows, so
 /// the view keeps the newest layout it was handed and drops an older one
 /// (`PROSE-UI-016`).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LayoutVersion(u64);
+pub enum LayoutVersion {}
 
-impl LayoutVersion {
-    /// The version before any layout was shaped.
-    pub const FIRST: Self = Self(0);
-
-    /// The version `value`.
-    #[must_use]
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    /// The number the version holds.
-    #[must_use]
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-
-    /// The version after this one, held at the last one.
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+impl ambre_core::GenerationKind for LayoutVersion {
+    type IssueRight = ();
+    const NAME: &'static str = "LayoutVersion";
 }
 
 /// One layout as the view receives it: the pages, the runs to draw on
@@ -1077,7 +1058,7 @@ impl LayoutVersion {
 /// the tables are those of the pages in [`ShapedLayout::pages`] alone.
 #[derive(Clone, Debug, Default)]
 pub struct ShapedLayout {
-    pub version: LayoutVersion,
+    pub version: ambre_core::Generation<LayoutVersion>,
     /// The page geometry of the document, with the blocks of the window.
     pub layout: Arc<PageLayout>,
     /// The run of every block the window draws text for: body, bands and
@@ -1161,7 +1142,7 @@ impl ShapedLayout {
     /// from them.
     #[must_use]
     pub fn new(
-        version: LayoutVersion,
+        version: ambre_core::Generation<LayoutVersion>,
         layout: Arc<PageLayout>,
         blocks: HashMap<TreeID, ShapedRun>,
         notes: HashMap<Id<Footnote>, ShapedRun>,

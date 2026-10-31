@@ -214,7 +214,7 @@ fn walk(
 /// before, as it is while a board is panned.
 fn board_paint() {
     let viewport = DisplayViewport {
-        version: ambre_bus::ViewportVersion(0),
+        version: ambre_core::Generation::ZERO,
         grid_unit: ambre_core::BoardLength::new(20.0),
         reactions: Default::default(),
         pins: Vec::new(),

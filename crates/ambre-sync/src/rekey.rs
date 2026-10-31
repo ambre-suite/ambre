@@ -25,6 +25,7 @@ use ambre_protocol::messages::{Clock, Signature};
 
 use crate::generation::ResendTicket;
 use crate::pipeline::UpdateFrame;
+use ambre_core::Generation;
 
 /// Updates kept per document until the relay echoes them back. Past the cap the
 /// oldest is forgotten, and a refusal of it can no longer be answered
@@ -88,7 +89,7 @@ pub(crate) struct Rekey {
     refused: bool,
     /// The delta the relay failed to sequence, waiting for its resend, and
     /// the ticket of the timer armed for it (`SYNC-159`).
-    failed: Option<(Signature, ResendTicket)>,
+    failed: Option<(Signature, Generation<ResendTicket>)>,
     /// Sequencing failures since the relay last echoed a delta of this log.
     failures: ambre_core::FailureCount,
 }
@@ -136,7 +137,7 @@ impl Rekey {
     pub(crate) fn failed(
         &mut self,
         signature: &Signature,
-        ticket: ResendTicket,
+        ticket: Generation<ResendTicket>,
     ) -> Option<ambre_core::FailureCount> {
         self.position(signature)?;
         self.failed = Some((*signature, ticket));
@@ -149,7 +150,7 @@ impl Rekey {
     /// clock. `None` when a later failure or a refusal made the timer stale.
     pub(crate) fn resend_failed(
         &mut self,
-        ticket: ResendTicket,
+        ticket: Generation<ResendTicket>,
     ) -> Option<(Signature, Clock, Vec<UpdateFrame>)> {
         let (signature, armed) = self.failed?;
         if armed != ticket {

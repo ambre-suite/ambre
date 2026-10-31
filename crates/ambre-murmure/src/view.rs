@@ -17,7 +17,7 @@ use std::rc::Rc;
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
     Attachment, ByteSize, Emoji, LogicCommand, MessageAt, MessageView, MurmureCommand,
-    MurmureEvent, ReplyEcho, RequestId, RestEvent, TextStyle, Timestamp, UiEvent,
+    MurmureEvent, ReplyEcho, Request, RestEvent, TextStyle, Timestamp, UiEvent,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
@@ -25,7 +25,7 @@ use ambre_canvas::{
 };
 use ambre_commands::{ClipboardWrite, FunctionKey, Key, KeyBinding, Modifiers};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
-use ambre_core::{CssPx, CssVector, ViewPoint, ViewPx, ViewSize};
+use ambre_core::{CssPx, CssVector, Generation, GenerationKind, ViewPoint, ViewPx, ViewSize};
 use ambre_draw::kinetic::{Kinetic, Release, ScrollStep};
 use ambre_draw::wheel::WheelDeltaMode;
 use ambre_draw::{Consumed, DrawSurface, FontContext, Point, Rect};
@@ -190,17 +190,20 @@ enum Rest {
     },
 }
 
-ambre_core::define_generation! {
-    /// The number of changes the lists of a page went through: what a
-    /// region repaints for when it moves.
-    struct ListsRevision;
+/// The changes the lists of a page went through: what a region repaints for
+/// when it moves.
+enum ListsRevision {}
+
+impl GenerationKind for ListsRevision {
+    type IssueRight = ();
+    const NAME: &'static str = "ListsRevision";
 }
 
 /// The lists every region of the page reads, and a count of their changes.
 #[derive(Default)]
 struct Lists {
     conversations: Conversations,
-    revision: ListsRevision,
+    revision: Generation<ListsRevision>,
 }
 
 /// The list a region shows: a channel, or the thread under one of its
@@ -260,7 +263,7 @@ pub struct MurmureView {
     marks: ReadMarks,
     unread_line: UnreadLine,
     /// The pane and the revision of the lists this region last painted.
-    painted: (MurmurePane, ListsRevision),
+    painted: (MurmurePane, Generation<ListsRevision>),
     /// What the last paint did.
     last: Option<Painted>,
     theme_ctl: ThemeControl,
@@ -306,7 +309,7 @@ pub struct MurmureView {
     parked: Rc<RefCell<Option<Composer>>>,
     /// The files a click asked for, by the request that fetches each. Both
     /// regions share it, and the content canvas reads the answers.
-    fetching: Rc<RefCell<HashMap<RequestId, Attachment>>>,
+    fetching: Rc<RefCell<HashMap<Generation<Request>, Attachment>>>,
     /// The pictures the previews show. Both regions share it, and the
     /// content canvas takes the answers.
     pictures: Rc<RefCell<Pictures>>,
@@ -320,7 +323,7 @@ pub struct MurmureView {
     /// The format bar this region last handed the page.
     barred: Option<MarkBar>,
     /// The version of the shelf the last plan read.
-    shelf_seen: crate::drafts::ShelfVersion,
+    shelf_seen: Generation<crate::drafts::ShelfVersion>,
     /// Whether the content changed since the last paint.
     dirty: Repaint,
 }
@@ -396,7 +399,7 @@ impl MurmureView {
             region: Region::Channel,
             marks: ReadMarks::default(),
             unread_line: UnreadLine::default(),
-            painted: (MurmurePane::default(), ListsRevision::ZERO),
+            painted: (MurmurePane::default(), Generation::ZERO),
             last: None,
             theme_ctl,
             theme,
@@ -422,7 +425,7 @@ impl MurmureView {
             ticked: None,
             listed: None,
             barred: None,
-            shelf_seen: crate::drafts::ShelfVersion::ZERO,
+            shelf_seen: Generation::ZERO,
             dirty: Repaint::Due,
         }
     }
@@ -519,7 +522,7 @@ impl MurmureView {
     fn answer_file(&mut self, ev: UiEvent) -> Option<UiEvent> {
         match ev {
             UiEvent::Rest {
-                id,
+                id: Some(id),
                 evt:
                     RestEvent::MediaUploaded {
                         ref content_hash, ..
@@ -532,7 +535,7 @@ impl MurmureView {
                 Some(Uploaded::Ready(_)) => {}
             },
             UiEvent::Rest {
-                id,
+                id: Some(id),
                 evt: RestEvent::MediaDownloaded { data, .. },
             } if self.fetching.borrow().contains_key(&id) => {
                 if let Some(file) = self.fetching.borrow_mut().remove(&id) {
@@ -665,7 +668,7 @@ impl MurmureView {
             Some(ListOf::Channel(channel) | ListOf::Thread(channel, _)) => channel,
             None => return,
         };
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         let media_ref = file.media_ref.clone();
         self.fetching.borrow_mut().insert(id, file);
         self.send(LogicCommand::Channel {
@@ -711,7 +714,7 @@ impl MurmureView {
             return;
         };
         for file in files {
-            let id = RequestId::next();
+            let id = ambre_bus::next_request();
             let (media_type, size) = (file.media_type(), ByteSize(file.data.len() as u64));
             let of = DraftOf::Channel(channel_id);
             if !self
@@ -3748,7 +3751,7 @@ mod tests {
     const HASH: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
     /// Drop `name` on the canvas, paint, and return the upload it asked.
-    fn drop_file(page: &mut Page, channel: Id<Channel>, name: &str) -> RequestId {
+    fn drop_file(page: &mut Page, channel: Id<Channel>, name: &str) -> Generation<Request> {
         page.dropped.borrow_mut().push(PickedFile {
             name: name.to_owned(),
             media_type: MediaType(String::new()),
@@ -3808,7 +3811,7 @@ mod tests {
             content_hash: ContentHash::parse(HASH).expect("an address"),
         };
         page.events
-            .try_send(UiEvent::Rest { id, evt })
+            .try_send(UiEvent::Rest { id: Some(id), evt })
             .expect("room");
         frame_with_fonts(&mut page.view);
         key(
@@ -3871,7 +3874,7 @@ mod tests {
             content_hash: ContentHash::parse(HASH).expect("an address"),
         };
         page.events
-            .try_send(UiEvent::Rest { id, evt })
+            .try_send(UiEvent::Rest { id: Some(id), evt })
             .expect("room");
         frame_with_fonts(&mut page.view);
         let hit = (0..300)
@@ -3932,7 +3935,7 @@ mod tests {
             data: vec![1, 2, 3].into(),
         };
         page.events
-            .try_send(UiEvent::Rest { id, evt })
+            .try_send(UiEvent::Rest { id: Some(id), evt })
             .expect("room");
         frame_with_fonts(&mut page.view);
         assert_eq!(*page.saved.borrow(), vec![(file, vec![1, 2, 3].into())]);

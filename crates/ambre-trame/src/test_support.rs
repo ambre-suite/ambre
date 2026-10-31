@@ -123,8 +123,8 @@ pub fn span(rows: u32, cols: u32) -> crate::MergeSpan {
 }
 
 /// The `n`-th edit session token a view mints, counting from one.
-pub fn session(n: u64) -> crate::EditSessionId {
-    (1..n).fold(crate::EditSessionId::FIRST, |token, _| token.next())
+pub fn session(n: u64) -> ambre_bus::Token<crate::EditSession> {
+    (1..n).fold(ambre_bus::Token::FIRST, |token, _| token.next())
 }
 
 /// The defined name `text`, which a test writes with a name's shape.

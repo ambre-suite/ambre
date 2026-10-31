@@ -3,7 +3,7 @@
 // Pure, native (`cargo test -p ambre-bus`) coverage of the bus data plane:
 //   - the two pure helpers carried on the content plane (`to_tsv`,
 //     `has_decimals`),
-//   - the `RequestId` allocator invariant (monotonic, shared `AtomicU64`),
+//   - the request id issuer invariant (monotonic, one shared issuer),
 //   - postcard round-trips of the Logic <-> Sync envelopes. The contract:
 //     `SyncCommand` / `LogicEvent`, and the `Rest*` family they carry, survive the
 //     `postMessage` hop unchanged, while application payloads stay `Vec<u8>`.
@@ -20,17 +20,18 @@
 )]
 
 use ambre_bus::app::toile::{PresencePayload, ToileCommand, Viewport as ToileViewport};
+use ambre_bus::next_request;
 use ambre_bus::{
     ActivityAnchor, ActivityKind, ActivitySummary, AppCommand, CellFormat, ChannelMeta,
     ChannelName, ChannelPlace, ClipboardCell, ClipboardPayload, DirectPeers, DocType, FoldAnswer,
-    LeaseAnswer, LogicEvent, MemberChannel, MemberInfo, MemberStanding, OpenFailure, RequestId,
-    RestCommand, RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand,
+    LeaseAnswer, LogicEvent, MemberChannel, MemberInfo, MemberStanding, OpenFailure, RestCommand,
+    RestEvent, Role, SelectionKind, SyncCommand, Timestamp, TrameCommand,
 };
 use ambre_bus::{Col, ColCount, Decimals, DecimalsStep, Row, RowCount};
-use ambre_core::BoardLength;
 use ambre_core::id::{
     Channel, Document, Element, Id, Lease, Meeting, Message, Meta, Segment, Snapshot, Space, User,
 };
+use ambre_core::{BoardLength, Generation};
 
 // -- Content plane: ClipboardPayload::to_tsv ---------------------------------
 
@@ -189,15 +190,16 @@ fn a_fraction_of_a_side_lies_between_zero_and_one() {
     );
 }
 
-// -- Service plane: RequestId allocator --------------------------------------
+// -- Service plane: request id issuer -----------------------------------------
 
 #[test]
 fn request_id_is_strictly_monotonic() {
-    let a = RequestId::next();
-    let b = RequestId::next();
-    let c = RequestId::next();
-    assert!(a.0 < b.0, "ids must increase");
-    assert!(b.0 < c.0);
+    let a = next_request();
+    let b = next_request();
+    let c = next_request();
+    assert!(Generation::ZERO < a, "no request carries the zero id");
+    assert!(a < b, "ids must increase");
+    assert!(b < c);
 }
 
 #[test]
@@ -206,12 +208,12 @@ fn request_id_is_unique_under_concurrency() {
 
     // Each thread keeps its own ids, so the test shares no lock with them.
     let handles: Vec<_> = (0..8)
-        .map(|_| std::thread::spawn(|| (0..1000).map(|_| RequestId::next().0).collect::<Vec<_>>()))
+        .map(|_| std::thread::spawn(|| (0..1000).map(|_| next_request()).collect::<Vec<_>>()))
         .collect();
     let mut seen = HashSet::new();
     for h in handles {
         for id in h.join().unwrap() {
-            assert!(seen.insert(id), "duplicate id {id}");
+            assert!(seen.insert(id), "duplicate id {id:?}");
         }
     }
     assert_eq!(seen.len(), 8 * 1000);
@@ -237,7 +239,7 @@ fn sync_command_roundtrips_through_postcard() {
     let doc = Id::<Document>::mint();
     let chan = Id::<Channel>::mint();
     roundtrip_sync(&SyncCommand::Rest {
-        id: RequestId(42),
+        id: Generation::nth(42),
         cmd: RestCommand::CreateDocument {
             doc_type: DocType::Trame,
             name: ambre_core::Name::new("Budget").unwrap(),
@@ -280,7 +282,7 @@ fn logic_event_roundtrips_through_postcard() {
     let doc = Id::<Document>::mint();
     let user = Id::<User>::mint();
     roundtrip_event(&LogicEvent::Rest {
-        id: RequestId(7),
+        id: Some(Generation::nth(7)),
         evt: RestEvent::DocumentCreated {
             document_id: doc,
             doc_type: DocType::Trame,
@@ -460,7 +462,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
     };
     let commands = [
         SyncCommand::Rest {
-            id: RequestId(5),
+            id: Generation::nth(5),
             cmd: RestCommand::CreateDocument {
                 doc_type: DocType::Toile,
                 name: ambre_core::Name::new("Plan").unwrap(),
@@ -617,7 +619,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
     ];
     let events = [
         LogicEvent::Rest {
-            id: RequestId(6),
+            id: Some(Generation::nth(6)),
             evt: RestEvent::DocumentCreated {
                 document_id: doc,
                 doc_type: DocType::Toile,
@@ -879,7 +881,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             message: "expired".to_owned(),
         },
         LogicEvent::ApiError {
-            id: Some(RequestId(8)),
+            id: Some(Generation::nth(8)),
             request: ambre_bus::ApiRequest::InviteToDocument,
             failure: ambre_bus::ApiFailure::refused(ambre_bus::RefusalCode::MembersChanged),
             message: "conflict".to_owned(),
@@ -940,7 +942,7 @@ fn the_ui_to_logic_path_carries_nothing_an_encoder_takes() {
 fn request_id_echo_is_preserved_across_the_hop() {
     // The id allocated by the UI must be byte-identical after a Sync round-trip
     // (the whole point of the correlation token).
-    let id = RequestId::next();
+    let id = next_request();
     let cmd = SyncCommand::Rest {
         id,
         cmd: RestCommand::InviteToDocument {
@@ -956,7 +958,7 @@ fn request_id_echo_is_preserved_across_the_hop() {
     let SyncCommand::Rest { id: back, .. } = postcard::from_bytes(&bytes).unwrap() else {
         panic!("variant changed");
     };
-    assert_eq!(id.0, back.0);
+    assert_eq!(id, back);
 }
 
 // -- Role gate: AppCommand::is_mutating (`architecture`) ---------
@@ -971,7 +973,7 @@ fn read_only_and_local_commands_are_not_mutating() {
     let cases: Vec<AppCommand> = vec![
         // Trame: local view state.
         AppCommand::Trame(TrameCommand::ScrollViewport {
-            version: ambre_bus::ViewportVersion(1),
+            version: ambre_core::Generation::nth(1),
             row_start: Row::new(0),
             row_end: Row::new(4),
             col_start: Col::new(0),

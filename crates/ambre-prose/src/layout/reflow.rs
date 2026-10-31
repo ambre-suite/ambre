@@ -63,7 +63,7 @@ pub struct Paginator {
     notes: pass::NotePlan,
     /// Stamped on each layout this paginator hands over, so the view can
     /// tell a late one from a new one (`PROSE-UI-016`).
-    version: LayoutVersion,
+    version: ambre_core::Generation<LayoutVersion>,
     /// Every block of the layout, by its place in the flow. Shared by every
     /// window handed over, and built again only when the blocks change.
     order: Arc<HashMap<TreeID, FlowIndex>>,
@@ -96,7 +96,7 @@ impl Paginator {
             toc_pages: HashMap::new(),
             bands: pass::BandHeights::default(),
             notes: pass::NotePlan::default(),
-            version: LayoutVersion::FIRST,
+            version: ambre_core::Generation::ZERO,
             order: Arc::default(),
             ends: None,
         }

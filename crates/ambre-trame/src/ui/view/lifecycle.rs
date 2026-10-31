@@ -80,7 +80,7 @@ impl TrameView {
             #[cfg(target_arch = "wasm32")]
             find_result,
             editor: None,
-            next_edit_session: crate::EditSessionId::FIRST,
+            next_edit_session: ambre_bus::Token::FIRST,
             pending_commit: None,
             editor_text_drag: false,
             selecting_drag: false,
@@ -374,7 +374,7 @@ impl TrameView {
     /// Close session `session` with no write, because a peer deleted its cell
     /// (`TRAME-UI-176`). The chrome toasts the loss; this side drops the editor
     /// and announces it. A no-op once the session closed.
-    pub(crate) fn drop_lost_edit(&mut self, session: crate::EditSessionId) {
+    pub(crate) fn drop_lost_edit(&mut self, session: ambre_bus::Token<crate::EditSession>) {
         if self.editor.as_ref().is_none_or(|e| e.session != session) {
             return;
         }
@@ -391,7 +391,11 @@ impl TrameView {
     /// Carry session `session` to `at`, where a peer moved its cell. The
     /// editor and the active cell follow, so the cell on screen is the one the
     /// commit reaches (`TRAME-UI-160`).
-    pub(crate) fn follow_moved_edit(&mut self, session: crate::EditSessionId, at: CellPos) {
+    pub(crate) fn follow_moved_edit(
+        &mut self,
+        session: ambre_bus::Token<crate::EditSession>,
+        at: CellPos,
+    ) {
         if !self.editor.as_mut().is_some_and(|e| e.follow(session, at)) {
             return;
         }
@@ -490,7 +494,7 @@ impl TrameView {
     /// Release session `session` on the Logic side with no write. A lost
     /// release leaves Logic pinning a cell no editor shows, so a later delete
     /// of it would report a session already closed.
-    fn end_session(&mut self, session: crate::EditSessionId) {
+    fn end_session(&mut self, session: ambre_bus::Token<crate::EditSession>) {
         if self
             .send_command_lossless(TrameCommand::EndCellEdit { session })
             .is_err()

@@ -109,7 +109,7 @@ impl LogicState {
             self.dispatch_outcome(document_id, vec![answer], None, None, Vec::new());
             return;
         };
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         self.pending_seals.insert(
             id,
             crate::PendingSeal {
@@ -133,7 +133,11 @@ impl LogicState {
     ///
     /// A document closed while its seal was in flight drops the answer.
     /// Nothing remains to download into, and the bytes go out of scope sealed.
-    pub(crate) fn resolve_pending_seal(&mut self, id: RequestId, evt: &RestEvent) -> bool {
+    pub(crate) fn resolve_pending_seal(
+        &mut self,
+        id: Generation<Request>,
+        evt: &RestEvent,
+    ) -> bool {
         let answer = match evt {
             RestEvent::DocFileSealed { data } => Ok(ambre_core::FileBytes::from(data.clone())),
             RestEvent::DocFileSealFailed => Err("the file could not be encrypted".to_owned()),
@@ -425,14 +429,14 @@ impl LogicState {
         }
     }
 
-    /// Lower one [`ToileRequest`] into the `(RequestId, RestCommand)` pair the
+    /// Lower one [`ToileRequest`] into the `(Generation<Request>, RestCommand)` pair the
     /// Sync plane expects, filling in the `document_id` the engine cannot name.
-    /// The `RequestId` is the one Toile allocated -- it owns the correlation.
+    /// The `Generation<Request>` is the one Toile allocated -- it owns the correlation.
     fn lower_request(
         &self,
         document_id: Id<Document>,
         request: ToileRequest,
-    ) -> (RequestId, RestCommand) {
+    ) -> (Generation<Request>, RestCommand) {
         match request {
             ToileRequest::UploadMedia { id, data } => {
                 (id, RestCommand::UploadMedia { document_id, data })
@@ -455,7 +459,7 @@ impl LogicState {
     pub(crate) fn route_service_event(
         &mut self,
         document_id: Id<Document>,
-        id: RequestId,
+        id: Generation<Request>,
         evt: RestEvent,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
@@ -481,7 +485,7 @@ impl LogicState {
     pub(crate) fn route_service_error(
         &mut self,
         document_id: Id<Document>,
-        id: RequestId,
+        id: Generation<Request>,
         reason: String,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {

@@ -24,7 +24,7 @@ impl SyncState {
     /// Seals one row under the store key.
     pub(crate) fn handle_seal_local_row(
         &self,
-        id: RequestId,
+        id: Generation<Request>,
         place: RowPlace,
         plaintext: SecretBytes,
     ) {
@@ -46,7 +46,7 @@ impl SyncState {
 
     /// Opens rows under the store key, each at its own place. A row that does
     /// not open answers `None` in its slot (`RESID-027`).
-    pub(crate) fn handle_open_local_rows(&self, id: RequestId, rows: Vec<SealedRow>) {
+    pub(crate) fn handle_open_local_rows(&self, id: Generation<Request>, rows: Vec<SealedRow>) {
         let Some(seed) = self.master_seed.as_ref() else {
             self.reply(id, RestEvent::LocalStoreLocked);
             return;
@@ -88,7 +88,7 @@ mod tests {
         plain: &[u8],
     ) -> ambre_core::SealedRowBytes {
         state.handle_rest(
-            RequestId(1),
+            Generation::nth(1),
             RestCommand::SealLocalRow {
                 place,
                 plaintext: SecretBytes::new(plain.to_vec()),
@@ -105,7 +105,7 @@ mod tests {
         rx: &ambre_bus::conduit::Receiver<LogicEvent>,
         rows: Vec<SealedRow>,
     ) -> RestEvent {
-        state.handle_rest(RequestId(2), RestCommand::OpenLocalRows { rows });
+        state.handle_rest(Generation::nth(2), RestCommand::OpenLocalRows { rows });
         answer(rx)
     }
 
@@ -191,7 +191,7 @@ mod tests {
     fn without_a_session_the_store_is_locked() {
         let (mut state, rx) = worker(None);
         state.handle_rest(
-            RequestId(1),
+            Generation::nth(1),
             RestCommand::SealLocalRow {
                 place: RowPlace::Document(Id::<Document>::mint()),
                 plaintext: SecretBytes::new(b"x".to_vec()),

@@ -23,7 +23,7 @@
 // Listing requires a session, so the signed-out panel gates access.
 // ============================================================================
 
-use ambre_bus::{DocType, LogicCommand, RequestId, RestCommand};
+use ambre_bus::{DocType, LogicCommand, RestCommand};
 use ambre_core::id::{Document, Id};
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
@@ -137,7 +137,7 @@ pub fn landing_view(
             };
             sealed_file.set(None);
             let _ = to_logic.try_send(LogicCommand::Rest {
-                id: RequestId::next(),
+                id: ambre_bus::next_request(),
                 cmd: RestCommand::OpenDocFile { sealed, passphrase },
             });
         })
@@ -158,7 +158,7 @@ pub fn landing_view(
         let to_logic = to_logic.clone();
         Callback::new(move |document_id: Id<Document>| {
             let _ = to_logic.try_send(LogicCommand::Rest {
-                id: RequestId::next(),
+                id: ambre_bus::next_request(),
                 cmd: RestCommand::DeleteDocument { document_id },
             });
             // Optimistic removal -- the relay also re-lists on `DocumentDeleted`.
@@ -379,7 +379,7 @@ fn doc_card(
             editing.set(false);
             if !name.is_empty() {
                 let _ = to_logic.try_send(LogicCommand::Rest {
-                    id: RequestId::next(),
+                    id: ambre_bus::next_request(),
                     cmd: RestCommand::RenameDocument {
                         document_id: id,
                         name: name.clone(),
@@ -569,7 +569,7 @@ fn sign_out_control(to_logic: ambre_bus::conduit::Sender<LogicCommand>) -> impl 
                 }
                 leaving.set(true);
                 let _ = to_logic.try_send(LogicCommand::Rest {
-                    id: RequestId::next(),
+                    id: ambre_bus::next_request(),
                     cmd: RestCommand::Logout,
                 });
             }
@@ -604,7 +604,7 @@ fn sign_in_panel(
                     // the session without `?user=` in the URL.
                     crate::remember_dev_user(&name);
                     let _ = to_logic.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
+                        id: ambre_bus::next_request(),
                         cmd: RestCommand::DevLogin { username: name },
                     });
                 }
@@ -647,7 +647,7 @@ fn sign_in_panel(
                         class="ambre-signin-btn"
                         on:click=move |_| {
                             let _ = to_logic.try_send(LogicCommand::Rest {
-                                id: RequestId::next(),
+                                id: ambre_bus::next_request(),
                                 cmd: RestCommand::ProviderSignIn {
                                     provider: ambre_core::OidcProvider::Google,
                                 },

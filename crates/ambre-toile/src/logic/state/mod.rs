@@ -136,7 +136,7 @@ pub struct ToileState {
     viewport: Viewport,
     /// How many viewport requests this state applied. Stamped on every frame
     /// it derives, so the view can drop a stale one (`BUS-017`).
-    viewport_version: ambre_bus::ViewportVersion,
+    viewport_version: ambre_core::Generation<ambre_bus::ViewportVersion>,
     /// Version vector already exported to Sync; deltas are `export(Updates{from})`.
     exported_vv: VersionVector,
     /// Local-only undo/redo: undoes only this peer's operations, one
@@ -365,7 +365,7 @@ impl ToileState {
             counter: IdCounter::ZERO,
             peer: ambre_core::PeerId(peer),
             viewport: Viewport::default(),
-            viewport_version: ambre_bus::ViewportVersion(0),
+            viewport_version: ambre_core::Generation::ZERO,
             exported_vv: VersionVector::default(),
             undo,
             my_user_id: None,

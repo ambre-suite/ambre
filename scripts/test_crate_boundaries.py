@@ -1120,12 +1120,20 @@ class CrateBoundaries(unittest.TestCase):
         self.assertTrue(any("redeclares the wire type `Update`" in e for e in errors), errors)
 
     def test_a_worker_id_or_an_app_message_is_refused(self):
-        for line in ("fn f() { let id = RequestId::next(); }\n", "fn f(c: TrameCommand) {}\n"):
+        for line in (
+            "fn f() { let id = ambre_bus::next_request(); }\n",
+            "fn f(c: TrameCommand) {}\n",
+            "fn f() { let id = Generation::<Request>::ZERO.next(); }\n",
+            "fn f() { let id = Generation::from_stored(1); }\n",
+            "fn f() { let id = ambre_core::Generation::ZERO.next(); }\n",
+            "static ISSUER: SharedIssuer<ambre_bus::Request> = SharedIssuer::new(());\n",
+            "fn f() { let issuer = Issuer::<Request>::new(()); }\n",
+        ):
             errors = self.breach(f"{cb.WORKER}/extra.rs", line)
             self.assertTrue(any("allocates an id or names an app message" in e for e in errors), (line, errors))
 
     def test_a_worker_test_allocating_an_id_stays_free(self):
-        text = "fn f() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { RequestId::next(); }\n}\n"
+        text = "fn f() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { next_request(); }\n}\n"
         self.assertEqual(self.breach(f"{cb.WORKER}/extra.rs", text), [])
 
     def test_a_second_engine_start_is_refused(self):

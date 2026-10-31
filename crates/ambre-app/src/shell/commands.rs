@@ -141,7 +141,7 @@ impl CommandPath {
             }
             ShellAction::RefreshDocuments => {
                 let _ = self.to_logic.try_send(LogicCommand::Rest {
-                    id: RequestId::next(),
+                    id: ambre_bus::next_request(),
                     cmd: RestCommand::ListDocuments,
                 });
             }

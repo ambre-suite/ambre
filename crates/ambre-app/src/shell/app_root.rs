@@ -299,7 +299,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         move |()| {
             if let Some(document_id) = current_doc.get_untracked() {
                 let _ = to_logic.try_send(LogicCommand::Rest {
-                    id: RequestId::next(),
+                    id: ambre_bus::next_request(),
                     cmd: RestCommand::ListDocumentMembers { document_id },
                 });
             }
@@ -552,7 +552,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
         let tx = to_logic.clone();
         move |cmd| {
             let _ = tx.try_send(LogicCommand::Rest {
-                id: RequestId::next(),
+                id: ambre_bus::next_request(),
                 cmd,
             });
         }
@@ -735,7 +735,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                             // is kept in `invite_role`; the relay dispatches phase 2
                             // (the actual share) once the trust decision is made.
                             let _ = tx.try_send(LogicCommand::Rest {
-                                id: RequestId::next(),
+                                id: ambre_bus::next_request(),
                                 cmd: RestCommand::FetchInviteeKey {
                                     document_id,
                                     invitee_email,

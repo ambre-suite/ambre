@@ -19,13 +19,13 @@
 //! [`LogicCommand::Rest`]: crate::LogicCommand::Rest
 //! [`LogicEvent::Rest`]: crate::LogicEvent::Rest
 
-use ambre_core::SessionNonce;
+use ambre_core::{Generation, SessionNonce};
 use serde::{Deserialize, Serialize};
 
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space};
 
 use crate::{
-    ActivitySummary, DirectMember, DocType, RequestId, RestCommand, SealedChannelKey, Seq,
+    ActivitySummary, DirectMember, DocType, Request, RestCommand, SealedChannelKey, Seq,
     SnapshotPurpose, SnapshotVerdict,
 };
 
@@ -36,7 +36,7 @@ pub enum SyncCommand {
     /// A [`RestCommand`] service operation forwarded from the Logic thread. The
     /// Sync thread answers with [`crate::LogicEvent::Rest`] echoing `id`.
     Rest {
-        id: RequestId,
+        id: Generation<Request>,
         cmd: RestCommand,
     },
 

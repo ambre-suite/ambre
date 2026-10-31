@@ -58,7 +58,7 @@ impl<P: Line> Pin<P> {
 #[derive(Debug, Clone)]
 pub(super) struct EditAnchor {
     /// The UI's token for the session, echoed in every event about it.
-    session: crate::EditSessionId,
+    session: ambre_bus::Token<crate::EditSession>,
     /// The sheet the session opened on.
     sheet: SheetId,
     row: Pin<Row>,
@@ -72,7 +72,7 @@ impl TrameState {
     /// nothing (`TRAME-UI-158`).
     pub(super) fn begin_cell_edit(
         &mut self,
-        session: crate::EditSessionId,
+        session: ambre_bus::Token<crate::EditSession>,
         at: CellPos,
     ) -> TrameOutcome {
         self.edit_anchor = Some(EditAnchor {
@@ -86,7 +86,10 @@ impl TrameState {
     }
 
     /// Close edit session `session` with no write. A no-op for another session.
-    pub(super) fn end_cell_edit(&mut self, session: crate::EditSessionId) -> TrameOutcome {
+    pub(super) fn end_cell_edit(
+        &mut self,
+        session: ambre_bus::Token<crate::EditSession>,
+    ) -> TrameOutcome {
         if self
             .edit_anchor
             .as_ref()
@@ -102,7 +105,7 @@ impl TrameState {
     /// this state no longer holds writes nothing (`TRAME-UI-176`).
     pub(super) fn commit_cell_edit(
         &mut self,
-        session: crate::EditSessionId,
+        session: ambre_bus::Token<crate::EditSession>,
         text: &FormulaSource,
     ) -> TrameOutcome {
         let Some(anchor) = self.edit_anchor.take_if(|a| a.session == session) else {

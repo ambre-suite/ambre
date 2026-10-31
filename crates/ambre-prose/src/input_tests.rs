@@ -687,7 +687,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let mut ui = ProseUiState::default();
     ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
     let empty = crate::layout::run::ShapedLayout::new(
-        crate::layout::run::LayoutVersion::new(1),
+        ambre_core::Generation::nth(1),
         Arc::new(crate::layout::pass::PageLayout {
             page_width: DocPx::new(800.0),
             page_height: DocPx::new(1000.0),
@@ -715,9 +715,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     // The structural command is followed by the sync that holds the input.
     assert!(matches!(
         sent.pop(),
-        Some(ProseCommand::Sync {
-            seen: ambre_bus::app::prose::TextChangeSeq(0)
-        })
+        Some(ProseCommand::Sync { seen }) if seen == ambre_core::Generation::ZERO
     ));
     assert!(matches!(
         sent.as_slice(),
@@ -731,7 +729,7 @@ fn a_press_on_a_document_with_no_block_asks_for_one() {
     let mut logic = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
     logic.load_faces(&crate::layout::fonts::shipped_faces());
     let mut shaped = logic.shaped_layout();
-    shaped.version = crate::layout::run::LayoutVersion::new(2);
+    shaped.version = ambre_core::Generation::nth(2);
     ui.apply_layout(shaped);
     let first = logic.root_blocks()[0];
     assert_eq!(

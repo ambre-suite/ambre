@@ -33,9 +33,7 @@
 //!   request -- kept explicit.
 //! - **Errors** (`AuthError`, `ApiError`): may be either a response or a
 //!   spontaneous server error; kept explicit for now (correlating errors by
-//!   `RequestId` is a later refinement).
-
-use core::sync::atomic::{AtomicU64, Ordering};
+//!   request is a later refinement).
 
 use serde::{Deserialize, Serialize};
 
@@ -55,33 +53,37 @@ use ambre_core::id::{Document, Id, Meeting, User};
 pub use ambre_core::{SecretBytes, SecretString};
 
 // -----------------------------------------------------------------------------
-// RequestId -- request/response correlation token
+// Request -- request/response correlation
 // -----------------------------------------------------------------------------
 
-/// Correlation token tying a [`RestCommand`] to the [`RestEvent`] that answers it.
+/// The family of service requests: a `Generation<Request>` ties a
+/// [`RestCommand`] to the [`RestEvent`] that answers it.
 ///
-/// Allocated in the Main instance via [`RequestId::next`] and echoed unchanged by
+/// Issued in the Main instance by [`next_request`] and echoed unchanged by
 /// the Sync worker. Lets a UI with several P3 operations in flight
 /// route each response to its call-site, and apply per-request timeout / retry. The
 /// previous fire-and-forget, stringly-correlated model could do neither.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct RequestId(pub u64);
+///
+/// An answer that no request asked for, such as the Sync worker's silent
+/// re-login, carries no request at all: its id is `None`.
+pub enum Request {}
 
-impl RequestId {
-    /// The id of an answer that no request asked for, such as the Sync
-    /// worker's silent re-login. The counter starts at 1, so no request
-    /// carries it (`BUS-004`).
-    pub const UNSOLICITED: Self = RequestId(0);
+impl ambre_core::GenerationKind for Request {
+    type IssueRight = ();
+    const NAME: &'static str = "RequestId";
+}
 
-    /// Allocate the next process-wide-unique id.
-    ///
-    /// Backed by one `AtomicU64` that the UI and Logic threads share over the
-    /// Main instance's heap. The Sync worker has its own memory and so its own
-    /// counter, and it never calls this (`BUS-004`).
-    pub fn next() -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(1);
-        RequestId(NEXT.fetch_add(1, Ordering::Relaxed))
-    }
+impl ambre_core::generation::Wire for Request {}
+
+/// The one issuer of the Main instance, shared by the UI and Logic threads
+/// over its heap. The Sync worker has its own memory and so its own static,
+/// and it never issues (`BUS-004`).
+static REQUESTS: ambre_core::SharedIssuer<Request> = ambre_core::SharedIssuer::new(());
+
+/// A request id unique to the Main instance.
+#[must_use = "a request id issued and dropped wastes a number"]
+pub fn next_request() -> ambre_core::Generation<Request> {
+    REQUESTS.issue()
 }
 
 // -----------------------------------------------------------------------------
@@ -406,7 +408,7 @@ ambre_core::define_flag! {
 
 /// A correlatable service response. Carried inside `LogicEvent::Rest` and
 /// forwarded verbatim as `UiEvent::Rest`, echoing the originating
-/// [`RequestId`].
+/// [`Request`], or `None` for an answer no request asked for.
 ///
 /// Success responses only: failures arrive as the explicit `AuthError` /
 /// `ApiError` envelope variants (which may also be spontaneous).

@@ -21,7 +21,7 @@ impl LogicState {
     }
 
     fn erase(&mut self, document_id: Id<Document>, content_hash: ambre_core::ContentHash) {
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         self.erasing.insert(id, (document_id, content_hash.clone()));
         self.send_to_sync(SyncCommand::Rest {
             id,
@@ -34,7 +34,7 @@ impl LogicState {
 
     /// The answer to an erase this thread asked for, which no view awaits.
     /// Returns `false` for any other answer.
-    pub(crate) fn erased(&mut self, id: RequestId, evt: &RestEvent) -> bool {
+    pub(crate) fn erased(&mut self, id: Generation<Request>, evt: &RestEvent) -> bool {
         if self.erasing.remove(&id).is_none() {
             return false;
         }
@@ -47,7 +47,7 @@ impl LogicState {
     /// An erase that did not reach the relay waits for the next connection
     /// (`ambre-spec-murmure-attachments.md`). Returns `false` for any other
     /// request.
-    pub(crate) fn erase_failed(&mut self, id: RequestId) -> bool {
+    pub(crate) fn erase_failed(&mut self, id: Generation<Request>) -> bool {
         let Some(erase) = self.erasing.remove(&id) else {
             return false;
         };

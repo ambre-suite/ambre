@@ -10,40 +10,40 @@
 use std::collections::VecDeque;
 
 use ambre_bus::SecretBytes;
-use ambre_core::SealedRowBytes;
 use ambre_core::id::{Document, Id};
+use ambre_core::{Generation, GenerationKind, Issuer, SealedRowBytes};
 
 use crate::{PersistWrite, SealedWrite};
 
 /// The answer one seal waits for.
 ///
-/// Only a queue hands one out, so no other crate can forge a ticket that
-/// lands on a write it did not seal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SealTicket(u64);
+/// The family is sealed: only this module builds a [`SealRight`], so only a
+/// queue issues a ticket. No other crate can forge one that lands on a write
+/// it did not seal.
+pub enum SealTicket {}
 
-impl SealTicket {
-    /// The ticket a new queue hands out first.
-    const FIRST: Self = Self(0);
+/// The right to issue seal tickets. Its field is private, so a queue of this
+/// module alone holds an issuer.
+#[derive(Clone, Copy)]
+pub struct SealRight(());
 
-    /// The ticket handed out after this one.
-    fn following(self) -> Self {
-        Self(self.0 + 1)
-    }
+impl GenerationKind for SealTicket {
+    type IssueRight = SealRight;
+    const NAME: &'static str = "SealTicket";
 }
 
 /// The writes on their way to the store, in the order Logic made them.
 #[derive(Debug)]
 pub struct SealQueue {
-    /// The ticket the next seal takes: each seal has its own.
-    next: SealTicket,
+    /// The source of the tickets: each seal has its own.
+    tickets: Issuer<SealTicket>,
     entries: VecDeque<Entry>,
 }
 
 impl Default for SealQueue {
     fn default() -> Self {
         Self {
-            next: SealTicket::FIRST,
+            tickets: Issuer::new(SealRight(())),
             entries: VecDeque::new(),
         }
     }
@@ -59,7 +59,10 @@ struct Entry {
 /// plaintext left with the ticket, and the sealed row replaces the slot.
 #[derive(Debug)]
 enum Slot {
-    Waiting { ticket: SealTicket, row: RowKind },
+    Waiting {
+        ticket: Generation<SealTicket>,
+        row: RowKind,
+    },
     Ready(SealedWrite),
 }
 
@@ -79,7 +82,7 @@ impl SealQueue {
         &mut self,
         document_id: Id<Document>,
         write: PersistWrite,
-    ) -> Option<(SealTicket, SecretBytes)> {
+    ) -> Option<(Generation<SealTicket>, SecretBytes)> {
         let (slot, plaintext) = match write {
             PersistWrite::Snapshot(bytes) => {
                 let ticket = self.ticket();
@@ -114,15 +117,13 @@ impl SealQueue {
         plaintext.map(|(ticket, bytes)| (ticket, SecretBytes::new(bytes)))
     }
 
-    fn ticket(&mut self) -> SealTicket {
-        let ticket = self.next;
-        self.next = ticket.following();
-        ticket
+    fn ticket(&mut self) -> Generation<SealTicket> {
+        self.tickets.issue()
     }
 
     /// The seal of `ticket` came back. `None` is a seal that did not happen,
     /// and its write is dropped: the store never holds a row in the clear.
-    pub fn sealed(&mut self, ticket: SealTicket, sealed: Option<SealedRowBytes>) {
+    pub fn sealed(&mut self, ticket: Generation<SealTicket>, sealed: Option<SealedRowBytes>) {
         let Some(at) = self.entries.iter().position(
             |entry| matches!(entry.slot, Slot::Waiting { ticket: waits, .. } if waits == ticket),
         ) else {
@@ -173,13 +174,14 @@ mod tests {
         SealedRowBytes::new(bytes.to_vec())
     }
 
-    /// Each seal takes its own ticket, so no answer lands on another write:
-    /// a new queue hands out 0, then 1, then 2.
+    /// Each seal takes its own ticket, so no answer lands on another write.
+    /// A new queue hands out three tickets in order, none the zero one.
     #[test]
     fn each_seal_takes_its_own_ticket() {
         let mut queue = SealQueue::default();
         let tickets = [queue.ticket(), queue.ticket(), queue.ticket()];
-        assert_eq!(tickets, [SealTicket(0), SealTicket(1), SealTicket(2)]);
+        assert!(Generation::ZERO < tickets[0]);
+        assert!(tickets.windows(2).all(|pair| pair[0] < pair[1]));
     }
 
     /// A write behind a seal waits for it, whatever it is. The store receives

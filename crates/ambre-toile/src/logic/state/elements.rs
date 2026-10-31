@@ -11,11 +11,12 @@ use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
 use crate::logic::align::{AlignOp, align_deltas};
 use crate::logic::command::{
-    CorrelationToken, InitContent, MediaRef, ToileError, ToileEvent, ToileOutcome, ZTarget,
+    ElementCreation, InitContent, MediaRef, ToileError, ToileEvent, ToileOutcome, ZTarget,
 };
 use crate::logic::index::ElementBounds;
 use crate::logic::model::{ElementKind, ElementStyle, LinkTarget, NodeId, ShapeKind, StrokePoint};
 use crate::logic::text_merge::merge_edits;
+use ambre_bus::Token;
 use ambre_core::id::{Element, Id};
 
 use super::codec::has_type;
@@ -34,7 +35,7 @@ impl ToileState {
         size: kurbo::Size,
         content: InitContent,
         fill: Option<Rgba>,
-        correlate: Option<CorrelationToken>,
+        correlate: Option<Token<ElementCreation>>,
     ) -> ToileOutcome {
         let id = match self.create_element_inner(kind, at, size, content, fill) {
             Ok(id) => id,
@@ -651,10 +652,11 @@ mod inner_tests {
 
     use crate::logic::align::AlignOp;
     use crate::logic::command::{
-        CorrelationToken, DisplayGeom, DisplayNode, InitContent, ToileCommand, ToileEvent,
+        DisplayGeom, DisplayNode, ElementCreation, InitContent, ToileCommand, ToileEvent,
     };
     use crate::logic::model::{ElementKind, ElementStyle, NodeId, ShapeKind};
     use crate::logic::state::ToileState;
+    use ambre_bus::Token;
     use ambre_core::id::{Element, Id, User};
 
     fn rect_at(st: &mut ToileState, x: f64) -> Id<Element> {
@@ -1117,7 +1119,7 @@ mod inner_tests {
     /// can match this reply and no other create's.
     #[test]
     fn a_create_echoes_its_correlate_token() {
-        let token = CorrelationToken::FIRST.next();
+        let token = Token::<ElementCreation>::FIRST.next();
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::CreateElement {
             kind: ElementKind::Shape(ShapeKind::Rect),

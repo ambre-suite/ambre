@@ -163,7 +163,7 @@ editor_text_drag: bool,                 // a pointer drag selecting text inside 
 ```rust
 pub struct CellEditor {
     pub at: CellPos,
-    pub session: EditSessionId,   // the token the edit events echo
+    pub session: Token<EditSession>, // the token the edit events echo
     pub(crate) core: TextEditor,  // the shared buffer, caret and selection (`TRAME-UI-050`)
 }
 ```

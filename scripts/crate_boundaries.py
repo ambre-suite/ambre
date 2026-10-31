@@ -421,7 +421,15 @@ PATH_DEP = re.compile(r'^([\w-]+)\s*=\s*\{[^}]*\bpath\s*=\s*"\.\./([\w-]+)"', re
 # The wire types, and what the worker may not name.
 PROTOCOL = "crates/ambre-protocol/src"
 TYPE_DECL = re.compile(r"^\s*pub(?:\([^)]*\))?\s+(?:struct|enum)\s+([A-Z]\w*)", re.MULTILINE)
-REQUEST_ALLOC = re.compile(r"\bRequestId::next\b")
+# Each way the worker could mint a request id by name: the allocator, a
+# stored number, an issuer or a generation of the `Request` family, and the
+# successor of the zero one. Inference can still hide the family, so the
+# row's Mechanism claims these forms alone.
+REQUEST_ALLOC = re.compile(
+    r"\bnext_request\b|\bfrom_stored\b|\bZERO\s*\.\s*next\b"
+    r"|\b(?:Shared)?Issuer\s*(?:::\s*)?<\s*(?:\w+::)*Request\s*>"
+    r"|\bGeneration\s*::\s*<\s*(?:\w+::)*Request\s*>"
+)
 ENGINE_SPAWN = re.compile(r"\bambre_logic::run\(")
 APP_SRC = "crates/ambre-app/src"
 APP_LIB = "crates/ambre-app/src/lib.rs"

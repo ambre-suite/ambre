@@ -90,7 +90,11 @@ impl LogicState {
     /// notice too many is harmless, a missing one is not. Returns `true` when
     /// the invite does not leave now. It waits for the active segment to be
     /// writable, or it is refused because the notice could not be written.
-    pub(crate) fn announce_before_invite(&mut self, id: RequestId, cmd: &RestCommand) -> bool {
+    pub(crate) fn announce_before_invite(
+        &mut self,
+        id: Generation<Request>,
+        cmd: &RestCommand,
+    ) -> bool {
         let RestCommand::InviteToDocument {
             document_id,
             invitee,
@@ -153,7 +157,7 @@ impl LogicState {
     /// again, and announce a member who never left.
     pub(crate) fn invite_to_channel(
         &mut self,
-        id: RequestId,
+        id: Generation<Request>,
         channel_id: Id<Channel>,
         invitee: DirectMember,
         now: Timestamp,
@@ -180,7 +184,7 @@ impl LogicState {
     }
 
     /// Refuse an invite this thread did not let leave.
-    pub(crate) fn refuse_invite(&self, id: RequestId, message: String) {
+    pub(crate) fn refuse_invite(&self, id: Generation<Request>, message: String) {
         tracing::warn!("Logic: invite refused: {message}");
         self.send_to_ui(UiEvent::ApiError {
             id: Some(id),
@@ -408,7 +412,7 @@ mod tests {
     fn an_invite_into_a_direct_message_of_two_leaves_behind_its_notice() {
         let (mut state, ui_rx, sync_rx) = harness();
         let (channel_id, meta, segment) = created_with(&mut state, &sync_rx, 2);
-        let (id, carol) = (RequestId::next(), Id::<User>::mint());
+        let (id, carol) = (ambre_bus::next_request(), Id::<User>::mint());
 
         state.handle_logic_command(LogicCommand::Rest {
             id,
@@ -455,7 +459,7 @@ mod tests {
         ready(&mut state, segment.document_id());
         drain(&sync_rx);
 
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         state.handle_logic_command(LogicCommand::Rest {
             id,
             cmd: invite(meta.document_id(), Id::<User>::mint()),
@@ -472,7 +476,7 @@ mod tests {
     fn an_invite_whose_notice_cannot_be_written_is_refused() {
         let (mut state, ui_rx, sync_rx) = harness();
         let (_, meta, segment) = created_with(&mut state, &sync_rx, 2);
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         state.handle_logic_command(LogicCommand::Rest {
             id,
             cmd: invite(meta.document_id(), Id::<User>::mint()),
@@ -495,7 +499,7 @@ mod tests {
         let (channel_id, meta, segment) = created_with(&mut state, &sync_rx, 2);
         ready(&mut state, segment.document_id());
         drain(&sync_rx);
-        let (id, carol) = (RequestId::next(), bob());
+        let (id, carol) = (ambre_bus::next_request(), bob());
 
         state.handle_logic_command(LogicCommand::InviteToChannel {
             id,
@@ -545,7 +549,7 @@ mod tests {
         drain(&sync_rx);
         drain(&ui_rx);
         let listed = state.channel_members[&channel_id][0].user_id;
-        let (first, second) = (RequestId::next(), RequestId::next());
+        let (first, second) = (ambre_bus::next_request(), ambre_bus::next_request());
 
         let member = DirectMember {
             user_id: listed,

@@ -26,5 +26,10 @@ crossbeam-queue = { workspace = true }
 # Wakes the task awaiting `Receiver::recv` without a lock.
 atomic-waker = { workspace = true }
 
+[dev-dependencies]
+# `Generation::nth` for a test that names a count. Test builds alone, held by
+# `ambre-core/tests/testing_feature.rs` (`ARCH-055`).
+ambre-core = { path = "../ambre-core", features = ["testing"] }
+
 [lints]
 workspace = true

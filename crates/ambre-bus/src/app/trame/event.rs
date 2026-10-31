@@ -5,7 +5,8 @@
 //! value types it reuses (`CellStyle`, `HAlign`, `VAlign`, `Borders`, ...) arrive
 //! by glob from the sibling command modules of `crate::app::trame`.
 
-use super::{CellPos, CellRect, Col, ColCount, EditSessionId, MergeSpan, Row, RowCount, SheetName};
+use super::{CellPos, CellRect, Col, ColCount, EditSession, MergeSpan, Row, RowCount, SheetName};
+use crate::token::Token;
 use ambre_core::id::{Id, User};
 use ambre_core::{DocPx, Rgb};
 
@@ -140,7 +141,7 @@ pub enum TrameEvent {
     /// [`TrameCommand::ScrollViewport`](super::TrameCommand::ScrollViewport)
     /// so stale responses can be dropped.
     ViewportData {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         row_start: Row,
         col_start: Col,
         cells: Vec<DisplayCell>,
@@ -239,7 +240,7 @@ pub enum TrameEvent {
     /// `(row, col)` on the active sheet. The open editor follows it, so the
     /// cell it shows is the cell its commit reaches.
     EditTargetMoved {
-        session: EditSessionId,
+        session: Token<EditSession>,
         row: Row,
         col: Col,
     },
@@ -247,7 +248,7 @@ pub enum TrameEvent {
     /// A peer deleted the sheet, row or column under edit `session`. The Logic
     /// thread dropped the session, so its commit writes nothing; the editor
     /// closes and the user is told the cell is gone.
-    EditTargetGone { session: EditSessionId },
+    EditTargetGone { session: Token<EditSession> },
 
     /// The workbook was written by a newer client and was refused whole (`SCHEMA-008`).
     /// Nothing was applied, and the grid on screen is the one that was already open.
@@ -367,7 +368,9 @@ pub enum TrameEvent {
     /// `trame-cell-styles`).
     /// The accompanying [`DataReset`](Self::DataReset) prompts a viewport
     /// re-fetch with the new style overrides applied.
-    CondFormatsUpdated { version: crate::ViewportVersion },
+    CondFormatsUpdated {
+        version: ambre_core::Generation<crate::ViewportVersion>,
+    },
 
     /// A local edit was rejected by a [`ValidationOnInvalid::Reject`] rule
     /// (`trame-cell-editing`). No CRDT delta was produced; the
@@ -375,7 +378,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Reject`]: super::ValidationOnInvalid::Reject
     ValidationError {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         row: Row,
         col: Col,
         message: String,
@@ -387,7 +390,7 @@ pub enum TrameEvent {
     ///
     /// [`ValidationOnInvalid::Warn`]: super::ValidationOnInvalid::Warn
     ValidationWarning {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         row: Row,
         col: Col,
         message: String,
@@ -397,7 +400,7 @@ pub enum TrameEvent {
     /// edit (`trame-cell-editing`, Post-MVP). No CRDT delta was
     /// produced; the chrome surfaces `description`.
     ProtectionDenied {
-        version: crate::ViewportVersion,
+        version: ambre_core::Generation<crate::ViewportVersion>,
         row: Row,
         col: Col,
         description: String,

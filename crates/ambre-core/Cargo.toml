@@ -14,6 +14,11 @@ description = "Types fondamentaux d'Ambre (UUID, DocType, PublicKey)"
 # `fixtures = ["ambre-core/fixtures"]` because a Cargo feature never enables its
 # dependency's feature implicitly.
 fixtures = []
+# Test helpers other crates' tests call, such as `Generation::nth`. A
+# `#[cfg(test)]` item of this crate reaches its own tests alone, so a
+# downstream test names this feature in its `[dev-dependencies]`, and nowhere
+# else: `tests/testing_feature.rs` refuses any other table that names it.
+testing = []
 
 [dependencies]
 # The sealed bytes of `encoded` travel as URL-safe base64, decoded when the
@@ -41,6 +46,9 @@ hex = { workspace = true, features = ["serde"] }
 [dev-dependencies]
 postcard = { workspace = true }
 serde_json = { workspace = true }
+# `tests/testing_feature.rs` reads every workspace manifest, so the `testing`
+# feature provably stays out of a shipped build (`ARCH-055`).
+toml = { workspace = true }
 
 [lints]
 workspace = true

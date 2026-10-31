@@ -50,12 +50,12 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::ActivitySummary;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    ApiFailure, ApiRequest, DocType, DocumentSummary, LogicEvent, MemberInfo, OpenFailure,
-    RequestId, RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta,
-    SnapshotPurpose, SnapshotVerdict, SyncCommand, UserInfo,
+    ApiFailure, ApiRequest, DocType, DocumentSummary, LogicEvent, MemberInfo, OpenFailure, Request,
+    RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotPurpose,
+    SnapshotVerdict, SyncCommand, UserInfo,
 };
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
-use ambre_core::{KeyId, PublicKey, SessionNonce};
+use ambre_core::{Generation, KeyId, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{Clock, Counter, Seq, Update};
 use ambre_protocol::public_data::{EphemeralPublicData, SnapshotPublicData, UpdatePublicData};
@@ -232,14 +232,14 @@ enum SyncEvent {
     /// makes the timer stale.
     ReplayRetry {
         document_id: Id<Document>,
-        ticket: generation::ReplayTicket,
+        ticket: ambre_core::Generation<generation::ReplayTicket>,
     },
     /// Fired by the timer armed when the relay failed to sequence a delta:
     /// send it again with every later one (`SYNC-159`). A later failure or
     /// refusal makes the timer stale.
     ResendRetry {
         document_id: Id<Document>,
-        ticket: generation::ResendTicket,
+        ticket: ambre_core::Generation<generation::ResendTicket>,
     },
     /// The WebSocket `onopen` fired: the socket is now OPEN, so (re)subscriptions
     /// can be sent (they would be dropped if sent while still CONNECTING).
@@ -251,7 +251,8 @@ enum SyncEvent {
         ok: bool,
     },
     SessionReady {
-        id: RequestId,
+        /// `None` for the silent re-login, which no request asked for.
+        id: Option<Generation<Request>>,
         user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
@@ -263,7 +264,7 @@ enum SyncEvent {
     /// A provider return was exchanged: the session's tokens, and whether the
     /// account holds its keys. No key is held yet, so no socket opens.
     ProviderSignedIn {
-        id: RequestId,
+        id: Generation<Request>,
         user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
@@ -271,7 +272,7 @@ enum SyncEvent {
         tokens: http::TokenPair,
     },
     AccountCreated {
-        id: RequestId,
+        id: Generation<Request>,
         recovery_words: ambre_bus::SecretString,
         master_seed: MasterSeed,
         signing_key: SigningKey,
@@ -279,20 +280,20 @@ enum SyncEvent {
         tokens: http::TokenPair,
     },
     DocumentList {
-        id: RequestId,
+        id: Generation<Request>,
         documents: Vec<DocumentSummary>,
     },
     DocumentCreated {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
         doc_type: DocType,
     },
     DocumentDeleted {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
     },
     DocumentRenamed {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
     },
     OpenDocumentReady {
@@ -447,7 +448,7 @@ enum SyncEvent {
     /// (`SyncCommand::ListMemberChannels`).
     MemberChannelsListed {
         /// The listing this answers, as `member_channels_asked` counted it.
-        asked: generation::RequestGeneration,
+        asked: ambre_core::Generation<generation::Listing>,
         result: Result<channels::MemberListing, http::HttpError>,
     },
     /// The relay's activity answer (`SyncCommand::FetchActivity`,
@@ -476,7 +477,7 @@ enum SyncEvent {
         failure: http::Failed,
     },
     HttpError {
-        id: RequestId,
+        id: Generation<Request>,
         failure: ApiFailure,
         message: String,
     },
@@ -484,7 +485,7 @@ enum SyncEvent {
     /// their exchange key fetched, with a formatted fingerprint. No key wrapped
     /// yet -- the Main thread decides trust before phase 2 wraps.
     InviteeKeyReady {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
         display_name: ambre_core::DisplayName,
@@ -495,7 +496,7 @@ enum SyncEvent {
     /// The key a user the client named is served with, and its fingerprint.
     /// Nothing is wrapped: the Main thread compares it with the pin first.
     MemberKeyReady {
-        id: RequestId,
+        id: Generation<Request>,
         user_id: Id<User>,
         exchange_pub_key: ambre_core::ExchangePublicKey,
         fingerprint: ambre_core::KeyFingerprint,
@@ -503,7 +504,7 @@ enum SyncEvent {
     /// Invite completed: the invitee's DocumentKey was wrapped via ECDH and the
     /// server accepted the share request.
     InviteSent {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
         display_name: ambre_core::DisplayName,
@@ -511,7 +512,7 @@ enum SyncEvent {
     /// Key rotation initiated by this client is finished: the server has the new
     /// `doc_key_enc` entries and the new key must be swapped locally.
     RevocationComplete {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
         new_doc_key: DocumentKey,
         /// The link the revoke left, from `new_doc_key` back to the key it
@@ -522,9 +523,9 @@ enum SyncEvent {
     /// plaintext names/emails).
     DocumentMembersReady {
         /// The request to answer, `None` for a refresh of the directory alone.
-        id: Option<RequestId>,
+        id: Option<Generation<Request>>,
         /// Which listing of this document answered (`SYNC-037`).
-        asked: generation::RequestGeneration,
+        asked: ambre_core::Generation<generation::Listing>,
         document_id: Id<Document>,
         /// What the walked log says a channel listed in this space must heed.
         word: membership_log::SpaceWord,
@@ -539,12 +540,12 @@ enum SyncEvent {
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {
-        id: RequestId,
+        id: Generation<Request>,
         users: Vec<UserInfo>,
     },
     /// A document member's role was updated server-side.
     MemberRoleUpdatedEvent {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
         user_id: Id<User>,
         role: Role,
@@ -561,7 +562,7 @@ enum SyncEvent {
     /// This user's departure landed: the relay removed their own share
     /// (`SYNC-127`). The document closes locally.
     DocumentLeft {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
     },
     /// The document owes a rotation: a member left and nobody re-keyed since
@@ -590,13 +591,13 @@ enum SyncEvent {
     /// Media upload completed: the encrypted blob was PUT to S3 and the server
     /// confirmed the insertion in the `media` table.
     MediaUploaded {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
     /// The relay holds no upload of this user's for the blob any more.
     MediaErased {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
@@ -620,7 +621,7 @@ enum SyncEvent {
     /// Media download completed: the encrypted blob was fetched from S3 and
     /// decrypted. `data` is the raw plaintext bytes ready for display.
     MediaDownloaded {
-        id: RequestId,
+        id: Generation<Request>,
         document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
         data: ambre_core::MediaBytes,
@@ -630,7 +631,7 @@ enum SyncEvent {
 impl SyncEvent {
     /// The failure of the service-plane request `id`, from a relay's answer
     /// or from this device.
-    fn http_error(id: RequestId, error: impl http::Reported) -> Self {
+    fn http_error(id: Generation<Request>, error: impl http::Reported) -> Self {
         Self::HttpError {
             id,
             failure: error.failure(),
@@ -664,7 +665,7 @@ struct SyncDocumentState {
     /// Uploads asked for while the document is local-only. The relay signs no
     /// link for a document it does not hold, so each one waits for the lazy
     /// creation (`SYNC-145`).
-    pending_uploads: Vec<(RequestId, ambre_core::MediaBytes)>,
+    pending_uploads: Vec<(Generation<Request>, ambre_core::MediaBytes)>,
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
     current_snapshot_id: Id<Snapshot>,
@@ -718,8 +719,8 @@ struct SyncDocumentState {
     /// the directory holds. Two listings can cross on the way, and the answer
     /// to the older one changes nothing. It cannot bring back the key of a
     /// member the newer one dropped (`SYNC-037`, `SYNC-094`).
-    directory_asked: generation::RequestGeneration,
-    directory_held: generation::RequestGeneration,
+    directory_asked: ambre_core::Issuer<generation::Listing>,
+    directory_held: ambre_core::Generation<generation::Listing>,
     /// When the document is a space: what a channel it lists must heed, from
     /// the latest walk of its log (the Murmure spaces spec).
     word: membership_log::SpaceWord,
@@ -816,8 +817,8 @@ impl SyncDocumentState {
             chain: chain::Chain::default(),
             ephemeral_remote_counters: HashMap::new(),
             signing_keys: HashMap::new(),
-            directory_asked: generation::RequestGeneration::ZERO,
-            directory_held: generation::RequestGeneration::ZERO,
+            directory_asked: ambre_core::Issuer::default(),
+            directory_held: ambre_core::Generation::ZERO,
             word: membership_log::SpaceWord::default(),
             role: Role::Owner,
             awaiting_initial_hydration: false,
@@ -1101,10 +1102,10 @@ pub struct SyncState {
     replay_stops: HashMap<Id<Document>, websocket::ReplayStops>,
     /// The ticket of the last replay timer armed. It only grows, so a timer
     /// armed before a reset never matches one armed after it.
-    replay_ticket: generation::ReplayTicket,
+    replay_ticket: ambre_core::Issuer<generation::ReplayTicket>,
     /// The ticket of the last resend timer armed. It only grows, like
     /// `replay_ticket` (`SYNC-159`).
-    resend_ticket: generation::ResendTicket,
+    resend_ticket: ambre_core::Issuer<generation::ResendTicket>,
     /// Sockets opened on the native mock transport, which has no socket to
     /// inspect: a host test reads it to tell a retry from none.
     #[cfg(not(target_arch = "wasm32"))]
@@ -1112,7 +1113,7 @@ pub struct SyncState {
     /// The listings of the user's channels asked so far. Each answer is
     /// whole, so only the latest one is handed on: an older one that
     /// crossed it would drop a channel just added.
-    member_channels_asked: generation::RequestGeneration,
+    member_channels_asked: ambre_core::Issuer<generation::Listing>,
     /// The key of each channel's `meta` the latest listing wrapped for this
     /// user. A channel never opened is watched under it (the Murmure
     /// notifications spec).
@@ -1199,11 +1200,11 @@ impl SyncState {
             inbound_held: false,
             held_outbox: RefCell::new(Vec::new()),
             replay_stops: HashMap::new(),
-            replay_ticket: generation::ReplayTicket::ZERO,
-            resend_ticket: generation::ResendTicket::ZERO,
+            replay_ticket: ambre_core::Issuer::default(),
+            resend_ticket: ambre_core::Issuer::default(),
             #[cfg(not(target_arch = "wasm32"))]
             socket_opens: 0,
-            member_channels_asked: generation::RequestGeneration::ZERO,
+            member_channels_asked: ambre_core::Issuer::default(),
             listed_keys: HashMap::new(),
             new_spaces: HashSet::new(),
             mock_ws_tx: None,
@@ -1556,14 +1557,14 @@ impl SyncState {
         }
     }
 
-    /// Reply to a service request, echoing its [`RequestId`].
-    fn reply(&self, id: RequestId, evt: RestEvent) {
-        self.send_to_logic(LogicEvent::Rest { id, evt });
+    /// Reply to a service request, echoing its [`Generation<Request>`].
+    fn reply(&self, id: Generation<Request>, evt: RestEvent) {
+        self.send_to_logic(LogicEvent::Rest { id: Some(id), evt });
     }
 
     /// Dispatch a relayed [`RestCommand`]. Most arms are placeholders today; the
     /// ones that already produce data answer via [`reply`](Self::reply).
-    fn handle_rest(&mut self, id: RequestId, cmd: RestCommand) {
+    fn handle_rest(&mut self, id: Generation<Request>, cmd: RestCommand) {
         match cmd {
             // -- Session -------------------------------------------------------
             RestCommand::Unlock { passphrase } => self.handle_unlock(id, passphrase),
@@ -1572,7 +1573,7 @@ impl SyncState {
                 email,
                 display_name,
             } => self.handle_setup_account(id, passphrase, email, display_name),
-            RestCommand::DevLogin { username } => self.handle_dev_login(id, username),
+            RestCommand::DevLogin { username } => self.handle_dev_login(Some(id), username),
             RestCommand::ProviderSignIn { provider } => self.handle_provider_sign_in(id, provider),
             RestCommand::ProviderReturn {
                 provider,

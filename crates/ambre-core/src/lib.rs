@@ -129,6 +129,7 @@ pub use font::{
     FontFamily, FontSize, FontWeight, InvalidFontSize, InvalidFontWeight, Slant, Strikethrough,
     Underline, Weight, WordBreak,
 };
+pub use generation::{Generation, GenerationKind, Issuer, SharedIssuer};
 pub use id::{DocumentScoped, Entity, Id, IdRepr};
 pub use key_hex::{ExchangeKeyHex, SignatureHex, SigningKeyHex};
 pub use key_id::{KEY_ID_LEN, KeyId, KeyIdError};

@@ -5,9 +5,7 @@
 // invitation and the request of a direct message, so every route to either
 // passes a decision.
 
-use ambre_bus::{
-    DirectMember, DirectMessageDraft, LogicCommand, RequestId, RestCommand, Role, Timestamp,
-};
+use ambre_bus::{DirectMember, DirectMessageDraft, LogicCommand, RestCommand, Role, Timestamp};
 use ambre_chrome::Dialog;
 use ambre_core::id::{Channel, Document, Id, User};
 use leptos::prelude::*;
@@ -127,7 +125,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
     let now = Timestamp(js_sys::Date::now() as u64);
     match &prompt.purpose {
         Purpose::Invite { document_id, email } => LogicCommand::Rest {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             cmd: RestCommand::InviteToDocument {
                 document_id: *document_id,
                 invitee_email: Some(email.clone()),
@@ -148,7 +146,7 @@ fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
             now,
         },
         Purpose::Channel { channel_id } => LogicCommand::InviteToChannel {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             channel_id: *channel_id,
             invitee: DirectMember {
                 user_id: prompt.user_id,

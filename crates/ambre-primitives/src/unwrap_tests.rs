@@ -107,6 +107,69 @@ fn an_unwrap_handed_to_a_foreign_call_passes() {
 }
 
 #[test]
+fn a_generic_newtype_over_a_marker_is_a_newtype_and_its_accessor_an_unwrap() {
+    let lib = "pub mod id {\n\
+        pub trait Kind { type Repr; }\n\
+        pub struct Id<E: Kind>(E::Repr);\n\
+        impl<E: Kind<Repr = u64>> Id<E> {\n\
+            pub fn raw(&self) -> <E as Kind>::Repr { self.0 }\n\
+        }\n\
+        pub trait Space { type Repr; }\n\
+        pub struct Px<S: Space>(S::Repr, core::marker::PhantomData<S>);\n\
+        impl<S: Space<Repr = u64>> Px<S> {\n\
+            pub fn get(self) -> S::Repr { self.0 }\n\
+        }\n\
+        pub struct Wrapper<T>(T);\n\
+        impl<T> Wrapper<T> {\n\
+            pub fn take(self) -> T { self.0 }\n\
+        }\n\
+    }\n\
+    use id::{Id, Px, Wrapper};\n\
+    pub struct Doc; impl id::Kind for Doc { type Repr = u64; } \
+    impl id::Space for Doc { type Repr = u64; }\n\
+    pub fn store(text: u64) {}\n\
+    pub fn save(id: &Id<Doc>, px: Px<Doc>, w: Wrapper<u64>) {\n\
+        store(id.raw());\n\
+        store(px.get());\n\
+        store(w.take());\n\
+    }\n";
+    assert_eq!(
+        refusals(&run(lib)),
+        [
+            "demo | src/lib.rs:21 | Id::raw -> store",
+            "demo | src/lib.rs:22 | Px::get -> store",
+        ]
+    );
+}
+
+#[test]
+fn a_generic_struct_over_no_primitive_and_its_marker_are_no_unwrap() {
+    let lib = "pub mod id {\n\
+        pub trait Kind { type Repr; }\n\
+        pub struct Handle<K: Kind>(K::Repr);\n\
+        impl<K: Kind> Handle<K> {\n\
+            pub fn inner(&self) -> &K::Repr { &self.0 }\n\
+        }\n\
+        pub trait Space { type Repr; }\n\
+        pub struct Px<S: Space>(S::Repr, core::marker::PhantomData<S>);\n\
+        impl<S: Space + Default> Px<S> {\n\
+            pub fn space(&self) -> S { S::default() }\n\
+        }\n\
+    }\n\
+    use id::{Handle, Px};\n\
+    pub struct Config;\n\
+    pub struct Doc; impl id::Kind for Doc { type Repr = Config; } \
+    impl id::Space for Doc { type Repr = u64; }\n\
+    pub fn apply(config: &Config) {}\n\
+    pub fn shape(doc: Doc) {}\n\
+    pub fn save(h: &Handle<Doc>, px: Px<Doc>) {\n\
+        apply(h.inner());\n\
+        shape(px.space());\n\
+    }\n";
+    assert!(refusals(&run(lib)).is_empty(), "{:?}", refusals(&run(lib)));
+}
+
+#[test]
 fn the_own_impl_and_the_defining_module_of_a_newtype_unwrap_it_freely() {
     let lib = "pub mod name {\n\
         pub struct Name(String);\n\

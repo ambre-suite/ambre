@@ -73,19 +73,16 @@ impl DocCount {
 /// The number of a text change the view did not draw: a remote one, or a
 /// local one the Logic thread rewrote. The view hands back the last it
 /// applied in [`ProseCommand::Sync`].
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
-)]
-#[serde(transparent)]
-pub struct TextChangeSeq(pub u64);
+/// It crosses the bus, so the family is a [`Wire`](ambre_core::generation::Wire)
+/// one: its serde form is the bare number.
+pub enum TextChangeSeq {}
 
-impl TextChangeSeq {
-    /// The number of the change after this one.
-    #[must_use]
-    pub const fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
-    }
+impl ambre_core::GenerationKind for TextChangeSeq {
+    type IssueRight = ();
+    const NAME: &'static str = "TextChangeSeq";
 }
+
+impl ambre_core::generation::Wire for TextChangeSeq {}
 
 /// How many text commands of the view the Logic thread has taken: the number
 /// a draft entry waits on. Apart from [`TextChangeSeq`], which counts the
@@ -1426,7 +1423,7 @@ pub enum ProseCommand {
     /// last one it applied carried. The Logic thread answers with
     /// [`ProseEvent::Synced`] once everything sent before has landed.
     Sync {
-        seen: TextChangeSeq,
+        seen: ambre_core::Generation<TextChangeSeq>,
     },
 
     // -- Text editing (`features/ambre-spec-prose-text-editing.md`) --
@@ -2500,7 +2497,7 @@ pub enum ProseEvent {
         /// The count of changes the view did not draw, this one included when
         /// `origin` is [`ChangeOrigin::Remote`]. The view hands it back in
         /// [`ProseCommand::Sync`].
-        seq: TextChangeSeq,
+        seq: ambre_core::Generation<TextChangeSeq>,
         /// How many insertions and deletions of text the Logic thread has
         /// taken from the view so far.
         acked: TextAck,

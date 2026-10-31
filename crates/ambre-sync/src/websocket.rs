@@ -30,7 +30,7 @@ pub(crate) struct ReplayStops {
     /// The last delta the latest stop named.
     after: Seq,
     /// The ticket of the timer armed for the latest stop, if any.
-    ticket: crate::generation::ReplayTicket,
+    ticket: ambre_core::Generation<crate::generation::ReplayTicket>,
 }
 
 impl SyncState {
@@ -306,21 +306,23 @@ impl SyncState {
         };
         tracing::warn!("Sync: replay of {document_id:?} stopped after {after_seq:?} (stop {stop})");
         let delay = replay_retry_delay(stop);
-        if delay.is_some() {
-            self.replay_ticket = self.replay_ticket.next();
-        }
+        let ticket = if delay.is_some() {
+            self.replay_ticket.issue()
+        } else {
+            self.replay_ticket.latest()
+        };
         self.replay_stops.insert(
             document_id,
             ReplayStops {
                 count: stop,
                 after: after_seq,
-                ticket: self.replay_ticket,
+                ticket,
             },
         );
         if let Some(delay) = delay {
             let retry = SyncEvent::ReplayRetry {
                 document_id,
-                ticket: self.replay_ticket,
+                ticket,
             };
             self.arm_event_timer(retry, delay);
         } else if stop == REPLAY_RETRY_LIMIT + 1 {
@@ -353,7 +355,11 @@ impl SyncState {
     /// A replay timer fired. A later stop or a reconnect since it was armed
     /// makes it stale. Otherwise ask again from the document's own cursor,
     /// which the delivered part of the replay already advanced (`SYNC-153`).
-    fn retry_replay(&mut self, document_id: Id<Document>, ticket: crate::generation::ReplayTicket) {
+    fn retry_replay(
+        &mut self,
+        document_id: Id<Document>,
+        ticket: ambre_core::Generation<crate::generation::ReplayTicket>,
+    ) {
         let live = self
             .replay_stops
             .get(&document_id)
@@ -510,7 +516,7 @@ impl SyncState {
                     tracing::warn!(
                         "Sync: refresh failed, re-running dev login for silent recovery"
                     );
-                    self.handle_dev_login(RequestId::UNSOLICITED, username);
+                    self.handle_dev_login(None, username);
                 } else {
                     // Real session with no usable refresh: surface so the UI can
                     // prompt re-auth. Fall back to backoff to avoid a tight loop.
@@ -561,14 +567,14 @@ impl SyncState {
                 self.setup_owed = false;
                 self.open_websocket();
                 self.flush_pending_opens();
-                self.reply(
+                self.send_to_logic(LogicEvent::Rest {
                     id,
-                    RestEvent::SessionReady {
+                    evt: RestEvent::SessionReady {
                         user_id,
                         display_name,
                         email,
                     },
-                );
+                });
             }
             SyncEvent::ProviderSignedIn {
                 id,
@@ -1791,7 +1797,7 @@ mod tests {
 
         let master_seed = MasterSeed::from_array([7u8; 32]);
         state.handle_sync_event(SyncEvent::AccountCreated {
-            id: ambre_bus::RequestId::next(),
+            id: ambre_bus::next_request(),
             recovery_words: ambre_bus::SecretString::default(),
             signing_key: master_seed.derive_signing_key(),
             exchange_key: master_seed.derive_exchange_key(),
@@ -2062,7 +2068,10 @@ mod tests {
         })
     }
 
-    fn retry(document_id: Id<Document>, ticket: crate::generation::ReplayTicket) -> SyncEvent {
+    fn retry(
+        document_id: Id<Document>,
+        ticket: ambre_core::Generation<crate::generation::ReplayTicket>,
+    ) -> SyncEvent {
         SyncEvent::ReplayRetry {
             document_id,
             ticket,
@@ -2070,7 +2079,10 @@ mod tests {
     }
 
     /// The ticket of the timer armed for the latest stop of `id`.
-    fn armed(state: &SyncState, id: Id<Document>) -> crate::generation::ReplayTicket {
+    fn armed(
+        state: &SyncState,
+        id: Id<Document>,
+    ) -> ambre_core::Generation<crate::generation::ReplayTicket> {
         state.replay_stops[&id].ticket
     }
 

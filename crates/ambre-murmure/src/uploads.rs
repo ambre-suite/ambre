@@ -8,7 +8,8 @@
 
 use std::collections::HashMap;
 
-use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType, RequestId};
+use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType, Request};
+use ambre_core::Generation;
 use ambre_core::{ByteCount, ExportFilename, KnownMediaType};
 
 use crate::composer::DraftOf;
@@ -157,7 +158,7 @@ impl std::fmt::Debug for Uploaded {
 /// `Debug` counts the files uploaded: each attachment names its file.
 #[derive(Default)]
 pub struct Uploads {
-    pending: HashMap<RequestId, Pending>,
+    pending: HashMap<Generation<Request>, Pending>,
     ready: HashMap<DraftOf, Vec<Attachment>>,
 }
 
@@ -176,7 +177,7 @@ impl Uploads {
     /// a thread carries no file, so a thread draft refuses it.
     pub fn begin(
         &mut self,
-        id: RequestId,
+        id: Generation<Request>,
         of: DraftOf,
         name: String,
         media_type: MediaType,
@@ -199,7 +200,11 @@ impl Uploads {
 
     /// The relay stored the file of `id` under `content_hash`, which its
     /// reader already checked. `None` for a request this model never held.
-    pub fn uploaded(&mut self, id: RequestId, content_hash: &ContentHash) -> Option<Uploaded> {
+    pub fn uploaded(
+        &mut self,
+        id: Generation<Request>,
+        content_hash: &ContentHash,
+    ) -> Option<Uploaded> {
         let pending = self.pending.remove(&id)?;
         self.ready.entry(pending.of).or_default().push(Attachment {
             media_ref: content_hash.clone(),
@@ -211,7 +216,7 @@ impl Uploads {
     }
 
     /// The upload of `id` failed. `None` for a request this model never held.
-    pub fn failed(&mut self, id: RequestId) -> Option<Uploaded> {
+    pub fn failed(&mut self, id: Generation<Request>) -> Option<Uploaded> {
         let pending = self.pending.remove(&id)?;
         Some(Uploaded::Failed {
             of: pending.of,
@@ -232,12 +237,12 @@ impl Uploads {
     /// The names of the files of the draft `of` that still upload, in the
     /// order they were asked.
     pub fn uploading(&self, of: DraftOf) -> Vec<&str> {
-        let mut pending: Vec<(&RequestId, &Pending)> = self
+        let mut pending: Vec<(&Generation<Request>, &Pending)> = self
             .pending
             .iter()
             .filter(|(_, pending)| pending.of == of)
             .collect();
-        pending.sort_by_key(|(id, _)| id.0);
+        pending.sort_by_key(|(id, _)| **id);
         pending
             .into_iter()
             .map(|(_, pending)| pending.name.as_str())
@@ -294,7 +299,7 @@ mod tests {
 
     fn begin(uploads: &mut Uploads, id: u64, of: DraftOf, name: &str) -> bool {
         uploads.begin(
-            RequestId(id),
+            Generation::nth(id),
             of,
             name.to_owned(),
             MediaType("image/png".to_owned()),
@@ -380,7 +385,10 @@ mod tests {
         assert!(uploads.busy(of));
         assert!(uploads.ready(of).is_empty());
         assert_eq!(
-            uploads.uploaded(RequestId(1), &ContentHash::parse(HASH).expect("an address")),
+            uploads.uploaded(
+                Generation::nth(1),
+                &ContentHash::parse(HASH).expect("an address")
+            ),
             Some(Uploaded::Ready(of))
         );
         assert!(!uploads.busy(of));
@@ -403,11 +411,11 @@ mod tests {
                 name: name.to_owned(),
             })
         };
-        assert_eq!(uploads.failed(RequestId(1)), failed("a.png"));
-        assert_eq!(uploads.failed(RequestId(2)), failed("b.png"));
+        assert_eq!(uploads.failed(Generation::nth(1)), failed("a.png"));
+        assert_eq!(uploads.failed(Generation::nth(2)), failed("b.png"));
         assert!(!uploads.busy(of));
         assert!(uploads.ready(of).is_empty());
-        assert_eq!(uploads.failed(RequestId(3)), None);
+        assert_eq!(uploads.failed(Generation::nth(3)), None);
     }
 
     /// A raster image opens; a type that can carry script saves.

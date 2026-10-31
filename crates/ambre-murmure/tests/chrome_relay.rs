@@ -15,8 +15,8 @@
 use ambre_bus::{
     CatalogueEntry, ChannelActivity, ChannelMatches, ChannelName, ChannelPlace, DirectMessageEvent,
     HeldReply, HeldSend, LogicCommand, MemberChannel, MemberInfo, MemberStanding, MemberView,
-    MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, RequestId,
-    RestCommand, RestEvent, Role, SearchMatch, SpaceEvent, Timestamp, UiEvent,
+    MessageAt, MessageDraft, MessageView, MurmureCommand, MurmureEvent, Presence, RestCommand,
+    RestEvent, Role, SearchMatch, SpaceEvent, Timestamp, UiEvent,
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteKey, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, KeyChar, Locale};
@@ -139,7 +139,7 @@ fn a_lost_channel_and_a_sign_out_take_their_drafts() {
     assert_eq!(shelf.get(DraftOf::Channel(failed)), Some(draft));
 
     relay.absorb(&UiEvent::Rest {
-        id: RequestId::next(),
+        id: Some(ambre_bus::next_request()),
         evt: RestEvent::LoggedOut,
     });
     assert_eq!(shelf.get(DraftOf::Channel(failed)), None);
@@ -456,7 +456,7 @@ fn a_space_with(
     let relay = MurmureRelay::new();
     let space = Id::<Space>::mint();
     relay.absorb(&UiEvent::Rest {
-        id: RequestId::next(),
+        id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
             user_id: users[0],
             display_name: ambre_core::DisplayName::new("Alice").unwrap(),
@@ -948,7 +948,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
     let (_owner, relay, direct) = shown_direct();
     let me = Id::<User>::mint();
     relay.absorb(&UiEvent::Rest {
-        id: RequestId::next(),
+        id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
             user_id: me,
             display_name: ambre_core::DisplayName::new("Alice").unwrap(),
@@ -1015,7 +1015,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
     let (_owner, relay, direct) = shown_direct();
     let me = Id::<User>::mint();
     relay.absorb(&UiEvent::Rest {
-        id: RequestId::next(),
+        id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
             user_id: me,
             display_name: ambre_core::DisplayName::new("Alice").unwrap(),

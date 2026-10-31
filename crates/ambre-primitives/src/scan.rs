@@ -145,6 +145,9 @@ enum SiteKind {
     Const,
     Static,
     Alias,
+    /// An associated type an impl writes: a marker hands a generic newtype
+    /// its representation there.
+    Assoc,
 }
 
 impl SiteKind {
@@ -156,6 +159,7 @@ impl SiteKind {
             Self::Const => "const",
             Self::Static => "static",
             Self::Alias => "alias",
+            Self::Assoc => "assoc",
         }
     }
 }
@@ -620,6 +624,13 @@ struct Host {
     receiver: Receiver,
     /// `Other` for a constant.
     output: Output,
+    /// Whether the impl sits in a `fn` body, where a local item may shadow
+    /// the trait the module declares.
+    in_body: bool,
+    /// Whether a segment of the trait path carries arguments, as
+    /// `Kind<u8>`, or the path opens with `::`. No generic newtype reads
+    /// such a trait ([`representation_slots`]).
+    trait_unplain: bool,
 }
 
 /// The trait of an impl, as the impl writes its path once a `use ... as`
@@ -633,6 +644,8 @@ struct TraitPath {
     /// The type arguments the impl writes on the last segment, as text. The
     /// workspace chose each one, not the trait.
     args: Vec<String>,
+    /// Every segment, without generics, once a rename is undone.
+    segments: Vec<String>,
 }
 
 /// One `type` alias, as a use of its name resolves it.
@@ -673,6 +686,12 @@ enum ImportName {
     /// `use a::B as C;` brings `B` in as `C`.
     Renamed,
 }
+
+/// A crate directory, a module and the name of an item it declares.
+type Home = (String, String, String);
+
+/// A [`Home`] and the name of one of its associated types.
+type Home4 = (String, String, String, String);
 
 /// One name a `use` item brings into a module.
 #[derive(Clone, Debug)]
@@ -752,6 +771,14 @@ struct Declared {
     /// Every struct and enum, per crate directory, then per name. A name
     /// declared twice in one crate keeps both.
     types: BTreeMap<String, BTreeMap<String, Vec<Declaration>>>,
+    /// Each associated type a generic newtype holds as its one field, as
+    /// the struct writes it. That is the crate directory, the module, the
+    /// trait path and the name. Placed once every crate is read.
+    held: Vec<(String, String, Vec<String>, String)>,
+    /// Each associated type of [`Declared::held`] whose trait places in the
+    /// workspace. That is the crate directory and module of the trait, its
+    /// name, and the name of the associated type.
+    representations: BTreeSet<Home4>,
     /// Every `type` alias, per crate directory, then per name.
     aliases: BTreeMap<String, BTreeMap<String, Vec<Alias>>>,
     /// The name of every alias, in any crate: a type that names none needs
@@ -1316,6 +1343,61 @@ impl Declared {
         Ok(chosen)
     }
 
+    /// The crate directory, the module and the name of the type or trait
+    /// the path `segments` names, written in `module` of `krate`. The name
+    /// is the one the item declares, so a `use ... as` rename on the way is
+    /// undone. The path follows the module's items, its `use` items and its
+    /// globs, as [`Declared::lookup`] does. `None` when the path leaves the
+    /// workspace, names no item, or cannot be placed. A caller that grants
+    /// an exemption on the answer then fails closed.
+    fn type_home(
+        &self,
+        krate: &str,
+        module: &str,
+        segments: &[String],
+        hops: Hops,
+    ) -> Option<Home> {
+        if hops > RESOLVE_HOPS {
+            return None;
+        }
+        let (name, prefix) = segments.split_last()?;
+        if !prefix.is_empty() {
+            let (dir, found) = self.place(krate, module, prefix, hops).ok()??;
+            return self.type_home(&dir, &found, std::slice::from_ref(name), hops.next());
+        }
+        if self.has_item(krate, module, name) {
+            return Some((krate.to_owned(), module.to_owned(), name.clone()));
+        }
+        if let Some(import) = self.import(krate, module, name) {
+            if import.path.len() == 1 {
+                return None;
+            }
+            return self.type_home(krate, module, &import.path, hops.next());
+        }
+        match self.through_globs(krate, module, name, hops).ok()? {
+            Through::Module(dir, found) => {
+                self.type_home(&dir, &found, std::slice::from_ref(name), hops.next())
+            }
+            Through::Foreign | Through::Absent => None,
+        }
+    }
+
+    /// Places the trait of each associated type a generic newtype holds
+    /// ([`Declared::held`]). A trait that leaves the workspace places
+    /// nowhere, and no impl can hold its associated type. Called once every
+    /// crate is read.
+    fn place_representations(&mut self) {
+        let placed: BTreeSet<Home4> = self
+            .held
+            .iter()
+            .filter_map(|(krate, module, path, name)| {
+                let (dir, found, tr) = self.type_home(krate, module, path, Hops::default())?;
+                Some((dir, found, tr, name.clone()))
+            })
+            .collect();
+        self.representations = placed;
+    }
+
     /// Whether the workspace declares the trait. A path of one segment is
     /// looked up by name. A foreign trait with the name of a workspace trait
     /// then counts as the workspace's.
@@ -1761,13 +1843,15 @@ impl<'ast> Visit<'ast> for BoolSeek {
 
 impl Scan {
     /// Checks the claim of a `newtype-inner` line (`ai/ambre-rust-style.md`):
-    /// the site is the own representation of its type. It is one of three:
+    /// the site is the own representation of its type. It is one of four:
     ///
     /// 1. the field of a struct with exactly one field, or the one field of
     ///    a tuple variant;
     /// 2. a parameter of a `fn` that returns a struct with one field or a
     ///    fieldless enum, as `Self`, `Option<Self>` or `Result<Self, _>`;
-    /// 3. the return of a method of such a type.
+    /// 3. the return of a method of such a type;
+    /// 4. an associated type an impl of a workspace trait writes, that a
+    ///    generic newtype of the workspace holds as its one field.
     ///
     /// A key the scan did not find passes: the stale check reports it.
     ///
@@ -1814,6 +1898,64 @@ impl Scan {
                     )),
                 }
             }
+            SiteKind::Assoc => {
+                let Some(host) = place.host.as_ref() else {
+                    return Err("an associated type outside an impl of a trait".to_owned());
+                };
+                let Some(path) = host.of_trait.as_ref() else {
+                    return Err("an associated type outside an impl of a trait".to_owned());
+                };
+                if host.in_body {
+                    return Err(
+                        "an impl in a fn body, whose trait a local item may shadow".to_owned()
+                    );
+                }
+                if host.trait_unplain {
+                    return Err(format!(
+                        "the trait {} carries generic arguments or a leading `::`, and no \
+                         generic newtype reads such a trait",
+                        path.name
+                    ));
+                }
+                let Some((dir, found, trait_name)) = self.declared.type_home(
+                    &place.krate,
+                    &place.module,
+                    &path.segments,
+                    Hops::default(),
+                ) else {
+                    return Err(format!(
+                        "the trait {} does not place on a trait of the workspace, so no \
+                         generic newtype of the workspace reads its associated type",
+                        path.name
+                    ));
+                };
+                // The item of an associated type is `<Type as Trait>::Name`,
+                // with a `#n` suffix when two `cfg` twins share the key.
+                let name = key
+                    .0
+                    .split(SiteKey::SEPARATOR)
+                    .nth(3)
+                    .and_then(|item| item.rsplit_once("::"))
+                    .map_or("", |(_, name)| name);
+                // Only a `#` and digits are the suffix: `r#Repr` is a name.
+                let name = name
+                    .rsplit_once('#')
+                    .filter(|(_, n)| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+                    .map_or(name, |(bare, _)| bare);
+                if self.declared.representations.contains(&(
+                    dir,
+                    found,
+                    trait_name,
+                    name.to_owned(),
+                )) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "no generic newtype of the workspace holds {}::{name} as its one field",
+                        path.name
+                    ))
+                }
+            }
             kind => Err(format!(
                 "a {} is never the inside of a newtype",
                 kind.as_str()
@@ -1837,6 +1979,13 @@ impl Scan {
         let Some(place) = self.places.get(key) else {
             return Ok(());
         };
+        if place.kind == SiteKind::Assoc {
+            // A trait declares the associated type and leaves its value to
+            // the impl: the workspace chose the primitive.
+            return Err(
+                "an associated type, whose value the impl chooses, not the trait".to_owned(),
+            );
+        }
         if let Some(host) = &place.host
             && let Some(path) = &host.of_trait
         {
@@ -2433,6 +2582,7 @@ pub fn scan(tree: &impl Tree, crates: &Path) -> Scan {
     // An alias of one crate may name a type of another. A call may reach a
     // crate through a re-export. Both are read once every crate is.
     result.declared.close_reach();
+    result.declared.place_representations();
     let mut keys = Vec::new();
     for raw in found.keys {
         if let Some(key) = settle(&result.declared, raw, &mut result.errors) {
@@ -2688,6 +2838,10 @@ enum Unplaced {
     NotRust,
     /// A file under a build output directory, which the walk leaves out.
     BuildOutput,
+    /// A `mod` inside a block, as in a `fn` body. The gate keys items on
+    /// their module path, so its items would merge with those of a module
+    /// of the same path outside the block.
+    InBody,
 }
 
 impl fmt::Display for Unplaced {
@@ -2699,6 +2853,7 @@ impl fmt::Display for Unplaced {
             Self::Outside => "a `#[path]` to a file outside the directory of the crate",
             Self::NotRust => "a `#[path]` to a file that is not `.rs`",
             Self::BuildOutput => "a `#[path]` to a file under a `target/` directory",
+            Self::InBody => "a `mod` inside a block, whose items the gate cannot tell apart",
         })
     }
 }
@@ -2990,6 +3145,12 @@ fn scan_crate(tree: &impl Tree, dir: &Path, result: &mut Scan, found: &mut Found
             .entry(name.clone())
             .or_default()
             .append(&mut visit.traits);
+        for (module, path, assoc) in visit.representations {
+            result
+                .declared
+                .held
+                .push((name.clone(), module, path, assoc));
+        }
         for (owner, decl) in visit.types {
             result
                 .declared
@@ -3137,6 +3298,99 @@ impl BlockNames {
             names.items.insert(ident.to_string());
         }
         names
+    }
+}
+
+/// The segments of `path`, without their generic arguments.
+fn idents(path: &syn::Path) -> Vec<String> {
+    path.segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect()
+}
+
+/// The associated types a generic newtype holds as its one field. Each is
+/// a trait path, as the struct writes it, and a name. The field holds
+/// `<P as Trait>::Name`, or `P::Name` with `P: Trait`. Under `P::Name`,
+/// each trait that bounds `P` counts. An impl writes `Name` only for the
+/// trait that declares it, and a foreign bound never places in the
+/// workspace.
+///
+/// A trait written with generic arguments counts for none: two impls of
+/// `Trait<A>` and `Trait<B>` give one type two representations. A trait
+/// path with a leading `::` counts for none either. It names an extern
+/// crate, which the gate's module lookup confuses with a child module.
+pub(crate) fn representation_slots(
+    generics: &syn::Generics,
+    ty: &syn::Type,
+) -> BTreeSet<(Vec<String>, String)> {
+    let syn::Type::Path(path) = ty else {
+        return BTreeSet::new();
+    };
+    let plain =
+        |segments: &[&syn::PathSegment]| segments.iter().all(|segment| segment.arguments.is_none());
+    if let Some(qself) = &path.qself {
+        // `<P as Trait>::Name`: the segments before `qself.position` name
+        // the trait, the rest name the associated type.
+        let is_param = matches!(&*qself.ty, syn::Type::Path(p)
+        if p.qself.is_none()
+            && p.path.get_ident().is_some_and(|ident| {
+                generics.type_params().any(|param| param.ident == *ident)
+            }));
+        let segments: Vec<&syn::PathSegment> = path.path.segments.iter().collect();
+        return match (is_param, segments.split_at_checked(qself.position)) {
+            (true, Some((trait_path, [name])))
+                if path.path.leading_colon.is_none()
+                    && !trait_path.is_empty()
+                    && plain(trait_path)
+                    && name.arguments.is_none() =>
+            {
+                BTreeSet::from([(
+                    trait_path
+                        .iter()
+                        .map(|segment| segment.ident.to_string())
+                        .collect(),
+                    name.ident.to_string(),
+                )])
+            }
+            _ => BTreeSet::new(),
+        };
+    }
+    let segments: Vec<&syn::PathSegment> = path.path.segments.iter().collect();
+    match segments.as_slice() {
+        [param, name] if param.arguments.is_none() && name.arguments.is_none() => {
+            let Some(declared) = generics
+                .type_params()
+                .find(|candidate| candidate.ident == param.ident)
+            else {
+                return BTreeSet::new();
+            };
+            let mut bounds: Vec<&syn::TypeParamBound> = declared.bounds.iter().collect();
+            if let Some(clause) = &generics.where_clause {
+                for predicate in &clause.predicates {
+                    if let syn::WherePredicate::Type(bound) = predicate
+                        && matches!(&bound.bounded_ty, syn::Type::Path(p)
+                            if p.qself.is_none() && p.path.is_ident(&param.ident))
+                    {
+                        bounds.extend(bound.bounds.iter());
+                    }
+                }
+            }
+            bounds
+                .into_iter()
+                .filter_map(|bound| match bound {
+                    syn::TypeParamBound::Trait(t)
+                        if t.path.leading_colon.is_none()
+                            && plain(&t.path.segments.iter().collect::<Vec<_>>()) =>
+                    {
+                        Some(idents(&t.path))
+                    }
+                    _ => None,
+                })
+                .map(|bound| (bound, name.ident.to_string()))
+                .collect()
+        }
+        _ => BTreeSet::new(),
     }
 }
 
@@ -3845,6 +4099,7 @@ fn trait_path(path: &syn::Path, segments: &[String]) -> TraitPath {
             .then(|| segments.first().cloned())
             .flatten(),
         args,
+        segments: segments.to_vec(),
     }
 }
 
@@ -4327,6 +4582,10 @@ struct FileVisit<'a> {
     traits: BTreeSet<String>,
     /// Every struct and enum the file declares, by name.
     types: Vec<(String, Declaration)>,
+    /// Each associated type a generic newtype of the file holds as its one
+    /// field: its module, the trait path and the name
+    /// ([`representation_slots`]).
+    representations: Vec<(String, Vec<String>, String)>,
     /// Every impl of `Deref` or `DerefMut` the file writes.
     derefs: Vec<DerefImpl>,
     /// Who reaches the next site.
@@ -4455,6 +4714,7 @@ impl<'a> FileVisit<'a> {
             owner: None,
             traits: BTreeSet::new(),
             types: Vec::new(),
+            representations: Vec::new(),
             derefs: Vec::new(),
             privacy: Privacy::Private,
             slot: None,
@@ -4762,6 +5022,16 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             }
             return;
         }
+        if !self.blocks.is_empty() {
+            // Its items are left unread: the scan fails on it.
+            self.children.push(Pending {
+                candidates: Vec::new(),
+                module,
+                placement: Placement::Unplaced(Unplaced::InBody),
+                root: PathBuf::new(),
+            });
+            return;
+        }
         self.modules.insert(module.join("::"));
         match &m.content {
             Some((_, items)) => {
@@ -4894,12 +5164,22 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             .trait_
             .as_ref()
             .map(|(_, path, _)| trait_path(path, &self.unrename(path)));
+        let in_body = !self.blocks.is_empty();
+        let trait_unplain = i.trait_.as_ref().is_some_and(|(_, path, _)| {
+            path.leading_colon.is_some()
+                || path
+                    .segments
+                    .iter()
+                    .any(|segment| !segment.arguments.is_none())
+        });
         let host = |receiver: Receiver, output: Output| Host {
             self_ty: self_ty.clone(),
             self_full: self_full.clone(),
             of_trait: of_trait.clone(),
             receiver,
             output,
+            in_body,
+            trait_unplain,
         };
         let module = self.module.join("::");
         if let Some(deref) = deref_impl(i, of_trait.as_ref(), self.krate, &module, &self.file) {
@@ -4944,6 +5224,16 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
                     self.emit(self.item(&c.ident.to_string()), SiteKind::Const, &c.ty);
                     self.host = None;
                     self.initialiser(c.ident.to_string(), &c.expr);
+                }
+                // Only a trait impl declares an associated type on stable
+                // Rust, so the site is as public as the trait.
+                syn::ImplItem::Type(t) if !test_only(&t.attrs) => {
+                    self.generics.push(generic_names(&t.generics));
+                    self.host = Some(host(Receiver::Without, Output::Other));
+                    self.privacy = Privacy::TraitImpl;
+                    self.emit(self.item(&t.ident.to_string()), SiteKind::Assoc, &t.ty);
+                    self.host = None;
+                    self.generics.pop();
                 }
                 _ => {}
             }
@@ -4996,6 +5286,20 @@ impl<'ast> Visit<'ast> for FileVisit<'_> {
             } else {
                 Decl::Struct
             };
+            // A struct a `fn` body declares is out of reach of every other
+            // item, so it grants no exemption.
+            if decl == Decl::Newtype
+                && self.blocks.is_empty()
+                && let Some(field) = s.fields.iter().find(|field| {
+                    !matches!(&field.ty, syn::Type::Path(path)
+                        if path.path.segments.last().is_some_and(|last| last.ident == "PhantomData"))
+                })
+            {
+                let module = self.module.join("::");
+                for (path, assoc) in representation_slots(&s.generics, &field.ty) {
+                    self.representations.push((module.clone(), path, assoc));
+                }
+            }
             self.declare(name.clone(), decl);
             self.owner = Some(name.clone());
             self.within(&s.generics, |visit| {
