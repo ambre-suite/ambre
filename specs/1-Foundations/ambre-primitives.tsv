@@ -3515,7 +3515,6 @@ ambre-core | src/payload.rs | crate::payload | Payload<K>::new(bytes) | param | 
 ambre-core | src/payload.rs | crate::payload | Payload<K>::as_bytes() | ret | &[u8]	newtype-inner	Payload newtype
 ambre-core | src/payload.rs | crate::payload | Payload<K>::into_bytes() | ret | Vec<u8>	newtype-inner	Payload newtype
 ambre-core | src/payload.rs | crate::payload | Payload<K>::is_empty() | ret | bool	generic	predicate
-ambre-core | src/payload.rs | crate::payload | Payload<K>::len() | ret | usize	generic	the length of the bytes, the one reading a Debug line or a log may carry
 ambre-core | src/payload.rs | crate::payload | <Payload<K> as AsRef<[u8]>>::as_ref() | ret | &[u8]	newtype-inner	Payload newtype, its bytes borrowed for a call that takes any bytes
 ambre-core | src/payload.rs | crate::payload | <Payload<K> as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	Payload newtype
 ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait

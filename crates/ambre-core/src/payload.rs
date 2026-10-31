@@ -18,7 +18,9 @@ use std::marker::PhantomData;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// The role of bytes that cross the threads: the name its debug form prints.
-/// A crate downstream may declare a role of its own.
+/// The trait stays open: a crate downstream declares a role of its own, as
+/// `ambre-bus` does for an encoded cursor. A role adds no serde form and no
+/// method, only a name beside the length.
 pub trait PayloadKind: 'static {
     /// The name the debug form prints, beside the length.
     const NAME: &'static str;
@@ -56,8 +58,8 @@ impl<K: PayloadKind> Payload<K> {
 
     /// How many bytes it holds.
     #[must_use]
-    pub fn len(&self) -> usize {
-        self.bytes.len()
+    pub fn len(&self) -> crate::ByteSize {
+        crate::ByteSize::of_len(self.bytes.len())
     }
 
     /// Whether there are no bytes.

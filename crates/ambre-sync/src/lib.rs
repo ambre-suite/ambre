@@ -1416,7 +1416,7 @@ impl SyncState {
             } => {
                 tracing::info!(
                     "[Sync] received SendUpdate doc={document_id} delta_size={}",
-                    payload.len()
+                    payload.len().0
                 );
                 self.send_summarized_update(document_id, payload, summary);
             }

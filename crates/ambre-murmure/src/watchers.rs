@@ -329,7 +329,7 @@ mod tests {
     fn a_sample_names_no_channel_and_nothing_else_reads_as_one() {
         let root = Id::<Message>::mint();
         for sample in [Sample::Watching, Sample::Typing, Sample::TypingIn(root)] {
-            assert_eq!(ByteSize::of_len(sample.bytes().len()), SAMPLE_LEN);
+            assert_eq!(sample.bytes().len(), SAMPLE_LEN);
             assert_eq!(Sample::read(&sample.bytes()), Some(sample));
         }
         assert_ne!(Sample::Watching.bytes(), crate::presence_sample());

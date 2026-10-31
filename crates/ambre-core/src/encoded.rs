@@ -62,9 +62,23 @@ const SEALED_NAME_MAX_CHARS: usize = crate::NAME_MAX_CHARS;
 const SEALED_NAME_MAX_LEN: usize =
     OBJECT_HEADER_LEN + UTF8_MAX_LEN * SEALED_NAME_MAX_CHARS + TAG_LEN;
 
+mod sealed {
+    /// Closes [`super::EncodedKind`] to the roles of this module: each length
+    /// policy is a rule of the relay (`SRV-226`), read here in one place.
+    pub trait Sealed {}
+    impl Sealed for super::WrappedDocKey {}
+    impl Sealed for super::SealedName {}
+    impl Sealed for super::WrappedMasterKey {}
+    impl Sealed for super::EscrowedKey {}
+    impl Sealed for super::SealedShare {}
+    impl Sealed for super::EncodedLogEntry {}
+    impl Sealed for super::EncodedKeyLink {}
+}
+
 /// The role of a sealed or signed value that travels as base64: its name,
-/// and the lengths its layout allows.
-pub trait EncodedKind: 'static {
+/// and the lengths its layout allows. The trait is sealed to the roles of
+/// this module.
+pub trait EncodedKind: sealed::Sealed + 'static {
     /// The name the debug form and a refusal print.
     const NAME: &'static str;
     /// The lengths the layout of this role allows; a read refuses any other.

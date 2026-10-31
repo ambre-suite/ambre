@@ -354,7 +354,7 @@ pub fn write_ambre_plaintext(
     document_id: Id<Document>,
     payload: &Payload<SnapshotBytes>,
 ) -> Payload<PlaintextContainer> {
-    let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
+    let mut out = Vec::with_capacity(HEADER_LEN + payload.as_bytes().len());
     out.extend_from_slice(&AMBRE_MAGIC);
     out.push(AMBRE_VERSION.as_u8());
     out.push(doc_type.as_u8());

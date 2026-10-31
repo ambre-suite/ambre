@@ -116,7 +116,7 @@ impl SyncState {
                 "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
                 seq.0,
                 update.public_data.clock.0,
-                opened.as_ref().map(|d| d.payload.len()).unwrap_or(0),
+                opened.as_ref().map_or(0, |d| d.payload.len().0),
             );
             return Some(opened);
         }

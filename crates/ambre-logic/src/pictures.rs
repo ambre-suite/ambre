@@ -117,7 +117,7 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
                 let Ok(frame) = frame else { break };
                 let (numer, denom) = frame.delay().numer_denom_ms();
                 let pixels = scale(frame.into_buffer(), size);
-                let after = held.saturating_add(ByteSize::of_len(pixels.len()));
+                let after = held.saturating_add(pixels.len());
                 if !frames.is_empty() && after > PICTURE_MAX_SIZE {
                     break;
                 }
@@ -231,7 +231,7 @@ mod tests {
             picture
                 .frames
                 .iter()
-                .all(|f| f.pixels.len() == 480 * 160 * 4)
+                .all(|f| f.pixels.len() == ambre_bus::ByteSize(480 * 160 * 4))
         );
         assert_ne!(picture.frames[0].pixels, picture.frames[1].pixels);
         let spinning = decode(&Payload::new(gif(2, (8, 8), 0))).expect("a GIF");

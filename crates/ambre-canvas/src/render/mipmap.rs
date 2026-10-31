@@ -52,7 +52,7 @@ pub fn build_chain(pixels: &Payload<RgbaPixels>, size: ImageSize) -> Vec<MipLeve
     if width == 0 || height == 0 {
         return out;
     }
-    if ByteSize::of_len(pixels.len()) < level0_size(size) {
+    if pixels.len() < level0_size(size) {
         return out;
     }
     let mut src = pixels.clone();

@@ -230,7 +230,8 @@ impl Sequence {
             .collect();
         rows.sort_unstable();
         let count = u32::try_from(rows.len()).unwrap_or(u32::MAX);
-        let mut out = Vec::with_capacity(8 + rows.len() * ROW_SIZE.as_len() + loro.len());
+        let mut out =
+            Vec::with_capacity(8 + rows.len() * ROW_SIZE.as_len() + loro.as_bytes().len());
         out.extend_from_slice(FRAME_MAGIC);
         out.extend_from_slice(&count.to_le_bytes());
         for (id, seq) in rows.into_iter().take(count as usize) {

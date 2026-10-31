@@ -145,12 +145,10 @@ fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
         alice.send(&draft(&body), author, NOW).expect("send");
         sent += 1;
         let segment = alice.active_id();
-        let bytes = ByteSize::of_len(
-            alice
-                .snapshot(segment.document_id())
-                .expect("snapshot")
-                .len(),
-        );
+        let bytes = alice
+            .snapshot(segment.document_id())
+            .expect("snapshot")
+            .len();
         let asked = alice.wants_close();
         if bytes >= BYTES {
             assert_eq!(asked, Some(segment), "asked at the send that passes");

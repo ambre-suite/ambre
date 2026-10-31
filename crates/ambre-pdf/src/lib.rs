@@ -229,7 +229,7 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         // krilla wants owned RGBA8 bytes; the source is a borrowed view, so copy
         // once into an image object krilla holds for the page's lifetime.
         let expected = image.size.width.get() as usize * image.size.height.get() as usize * 4;
-        if image.pixels.len() != expected || expected == 0 {
+        if image.pixels.as_bytes().len() != expected || expected == 0 {
             return; // malformed source: skip rather than embed garbage
         }
         let img = Image::from_rgba8(

@@ -119,7 +119,7 @@ fn take_slice(queue: &mut ReplayQueue) -> Vec<(Seq, ambre_core::Payload<ambre_co
     let mut bytes = 0usize;
     let mut slice = Vec::new();
     while let Some((_, payload)) = queue.front() {
-        let next = bytes.saturating_add(payload.len());
+        let next = bytes.saturating_add(payload.as_bytes().len());
         if !slice.is_empty() && next > REPLAY_SLICE_BYTES {
             break;
         }

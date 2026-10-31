@@ -192,13 +192,13 @@ impl StoreLedger {
         match write {
             SealedWrite::Snapshot(bytes) => {
                 cost = Cost {
-                    snapshot: ByteSize::of_len(bytes.len()),
+                    snapshot: bytes.len(),
                     deltas: ByteSize(0),
                 };
                 self.charge(id, cost, Delivery::Unsent);
             }
             SealedWrite::Delta(bytes) => {
-                cost.deltas = cost.deltas.saturating_add(ByteSize::of_len(bytes.len()));
+                cost.deltas = cost.deltas.saturating_add(bytes.len());
                 self.charge(id, cost, Delivery::Unsent);
             }
             SealedWrite::Session { .. } => self.charge(id, cost, Delivery::Unsent),

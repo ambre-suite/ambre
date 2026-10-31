@@ -3166,27 +3166,30 @@ mod tests {
 
     #[test]
     fn presence_directory_skips_unparsable_rows_without_inventing_ids() {
-        // A bad row never reaches the directory: the answer that carries it
-        // is refused when it is read (`SRV-242`). A fabricated id would
-        // attribute a cursor to the wrong person, which is what keying
-        // presence on the Id<User> prevents.
-        let read = |signing_pub_key: String| {
-            serde_json::from_value::<http::DocumentMembersResponse>(serde_json::json!({
-                "members": [ {
-                    "user_id": "11111111-1111-1111-1111-111111111111",
-                    "display_name": "A", "email": "a@test.local",
-                    "signing_pub_key": signing_pub_key, "exchange_pub_key": "ab".repeat(32),
-                    "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]),
-                    "role": "viewer", "wrapper_exchange_pub_key": "ab".repeat(32),
-                } ]
-            }))
+        // A row whose key does not parse is skipped when the answer is read,
+        // and the sound rows beside it stay. A fabricated id would attribute
+        // a cursor to the wrong person, which is what keying presence on the
+        // Id<User> prevents.
+        let row = |user_id: &str, signing_pub_key: String| {
+            serde_json::json!({
+                "user_id": user_id,
+                "display_name": "A", "email": "a@test.local",
+                "signing_pub_key": signing_pub_key, "exchange_pub_key": "ab".repeat(32),
+                "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]),
+                "role": "viewer", "wrapper_exchange_pub_key": "ab".repeat(32),
+            })
         };
-        assert!(read("zz-not-hex".to_owned()).is_err());
-        // 31 bytes: not a valid Ed25519 key.
-        assert!(read("bb".repeat(31)).is_err());
-        let sound = read("bb".repeat(32)).expect("a sound answer");
+        let answer = serde_json::from_value::<http::DocumentMembersResponse>(serde_json::json!({
+            "members": [
+                row("33333333-3333-3333-3333-333333333333", "zz-not-hex".to_owned()),
+                // 31 bytes: not a valid Ed25519 key.
+                row("44444444-4444-4444-4444-444444444444", "bb".repeat(31)),
+                row("11111111-1111-1111-1111-111111111111", "bb".repeat(32)),
+            ]
+        }))
+        .expect("one malformed row never refuses the whole answer");
         let dir = presence_directory(
-            sound
+            answer
                 .members
                 .iter()
                 .map(|m| (m.user_id, &m.signing_pub_key)),

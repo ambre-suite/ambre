@@ -401,7 +401,7 @@ impl LogicState {
         if let Some(payload) = update {
             tracing::debug!(
                 "[Logic->Sync] pushing SendUpdate doc={document_id} delta_size={}",
-                payload.len(),
+                payload.len().0,
             );
             // The delta that leaves for the relay is the one saved: it holds
             // every operation the command wrote.

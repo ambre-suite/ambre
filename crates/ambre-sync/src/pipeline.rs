@@ -224,7 +224,7 @@ pub fn update_body(
             .as_len()
             .saturating_add(1)
             .saturating_add(summary_len)
-            .saturating_add(delta.len()),
+            .saturating_add(delta.as_bytes().len()),
     );
     body.extend_from_slice(nonce.as_slice());
     match summary {

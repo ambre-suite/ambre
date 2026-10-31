@@ -184,6 +184,11 @@ prefix, since the type already fixes the length (`BUS-031`). A readable codec, s
 the relay, spells the same value as lowercase hexadecimal (`ambre-spec-server.md`, `SRV-242`).
 One generic type writes both forms, so no role chooses its form by an attribute.
 
+These forms replaced older ones with no version bump and no migration, since nothing had shipped.
+A key, a nonce or a signature once carried a length prefix, and a salt once travelled as base64.
+So the update blobs, the snapshots and the membership log a development database stored before the
+change do not read after it. The break is deliberate, not a defect.
+
 **Code.** `crates/ambre-bus/src/` for the contract, `crates/ambre-logic/src/dispatch.rs` for the
 routing, `crates/ambre-logic/src/data.rs` for the role gate.
 

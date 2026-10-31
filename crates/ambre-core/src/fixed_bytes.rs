@@ -30,6 +30,25 @@ mod sealed {
     /// Closes [`super::ByteArray`] to the byte arrays.
     pub trait Sealed {}
     impl<const N: usize> Sealed for [u8; N] {}
+
+    /// Closes [`super::FixedRole`] to the roles of this crate. A role
+    /// downstream could otherwise give any secret a serde form and a value
+    /// that never wipes itself.
+    pub trait SealedRole {}
+    impl SealedRole for crate::PublicKey {}
+    impl SealedRole for crate::ExchangePublicKey {}
+    impl SealedRole for crate::Nonce {}
+    impl SealedRole for crate::CommitmentTag {}
+    impl SealedRole for crate::Signature {}
+    impl SealedRole for crate::ChainHash {}
+    impl SealedRole for crate::EntryDigest {}
+    impl SealedRole for crate::KeyId {}
+    impl SealedRole for crate::SessionNonce {}
+    impl SealedRole for crate::FileSalt {}
+    impl SealedRole for crate::FileDigest {}
+    impl SealedRole for crate::MediaAddress {}
+    impl SealedRole for crate::FormatMagic {}
+    impl SealedRole for crate::MasterKeySalt {}
 }
 
 /// A byte array of any width: the storage of a [`FixedBytes`]. Closed to
@@ -70,8 +89,9 @@ pub enum DebugForm {
 ///
 /// A role is an empty `enum` that names a value no code builds. The width
 /// sits in [`FixedRole::Array`], since a const generic parameter cannot be
-/// read from an associated constant on stable Rust.
-pub trait FixedRole: 'static {
+/// read from an associated constant on stable Rust. The trait is sealed: every
+/// role lives in this crate, and a review reads each one.
+pub trait FixedRole: sealed::SealedRole + 'static {
     /// The name the debug form and an error print.
     const NAME: &'static str;
     /// What the debug form prints.
@@ -282,6 +302,8 @@ mod tests {
     /// A role wider than the 32 bytes serde derives an array for.
     enum Wide {}
 
+    impl super::sealed::SealedRole for Wide {}
+
     impl FixedRole for Wide {
         const NAME: &'static str = "Wide";
         type Array = [u8; 64];
@@ -289,6 +311,8 @@ mod tests {
 
     /// A role whose debug form prints its width alone.
     enum Short {}
+
+    impl super::sealed::SealedRole for Short {}
 
     impl FixedRole for Short {
         const NAME: &'static str = "Short";

@@ -41,7 +41,7 @@ impl KeyLink {
         if self.sealed.is_empty() {
             return Err(ValidationError::EmptyCiphertext);
         }
-        if self.sealed.len() > MAX_SEALED_KEY_LEN {
+        if self.sealed.as_bytes().len() > MAX_SEALED_KEY_LEN {
             return Err(ValidationError::OversizedKeyLink);
         }
         if self.key == self.previous {

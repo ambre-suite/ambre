@@ -1926,6 +1926,10 @@ impl WriteAnswer {
 
 #[derive(Deserialize)]
 pub(crate) struct DocumentMembersResponse {
+    /// The rows that read whole. A row whose key or id does not parse is
+    /// skipped, never the whole answer, so one malformed row cannot empty
+    /// the presence directory (`SYNC-015`).
+    #[serde(deserialize_with = "sound_rows")]
     pub members: Vec<DocumentMemberEntry>,
     /// The document owes a rotation (`SRV-122`, `SYNC-128`).
     #[serde(default)]
@@ -1933,6 +1937,21 @@ pub(crate) struct DocumentMembersResponse {
     /// The membership log, oldest entry first (`SRV-104`).
     #[serde(default)]
     pub log: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
+}
+
+/// Reads a list of rows and keeps each row that parses. A list that is not a
+/// list still refuses the answer; a row that does not parse is dropped
+/// alone.
+fn sound_rows<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let rows = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| serde_json::from_value(row).ok())
+        .collect())
 }
 
 #[derive(Deserialize)]

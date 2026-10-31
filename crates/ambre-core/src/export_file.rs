@@ -268,7 +268,7 @@ impl Payload<FileBytes> {
     /// The size of the file.
     #[must_use]
     pub fn size(&self) -> ByteSize {
-        ByteSize::of_len(self.len())
+        self.len()
     }
 }
 

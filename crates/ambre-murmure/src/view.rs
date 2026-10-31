@@ -16,8 +16,8 @@ use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    Attachment, ByteSize, Emoji, LogicCommand, MessageAt, MessageView, MurmureCommand,
-    MurmureEvent, ReplyEcho, Request, RestEvent, TextStyle, Timestamp, UiEvent,
+    Attachment, Emoji, LogicCommand, MessageAt, MessageView, MurmureCommand, MurmureEvent,
+    ReplyEcho, Request, RestEvent, TextStyle, Timestamp, UiEvent,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
@@ -715,7 +715,7 @@ impl MurmureView {
         };
         for file in files {
             let id = ambre_bus::next_request();
-            let (media_type, size) = (file.media_type(), ByteSize(file.data.len() as u64));
+            let (media_type, size) = (file.media_type(), file.data.len());
             let of = DraftOf::Channel(channel_id);
             if !self
                 .composer
@@ -1888,7 +1888,7 @@ impl MurmureView {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::{ByteSpan, CharSpan};
+    use ambre_bus::{ByteSize, ByteSpan, CharSpan};
     use std::cell::Cell;
 
     use ambre_bus::conduit::local;
