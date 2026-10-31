@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Start the Ambre Blind Relay server (ambre-server).
 #
-# The server requires PostgreSQL, Redis, and S3 (MinIO) to be running.
+# The server requires PostgreSQL, Redis, and S3 (Garage) to be running.
 # Run `docker compose up -d` first to provision these services.
 #
 # Environment variables are read from .env if present.

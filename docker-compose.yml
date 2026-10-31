@@ -23,20 +23,20 @@ services:
       interval: 5s
       retries: 5
 
-  minio:
-    # MinIO no longer publishes images (Docker Hub removed, quay.io gated); Chainguard rebuilds it.
-    image: cgr.dev/chainguard/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+  # The S3 object store. The image holds the binary alone, no shell, so
+  # `scripts/garage_init.sh` creates the layout, the key and the bucket from
+  # the host (`just services-up` runs it).
+  garage:
+    image: dxflrs/garage:v2.3.0
+    container_name: ambre-garage
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:3900"
     volumes:
-      - miniodata:/data
+      - ./garage.toml:/etc/garage.toml:ro
+      - garagemeta:/var/lib/garage/meta
+      - garagedata:/var/lib/garage/data
     healthcheck:
-      test: ["CMD-SHELL", "mc alias set local http://localhost:9000 minioadmin minioadmin && mc ready local && mc mb --ignore-existing local/ambre-dev"]
+      test: ["CMD", "/garage", "status"]
       interval: 5s
       retries: 5
 
@@ -58,5 +58,6 @@ services:
 
 volumes:
   pgdata:
-  miniodata:
+  garagemeta:
+  garagedata:
   pgadmindata:

@@ -31,8 +31,9 @@
 //!
 //! The browser puts and fetches media through the presigned links itself.
 //! So the bucket must allow `PUT` and `GET` from the application's origin.
-//! Without that rule, every picture upload fails in the browser. minio
-//! allows every origin by default; AWS S3 allows none.
+//! Without that rule, every picture upload fails in the browser. Neither
+//! Garage nor AWS S3 allows an origin by default; the local stack sets the
+//! rule in `scripts/garage_init.sh`.
 
 use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::presigning::PresigningConfig;

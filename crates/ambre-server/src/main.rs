@@ -85,21 +85,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // falls back to the default chain (ending at the EC2 metadata endpoint).
     // That chain is unreachable off-EC2, and surfaces as a "dispatch failure" on
     // every request. Set both explicitly. Credentials come from the environment.
-    // When an endpoint override is present (local MinIO) we default to its dev
-    // root user, so the stack works out of the box.
+    // When an endpoint override is present (the local Garage) we default to its
+    // dev key, `scripts/garage_init.sh`, so the stack works out of the box.
     let aws_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_owned());
     let mut s3_config =
         aws_sdk_s3::Config::builder().region(aws_sdk_s3::config::Region::new(aws_region));
-    let local_dev = s3_endpoint.is_some();
-    let default_cred = || {
-        if local_dev {
-            "minioadmin".to_owned()
-        } else {
-            String::new()
-        }
+    let (dev_key, dev_secret) = if s3_endpoint.is_some() {
+        (
+            "GK1c7374dda8bf9b67e1ed2022",
+            "b64c22af0c1f051c482b80d9cbde6751304fd0d084a565d2a5fb0342021899ca",
+        )
+    } else {
+        ("", "")
     };
-    let access_key = std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| default_cred());
-    let secret_key = std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| default_cred());
+    let access_key = std::env::var("AWS_ACCESS_KEY_ID").unwrap_or_else(|_| dev_key.to_owned());
+    let secret_key =
+        std::env::var("AWS_SECRET_ACCESS_KEY").unwrap_or_else(|_| dev_secret.to_owned());
     s3_config = s3_config.credentials_provider(aws_sdk_s3::config::Credentials::new(
         access_key,
         secret_key,

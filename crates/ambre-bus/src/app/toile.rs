@@ -1137,7 +1137,7 @@ pub struct ClipMembership {
 /// Self-contained, id-free snapshot of a selection produced by `CopyElements`
 /// (`toile-clipboard`). Portable across boards and sessions (postcard
 /// round-trips for the OS clipboard). The payload names media by content hash
-/// only, and the blobs stay on MinIO (`toile-media`). A `doc_embed` copies the
+/// only, and the blobs stay in the object store (`toile-media`). A `doc_embed` copies the
 /// same `document_id`, that is a second reference to the one nested document,
 /// not a clone.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

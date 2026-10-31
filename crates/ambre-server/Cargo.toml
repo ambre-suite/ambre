@@ -8,7 +8,7 @@ description = "Blind Relay server for Ambre - Axum, PostgreSQL, Redis, S3"
 [features]
 test-helpers = []
 # `db` flips the `cfg_attr(not(feature = "db"), ignore = ...)` gate off so the
-# server integration tests (postgres / redis / minio) actually run. Requires the
+# server integration tests (postgres / redis / garage) actually run. Requires the
 # backing services (`just services-up`); `#[sqlx::test]` provisions an ephemeral
 # database per test. Pure marker feature -- it gates test attributes only.
 db = []

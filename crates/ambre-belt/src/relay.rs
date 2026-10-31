@@ -51,14 +51,18 @@ impl Relay {
             )
             // The relay reads its object store keys from the AWS variables. An
             // AWS profile in the shell would sign the uploads with a key the
-            // local store refuses, so the belt names the store's own keys.
+            // local store refuses, so the belt names the store's own keys. They
+            // are the dev key of `scripts/garage_init.sh`.
             .env(
                 "AWS_ACCESS_KEY_ID",
-                belt_var("BELT_S3_ACCESS_KEY", "minioadmin"),
+                belt_var("BELT_S3_ACCESS_KEY", "GK1c7374dda8bf9b67e1ed2022"),
             )
             .env(
                 "AWS_SECRET_ACCESS_KEY",
-                belt_var("BELT_S3_SECRET_KEY", "minioadmin"),
+                belt_var(
+                    "BELT_S3_SECRET_KEY",
+                    "b64c22af0c1f051c482b80d9cbde6751304fd0d084a565d2a5fb0342021899ca",
+                ),
             )
             .stdout(Stdio::null())
             .stderr(if std::env::var_os("BELT_VERBOSE").is_some() {

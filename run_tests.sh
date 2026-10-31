@@ -55,7 +55,7 @@ run_native() {
 }
 
 run_db() {
-    echo ">> test-db (postgres/redis/minio)"
+    echo ">> test-db (postgres/redis/garage)"
     load_env
     just services-up
     # Tear services down on exit (success or failure) unless KEEP_SERVICES=1.

@@ -8,7 +8,7 @@
 # Tiers (architecture spec section 4 "Test tiering"):
 #   native -- pure Rust on the native x86_64 target, zero external dependency
 #             (default tier; the spec calls this the "host" tier).
-#   db     -- server integration behind the `db` Cargo feature (postgres/redis/minio).
+#   db     -- server integration behind the `db` Cargo feature (postgres/redis/garage).
 #   wasm   -- `cfg(target_arch = "wasm32")` surfaces via headless Chrome.
 
 # List recipes.
@@ -174,8 +174,8 @@ size:
 # not even compile under `--features db` alone. 156 tests were collected where
 # 162 exist.
 
-# db tier: server integration tests (needs postgres/redis/minio). S3_ENDPOINT
-# defaults to the minio of `services-up`; the media round trip fails without it.
+# db tier: server integration tests (needs postgres/redis/garage). S3_ENDPOINT
+# defaults to the garage of `services-up`; the media round trip fails without it.
 test-db:
     S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9000}" cargo test -p ambre-server --features db,test-helpers
 
@@ -490,9 +490,18 @@ deny:
 fuzz seconds="60":
     cd fuzz && for target in wire_decode docfile formula markdown sealed trame_file toile_file; do cargo fuzz run "$target" -- -max_total_time={{seconds}} -rss_limit_mb=2048 || exit 1; done
 
-# Local convenience: bring the db-tier backing services up.
+# Local convenience: bring the db-tier backing services up, the object store
+# prepared.
 services-up:
-    docker compose up -d postgres redis minio
+    docker compose up -d postgres redis
+    just garage-up
+
+# The object store alone: the Garage of `docker-compose.yml`, with its layout,
+# the dev key, the bucket and the CORS rule (`scripts/garage_init.sh`). CI runs
+# this recipe; postgres and redis are services there.
+garage-up:
+    docker compose up -d garage
+    bash scripts/garage_init.sh
 
 # Local convenience: tear the db-tier backing services down.
 services-down:

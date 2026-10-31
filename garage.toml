@@ -1,0 +1,19 @@
+# The object store of the local stack and of the test tiers (`docker-compose.yml`,
+# CI): one Garage node holding one copy of each block. `scripts/garage_init.sh`
+# gives it its layout, the dev key and the bucket. The secret below guards
+# nothing; never reuse it in a deployment.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+
+# IPv4: a Docker network without IPv6 cannot bind `[::]`, and the node panics.
+rpc_bind_addr = "0.0.0.0:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "0c04acaf6a2a9b0e53d83873bed6b55b9d640cdbcd9e121f5a68103fcd0fd704"
+
+[s3_api]
+# The relay and the test helpers sign for this region.
+s3_region = "us-east-1"
+api_bind_addr = "0.0.0.0:3900"
+root_domain = ".s3.garage.localhost"

@@ -226,10 +226,10 @@ jobs:
   # Image tags are kept in sync with `docker-compose.yml` (the dev source of
   # truth) so a test never passes on one Postgres/Redis and fails on another.
   #
-  # minio is started by a step, not declared as a service: a service container
-  # cannot pass the image its `server /data` argument. The media round trip
-  # (`SYNC-139`) puts a blob through it and reads it back; `just test-db`
-  # points the suite at it through S3_ENDPOINT.
+  # Garage is started by a step, not declared as a service: a service container
+  # starts before the checkout, so it cannot mount `garage.toml`. The media
+  # round trip (`SYNC-139`) puts a blob through it and reads it back;
+  # `just test-db` points the suite at it through S3_ENDPOINT.
   # ---------------------------------------------------------------------------
   test-db:
     runs-on: ubuntu-latest
@@ -273,19 +273,9 @@ jobs:
           # Only the default branch writes caches; feature branches restore
           # from main without consuming the shared 10 GB budget (avoids eviction).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      # Same image and root user as docker-compose.yml. The test creates the
-      # bucket it needs.
-      - name: Start minio
-        run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            cgr.dev/chainguard/minio:latest server /data
-          for _ in $(seq 1 30); do
-            curl -sf http://localhost:9000/minio/health/live && exit 0
-            sleep 1
-          done
-          docker logs minio
-          exit 1
+      # The garage of docker-compose.yml, prepared by `scripts/garage_init.sh`.
+      - name: Start garage
+        run: just garage-up
       - run: just test-db
 
   # ---------------------------------------------------------------------------
@@ -340,23 +330,10 @@ jobs:
           # Only the default branch writes caches; feature branches restore
           # from main without consuming the shared 10 GB budget (avoids eviction).
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      # Same image and root user as docker-compose.yml. The relay stores media
-      # in the bucket, and creates none.
-      - name: Start minio
-        run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            cgr.dev/chainguard/minio:latest server /data
-          for _ in $(seq 1 30); do
-            if curl -sf http://localhost:9000/minio/health/live; then
-              AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin \
-                aws --endpoint-url http://localhost:9000 s3 mb s3://ambre-dev
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs minio
-          exit 1
+      # The garage of docker-compose.yml, prepared by `scripts/garage_init.sh`.
+      # The relay stores media in the bucket, and creates none.
+      - name: Start garage
+        run: just garage-up
       - run: just test-browser
         env:
           CHROMEDRIVER: ${{ steps.chrome.outputs.chromedriver-path }}

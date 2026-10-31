@@ -146,7 +146,7 @@ pub fn offline_s3(endpoint: Option<&str>) -> aws_sdk_s3::Client {
 
 /// The object store of the database tier, and its bucket, which this call
 /// creates when it is missing. `S3_ENDPOINT` names the store. The credentials
-/// and the bucket default to those of the local stack, `docker-compose.yml`.
+/// and the bucket default to those of the local stack, `scripts/garage_init.sh`.
 ///
 /// A run with no `S3_ENDPOINT` fails, so the tier cannot pass without a store.
 pub async fn storage_service() -> (aws_sdk_s3::Client, crate::s3::BucketName) {
@@ -157,8 +157,11 @@ pub async fn storage_service() -> (aws_sdk_s3::Client, crate::s3::BucketName) {
         .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
         .region(aws_sdk_s3::config::Region::new("us-east-1"))
         .credentials_provider(aws_sdk_s3::config::Credentials::new(
-            env("AWS_ACCESS_KEY_ID", "minioadmin"),
-            env("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+            env("AWS_ACCESS_KEY_ID", "GK1c7374dda8bf9b67e1ed2022"),
+            env(
+                "AWS_SECRET_ACCESS_KEY",
+                "b64c22af0c1f051c482b80d9cbde6751304fd0d084a565d2a5fb0342021899ca",
+            ),
             None,
             None,
             "db-tier",
