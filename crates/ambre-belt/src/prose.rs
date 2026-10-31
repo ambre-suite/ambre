@@ -4,7 +4,7 @@
 mod tests {
     use std::sync::Arc;
 
-    use serde_json::json;
+    use serde_json::{Value, json};
 
     use crate::page::{Page, STEP, drag};
     use crate::relay::Relay;
@@ -24,6 +24,23 @@ mod tests {
             .await;
     }
 
+    /// Waits until the status bar counts `figure`, such as "17 with spaces".
+    /// The Logic thread sends the count of the document it holds, so the
+    /// figure says that a typed or loaded text has reached it.
+    async fn wait_counted(page: &Page, figure: &str) {
+        let figure = Value::String(figure.to_owned());
+        page.browser
+            .wait_for(
+                &format!("the count {figure}"),
+                &format!(
+                    "return [...document.querySelectorAll('.ambre-statusbar .stat')] \
+                       .some(s => s.textContent === {figure});"
+                ),
+                STEP,
+            )
+            .await;
+    }
+
     /// `PROSE-IO-056`: a Markdown export of a typed paragraph lands in the
     /// browser's download directory, holding that paragraph.
     #[tokio::test(flavor = "multi_thread")]
@@ -34,6 +51,7 @@ mod tests {
     async fn a_markdown_export_reaches_the_download_directory() {
         let page = Page::new_document("prose").await;
         write(&page, "Hello from the belt").await;
+        wait_counted(&page, "19 with spaces").await;
         page.command("Export to Markdown (.md)").await;
         let (name, bytes) = page.download().await;
         let text = String::from_utf8(bytes).expect("Markdown is text");
@@ -51,6 +69,8 @@ mod tests {
     async fn a_native_prose_file_opens_from_the_home_screen() {
         let author = Page::new_document("prose").await;
         write(&author, "Carried in a file").await;
+        // The save must not outrun the keys it carries.
+        wait_counted(&author, "17 with spaces").await;
         author
             .command("Save to a file (.ambre, not encrypted)")
             .await;
@@ -80,6 +100,9 @@ mod tests {
             )
             .await;
         reader.wait_canvas().await;
+        // A laid-out canvas is not yet a loaded file: the export waits until
+        // the opened paragraph is there.
+        wait_counted(&reader, "17 with spaces").await;
 
         reader.command("Export to Markdown (.md)").await;
         let (_, bytes) = reader.download().await;
