@@ -71,7 +71,7 @@ pub(crate) fn mount_shell(
     present_toile: RwSignal<PresentMode>,
     presenter_slide: RwSignal<SlidePosition>,
     presenter_notes: RwSignal<String>,
-    presenter_frame: RwSignal<Option<Id<Element>>>,
+    presenter_frame: RwSignal<Option<Id<Frame>>>,
     broadcasting_toile: RwSignal<Broadcast>,
     following_toile: RwSignal<Option<Id<User>>>,
     presenter_peer_toile: RwSignal<Option<Id<User>>>,

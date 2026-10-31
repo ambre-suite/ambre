@@ -972,10 +972,7 @@ impl ToileState {
         let (frame, notes) = self.active_notes()?;
         match before {
             Some((f, n)) if *f == frame && *n == notes => None,
-            _ => Some(ToileEvent::NotesChanged {
-                frame: frame.into(),
-                notes,
-            }),
+            _ => Some(ToileEvent::NotesChanged { frame, notes }),
         }
     }
 

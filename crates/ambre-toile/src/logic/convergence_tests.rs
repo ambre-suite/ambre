@@ -3584,11 +3584,7 @@ fn slide_change_carries_count_frame_and_notes() {
         2,
         "the whole deck length drives the k / n counter"
     );
-    assert_eq!(
-        change.frame,
-        Some(b.clone().into()),
-        "the active slide's frame id"
-    );
+    assert_eq!(change.frame, Some(b.clone()), "the active slide's frame id");
     assert_eq!(
         change.notes, "Talk track for slide two",
         "the active slide's speaker notes seed the editor"
@@ -3596,7 +3592,7 @@ fn slide_change_carries_count_frame_and_notes() {
 
     // Stepping back to a note-less slide reports empty notes, not the stale ones.
     let change = slide_change(&st.handle_command(ToileCommand::PrevSlide));
-    assert_eq!(change.frame, Some(a.into()));
+    assert_eq!(change.frame, Some(a));
     assert!(
         change.notes.is_empty(),
         "a note-less slide carries empty notes"
@@ -3919,7 +3915,7 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
     });
     assert_eq!(
         reported,
-        Some((frame.into(), "open on the budget".to_owned())),
+        Some((frame, "open on the budget".to_owned())),
         "the note on screen moved and the panel was not told"
     );
 
@@ -4264,7 +4260,7 @@ fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
         out.display.iter().any(|e| matches!(
             e,
             ToileEvent::NotesChanged { frame, notes }
-                if *frame == Id::<Element>::from(f.clone()) && notes == "Dear Hello world!"
+                if *frame == f && notes == "Dear Hello world!"
         )),
         "the panel is told the merged note"
     );
@@ -5585,7 +5581,7 @@ fn replying_to_a_missing_thread_is_a_rejected_no_op() {
     assert!(
         out.display
             .iter()
-            .any(|e| matches!(e, ToileEvent::Error(ToileError::NoSuchElement(_)))),
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::NoSuchThread(_)))),
     );
 }
 

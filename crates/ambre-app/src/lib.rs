@@ -47,7 +47,7 @@ use ambre_chrome::{
     AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
     Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
 };
-use ambre_core::id::{Document, Element, Id, User};
+use ambre_core::id::{Document, Frame, Id, User};
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
 // for every Trame concern -- it names no command, button, or event variant itself.
@@ -654,7 +654,7 @@ pub fn main() {
     let present_toile = RwSignal::new(PresentMode::Editing);
     let presenter_slide = RwSignal::new(SlidePosition::default());
     let presenter_notes = RwSignal::new(String::new());
-    let presenter_frame = RwSignal::new(None::<Id<Element>>);
+    let presenter_frame = RwSignal::new(None::<Id<Frame>>);
     // "Follow presenter" role signals (toile-presentation), mirrored from the
     // `PresentBroadcastChanged` / `FollowingChanged` events and from a peer's
     // broadcasting presence. `presenter_peer_toile` is the latest peer seen

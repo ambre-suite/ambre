@@ -118,7 +118,9 @@ impl ToileState {
     }
 
     /// The frame `id` names, or `None` when no element carries `id` or the
-    /// element is not a frame. The one place an element id becomes a frame id.
+    /// element is not a frame. The one checked conversion from an element id
+    /// to a frame id. `Id::<Frame>::from_text` decodes a stored text, and the
+    /// engine checks the kind again where that id lands.
     pub fn frame(&self, id: &Id<Element>) -> Option<Id<Frame>> {
         self.is_frame(id)
             .then(|| Id::<Frame>::from_text(id.as_str().to_owned()))
@@ -299,7 +301,7 @@ impl ToileState {
                 .as_ref()
                 .and_then(|f| self.notes(f))
                 .unwrap_or_default(),
-            frame: frame.map(Into::into),
+            frame,
             transition: self.transition(),
         }
     }
@@ -423,7 +425,7 @@ impl ToileState {
             self.doc.commit();
             // The panel shows `typed`, and the note is now `merged`.
             let told = (merged != typed).then(|| ToileEvent::NotesChanged {
-                frame: element.clone(),
+                frame: frame.clone(),
                 notes: merged,
             });
             return self.emit_with_update(told.into_iter().collect());

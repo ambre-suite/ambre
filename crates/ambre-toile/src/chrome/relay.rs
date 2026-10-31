@@ -42,7 +42,7 @@ pub struct ToileRelay {
     /// The speaker notes of the slide on screen.
     pub presenter_notes: RwSignal<String>,
     /// The frame those notes belong to.
-    pub presenter_frame: RwSignal<Option<Id<Element>>>,
+    pub presenter_frame: RwSignal<Option<Id<Frame>>>,
     /// Whether this client broadcasts its playback position.
     pub broadcasting: RwSignal<Broadcast>,
     /// The presenter this client follows, if any.
@@ -66,12 +66,8 @@ impl ToileRelay {
                 PresenterIntent::Next => ToileCommand::NextSlide,
                 PresenterIntent::Exit => ToileCommand::ExitPresent,
                 // A note edit lands on the frame the last slide event named.
-                // The slide event carries it as an element id; the engine
-                // checks the kind when the edit lands.
                 PresenterIntent::EditNotes { base, delta } => ToileCommand::EditNotes {
-                    frame: Id::<Frame>::from_text(
-                        self.presenter_frame.get_untracked()?.as_str().to_owned(),
-                    ),
+                    frame: self.presenter_frame.get_untracked()?,
                     base,
                     delta,
                 },

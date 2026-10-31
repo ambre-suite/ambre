@@ -44,7 +44,7 @@ use ambre_core::id::{Element, Id, Thread, User};
 
 use crate::logic::command::{
     CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread, TextDelta,
-    ThreadMessageIndex, ToileEvent, ToileOutcome, Viewport,
+    ThreadMessageIndex, ToileError, ToileEvent, ToileOutcome, Viewport,
 };
 use ambre_bus::app::toile::ThreadMessageCount;
 
@@ -358,10 +358,11 @@ impl ToileState {
         ToileOutcome::display_only(events)
     }
 
-    /// The error for a thread that does not exist. The bus has no thread
-    /// variant, so the error names the thread by its text, as before.
+    /// The error for a thread that does not exist.
     fn err_no_thread(&self, thread: &Id<Thread>) -> ToileOutcome {
-        self.err_no_element(&Id::<Element>::from_text(thread.as_str().to_owned()))
+        ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NoSuchThread(
+            thread.clone(),
+        ))])
     }
 
     /// The thread's map container, or `None` when no thread carries `id`.

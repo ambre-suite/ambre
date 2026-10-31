@@ -39,8 +39,9 @@
 //! let uuid: ambre_core::Uuid = Id::<Document>::mint().into();
 //! ```
 //!
-//! A frame becomes its element for free, but an element never becomes a frame
-//! without the board:
+//! A frame becomes its element for free, but no conversion turns an element
+//! into a frame. The board checks that way, and a decode of stored text is
+//! checked again where the id lands:
 //!
 //! ```compile_fail
 //! use ambre_core::id::{Element, Frame, Id};
@@ -257,6 +258,7 @@ impl<E: Entity<Repr = String>> Id<E> {
     }
 
     /// Wraps a text read back from the document, which minted it earlier.
+    /// The kind is not checked here: the engine checks it where the id lands.
     pub fn from_text(text: String) -> Self {
         Self::from_raw(text)
     }
@@ -429,8 +431,8 @@ impl Entity for Connector {
 }
 
 /// A Toile frame: an element of type `frame`, as a presentation sequence names
-/// it. An `Id<Frame>` becomes an `Id<Element>` for free. The way back goes
-/// through the board, which checks that the element is a frame.
+/// it. An `Id<Frame>` becomes an `Id<Element>` for free. No conversion goes
+/// back: the board answers the frame of an element only when it is one.
 pub enum Frame {}
 impl sealed::Sealed for Frame {}
 impl Entity for Frame {

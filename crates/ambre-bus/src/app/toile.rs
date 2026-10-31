@@ -1827,10 +1827,10 @@ pub struct SlideChange {
     /// when the slide has no resolvable frame (dangling id), leaving the camera
     /// where it is.
     pub to_rect: Option<Rect>,
-    /// The new active frame's element id, or `None` when the slide has no
-    /// resolvable frame (dangling id / empty deck). The presenter panel uses it
-    /// as the target of `EditNotes`.
-    pub frame: Option<Id<Element>>,
+    /// The new active frame, or `None` when the slide has no resolvable frame
+    /// (dangling id / empty deck). The presenter panel uses it as the target
+    /// of `EditNotes`.
+    pub frame: Option<Id<Frame>>,
     /// The new active frame's speaker notes as plain text, seeding the presenter
     /// panel's editor (`toile-presentation`). Empty when the frame has no
     /// notes yet or is absent.
@@ -2621,6 +2621,8 @@ pub enum ToileError {
     NoSuchElement(Id<Element>),
     #[error("connector {} not found", .0.as_str())]
     NoSuchConnector(Id<Connector>),
+    #[error("comment thread {} not found", .0.as_str())]
+    NoSuchThread(Id<Thread>),
     #[error("{} cannot be created via CreateElement", .kind.type_tag())]
     NotCreatable { kind: ElementKind },
     #[error("InitContent does not match the requested element kind")]
@@ -2651,6 +2653,7 @@ impl fmt::Debug for ToileError {
         match self {
             Self::NoSuchElement(id) => f.debug_tuple("NoSuchElement").field(id).finish(),
             Self::NoSuchConnector(id) => f.debug_tuple("NoSuchConnector").field(id).finish(),
+            Self::NoSuchThread(id) => f.debug_tuple("NoSuchThread").field(id).finish(),
             Self::NotCreatable { kind } => {
                 f.debug_struct("NotCreatable").field("kind", kind).finish()
             }
@@ -2821,7 +2824,7 @@ pub enum ToileEvent {
     /// the whole note, because the presenter panel's editor holds a body and
     /// not a position. Emitted only when the text actually differs.
     NotesChanged {
-        frame: Id<Element>,
+        frame: Id<Frame>,
         notes: String,
     },
     /// A foreign-file import applied successfully
@@ -3266,7 +3269,7 @@ mod tests {
             format!(
                 "{:?}",
                 ToileEvent::NotesChanged {
-                    frame: id.clone(),
+                    frame: frame_id.clone(),
                     notes: secret.clone(),
                 }
             ),

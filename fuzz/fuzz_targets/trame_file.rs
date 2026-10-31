@@ -3,8 +3,9 @@
 //! container, so the input reaches the schema gate and the CRDT engine.
 #![no_main]
 
+use ambre_core::id::{Document, Id};
 use ambre_core::{
-    DeltaBytes, DocType, DocumentId, FileBytes, SnapshotBytes, Uuid, docfile::write_ambre_plaintext,
+    DeltaBytes, DocType, FileBytes, SnapshotBytes, Uuid, docfile::write_ambre_plaintext,
 };
 use ambre_trame::{Col, HeaderRow, Row, TrameCommand, TrameState};
 use libfuzzer_sys::fuzz_target;
@@ -21,7 +22,7 @@ fuzz_target!(|data: &[u8]| {
     });
     let file = write_ambre_plaintext(
         DocType::Trame,
-        DocumentId::from_uuid(Uuid::from_bytes([7; 16])),
+        Id::<Document>::from_uuid(Uuid::from_bytes([7; 16])),
         &SnapshotBytes::new(data.to_vec()),
     );
     let _ = TrameState::new().import_ambre_plaintext(&file);
