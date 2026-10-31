@@ -101,7 +101,7 @@ impl Update {
     /// [`ValidationError::EmptyCiphertext`] on an empty ciphertext, and
     /// [`ValidationError::ZeroClock`] on a clock of 0, which no author writes.
     pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.ciphertext.0.is_empty() {
+        if self.ciphertext.as_bytes().is_empty() {
             return Err(ValidationError::EmptyCiphertext);
         }
         if self.public_data.clock.0 == 0 {
@@ -145,7 +145,7 @@ impl Snapshot {
     /// [`ValidationError::DuplicatePublicKey`] when an author appears twice in
     /// `parent_snapshot_update_clocks`.
     pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.ciphertext.0.is_empty() {
+        if self.ciphertext.as_bytes().is_empty() {
             return Err(ValidationError::EmptyCiphertext);
         }
         let mut seen = HashSet::new();
@@ -187,7 +187,7 @@ impl Ephemeral {
     /// [`ValidationError::EmptyCiphertext`] on an empty ciphertext, and
     /// [`ValidationError::ZeroCounter`] on a counter of 0.
     pub fn validate(&self) -> Result<(), ValidationError> {
-        if self.ciphertext.0.is_empty() {
+        if self.ciphertext.as_bytes().is_empty() {
             return Err(ValidationError::EmptyCiphertext);
         }
         if self.public_data.counter.0 == 0 {
@@ -217,7 +217,7 @@ mod validate_tests {
 
     fn update(cipher: Vec<u8>, clock: u64) -> Update {
         Update {
-            ciphertext: Ciphertext(cipher),
+            ciphertext: Ciphertext::new(cipher),
             nonce: FixedBytes::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: Id::from_bytes([1u8; 16]),
@@ -233,7 +233,7 @@ mod validate_tests {
 
     fn ephemeral(cipher: Vec<u8>, counter: u64) -> Ephemeral {
         Ephemeral {
-            ciphertext: Ciphertext(cipher),
+            ciphertext: Ciphertext::new(cipher),
             nonce: FixedBytes::from_array([0u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: Id::from_bytes([1u8; 16]),
@@ -308,7 +308,7 @@ mod validate_tests {
         clocks: Vec<(FixedBytes<PublicKey>, Clock)>,
     ) -> Snapshot {
         Snapshot {
-            ciphertext: Ciphertext(cipher),
+            ciphertext: Ciphertext::new(cipher),
             nonce: FixedBytes::from_array([0u8; 24]),
             public_data: SnapshotPublicData {
                 document_id: Id::from_bytes([1u8; 16]),

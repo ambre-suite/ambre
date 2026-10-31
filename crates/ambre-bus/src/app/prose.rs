@@ -213,7 +213,7 @@ impl BlockId {
 
 impl fmt::Display for BlockId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}@{}", self.counter.0, self.peer)
+        write!(f, "{}@{}", self.counter.get(), self.peer)
     }
 }
 
@@ -2322,7 +2322,7 @@ pub enum InteropError {
     #[error("the file could not be read: {0}")]
     ParseFailed(String),
     /// The file is larger than a conversion accepts.
-    #[error("the file is too large to import ({} bytes)", .0.0)]
+    #[error("the file is too large to import ({} bytes)", .0.get())]
     TooLarge(ambre_core::ByteSize),
 }
 
@@ -2974,10 +2974,10 @@ mod tests {
     fn a_parse_failure_prints_the_length_of_its_reason_alone() {
         let failed = InteropError::ParseFailed("near 'Q3 layoffs'".to_owned());
         assert_eq!(format!("{failed:?}"), "ParseFailed(17 chars)");
-        let large = InteropError::TooLarge(ambre_core::ByteSize(9));
+        let large = InteropError::TooLarge(ambre_core::ByteSize::new(9));
         assert_eq!(
             format!("{large:?}"),
-            format!("TooLarge({:?})", ambre_core::ByteSize(9))
+            format!("TooLarge({:?})", ambre_core::ByteSize::new(9))
         );
     }
 
@@ -3061,7 +3061,7 @@ mod tests {
     #[test]
     fn an_authored_text_prints_its_length_alone() {
         let secret = "Q3 layoffs".to_owned();
-        let block_id = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
+        let block_id = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let pos = DocOffset::ZERO;
         let now = ambre_core::Timestamp::default();
         let comment_id = Id::<Comment>::mint();
@@ -3201,7 +3201,7 @@ mod tests {
     #[test]
     fn presence_is_not_a_mutation() {
         let pos = CursorPosition {
-            block_id: BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0)),
+            block_id: BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0)),
             offset: DocOffset::ZERO,
             anchor: None,
         };
@@ -3209,7 +3209,7 @@ mod tests {
         assert!(!ProseCommand::Noop.is_mutating());
         assert!(
             ProseCommand::SplitBlock {
-                block_id: BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0)),
+                block_id: BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0)),
                 pos: DocOffset::ZERO
             }
             .is_mutating()

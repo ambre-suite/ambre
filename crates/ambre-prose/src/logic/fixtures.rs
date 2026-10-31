@@ -48,8 +48,12 @@ impl ProseState {
             // `u64::MAX` is never a peer: without a scaffolding identity,
             // nothing is subtracted.
             peers: fixture_peer_count(
-                self.doc.oplog_vv().keys().copied().map(ambre_core::PeerId),
-                super::scaffold_identity().unwrap_or(ambre_core::PeerId(u64::MAX)),
+                self.doc
+                    .oplog_vv()
+                    .keys()
+                    .copied()
+                    .map(ambre_core::PeerId::new),
+                super::scaffold_identity().unwrap_or(ambre_core::PeerId::new(u64::MAX)),
             ),
             body: ShapeBody::Prose { blocks, characters },
         }
@@ -347,7 +351,7 @@ impl FixtureGen for ProseFixture {
 const AUTHOR_SEED: FixtureSeed = FixtureSeed::new(0x5EED_9905_A117_0001);
 
 /// The comment's clock, pinned: a real one would differ run to run.
-const COMMENT_AT: ambre_core::Timestamp = ambre_core::Timestamp(1_700_000_000_000);
+const COMMENT_AT: ambre_core::Timestamp = ambre_core::Timestamp::new(1_700_000_000_000);
 
 /// Why the fixture document was not built.
 #[derive(Debug)]
@@ -566,7 +570,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         ProseCommand::ReplyToComment {
             comment_id: thread,
             text: "Net.".to_owned(),
-            now: COMMENT_AT.plus(ambre_core::Millis(60_000)),
+            now: COMMENT_AT.plus(ambre_core::Millis::new(60_000)),
         },
     )?;
     Ok(state)
@@ -583,7 +587,8 @@ mod tests {
 
     #[test]
     fn the_shape_counts_the_blocks_and_the_characters() {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(7)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(7)).expect("a document is built");
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
@@ -603,8 +608,10 @@ mod tests {
 
     #[test]
     fn two_documents_holding_the_same_content_dump_alike() {
-        let mut first = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
-        let mut second = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
+        let mut first =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+        let mut second =
+            ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
         for state in [&mut first, &mut second] {
             let block = state.root_blocks()[0];
             state.handle_command(ProseCommand::InsertText {

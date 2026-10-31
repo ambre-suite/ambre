@@ -639,7 +639,7 @@ pub async fn take_finalize_lease(
                     retry_in: terms.pending_retry,
                 });
             };
-            let stored = i64::try_from(seq.0)
+            let stored = i64::try_from(seq.get())
                 .map_err(|_| AppError::Internal("delta number out of range".into()))?;
             sqlx::query("UPDATE channel_documents SET horizon = $2 WHERE document_id = $1")
                 .bind(document)
@@ -983,7 +983,7 @@ pub async fn commit_fold(
     let conflict = |detail: &str| AppError::Conflict {
         detail: detail.into(),
     };
-    let seq = i64::try_from(amendments_seq.0)
+    let seq = i64::try_from(amendments_seq.get())
         .map_err(|_| conflict("the delta number is out of range"))?;
     let mut tx = pool.begin().await?;
     let row: Option<FoldCommitRow> = sqlx::query_as(
@@ -1094,10 +1094,10 @@ pub async fn settle_fold(
     tx.commit().await?;
     Ok(Some(SettledFold {
         amendments: uuid_row_to_id(amendments),
-        folded_seq: ambre_core::Seq(folded_seq.unwrap_or(0).unsigned_abs()),
+        folded_seq: ambre_core::Seq::new(folded_seq.unwrap_or(0).unsigned_abs()),
         dropped_keys: dropped_keys
             .into_iter()
-            .map(ambre_core::ObjectKey)
+            .map(ambre_core::ObjectKey::new)
             .collect(),
     }))
 }

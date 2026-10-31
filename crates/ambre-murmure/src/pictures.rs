@@ -17,7 +17,7 @@ use crate::Region;
 
 /// The bytes the page holds decoded (`ambre-spec-budgets.md section 6`).
 /// Past it, the pictures painted longest ago go, never one on screen.
-pub const PICTURES_MAX_SIZE: ByteSize = ByteSize(16 * 1024 * 1024);
+pub const PICTURES_MAX_SIZE: ByteSize = ByteSize::new(16 * 1024 * 1024);
 
 /// The types the Logic thread decodes for a preview. Any other file shows
 /// as its chip alone.
@@ -101,7 +101,7 @@ impl Pictures {
     pub fn new(cap: ByteSize) -> Self {
         Self {
             held: HashMap::new(),
-            bytes: ByteSize(0),
+            bytes: ByteSize::new(0),
             cap,
             paint: Generation::ZERO,
             screens: Screens::default(),
@@ -214,17 +214,17 @@ pub fn frame_at(
     now: ambre_core::PageTime,
     motion: Motion,
 ) -> (FrameIndex, Option<ambre_core::PageTime>) {
-    let total: u64 = picture.frames.iter().map(|f| f.delay.0).sum();
+    let total: u64 = picture.frames.iter().map(|f| f.delay.get()).sum();
     if motion == Motion::Reduced || picture.frames.len() < 2 || total == 0 {
         return (FrameIndex::ZERO, None);
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let at = now.0.max(0.0) as u64 % total;
+    let at = now.get().max(0.0) as u64 % total;
     let mut until = 0;
     for (i, frame) in picture.frames.iter().enumerate() {
-        until += frame.delay.0;
+        until += frame.delay.get();
         if at < until {
-            let due = ambre_core::Millis(until - at).to_page_millis();
+            let due = ambre_core::Millis::new(until - at).to_page_millis();
             return (FrameIndex::from_usize(i), Some(now.after(due)));
         }
     }
@@ -260,7 +260,7 @@ mod tests {
                 .iter()
                 .map(|&delay| PictureFrame {
                     pixels: vec![0; bytes].into(),
-                    delay: ambre_core::Millis(u64::from(delay)),
+                    delay: ambre_core::Millis::new(u64::from(delay)),
                 })
                 .collect(),
         }
@@ -272,20 +272,20 @@ mod tests {
     fn the_clock_picks_the_frame_and_names_the_next() {
         let gif = picture(&[100, 50, 50], 4);
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime(0.0), Motion::Full),
-            (FrameIndex::new(0), Some(ambre_bus::PageTime(100.0)))
+            frame_at(&gif, ambre_bus::PageTime::new(0.0), Motion::Full),
+            (FrameIndex::new(0), Some(ambre_bus::PageTime::new(100.0)))
         );
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime(120.0), Motion::Full),
-            (FrameIndex::new(1), Some(ambre_bus::PageTime(150.0)))
+            frame_at(&gif, ambre_bus::PageTime::new(120.0), Motion::Full),
+            (FrameIndex::new(1), Some(ambre_bus::PageTime::new(150.0)))
         );
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime(199.0), Motion::Full),
-            (FrameIndex::new(2), Some(ambre_bus::PageTime(200.0)))
+            frame_at(&gif, ambre_bus::PageTime::new(199.0), Motion::Full),
+            (FrameIndex::new(2), Some(ambre_bus::PageTime::new(200.0)))
         );
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime(230.0), Motion::Full),
-            (FrameIndex::new(0), Some(ambre_bus::PageTime(300.0))),
+            frame_at(&gif, ambre_bus::PageTime::new(230.0), Motion::Full),
+            (FrameIndex::new(0), Some(ambre_bus::PageTime::new(300.0))),
             "it loops"
         );
     }
@@ -296,11 +296,15 @@ mod tests {
     fn reduced_motion_holds_the_first_frame() {
         let gif = picture(&[100, 50], 4);
         assert_eq!(
-            frame_at(&gif, ambre_bus::PageTime(120.0), Motion::Reduced),
+            frame_at(&gif, ambre_bus::PageTime::new(120.0), Motion::Reduced),
             (FrameIndex::ZERO, None)
         );
         assert_eq!(
-            frame_at(&picture(&[0], 4), ambre_bus::PageTime(120.0), Motion::Full),
+            frame_at(
+                &picture(&[0], 4),
+                ambre_bus::PageTime::new(120.0),
+                Motion::Full
+            ),
             (FrameIndex::ZERO, None)
         );
     }
@@ -319,7 +323,7 @@ mod tests {
     /// is held, so it is not asked again.
     #[test]
     fn a_picture_is_asked_once_and_lands_once() {
-        let mut shelf = Pictures::new(ByteSize(1024));
+        let mut shelf = Pictures::new(ByteSize::new(1024));
         shelf.begin_paint(Region::Channel);
         let (a, b) = (file('a'), file('b'));
         assert!(shelf.want(&a));
@@ -340,7 +344,7 @@ mod tests {
     /// one the last paint of a screen drew.
     #[test]
     fn past_the_cap_the_coldest_picture_goes_and_none_on_screen() {
-        let mut shelf = Pictures::new(ByteSize(10));
+        let mut shelf = Pictures::new(ByteSize::new(10));
         let (a, b, c, d) = (file('a'), file('b'), file('c'), file('d'));
         shelf.begin_paint(Region::Channel);
         shelf.want(&a);
@@ -349,7 +353,7 @@ mod tests {
         shelf.want(&b);
         shelf.land(b.clone(), Some(picture(&[0], 6)));
         assert!(shelf.get(&a).is_none(), "the coldest went");
-        assert_eq!(shelf.bytes(), ByteSize(6));
+        assert_eq!(shelf.bytes(), ByteSize::new(6));
         shelf.want(&c);
         shelf.land(c.clone(), Some(picture(&[0], 6)));
         assert!(
@@ -368,7 +372,7 @@ mod tests {
     /// Only the types the Logic thread decodes preview.
     #[test]
     fn only_a_decoded_type_previews() {
-        let typed = |t: &str| previews(&MediaType(t.to_owned()));
+        let typed = |t: &str| previews(&MediaType::new(t.to_owned()));
         assert!(typed("image/gif") && typed(" IMAGE/PNG ") && typed("image/jpeg"));
         assert!(!typed("image/webp") && !typed("image/svg+xml") && !typed("text/html"));
     }

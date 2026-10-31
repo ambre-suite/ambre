@@ -90,15 +90,15 @@ an `Id<E>` of `ambre_core::id`. The types marked not
 built join with the feature that first writes them.
 
 ```rust
-pub struct Timestamp(pub u64);          // Unix milliseconds, display only: a clock is untrusted
+pub struct Timestamp(u64);              // Unix milliseconds, display only: a clock is untrusted
 pub struct Emoji(Cow<'static, str>);    // exactly one extended grapheme cluster
 pub(crate) struct ReactionKey(String);  // "{user} {emoji}": the first space ends the user
 pub enum ReactionEmoji { Unicode(Emoji), Custom(CustomEmojiId) }  // not built: custom emoji
 pub struct CustomEmojiId(Uuid);         // not built: minted by the admin's client
 pub struct TagId(Uuid);                 // not built: minted by the forum owner's client
 pub struct ImportOrigin { pub name: String, pub ts: Timestamp }  // not built
-pub struct MediaType(pub String);       // a lower-case type and subtype
-pub struct ByteSize(pub u64);
+pub struct MediaType(String);           // a lower-case type and subtype
+pub struct ByteSize(u64);
 pub struct SealedChannelKey(Vec<u8>);   // a channel key, sealed under the space key
 pub enum DocumentKind { Space, Meta, Segment, Amendments, Thread }
 pub enum ChannelType { Direct, Private, Public }

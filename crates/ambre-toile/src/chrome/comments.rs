@@ -230,7 +230,7 @@ pub fn CommentComposer(
 /// The wall clock a message carries, rendered for the reader. Nothing orders by
 /// it (`TOILE-FEAT-012`): it is shown and used for nothing else.
 fn clock_label(ts: ambre_core::Timestamp) -> String {
-    let date = js_sys::Date::new(&(ts.0 as f64).into());
+    let date = js_sys::Date::new(&(ts.get() as f64).into());
     date.to_locale_time_string("en-US")
         .as_string()
         .unwrap_or_default()

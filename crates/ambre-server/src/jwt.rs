@@ -65,7 +65,7 @@ impl std::fmt::Debug for JwtSeed {
 pub enum JwtSeedRefusal {
     #[error("JWT_SIGNING_SEED is not valid hex")]
     NotHex,
-    #[error("JWT_SIGNING_SEED must be 32 bytes (64 hex chars), not {}", .0.0)]
+    #[error("JWT_SIGNING_SEED must be 32 bytes (64 hex chars), not {}", .0.get())]
     Length(ambre_core::ByteSize),
 }
 
@@ -220,7 +220,7 @@ mod tests {
             sub: Id::<User>::parse_str("11111111-1111-7111-8111-111111111111").unwrap(),
             spk: Some(FixedBytes::from_array([0xab; 32])),
             iat,
-            exp: iat.plus(Seconds(900)),
+            exp: iat.plus(Seconds::new(900)),
         };
         let token = keys.mint(&claims).expect("mint");
         let decoded = keys.verify(&token).expect("verify");
@@ -240,10 +240,10 @@ mod tests {
         assert_eq!(format!("{seed:?}"), "JwtSeed([REDACTED])");
         assert_eq!(
             read("ab".repeat(31)).err(),
-            Some(JwtSeedRefusal::Length(ambre_core::ByteSize(31)))
+            Some(JwtSeedRefusal::Length(ambre_core::ByteSize::new(31)))
         );
         assert_eq!(
-            JwtSeedRefusal::Length(ambre_core::ByteSize(31)).to_string(),
+            JwtSeedRefusal::Length(ambre_core::ByteSize::new(31)).to_string(),
             "JWT_SIGNING_SEED must be 32 bytes (64 hex chars), not 31"
         );
         assert_eq!(read("zz".to_owned()).err(), Some(JwtSeedRefusal::NotHex));
@@ -256,12 +256,12 @@ mod tests {
     #[test]
     fn expired_token_is_rejected() {
         let keys = JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([9u8; 32]));
-        let iat = UnixSeconds(now().0 - 10_000);
+        let iat = UnixSeconds::new(now().get() - 10_000);
         let claims = Claims {
             sub: Id::<User>::mint(),
             spk: Some(FixedBytes::from_array([0x79; 32])),
             iat,
-            exp: iat.plus(Seconds(1)), // long past
+            exp: iat.plus(Seconds::new(1)), // long past
         };
         let token = keys.mint(&claims).expect("mint");
         assert!(keys.verify(&token).is_err());
@@ -277,7 +277,7 @@ mod tests {
                 sub: Id::<User>::mint(),
                 spk: Some(FixedBytes::from_array([0x70; 32])),
                 iat,
-                exp: iat.plus(Seconds(900)),
+                exp: iat.plus(Seconds::new(900)),
             })
             .expect("mint");
         assert!(b.verify(&token).is_err());

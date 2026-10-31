@@ -241,8 +241,8 @@ pub fn migration_peer(
     heads.sort_unstable();
     let mut hash = Fnv::new(b"ambre-schema-migration");
     for (peer, counter) in heads {
-        hash.feed(&peer.0.to_le_bytes());
-        hash.feed(&counter.0.to_le_bytes());
+        hash.feed(&peer.get().to_le_bytes());
+        hash.feed(&counter.get().to_le_bytes());
     }
     hash.peer()
 }
@@ -312,7 +312,7 @@ impl Fnv {
     /// The hash as a peer identity: never `u64::MAX`, which the CRDT engine
     /// reserves.
     fn peer(self) -> crate::PeerId {
-        crate::PeerId(if self.0 == u64::MAX {
+        crate::PeerId::new(if self.0 == u64::MAX {
             self.0 - 1
         } else {
             self.0
@@ -423,7 +423,7 @@ mod tests {
 
     /// The heads of a history, as a document reports them.
     fn heads<const N: usize>(ids: [(u64, i32); N]) -> [(crate::PeerId, crate::OpCounter); N] {
-        ids.map(|(peer, counter)| (crate::PeerId(peer), crate::OpCounter(counter)))
+        ids.map(|(peer, counter)| (crate::PeerId::new(peer), crate::OpCounter::new(counter)))
     }
 
     #[test]
@@ -443,7 +443,7 @@ mod tests {
         assert_eq!(migration_peer([]), migration_peer(Vec::new()));
         assert_eq!(
             migration_peer(heads([(1, 0)])),
-            crate::PeerId(0xe0f9_c7c0_c2dd_425e)
+            crate::PeerId::new(0xe0f9_c7c0_c2dd_425e)
         );
     }
 

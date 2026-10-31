@@ -211,7 +211,19 @@ impl std::fmt::Display for Opacity {
 /// The error of a decoded opacity that is not a finite number from 0 to 1.
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 #[error("an opacity is a finite number from 0 to 1, not {0}")]
-pub struct InvalidOpacity(pub f32);
+pub struct InvalidOpacity(f32);
+
+impl InvalidOpacity {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: f32) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+}
 
 impl TryFrom<f32> for Opacity {
     type Error = InvalidOpacity;

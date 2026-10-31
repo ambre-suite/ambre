@@ -175,7 +175,7 @@ impl LogicState {
         let after = self
             .read_cursors
             .get(&thread)
-            .map_or(Seq(0), |cursor| cursor.read);
+            .map_or(Seq::new(0), |cursor| cursor.read);
         self.watched_threads.insert(
             thread,
             WatchedThread {

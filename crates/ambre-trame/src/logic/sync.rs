@@ -57,9 +57,9 @@ fn write_entry(
         loro::CommitOptions::new().origin(ambre_core::crdt::CommitOrigin::Peers.as_str()),
     );
     doc.oplog_vv()
-        .get(&peer.0)
+        .get(&peer.get())
         .copied()
-        .map(ambre_core::OpCounter)
+        .map(ambre_core::OpCounter::new)
 }
 
 impl TrameState {
@@ -76,7 +76,7 @@ impl TrameState {
             if current
                 .get(&self.doc.peer_id())
                 .copied()
-                .map(ambre_core::OpCounter)
+                .map(ambre_core::OpCounter::new)
                 == Some(end)
             {
                 return None;
@@ -119,7 +119,7 @@ impl TrameState {
         entry: ambre_core::PeerEntry,
     ) -> bool {
         self.doc.commit();
-        if let Err(e) = self.doc.set_peer_id(peer.0) {
+        if let Err(e) = self.doc.set_peer_id(peer.get()) {
             tracing::error!("[Logic] the session identity was refused: {e:?}");
             return false;
         }

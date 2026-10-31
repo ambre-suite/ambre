@@ -243,15 +243,15 @@ mod tests {
             granted,
             Ok(LeaseAnswer::Granted {
                 lease,
-                horizon: ambre_bus::Seq(41),
-                expires_in: ambre_core::Millis(30_000)
+                horizon: ambre_bus::Seq::new(41),
+                expires_in: ambre_core::Millis::new(30_000)
             })
         );
         let deferred = take_lease(&transport, &auth, &root(), channel, segment).await;
         assert_eq!(
             deferred,
             Ok(LeaseAnswer::Deferred {
-                retry_in: ambre_core::Millis(86_400_000)
+                retry_in: ambre_core::Millis::new(86_400_000)
             })
         );
         let url = format!("{BASE}/api/channels/{channel}/segments/{segment}/lease");
@@ -288,7 +288,7 @@ mod tests {
             channel,
             segment,
             lease,
-            upload(document, ambre_bus::Seq(41)),
+            upload(document, ambre_bus::Seq::new(41)),
         )
         .await;
         assert_eq!(committed, Ok(()));

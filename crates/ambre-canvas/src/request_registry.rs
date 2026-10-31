@@ -130,7 +130,7 @@ mod tests {
     enum TestTag {}
     impl RequestTag for TestTag {
         type Event = ();
-        const DEFAULT_TIMEOUT: ambre_bus::Millis = ambre_bus::Millis(5000);
+        const DEFAULT_TIMEOUT: ambre_bus::Millis = ambre_bus::Millis::new(5000);
     }
 
     type TestRegistry = RequestRegistry<TestTag>;
@@ -139,8 +139,8 @@ mod tests {
     fn prepare_allocates_unique_ids() {
         // Not wasm, but ambre_bus::next_request() compiles and runs on the host too.
         let mut reg = TestRegistry::new();
-        let cmd1 = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime(0.0));
-        let cmd2 = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime(0.0));
+        let cmd1 = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
+        let cmd2 = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
         let LogicCommand::Rest { id: id1, .. } = cmd1 else {
             panic!()
         };
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn try_recv_matches_pending_id() {
         let mut reg = TestRegistry::new();
-        let cmd = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime(0.0));
+        let cmd = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
         let LogicCommand::Rest { id, .. } = cmd else {
             panic!()
         };
@@ -175,8 +175,8 @@ mod tests {
         // Prepare with explicit 1000 ms timeout at t=0.
         let cmd = reg.prepare_with_timeout(
             RestCommand::ListDocuments,
-            ambre_bus::PageTime(0.0),
-            ambre_bus::Millis(1000),
+            ambre_bus::PageTime::new(0.0),
+            ambre_bus::Millis::new(1000),
         );
         let LogicCommand::Rest { id, .. } = cmd else {
             panic!()
@@ -184,11 +184,11 @@ mod tests {
         assert_eq!(reg.pending_count(), 1);
 
         // Just before timeout -- still alive.
-        reg.expire(ambre_bus::PageTime(999.9));
+        reg.expire(ambre_bus::PageTime::new(999.9));
         assert_eq!(reg.pending_count(), 1);
 
         // Past deadline -- removed.
-        reg.expire(ambre_bus::PageTime(1000.0));
+        reg.expire(ambre_bus::PageTime::new(1000.0));
         assert_eq!(reg.pending_count(), 0);
         assert!(!reg.try_recv(id));
     }
@@ -196,8 +196,8 @@ mod tests {
     #[test]
     fn clear_removes_all() {
         let mut reg = TestRegistry::new();
-        reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime(0.0));
-        reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime(0.0));
+        reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
+        reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
         assert_eq!(reg.pending_count(), 2);
         reg.clear();
         assert_eq!(reg.pending_count(), 0);
@@ -206,8 +206,8 @@ mod tests {
     #[test]
     fn concurrent_requests_independent() {
         let mut reg = TestRegistry::new();
-        let cmd_a = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime(0.0));
-        let cmd_b = reg.prepare(RestCommand::Logout, ambre_bus::PageTime(0.0));
+        let cmd_a = reg.prepare(RestCommand::ListDocuments, ambre_bus::PageTime::new(0.0));
+        let cmd_b = reg.prepare(RestCommand::Logout, ambre_bus::PageTime::new(0.0));
         let LogicCommand::Rest { id: id_a, .. } = cmd_a else {
             panic!()
         };

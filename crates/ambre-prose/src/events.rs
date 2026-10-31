@@ -33,15 +33,15 @@ use loro::TreeID;
 /// of the Sync worker's dependency graph (`SYNC-011`).
 #[must_use]
 pub fn tree_id(id: BlockId) -> TreeID {
-    TreeID::new(id.peer.0, id.counter.0)
+    TreeID::new(id.peer.get(), id.counter.get())
 }
 
 /// The transport block id a CRDT id names. The inverse of [`tree_id`].
 #[must_use]
 pub fn block_id(id: TreeID) -> BlockId {
     BlockId::new(
-        ambre_core::PeerId(id.peer),
-        ambre_core::OpCounter(id.counter),
+        ambre_core::PeerId::new(id.peer),
+        ambre_core::OpCounter::new(id.counter),
     )
 }
 

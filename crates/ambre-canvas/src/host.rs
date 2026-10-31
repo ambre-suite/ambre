@@ -113,7 +113,7 @@ pub fn start_raf_loop(mut frame: impl FnMut(ambre_bus::PageTime) + 'static, _set
     let cb_clone = Rc::clone(&cb);
 
     *cb.borrow_mut() = Some(Closure::new(move |ts: f64| {
-        frame(ambre_bus::PageTime(ts));
+        frame(ambre_bus::PageTime::new(ts));
         request_frame(&cb_clone);
     }));
     request_frame(&cb);

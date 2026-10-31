@@ -211,17 +211,17 @@ mod tests {
             granted,
             Ok(FoldAnswer::Granted {
                 lease,
-                horizon: ambre_bus::Seq(41),
+                horizon: ambre_bus::Seq::new(41),
                 amendments,
-                amendments_seq: ambre_bus::Seq(7),
-                expires_in: ambre_core::Millis(30_000)
+                amendments_seq: ambre_bus::Seq::new(7),
+                expires_in: ambre_core::Millis::new(30_000)
             })
         );
         let deferred = take_fold_lease(&transport, &auth, &root(), channel, segment).await;
         assert_eq!(
             deferred,
             Ok(FoldAnswer::Deferred {
-                retry_in: ambre_core::Millis(86_400_000)
+                retry_in: ambre_core::Millis::new(86_400_000)
             })
         );
         let url = format!("{BASE}/api/channels/{channel}/segments/{segment}/fold-lease");
@@ -250,10 +250,10 @@ mod tests {
             Ok((204, serde_json::Value::Null)),
         ]);
         let auth = session("access-1", "refresh-1");
-        let upload = upload(segment.document_id(), ambre_bus::Seq(41));
+        let upload = upload(segment.document_id(), ambre_bus::Seq::new(41));
         let reach = FoldReach {
             lease,
-            amendments_seq: ambre_bus::Seq(7),
+            amendments_seq: ambre_bus::Seq::new(7),
         };
         let committed =
             commit_fold(&transport, &auth, &root(), channel, segment, reach, upload).await;

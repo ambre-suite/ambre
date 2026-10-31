@@ -46,10 +46,11 @@ pub async fn media_upload_url(
     // Reject an oversized blob before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size == ambre_core::ByteSize(0) || req.size > state.config.media_max_size {
+    if req.size == ambre_core::ByteSize::new(0) || req.size > state.config.media_max_size {
         return Err(AppError::PayloadTooLarge(format!(
             "media size {} bytes outside 1..={}",
-            req.size.0, state.config.media_max_size.0
+            req.size.get(),
+            state.config.media_max_size.get()
         )));
     }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);
@@ -134,10 +135,11 @@ pub async fn media_confirm_upload(
     }
     // Mirror the upload-url cap so a recorded `media` row can never claim a size
     // the upload path would have refused.
-    if req.size == ambre_core::ByteSize(0) || req.size > state.config.media_max_size {
+    if req.size == ambre_core::ByteSize::new(0) || req.size > state.config.media_max_size {
         return Err(AppError::PayloadTooLarge(format!(
             "media size {} bytes outside 1..={}",
-            req.size.0, state.config.media_max_size.0
+            req.size.get(),
+            state.config.media_max_size.get()
         )));
     }
     let key = s3::format_s3_media_key(&state.config.s3_env_prefix, &doc_id, &req.content_hash);

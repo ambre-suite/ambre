@@ -150,7 +150,7 @@ mod tests {
             .update
             .expect("an edit writes a delta");
         SignedDelta {
-            seq: ambre_core::Seq(peer.0),
+            seq: ambre_core::Seq::new(peer.get()),
             payload,
             nonce: FixedBytes::from_array([0; 16]),
             peer,
@@ -171,7 +171,7 @@ mod tests {
         let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Trame);
         let deltas: Vec<SignedDelta> = (1..=8)
-            .map(|peer| written_by(ambre_core::PeerId(peer), 20 << 10))
+            .map(|peer| written_by(ambre_core::PeerId::new(peer), 20 << 10))
             .collect();
         let (from_ui_tx, from_ui) = ambre_bus::conduit::to_worker(
             ambre_bus::conduit::ChannelCapacity::new(64),
@@ -215,8 +215,11 @@ mod tests {
     #[test]
     fn a_slice_takes_one_delta_whatever_its_size() {
         let mut queue: ReplayQueue = [
-            (ambre_core::Seq(1), vec![0; REPLAY_SLICE_BYTES * 2].into()),
-            (ambre_core::Seq(2), vec![0; 1].into()),
+            (
+                ambre_core::Seq::new(1),
+                vec![0; REPLAY_SLICE_BYTES * 2].into(),
+            ),
+            (ambre_core::Seq::new(2), vec![0; 1].into()),
         ]
         .into_iter()
         .collect();

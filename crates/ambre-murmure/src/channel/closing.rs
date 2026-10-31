@@ -45,11 +45,11 @@ impl MessageCount {
 
 /// The snapshot bytes past which an active segment asks to close, whatever
 /// its message count: the 2 MB bound of the same row (`MURMURE-481`).
-pub const SEGMENT_SNAPSHOT_SIZE: ByteSize = ByteSize(2 * 1024 * 1024);
+pub const SEGMENT_SNAPSHOT_SIZE: ByteSize = ByteSize::new(2 * 1024 * 1024);
 
 /// The delay before a successor that failed to open is fetched again,
 /// doubled at each failure: the row of `ambre-spec-budgets.md section 8`.
-pub const SUCCESSOR_RETRY: Millis = Millis(1_000);
+pub const SUCCESSOR_RETRY: Millis = Millis::new(1_000);
 
 /// The failures past which a successor is no longer fetched again.
 const SUCCESSOR_FAILURES: FailureCount = FailureCount::new(5);

@@ -350,7 +350,7 @@ impl TrameState {
     pub fn with_peer(peer: ambre_core::PeerId) -> Self {
         let doc = LoroDoc::new();
         // `set_peer_id` before any op: Trame's sheet ids capture it.
-        doc.set_peer_id(peer.0)
+        doc.set_peer_id(peer.get())
             .expect("a fresh LoroDoc accepts a peer id");
         // No wall clock in the ops: a recorded timestamp would differ between two
         // runs of the same generator and defeat the byte diff of `fixtures`.
@@ -371,7 +371,7 @@ impl TrameState {
         // copy is one change. Under the workbook's own identity, a reader that
         // has sent nothing would import each change against the whole history
         // (`TRAME-231`).
-        doc.set_peer_id(scaffold_identity().0)
+        doc.set_peer_id(scaffold_identity().get())
             .expect("a document outside a transaction takes a peer id");
         write_scaffold(&doc);
         doc.commit();

@@ -792,11 +792,11 @@ mod tests {
         };
         assert_eq!(asked.region(), Region::Channel);
         assert!(matches!(
-            asked.clone().command(Timestamp(7)),
+            asked.clone().command(Timestamp::new(7)),
             LogicCommand::Channel {
                 channel_id,
-                command: MurmureCommand::SendMessage { draft: d, now: Timestamp(7), confirmed: ambre_bus::Confirmation::Confirmed, .. },
-            } if channel_id == channel && d == draft
+                command: MurmureCommand::SendMessage { draft: d, now, confirmed: ambre_bus::Confirmation::Confirmed, .. },
+            } if channel_id == channel && d == draft && now.get() == 7
         ));
         let root = Id::<Message>::mint();
         let reply = AskedAll {
@@ -812,17 +812,17 @@ mod tests {
         };
         assert_eq!(reply.region(), Region::Thread);
         assert!(matches!(
-            reply.command(Timestamp(8)),
+            reply.command(Timestamp::new(8)),
             LogicCommand::Channel {
                 channel_id,
                 command: MurmureCommand::Reply {
                     root: r,
                     draft: d,
                     also_in_channel: ReplyEcho::AlsoInChannel,
-                    now: Timestamp(8),
+                    now,
                     confirmed: ambre_bus::Confirmation::Confirmed,
                 },
-            } if channel_id == channel && r == root && d == draft
+            } if channel_id == channel && r == root && d == draft && now.get() == 8
         ));
         assert_eq!(
             asked_all_title(ambre_core::MemberCount::new(12)),
@@ -925,7 +925,7 @@ mod tests {
             message: own.message,
         };
         assert_eq!(pending, asked);
-        let now = Timestamp(1_700_000_000_000);
+        let now = Timestamp::new(1_700_000_000_000);
         let LogicCommand::Channel {
             channel_id,
             command:
@@ -1027,7 +1027,7 @@ mod tests {
                     emoji,
                     now,
                 },
-        } = pending.command(ambre_bus::Emoji::from("\u{1F680}"), Timestamp(9))
+        } = pending.command(ambre_bus::Emoji::from("\u{1F680}"), Timestamp::new(9))
         else {
             panic!("a pick reacts to the message");
         };
@@ -1038,7 +1038,7 @@ mod tests {
                 MessageAt::Segment(segment),
                 target.message,
                 "\u{1F680}",
-                Timestamp(9)
+                Timestamp::new(9)
             )
         );
     }

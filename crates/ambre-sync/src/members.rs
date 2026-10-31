@@ -104,7 +104,7 @@ impl SyncState {
                     document_id,
                     user_id: Id::<User>::mint(),
                     display_name: invitee_email
-                        .and_then(|email| ambre_core::DisplayName::cut_to_fit(&email.0))
+                        .and_then(|email| ambre_core::DisplayName::cut_to_fit(email.as_str()))
                         .unwrap_or_else(|| ambre_core::DisplayName::handle_of(&invitee)),
                 },
             );

@@ -862,7 +862,7 @@ impl ToileView {
             embed_focus: embed::EmbedFocus::default(),
             embed_sessions: embed::EmbedSessions::default(),
             child_route: None,
-            frame_now: ambre_bus::PageTime(0.0),
+            frame_now: ambre_bus::PageTime::new(0.0),
         }
     }
 
@@ -1639,7 +1639,7 @@ impl ToileView {
     fn clock(&self) -> ambre_core::PageTime {
         #[cfg(target_arch = "wasm32")]
         if let Some(perf) = web_sys::window().and_then(|w| w.performance()) {
-            return ambre_core::PageTime(perf.now());
+            return ambre_core::PageTime::new(perf.now());
         }
         self.frame_now
     }
@@ -4430,7 +4430,7 @@ impl ToileView {
 #[cfg(target_arch = "wasm32")]
 fn wall_clock() -> ambre_core::Timestamp {
     // `Date.now()` is a whole, non-negative count of milliseconds.
-    ambre_core::Timestamp(js_sys::Date::now() as u64)
+    ambre_core::Timestamp::new(js_sys::Date::now() as u64)
 }
 
 /// The canvas element's top-left client offset (CSS px), so a canvas-local anchor

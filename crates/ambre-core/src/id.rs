@@ -503,7 +503,7 @@ mod tests {
     /// A minted text identifier travels as its plain string, both ways.
     #[test]
     fn a_minted_id_travels_as_its_text() {
-        let id = Id::<Element>::mint_from(PeerId(0xab), IdCounter::new(7));
+        let id = Id::<Element>::mint_from(PeerId::new(0xab), IdCounter::new(7));
         assert_eq!(id.as_str(), "00000000000000ab_00000007");
         let json = serde_json::to_string(&id).unwrap();
         assert_eq!(json, "\"00000000000000ab_00000007\"");

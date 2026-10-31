@@ -45,7 +45,7 @@ pub fn fingerprint(
         }
         out.push(c);
     }
-    ambre_core::KeyFingerprint(out)
+    ambre_core::KeyFingerprint::new(out)
 }
 
 /// The first `N` bytes of `digest`, zero-filled past its end. Every caller
@@ -82,7 +82,7 @@ pub fn chain_hash(
     snapshot: &ambre_core::Ciphertext,
 ) -> FixedBytes<ambre_core::ChainHash> {
     let parent: &[u8] = parent.map_or(&[], |p| p.as_slice());
-    FixedBytes::from_array(length_prefixed(Head(parent), Tail(&snapshot.0)))
+    FixedBytes::from_array(length_prefixed(Head(parent), Tail(snapshot.as_bytes())))
 }
 
 /// The field that [`length_prefixed`] bounds with its length.

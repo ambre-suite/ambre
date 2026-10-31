@@ -95,9 +95,9 @@ fn metrics(state: &mut TrameState, n: u32) -> (Vec<f32>, Vec<f32>) {
 /// Two peers on one workbook, each with its own identity.
 fn two_peers(base: &TrameState) -> (TrameState, TrameState) {
     let snapshot = base.export_snapshot();
-    let mut a = TrameState::with_peer(ambre_core::PeerId(11));
+    let mut a = TrameState::with_peer(ambre_core::PeerId::new(11));
     a.import_snapshot(&snapshot).expect("the snapshot reads");
-    let mut b = TrameState::with_peer(ambre_core::PeerId(22));
+    let mut b = TrameState::with_peer(ambre_core::PeerId::new(22));
     b.import_snapshot(&snapshot).expect("the snapshot reads");
     (a, b)
 }

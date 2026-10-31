@@ -30,7 +30,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
         time_of: Rc::new(move |ts| clock.format(ts)),
         now: Rc::new(super::probe::now),
         // `Date.now()` is a whole, non-negative count of milliseconds.
-        wall_clock: Rc::new(|| ambre_bus::Timestamp(js_sys::Date::now() as u64)),
+        wall_clock: Rc::new(|| ambre_bus::Timestamp::new(js_sys::Date::now() as u64)),
         motion: Rc::new({
             // The query is asked once; its answer follows the user's setting.
             let query = web_sys::window()
@@ -71,7 +71,7 @@ pub fn page_reads(relay: MurmureRelay, pipe: TextInput, warn: Rc<dyn Fn(&str)>) 
 
 /// How long a tab has to read the address of an image it opened before the
 /// page lets the bytes go.
-const OPENED_FOR: ambre_core::Millis = ambre_core::Millis(60_000);
+const OPENED_FOR: ambre_core::Millis = ambre_core::Millis::new(60_000);
 
 /// Hand the browser a file a member fetched. A raster image opens in a tab of
 /// its own. Any other file saves, typed as a plain stream of bytes. So no
@@ -285,7 +285,7 @@ impl LocalTime {
 
     /// `ts`, written for the reader.
     pub fn format(&self, ts: Timestamp) -> String {
-        let date = js_sys::Date::new(&JsValue::from_f64(ts.0 as f64));
+        let date = js_sys::Date::new(&JsValue::from_f64(ts.get() as f64));
         self.0
             .call1(&JsValue::NULL, &date)
             .ok()
@@ -317,7 +317,7 @@ mod tests {
         let expected: String = date
             .to_locale_time_string_with_options("default", &options)
             .into();
-        let written = LocalTime::new().format(Timestamp(ms as u64));
+        let written = LocalTime::new().format(Timestamp::new(ms as u64));
         assert_eq!(written, expected);
         assert!(written.chars().any(|c| c.is_ascii_digit()));
     }
@@ -362,7 +362,7 @@ mod tests {
             channel: Id::<Channel>::mint(),
         });
         assert!(matches!((reads.pane)(), MurmurePane::Members { .. }));
-        let ts = Timestamp(1_700_000_000_000);
+        let ts = Timestamp::new(1_700_000_000_000);
         assert_eq!((reads.time_of)(ts), LocalTime::new().format(ts));
     }
 
@@ -410,7 +410,7 @@ mod tests {
             media_ref: ambre_bus::ContentHash::parse(&"0".repeat(64)).expect("an address"),
             name: "a".to_owned(),
             media_type: ambre_core::MediaType::from(media_type),
-            size: ambre_bus::ByteSize(1),
+            size: ambre_bus::ByteSize::new(1),
         };
         save_file(&file("image/png"), vec![1].into());
         js_sys::Reflect::set(&window, &key, &original).expect("open restored");

@@ -519,7 +519,7 @@ fn annotation_reading(reader: &ProseState, stored: &Stored) -> Option<String> {
                     doc::ReplyKey::Id => format!("is {}", reply.reply_id.to_hyphenated()),
                     doc::ReplyKey::Author => format!("by {:?}", author_text(reply.author.as_ref())),
                     doc::ReplyKey::User => format!("by user {}", reply.user_id),
-                    doc::ReplyKey::Created => format!("at {} ms", reply.created_at.0),
+                    doc::ReplyKey::Created => format!("at {} ms", reply.created_at.get()),
                     doc::ReplyKey::Text => format!("reads {:?}", reply.text),
                 };
                 format!("reply {} {what}", at + 1)
@@ -681,7 +681,8 @@ fn mark_reading(
 /// A document opened from `state`'s snapshot, through the full-state read
 /// every reload takes, and laid out once as the view would.
 fn reopened(state: &ProseState) -> ProseState {
-    let mut reader = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
+    let mut reader =
+        ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
     reader
         .import_snapshot(&state.export_snapshot())
         .expect("a document this build wrote reopens");

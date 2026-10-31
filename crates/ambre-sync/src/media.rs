@@ -412,9 +412,7 @@ async fn erase_media(
         .delete(&base.join(format!("/media/{content_hash}")))
         .await
     {
-        Ok(status)
-            if status.is_success() || matches!(status, ambre_core::HttpStatus(403 | 404)) =>
-        {
+        Ok(status) if status.is_success() || matches!(status.get(), 403 | 404) => {
             let _ = tx.send(SyncEvent::MediaErased {
                 id,
                 document_id,
@@ -446,7 +444,7 @@ async fn upload_leg(
             &base.join("/media/upload-url"),
             &http::UploadUrlRequest {
                 content_hash: content_hash.clone(),
-                size: ambre_core::ByteSize(size),
+                size: ambre_core::ByteSize::new(size),
             },
         )
         .await
@@ -459,7 +457,7 @@ async fn upload_leg(
         &base.join("/media"),
         &http::ConfirmUploadRequest {
             content_hash: content_hash.clone(),
-            size: ambre_core::ByteSize(size),
+            size: ambre_core::ByteSize::new(size),
         },
     )
     .await
@@ -605,7 +603,7 @@ mod tests {
             Self {
                 fail,
                 served,
-                erase_status: ambre_core::HttpStatus(200),
+                erase_status: ambre_core::HttpStatus::new(200),
                 steps: Default::default(),
             }
         }
@@ -689,7 +687,7 @@ mod tests {
             ("delete", 200, false),
         ] {
             let mut http = FakeMedia::new(fail, Vec::new());
-            http.erase_status = ambre_core::HttpStatus(status);
+            http.erase_status = ambre_core::HttpStatus::new(status);
             let id = ambre_bus::next_request();
             let hash = ambre_core::ContentHash::parse(&"cd".repeat(32)).expect("a hash");
             erase_media(&http, &base(), id, document_id, hash, &tx, &logic).await;

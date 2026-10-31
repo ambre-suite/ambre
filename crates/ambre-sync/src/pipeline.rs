@@ -45,11 +45,11 @@ const MAX_DECOMPRESS_RATIO: usize = 200;
 /// Floor for the per-message decompression ceiling. Tiny legitimate messages (a
 /// few compressed bytes expanding to a normal delta) are never rejected by
 /// the ratio bound alone.
-const MIN_DECOMPRESS_CEILING: ByteSize = ByteSize(1 << 20); // 1 MiB
+const MIN_DECOMPRESS_CEILING: ByteSize = ByteSize::new(1 << 20); // 1 MiB
 
 /// Hard upper bound on any single decompressed message, regardless of the
 /// ratio-derived ceiling. Matches the client-memory pillar (< 100 MB per doc).
-const ABSOLUTE_DECOMPRESS_CAP: ByteSize = ByteSize(64 << 20); // 64 MiB
+const ABSOLUTE_DECOMPRESS_CAP: ByteSize = ByteSize::new(64 << 20); // 64 MiB
 
 /// Compression scheme of a sealed plaintext, encoded as the first plaintext byte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -330,7 +330,7 @@ fn decompress_zstd_bounded(body: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let mut out = Vec::new();
     let refusal = match decoder
         .by_ref()
-        .take(ceiling.0.saturating_add(1))
+        .take(ceiling.get().saturating_add(1))
         .read_to_end(&mut out)
     {
         Err(_) => PipelineError::Decompress,
@@ -456,7 +456,7 @@ pub fn seal_update(
     tracing::debug!(
         "[Pipeline] seal_update: {} bytes plaintext -> {} bytes ciphertext",
         payload.len(),
-        ciphertext.0.len(),
+        ciphertext.as_bytes().len(),
     );
     Ok(Update {
         ciphertext,
@@ -481,7 +481,7 @@ pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<UpdateFrame
     let frame = open_payload(&sealed, &aad, doc_key, &update.public_data.pub_key)?.into_frame();
     tracing::debug!(
         "[Pipeline] open_update: {} bytes ciphertext -> {} bytes plaintext",
-        update.ciphertext.0.len(),
+        update.ciphertext.as_bytes().len(),
         frame.len(),
     );
     Ok(frame)
@@ -904,7 +904,7 @@ fn object_bytes(
     out.extend_from_slice(sealed.signature.as_slice());
     out.extend_from_slice(sealed.commitment_tag.as_slice());
     out.extend_from_slice(sealed.nonce.as_slice());
-    out.extend_from_slice(&sealed.ciphertext.0);
+    out.extend_from_slice(sealed.ciphertext.as_bytes());
     SealedBlob(out)
 }
 
@@ -929,7 +929,7 @@ fn object_parts(
     check_key(key_id, doc_key)?;
     let sealed = Sealed {
         nonce,
-        ciphertext: Ciphertext(ciphertext.to_vec()),
+        ciphertext: Ciphertext::new(ciphertext.to_vec()),
         commitment_tag,
         signature,
     };
@@ -1134,7 +1134,7 @@ mod tests {
         let snapshot =
             seal_snapshot(&Payload::new(payload.to_vec()), pd, &doc_key, &signing).unwrap();
         // Compressed ciphertext is far smaller than the 4 KiB plaintext.
-        assert!(snapshot.ciphertext.0.len() < payload.len());
+        assert!(snapshot.ciphertext.as_bytes().len() < payload.len());
         assert_eq!(open_snapshot(&snapshot, &doc_key).unwrap(), payload);
     }
 
@@ -1166,7 +1166,7 @@ mod tests {
     /// it, the public metadata and the shape around it.
     fn readable_part(update: &Update) -> Vec<u8> {
         let mut blank = update.clone();
-        blank.ciphertext = Ciphertext(Vec::new());
+        blank.ciphertext = Ciphertext::new(Vec::new());
         blank.nonce = FixedBytes::from_array([0u8; 24]);
         blank.commitment_tag = FixedBytes::from_array([0u8; 32]);
         blank.signature = FixedBytes::from_array([0u8; 64]);
@@ -1563,7 +1563,7 @@ mod tests {
         moved[tag_at] ^= 1;
         let tag = FixedBytes::<CommitmentTag>::from_slice(&moved[tag_at..nonce_at]).unwrap();
         let nonce = FixedBytes::<Nonce>::from_slice(&moved[nonce_at..header_len]).unwrap();
-        let body = ambre_core::Ciphertext(moved[header_len..].to_vec());
+        let body = ambre_core::Ciphertext::new(moved[header_len..].to_vec());
         let bound = object_aad(doc_key.id(), aad);
         let resigned = signature::sign(&signing, &nonce, &body, &bound, &tag);
         moved[signature_at..tag_at].copy_from_slice(resigned.as_slice());

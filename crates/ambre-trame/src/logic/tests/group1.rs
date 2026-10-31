@@ -702,7 +702,7 @@ fn multi_sheet_isolation_and_name_lookup() {
     other
         .push(
             Uid {
-                peer: ambre_core::PeerId(1),
+                peer: ambre_core::PeerId::new(1),
                 counter: ambre_core::IdCounter::new(0),
             }
             .to_key_part()

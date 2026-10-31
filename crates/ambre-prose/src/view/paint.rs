@@ -1028,7 +1028,8 @@ mod tests {
 
     #[test]
     fn a_page_carries_its_bands_and_its_footnotes_below_a_separator() {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let body = append(&mut state, BlockInit::Paragraph, "Body text with a note.");
         state.handle_command(ProseCommand::SetHeaderEnabled {
@@ -1135,7 +1136,7 @@ mod tests {
     #[test]
     fn a_merged_region_is_drawn_as_one_cell_and_a_covered_cell_not_at_all() {
         use crate::logic::tables::tests::{cell_at, document_with_table, type_in};
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let outcome = state.handle_command(ProseCommand::MergeTableCells {
             table_id: block_id(table),
@@ -1191,7 +1192,7 @@ mod tests {
     /// painted with the shipped faces.
     fn styled_table() -> (ProseState, loro::TreeID, loro::TreeID) {
         use crate::logic::tables::tests::{cell_at, document_with_table, type_in};
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 1, 2);
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let first = cell_at(&state, table, 0, 0);
         let second = cell_at(&state, table, 0, 1);
@@ -1408,7 +1409,8 @@ mod tests {
     /// document answers, as body text is.
     #[test]
     fn a_draft_in_a_header_is_drawn_before_the_document_answers() {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         append(&mut state, BlockInit::Paragraph, "Body");
         state.handle_command(ProseCommand::SetHeaderEnabled {
@@ -1433,7 +1435,7 @@ mod tests {
     #[test]
     fn a_draft_in_a_cell_is_drawn_before_the_document_answers() {
         use crate::logic::tables::tests::{cell_at, document_with_table, first_block_of};
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 1, 2);
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let cell = cell_at(&state, table, 0, 0);
         let block = block_id(first_block_of(&state, cell));
@@ -1786,7 +1788,7 @@ mod tests {
         );
         // The document answers with the block it minted: the text typed
         // into it is drawn there, and the caret with it.
-        let minted = BlockId::new(ambre_core::PeerId(9), ambre_core::OpCounter(9));
+        let minted = BlockId::new(ambre_core::PeerId::new(9), ambre_core::OpCounter::new(9));
         ui.apply_event(&crate::events::ProseEvent::BlockSplit {
             source: first,
             new_block: minted,
@@ -1818,7 +1820,7 @@ mod tests {
             at: DocOffset::new(10),
             new_block: None,
         });
-        let minted = BlockId::new(ambre_core::PeerId(9), ambre_core::OpCounter(9));
+        let minted = BlockId::new(ambre_core::PeerId::new(9), ambre_core::OpCounter::new(9));
         ui.apply_event(&crate::events::ProseEvent::BlockSplit {
             source: first,
             new_block: minted,
@@ -1917,7 +1919,7 @@ mod tests {
     #[test]
     fn a_press_in_a_cell_lands_in_its_text() {
         use crate::logic::tables::tests::{cell_at, document_with_table, first_block_of, type_in};
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 1, 2);
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let (left, right) = (cell_at(&state, table, 0, 0), cell_at(&state, table, 0, 1));
         type_in(&mut state, right, "abcdef");
@@ -1956,7 +1958,7 @@ mod tests {
     #[test]
     fn a_press_in_a_stale_cell_draft_lands_where_it_was_drawn() {
         use crate::logic::tables::tests::{cell_at, document_with_table, first_block_of, type_in};
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 1);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 1, 1);
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let cell = cell_at(&state, table, 0, 0);
         type_in(&mut state, cell, "abcdef");

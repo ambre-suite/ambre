@@ -277,7 +277,7 @@ impl LocalStore {
     fn refused(&self, id: Id<Document>, write: SealedWrite, attempt: Attempt) {
         let need = match &write {
             PersistWrite::Snapshot(bytes) | PersistWrite::Delta(bytes) => bytes.len(),
-            _ => ambre_core::ByteSize(0),
+            _ => ambre_core::ByteSize::new(0),
         };
         let decision = self.inner.ledger.borrow_mut().refused(
             id,

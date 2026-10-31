@@ -450,7 +450,7 @@ fn authored_by(
     match loro::LoroDoc::decode_import_blob_meta(payload.as_bytes(), false) {
         Ok(meta) => {
             meta.mode == loro::EncodedBlobMode::Updates
-                && meta.partial_end_vv.keys().all(|p| *p == peer.0)
+                && meta.partial_end_vv.keys().all(|p| *p == peer.get())
         }
         Err(_) => false,
     }
@@ -471,7 +471,7 @@ enum AnswerFor {
 fn sent_by(payload: &[u8], peer: ambre_core::PeerId) -> bool {
     authored_by(&payload.to_vec().into(), peer)
         || serde_json::from_slice::<loro::json::JsonSchema>(payload).is_ok_and(|update| {
-            !update.changes.is_empty() && update.changes.iter().all(|c| c.id.peer == peer.0)
+            !update.changes.is_empty() && update.changes.iter().all(|c| c.id.peer == peer.get())
         })
 }
 
@@ -621,7 +621,7 @@ impl LogicState {
 #[cfg(test)]
 fn test_peer() -> ambre_core::PeerId {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x1000);
-    ambre_core::PeerId(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+    ambre_core::PeerId::new(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
 }
 
 /// A registry entry for `peer`, as Sync would issue it; no test reads its
@@ -629,7 +629,7 @@ fn test_peer() -> ambre_core::PeerId {
 #[cfg(test)]
 fn test_entry(peer: ambre_core::PeerId) -> ambre_core::PeerEntry {
     let mut user = [0; 16];
-    user[..8].copy_from_slice(&peer.0.to_le_bytes());
+    user[..8].copy_from_slice(&peer.get().to_le_bytes());
     ambre_core::PeerEntry {
         user: Id::<User>::from_bytes(user),
         nonce: FixedBytes::from_array([0; 16]),
@@ -647,7 +647,7 @@ fn identified(mut channel: ambre_murmure::ChannelState) -> ambre_murmure::Channe
             .adopt_session(
                 document_id,
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
             )
             .expect("adopt");
     }
@@ -1229,10 +1229,10 @@ fn remote_delta(
         .and_then(|meta| meta.partial_end_vv.keys().next().copied())
         .unwrap_or_default();
     ambre_bus::SignedDelta {
-        seq: ambre_core::Seq(seq),
+        seq: ambre_core::Seq::new(seq),
         payload,
         nonce: FixedBytes::from_array([0; 16]),
-        peer: ambre_core::PeerId(peer),
+        peer: ambre_core::PeerId::new(peer),
         user: None,
         summary: None,
     }
@@ -1696,7 +1696,7 @@ mod pass_tests {
             .expect("the peer's delta");
         state.apply_remote(
             document_id,
-            Order::Update(Seq(1)),
+            Order::Update(Seq::new(1)),
             ambre_core::LoroPayloadRef::Delta(&delta),
         );
         assert!(!state.has_pending_work(), "the import landed first");
@@ -1727,8 +1727,8 @@ mod authorship_tests {
     use ambre_bus::{Col, Row};
     use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
-    const ALICE: ambre_core::PeerId = ambre_core::PeerId(0xA11CE);
-    const MALLORY: ambre_core::PeerId = ambre_core::PeerId(0xBAD);
+    const ALICE: ambre_core::PeerId = ambre_core::PeerId::new(0xA11CE);
+    const MALLORY: ambre_core::PeerId = ambre_core::PeerId::new(0xBAD);
 
     struct Rig {
         state: LogicState,
@@ -1799,7 +1799,7 @@ mod authorship_tests {
         peer: ambre_core::PeerId,
     ) -> SignedDelta {
         SignedDelta {
-            seq: ambre_core::Seq(0),
+            seq: ambre_core::Seq::new(0),
             payload,
             nonce: FixedBytes::from_array([0; 16]),
             peer,
@@ -1846,7 +1846,7 @@ mod authorship_tests {
         meta.partial_end_vv
             .keys()
             .copied()
-            .map(ambre_core::PeerId)
+            .map(ambre_core::PeerId::new)
             .collect()
     }
 
@@ -1890,8 +1890,14 @@ mod authorship_tests {
             ],
         });
         let held = held(&rig);
-        assert!(held.get(&ALICE.0).is_some(), "the honest delta was dropped");
-        assert!(held.get(&MALLORY.0).is_none(), "the forged delta landed");
+        assert!(
+            held.get(&ALICE.get()).is_some(),
+            "the honest delta was dropped"
+        );
+        assert!(
+            held.get(&MALLORY.get()).is_none(),
+            "the forged delta landed"
+        );
     }
 
     /// `AUTHOR-007`: the verdict reads the delta and its signer alone, so two
@@ -1904,7 +1910,7 @@ mod authorship_tests {
             signed(
                 merged(&[
                     written_by(MALLORY, "a"),
-                    written_by(ambre_core::PeerId(ALICE.0 + 1), "b"),
+                    written_by(ambre_core::PeerId::new(ALICE.get() + 1), "b"),
                 ]),
                 MALLORY,
             ),
@@ -1919,7 +1925,7 @@ mod authorship_tests {
                     });
                 }
                 let mut held = held(&rig);
-                held.remove(&rig.peer.0);
+                held.remove(&rig.peer.get());
                 held
             })
             .collect();
@@ -1956,7 +1962,9 @@ mod authorship_tests {
         };
         let [left, right] = tabs.each_ref().map(read);
         assert_eq!(left, right, "the two tabs diverged");
-        assert!(left.0.get(&tabs[0].peer.0).is_some() && left.0.get(&tabs[1].peer.0).is_some());
+        assert!(
+            left.0.get(&tabs[0].peer.get()).is_some() && left.0.get(&tabs[1].peer.get()).is_some()
+        );
     }
 
     /// `AUTHOR-008`, `AUTHOR-009`, `AUTHOR-011`: a session that never edits
@@ -2023,7 +2031,7 @@ mod authorship_tests {
     /// Alice's delta, numbered `seq` by the relay, reaches the rig.
     fn receive(rig: &mut Rig, payload: ambre_core::Payload<ambre_core::DeltaBytes>, seq: u64) {
         let mut delta = signed(payload, ALICE);
-        delta.seq = ambre_core::Seq(seq);
+        delta.seq = ambre_core::Seq::new(seq);
         rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id: rig.document_id,
             delta,
@@ -2035,7 +2043,7 @@ mod authorship_tests {
         rig.state.handle_logic_event(LogicEvent::PendingSnapshot {
             document_id: rig.document_id,
             snapshot_id: Id::<Snapshot>::genesis(rig.document_id),
-            covered_seq: ambre_core::Seq(covered),
+            covered_seq: ambre_core::Seq::new(covered),
             payload: payload.into(),
             purpose: SnapshotPurpose::Confirm,
         });
@@ -2053,14 +2061,14 @@ mod authorship_tests {
         peer: ambre_core::PeerId,
     ) -> ambre_core::Payload<ambre_core::DeltaBytes> {
         let doc = LoroDoc::new();
-        doc.set_peer_id(peer.0)
+        doc.set_peer_id(peer.get())
             .expect("a fresh document takes a peer id");
         let meta = doc.get_map(ambre_core::crdt::FoundationRoot::Meta.as_str());
         meta.insert(ambre_core::schema::MetaKey::SchemaVersion.as_str(), 99)
             .expect("an insert");
         doc.commit();
         let base = doc.oplog_vv();
-        doc.set_peer_id(ALICE.0).expect("a peer id");
+        doc.set_peer_id(ALICE.get()).expect("a peer id");
         // A key no schema declares: the delta only has to carry an op.
         meta.insert("note", "x").expect("an insert");
         doc.commit();
@@ -2096,14 +2104,22 @@ mod authorship_tests {
     fn a_delta_waiting_on_a_foreign_scaffold_reports_the_document() {
         let mut rig = rig();
         receive(&mut rig, written_by(ALICE, "ours"), 1);
-        receive(&mut rig, on_foreign_scaffold(ambre_core::PeerId(0x5CAF)), 2);
+        receive(
+            &mut rig,
+            on_foreign_scaffold(ambre_core::PeerId::new(0x5CAF)),
+            2,
+        );
         assert!(
             !told_unreadable(&rig),
             "reported before the replay was done"
         );
         ready(&mut rig);
         assert!(told_unreadable(&rig), "the document was not reported");
-        receive(&mut rig, on_foreign_scaffold(ambre_core::PeerId(0x5CAF)), 3);
+        receive(
+            &mut rig,
+            on_foreign_scaffold(ambre_core::PeerId::new(0x5CAF)),
+            3,
+        );
         assert!(!told_unreadable(&rig), "the document was reported twice");
 
         let mut clean = rig_with_ready();
@@ -2116,7 +2132,11 @@ mod authorship_tests {
     #[test]
     fn a_delta_past_a_gap_is_not_reported() {
         let mut rig = rig_with_ready();
-        receive(&mut rig, on_foreign_scaffold(ambre_core::PeerId(0x5CAF)), 3);
+        receive(
+            &mut rig,
+            on_foreign_scaffold(ambre_core::PeerId::new(0x5CAF)),
+            3,
+        );
         assert!(!told_unreadable(&rig));
     }
 
@@ -2154,7 +2174,7 @@ mod authorship_tests {
         rig.state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: rig.document_id,
             payload: (snapshot_of(std::slice::from_ref(&hers))).into(),
-            covered_seq: ambre_core::Seq(5),
+            covered_seq: ambre_core::Seq::new(5),
         });
         assert_eq!(
             verdict(&mut rig, snapshot_of(&[hers]), 3),
@@ -2176,7 +2196,7 @@ mod authorship_tests {
             SyncCommand::SendSnapshot { covered_seq, .. } => Some(covered_seq),
             _ => None,
         });
-        assert_eq!(covered, Some(ambre_core::Seq(1)));
+        assert_eq!(covered, Some(ambre_core::Seq::new(1)));
     }
 
     /// One open document still waiting for its session identity, with the
@@ -2198,7 +2218,7 @@ mod authorship_tests {
             sync,
             ui,
             document_id,
-            peer: ambre_core::PeerId(0),
+            peer: ambre_core::PeerId::new(0),
         };
         (rig, persist)
     }
@@ -2241,7 +2261,7 @@ mod authorship_tests {
     /// write under whatever PeerID the document holds then (`PROSE-027`).
     fn emptied_page() -> Vec<u8> {
         let doc = LoroDoc::new();
-        doc.set_peer_id(ALICE.0).expect("a PeerID");
+        doc.set_peer_id(ALICE.get()).expect("a PeerID");
         let page = DocState::new(DocType::Prose).expect("a page");
         doc.import(page.export_snapshot().as_bytes())
             .expect("the scaffolding");
@@ -2258,7 +2278,7 @@ mod authorship_tests {
     /// nothing written under a PeerID but the cache's and the session's.
     #[test]
     fn a_cached_document_shows_before_the_identity_and_is_rebuilt_under_it() {
-        let logged = written_by(ambre_core::PeerId(ALICE.0 + 1), "logged");
+        let logged = written_by(ambre_core::PeerId::new(ALICE.get() + 1), "logged");
         let cases = [
             (
                 DocType::Trame,
@@ -2305,7 +2325,7 @@ mod authorship_tests {
             let strangers: Vec<u64> = held
                 .keys()
                 .copied()
-                .filter(|p| *p != peer.0 && restored.get(p).is_none())
+                .filter(|p| *p != peer.get() && restored.get(p).is_none())
                 .collect();
             assert!(
                 strangers.is_empty(),
@@ -2400,8 +2420,8 @@ mod authorship_tests {
         let first =
             LoroDoc::decode_import_blob_meta(hers[0].as_bytes(), false).expect("her first delta");
         assert_eq!(
-            meta.partial_start_vv.get(&ALICE.0),
-            first.partial_end_vv.get(&ALICE.0),
+            meta.partial_start_vv.get(&ALICE.get()),
+            first.partial_end_vv.get(&ALICE.get()),
             "the unsent delta does not start where the relay's copy ends"
         );
         assert!(

@@ -107,7 +107,7 @@ impl SyncState {
                                         http::TokenPair {
                                             access_token: http::SecretToken::default(),
                                             refresh_token: http::SecretToken::default(),
-                                            access_expires_in: ambre_core::Seconds(0),
+                                            access_expires_in: ambre_core::Seconds::new(0),
                                         },
                                     ),
                                 });
@@ -191,7 +191,7 @@ impl SyncState {
                             id,
                             user_id,
                             display_name: resp.display_name,
-                            email: ambre_core::Email(String::new()),
+                            email: ambre_core::Email::new(String::new()),
                             master_seed,
                             signing_key,
                             exchange_key,
@@ -219,7 +219,7 @@ impl SyncState {
                 evt: RestEvent::SessionReady {
                     user_id,
                     display_name: username,
-                    email: ambre_core::Email(String::new()),
+                    email: ambre_core::Email::new(String::new()),
                 },
             });
         }
@@ -528,7 +528,7 @@ mod provider_tests {
             tokens: TokenPair {
                 access_token: SecretToken::from("access-s3cr3t".to_owned()),
                 refresh_token: SecretToken::from("refresh-s3cr3t".to_owned()),
-                access_expires_in: ambre_core::Seconds(60),
+                access_expires_in: ambre_core::Seconds::new(60),
             },
         }
     }

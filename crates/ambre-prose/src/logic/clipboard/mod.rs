@@ -155,7 +155,7 @@ impl ClipValue {
 }
 
 /// The longest family name a paste keeps, in bytes.
-const FAMILY_MAX: ambre_core::ByteSize = ambre_core::ByteSize(64);
+const FAMILY_MAX: ambre_core::ByteSize = ambre_core::ByteSize::new(64);
 
 /// The value a paste writes under `root`, from either half of the clipboard
 /// (`PROSE-UI-220`, `PROSE-UI-234`). The value passes the grammar of a typed
@@ -518,7 +518,7 @@ mod tests {
     }
 
     fn document() -> (ProseState, BlockId) {
-        let state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         let first = state.root_blocks()[0];
         (state, first)
     }

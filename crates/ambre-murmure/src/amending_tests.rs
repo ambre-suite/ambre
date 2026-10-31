@@ -20,7 +20,7 @@ use crate::{
     ThreadTarget,
 };
 
-const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {
@@ -48,7 +48,7 @@ fn closing_with(texts: &[&str], author: Id<User>) -> (ChannelState, Id<Segment>)
         .adopt_session(
             successor.document_id(),
             peer,
-            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt");
     (state, closing)
@@ -79,7 +79,7 @@ fn amended(
         .adopt_session(
             amendments,
             peer,
-            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt")
         .expect("the header travels");
@@ -138,14 +138,19 @@ fn bob_holding(
     bob.apply_remote(bob.meta_id().document_id(), meta.into())
         .expect("meta");
     assert_eq!(bob.amendments_to_open(), [amendments]);
-    bob.apply_signed(amendments, Seq(1), first, signer(alice, amendments, author))
-        .expect("the header waits");
+    bob.apply_signed(
+        amendments,
+        Seq::new(1),
+        first,
+        signer(alice, amendments, author),
+    )
+    .expect("the header waits");
     bob.older_ready(amendments).expect("admitted");
     let peer = next_peer();
     bob.adopt_session(
         amendments,
         peer,
-        PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
     )
     .expect("adopt");
     assert_eq!(bob.amendments_id(segment), Some(amendments));
@@ -306,7 +311,7 @@ fn a_member_reads_the_amendments_over_the_segment() {
     let by_alice = signer(&alice, amendments, author);
     for (seq, payload) in [(1, &first), (2, &edited.delta)] {
         let events = bob
-            .apply_signed(amendments, Seq(seq), payload, by_alice)
+            .apply_signed(amendments, Seq::new(seq), payload, by_alice)
             .expect("waits");
         assert!(events.is_empty());
     }
@@ -316,7 +321,7 @@ fn a_member_reads_the_amendments_over_the_segment() {
 
     let deleted = alice.delete(segment, ids[1], author).expect("delete");
     let events = bob
-        .apply_signed(amendments, Seq(3), &deleted.delta, by_alice)
+        .apply_signed(amendments, Seq::new(3), &deleted.delta, by_alice)
         .expect("applies");
     assert_eq!(events.len(), 1);
     assert_eq!(
@@ -353,7 +358,7 @@ fn an_amendment_of_another_authors_message_is_refused() {
     let forged = json_since(doc, &before);
     let by_bob = signer(&bob, amendments, bob_user);
     assert_eq!(
-        alice.apply_signed(amendments, Seq(2), &forged, by_bob),
+        alice.apply_signed(amendments, Seq::new(2), &forged, by_bob),
         Err(MurmureError::Refused(Refusal::ForeignMessage))
     );
 
@@ -365,7 +370,7 @@ fn an_amendment_of_another_authors_message_is_refused() {
     let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, alice_user);
     bob.apply_signed(
         amendments,
-        Seq(2),
+        Seq::new(2),
         &edited.delta,
         signer(&alice, amendments, alice_user),
     )
@@ -385,7 +390,7 @@ fn an_amendment_of_another_authors_message_is_refused() {
     assert_eq!(
         alice.apply_signed(
             amendments,
-            Seq(3),
+            Seq::new(3),
             &forged,
             signer(&bob, amendments, bob_user)
         ),
@@ -419,7 +424,7 @@ fn an_amendment_outside_its_segment_is_refused() {
     assert_eq!(
         alice.apply_signed(
             amendments,
-            Seq(2),
+            Seq::new(2),
             &forged,
             signer(&bob, amendments, author)
         ),
@@ -446,7 +451,7 @@ fn an_amendment_outside_its_segment_is_refused() {
     carol
         .apply_signed(
             amendments,
-            Seq(1),
+            Seq::new(1),
             &first,
             signer(&alice, amendments, author),
         )
@@ -474,7 +479,7 @@ fn locked_thread(
         .adopt_session(
             thread,
             peer,
-            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt");
     let linked = state.thread_linked(segment, root, thread).expect("link");
@@ -542,7 +547,7 @@ fn another_member_finds_the_thread_of_a_locked_root() {
     let replier = Id::<User>::mint();
     bob.apply_signed(
         amendments,
-        Seq(2),
+        Seq::new(2),
         &recorded.delta,
         signer(&alice, amendments, replier),
     )
@@ -567,7 +572,7 @@ fn a_thread_record_outside_the_rule_is_refused() {
     let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, author);
     bob.apply_signed(
         amendments,
-        Seq(2),
+        Seq::new(2),
         &recorded.delta,
         signer(&alice, amendments, author),
     )
@@ -617,7 +622,7 @@ fn a_thread_record_outside_the_rule_is_refused() {
         assert_eq!(
             alice.apply_signed(
                 amendments,
-                Seq(seq),
+                Seq::new(seq),
                 &forged,
                 signer(&bob, amendments, user)
             ),

@@ -12,7 +12,7 @@ use crate::channel::live_segments;
 use crate::session::next_peer;
 use crate::{ChannelState, ChannelType, MurmureError, Signer};
 
-const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 
 fn draft(text: &str) -> MessageDraft {
     MessageDraft {
@@ -63,7 +63,7 @@ fn close_created(
         .adopt_session(
             successor.document_id(),
             peer,
-            PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+            PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
         )
         .expect("adopt")
         .expect("the successor's first update");
@@ -114,8 +114,8 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
     alice.lease_granted(
         closing,
         Id::<Lease>::mint(),
-        ambre_core::Seq(1),
-        ambre_core::Millis(60_000),
+        ambre_core::Seq::new(1),
+        ambre_core::Millis::new(60_000),
     );
     alice.mark_final(closing).expect("mark").expect("a delta");
     assert_eq!(alice.closing_id(), None, "the slot is free");
@@ -133,7 +133,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
 /// snapshot past the byte bound, far below its message count.
 #[test]
 fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
-    const BYTES: ByteSize = ByteSize(16 * 1024);
+    const BYTES: ByteSize = ByteSize::new(16 * 1024);
     let mut alice = channel(10_000).with_segment_snapshot_size(BYTES);
     let author = Id::<User>::mint();
     let mut sent = 0;
@@ -177,7 +177,7 @@ fn a_successor_that_fails_to_open_is_fetched_again() {
 
     // The Sync worker could not open it.
     assert!(bob.cancel_older(successor.document_id()));
-    let at = |ms: u64| Timestamp(NOW.0 + ms);
+    let at = |ms: u64| Timestamp::new(NOW.get() + ms);
     assert_eq!(bob.successor_to_retry(NOW), None, "the tick dates it");
     assert_eq!(bob.successor_to_retry(at(999)), None);
     assert_eq!(bob.successor_to_retry(at(1_000)), Some(successor));
@@ -195,7 +195,7 @@ fn a_successor_that_fails_to_open_is_fetched_again() {
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(author),
     };
-    bob.apply_signed(successor.document_id(), Seq(1), &first, signer)
+    bob.apply_signed(successor.document_id(), Seq::new(1), &first, signer)
         .expect("arrival");
     bob.older_ready(successor.document_id()).expect("ready");
     assert_eq!((bob.active_id(), bob.closing_id()), (successor, Some(old)));
@@ -214,13 +214,13 @@ fn a_successor_is_fetched_again_four_times_at_most() {
     bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
         .expect("meta");
     assert_eq!(bob.successor_to_open(), Some(successor));
-    let mut now = NOW.0;
+    let mut now = NOW.get();
     let mut fetches = 0;
     for _ in 0..10 {
         bob.cancel_older(successor.document_id());
-        assert_eq!(bob.successor_to_retry(Timestamp(now)), None);
+        assert_eq!(bob.successor_to_retry(Timestamp::new(now)), None);
         now += 60_000;
-        if bob.successor_to_retry(Timestamp(now)).is_some() {
+        if bob.successor_to_retry(Timestamp::new(now)).is_some() {
             fetches += 1;
         }
     }
@@ -340,7 +340,7 @@ fn a_remote_close_is_followed_once_its_successor_arrives() {
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(author),
     };
-    bob.apply_signed(successor.document_id(), Seq(1), &first, signer)
+    bob.apply_signed(successor.document_id(), Seq::new(1), &first, signer)
         .expect("arrival");
     let event = bob.older_ready(successor.document_id()).expect("ready");
     assert_eq!(
@@ -399,14 +399,14 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         peer: alice.peer(successor.document_id()).expect("a session"),
         user: Some(alice_user),
     };
-    bob.apply_signed(successor.document_id(), Seq(1), &first, signer)
+    bob.apply_signed(successor.document_id(), Seq::new(1), &first, signer)
         .expect("arrival");
     bob.older_ready(successor.document_id()).expect("ready");
     let peer = next_peer();
     bob.adopt_session(
         successor.document_id(),
         peer,
-        PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+        PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
     )
     .expect("adopt");
 
@@ -440,7 +440,7 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
         user: Some(bob_user),
     };
     alice
-        .apply_signed(successor.document_id(), Seq(2), &sent.delta, signer)
+        .apply_signed(successor.document_id(), Seq::new(2), &sent.delta, signer)
         .expect("the check accepts the moved message");
     assert_eq!(
         alice.messages(successor).expect("successor"),

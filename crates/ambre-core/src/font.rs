@@ -83,7 +83,19 @@ impl FontSize {
 /// The error of a decoded font size that is not finite or is negative.
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 #[error("a font size must be a finite, non-negative number of points, not {0}")]
-pub struct InvalidFontSize(pub f32);
+pub struct InvalidFontSize(f32);
+
+impl InvalidFontSize {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: f32) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+}
 
 impl std::fmt::Display for FontSize {
     /// The number of points, without a unit: `12` for twelve points.
@@ -170,7 +182,19 @@ impl std::fmt::Display for FontWeight {
 /// The error of a decoded font weight off the CSS scale of 1 to 1000.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("a font weight lies on the CSS scale of 1 to 1000, not {0}")]
-pub struct InvalidFontWeight(pub u16);
+pub struct InvalidFontWeight(u16);
+
+impl InvalidFontWeight {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u16) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+}
 
 impl TryFrom<u16> for FontWeight {
     type Error = InvalidFontWeight;

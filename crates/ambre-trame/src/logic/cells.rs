@@ -187,7 +187,7 @@ impl TrameState {
         };
         self.uid_counter = counter.next();
         Some(Uid {
-            peer: ambre_core::PeerId(self.doc.peer_id()),
+            peer: ambre_core::PeerId::new(self.doc.peer_id()),
             counter,
         })
     }

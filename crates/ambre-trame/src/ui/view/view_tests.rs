@@ -41,7 +41,7 @@ impl TestClock {
 
 impl Clock for TestClock {
     fn now(&self) -> ambre_core::PageTime {
-        ambre_core::PageTime(self.0.get())
+        ambre_core::PageTime::new(self.0.get())
     }
 }
 

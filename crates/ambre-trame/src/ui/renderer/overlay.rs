@@ -456,7 +456,7 @@ pub fn draw_overlay<S: DrawSurface>(
         && let Some(range) = state.range_pixel_rect(rect)
     {
         let (x, y, w, ht) = (range.x0, range.y0, range.width(), range.height());
-        let phase = Px::<Surface>::new((clock.now().0 / 40.0) % MARCHING_PERIOD.get());
+        let phase = Px::<Surface>::new((clock.now().get() / 40.0) % MARCHING_PERIOD.get());
         let c = palette.selection;
         dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, phase);
         dashed_h(

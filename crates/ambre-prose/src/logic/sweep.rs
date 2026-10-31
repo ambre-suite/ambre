@@ -91,7 +91,7 @@ impl ProseState {
         let node = doc::Fields::of(doc::blocks(&self.doc).get_meta(*id).ok()?);
         match node.get(doc::NodeKey::Hidden)? {
             ValueOrContainer::Value(LoroValue::String(peer)) => {
-                peer.parse().ok().map(ambre_core::PeerId)
+                peer.parse().ok().map(ambre_core::PeerId::new)
             }
             _ => None,
         }
@@ -143,8 +143,10 @@ mod tests {
     /// registry ties to his user. Bob adds a block and hides it, and Alice
     /// reads both writes.
     fn bob_hid_a_block() -> (ProseState, ProseState, BlockId) {
-        let mut alice = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
-        let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
+        let mut alice =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
+        let mut bob =
+            ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
         bob.import_snapshot(&alice.export_snapshot())
             .expect("the seed imports");
         let entry = PeerEntry {
@@ -152,7 +154,7 @@ mod tests {
             nonce: FixedBytes::from_array([9; 16]),
             signature: FixedBytes::from_array([0; 64]),
         };
-        assert!(bob.adopt_session(ambre_core::PeerId(22), entry));
+        assert!(bob.adopt_session(ambre_core::PeerId::new(22), entry));
         let first = bob.root_blocks()[0];
         bob.handle_command(ProseCommand::InsertBlock {
             parent_id: None,

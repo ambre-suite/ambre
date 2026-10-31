@@ -295,8 +295,8 @@ mod tests {
 
     fn block() -> BlockId {
         BlockId {
-            peer: ambre_core::PeerId(1),
-            counter: ambre_core::OpCounter(0),
+            peer: ambre_core::PeerId::new(1),
+            counter: ambre_core::OpCounter::new(0),
         }
     }
 
@@ -313,8 +313,8 @@ mod tests {
             DocOffset::ZERO,
         );
         let echo = probe.handled(
-            ambre_core::PageTime(10.0),
-            ambre_core::PageTime(10.5),
+            ambre_core::PageTime::new(10.0),
+            ambre_core::PageTime::new(10.5),
             &draft,
             Dispatch::Sent,
         );
@@ -322,18 +322,18 @@ mod tests {
         assert_eq!(echo[0].name, ProbeName::Echo);
         assert!((echo[0].duration().get() - 0.5).abs() < 1e-9);
 
-        let caret = probe.painted(ambre_core::PageTime(14.0));
+        let caret = probe.painted(ambre_core::PageTime::new(14.0));
         assert_eq!(caret.len(), 1, "the draft shows the key on the next frame");
         assert_eq!(caret[0].name, ProbeName::Caret);
 
         assert!(
             probe
-                .answered(ambre_core::PageTime(15.0), &draft, Answer::Other)
+                .answered(ambre_core::PageTime::new(15.0), &draft, Answer::Other)
                 .is_empty(),
             "not yet confirmed"
         );
         draft.confirm(ambre_bus::app::prose::TextAck(7));
-        let confirm = probe.answered(ambre_core::PageTime(20.0), &draft, Answer::Other);
+        let confirm = probe.answered(ambre_core::PageTime::new(20.0), &draft, Answer::Other);
         assert_eq!(confirm.len(), 1);
         assert_eq!(confirm[0].name, ProbeName::Confirm);
         assert!((confirm[0].duration().get() - 10.0).abs() < 1e-9);
@@ -348,8 +348,8 @@ mod tests {
         assert!(
             probe
                 .handled(
-                    ambre_core::PageTime(0.0),
-                    ambre_core::PageTime(1.0),
+                    ambre_core::PageTime::new(0.0),
+                    ambre_core::PageTime::new(1.0),
                     &draft,
                     Dispatch::Sent
                 )
@@ -357,11 +357,11 @@ mod tests {
             "no echo without a draft"
         );
         assert!(
-            probe.painted(ambre_core::PageTime(5.0)).is_empty(),
+            probe.painted(ambre_core::PageTime::new(5.0)).is_empty(),
             "the frame before the layout shows nothing"
         );
-        probe.answered(ambre_core::PageTime(30.0), &draft, Answer::Layout);
-        let caret = probe.painted(ambre_core::PageTime(33.0));
+        probe.answered(ambre_core::PageTime::new(30.0), &draft, Answer::Layout);
+        let caret = probe.painted(ambre_core::PageTime::new(33.0));
         assert_eq!(caret.len(), 1);
         assert!((caret[0].duration().get() - 33.0).abs() < 1e-9);
     }
@@ -379,15 +379,15 @@ mod tests {
             DocOffset::ZERO,
         );
         probe.handled(
-            ambre_core::PageTime(0.0),
-            ambre_core::PageTime(0.1),
+            ambre_core::PageTime::new(0.0),
+            ambre_core::PageTime::new(0.1),
             &draft,
             Dispatch::Sent,
         );
         draft.confirm(ambre_bus::app::prose::TextAck(1));
         assert_eq!(
             probe
-                .answered(ambre_core::PageTime(0.5), &draft, Answer::Other)
+                .answered(ambre_core::PageTime::new(0.5), &draft, Answer::Other)
                 .len(),
             1
         );
@@ -398,14 +398,14 @@ mod tests {
             DocOffset::new(1),
         );
         probe.handled(
-            ambre_core::PageTime(1.0),
-            ambre_core::PageTime(1.1),
+            ambre_core::PageTime::new(1.0),
+            ambre_core::PageTime::new(1.1),
             &draft,
             Dispatch::Sent,
         );
         assert_eq!(
             probe
-                .answered(ambre_core::PageTime(1.5), &draft, Answer::Other)
+                .answered(ambre_core::PageTime::new(1.5), &draft, Answer::Other)
                 .len(),
             0,
             "a confirmed entry is not new"
@@ -414,7 +414,7 @@ mod tests {
         draft.laid();
         assert_eq!(
             probe
-                .answered(ambre_core::PageTime(9.0), &draft, Answer::Layout)
+                .answered(ambre_core::PageTime::new(9.0), &draft, Answer::Layout)
                 .len(),
             1
         );
@@ -433,8 +433,8 @@ mod tests {
             DocOffset::ZERO,
         );
         probe.handled(
-            ambre_core::PageTime(0.0),
-            ambre_core::PageTime(0.1),
+            ambre_core::PageTime::new(0.0),
+            ambre_core::PageTime::new(0.1),
             &draft,
             Dispatch::Sent,
         );
@@ -445,15 +445,15 @@ mod tests {
             DocOffset::new(1),
         );
         probe.handled(
-            ambre_core::PageTime(1.0),
-            ambre_core::PageTime(1.1),
+            ambre_core::PageTime::new(1.0),
+            ambre_core::PageTime::new(1.1),
             &draft,
             Dispatch::Sent,
         );
         draft.confirm(ambre_bus::app::prose::TextAck(1));
         draft.confirm(ambre_bus::app::prose::TextAck(2));
         draft.laid();
-        let confirm = probe.answered(ambre_core::PageTime(9.0), &draft, Answer::Layout);
+        let confirm = probe.answered(ambre_core::PageTime::new(9.0), &draft, Answer::Layout);
         assert_eq!(confirm.len(), 2);
     }
 
@@ -465,14 +465,14 @@ mod tests {
         assert!(
             probe
                 .handled(
-                    ambre_core::PageTime(0.0),
-                    ambre_core::PageTime(0.2),
+                    ambre_core::PageTime::new(0.0),
+                    ambre_core::PageTime::new(0.2),
                     &draft,
                     Dispatch::Kept
                 )
                 .is_empty()
         );
-        assert_eq!(probe.painted(ambre_core::PageTime(4.0)).len(), 1);
+        assert_eq!(probe.painted(ambre_core::PageTime::new(4.0)).len(), 1);
     }
 
     /// The count is the frames begun between the key and its answer: the
@@ -489,20 +489,20 @@ mod tests {
             DocOffset::ZERO,
         );
         probe.handled(
-            ambre_core::PageTime(0.0),
-            ambre_core::PageTime(0.1),
+            ambre_core::PageTime::new(0.0),
+            ambre_core::PageTime::new(0.1),
             &draft,
             Dispatch::Sent,
         );
         probe.frame();
-        probe.answered(ambre_core::PageTime(16.0), &draft, Answer::Other);
+        probe.answered(ambre_core::PageTime::new(16.0), &draft, Answer::Other);
         assert!(
             probe.take_counts().is_empty(),
             "the echo frame has no answer"
         );
         probe.frame();
         draft.confirm(ambre_bus::app::prose::TextAck(1));
-        probe.answered(ambre_core::PageTime(33.0), &draft, Answer::Other);
+        probe.answered(ambre_core::PageTime::new(33.0), &draft, Answer::Other);
         assert_eq!(probe.take_counts(), [FrameCount::new(2)]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");
     }

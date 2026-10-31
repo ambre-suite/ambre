@@ -12,7 +12,7 @@ use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 use crate::schema::{self, Root};
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
 
-const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 const THUMB: &str = "\u{1F44D}";
 
 /// One member of the channel: its state, and the user it writes for.
@@ -42,7 +42,7 @@ impl Member {
         self.state
             .apply_signed(
                 sent.segment.document_id(),
-                Seq(seq),
+                Seq::new(seq),
                 &sent.delta,
                 from.signer(),
             )

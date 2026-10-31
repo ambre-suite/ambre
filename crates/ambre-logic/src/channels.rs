@@ -2108,7 +2108,7 @@ mod tests {
     use ambre_core::id::Lease;
     use ambre_murmure::ChannelType;
 
-    const NOW: Timestamp = Timestamp(1_700_000_000_000);
+    const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
         let (state, ui, sync, store) = harness_with_store();
@@ -2338,7 +2338,7 @@ mod tests {
         bob.handle_logic_event(LogicEvent::RemoteUpdate {
             document_id,
             delta: ambre_bus::SignedDelta {
-                seq: ambre_core::Seq(1),
+                seq: ambre_core::Seq::new(1),
                 payload,
                 nonce: FixedBytes::from_array([0; 16]),
                 peer,
@@ -2417,7 +2417,7 @@ mod tests {
             deltas.push((
                 document_id,
                 ambre_bus::SignedDelta {
-                    seq: ambre_core::Seq(seq),
+                    seq: ambre_core::Seq::new(seq),
                     payload,
                     nonce: FixedBytes::from_array([0; 16]),
                     peer,
@@ -2499,7 +2499,7 @@ mod tests {
         state.read_cursors.insert(
             active.document_id(),
             ReadCursor {
-                read: Seq(0),
+                read: Seq::new(0),
                 active: ambre_bus::Activity::Quiet,
             },
         );
@@ -2713,7 +2713,10 @@ mod tests {
             .collect();
         assert_eq!(
             horizons,
-            HashMap::from([(meta, ambre_core::Seq(1)), (active, ambre_core::Seq(1))]),
+            HashMap::from([
+                (meta, ambre_core::Seq::new(1)),
+                (active, ambre_core::Seq::new(1))
+            ]),
             "each light subscription keeps its horizon"
         );
 
@@ -2824,7 +2827,7 @@ mod tests {
     fn serve(state: &mut LogicState, stored: &ChannelState, document_id: Id<Document>) {
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id,
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (stored.snapshot(document_id).expect("snapshot")),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -3290,7 +3293,7 @@ mod tests {
                     document_id: self.active.document_id(),
                     kind: ChannelDocumentKind::Segment,
                     active: ambre_bus::Activity::Active,
-                    read: Seq(read),
+                    read: Seq::new(read),
                     last: None,
                 }],
             });
@@ -3371,7 +3374,10 @@ mod tests {
             ids.iter()
                 .map(|id| channel.position(m.active, *id))
                 .collect::<Vec<_>>(),
-            [Some(Position::Exact(Seq(5))), Some(Position::Exact(Seq(6)))]
+            [
+                Some(Position::Exact(Seq::new(5))),
+                Some(Position::Exact(Seq::new(6)))
+            ]
         );
     }
 
@@ -3423,11 +3429,11 @@ mod tests {
         let ids = m.message_ids();
 
         m.mark_unread(ids[1]);
-        assert_eq!(m.moved(), [vec![(m.active, Seq(5))]]);
+        assert_eq!(m.moved(), [vec![(m.active, Seq::new(5))]]);
         assert_eq!(m.counts(), [Some(1)]);
 
         m.mark_unread(ids[0]);
-        assert_eq!(m.moved(), [vec![(m.active, Seq(4))]]);
+        assert_eq!(m.moved(), [vec![(m.active, Seq::new(4))]]);
         assert_eq!(m.counts(), [Some(2)]);
     }
 
@@ -3460,7 +3466,10 @@ mod tests {
         });
         assert!(m.message_ids().is_empty());
         // Refused, and still delivered: the count reads past it.
-        assert_eq!(m.bob.channels[&m.channel_id].delivered(document_id), Seq(1));
+        assert_eq!(
+            m.bob.channels[&m.channel_id].delivered(document_id),
+            Seq::new(1)
+        );
         assert!(
             !drain(&m.bob_ui)
                 .iter()
@@ -3532,7 +3541,7 @@ mod tests {
 
         m.mark_unread(ids[0]);
         let moved = m.moved();
-        assert_eq!(moved, [vec![(m.active, Seq(4))]]);
+        assert_eq!(moved, [vec![(m.active, Seq::new(4))]]);
         assert!(
             moved
                 .iter()
@@ -3703,12 +3712,12 @@ mod tests {
                     ),
                 ],
             },
-            now: Timestamp(1),
+            now: Timestamp::new(1),
         };
         let delete = MurmureCommand::DeleteMessage {
             at: segment.into(),
             message,
-            now: Timestamp(2),
+            now: Timestamp::new(2),
         };
 
         for command in [edit, delete.clone()] {
@@ -3866,8 +3875,8 @@ mod tests {
                 attachments: vec![Attachment {
                     media_ref: ContentHash::parse(&file).expect("a content hash"),
                     name: "plan.pdf".to_owned(),
-                    media_type: MediaType("application/pdf".to_owned()),
-                    size: ByteSize(2048),
+                    media_type: MediaType::new("application/pdf".to_owned()),
+                    size: ByteSize::new(2048),
                 }],
                 now,
                 confirmed,
@@ -3883,7 +3892,7 @@ mod tests {
             MurmureCommand::DeleteMessage {
                 at: segment.into(),
                 message,
-                now: Timestamp(2),
+                now: Timestamp::new(2),
             },
         );
         let asked = erases(&drain(&sync));
@@ -4020,7 +4029,7 @@ mod tests {
             id: Some(again),
             request: ambre_bus::ApiRequest::DownloadMedia,
             failure: ambre_bus::ApiFailure::Relay {
-                status: ambre_bus::HttpStatus(404),
+                status: ambre_bus::HttpStatus::new(404),
                 code: None,
             },
             message: "gone".into(),
@@ -4042,7 +4051,7 @@ mod tests {
     // --- Who watches a channel, and who types in it ---
 
     fn at(offset: u64) -> Timestamp {
-        Timestamp(NOW.0 + offset)
+        Timestamp::new(NOW.get() + offset)
     }
 
     fn command(state: &mut LogicState, channel_id: Id<Channel>, command: MurmureCommand) {
@@ -4121,7 +4130,7 @@ mod tests {
         );
         assert!(ephemerals(&sync).is_empty(), "within the refresh period");
         let refreshed = MurmureCommand::Tick {
-            now: at(ambre_murmure::REFRESH_PERIOD.0),
+            now: at(ambre_murmure::REFRESH_PERIOD.get()),
         };
         command(&mut state, channel_id, refreshed);
         assert_eq!(ephemerals(&sync), [(meta, Sample::Watching.bytes())]);
@@ -4147,7 +4156,7 @@ mod tests {
         let before = versions(&state);
         drain(&sync);
 
-        for offset in [0, 500, ambre_murmure::TYPING_REFRESH.0] {
+        for offset in [0, 500, ambre_murmure::TYPING_REFRESH.get()] {
             command(
                 &mut state,
                 channel_id,
@@ -4230,7 +4239,7 @@ mod tests {
         );
 
         let expired = MurmureCommand::Tick {
-            now: at(ambre_murmure::TYPING_EXPIRY.0 + 1),
+            now: at(ambre_murmure::TYPING_EXPIRY.get() + 1),
         };
         command(&mut state, channel_id, expired);
         assert_eq!(watchers(&ui), [(channel_id, vec![bob], Vec::new())]);
@@ -4591,7 +4600,7 @@ mod tests {
             channel_id,
             segment: closing,
             answer: LeaseAnswer::Deferred {
-                retry_in: ambre_core::Millis(5_000),
+                retry_in: ambre_core::Millis::new(5_000),
             },
         });
         command(
@@ -4617,8 +4626,8 @@ mod tests {
             segment: closing,
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_core::Seq(1),
-                expires_in: ambre_core::Millis(30_000),
+                horizon: ambre_core::Seq::new(1),
+                expires_in: ambre_core::Millis::new(30_000),
             },
         });
         command(
@@ -4627,13 +4636,13 @@ mod tests {
             MurmureCommand::Tick { now: at(7_000) },
         );
         assert!(finalizes(&sync).is_empty(), "the horizon is not in");
-        state.record_channel_seq(closing.document_id(), ambre_core::Seq(1), None);
+        state.record_channel_seq(closing.document_id(), ambre_core::Seq::new(1), None);
         command(
             &mut state,
             channel_id,
             MurmureCommand::Tick { now: at(8_000) },
         );
-        assert_eq!(finalizes(&sync), [(closing, Some(ambre_core::Seq(1)))]);
+        assert_eq!(finalizes(&sync), [(closing, Some(ambre_core::Seq::new(1)))]);
 
         state.handle_logic_event(LogicEvent::SegmentFinalized {
             channel_id,
@@ -4662,12 +4671,12 @@ mod tests {
             segment,
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_core::Seq(1),
-                expires_in: ambre_core::Millis(30_000),
+                horizon: ambre_core::Seq::new(1),
+                expires_in: ambre_core::Millis::new(30_000),
             },
         });
         command(state, channel_id, MurmureCommand::Tick { now });
-        assert_eq!(finalizes(sync), [(segment, Some(ambre_core::Seq(1)))]);
+        assert_eq!(finalizes(sync), [(segment, Some(ambre_core::Seq::new(1)))]);
         state.handle_logic_event(LogicEvent::SegmentFinalized {
             channel_id,
             segment,
@@ -4683,7 +4692,7 @@ mod tests {
         sync: &Receiver<SyncCommand>,
     ) -> (Id<Channel>, Id<Segment>, Id<Segment>) {
         let (channel_id, closed) = closed_channel(state, sync);
-        state.record_channel_seq(closed.document_id(), ambre_core::Seq(1), None);
+        state.record_channel_seq(closed.document_id(), ambre_core::Seq::new(1), None);
         finalize_at_one(state, sync, channel_id, closed, NOW);
         let channel = &state.channels[&channel_id];
         let (meta, active) = (channel.meta_id(), channel.active_id());
@@ -4878,7 +4887,7 @@ mod tests {
         drain(&ui);
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: segment.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (vec![0xff; 8]).into(),
         });
         state.handle_logic_event(LogicEvent::DocumentReady {
@@ -4896,7 +4905,7 @@ mod tests {
     fn a_dropped_final_snapshot_is_shown_and_sealed_again() {
         let (mut state, ui, sync) = harness();
         let (channel_id, closing) = closed_channel(&mut state, &sync);
-        state.record_channel_seq(closing.document_id(), ambre_core::Seq(1), None);
+        state.record_channel_seq(closing.document_id(), ambre_core::Seq::new(1), None);
         finalize_at_one(&mut state, &sync, channel_id, closing, NOW);
         drain(&sync);
         drain(&ui);
@@ -4969,7 +4978,7 @@ mod tests {
             .adopt_session(
                 successor.document_id(),
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
             )
             .expect("adopt");
         drain(&sync);
@@ -5234,7 +5243,7 @@ mod tests {
         sync: &Receiver<SyncCommand>,
     ) -> (Id<Channel>, Id<Segment>, Id<Message>, Id<Document>) {
         let (channel_id, closing) = closed_channel(state, sync);
-        state.record_channel_seq(closing.document_id(), ambre_core::Seq(1), None);
+        state.record_channel_seq(closing.document_id(), ambre_core::Seq::new(1), None);
         finalize_at_one(state, sync, channel_id, closing, NOW);
         drain(sync);
         let message = state.channels[&channel_id].messages(closing).expect("held")[0].id;
@@ -5287,10 +5296,10 @@ mod tests {
             segment,
             answer: FoldAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_core::Seq(1),
+                horizon: ambre_core::Seq::new(1),
                 amendments,
-                amendments_seq: ambre_core::Seq(0),
-                expires_in: ambre_core::Millis(30_000),
+                amendments_seq: ambre_core::Seq::new(0),
+                expires_in: ambre_core::Millis::new(30_000),
             },
         });
         command(
@@ -5300,7 +5309,7 @@ mod tests {
         );
         assert_eq!(
             folds(&sync),
-            [(segment, Some(ambre_core::Seq(0)))],
+            [(segment, Some(ambre_core::Seq::new(0)))],
             "the fold leaves"
         );
         state.handle_logic_event(LogicEvent::SegmentFolded {
@@ -5492,13 +5501,13 @@ mod tests {
             channel_verdict(&mut state, &sync, document_id, covered, b"loro?".to_vec()),
             SnapshotVerdict::Mismatch
         );
-        state.record_channel_seq(document_id, ambre_core::Seq(2), None);
+        state.record_channel_seq(document_id, ambre_core::Seq::new(2), None);
         assert_eq!(
             channel_verdict(
                 &mut state,
                 &sync,
                 document_id,
-                ambre_core::Seq(2),
+                ambre_core::Seq::new(2),
                 payload.into_bytes()
             ),
             SnapshotVerdict::Unchecked,
@@ -5525,7 +5534,7 @@ mod tests {
             &mut state,
             channel_id,
             MurmureCommand::Tick {
-                now: at(1 + ambre_murmure::FINALIZE_RETRY.0),
+                now: at(1 + ambre_murmure::FINALIZE_RETRY.get()),
             },
         );
         assert_eq!(finalizes(&sync), [(closing, None)], "asked again");
@@ -5612,7 +5621,7 @@ mod tests {
             message: "no update yet".to_owned(),
         });
         let tick = |ms: u64| MurmureCommand::Tick {
-            now: Timestamp(NOW.0 + ms),
+            now: Timestamp::new(NOW.get() + ms),
         };
         command(&mut state, channel_id, tick(0));
         command(&mut state, channel_id, tick(999));
@@ -6031,7 +6040,7 @@ mod tests {
             .adopt_session(
                 thread,
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
             )
             .expect("adopt");
         let named = m
@@ -6094,12 +6103,12 @@ mod tests {
             .adopt_session(
                 thread,
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
             )
             .expect("adopt");
         channel.thread_linked(closed, root, thread).expect("link");
         let probe = channel.snapshot(thread).expect("thread");
-        state.record_channel_seq(closed.document_id(), ambre_core::Seq(1), None);
+        state.record_channel_seq(closed.document_id(), ambre_core::Seq::new(1), None);
         finalize_at_one(&mut state, &sync, channel_id, closed, NOW);
         let channel = &state.channels[&channel_id];
         let (meta, active) = (channel.meta_id(), channel.active_id());
@@ -6119,7 +6128,7 @@ mod tests {
              payload: &ambre_core::Payload<ambre_core::SnapshotBytes>| {
                 state.handle_logic_event(LogicEvent::RemoteSnapshot {
                     document_id,
-                    covered_seq: ambre_core::Seq(1),
+                    covered_seq: ambre_core::Seq::new(1),
                     payload: payload.clone(),
                 });
                 state.handle_logic_event(LogicEvent::DocumentReady {
@@ -6213,7 +6222,7 @@ mod tests {
         assert_eq!(
             m.bob.read_cursors.get(&thread),
             Some(&ReadCursor {
-                read: Seq(1),
+                read: Seq::new(1),
                 active: ambre_bus::Activity::Quiet,
             })
         );
@@ -6242,7 +6251,7 @@ mod tests {
             .adopt_session(
                 thread,
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
             )
             .expect("adopt");
         let named = m
@@ -6282,7 +6291,7 @@ mod tests {
         m.bob.read_cursors.insert(
             document_id,
             ReadCursor {
-                read: Seq(2),
+                read: Seq::new(2),
                 active: ambre_bus::Activity::Quiet,
             },
         );
@@ -6379,8 +6388,8 @@ mod tests {
             matches!(asked.as_slice(), [SyncCommand::FetchActivity]),
             "expected one activity request, got {asked:?}"
         );
-        answer(&mut state, channel_id, &[(thread, Seq(3))]);
-        assert_eq!(watched(&sync), [(thread, meta, Seq(3))]);
+        answer(&mut state, channel_id, &[(thread, Seq::new(3))]);
+        assert_eq!(watched(&sync), [(thread, meta, Seq::new(3))]);
         state.handle_logic_event(LogicEvent::ThreadActivity {
             document_id: thread,
         });
@@ -6388,11 +6397,11 @@ mod tests {
 
         // A thread the channel already places is watched at once.
         let placed = Id::<Document>::mint();
-        answer(&mut state, channel_id, &[(placed, Seq(0))]);
+        answer(&mut state, channel_id, &[(placed, Seq::new(0))]);
         state.handle_logic_event(LogicEvent::ThreadActivity {
             document_id: placed,
         });
-        assert_eq!(watched(&sync), [(placed, meta, Seq(0))]);
+        assert_eq!(watched(&sync), [(placed, meta, Seq::new(0))]);
     }
 
     /// A thread the open channel holds hears its deltas on its own topic.
@@ -6405,7 +6414,7 @@ mod tests {
         let (channel_id, active) = open_channel(&mut state);
         let unopened = Id::<Channel>::mint();
         let thread = Id::<Document>::mint();
-        answer(&mut state, unopened, &[(thread, Seq(0))]);
+        answer(&mut state, unopened, &[(thread, Seq::new(0))]);
         drain(&sync);
         for document_id in [active.document_id(), thread] {
             state.handle_logic_event(LogicEvent::ThreadActivity { document_id });
@@ -6424,14 +6433,14 @@ mod tests {
         state.read_cursors.insert(
             active.document_id(),
             ReadCursor {
-                read: Seq(0),
+                read: Seq::new(0),
                 active: ambre_bus::Activity::Quiet,
             },
         );
         let mut threads = Vec::new();
         for channel_id in [closed, open] {
             let thread = Id::<Document>::mint();
-            answer(&mut state, channel_id, &[(thread, Seq(0))]);
+            answer(&mut state, channel_id, &[(thread, Seq::new(0))]);
             state.handle_logic_event(LogicEvent::ThreadActivity {
                 document_id: thread,
             });
@@ -6482,7 +6491,7 @@ mod tests {
         let (channel_id, _) = open_channel(&mut state);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
         let thread = Id::<Document>::mint();
-        answer(&mut state, channel_id, &[(thread, Seq(0))]);
+        answer(&mut state, channel_id, &[(thread, Seq::new(0))]);
         state.handle_logic_event(LogicEvent::ThreadActivity {
             document_id: thread,
         });

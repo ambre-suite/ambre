@@ -47,7 +47,11 @@ impl SyncState {
                                 // (NaN -> 0 when the server timestamp is absent).
                                 updated_at: {
                                     let ms = js_sys::Date::parse(e.updated_at.as_str());
-                                    ambre_bus::Timestamp(if ms.is_nan() { 0 } else { ms as u64 })
+                                    ambre_bus::Timestamp::new(if ms.is_nan() {
+                                        0
+                                    } else {
+                                        ms as u64
+                                    })
                                 },
                                 member_count: e.member_count.max(ambre_core::MemberCount::ONE),
                             });
@@ -71,7 +75,7 @@ impl SyncState {
                     doc_type: *doc_type,
                     name: Some(name.clone()),
                     role: Role::Owner,
-                    updated_at: ambre_bus::Timestamp(0),
+                    updated_at: ambre_bus::Timestamp::new(0),
                     member_count: ambre_core::MemberCount::ONE,
                 })
                 .collect();

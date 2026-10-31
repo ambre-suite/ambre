@@ -18,7 +18,7 @@ use crate::keys::DocumentKey;
 /// [`FixedBytes::<CommitmentTag>::SIZE`](FixedBytes::SIZE).
 const TAG_LEN: usize = 32;
 
-const _: () = assert!(FixedBytes::<CommitmentTag>::SIZE.0 == TAG_LEN as u64);
+const _: () = assert!(FixedBytes::<CommitmentTag>::SIZE.get() == TAG_LEN as u64);
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -41,7 +41,7 @@ fn mac(
 ) -> HmacSha256 {
     let mut m = keyed(key.as_bytes());
     m.update(nonce.as_slice());
-    m.update(&ciphertext.0);
+    m.update(ciphertext.as_bytes());
     m.update(aad.as_bytes());
     m
 }

@@ -85,7 +85,7 @@ mod tests {
         let doc = LoroDoc::new();
         doc.import(&base.export(ExportMode::all_updates()).expect("export"))
             .expect("import");
-        doc.set_peer_id(peer.0).expect("peer");
+        doc.set_peer_id(peer.get()).expect("peer");
         let from: VersionVector = doc.oplog_vv();
         doc.get_text("t").insert(0, text).expect("insert");
         doc.commit();
@@ -95,7 +95,7 @@ mod tests {
 
     fn scaffold(peer: ambre_core::PeerId) -> LoroDoc {
         let doc = LoroDoc::new();
-        doc.set_peer_id(peer.0).expect("peer");
+        doc.set_peer_id(peer.get()).expect("peer");
         doc.get_map("meta").insert("v", 1).expect("insert");
         doc.commit();
         doc
@@ -103,49 +103,57 @@ mod tests {
 
     #[test]
     fn a_delta_on_a_scaffold_the_reader_never_wrote_waits_on_it() {
-        let (_, delta) = on_top(&scaffold(ambre_core::PeerId(7)), ambre_core::PeerId(1), "a");
-        let reader = scaffold(ambre_core::PeerId(8));
+        let (_, delta) = on_top(
+            &scaffold(ambre_core::PeerId::new(7)),
+            ambre_core::PeerId::new(1),
+            "a",
+        );
+        let reader = scaffold(ambre_core::PeerId::new(8));
         reader.import(&delta).expect("import");
         let mut waiting = Waiting::default();
-        waiting.note(ambre_core::Seq(1), &delta.clone().into(), &reader);
+        waiting.note(ambre_core::Seq::new(1), &delta.clone().into(), &reader);
         waiting.settle(&reader);
         assert!(
-            waiting.stalled(ambre_core::Seq(1)),
+            waiting.stalled(ambre_core::Seq::new(1)),
             "the scaffold of peer 7 never arrives"
         );
         assert!(
-            !waiting.stalled(ambre_core::Seq(1)),
+            !waiting.stalled(ambre_core::Seq::new(1)),
             "the document is reported once"
         );
     }
 
     #[test]
     fn a_delta_on_the_readers_own_scaffold_waits_on_nothing() {
-        let (_, delta) = on_top(&scaffold(ambre_core::PeerId(7)), ambre_core::PeerId(1), "a");
-        let reader = scaffold(ambre_core::PeerId(7));
+        let (_, delta) = on_top(
+            &scaffold(ambre_core::PeerId::new(7)),
+            ambre_core::PeerId::new(1),
+            "a",
+        );
+        let reader = scaffold(ambre_core::PeerId::new(7));
         reader.import(&delta).expect("import");
         let mut waiting = Waiting::default();
-        waiting.note(ambre_core::Seq(1), &delta.clone().into(), &reader);
-        assert!(!waiting.stalled(ambre_core::Seq(1)));
+        waiting.note(ambre_core::Seq::new(1), &delta.clone().into(), &reader);
+        assert!(!waiting.stalled(ambre_core::Seq::new(1)));
     }
 
     #[test]
     fn a_delta_waiting_on_one_not_yet_held_is_not_reported() {
-        let base = scaffold(ambre_core::PeerId(7));
-        let (first_doc, first) = on_top(&base, ambre_core::PeerId(1), "a");
-        let (_, second) = on_top(&first_doc, ambre_core::PeerId(2), "b");
-        let reader = scaffold(ambre_core::PeerId(7));
+        let base = scaffold(ambre_core::PeerId::new(7));
+        let (first_doc, first) = on_top(&base, ambre_core::PeerId::new(1), "a");
+        let (_, second) = on_top(&first_doc, ambre_core::PeerId::new(2), "b");
+        let reader = scaffold(ambre_core::PeerId::new(7));
         reader.import(&second).expect("import");
         let mut waiting = Waiting::default();
-        waiting.note(ambre_core::Seq(2), &second.clone().into(), &reader);
+        waiting.note(ambre_core::Seq::new(2), &second.clone().into(), &reader);
         assert!(
-            !waiting.stalled(ambre_core::Seq(0)),
+            !waiting.stalled(ambre_core::Seq::new(0)),
             "seq 1 is not held yet"
         );
         reader.import(&first).expect("import");
         waiting.settle(&reader);
         assert!(
-            !waiting.stalled(ambre_core::Seq(2)),
+            !waiting.stalled(ambre_core::Seq::new(2)),
             "seq 1 carried what seq 2 waited on"
         );
     }

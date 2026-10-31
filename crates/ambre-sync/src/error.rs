@@ -144,7 +144,7 @@ mod tests {
         let refused = HttpError::refused(
             crate::http::Method::Delete,
             &crate::http::Target::relay("https://api.test/share"),
-            ambre_core::HttpStatus(403),
+            ambre_core::HttpStatus::new(403),
             Some(ambre_core::RefusalCode::SetupRequired),
         );
         let step = SyncError::from(refused.clone());

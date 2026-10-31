@@ -15,7 +15,7 @@ use ambre_core::id::{Id, User};
 
 /// How often a client that holds a space open sends its presence sample, in
 /// milliseconds (`ambre-spec-budgets.md section 8`).
-pub const REFRESH_PERIOD: Millis = Millis(60_000);
+pub const REFRESH_PERIOD: Millis = Millis::new(60_000);
 
 /// How long a presence sample keeps its member online, in milliseconds
 /// (`ambre-spec-budgets.md section 8`). Three refresh periods: one for the
@@ -214,10 +214,10 @@ mod tests {
         assert!(shown.contains("members: 1"), "{shown}");
     }
 
-    const T0: Timestamp = Timestamp(1_700_000_000_000);
+    const T0: Timestamp = Timestamp::new(1_700_000_000_000);
 
     fn at(offset: u64) -> Timestamp {
-        Timestamp(T0.0 + offset)
+        Timestamp::new(T0.get() + offset)
     }
 
     fn names(view: &[MemberView]) -> Vec<&str> {
@@ -257,11 +257,11 @@ mod tests {
         assert!(roster.heard(bob), "Bob was offline");
         assert_eq!(roster.presence(bob), Presence::Online);
         assert!(
-            !roster.tick(at(PRESENCE_EXPIRY.0)),
+            !roster.tick(at(PRESENCE_EXPIRY.get())),
             "still within the expiry"
         );
         assert_eq!(roster.presence(bob), Presence::Online);
-        assert!(roster.tick(at(PRESENCE_EXPIRY.0 + 1)));
+        assert!(roster.tick(at(PRESENCE_EXPIRY.get() + 1)));
         assert_eq!(roster.presence(bob), Presence::Offline);
     }
 
@@ -273,7 +273,7 @@ mod tests {
         let mut roster = roster(&[(bob, "Bob")]);
         for period in 1..10 {
             roster.heard(bob);
-            roster.tick(at(period * REFRESH_PERIOD.0));
+            roster.tick(at(period * REFRESH_PERIOD.get()));
             assert_eq!(roster.presence(bob), Presence::Online, "period {period}");
         }
     }
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn the_sample_holds_the_state_alone() {
         let sample = presence_sample();
-        assert_eq!(sample.len(), ambre_bus::ByteSize(2));
+        assert_eq!(sample.len(), ambre_bus::ByteSize::new(2));
         assert!(is_presence_sample(&sample));
         let sample_of =
             |bytes: &[u8]| ambre_core::Payload::<ambre_core::EphemeralBytes>::new(bytes.to_vec());

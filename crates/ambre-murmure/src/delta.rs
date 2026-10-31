@@ -203,7 +203,11 @@ pub(crate) fn check(
     thread_of: impl Fn(&ContainerID) -> Option<ThreadField>,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
-    if update.changes.iter().any(|c| c.id.peer != signer.peer.0) {
+    if update
+        .changes
+        .iter()
+        .any(|c| c.id.peer != signer.peer.get())
+    {
         return Err(Refusal::NotSigners);
     }
     // A container this session created is the signer's own.
@@ -230,7 +234,7 @@ pub(crate) fn check(
                 // A message, its body and every child of it belong to the
                 // user whose PeerID created them. Its `thread` field is the
                 // one exception (`MURMURE-255`).
-                if owner(ambre_core::PeerId(*peer)) != Some(user) {
+                if owner(ambre_core::PeerId::new(*peer)) != Some(user) {
                     if thread_set(&op.content, thread_of(id)) {
                         continue;
                     }
@@ -309,16 +313,20 @@ pub(crate) fn check_amendments(
     thread_of: impl Fn(Id<Message>) -> ThreadField,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
-    if update.changes.iter().any(|c| c.id.peer != signer.peer.0) {
+    if update
+        .changes
+        .iter()
+        .any(|c| c.id.peer != signer.peer.get())
+    {
         return Err(Refusal::NotSigners);
     }
     for op in update.changes.iter().flat_map(|c| &c.ops) {
         match &op.container {
             ContainerID::Normal { peer, .. } => {
-                let owner = if *peer == signer.peer.0 {
+                let owner = if *peer == signer.peer.get() {
                     Some(user)
                 } else {
-                    registered(ambre_core::PeerId(*peer))
+                    registered(ambre_core::PeerId::new(*peer))
                 };
                 if owner != Some(user) {
                     return Err(Refusal::ForeignMessage);
@@ -682,7 +690,7 @@ pub(crate) fn import_arrivals(
 pub(crate) fn binary_by(payload: &Payload<DeltaBytes>, peer: ambre_core::PeerId) -> bool {
     LoroDoc::decode_import_blob_meta(payload.as_bytes(), false).is_ok_and(|meta| {
         meta.mode == loro::EncodedBlobMode::Updates
-            && meta.partial_end_vv.keys().all(|p| *p == peer.0)
+            && meta.partial_end_vv.keys().all(|p| *p == peer.get())
     })
 }
 

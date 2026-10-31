@@ -174,7 +174,7 @@ pub async fn issue_session(
 /// The longest an access token may live, whatever the deployment configures
 /// (`SRV-025`). A token is not revocable before its expiry, so this bounds the
 /// window a leaked one stays usable.
-pub const ACCESS_TOKEN_MAX_TTL: ambre_core::Seconds = ambre_core::Seconds(15 * 60);
+pub const ACCESS_TOKEN_MAX_TTL: ambre_core::Seconds = ambre_core::Seconds::new(15 * 60);
 
 /// The lifetime a minted token carries: the configured one, capped.
 fn access_lifetime(configured: ambre_core::Seconds) -> ambre_core::Seconds {

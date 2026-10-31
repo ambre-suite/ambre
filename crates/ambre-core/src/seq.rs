@@ -12,9 +12,19 @@ use serde::{Deserialize, Serialize};
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct Seq(pub u64);
+pub struct Seq(u64);
 
 impl Seq {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// Before the first update of a document.
     pub const ZERO: Self = Self(0);
 
@@ -65,9 +75,19 @@ impl Seq {
 /// A number of deltas of one document: the rows of its inline tail, or the
 /// updates the relay numbered past a snapshot.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DeltaCount(pub u64);
+pub struct DeltaCount(u64);
 
 impl DeltaCount {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The count as a Postgres `BIGINT` stores it, saturating at `i64::MAX`.
     pub fn to_i64_saturating(self) -> i64 {
         i64::try_from(self.0).unwrap_or(i64::MAX)

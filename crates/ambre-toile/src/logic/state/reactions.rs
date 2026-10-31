@@ -247,7 +247,7 @@ mod tests {
     fn a_reaction_encodes() {
         let reaction = Reaction {
             kind: ReactionKind::Emoji(ambre_bus::Emoji::from("+1")),
-            ts: ambre_bus::Timestamp(0),
+            ts: ambre_bus::Timestamp::new(0),
         };
         assert!(encode(&reaction).is_ok());
     }

@@ -19,7 +19,7 @@ use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Query, SCHEMA_VERSION, Signer,
 };
 
-const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 
 /// The query a member searching for `text` sends.
 fn parse_query(text: &str) -> Option<Query> {
@@ -643,7 +643,7 @@ fn a_sent_delta_brings_a_peer_to_the_same_messages() {
     let events = bob
         .apply_signed(
             sent.segment.document_id(),
-            Seq(1),
+            Seq::new(1),
             &sent.delta,
             signer(&alice, sent.segment, author),
         )
@@ -670,7 +670,7 @@ fn a_remote_delta_names_the_message_it_brought_once() {
     assert_eq!(alice.take_arrived(), None, "an own send");
     bob.apply_signed(
         sent.segment.document_id(),
-        Seq(1),
+        Seq::new(1),
         &sent.delta,
         signer(&alice, sent.segment, author),
     )
@@ -719,7 +719,7 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
     let author = Id::<User>::mint();
     let sent = alice.send(&draft("base"), author, NOW).expect("send");
     let by = signer(&alice, sent.segment, author);
-    bob.apply_signed(sent.segment.document_id(), Seq(1), &sent.delta, by)
+    bob.apply_signed(sent.segment.document_id(), Seq::new(1), &sent.delta, by)
         .expect("apply");
 
     let segment = alice.active_id();
@@ -895,7 +895,7 @@ fn a_notice_names_the_member_who_joins_for_every_member() {
     );
     // The authorship check admits it: every key belongs to the inviter.
     let by = signer(&alice, sent.segment, author);
-    bob.apply_signed(sent.segment.document_id(), Seq(1), &sent.delta, by)
+    bob.apply_signed(sent.segment.document_id(), Seq::new(1), &sent.delta, by)
         .expect("apply");
     let read = bob.messages(bob.active_id()).expect("held");
     assert_eq!(read.len(), 1);
@@ -1364,7 +1364,7 @@ fn two_finals() -> (Stored, Id<Segment>, Id<Segment>) {
         (newer, 20, SegmentState::Final),
         (stored.active_id, 30, SegmentState::Active),
     ] {
-        push_segment_entry(&meta, id, Timestamp(from), state).expect("entry");
+        push_segment_entry(&meta, id, Timestamp::new(from), state).expect("entry");
     }
     meta.commit();
     stored.meta = snapshot(&meta);
@@ -1383,18 +1383,18 @@ fn a_band_spans_its_segment_up_to_the_next_one() {
         Some(MurmureEvent::Unreadable {
             segment: newer,
             cause: Unreadable::KeyNotReceived,
-            from: Timestamp(20),
-            to: Some(Timestamp(30)),
+            from: Timestamp::new(20),
+            to: Some(Timestamp::new(30)),
         })
     );
     assert!(matches!(
         state.band(older.document_id(), Unreadable::Damaged),
         Some(MurmureEvent::Unreadable {
             cause: Unreadable::Damaged,
-            from: Timestamp(10),
-            to: Some(Timestamp(20)),
+            from,
+            to: Some(to),
             ..
-        })
+        }) if from.get() == 10 && to.get() == 20
     ));
     assert_eq!(
         state.band(stored.active_id.document_id(), Unreadable::Damaged),

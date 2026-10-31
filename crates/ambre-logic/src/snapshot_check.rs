@@ -173,7 +173,7 @@ pub(crate) fn check_snapshot(
         if theirs_end > ours {
             match registry_entry(&theirs, peer) {
                 Some(entry) => extras.push((
-                    ambre_core::PeerId(peer),
+                    ambre_core::PeerId::new(peer),
                     ambre_core::PeerEntryBytes::new(entry),
                 )),
                 None => return Outcome::Unchecked,
@@ -187,7 +187,7 @@ pub(crate) fn check_snapshot(
 fn registry_entry(doc: &LoroDoc, peer: PeerID) -> Option<Vec<u8>> {
     match doc
         .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
-        .get(ambre_core::PeerKey::of(ambre_core::PeerId(peer)).as_str())
+        .get(ambre_core::PeerKey::of(ambre_core::PeerId::new(peer)).as_str())
     {
         Some(ValueOrContainer::Value(LoroValue::Binary(bytes))) => Some(bytes.to_vec()),
         _ => None,
@@ -313,7 +313,7 @@ mod tests {
             let bytes = delta(&alice, &from);
             bob.import(&bytes).expect("import");
             seq += 1;
-            ledger.record(ambre_core::Seq(seq), Some(&bytes.clone().into()));
+            ledger.record(ambre_core::Seq::new(seq), Some(&bytes.clone().into()));
         };
         for (i, ch) in "hello world".chars().enumerate() {
             send(&|| text.insert(i, &ch.to_string()).expect("insert"));
@@ -450,7 +450,7 @@ mod tests {
         alice
             .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
             .insert(
-                ambre_core::PeerKey::of(ambre_core::PeerId(1)).as_str(),
+                ambre_core::PeerKey::of(ambre_core::PeerId::new(1)).as_str(),
                 vec![7_u8; 4],
             )
             .expect("entry");
@@ -466,7 +466,7 @@ mod tests {
             ),
             Outcome::Match {
                 extras: vec![(
-                    ambre_core::PeerId(1),
+                    ambre_core::PeerId::new(1),
                     ambre_core::PeerEntryBytes::new(vec![7_u8; 4])
                 )]
             }
@@ -484,7 +484,7 @@ mod tests {
             &bob,
             &ledger,
             &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(snapshot.to_vec()),
-            ambre_core::Seq(1),
+            ambre_core::Seq::new(1),
             Purpose::Confirm,
         );
         assert_eq!(before, (bob.oplog_vv(), bob.get_deep_value()));

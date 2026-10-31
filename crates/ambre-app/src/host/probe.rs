@@ -22,7 +22,7 @@ const SUMMARY_EVERY: ambre_core::PageMillis = ambre_core::PageMillis::new(5_000.
 
 /// The page's clock, in milliseconds since the page opened.
 pub(crate) fn now() -> ambre_core::PageTime {
-    ambre_core::PageTime(
+    ambre_core::PageTime::new(
         web_sys::window()
             .and_then(|w| w.performance())
             .map_or(0.0, |p| p.now()),
@@ -62,7 +62,7 @@ impl Timeline {
         Self {
             samples: wanted.then(BTreeMap::new),
             counts: wanted.then(BTreeMap::new),
-            last_summary: ambre_core::PageTime(0.0),
+            last_summary: ambre_core::PageTime::new(0.0),
             fresh: false,
         }
     }
@@ -164,8 +164,8 @@ fn stamp(measure: &Measure) {
     let set = |key: &str, value: f64| {
         let _ = js_sys::Reflect::set(&options, &key.into(), &value.into());
     };
-    set("start", measure.start.0);
-    set("end", measure.end.0);
+    set("start", measure.start.get());
+    set("end", measure.end.get());
     let Ok(function) = js_sys::Reflect::get(&performance, &"measure".into()) else {
         return;
     };

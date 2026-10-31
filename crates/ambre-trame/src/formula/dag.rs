@@ -296,11 +296,11 @@ mod tests {
         CellId::bound(
             EngineSheet::ACTIVE,
             Uid {
-                peer: ambre_core::PeerId(1),
+                peer: ambre_core::PeerId::new(1),
                 counter: ambre_core::IdCounter::new(row),
             },
             Uid {
-                peer: ambre_core::PeerId(2),
+                peer: ambre_core::PeerId::new(2),
                 counter: ambre_core::IdCounter::new(col),
             },
         )
@@ -310,13 +310,13 @@ mod tests {
     fn range(r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
         let rid = |r: u32| {
             RangeEndpoint::Specific(AxisId::Bound(Uid {
-                peer: ambre_core::PeerId(1),
+                peer: ambre_core::PeerId::new(1),
                 counter: ambre_core::IdCounter::new(r),
             }))
         };
         let cid = |c: u32| {
             RangeEndpoint::Specific(AxisId::Bound(Uid {
-                peer: ambre_core::PeerId(2),
+                peer: ambre_core::PeerId::new(2),
                 counter: ambre_core::IdCounter::new(c),
             }))
         };
@@ -439,13 +439,13 @@ mod tests {
         let mut idx = SheetIndex::default();
         for i in 0..rows {
             idx.push_row(Uid {
-                peer: ambre_core::PeerId(sheet as u64 * 10 + 1),
+                peer: ambre_core::PeerId::new(sheet as u64 * 10 + 1),
                 counter: ambre_core::IdCounter::new(i as u32),
             });
         }
         for i in 0..cols {
             idx.push_col(Uid {
-                peer: ambre_core::PeerId(sheet as u64 * 10 + 2),
+                peer: ambre_core::PeerId::new(sheet as u64 * 10 + 2),
                 counter: ambre_core::IdCounter::new(i as u32),
             });
         }
@@ -457,11 +457,11 @@ mod tests {
         CellId::bound(
             EngineSheet::new(sheet),
             Uid {
-                peer: ambre_core::PeerId(sheet as u64 * 10 + 1),
+                peer: ambre_core::PeerId::new(sheet as u64 * 10 + 1),
                 counter: ambre_core::IdCounter::new(row),
             },
             Uid {
-                peer: ambre_core::PeerId(sheet as u64 * 10 + 2),
+                peer: ambre_core::PeerId::new(sheet as u64 * 10 + 2),
                 counter: ambre_core::IdCounter::new(col),
             },
         )
@@ -471,13 +471,13 @@ mod tests {
     fn range_on(sheet: u16, r0: u32, r1: u32, c0: u32, c1: u32) -> RangeId {
         let rid = |r: u32| {
             RangeEndpoint::Specific(AxisId::Bound(Uid {
-                peer: ambre_core::PeerId(sheet as u64 * 10 + 1),
+                peer: ambre_core::PeerId::new(sheet as u64 * 10 + 1),
                 counter: ambre_core::IdCounter::new(r),
             }))
         };
         let cid = |c: u32| {
             RangeEndpoint::Specific(AxisId::Bound(Uid {
-                peer: ambre_core::PeerId(sheet as u64 * 10 + 2),
+                peer: ambre_core::PeerId::new(sheet as u64 * 10 + 2),
                 counter: ambre_core::IdCounter::new(c),
             }))
         };

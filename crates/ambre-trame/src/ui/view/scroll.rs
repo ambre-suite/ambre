@@ -178,20 +178,20 @@ mod tests {
                     ambre_canvas::WheelAmount::new(0.0),
                     ambre_canvas::WheelAmount::new(16.0),
                 )),
-                ambre_bus::PageTime(16.0 * f64::from(step)),
+                ambre_bus::PageTime::new(16.0 * f64::from(step)),
             );
         }
         let glided = g.top_row;
-        s.tick(&mut g, ambre_bus::PageTime(64.0));
+        s.tick(&mut g, ambre_bus::PageTime::new(64.0));
         assert_eq!(s.speed(), None, "no motion while the glide lasts");
         // The frame past the pause launches the motion, and later ones move.
-        s.tick(&mut g, ambre_bus::PageTime(64.0 + 70.0));
+        s.tick(&mut g, ambre_bus::PageTime::new(64.0 + 70.0));
         let vy = s.speed().expect("the paused glide carries on").dy.get();
         assert!((vy - 1.0).abs() < 0.05, "the glide's speed, {vy}");
         let mut now = 64.0 + 70.0;
         while g.top_row == glided {
             now += 16.0;
-            s.tick(&mut g, ambre_bus::PageTime(now));
+            s.tick(&mut g, ambre_bus::PageTime::new(now));
             assert!(now < 2_000.0, "the coast reaches a whole row");
         }
 
@@ -206,13 +206,13 @@ mod tests {
                     ),
                     ambre_canvas::WheelDeltaMode::Line,
                 ),
-                ambre_bus::PageTime(16.0 * f64::from(step)),
+                ambre_bus::PageTime::new(16.0 * f64::from(step)),
             );
         }
         let stepped = g.top_row;
         assert!(
             matches!(
-                s.tick(&mut g, ambre_bus::PageTime(64.0 + 70.0)),
+                s.tick(&mut g, ambre_bus::PageTime::new(64.0 + 70.0)),
                 ScrollOutcome::Idle
             ),
             "a notch never coasts"

@@ -123,7 +123,7 @@ pub enum FixedBytesError {
 
 impl<R: FixedRole> FixedBytes<R> {
     /// Bytes of one value where a layout frames it.
-    pub const SIZE: ByteSize = ByteSize(R::Array::LEN as u64);
+    pub const SIZE: ByteSize = ByteSize::new(R::Array::LEN as u64);
 
     /// Wraps the bytes.
     #[must_use]
@@ -371,7 +371,7 @@ mod tests {
 
     #[test]
     fn a_value_reads_from_its_width_alone() {
-        assert_eq!(FixedBytes::<Short>::SIZE, ByteSize(3));
+        assert_eq!(FixedBytes::<Short>::SIZE, ByteSize::new(3));
         assert!(FixedBytes::<Short>::from_slice(&[1, 2]).is_err());
         assert!(FixedBytes::<Short>::from_slice(&[1, 2, 3, 4]).is_err());
         let value = FixedBytes::<Short>::from_slice(&[1, 2, 3]).unwrap();

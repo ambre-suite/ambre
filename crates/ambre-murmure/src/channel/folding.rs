@@ -27,7 +27,7 @@ use crate::{mention, style};
 /// The delay before a fold lease is asked again once a fold left: the
 /// `FOLD_DELAY` row of `ambre-spec-budgets.md section 8`, which the relay
 /// holds. The relay answers sooner when a fold is owed earlier.
-pub const FOLD_DELAY: Millis = Millis(7 * 24 * 60 * 60 * 1000);
+pub const FOLD_DELAY: Millis = Millis::new(7 * 24 * 60 * 60 * 1000);
 
 /// The fold of one final segment, as this client drives it.
 #[derive(Debug)]
@@ -117,7 +117,7 @@ impl ChannelState {
             self.folding = Some(Folding {
                 segment,
                 step: Step::Due {
-                    after: Millis(0),
+                    after: Millis::new(0),
                     at: None,
                 },
                 failures: FailureCount::ZERO,
@@ -228,7 +228,9 @@ impl ChannelState {
             return Ok(None);
         };
         let grant = *grant;
-        let until = *until.get_or_insert(Timestamp(now.0.saturating_add(grant.expires_in.0)));
+        let until = *until.get_or_insert(Timestamp::new(
+            now.get().saturating_add(grant.expires_in.get()),
+        ));
         let held = self.amendments.get(&segment).map(|held| held.id);
         if held != Some(grant.amendments) {
             self.fold_failed(segment);
@@ -471,7 +473,7 @@ pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(Id<Document>, Seq)> {
         Id::<Document>::parse_str(&schema::string(&header, HeaderKey::Folded)?).ok()?;
     Some((
         amendments,
-        Seq(schema::unsigned(&header, HeaderKey::FoldedSeq)?),
+        Seq::new(schema::unsigned(&header, HeaderKey::FoldedSeq)?),
     ))
 }
 
@@ -543,7 +545,7 @@ fn fold_into(
     header.insert(HeaderKey::Folded, amendments_id.to_string())?;
     header.insert(
         HeaderKey::FoldedSeq,
-        i64::try_from(reached.0).unwrap_or(i64::MAX),
+        i64::try_from(reached.get()).unwrap_or(i64::MAX),
     )?;
     Ok(())
 }

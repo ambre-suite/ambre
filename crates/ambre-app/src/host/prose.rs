@@ -159,7 +159,7 @@ impl ProseView {
             shown: None,
             annotations,
             layout_cx: LayoutContext::new(),
-            now: ambre_bus::PageTime(0.0),
+            now: ambre_bus::PageTime::new(0.0),
             probe: KeyProbe::default(),
             timeline: super::probe::Timeline::new(),
         }
@@ -245,7 +245,7 @@ impl ProseView {
             return;
         };
         self.annotations.intent.set(None);
-        let now = ambre_core::Timestamp(js_sys::Date::now() as u64);
+        let now = ambre_core::Timestamp::new(js_sys::Date::now() as u64);
         if let Some(command) = self.state.take_intent(intent, now) {
             send_edit(&mut self.outbox, self.document_id, command);
             self.busy_pub.publish(self.outbox.load());
@@ -553,7 +553,7 @@ impl ProseView {
                 // may leave its own (`PROSE-UI-218`, `KINETIC-002`).
                 let now = web_sys::window()
                     .and_then(|w| w.performance())
-                    .map_or(self.now, |p| ambre_bus::PageTime(p.now()));
+                    .map_or(self.now, |p| ambre_bus::PageTime::new(p.now()));
                 self.state.wheel(*delta, now);
                 // The text moved from under the pointer, and the bar with it
                 // (`PROSE-UI-055`).

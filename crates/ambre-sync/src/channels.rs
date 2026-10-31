@@ -639,7 +639,7 @@ impl SyncState {
     /// leaves the channel unread rather than read too far.
     pub(crate) fn read_up_to(&self, document_id: Id<Document>) -> Option<Seq> {
         let doc = self.documents.get(&document_id)?;
-        (doc.last_seq.0 > 0 && doc.quarantine_len() == 0).then_some(doc.last_seq)
+        (doc.last_seq.get() > 0 && doc.quarantine_len() == 0).then_some(doc.last_seq)
     }
 
     /// Move the cursors of one channel to its latest message (the Murmure
@@ -1283,8 +1283,8 @@ pub(crate) mod tests {
                 document_id: segment,
                 kind: ChannelDocumentKind::Thread,
                 active: ambre_bus::Activity::Active,
-                read: Seq(7),
-                last: Some(Seq(9)),
+                read: Seq::new(7),
+                last: Some(Seq::new(9)),
             }]
         );
         let bad = activity(&channel.to_string(), "nope", false);
@@ -1323,7 +1323,7 @@ pub(crate) mod tests {
         let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
             nonce,
-            ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
+            ciphertext: ambre_core::Ciphertext::new(ciphertext.to_vec()),
         };
         let own_pub = crate::sharing::own_exchange_key(exchange_key);
         let (key, anchor) =
@@ -1566,7 +1566,7 @@ pub(crate) mod tests {
             let error = crate::http::HttpError::refused(
                 crate::http::Method::Get,
                 &crate::http::Target::relay(url),
-                ambre_core::HttpStatus(status),
+                ambre_core::HttpStatus::new(status),
                 code,
             );
             state.channel_listed(channel_id, None, Err(error));
@@ -1708,7 +1708,7 @@ pub(crate) mod tests {
         );
         let answer: http::MemberChannelsResponse = serde_json::from_str(&body).expect("decodes");
         let lasts: Vec<_> = answer.channels.iter().map(|c| c.meta_last).collect();
-        assert_eq!(lasts, [None, Some(ambre_core::Seq(6)), None]);
+        assert_eq!(lasts, [None, Some(ambre_core::Seq::new(6)), None]);
         let named = vec![ChannelName {
             channel_id: private,
             name: ambre_core::Name::new("Design").unwrap(),
@@ -1716,7 +1716,7 @@ pub(crate) mod tests {
         let listed = ambre_bus::ChannelMeta {
             channel_id: private,
             meta,
-            last: Some(ambre_core::Seq(6)),
+            last: Some(ambre_core::Seq::new(6)),
         };
         let key = DocumentKey::generate();
         let listing = |(channels, spaces, peers), names, keys| MemberListing {
@@ -1800,8 +1800,9 @@ pub(crate) mod tests {
         let own_pub = crate::sharing::own_exchange_key(&own);
         let key = DocumentKey::generate();
         let wrapped = ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, &key).unwrap();
-        let doc_key_enc =
-            ambre_core::Encoded::new([wrapped.nonce.as_slice(), &wrapped.ciphertext.0].concat());
+        let doc_key_enc = ambre_core::Encoded::new(
+            [wrapped.nonce.as_slice(), wrapped.ciphertext.as_bytes()].concat(),
+        );
         let entry =
             |meta: Id<Meta>, name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>| {
                 http::MemberChannelEntry {
@@ -1858,13 +1859,13 @@ pub(crate) mod tests {
         // Each keeps the last number of its meta, none where none is listed.
         let mut answer = answer;
         answer.channels[3].doc_key_enc = ambre_core::Encoded::new(vec![0]);
-        answer.channels[0].meta_last = Some(ambre_core::Seq(6));
+        answer.channels[0].meta_last = Some(ambre_core::Seq::new(6));
         let keys: Vec<_> = listed_keys(&answer, &own)
             .into_iter()
             .map(|(listed, opened)| (listed.meta, listed.last, opened.id()))
             .collect();
         let held = [
-            (named, Some(ambre_core::Seq(6))),
+            (named, Some(ambre_core::Seq::new(6))),
             (elsewhere, None),
             (cleared, None),
         ]
@@ -1991,7 +1992,7 @@ pub(crate) mod tests {
         let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
         let wrapped = ambre_crypto::ecdh::WrappedKey {
             nonce,
-            ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
+            ciphertext: ambre_core::Ciphertext::new(ciphertext.to_vec()),
         };
         let sender_pub = crate::sharing::own_exchange_key(sender);
         let (key, root) =

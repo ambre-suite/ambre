@@ -177,19 +177,19 @@ message_limit!(
 impl Default for Config {
     fn default() -> Self {
         Self {
-            access_ttl: ambre_core::Seconds(900),
-            refresh_ttl: ambre_core::Seconds(30 * 24 * 3600),
-            presigned_url_ttl: ambre_core::Seconds(900),
-            media_max_size: ambre_core::ByteSize(100 * 1024 * 1024),
-            snapshot_max_size: ambre_core::ByteSize(50 * 1024 * 1024),
-            delta_max_size: ambre_core::ByteSize(4 * 1024 * 1024),
+            access_ttl: ambre_core::Seconds::new(900),
+            refresh_ttl: ambre_core::Seconds::new(30 * 24 * 3600),
+            presigned_url_ttl: ambre_core::Seconds::new(900),
+            media_max_size: ambre_core::ByteSize::new(100 * 1024 * 1024),
+            snapshot_max_size: ambre_core::ByteSize::new(50 * 1024 * 1024),
+            delta_max_size: ambre_core::ByteSize::new(4 * 1024 * 1024),
             s3_env_prefix: crate::s3::EnvPrefix::new("dev-ambre".to_owned()),
             oidc_google: None,
             dev_mode: DevMode::Off,
             trust_proxy_headers: ProxyTrust::Direct,
             ws_msg_rate_per_sec: RatePerSec::DEFAULT,
             ws_msg_burst: Burst::DEFAULT,
-            ephemeral_max_size: ambre_core::ByteSize(64 * 1024),
+            ephemeral_max_size: ambre_core::ByteSize::new(64 * 1024),
         }
     }
 }

@@ -200,7 +200,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         Id::<Channel>::mint(),
         ChannelType::Public,
         Some(&crate::fit_name("general")),
-        Timestamp(1_700_000_000_000),
+        Timestamp::new(1_700_000_000_000),
     )
     .expect("create");
     for (id, peer) in [
@@ -208,15 +208,19 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
         (state.active_id().document_id(), SEGMENT_PEER),
     ] {
         state
-            .adopt_session(id, ambre_core::PeerId(peer), PeerEntryBytes::new(entry()))
+            .adopt_session(
+                id,
+                ambre_core::PeerId::new(peer),
+                PeerEntryBytes::new(entry()),
+            )
             .expect("adopt");
     }
     // The first message carries a file, by its address alone.
     let file = Attachment {
         media_ref: ContentHash::parse(&"ab".repeat(32)).expect("an address"),
         name: "plan.pdf".to_owned(),
-        media_type: MediaType("application/pdf".to_owned()),
-        size: ByteSize(2_048),
+        media_type: MediaType::new("application/pdf".to_owned()),
+        size: ByteSize::new(2_048),
     };
     state
         .send_attached(
@@ -230,7 +234,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
             },
             &[file],
             AUTHOR,
-            Timestamp(1_700_000_000_001),
+            Timestamp::new(1_700_000_000_001),
         )
         .expect("send");
     let segment = state.active_id();
@@ -241,11 +245,11 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
             message,
             &ambre_bus::Emoji::from("\u{1F44D}"),
             AUTHOR,
-            Timestamp(1_700_000_000_002),
+            Timestamp::new(1_700_000_000_002),
         )
         .expect("react");
     state
-        .announce(MEMBER, AUTHOR, Timestamp(1_700_000_000_003))
+        .announce(MEMBER, AUTHOR, Timestamp::new(1_700_000_000_003))
         .expect("announce");
     // A third message the author edits, and a fourth one she deletes.
     for (text, ts) in [("draft", 1_700_000_000_004), ("gone", 1_700_000_000_005)] {
@@ -254,7 +258,9 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
             mentions: Vec::new(),
             styles: Vec::new(),
         };
-        state.send(&draft, AUTHOR, Timestamp(ts)).expect("send");
+        state
+            .send(&draft, AUTHOR, Timestamp::new(ts))
+            .expect("send");
     }
     let messages = state.messages(segment).expect("held");
     let edited = MessageDraft {
@@ -277,7 +283,7 @@ pub(crate) fn channel_of_every_key() -> ChannelState {
 /// with a copy sent to the channel.
 fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Message>) {
     let ThreadTarget::Create(thread) = state
-        .reply_target(root, Timestamp(1_700_000_000_005))
+        .reply_target(root, Timestamp::new(1_700_000_000_005))
         .expect("target")
     else {
         panic!("a root with no thread creates one");
@@ -285,7 +291,7 @@ fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Mess
     state
         .adopt_session(
             thread,
-            ambre_core::PeerId(THREAD_PEER),
+            ambre_core::PeerId::new(THREAD_PEER),
             PeerEntryBytes::new(entry()),
         )
         .expect("adopt");
@@ -300,7 +306,7 @@ fn reply_in_thread(state: &mut ChannelState, segment: Id<Segment>, root: Id<Mess
             root,
             &reply,
             AUTHOR,
-            Timestamp(1_700_000_000_005),
+            Timestamp::new(1_700_000_000_005),
             ambre_bus::ReplyEcho::AlsoInChannel,
         )
         .expect("reply");
@@ -333,13 +339,13 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
             segment,
             successor,
             crate::Successor::Created,
-            Timestamp(1_700_000_000_006),
+            Timestamp::new(1_700_000_000_006),
         )
         .expect("close");
     state
         .adopt_session(
             successor.document_id(),
-            ambre_core::PeerId(SUCCESSOR_PEER),
+            ambre_core::PeerId::new(SUCCESSOR_PEER),
             PeerEntryBytes::new(entry()),
         )
         .expect("adopt");
@@ -347,7 +353,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
         .relocate_locked(segment.document_id(), &[])
         .expect("lock");
     let ChangeTarget::Create(amendments) = state
-        .change_target(segment, Timestamp(1_700_000_000_007))
+        .change_target(segment, Timestamp::new(1_700_000_000_007))
         .expect("target")
     else {
         panic!("a locked segment with no amendments creates them");
@@ -355,7 +361,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
     state
         .adopt_session(
             amendments,
-            ambre_core::PeerId(AMENDMENTS_PEER),
+            ambre_core::PeerId::new(AMENDMENTS_PEER),
             PeerEntryBytes::new(entry()),
         )
         .expect("adopt");
@@ -394,7 +400,7 @@ fn amend_after_lock(state: &mut ChannelState, segment: Id<Segment>) {
     // A first reply to a locked root records its thread (`MURMURE-484`).
     let root = messages[1].id;
     let ThreadTarget::Create(thread) = state
-        .reply_target(root, Timestamp(1_700_000_000_008))
+        .reply_target(root, Timestamp::new(1_700_000_000_008))
         .expect("target")
     else {
         panic!("a locked root with no thread creates one");
@@ -423,11 +429,14 @@ pub(crate) fn space_of_every_key(channel: &ChannelState) -> SpaceState {
     let mut space = SpaceState::create(
         Id::<Space>::mint(),
         &crate::fit_name("Acme"),
-        Timestamp(1_700_000_000_000),
+        Timestamp::new(1_700_000_000_000),
     )
     .expect("create");
     space
-        .adopt_session(ambre_core::PeerId(SPACE_PEER), PeerEntryBytes::new(entry()))
+        .adopt_session(
+            ambre_core::PeerId::new(SPACE_PEER),
+            PeerEntryBytes::new(entry()),
+        )
         .expect("adopt");
     let category = Id::<Category>::mint();
     space
@@ -635,11 +644,11 @@ fn steps_written() -> Vec<String> {
             doc.set_peer_id(
                 migration_peer(heads.iter().map(|id| {
                     (
-                        ambre_core::PeerId(id.peer),
-                        ambre_core::OpCounter(id.counter),
+                        ambre_core::PeerId::new(id.peer),
+                        ambre_core::OpCounter::new(id.counter),
                     )
                 }))
-                .0,
+                .get(),
             )
             .expect("the migration identity");
             let before = doc.oplog_vv();

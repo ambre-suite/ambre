@@ -289,7 +289,7 @@ pub async fn pending_deletions(
         .map(|(id, sweep_due, rows_left)| PendingDeletion {
             document_id: uuid_row_to_id(id),
             // A negative mark, which no relay writes, is due at once.
-            sweep_due: ambre_core::UnixSeconds(u64::try_from(sweep_due).unwrap_or(0)),
+            sweep_due: ambre_core::UnixSeconds::new(u64::try_from(sweep_due).unwrap_or(0)),
             rows_left: DocumentRows::from_bool(rows_left),
         })
         .collect())

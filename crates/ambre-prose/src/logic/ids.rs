@@ -87,7 +87,7 @@ impl IdSource {
 fn pack(peer: ambre_core::PeerId, place: IdSequence) -> Uuid {
     const VERSION: u128 = 0xF << 76;
     const VARIANT: u128 = 0b11 << 62;
-    let raw = (u128::from(peer.0) << 64) | u128::from(place.0);
+    let raw = (u128::from(peer.get()) << 64) | u128::from(place.0);
     let bits = (raw & !VERSION & !VARIANT) | (0x8 << 76) | (0b10 << 62);
     Uuid::from_bytes(bits.to_be_bytes())
 }
@@ -100,8 +100,8 @@ mod tests {
     /// inside it.
     #[test]
     fn a_seeded_source_repeats_its_sequence_and_never_an_id() {
-        let first = IdSource::seeded(ambre_core::PeerId(0x5EED));
-        let second = IdSource::seeded(ambre_core::PeerId(0x5EED));
+        let first = IdSource::seeded(ambre_core::PeerId::new(0x5EED));
+        let second = IdSource::seeded(ambre_core::PeerId::new(0x5EED));
         let a: Vec<Uuid> = (0..4).map(|_| first.mint()).collect();
         let b: Vec<Uuid> = (0..4).map(|_| second.mint()).collect();
         assert_eq!(a, b);
@@ -115,7 +115,7 @@ mod tests {
     /// variant mask, so place 2^62 packed to the id of place zero.
     #[test]
     fn a_seeded_source_never_reissues_an_id_at_the_end_of_its_sequence() {
-        let peer = ambre_core::PeerId(0x5EED);
+        let peer = ambre_core::PeerId::new(0x5EED);
         let start: Uuid = IdSource::seeded(peer).mint();
         let end = IdSource::Seeded {
             peer,
@@ -132,7 +132,7 @@ mod tests {
     #[should_panic(expected = "a pinned peer mints at most 2^62 ids")]
     fn a_seeded_source_panics_past_the_end_of_its_sequence() {
         let end = IdSource::Seeded {
-            peer: ambre_core::PeerId(0x5EED),
+            peer: ambre_core::PeerId::new(0x5EED),
             next: Cell::new(Some(IdSequence::LAST)),
         };
         let _last: Uuid = end.mint();
@@ -142,7 +142,7 @@ mod tests {
     /// The packed id reads as a version 8 id of the RFC variant.
     #[test]
     fn a_seeded_id_carries_version_8() {
-        let bytes = pack(ambre_core::PeerId(u64::MAX), IdSequence::LAST);
+        let bytes = pack(ambre_core::PeerId::new(u64::MAX), IdSequence::LAST);
         let bytes = bytes.as_bytes();
         assert_eq!(bytes[6] >> 4, 0x8);
         assert_eq!(bytes[8] >> 6, 0b10);

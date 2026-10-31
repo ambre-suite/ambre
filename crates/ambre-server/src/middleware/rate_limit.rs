@@ -202,7 +202,7 @@ impl RateLimitCategory {
         });
         RateLimit {
             max_requests,
-            window: ambre_core::Seconds(60),
+            window: ambre_core::Seconds::new(60),
         }
     }
 
@@ -262,7 +262,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
 
     let bucket = request_bucket(&state.jwt, state.config.trust_proxy_headers, &req);
 
-    let now = ambre_core::UnixMillis(
+    let now = ambre_core::UnixMillis::new(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)),
@@ -275,7 +275,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
                 tracing::error!("Rate limiter Redis error on auth tier: {e:?}, failing closed");
                 return (
                     StatusCode::SERVICE_UNAVAILABLE,
-                    [("Retry-After", window.0.to_string())],
+                    [("Retry-After", window.get().to_string())],
                     crate::error::ErrorBody::json(
                         ambre_core::RefusalCode::RateLimiterUnavailable,
                         "Service temporarily unavailable, please retry",
@@ -289,7 +289,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
             }
         };
 
-    let reset = now.plus(window_span).to_unix_seconds().0;
+    let reset = now.plus(window_span).to_unix_seconds().get();
 
     let Verdict::Allowed { remaining } = verdict else {
         return (
@@ -298,7 +298,7 @@ pub async fn rate_limit_inner(state: Arc<AppState>, req: Request, next: Next) ->
                 ("X-RateLimit-Limit", max_req.to_string()),
                 ("X-RateLimit-Remaining", "0".to_string()),
                 ("X-RateLimit-Reset", reset.to_string()),
-                ("Retry-After", window.0.to_string()),
+                ("Retry-After", window.get().to_string()),
             ],
             crate::error::ErrorBody::json(
                 ambre_core::RefusalCode::RateLimited,
@@ -349,14 +349,14 @@ async fn check_sliding_window(
     let nonce = REQUEST_NONCE.fetch_add(1, Ordering::Relaxed);
     // Unique per (instance, request), so same-millisecond requests are distinct
     // sorted-set members even across pods (see `INSTANCE_ID`).
-    let member = format!("{}-{}-{nonce}", now.0, *INSTANCE_ID);
+    let member = format!("{}-{}-{nonce}", now.get(), *INSTANCE_ID);
 
     let count: i64 = state
         .redis
         .eval(
             SLIDING_WINDOW_LUA,
             [key.as_str()],
-            [now.0.to_string(), window.0.to_string(), member],
+            [now.get().to_string(), window.get().to_string(), member],
         )
         .await
         .map_err(|e| AppError::Redis(format!("rate limit sliding-window eval: {e}")))?;
@@ -508,7 +508,7 @@ mod tests {
             sub: user,
             spk: None,
             iat: now,
-            exp: now.plus(ambre_core::Seconds(900)),
+            exp: now.plus(ambre_core::Seconds::new(900)),
         };
         (
             user,
@@ -649,7 +649,7 @@ mod tests {
             category.limits(),
             RateLimit {
                 max_requests: RequestCount::new(10),
-                window: ambre_core::Seconds(60),
+                window: ambre_core::Seconds::new(60),
             }
         );
     }
@@ -661,7 +661,7 @@ mod tests {
             category.limits(),
             RateLimit {
                 max_requests: RequestCount::new(300),
-                window: ambre_core::Seconds(60),
+                window: ambre_core::Seconds::new(60),
             }
         );
     }
@@ -673,7 +673,7 @@ mod tests {
             category.limits(),
             RateLimit {
                 max_requests: RequestCount::new(10),
-                window: ambre_core::Seconds(60),
+                window: ambre_core::Seconds::new(60),
             }
         );
     }

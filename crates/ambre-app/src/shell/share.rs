@@ -81,7 +81,7 @@ pub(crate) fn ShareMembers(
                                 {member.display_name.as_str().to_owned()}
                                 {standing_badge(member.standing)}
                             </span>
-                            <span class="ambre-share-member-email">{member.email.0.clone()}</span>
+                            <span class="ambre-share-member-email">{member.email.as_str().to_owned()}</span>
                             <select prop:value=cur_role.as_str() on:change=on_role>
                                 <option value="owner" selected=cur_role == Role::Owner>"Owner"</option>
                                 <option value="editor" selected=cur_role == Role::Editor>"Editor"</option>
@@ -160,7 +160,7 @@ mod tests {
         MemberInfo {
             user_id: Id::from_bytes([byte; 16]),
             display_name: ambre_core::DisplayName::new(&format!("member {byte}")).unwrap(),
-            email: ambre_bus::Email(format!("m{byte}@example.com")),
+            email: ambre_bus::Email::new(format!("m{byte}@example.com")),
             role,
             standing: MemberStanding::Verified,
         }

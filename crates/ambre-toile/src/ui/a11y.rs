@@ -96,7 +96,7 @@ mod tests {
     ) -> DisplayElement {
         DisplayElement {
             id: Id::<Element>::mint_from(
-                ambre_core::PeerId(1),
+                ambre_core::PeerId::new(1),
                 ambre_bus::app::toile::IdCounter::new(n),
             ),
             kind,

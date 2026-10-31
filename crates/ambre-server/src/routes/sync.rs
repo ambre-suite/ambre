@@ -263,7 +263,7 @@ pub async fn create_snapshot(
     // A cold counter reads 0 and bounds nothing.
     let last = crate::redis_ops::current_seq(&state.redis, &doc_id).await?;
     let covered = req.covered_seq;
-    if last > ambre_core::Seq(0) && covered > last {
+    if last > ambre_core::Seq::new(0) && covered > last {
         return Err(AppError::BadRequest(
             "covered_seq past the last delta".into(),
         ));
@@ -320,10 +320,11 @@ pub async fn snapshot_upload_url(
     // Reject an oversized snapshot before handing out an upload URL. Bind the
     // declared size into the presigned PUT, so the actual upload cannot exceed
     // it.
-    if req.size == ambre_core::ByteSize(0) || req.size > state.config.snapshot_max_size {
+    if req.size == ambre_core::ByteSize::new(0) || req.size > state.config.snapshot_max_size {
         return Err(AppError::PayloadTooLarge(format!(
             "snapshot size {} bytes outside 1..={}",
-            req.size.0, state.config.snapshot_max_size.0
+            req.size.get(),
+            state.config.snapshot_max_size.get()
         )));
     }
 

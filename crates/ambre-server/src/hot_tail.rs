@@ -13,18 +13,18 @@ use crate::state::AppState;
 
 /// A delta whose sealed envelope is under this size lives in its index row
 /// (`ambre-spec-budgets.md`, the inline delta size row).
-pub const INLINE_DELTA_MAX_SIZE: ByteSize = ByteSize(64 * 1024);
+pub const INLINE_DELTA_MAX_SIZE: ByteSize = ByteSize::new(64 * 1024);
 
 /// The most a document holds inline (`ambre-spec-budgets.md`, the inline
 /// deltas per document row; `SRV-150`).
 pub const INLINE_CAP: InlineCap = InlineCap {
-    deltas: DeltaCount(256),
-    bytes: ByteSize(256 * 1024),
+    deltas: DeltaCount::new(256),
+    bytes: ByteSize::new(256 * 1024),
 };
 
 /// How long a document goes without a write before its whole tail moves out
 /// (`ambre-spec-budgets.md section 8`; `SRV-152`).
-pub const IDLE_AFTER: ambre_core::Seconds = ambre_core::Seconds(24 * 3600);
+pub const IDLE_AFTER: ambre_core::Seconds = ambre_core::Seconds::new(24 * 3600);
 
 /// How many idle documents one pass moves.
 const IDLE_PASS_LIMIT: crate::db::QueryLimit = crate::db::QueryLimit::saturating(100);
@@ -40,8 +40,8 @@ pub fn past_watermark(deltas: DeltaCount, bytes: ByteSize) -> bool {
 /// most a quarter of the cap, in deltas and in bytes alike.
 fn kept_after_move(tail: &[(ambre_core::Seq, Payload)]) -> usize {
     let quarter = INLINE_CAP.quarter();
-    let mut kept = DeltaCount(0);
-    let mut bytes = ByteSize(0);
+    let mut kept = DeltaCount::new(0);
+    let mut bytes = ByteSize::new(0);
     for (_, wire) in tail.iter().rev() {
         let next = bytes.saturating_add(ByteSize::of_len(wire.len()));
         if kept.plus_one() > quarter.deltas || next > quarter.bytes {
@@ -50,7 +50,7 @@ fn kept_after_move(tail: &[(ambre_core::Seq, Payload)]) -> usize {
         kept = kept.plus_one();
         bytes = next;
     }
-    usize::try_from(kept.0).unwrap_or(usize::MAX)
+    usize::try_from(kept.get()).unwrap_or(usize::MAX)
 }
 
 /// The object a batch of deltas is stored under, named by its first and last
@@ -61,9 +61,10 @@ pub fn batch_key(
     first: ambre_core::Seq,
     last: ambre_core::Seq,
 ) -> ambre_core::ObjectKey {
-    ambre_core::ObjectKey(format!(
+    ambre_core::ObjectKey::new(format!(
         "{env_prefix}/documents/{document_id}/batches/{:010}-{:010}",
-        first.0, last.0
+        first.get(),
+        last.get()
     ))
 }
 
@@ -226,7 +227,7 @@ mod tests {
         (1..=n)
             .map(|s| {
                 (
-                    ambre_core::Seq(u64::try_from(s).unwrap()),
+                    ambre_core::Seq::new(u64::try_from(s).unwrap()),
                     Payload::new(vec![0u8; size]),
                 )
             })
@@ -236,10 +237,16 @@ mod tests {
     /// `SRV-151`: the move starts at three quarters of the count or the bytes.
     #[test]
     fn a_move_starts_at_three_quarters_of_either_bound() {
-        assert!(!past_watermark(DeltaCount(191), ByteSize(0)));
-        assert!(past_watermark(DeltaCount(192), ByteSize(0)));
-        assert!(!past_watermark(DeltaCount(1), ByteSize(192 * 1024 - 1)));
-        assert!(past_watermark(DeltaCount(1), ByteSize(192 * 1024)));
+        assert!(!past_watermark(DeltaCount::new(191), ByteSize::new(0)));
+        assert!(past_watermark(DeltaCount::new(192), ByteSize::new(0)));
+        assert!(!past_watermark(
+            DeltaCount::new(1),
+            ByteSize::new(192 * 1024 - 1)
+        ));
+        assert!(past_watermark(
+            DeltaCount::new(1),
+            ByteSize::new(192 * 1024)
+        ));
     }
 
     /// `SRV-151`: a move keeps the newest quarter of either bound inline.
@@ -256,12 +263,12 @@ mod tests {
         let frames = vec![(3, vec![1, 2]), (7, vec![]), (9, vec![5; 300])];
         let sealed: Vec<(ambre_core::Seq, Payload)> = frames
             .iter()
-            .map(|(s, f)| (ambre_core::Seq(*s), Payload::new(f.clone())))
+            .map(|(s, f)| (ambre_core::Seq::new(*s), Payload::new(f.clone())))
             .collect();
         let back = decode_batch(&encode_batch(&sealed).unwrap()).unwrap();
         let back: Vec<(u64, Vec<u8>)> = back
             .into_iter()
-            .map(|(s, f)| (s.0, f.expose_bytes().to_vec()))
+            .map(|(s, f)| (s.get(), f.expose_bytes().to_vec()))
             .collect();
         assert_eq!(back, frames);
     }
@@ -304,7 +311,7 @@ mod db_tests {
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
             &snap,
             ambre_protocol::messages::Clock(seq.unsigned_abs()),
-            ambre_core::Seq(seq.unsigned_abs()),
+            ambre_core::Seq::new(seq.unsigned_abs()),
             &wire,
             cap,
         )
@@ -322,7 +329,7 @@ mod db_tests {
         crate::db::get_updates_after(
             &state.db,
             doc,
-            ambre_core::Seq(0),
+            ambre_core::Seq::new(0),
             crate::db::QueryLimit::saturating(1000),
         )
         .await
@@ -332,7 +339,7 @@ mod db_tests {
             (
                 r.seq.to_i64_saturating(),
                 r.wire.is_some(),
-                r.batch_key.map(|k| k.0),
+                r.batch_key.map(ambre_core::ObjectKey::into_inner),
             )
         })
         .collect()
@@ -362,8 +369,8 @@ mod db_tests {
         let owner = create_test_user(&state.db, "bytes@ambre.app").await;
         let other = create_test_document(&state.db, owner, "prose").await;
         let small = InlineCap {
-            deltas: DeltaCount(100),
-            bytes: ByteSize(10),
+            deltas: DeltaCount::new(100),
+            bytes: ByteSize::new(10),
         };
         assert!(matches!(
             inline(&state, &other, 1, &[0; 6], small).await,
@@ -391,8 +398,8 @@ mod db_tests {
         let key = batch_key(
             &state.config.s3_env_prefix,
             &doc,
-            ambre_core::Seq(1),
-            ambre_core::Seq(136),
+            ambre_core::Seq::new(1),
+            ambre_core::Seq::new(136),
         );
         let rows = homes(&state, &doc).await;
         assert!(
@@ -468,16 +475,19 @@ mod db_tests {
         let older = batch_key(
             &state.config.s3_env_prefix,
             &doc,
-            ambre_core::Seq(1),
-            ambre_core::Seq(5),
+            ambre_core::Seq::new(1),
+            ambre_core::Seq::new(5),
         );
         let newer = batch_key(
             &state.config.s3_env_prefix,
             &doc,
-            ambre_core::Seq(6),
-            ambre_core::Seq(10),
+            ambre_core::Seq::new(6),
+            ambre_core::Seq::new(10),
         );
-        assert_eq!(stub.keys(), [older.0.clone(), newer.0.clone()]);
+        assert_eq!(
+            stub.keys(),
+            [older.as_str().to_owned(), newer.as_str().to_owned()]
+        );
 
         let clocks = serde_json::json!({});
         let snap = crate::db::create_snapshot(
@@ -486,7 +496,7 @@ mod db_tests {
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
             &clocks,
             &ambre_core::ObjectKey::from("snap"),
-            ambre_core::Seq(7),
+            ambre_core::Seq::new(7),
         )
         .await
         .unwrap();
@@ -501,7 +511,7 @@ mod db_tests {
         assert_eq!(trim(&state).await.unwrap(), 7);
         assert_eq!(
             stub.keys(),
-            [newer.0],
+            [newer.as_str()],
             "the batch still naming 8 to 10 stays"
         );
     }

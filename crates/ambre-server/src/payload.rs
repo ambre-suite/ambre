@@ -133,7 +133,7 @@ impl Payload {
     pub fn read_pending(&self) -> Option<(ambre_core::Seq, ambre_core::ObjectKey, Payload)> {
         use base64::Engine;
         let entry: serde_json::Value = serde_json::from_slice(&self.0).ok()?;
-        let s3_key = ambre_core::ObjectKey(entry.get("s3_key")?.as_str()?.to_owned());
+        let s3_key = ambre_core::ObjectKey::new(entry.get("s3_key")?.as_str()?.to_owned());
         let frame = base64::engine::general_purpose::URL_SAFE
             .decode(entry.get("update_b64")?.as_str()?)
             .ok()?;
@@ -141,14 +141,14 @@ impl Payload {
             .get("seq")
             .and_then(serde_json::Value::as_u64)
             .unwrap_or(0);
-        Some((ambre_core::Seq(seq), s3_key, Self(frame)))
+        Some((ambre_core::Seq::new(seq), s3_key, Self(frame)))
     }
 
     /// The number a pending entry names, when it names one, even if the rest
     /// does not parse.
     pub fn pending_seq(&self) -> Option<ambre_core::Seq> {
         let entry: serde_json::Value = serde_json::from_slice(&self.0).ok()?;
-        entry.get("seq")?.as_u64().map(ambre_core::Seq)
+        entry.get("seq")?.as_u64().map(ambre_core::Seq::new)
     }
 }
 
@@ -188,8 +188,8 @@ mod tests {
     #[test]
     fn a_batch_reads_back_its_frames() {
         let frames = vec![
-            (ambre_core::Seq(3), Payload::new(vec![1, 2])),
-            (ambre_core::Seq(4), Payload::new(vec![])),
+            (ambre_core::Seq::new(3), Payload::new(vec![1, 2])),
+            (ambre_core::Seq::new(4), Payload::new(vec![])),
         ];
         let batch = Payload::batch(&frames).unwrap();
         let stored: Vec<(i64, Vec<u8>)> = vec![(3, vec![1, 2]), (4, vec![])];
@@ -218,18 +218,18 @@ mod tests {
     #[test]
     fn a_pending_entry_reads_back() {
         let entry = Payload::pending_entry(
-            ambre_core::Seq(7),
+            ambre_core::Seq::new(7),
             &ambre_core::ObjectKey::from("d/7"),
             &Payload::new(vec![9, 8]),
         );
         let (seq, key, frame) = entry.read_pending().unwrap();
         assert_eq!(
             (seq, key.as_str(), frame.expose_bytes()),
-            (ambre_core::Seq(7), "d/7", &[9u8, 8][..])
+            (ambre_core::Seq::new(7), "d/7", &[9u8, 8][..])
         );
         assert_eq!(
             Payload::new(b"{\"seq\":4}".to_vec()).pending_seq(),
-            Some(ambre_core::Seq(4))
+            Some(ambre_core::Seq::new(4))
         );
         assert!(Payload::new(b"not json".to_vec()).read_pending().is_none());
     }

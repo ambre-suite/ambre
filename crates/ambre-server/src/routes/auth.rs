@@ -228,7 +228,7 @@ pub async fn oidc_callback(
             "OIDC provider returned an unverified email".into(),
         ));
     }
-    let email = ambre_core::Email(claims.email().map(|e| e.to_string()).unwrap_or_default());
+    let email = ambre_core::Email::new(claims.email().map(|e| e.to_string()).unwrap_or_default());
     let display_name = provider_display_name(
         claims.name().and_then(|l| l.get(None)).map(|s| s.as_str()),
         claims

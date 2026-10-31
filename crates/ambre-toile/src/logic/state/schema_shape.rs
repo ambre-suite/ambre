@@ -326,14 +326,14 @@ fn postcard_layouts() -> Vec<(String, String)> {
             format!("reactions/{ANY}#emoji"),
             hex(&encode(&Reaction {
                 kind: ReactionKind::Emoji(ambre_bus::Emoji::from("e")),
-                ts: ambre_bus::Timestamp(1),
+                ts: ambre_bus::Timestamp::new(1),
             })),
         ),
         (
             format!("reactions/{ANY}#vote"),
             hex(&encode(&Reaction {
                 kind: ReactionKind::Vote(ambre_bus::app::toile::VoteWeight::new(2)),
-                ts: ambre_bus::Timestamp(3),
+                ts: ambre_bus::Timestamp::new(3),
             })),
         ),
     ]
@@ -467,7 +467,7 @@ fn created(outcome: &ToileOutcome) -> Id<Element> {
 /// board: its job is width, and the coverage assertion fails when it stops
 /// having it.
 pub(super) fn board_of_every_key() -> ToileState {
-    let mut st = ToileState::with_peer(ambre_core::PeerId(1));
+    let mut st = ToileState::with_peer(ambre_core::PeerId::new(1));
     st.set_user_id(Id::<User>::from_bytes([7; 16]));
 
     let create = |st: &mut ToileState, kind, at: Point, content, correlate| {
@@ -630,13 +630,13 @@ pub(super) fn board_of_every_key() -> ToileState {
         target: rect.clone(),
         reaction: Some(Reaction {
             kind: ReactionKind::Emoji(ambre_bus::Emoji::from("+1")),
-            ts: ambre_bus::Timestamp(1),
+            ts: ambre_bus::Timestamp::new(1),
         }),
     });
     let opened = st.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Element(rect),
         body: "a remark".to_owned(),
-        ts: ambre_bus::Timestamp(2),
+        ts: ambre_bus::Timestamp::new(2),
     });
     let thread = opened
         .display
@@ -649,7 +649,7 @@ pub(super) fn board_of_every_key() -> ToileState {
     st.handle_command(ToileCommand::ReplyComment {
         thread: thread.clone(),
         body: "an answer".to_owned(),
-        ts: ambre_bus::Timestamp(3),
+        ts: ambre_bus::Timestamp::new(3),
     });
     st.handle_command(ToileCommand::ResolveThread {
         thread,
@@ -734,11 +734,11 @@ fn steps_written() -> Vec<String> {
                 .set_peer_id(
                     migration_peer(heads.iter().map(|id| {
                         (
-                            ambre_core::PeerId(id.peer),
-                            ambre_core::OpCounter(id.counter),
+                            ambre_core::PeerId::new(id.peer),
+                            ambre_core::OpCounter::new(id.counter),
                         )
                     }))
-                    .0,
+                    .get(),
                 )
                 .expect("the migration identity");
             let before = scratch.oplog_vv();

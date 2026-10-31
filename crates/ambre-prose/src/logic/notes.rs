@@ -255,7 +255,7 @@ mod tests {
     /// left the call behind as a carrier that names no note.
     #[test]
     fn deleting_a_note_deletes_a_call_spelled_another_way() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["Hello world"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), &["Hello world"]);
         let id = add(&mut state, ids[0], DocOffset::new(5), "A note.");
         let body = doc::get_block_text(state.document(), &crate::events::tree_id(ids[0]));
         let upper = id.to_hyphenated().to_uppercase();
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn a_note_lands_as_one_call_and_an_entry_holding_its_text() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["Hello world"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), &["Hello world"]);
         let id = add(&mut state, ids[0], DocOffset::new(5), "A note.");
         assert_eq!(
             state.text_of(&ids[0]).as_deref(),
@@ -289,7 +289,7 @@ mod tests {
 
     #[test]
     fn a_note_touches_no_other_note() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["abc"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), &["abc"]);
         let first = add(&mut state, ids[0], DocOffset::new(3), "one");
         let before = note::body(state.document(), &first).map(|t| t.get_richtext_value());
         add(&mut state, ids[0], DocOffset::ZERO, "two");
@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn a_note_is_numbered_from_the_order_of_its_calls_and_stores_no_number() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["first", "second"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), &["first", "second"]);
         add(&mut state, ids[1], DocOffset::new(6), "later");
         add(&mut state, ids[0], DocOffset::new(5), "earlier");
         assert_eq!(
@@ -328,9 +328,9 @@ mod tests {
 
     #[test]
     fn a_note_keeps_its_identity_through_a_move_an_edit_and_a_remote_change() {
-        let (mut alice, ids) = document(ambre_core::PeerId(1), &["one", "two"]);
+        let (mut alice, ids) = document(ambre_core::PeerId::new(1), &["one", "two"]);
         let id = add(&mut alice, ids[0], DocOffset::new(3), "note");
-        let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("bob");
+        let mut bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("bob");
         bob.import_snapshot(&alice.export_snapshot())
             .expect("bob opens");
         alice.handle_command(ProseCommand::MoveBlock {
@@ -362,8 +362,8 @@ mod tests {
 
     #[test]
     fn two_converged_peers_count_the_same_numbers() {
-        let (mut alice, ids) = document(ambre_core::PeerId(1), &["para"]);
-        let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("bob");
+        let (mut alice, ids) = document(ambre_core::PeerId::new(1), &["para"]);
+        let mut bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("bob");
         bob.import_snapshot(&alice.export_snapshot())
             .expect("bob opens");
         let from_alice = alice.handle_command(ProseCommand::InsertFootnote {
@@ -389,7 +389,7 @@ mod tests {
 
     #[test]
     fn deleting_the_text_of_a_call_keeps_the_note_and_lists_it_as_orphaned() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["abc"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), &["abc"]);
         let id = add(&mut state, ids[0], DocOffset::new(1), "kept");
         state.handle_command(ProseCommand::DeleteText {
             block_id: ids[0],
@@ -408,7 +408,7 @@ mod tests {
 
     #[test]
     fn deleting_a_note_removes_its_body_and_its_calls_and_nothing_else() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["abcdef"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), &["abcdef"]);
         let gone = add(&mut state, ids[0], DocOffset::new(2), "gone");
         let kept = add(&mut state, ids[0], DocOffset::new(5), "kept");
         let kept_body = note::body(state.document(), &kept).map(|t| t.to_string());
@@ -431,9 +431,9 @@ mod tests {
 
     #[test]
     fn a_note_deleted_while_a_peer_edits_it_leaves_no_call() {
-        let (mut alice, ids) = document(ambre_core::PeerId(1), &["text"]);
+        let (mut alice, ids) = document(ambre_core::PeerId::new(1), &["text"]);
         let id = add(&mut alice, ids[0], DocOffset::new(4), "body");
-        let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("bob");
+        let mut bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("bob");
         bob.import_snapshot(&alice.export_snapshot())
             .expect("bob opens");
         let deleted = alice.handle_command(ProseCommand::DeleteFootnote { footnote_id: id });
@@ -451,7 +451,7 @@ mod tests {
 
     #[test]
     fn an_entry_is_a_note_by_its_declared_kind_and_by_nothing_else() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["text"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), &["text"]);
         let real = add(&mut state, ids[0], DocOffset::new(4), "a note");
         let annots = doc::annots(state.document());
         let shaped_alike = Id::<Footnote>::mint();
@@ -479,7 +479,7 @@ mod tests {
 
     #[test]
     fn a_note_is_refused_in_a_band_and_the_refusal_is_reported() {
-        let (mut state, _) = document(ambre_core::PeerId(1), &["body"]);
+        let (mut state, _) = document(ambre_core::PeerId::new(1), &["body"]);
         state.handle_command(ProseCommand::SetFooterEnabled {
             shown: crate::events::BandState::On,
         });
@@ -502,7 +502,7 @@ mod tests {
     /// meets. Deleting the note takes the block with it.
     #[test]
     fn a_note_holds_its_text_in_a_block_out_of_the_flow() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["text"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), &["text"]);
         let id = add(&mut state, ids[0], DocOffset::new(4), "a note");
         let block = note::block(state.document(), &id).expect("the note's block");
         assert_eq!(state.text_of(&block_id(block)).as_deref(), Some("a note"));
@@ -529,7 +529,7 @@ mod tests {
     /// comment, and does not split.
     #[test]
     fn a_note_refuses_a_note_a_comment_and_a_split() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), &["text"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), &["text"]);
         let id = add(&mut state, ids[0], DocOffset::new(4), "a note");
         let block = block_id(note::block(state.document(), &id).expect("the note's block"));
         let outcome = state.handle_command(ProseCommand::InsertFootnote {
@@ -542,7 +542,7 @@ mod tests {
             block_id: block,
             range: DocSpan::from_usize_range(0..2),
             text: "a thread".to_owned(),
-            now: ambre_core::Timestamp(0),
+            now: ambre_core::Timestamp::new(0),
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::CommentInNote));
         let outcome = state.handle_command(ProseCommand::SplitBlock {
@@ -557,7 +557,7 @@ mod tests {
     /// marks live on the note's own block, so the snapshot carries them.
     #[test]
     fn a_reloaded_note_keeps_its_text_and_its_marks() {
-        let (mut author, ids) = document(ambre_core::PeerId(1), &["text"]);
+        let (mut author, ids) = document(ambre_core::PeerId::new(1), &["text"]);
         let id = add(&mut author, ids[0], DocOffset::new(4), "a note");
         let block = block_id(note::block(author.document(), &id).expect("the note's block"));
         author.handle_command(ProseCommand::ApplyMark {
@@ -568,7 +568,7 @@ mod tests {
         });
         let marked = note::body(author.document(), &id).map(|t| t.get_richtext_value());
 
-        let mut reader = ProseState::with_peer(ambre_core::PeerId(2)).expect("a reader");
+        let mut reader = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a reader");
         reader
             .import_snapshot(&author.export_snapshot())
             .expect("the reload");

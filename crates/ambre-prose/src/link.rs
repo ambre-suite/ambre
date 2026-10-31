@@ -90,7 +90,7 @@ impl OpenableScheme {
 
 /// The longest link target a paste keeps and a copy or an export writes, in
 /// bytes (`PROSE-UI-234`, `PROSE-IO-069`).
-pub(crate) const HREF_MAX: ambre_core::ByteSize = ambre_core::ByteSize(2048);
+pub(crate) const HREF_MAX: ambre_core::ByteSize = ambre_core::ByteSize::new(2048);
 
 /// Whether a link's target of `size` fits [`HREF_MAX`]. A writer writes a
 /// longer one as its text alone. A paste, a copy and an export all ask here,
@@ -145,7 +145,8 @@ mod tests {
 
     #[test]
     fn a_link_is_listed_whole_across_the_marks_inside_it() {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         let block = append(&mut state, BlockInit::Paragraph, "see the site now");
         let events = mark(&mut state, block, (4, 12), "a", "https://example.org/");
         let expected = vec![LinkSpan {

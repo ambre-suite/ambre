@@ -253,7 +253,7 @@ impl FrameHost {
             last_drain: ambre_core::PageMillis::ZERO,
             last_draw: ambre_core::PageMillis::ZERO,
             last_gpu: ambre_core::PageMillis::ZERO,
-            last_hud_update: ambre_bus::PageTime(0.0),
+            last_hud_update: ambre_bus::PageTime::new(0.0),
             fatal_screen: ambre_canvas::FatalScreen::Unpainted,
         }
     }
@@ -483,9 +483,9 @@ impl FrameHost {
         self.cells.settle(&mut self.view);
         self.cells.render(raf_timestamp);
 
-        let t_drain = ambre_core::PageTime(self.perf.now());
+        let t_drain = ambre_core::PageTime::new(self.perf.now());
         self.view.update();
-        let t_after_drain = ambre_core::PageTime(self.perf.now());
+        let t_after_drain = ambre_core::PageTime::new(self.perf.now());
 
         // Service any Paste-button read the shell decoded. The shell read the
         // clipboard inside the click gesture. The host answers rung 2 by
@@ -573,13 +573,13 @@ impl FrameHost {
             gpu: self.last_gpu,
         };
 
-        let t0 = ambre_core::PageTime(self.perf.now());
+        let t0 = ambre_core::PageTime::new(self.perf.now());
 
         // -- Build CPU batches for whichever layers are being rebuilt. --------
         let t_draw = if any_dirty {
             gpu.text_cache.reset_frame_stats();
             gpu.quad_renderer.begin_frame(gpu.size);
-            let t_draw_start = ambre_core::PageTime(self.perf.now());
+            let t_draw_start = ambre_core::PageTime::new(self.perf.now());
             {
                 let mut surface = WgpuSurface::new(&mut gpu.quad_renderer, &gpu.device, &gpu.queue);
                 if content_active {
@@ -632,7 +632,7 @@ impl FrameHost {
                 }
             }
             gpu.text_cache.evict_if_oversized(5_000);
-            ambre_core::PageTime(self.perf.now()) - t_draw_start
+            ambre_core::PageTime::new(self.perf.now()) - t_draw_start
         } else {
             ambre_core::PageMillis::ZERO
         };
@@ -642,12 +642,12 @@ impl FrameHost {
         if phases.present == ambre_canvas::Present::Skip {
             return;
         }
-        let t_gpu_start = ambre_core::PageTime(self.perf.now());
+        let t_gpu_start = ambre_core::PageTime::new(self.perf.now());
         if !super::cell::present(gpu, &plan) {
             return;
         }
 
-        let t2 = ambre_core::PageTime(self.perf.now());
+        let t2 = ambre_core::PageTime::new(self.perf.now());
         self.last_frame = t2 - t0;
         self.last_drain = t_after_drain - t_drain;
         self.last_draw = t_draw;

@@ -20,10 +20,10 @@ use ambre_bus::app::prose::{DocDelta, DocSpan};
 /// The seed travels as a snapshot, which is how a second peer joins a document
 /// in the live system.
 fn two_peers() -> (ProseState, ProseState, crate::events::BlockId) {
-    let alice = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+    let alice = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
     let block = alice.root_blocks()[0];
     let seed = alice.export_snapshot();
-    let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
+    let mut bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
     bob.import_snapshot(&seed).expect("the seed imports");
     (alice, bob, block)
 }
@@ -307,7 +307,7 @@ fn a_remote_change_is_never_re_broadcast() {
         })
         .update
         .expect("a delta");
-    let mut third = ProseState::with_peer(ambre_core::PeerId(3)).expect("a document is built");
+    let mut third = ProseState::with_peer(ambre_core::PeerId::new(3)).expect("a document is built");
     third
         .import_snapshot(&alice.export_snapshot())
         .expect("the seed imports");
@@ -602,9 +602,9 @@ fn bold(
 
 /// Two peers over one document holding a table of `rows` by `cols`.
 fn two_peers_with_table(rows: u32, cols: u32) -> (ProseState, ProseState, loro::TreeID) {
-    let (alice, table) = document_with_table(ambre_core::PeerId(1), rows, cols);
+    let (alice, table) = document_with_table(ambre_core::PeerId::new(1), rows, cols);
     let seed = alice.export_snapshot();
-    let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
+    let mut bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
     bob.import_snapshot(&seed).expect("the seed imports");
     (alice, bob, table)
 }

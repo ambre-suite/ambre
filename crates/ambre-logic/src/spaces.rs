@@ -941,7 +941,7 @@ mod tests {
     use ambre_bus::{Role, Topic};
     use ambre_core::id::Category;
 
-    const NOW: Timestamp = Timestamp(1_700_000_000_000);
+    const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 
     /// The name `text` is, within the cap.
     fn fit_name(text: &str) -> Name {
@@ -1032,7 +1032,7 @@ mod tests {
         state.grant_identity(space_id.document_id());
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (stored.snapshot().expect("snapshot")),
         });
         ready(state, space_id.document_id(), role);
@@ -1046,7 +1046,7 @@ mod tests {
         space
             .adopt_session(
                 peer,
-                ambre_core::PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()),
+                ambre_core::PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
             )
             .expect("adopt");
         space
@@ -1125,7 +1125,7 @@ mod tests {
         let _ = drain(&sync);
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (stored.snapshot().expect("snapshot")),
         });
         assert!(
@@ -1252,7 +1252,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (stored.snapshot().expect("snapshot")),
         });
         ready(&mut state, space_id.document_id(), Role::Viewer);
@@ -1423,7 +1423,7 @@ mod tests {
         bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
         bob.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (alice.snapshot().expect("snapshot")),
         });
         ready(&mut bob, space_id.document_id(), Role::Editor);
@@ -1496,7 +1496,7 @@ mod tests {
         bob.handle_logic_command(LogicCommand::OpenSpace { space_id });
         bob.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (alice.snapshot().expect("snapshot")),
         });
         ready(&mut bob, space_id.document_id(), role);
@@ -1698,7 +1698,7 @@ mod tests {
         viewer.grant_identity(space_id.document_id());
         viewer.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload,
         });
         ready(&mut viewer, space_id.document_id(), Role::Viewer);
@@ -2093,7 +2093,7 @@ mod tests {
         MemberInfo {
             user_id,
             display_name: ambre_core::DisplayName::new(name).unwrap(),
-            email: ambre_core::Email(format!("{name}@example.org")),
+            email: ambre_core::Email::new(format!("{name}@example.org")),
             role: Role::Editor,
             standing: ambre_bus::MemberStanding::Verified,
         }
@@ -2112,7 +2112,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (stored.snapshot().expect("snapshot")),
         });
         ready(state, space_id.document_id(), Role::Editor);
@@ -2152,7 +2152,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (stored.snapshot().expect("snapshot")),
         });
         assert!(
@@ -2177,7 +2177,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::OpenSpace { space_id });
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (stored.snapshot().expect("snapshot")),
         });
         let _ = drain(&sync);
@@ -2276,7 +2276,7 @@ mod tests {
 
         state.handle_logic_event(LogicEvent::RemoteSnapshot {
             document_id: space_id.document_id(),
-            covered_seq: ambre_core::Seq(1),
+            covered_seq: ambre_core::Seq::new(1),
             payload: (stored.snapshot().expect("snapshot")),
         });
         ready(&mut state, space_id.document_id(), Role::Editor);
@@ -2318,15 +2318,15 @@ mod tests {
             state.handle_logic_command(LogicCommand::Space {
                 space_id,
                 command: SpaceCommand::RefreshPresence {
-                    now: Timestamp(NOW.0 + offset),
+                    now: Timestamp::new(NOW.get() + offset),
                 },
             });
         };
-        tick(&mut state, PRESENCE_EXPIRY.0);
+        tick(&mut state, PRESENCE_EXPIRY.get());
         assert!(last_members(&drain(&ui)).is_none(), "Bob is still online");
         assert_eq!(samples(&drain(&sync)).len(), 1);
 
-        tick(&mut state, PRESENCE_EXPIRY.0 + 1);
+        tick(&mut state, PRESENCE_EXPIRY.get() + 1);
         let members = last_members(&drain(&ui)).expect("a member list");
         assert_eq!(members[0].presence, Presence::Offline);
         assert_eq!(samples(&drain(&sync)).len(), 1);
@@ -2459,7 +2459,7 @@ mod tests {
             id: Some(change),
             request: ambre_bus::ApiRequest::UpdateDocumentMemberRole,
             failure: ambre_bus::ApiFailure::Relay {
-                status: ambre_bus::HttpStatus(403),
+                status: ambre_bus::HttpStatus::new(403),
                 code: None,
             },
             message: "HTTP 403".into(),

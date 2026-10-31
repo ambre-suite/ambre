@@ -243,7 +243,7 @@ impl Bound {
                     if let Some((phase, at)) = touch_of(&event) {
                         if view
                             .borrow_mut()
-                            .touch(phase, at, ambre_bus::PageTime(event.time_stamp()))
+                            .touch(phase, at, ambre_bus::PageTime::new(event.time_stamp()))
                             .is_yes()
                         {
                             event.prevent_default();
@@ -781,7 +781,7 @@ mod tests {
         let mut cache = ambre_canvas::TextCache::new();
         let mut surface = ambre_draw::testing::RecordingSurface::new();
         view.update();
-        view.plan_repaint(ambre_bus::PageTime(0.0), ambre_canvas::HudTick::Idle);
+        view.plan_repaint(ambre_bus::PageTime::new(0.0), ambre_canvas::HudTick::Idle);
         view.paint_content(&mut surface, &mut font_cx, &mut cache, None);
     }
 
@@ -971,7 +971,7 @@ mod tests {
         cells.sync(&page);
         let bound = cells.bound.get_mut(&THREAD_CANVAS).unwrap();
         assert!(
-            bound.render(ambre_bus::PageTime(0.0)).is_none(),
+            bound.render(ambre_bus::PageTime::new(0.0)).is_none(),
             "no GPU yet"
         );
 
@@ -985,16 +985,16 @@ mod tests {
             .content
         };
         assert!(matches!(
-            plan(bound, ambre_bus::PageTime(0.0)),
+            plan(bound, ambre_bus::PageTime::new(0.0)),
             ContentRepaint::Full
         ));
         assert!(matches!(
-            plan(bound, ambre_bus::PageTime(16.0)),
+            plan(bound, ambre_bus::PageTime::new(16.0)),
             ContentRepaint::Reuse
         ));
         assert!(
             matches!(
-                page.plan_repaint(ambre_bus::PageTime(16.0), ambre_canvas::HudTick::Idle)
+                page.plan_repaint(ambre_bus::PageTime::new(16.0), ambre_canvas::HudTick::Idle)
                     .content,
                 ContentRepaint::Full
             ),
@@ -1005,11 +1005,11 @@ mod tests {
         sleep(50).await;
         let bound = &cells.bound[&THREAD_CANVAS];
         assert!(matches!(
-            plan(bound, ambre_bus::PageTime(32.0)),
+            plan(bound, ambre_bus::PageTime::new(32.0)),
             ContentRepaint::Full
         ));
         assert!(matches!(
-            page.plan_repaint(ambre_bus::PageTime(32.0), ambre_canvas::HudTick::Idle)
+            page.plan_repaint(ambre_bus::PageTime::new(32.0), ambre_canvas::HudTick::Idle)
                 .content,
             ContentRepaint::Reuse
         ));

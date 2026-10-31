@@ -648,7 +648,7 @@ mod tests {
     };
 
     fn document() -> ProseState {
-        ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built")
+        ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built")
     }
 
     fn import(state: &mut ProseState, markdown: &str) -> ProseOutcome {

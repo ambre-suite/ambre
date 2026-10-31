@@ -144,10 +144,10 @@ mod tests {
     }
 
     /// The last number the activity answer gives every document.
-    const LAST: Seq = Seq(3);
+    const LAST: Seq = Seq::new(3);
 
     /// The last number the listing gives every `meta`.
-    const META_LAST: Seq = Seq(8);
+    const META_LAST: Seq = Seq::new(8);
 
     fn list(state: &mut LogicState, metas: &[(Id<Channel>, Id<Meta>)]) {
         state.handle_logic_event(LogicEvent::MemberChannels {
@@ -270,8 +270,8 @@ mod tests {
                 document_id: segment,
                 kind: ChannelDocumentKind::Segment,
                 active: ambre_bus::Activity::Active,
-                read: Seq(2),
-                last: Some(Seq(50)),
+                read: Seq::new(2),
+                last: Some(Seq::new(50)),
             }],
         });
         let mark = ChannelActivity {

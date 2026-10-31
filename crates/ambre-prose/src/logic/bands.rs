@@ -168,7 +168,13 @@ impl ProseState {
 
     /// This session's own operation counter: how far its PeerID has written.
     fn own_counter(&self) -> ambre_core::OpCounter {
-        ambre_core::OpCounter(self.doc.oplog_vv().get(&self.peer.0).copied().unwrap_or(0))
+        ambre_core::OpCounter::new(
+            self.doc
+                .oplog_vv()
+                .get(&self.peer.get())
+                .copied()
+                .unwrap_or(0),
+        )
     }
 
     /// The side's two blocks, minted on first use. Each is a root paragraph
@@ -479,7 +485,7 @@ pub(crate) mod tests {
     fn the_date_field_stores_a_format_and_no_date() {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp(1_700_000_000_000),
+            now: ambre_core::Timestamp::new(1_700_000_000_000),
         });
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::Date(DateFieldFormat::Long),
@@ -556,29 +562,29 @@ pub(crate) mod tests {
             text: "a".to_owned(),
         });
         let stamped = state.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp(42),
+            now: ambre_core::Timestamp::new(42),
         });
         assert!(stamped.update.is_some());
         assert_eq!(
             doc::read_updated_at(state.document()),
-            Some(ambre_core::Timestamp(42))
+            Some(ambre_core::Timestamp::new(42))
         );
         let again = state.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp(43),
+            now: ambre_core::Timestamp::new(43),
         });
         assert!(again.update.is_none(), "nothing was written since");
         state.handle_command(ProseCommand::Undo);
         assert_eq!(state.text_of(&header).as_deref(), Some(""));
         assert_eq!(
             doc::read_updated_at(state.document()),
-            Some(ambre_core::Timestamp(42))
+            Some(ambre_core::Timestamp::new(42))
         );
     }
 
     /// Two peers, each holding the other's opening state.
     fn two_peers() -> (ProseState, ProseState) {
-        let mut alice = ProseState::with_peer(ambre_core::PeerId(1)).expect("alice");
-        let bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("bob");
+        let mut alice = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("alice");
+        let bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("bob");
         let snapshot = alice.export_snapshot();
         let mut bob = bob;
         bob.import_snapshot(&snapshot)
@@ -634,7 +640,7 @@ pub(crate) mod tests {
         });
         send(&field, &mut bob);
         let stamp = alice.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp(1_772_712_000_000),
+            now: ambre_core::Timestamp::new(1_772_712_000_000),
         });
         send(&stamp, &mut bob);
         let header = crate::events::tree_id(alice.bands().header.expect("the header"));
@@ -655,7 +661,7 @@ pub(crate) mod tests {
             pos: DocOffset::ZERO,
         });
         state.handle_command(ProseCommand::StampModified {
-            now: ambre_core::Timestamp(1_772_712_000_000),
+            now: ambre_core::Timestamp::new(1_772_712_000_000),
         });
         let header = crate::events::tree_id(header);
         // A new document carries no language, so the date takes the neutral

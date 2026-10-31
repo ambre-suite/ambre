@@ -37,10 +37,10 @@ pub(crate) fn write(
         let entry = Fields::<AttachmentKey>::of(list.push_container(LoroMap::new())?);
         entry.insert(AttachmentKey::Media, attachment.media_ref.as_str())?;
         entry.insert(AttachmentKey::Name, attachment.name.as_str())?;
-        entry.insert(AttachmentKey::Type, attachment.media_type.0.as_str())?;
+        entry.insert(AttachmentKey::Type, attachment.media_type.as_str())?;
         // Loro has no unsigned integer; a file past `i64::MAX` bytes is not
         // one the relay accepts, so saturating loses nothing real.
-        let size = i64::try_from(attachment.size.0).unwrap_or(i64::MAX);
+        let size = i64::try_from(attachment.size.get()).unwrap_or(i64::MAX);
         entry.insert(AttachmentKey::Size, size)?;
     }
     Ok(())
@@ -70,7 +70,7 @@ fn read_entry(entry: &Fields<AttachmentKey>) -> Option<Attachment> {
     Some(Attachment {
         media_ref: ContentHash::parse(&schema::string(entry, AttachmentKey::Media)?)?,
         name: schema::string(entry, AttachmentKey::Name)?,
-        media_type: MediaType(schema::string(entry, AttachmentKey::Type)?),
-        size: ByteSize(schema::unsigned(entry, AttachmentKey::Size)?),
+        media_type: MediaType::new(schema::string(entry, AttachmentKey::Type)?),
+        size: ByteSize::new(schema::unsigned(entry, AttachmentKey::Size)?),
     })
 }

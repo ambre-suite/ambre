@@ -92,7 +92,8 @@ mod tests {
 
     /// A document of one paragraph per string, in order.
     fn document_of(paragraphs: &[&str]) -> ProseState {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         let mut last = state.root_blocks()[0];
         for (index, text) in paragraphs.iter().enumerate() {
             if index > 0 {
@@ -119,7 +120,7 @@ mod tests {
 
     #[test]
     fn an_empty_document_counts_zero_for_the_four_tallies() {
-        let state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         assert_eq!(compute_word_count(state.document()), WordCount::default());
     }
 

@@ -67,7 +67,7 @@ impl FixtureGen for TrameGen {
         ambre_core::GeneratorVersion::new(self.version)
     }
     fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
-        let mut state = TrameState::with_peer(ambre_core::PeerId(self.seed));
+        let mut state = TrameState::with_peer(ambre_core::PeerId::new(self.seed));
         for (row, text) in [(0, "21"), (1, "=A1*2"), (2, "plain")] {
             state.handle_command(TrameCommand::SetCellText {
                 row: Row::new(row),
@@ -101,7 +101,7 @@ impl FixtureGen for ToileGen {
         ambre_core::GeneratorVersion::new(1)
     }
     fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
-        let mut state = ToileState::with_peer(ambre_core::PeerId(self.seed));
+        let mut state = ToileState::with_peer(ambre_core::PeerId::new(self.seed));
         for i in 0..3 {
             state.handle_command(ToileCommand::CreateElement {
                 kind: ElementKind::Shape(ShapeKind::Rect),
@@ -608,8 +608,8 @@ fn a_solo_document_reports_one_peer_and_a_merged_one_reports_two() {
     // subtract exactly that one, so a solo document still reports one.
     assert_eq!(shape_of(&solo).peers.get(), 1, "one author");
 
-    let mut alice = TrameState::with_peer(ambre_core::PeerId(1));
-    let mut bob = TrameState::with_peer(ambre_core::PeerId(2));
+    let mut alice = TrameState::with_peer(ambre_core::PeerId::new(1));
+    let mut bob = TrameState::with_peer(ambre_core::PeerId::new(2));
     alice.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
         col: Col::new(0),
@@ -670,8 +670,8 @@ fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
         DocState::Trame(Box::new(state))
     };
     // Different peers, different write order -- same content.
-    let one = build(ambre_core::PeerId(11), false);
-    let two = build(ambre_core::PeerId(22), true);
+    let one = build(ambre_core::PeerId::new(11), false);
+    let two = build(ambre_core::PeerId::new(22), true);
     assert_ne!(
         one.export_snapshot(),
         two.export_snapshot(),
@@ -681,7 +681,7 @@ fn the_canonical_dump_is_blind_to_the_route_a_document_took() {
 
     // And a real content difference still shows.
     let three = {
-        let mut state = TrameState::with_peer(ambre_core::PeerId(11));
+        let mut state = TrameState::with_peer(ambre_core::PeerId::new(11));
         state.handle_command(TrameCommand::SetCellText {
             row: Row::new(0),
             col: Col::new(0),
@@ -711,8 +711,8 @@ fn a_toile_dump_names_nodes_by_paint_order_not_by_element_id() {
         }
         DocState::Toile(Box::new(state))
     };
-    let one = build(ambre_core::PeerId(101));
-    let two = build(ambre_core::PeerId(202));
+    let one = build(ambre_core::PeerId::new(101));
+    let two = build(ambre_core::PeerId::new(202));
     assert_ne!(one.export_snapshot(), two.export_snapshot());
     let dump = canonical_dump(&one);
     assert_eq!(dump, canonical_dump(&two));

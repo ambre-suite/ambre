@@ -398,14 +398,14 @@ fn a_group_left_with_no_member_is_removed() {
 /// enclosed member it kept, and it moves nobody.
 #[test]
 fn a_binding_keeps_what_it_can_hold_and_moves_nobody() {
-    let mut a = ToileState::with_peer(ambre_core::PeerId(1));
+    let mut a = ToileState::with_peer(ambre_core::PeerId::new(1));
     let x = rect(&mut a, 0.0, 0.0);
     let y = rect(&mut a, 30.0, 0.0);
     let z = rect(&mut a, 60.0, 0.0);
     let gone = rect(&mut a, 90.0, 0.0);
     let inner = group(&mut a, &[&x, &y]);
     // A peer deletes `gone` while this user still has it selected.
-    let mut b = ToileState::with_peer(ambre_core::PeerId(2));
+    let mut b = ToileState::with_peer(ambre_core::PeerId::new(2));
     b.apply_remote_snapshot(&a.export_snapshot());
     let deleted = b.handle_command(ToileCommand::DeleteElements {
         ids: vec![gone.clone()],
@@ -702,7 +702,7 @@ fn a_command_culls_against_the_last_reported_camera() {
 /// one by one repaint once each.
 #[test]
 fn a_remote_batch_repaints_once() {
-    let mut a = ToileState::with_peer(ambre_core::PeerId(1));
+    let mut a = ToileState::with_peer(ambre_core::PeerId::new(1));
     let deltas: Vec<ambre_core::Payload<ambre_core::DeltaBytes>> = (0..5)
         .map(|i| {
             create(
@@ -715,11 +715,11 @@ fn a_remote_batch_repaints_once() {
             .expect("a create is a change")
         })
         .collect();
-    let mut batched = ToileState::with_peer(ambre_core::PeerId(2));
+    let mut batched = ToileState::with_peer(ambre_core::PeerId::new(2));
     let events = batched.apply_remote_batch(&deltas);
     assert_eq!(viewports(&events), 1);
     assert_eq!(batched.element_count(), ambre_core::ElementCount::new(5));
-    let mut single = ToileState::with_peer(ambre_core::PeerId(3));
+    let mut single = ToileState::with_peer(ambre_core::PeerId::new(3));
     let each: usize = deltas
         .iter()
         .map(|d| viewports(&single.apply_remote(d)))
@@ -740,7 +740,7 @@ fn every_id_the_board_writes_has_the_minted_width() {
     for (peer, counter) in [(0, 0), (u64::MAX, u32::MAX)] {
         assert_eq!(
             Id::<Element>::mint_from(
-                ambre_core::PeerId(peer),
+                ambre_core::PeerId::new(peer),
                 ambre_bus::app::toile::IdCounter::new(counter)
             )
             .as_str()
@@ -749,7 +749,7 @@ fn every_id_the_board_writes_has_the_minted_width() {
         );
         assert_eq!(
             Id::<Connector>::mint_from(
-                ambre_core::PeerId(peer),
+                ambre_core::PeerId::new(peer),
                 ambre_bus::app::toile::IdCounter::new(counter)
             )
             .as_str()
@@ -758,7 +758,7 @@ fn every_id_the_board_writes_has_the_minted_width() {
         );
     }
     // Loro reserves the top peer id, so the widest a document takes is one less.
-    let mut st = ToileState::with_peer(ambre_core::PeerId(u64::MAX - 1));
+    let mut st = ToileState::with_peer(ambre_core::PeerId::new(u64::MAX - 1));
     let a = rect(&mut st, 0.0, 0.0);
     let b = rect(&mut st, 40.0, 0.0);
     let f = frame(&mut st, 0.0, 100.0);

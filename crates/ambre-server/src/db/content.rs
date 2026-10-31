@@ -44,7 +44,7 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
         document_id: r.try_get::<PgId, _>("document_id")?.into(),
         author_pubkey: decode_key(r.try_get("author_pubkey")?)?,
         update_clocks: r.try_get("update_clocks")?,
-        s3_key: ambre_core::ObjectKey(r.try_get("s3_key")?),
+        s3_key: ambre_core::ObjectKey::new(r.try_get("s3_key")?),
         covered_seq: decode_seq(r.try_get("covered_seq")?)?,
         status: parse_status(&status)?,
         created_at: r.try_get("created_at")?,
@@ -91,8 +91,8 @@ impl InlineCap {
     #[must_use]
     pub const fn three_quarters(self) -> Self {
         Self {
-            deltas: DeltaCount(self.deltas.0.saturating_mul(3).div_ceil(4)),
-            bytes: ambre_core::ByteSize(self.bytes.0.saturating_mul(3).div_ceil(4)),
+            deltas: DeltaCount::new(self.deltas.get().saturating_mul(3).div_ceil(4)),
+            bytes: ambre_core::ByteSize::new(self.bytes.get().saturating_mul(3).div_ceil(4)),
         }
     }
 
@@ -101,8 +101,8 @@ impl InlineCap {
     #[must_use]
     pub const fn quarter(self) -> Self {
         Self {
-            deltas: DeltaCount(self.deltas.0 / 4),
-            bytes: ambre_core::ByteSize(self.bytes.0 / 4),
+            deltas: DeltaCount::new(self.deltas.get() / 4),
+            bytes: ambre_core::ByteSize::new(self.bytes.get() / 4),
         }
     }
 }
@@ -284,7 +284,7 @@ pub async fn drop_pending_snapshot(
     .rows_affected();
     tx.commit().await?;
     Ok(Some(DroppedSnapshot {
-        s3_key: ambre_core::ObjectKey(s3_key),
+        s3_key: ambre_core::ObjectKey::new(s3_key),
         after: if cleared == 1 {
             ambre_core::AfterDrop::Refinalize
         } else {
@@ -491,7 +491,7 @@ pub async fn idle_inline_documents(
                          AND v.created_at > now() - make_interval(secs => $1::BIGINT::FLOAT8)) \
          LIMIT $2",
     )
-    .bind(i64::try_from(idle.0).unwrap_or(i64::MAX))
+    .bind(i64::try_from(idle.get()).unwrap_or(i64::MAX))
     .bind(limit.as_i64())
     .fetch_all(pool)
     .await?;
@@ -525,11 +525,11 @@ pub async fn get_updates_after(
                 seq: decode_seq(r.try_get("seq")?)?,
                 s3_key: r
                     .try_get::<Option<String>, _>("s3_key")?
-                    .map(ambre_core::ObjectKey),
+                    .map(ambre_core::ObjectKey::new),
                 wire: r.try_get("wire")?,
                 batch_key: r
                     .try_get::<Option<String>, _>("batch_key")?
-                    .map(ambre_core::ObjectKey),
+                    .map(ambre_core::ObjectKey::new),
                 created_at: r.try_get("created_at")?,
             })
         })
@@ -657,7 +657,10 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
     .await?;
     Ok(Trim {
         rows: u64::try_from(rows).unwrap_or(0),
-        batch_keys: batch_keys.into_iter().map(ambre_core::ObjectKey).collect(),
+        batch_keys: batch_keys
+            .into_iter()
+            .map(ambre_core::ObjectKey::new)
+            .collect(),
     })
 }
 
@@ -685,7 +688,7 @@ pub async fn insert_media(
     .bind(content_hash.as_str())
     .bind(did)
     .bind(uid)
-    .bind(i64::try_from(size.0).unwrap_or(i64::MAX))
+    .bind(i64::try_from(size.get()).unwrap_or(i64::MAX))
     .bind(s3_key.as_str())
     .execute(&mut *tx)
     .await?;
@@ -763,7 +766,7 @@ pub async fn erase_media_claim(
         .execute(&mut **tx)
         .await?;
     Ok(MediaErase::Last {
-        s3_key: ambre_core::ObjectKey(s3_key),
+        s3_key: ambre_core::ObjectKey::new(s3_key),
     })
 }
 

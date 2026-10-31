@@ -205,7 +205,11 @@ impl TrameState {
     /// peer, so a restored solo document still reports one author.
     fn fixture_peer_count(&self) -> ambre_core::PeerCount {
         fixture_peer_count(
-            self.doc.oplog_vv().keys().copied().map(ambre_core::PeerId),
+            self.doc
+                .oplog_vv()
+                .keys()
+                .copied()
+                .map(ambre_core::PeerId::new),
             super::scaffold_identity(),
         )
     }
@@ -420,7 +424,7 @@ fn build_multi_sheet(state: &mut TrameState) {
 /// That is what merging two documents born apart looks like, and the corpus wants
 /// it on record.
 fn build_two_peer_merge(state: &mut TrameState, seed: FixtureSeed) {
-    let mut other = TrameState::with_peer(ambre_core::PeerId(seed.get() ^ 0xFFFF_FFFF));
+    let mut other = TrameState::with_peer(ambre_core::PeerId::new(seed.get() ^ 0xFFFF_FFFF));
     state.handle_command(TrameCommand::SetCellsBatch {
         cells: (0..10)
             .map(|row| {

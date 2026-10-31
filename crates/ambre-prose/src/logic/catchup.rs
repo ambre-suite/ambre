@@ -345,7 +345,7 @@ mod tests {
     use super::*;
     use crate::events::BlockId;
 
-    const A: BlockId = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
+    const A: BlockId = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
 
     fn run(at: u32, delta: i64) -> TextEdit {
         TextEdit {

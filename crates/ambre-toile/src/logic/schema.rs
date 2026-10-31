@@ -139,12 +139,12 @@ fn gate_through<'a>(
             let heads = scratch.oplog_frontiers();
             let peer = migration_peer(heads.iter().map(|id| {
                 (
-                    ambre_core::PeerId(id.peer),
-                    ambre_core::OpCounter(id.counter),
+                    ambre_core::PeerId::new(id.peer),
+                    ambre_core::OpCounter::new(id.counter),
                 )
             }));
             scratch
-                .set_peer_id(peer.0)
+                .set_peer_id(peer.get())
                 .map_err(|e| SchemaError::MigrationFailed {
                     from: found,
                     to: SCHEMA_VERSION,
@@ -312,7 +312,7 @@ mod tests {
         }];
         let open = |peer: ambre_core::PeerId| {
             let live = LoroDoc::new();
-            live.set_peer_id(peer.0).expect("a peer of its own");
+            live.set_peer_id(peer.get()).expect("a peer of its own");
             live.import(
                 gate_through(&steps, &bytes.clone().into())
                     .expect("version 0 migrates")
@@ -331,7 +331,10 @@ mod tests {
                 .and_then(|c| c.into_text().ok())
                 .expect("the body is a text")
         };
-        let (a, b) = (open(ambre_core::PeerId(1)), open(ambre_core::PeerId(2)));
+        let (a, b) = (
+            open(ambre_core::PeerId::new(1)),
+            open(ambre_core::PeerId::new(2)),
+        );
         body(&a).insert(0, "now ").expect("a types");
         a.commit();
         body(&b).insert(8, " and eggs").expect("b types");

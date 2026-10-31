@@ -357,7 +357,7 @@ fn header_reading(reader: &Reader<'_>, stored: &Stored, key: HeaderKey) -> Optio
     // A fold is read through the check a fold snapshot passes.
     if key == HeaderKey::FoldedSeq {
         let (_, seq) = header_fold(reader.doc(stored.kind))?;
-        return Some(format!("folds its amendments up to delta {}", seq.0));
+        return Some(format!("folds its amendments up to delta {}", seq.get()));
     }
     let value = stored.string()?;
     match key {
@@ -453,7 +453,7 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
         MessageKey::Author if message.author == AUTHOR => {
             Some(format!("message {n} by the author"))
         }
-        MessageKey::Ts => Some(format!("message {n} sent at {} ms", message.ts.0)),
+        MessageKey::Ts => Some(format!("message {n} sent at {} ms", message.ts.get())),
         // A mention mark is read through the mentions the view is given.
         MessageKey::Content if stored.mark(2).and_then(Mark::parse) == Some(Mark::Mention) => {
             let named = match message.mentions.first()?.target {
@@ -510,11 +510,11 @@ fn message_reading(reader: &Reader<'_>, stored: &Stored) -> Option<String> {
                 )),
                 AttachmentKey::Type => Some(format!(
                     "message {n} carries file {f} of type {:?}",
-                    file.media_type.0
+                    file.media_type.as_str()
                 )),
                 AttachmentKey::Size => Some(format!(
                     "message {n} carries file {f} of {} bytes",
-                    file.size.0
+                    file.size.get()
                 )),
                 _ => None,
             }

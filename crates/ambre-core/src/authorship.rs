@@ -28,7 +28,19 @@ pub const PEER_ENTRY_LEN: usize = 16 + SESSION_NONCE_LEN + ENTRY_SIGNATURE_LEN;
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct PeerId(pub u64);
+pub struct PeerId(u64);
+
+impl PeerId {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
 
 impl std::fmt::Display for PeerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -51,7 +63,19 @@ impl std::fmt::LowerHex for PeerId {
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct OpCounter(pub i32);
+pub struct OpCounter(i32);
+
+impl OpCounter {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: i32) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> i32 {
+        self.0
+    }
+}
 
 /// The part of a minted id after its PeerID: a Toile element or connector
 /// id, or a Trame row or column uid. One session mints each value once, so

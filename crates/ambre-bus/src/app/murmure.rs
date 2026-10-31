@@ -837,7 +837,7 @@ impl SealedChannelKey {
         let mut bytes = Vec::new();
         key_id.push_to(&mut bytes);
         nonce.push_to(&mut bytes);
-        bytes.extend_from_slice(&ciphertext.0);
+        bytes.extend_from_slice(ciphertext.as_bytes());
         Self(bytes)
     }
 
@@ -858,7 +858,11 @@ impl SealedChannelKey {
     )> {
         let (key_id, rest) = ambre_core::FixedBytes::<ambre_core::KeyId>::split_from(&self.0)?;
         let (nonce, ciphertext) = ambre_core::FixedBytes::<ambre_core::Nonce>::split_from(rest)?;
-        Some((key_id, nonce, ambre_core::Ciphertext(ciphertext.to_vec())))
+        Some((
+            key_id,
+            nonce,
+            ambre_core::Ciphertext::new(ciphertext.to_vec()),
+        ))
     }
 
     /// The sealed bytes, as the catalogue stores them.
@@ -1152,12 +1156,15 @@ mod tests {
             FixedBytes::<KeyId>::from_array([3; 16]),
             FixedBytes::<Nonce>::from_array([7; 24]),
         );
-        let ciphertext = Ciphertext(b"sealed".to_vec());
+        let ciphertext = Ciphertext::new(b"sealed".to_vec());
         let sealed = SealedChannelKey::from_parts(key_id, &nonce, &ciphertext);
         assert_eq!(sealed.key_id(), Some(key_id));
         assert_eq!(sealed.split(), Some((key_id, nonce, ciphertext)));
-        let empty = SealedChannelKey::from_parts(key_id, &nonce, &Ciphertext(Vec::new()));
-        assert_eq!(empty.split(), Some((key_id, nonce, Ciphertext(Vec::new()))));
+        let empty = SealedChannelKey::from_parts(key_id, &nonce, &Ciphertext::new(Vec::new()));
+        assert_eq!(
+            empty.split(),
+            Some((key_id, nonce, Ciphertext::new(Vec::new())))
+        );
         let short = SealedChannelKey::from_bytes(vec![3; 39]);
         assert_eq!(short.key_id(), Some(key_id));
         assert_eq!(short.split(), None);
@@ -1208,8 +1215,8 @@ mod tests {
         let attachment = Attachment {
             media_ref: ContentHash::parse(&"a".repeat(64)).expect("an address"),
             name: secret.to_owned(),
-            media_type: MediaType("text/plain".to_owned()),
-            size: ByteSize(1),
+            media_type: MediaType::new("text/plain".to_owned()),
+            size: ByteSize::new(1),
         };
         let view = MessageView {
             id: Id::<Message>::mint(),

@@ -152,7 +152,7 @@ impl ClipboardFormat {
 
 /// How often a hidden page relays, in milliseconds (`CANVAS-075`). The
 /// browser spaces a hidden page's timers to a second at least.
-const HIDDEN_RELAY_PERIOD: ambre_bus::Millis = ambre_bus::Millis(1000);
+const HIDDEN_RELAY_PERIOD: ambre_bus::Millis = ambre_bus::Millis::new(1000);
 
 /// Base64-encode bytes for transport as a clipboard string (UTF-8 safe).
 /// Where a mouse, pointer or drag event landed on its canvas. The DOM
@@ -747,7 +747,7 @@ mod tests {
     fn tick_fps_needs_two_samples() {
         let mut times = VecDeque::new();
         let mut fps = ambre_core::FrameRate::new(-1.0);
-        FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime(0.0));
+        FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime::new(0.0));
         // A single sample cannot establish a rate.
         assert_eq!(fps, ambre_core::FrameRate::ZERO);
     }
@@ -761,7 +761,7 @@ mod tests {
             FrameHost::tick_fps(
                 &mut times,
                 &mut fps,
-                ambre_core::PageTime(i as f64 * 1000.0 / 60.0),
+                ambre_core::PageTime::new(i as f64 * 1000.0 / 60.0),
             );
         }
         let fps = fps.get();
@@ -903,8 +903,8 @@ mod tests {
     fn tick_fps_evicts_samples_older_than_one_second() {
         let mut times = VecDeque::new();
         let mut fps = ambre_core::FrameRate::ZERO;
-        FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime(0.0));
-        FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime(5000.0)); // 5 s later
+        FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime::new(0.0));
+        FrameHost::tick_fps(&mut times, &mut fps, ambre_core::PageTime::new(5000.0)); // 5 s later
         // The 0.0 sample is > 1 s old and must be evicted, leaving one sample.
         assert_eq!(times.len(), 1);
         assert_eq!(fps, ambre_core::FrameRate::ZERO);

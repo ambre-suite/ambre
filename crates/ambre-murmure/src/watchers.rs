@@ -16,11 +16,11 @@ use crate::{PRESENCE_EXPIRY, REFRESH_PERIOD};
 
 /// How often the view ticks an open channel, in milliseconds
 /// (`ambre-spec-budgets.md section 8`).
-pub const TICK_PERIOD: Millis = Millis(1_000);
+pub const TICK_PERIOD: Millis = Millis::new(1_000);
 
 /// How often a member who keeps typing sends a typing sample, in
 /// milliseconds (`ambre-spec-budgets.md section 8`).
-pub const TYPING_REFRESH: Millis = Millis(3_000);
+pub const TYPING_REFRESH: Millis = Millis::new(3_000);
 
 /// How long a typing sample keeps its member typing, in milliseconds
 /// (`ambre-spec-budgets.md section 8`). Two refresh periods: one for the
@@ -71,7 +71,7 @@ impl SampleState {
 
 /// The length of every sample: a tag, the state, and a root or zeros. One
 /// length for all, so the sealed size never tells a thread from its channel.
-const SAMPLE_LEN: ByteSize = ByteSize(18);
+const SAMPLE_LEN: ByteSize = ByteSize::new(18);
 
 /// What a sample on the `meta` document of a channel says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -259,10 +259,10 @@ fn owed(sent: &mut Option<Timestamp>, now: Timestamp, period: Millis) -> bool {
 mod tests {
     use super::*;
 
-    const T0: Timestamp = Timestamp(1_700_000_000_000);
+    const T0: Timestamp = Timestamp::new(1_700_000_000_000);
 
     fn at(offset: u64) -> Timestamp {
-        Timestamp(T0.0 + offset)
+        Timestamp::new(T0.get() + offset)
     }
 
     fn ticked() -> Watchers {
@@ -279,14 +279,14 @@ mod tests {
     fn typing_refreshes_while_it_lasts_and_expires_once_it_stops() {
         let mut watchers = ticked();
         assert!(watchers.owes_typing(T0, None), "the first keystroke sends");
-        assert!(!watchers.owes_typing(at(TYPING_REFRESH.0 - 1), None));
-        assert!(watchers.owes_typing(at(TYPING_REFRESH.0), None));
+        assert!(!watchers.owes_typing(at(TYPING_REFRESH.get() - 1), None));
+        assert!(watchers.owes_typing(at(TYPING_REFRESH.get()), None));
 
         let bob = Id::<User>::mint();
         assert!(watchers.heard(bob, Sample::Typing));
         assert_eq!(watchers.view(), (vec![bob], vec![bob]));
-        assert!(!watchers.tick(at(TYPING_EXPIRY.0)), "within the expiry");
-        assert!(watchers.tick(at(TYPING_EXPIRY.0 + 1)));
+        assert!(!watchers.tick(at(TYPING_EXPIRY.get())), "within the expiry");
+        assert!(watchers.tick(at(TYPING_EXPIRY.get() + 1)));
         assert_eq!(
             watchers.view(),
             (vec![bob], Vec::new()),
@@ -311,13 +311,13 @@ mod tests {
 
         assert!(watchers.left(carol));
         assert!(!watchers.left(carol));
-        assert!(!watchers.tick(at(PRESENCE_EXPIRY.0)));
-        assert!(watchers.tick(at(PRESENCE_EXPIRY.0 + 1)));
+        assert!(!watchers.tick(at(PRESENCE_EXPIRY.get())));
+        assert!(watchers.tick(at(PRESENCE_EXPIRY.get() + 1)));
         assert_eq!(watchers.view(), (Vec::new(), Vec::new()));
 
         assert!(watchers.owes_watching(T0));
-        assert!(!watchers.owes_watching(at(REFRESH_PERIOD.0 - 1)));
-        assert!(watchers.owes_watching(at(REFRESH_PERIOD.0)));
+        assert!(!watchers.owes_watching(at(REFRESH_PERIOD.get() - 1)));
+        assert!(watchers.owes_watching(at(REFRESH_PERIOD.get())));
     }
 
     // --- MURMURE-127 ---
@@ -401,7 +401,7 @@ mod tests {
         assert!(watchers.owes_typing(T0, None));
         assert!(watchers.owes_typing(at(1), Some(root)), "a new place");
         assert!(!watchers.owes_typing(at(2), Some(root)));
-        assert!(watchers.owes_typing(at(TYPING_REFRESH.0 + 1), Some(root)));
+        assert!(watchers.owes_typing(at(TYPING_REFRESH.get() + 1), Some(root)));
         assert_eq!(Sample::typing(Some(root)), Sample::TypingIn(root));
         assert_eq!(Sample::typing(None), Sample::Typing);
     }

@@ -23,7 +23,7 @@ fn long_text() -> String {
 
 /// A document of `texts`, one paragraph each, measured on the shipped faces.
 fn document(texts: &[String]) -> (ProseState, Vec<BlockId>) {
-    let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document");
+    let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
     state.load_faces(&crate::layout::fonts::shipped_faces());
     let mut ids = state.root_blocks();
     for _ in 1..texts.len() {

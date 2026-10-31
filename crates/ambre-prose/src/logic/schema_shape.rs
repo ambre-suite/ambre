@@ -335,7 +335,7 @@ pub(super) fn declared_mark_roots() -> Vec<String> {
 /// registered root. It is deliberately not a realistic document: its job is
 /// width, and the coverage assertion fails when it stops having it.
 pub(super) fn document_of_every_key() -> ProseState {
-    let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+    let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
     let root = state.root_blocks()[0];
     state.handle_command(ProseCommand::InsertText {
         block_id: root,
@@ -457,7 +457,7 @@ fn write_the_bands(state: &mut ProseState) {
         pos: DocOffset::ZERO,
     });
     state.handle_command(ProseCommand::StampModified {
-        now: ambre_core::Timestamp(1),
+        now: ambre_core::Timestamp::new(1),
     });
 }
 
@@ -480,7 +480,7 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
         block_id: root,
         range: DocSpan::from_usize_range(0..1),
         text: "A comment.".to_owned(),
-        now: ambre_core::Timestamp(1),
+        now: ambre_core::Timestamp::new(1),
     });
     let Some(thread) = state.comments().into_iter().next() else {
         panic!("the scenario opened a thread");
@@ -488,7 +488,7 @@ fn write_a_thread(state: &mut ProseState, root: crate::events::BlockId) {
     state.handle_command(ProseCommand::ReplyToComment {
         comment_id: thread.comment_id,
         text: "A reply.".to_owned(),
-        now: ambre_core::Timestamp(2),
+        now: ambre_core::Timestamp::new(2),
     });
 }
 
@@ -650,11 +650,11 @@ fn steps_written() -> Vec<String> {
                 .set_peer_id(
                     migration_peer(heads.iter().map(|id| {
                         (
-                            ambre_core::PeerId(id.peer),
-                            ambre_core::OpCounter(id.counter),
+                            ambre_core::PeerId::new(id.peer),
+                            ambre_core::OpCounter::new(id.counter),
                         )
                     }))
-                    .0,
+                    .get(),
                 )
                 .expect("the migration identity");
             let before = scratch.oplog_vv();

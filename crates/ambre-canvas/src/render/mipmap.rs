@@ -29,7 +29,7 @@ pub struct MipLevel {
 pub fn level0_size(size: Size<Px<Image>>) -> ByteSize {
     // In `u64` and saturating: a `usize` product wraps on wasm32 for a large
     // declared size, and a wrapped size would admit a short buffer.
-    ByteSize(
+    ByteSize::new(
         u64::from(size.width.get())
             .saturating_mul(u64::from(size.height.get()))
             .saturating_mul(4),

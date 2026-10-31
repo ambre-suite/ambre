@@ -70,18 +70,18 @@ pub(crate) fn MurmureShell(
         <DeleteConfirm
             relay=relay
             send=send
-            now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
+            now=Callback::new(|()| ambre_bus::Timestamp::new(js_sys::Date::now() as u64))
         />
         <ChannelMentionConfirm
             relay=relay
             send=send
-            now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
+            now=Callback::new(|()| ambre_bus::Timestamp::new(js_sys::Date::now() as u64))
         />
         // The view stamps a reaction, as it stamps a deletion.
         <EmojiPicker
             relay=relay
             send=send
-            now=Callback::new(|()| ambre_bus::Timestamp(js_sys::Date::now() as u64))
+            now=Callback::new(|()| ambre_bus::Timestamp::new(js_sys::Date::now() as u64))
         />
         <KeyList relay=relay />
         <MentionPanel relay=relay />
@@ -726,7 +726,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
                                 .is_some_and(landing::SignInMode::is_dev)
                                 && !raw.contains('@')
                             {
-                                ambre_bus::Email(format!("{raw}@dev.local"))
+                                ambre_bus::Email::new(format!("{raw}@dev.local"))
                             } else {
                                 ambre_bus::Email::from(raw)
                             };

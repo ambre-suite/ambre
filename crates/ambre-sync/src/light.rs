@@ -78,7 +78,7 @@ impl LightSubscription {
         me: Option<Id<User>>,
         mine: Option<&FixedBytes<PublicKey>>,
     ) -> Option<ActivityCounters> {
-        if seq.0 <= self.seen.0 {
+        if seq.get() <= self.seen.get() {
             return None;
         }
         self.seen = seq;
@@ -190,7 +190,7 @@ impl SyncState {
         light.doc_key = new_key.clone();
         // A frame is counted once its number passes `seen`, so the cursor
         // steps back below the first frame that did not open.
-        let replay = unopened.map(|from| Seq(from.0.saturating_sub(1)));
+        let replay = unopened.map(|from| Seq::new(from.get().saturating_sub(1)));
         if let Some(after) = replay {
             light.seen = after;
         }
@@ -212,7 +212,7 @@ impl SyncState {
     /// already held, in full or light, is left as it is. A `meta` this
     /// worker holds no key for watches nothing.
     pub(crate) fn handle_watch_segment(&mut self, segment: Id<Segment>, meta: Id<Meta>) {
-        self.watch_light(segment.document_id(), meta, Seq(0));
+        self.watch_light(segment.document_id(), meta, Seq::new(0));
     }
 
     /// Counts a thread whose root is not on screen from the number after
@@ -291,8 +291,8 @@ impl SyncState {
                 ..LightSubscription::new(
                     key.clone(),
                     DocType::Murmure,
-                    Seq(0),
-                    last.unwrap_or(Seq(0)),
+                    Seq::new(0),
+                    last.unwrap_or(Seq::new(0)),
                 )
             },
         );
@@ -384,7 +384,7 @@ mod tests {
             DocType::Trame,
             crate::Existence::OnRelay,
         );
-        doc.last_seq = Seq(9);
+        doc.last_seq = Seq::new(9);
         let snapshot = doc.current_snapshot_id;
         state.documents.insert(document_id, doc);
         state.session_nonces.insert(document_id, NONCE);
@@ -431,12 +431,12 @@ mod tests {
     /// and its cursors, and its full session is gone.
     #[test]
     fn an_evicted_document_costs_only_a_light_subscription() {
-        let (state, _rx, document_id, _, _) = released(ambre_bus::Seq(5));
+        let (state, _rx, document_id, _, _) = released(ambre_bus::Seq::new(5));
         assert_eq!(state.documents_len(), 0);
         assert!(!state.session_nonces.contains_key(&document_id));
         assert_eq!(state.light_doc_type(document_id), Some(DocType::Trame));
         assert!(std::mem::size_of::<LightSubscription>() < 1024);
-        assert_eq!(state.light_cursors(), vec![(document_id, Seq(9))]);
+        assert_eq!(state.light_cursors(), vec![(document_id, Seq::new(9))]);
     }
 
     /// Holds `RESID-014`, `RESID-005` and `RESID-016`. An update of a light
@@ -444,10 +444,10 @@ mod tests {
     /// the Logic thread but the counters.
     #[test]
     fn a_light_update_moves_its_counters_from_the_summary() {
-        let (mut state, rx, document_id, doc_key, snapshot) = released(ambre_bus::Seq(9));
+        let (mut state, rx, document_id, doc_key, snapshot) = released(ambre_bus::Seq::new(9));
         drain(&rx);
         state.receive_update(
-            Seq(10),
+            Seq::new(10),
             update(document_id, snapshot, &doc_key, Some(&mention())),
         );
         let events = drain(&rx);
@@ -457,7 +457,7 @@ mod tests {
         assert_eq!((counters.content.get(), counters.mentions.get()), (1, 1));
         assert_eq!(state.documents_len(), 0, "counting loaded the document");
         state.receive_update(
-            Seq(10),
+            Seq::new(10),
             update(document_id, snapshot, &doc_key, Some(&mention())),
         );
         assert!(drain(&rx).is_empty(), "a number read twice counted twice");
@@ -467,12 +467,12 @@ mod tests {
     /// open, marks the document active and counts nothing.
     #[test]
     fn a_light_update_with_no_summary_marks_activity_alone() {
-        let (mut state, rx, document_id, doc_key, snapshot) = released(ambre_bus::Seq(9));
+        let (mut state, rx, document_id, doc_key, snapshot) = released(ambre_bus::Seq::new(9));
         drain(&rx);
-        state.receive_update(Seq(10), update(document_id, snapshot, &doc_key, None));
+        state.receive_update(Seq::new(10), update(document_id, snapshot, &doc_key, None));
         let stranger = DocumentKey::generate();
         state.receive_update(
-            Seq(11),
+            Seq::new(11),
             update(document_id, snapshot, &stranger, Some(&mention())),
         );
         let counters: Vec<ActivityCounters> = drain(&rx)
@@ -493,17 +493,17 @@ mod tests {
     /// another, moves no counter and marks nothing.
     #[test]
     fn an_update_this_user_signed_counts_nothing() {
-        let (mut state, rx, document_id, doc_key, snapshot) = released(ambre_bus::Seq(9));
+        let (mut state, rx, document_id, doc_key, snapshot) = released(ambre_bus::Seq::new(9));
         drain(&rx);
         state.signing_key = Some(MasterSeed::from_array([2; 32]).derive_signing_key());
         state.receive_update(
-            Seq(10),
+            Seq::new(10),
             update(document_id, snapshot, &doc_key, Some(&mention())),
         );
         assert!(drain(&rx).is_empty(), "the user's own update counted");
         state.signing_key = Some(MasterSeed::from_array([3; 32]).derive_signing_key());
         state.receive_update(
-            Seq(11),
+            Seq::new(11),
             update(document_id, snapshot, &doc_key, Some(&mention())),
         );
         assert_eq!(
@@ -546,7 +546,7 @@ mod tests {
         }
         state.handle_command(SyncCommand::ReleaseDocument {
             document_id,
-            applied_seq: ambre_bus::Seq(0),
+            applied_seq: ambre_bus::Seq::new(0),
         });
         assert_eq!(
             state.documents_len(),
@@ -555,7 +555,7 @@ mod tests {
         );
         assert!(!released(drain(&rx)), "the store heard of a change unsent");
         state.signing_key = Some(MasterSeed::from_array([2; 32]).derive_signing_key());
-        state.receive_update(Seq(1), echo);
+        state.receive_update(Seq::new(1), echo);
         assert_eq!(state.documents_len(), 0);
         assert_eq!(state.light_doc_type(document_id), Some(DocType::Trame));
         assert!(released(drain(&rx)));
@@ -565,22 +565,22 @@ mod tests {
     /// horizon when the relay's snapshot folds in nothing past it.
     #[test]
     fn a_reopen_resumes_after_the_horizon_it_holds() {
-        let (mut state, _rx, document_id, _, _) = released(ambre_bus::Seq(5));
-        assert!(resumes(Seq(5), ambre_bus::Seq(5)));
-        assert!(resumes(Seq(5), ambre_bus::Seq(0)));
+        let (mut state, _rx, document_id, _, _) = released(ambre_bus::Seq::new(5));
+        assert!(resumes(Seq::new(5), ambre_bus::Seq::new(5)));
+        assert!(resumes(Seq::new(5), ambre_bus::Seq::new(0)));
         assert!(
-            !resumes(Seq(5), ambre_bus::Seq(6)),
+            !resumes(Seq::new(5), ambre_bus::Seq::new(6)),
             "a newer relay snapshot was skipped"
         );
-        assert_eq!(state.take_light(document_id), Some(Seq(5)));
+        assert_eq!(state.take_light(document_id), Some(Seq::new(5)));
         assert_eq!(state.take_light(document_id), None);
     }
 
     /// The horizon never passes what the session itself received.
     #[test]
     fn the_horizon_never_passes_what_the_session_received() {
-        let (mut state, _rx, document_id, _, _) = released(ambre_bus::Seq(40));
-        assert_eq!(state.take_light(document_id), Some(Seq(9)));
+        let (mut state, _rx, document_id, _, _) = released(ambre_bus::Seq::new(40));
+        assert_eq!(state.take_light(document_id), Some(Seq::new(9)));
     }
 
     /// Holds `SYNC-162`: a segment of a closed channel is watched under the
@@ -588,7 +588,7 @@ mod tests {
     /// as any light document's.
     #[test]
     fn a_watched_segment_counts_from_its_first_number() {
-        let (mut state, rx, meta, doc_key, _) = released(ambre_bus::Seq(9));
+        let (mut state, rx, meta, doc_key, _) = released(ambre_bus::Seq::new(9));
         drain(&rx);
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
@@ -607,15 +607,15 @@ mod tests {
                     WsClientMsg::Subscribe { document_id: a },
                     WsClientMsg::RequestMissing {
                         document_id: b,
-                        after_seq: Seq(0),
+                        after_seq,
                     },
-                ] if *a == document_id && *b == document_id
+                ] if *a == document_id && *b == document_id && after_seq.get() == 0
             ),
             "expected a subscribe and a request from 0, got {sent:?}"
         );
-        assert_eq!(state.light_cursor(document_id), Some(Seq(0)));
+        assert_eq!(state.light_cursor(document_id), Some(Seq::new(0)));
         state.receive_update(
-            Seq(1),
+            Seq::new(1),
             update(
                 document_id,
                 Id::<Snapshot>::mint(),
@@ -631,7 +631,7 @@ mod tests {
 
         state.handle_command(SyncCommand::WatchSegment { segment, meta });
         assert!(ws_rx.try_recv().is_err(), "a held segment is watched again");
-        assert_eq!(state.light_cursor(document_id), Some(Seq(1)));
+        assert_eq!(state.light_cursor(document_id), Some(Seq::new(1)));
     }
 
     /// A watched thread is asked from its read cursor, under the key of its
@@ -639,7 +639,7 @@ mod tests {
     /// spec). Nothing past the cursor is counted twice, and no document loads.
     #[test]
     fn a_watched_thread_counts_after_its_read_cursor() {
-        let (mut state, rx, meta, doc_key, _) = released(ambre_bus::Seq(9));
+        let (mut state, rx, meta, doc_key, _) = released(ambre_bus::Seq::new(9));
         drain(&rx);
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
@@ -648,7 +648,7 @@ mod tests {
         state.handle_command(SyncCommand::WatchThread {
             thread,
             meta,
-            after: Seq(4),
+            after: Seq::new(4),
         });
         let sent: Vec<WsClientMsg> = ws_rx
             .try_iter()
@@ -661,16 +661,16 @@ mod tests {
                     WsClientMsg::Subscribe { document_id: a },
                     WsClientMsg::RequestMissing {
                         document_id: b,
-                        after_seq: Seq(4),
+                        after_seq,
                     },
-                ] if *a == thread && *b == thread
+                ] if *a == thread && *b == thread && after_seq.get() == 4
             ),
             "expected a subscribe and a request after the cursor, got {sent:?}"
         );
         let reply = || update(thread, Id::<Snapshot>::mint(), &doc_key, Some(&mention()));
-        state.receive_update(Seq(4), reply());
+        state.receive_update(Seq::new(4), reply());
         assert!(drain(&rx).is_empty(), "a reply already read counted");
-        state.receive_update(Seq(5), reply());
+        state.receive_update(Seq::new(5), reply());
         let events = drain(&rx);
         let [
             LogicEvent::Activity {
@@ -714,7 +714,7 @@ mod tests {
             channel_id,
             meta,
             meta_last: None,
-            documents: vec![(segment, Some(Seq(4))), (older, None)],
+            documents: vec![(segment, Some(Seq::new(4))), (older, None)],
         };
         state.handle_command(watch.clone());
         assert!(
@@ -741,10 +741,10 @@ mod tests {
                     WsClientMsg::Subscribe { document_id: b },
                     WsClientMsg::RequestMissing {
                         document_id: c,
-                        after_seq: Seq(4),
+                        after_seq,
                     },
                     WsClientMsg::Subscribe { document_id: d },
-                ] if (*a, *b, *c, *d) == (m, s, s, o)
+                ] if (*a, *b, *c, *d) == (m, s, s, o) && after_seq.get() == 4
             ),
             "expected three subscribes and one request after the last number"
         );
@@ -753,7 +753,7 @@ mod tests {
 
         let heads: HashSet<_> = state.light_heads().into_iter().collect();
         assert_eq!(heads, HashSet::from([m, o]));
-        assert_eq!(state.light_cursors(), vec![(s, Seq(4))]);
+        assert_eq!(state.light_cursors(), vec![(s, Seq::new(4))]);
         state.resubscribe_all();
         let requests: Vec<(Id<Document>, Seq)> = sent()
             .into_iter()
@@ -767,15 +767,15 @@ mod tests {
             .collect();
         assert_eq!(
             requests,
-            vec![(s, Seq(4))],
+            vec![(s, Seq::new(4))],
             "a reconnect resumes after the last number, and a head replays nothing"
         );
 
         // A delta at or below the last number was news before the answer.
         let mentioned = || update(segment, Id::<Snapshot>::mint(), &doc_key, Some(&mention()));
-        state.receive_update(Seq(4), mentioned());
+        state.receive_update(Seq::new(4), mentioned());
         assert!(drain(&rx).is_empty(), "a delta the answer covered counted");
-        state.receive_update(Seq(7), mentioned());
+        state.receive_update(Seq::new(7), mentioned());
         let events = drain(&rx);
         let [
             LogicEvent::Activity {
@@ -787,17 +787,17 @@ mod tests {
             panic!("expected the segment's counters, got {events:?}");
         };
         assert_eq!((*document_id, counters.mentions.get()), (segment, 1));
-        assert_eq!(state.light_cursors(), vec![(segment, Seq(7))]);
+        assert_eq!(state.light_cursors(), vec![(segment, Seq::new(7))]);
 
         // The first live delta of a head gives it a cursor.
         state.receive_update(
-            Seq(2),
+            Seq::new(2),
             update(older, Id::<Snapshot>::mint(), &doc_key, None),
         );
         assert_eq!(state.light_heads(), vec![m]);
         assert_eq!(
             state.take_light(segment),
-            Some(Seq(0)),
+            Some(Seq::new(0)),
             "an open replays from the start"
         );
         assert_eq!(state.documents_len(), 0, "watching loads nothing");
@@ -818,7 +818,7 @@ mod tests {
         state.handle_command(SyncCommand::WatchChannel {
             channel_id,
             meta,
-            meta_last: Some(Seq(5)),
+            meta_last: Some(Seq::new(5)),
             documents: Vec::new(),
         });
         let sent: Vec<WsClientMsg> = ws_rx
@@ -833,14 +833,14 @@ mod tests {
                     WsClientMsg::Subscribe { document_id: a },
                     WsClientMsg::RequestMissing {
                         document_id: b,
-                        after_seq: Seq(5),
+                        after_seq,
                     },
-                ] if (*a, *b) == (m, m)
+                ] if (*a, *b) == (m, m) && after_seq.get() == 5
             ),
             "expected a subscribe and a request after the last number, got {sent:?}"
         );
         assert!(state.light_heads().is_empty());
-        assert_eq!(state.light_cursors(), vec![(m, Seq(5))]);
+        assert_eq!(state.light_cursors(), vec![(m, Seq::new(5))]);
     }
 
     /// Holds `RESID-023`. A rotation of a watched `meta` gives it the new
@@ -861,7 +861,7 @@ mod tests {
         state.handle_command(SyncCommand::WatchChannel {
             channel_id,
             meta,
-            meta_last: Some(Seq(1)),
+            meta_last: Some(Seq::new(1)),
             documents: Vec::new(),
         });
         let m = meta.document_id();
@@ -879,7 +879,7 @@ mod tests {
         };
         let mentioned =
             |doc, key: &DocumentKey| update(doc, Id::<Snapshot>::mint(), key, Some(&mention()));
-        state.receive_update(Seq(2), mentioned(m, &new_key));
+        state.receive_update(Seq::new(2), mentioned(m, &new_key));
         assert_eq!(
             mentions(&rx),
             vec![(m, 0)],
@@ -893,12 +893,12 @@ mod tests {
         });
         let listed = state.listed_keys.get(&channel_id).map(|(_, key)| key.id());
         assert_eq!(listed, Some(new_key.id()), "the listed key follows");
-        state.receive_update(Seq(3), mentioned(m, &new_key));
+        state.receive_update(Seq::new(3), mentioned(m, &new_key));
         assert_eq!(mentions(&rx), vec![(m, 1)]);
 
         let segment = Id::<Segment>::mint();
         state.handle_command(SyncCommand::WatchSegment { segment, meta });
-        state.receive_update(Seq(1), mentioned(segment.document_id(), &new_key));
+        state.receive_update(Seq::new(1), mentioned(segment.document_id(), &new_key));
         assert_eq!(mentions(&rx), vec![(segment.document_id(), 1)]);
     }
 
@@ -919,7 +919,7 @@ mod tests {
         state.handle_command(SyncCommand::WatchChannel {
             channel_id,
             meta,
-            meta_last: Some(Seq(1)),
+            meta_last: Some(Seq::new(1)),
             documents: Vec::new(),
         });
         let m = meta.document_id();
@@ -941,10 +941,10 @@ mod tests {
                 })
                 .collect()
         };
-        assert_eq!(requests(), vec![Seq(1)]);
+        assert_eq!(requests(), vec![Seq::new(1)]);
         let mentioned = || update(m, Id::<Snapshot>::mint(), &new_key, Some(&mention()));
-        state.receive_update(Seq(2), mentioned());
-        state.receive_update(Seq(3), mentioned());
+        state.receive_update(Seq::new(2), mentioned());
+        state.receive_update(Seq::new(3), mentioned());
         assert_eq!(mentions(), vec![0, 0], "a key it lacks counts nothing");
         let asked: Vec<_> = state.light[&m].asked.iter().copied().collect();
         assert_eq!(asked, vec![new_key.id()], "each key is asked once");
@@ -957,11 +957,11 @@ mod tests {
         state.handle_sync_event(rotated(&new_key));
         assert_eq!(
             requests(),
-            vec![Seq(1)],
+            vec![Seq::new(1)],
             "replayed from the first unopened frame"
         );
-        state.receive_update(Seq(2), mentioned());
-        state.receive_update(Seq(3), mentioned());
+        state.receive_update(Seq::new(2), mentioned());
+        state.receive_update(Seq::new(3), mentioned());
         assert_eq!(mentions(), vec![1, 2]);
         state.handle_sync_event(rotated(&new_key));
         assert!(requests().is_empty(), "a key already held replays nothing");
@@ -972,7 +972,7 @@ mod tests {
     /// thread (the Murmure threads spec).
     #[test]
     fn a_thread_signal_reaches_logic_only_for_a_thread_not_held() {
-        let (mut state, rx, held, _, _) = released(ambre_bus::Seq(9));
+        let (mut state, rx, held, _, _) = released(ambre_bus::Seq::new(9));
         drain(&rx);
         let open = Id::<Document>::mint();
         let doc = SyncDocumentState::new(

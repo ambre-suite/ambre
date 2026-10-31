@@ -138,12 +138,12 @@ fn gate_through<'a>(
             let heads = scratch.oplog_frontiers();
             let peer = migration_peer(heads.iter().map(|id| {
                 (
-                    ambre_core::PeerId(id.peer),
-                    ambre_core::OpCounter(id.counter),
+                    ambre_core::PeerId::new(id.peer),
+                    ambre_core::OpCounter::new(id.counter),
                 )
             }));
             scratch
-                .set_peer_id(peer.0)
+                .set_peer_id(peer.get())
                 .map_err(|e| SchemaError::MigrationFailed {
                     from: found,
                     to: SCHEMA_VERSION,
@@ -257,7 +257,8 @@ mod tests {
     /// left the block set alone would still be a write.
     #[test]
     fn a_document_from_a_newer_client_is_refused_and_changes_nothing() {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         let root = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: root,

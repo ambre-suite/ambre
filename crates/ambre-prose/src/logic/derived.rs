@@ -193,7 +193,8 @@ mod tests {
 
     /// A document laid out on the shipped faces, holding nothing yet.
     fn fresh() -> ProseState {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         state
     }
@@ -384,7 +385,8 @@ mod tests {
         heading(&mut alice, 2, "Two");
         heading(&mut alice, 3, "Three");
         let seed = alice.export_snapshot();
-        let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document is built");
+        let mut bob =
+            ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document is built");
         bob.load_faces(&crate::layout::fonts::shipped_faces());
         bob.import_snapshot(&seed).expect("the seed imports");
         let from_bob = bob
@@ -539,10 +541,10 @@ mod tests {
                 text: (*word).to_owned(),
             });
             show(&mut view, &outcome.display);
-            assert_eq!(view.tick(ambre_core::PageTime(0.0)), None);
+            assert_eq!(view.tick(ambre_core::PageTime::new(0.0)), None);
         }
         let command = view
-            .tick(ambre_core::PageTime(RECOUNT_DELAY.get()))
+            .tick(ambre_core::PageTime::new(RECOUNT_DELAY.get()))
             .expect("the recount is due");
         let outcome = state.handle_command(command);
         show(&mut view, &outcome.display);

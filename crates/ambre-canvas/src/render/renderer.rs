@@ -152,7 +152,7 @@ pub struct QuadRenderer {
 /// therefore carry their own ceiling rather than sharing an unstated remainder.
 /// At four bytes a texel a full budget is roughly six 1024x1024 photographs, and
 /// the chain adds a third to each.
-const IMAGE_VRAM_BUDGET: ByteSize = ByteSize(24 * 1024 * 1024);
+const IMAGE_VRAM_BUDGET: ByteSize = ByteSize::new(24 * 1024 * 1024);
 
 /// One cached picture: what a draw binds, and what holding it costs.
 struct CacheEntry<T> {
@@ -190,7 +190,7 @@ impl<T> ImageCache<T> {
     fn new(budget: ByteSize) -> Self {
         Self {
             map: HashMap::new(),
-            bytes: ByteSize(0),
+            bytes: ByteSize::new(0),
             budget,
             clock: 0,
         }
@@ -1380,7 +1380,7 @@ mod image_cache_tests {
     fn entry(bytes: u64, w: u32, h: u32, last_used: u64) -> CacheEntry<u32> {
         CacheEntry {
             payload: w,
-            bytes: ByteSize(bytes),
+            bytes: ByteSize::new(bytes),
             size: Size::new(Px::new(w), Px::new(h)),
             last_used,
         }
@@ -1391,7 +1391,7 @@ mod image_cache_tests {
     /// eviction picks at random rather than least-recently-drawn.
     #[test]
     fn a_hit_stamps_the_entry_with_the_current_frame() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize(1024));
+        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(1024));
         c.insert(ImageKey(1), entry(16, 2, 2, 0));
         c.clock = 7;
         assert_eq!(
@@ -1406,7 +1406,7 @@ mod image_cache_tests {
     /// content (`ImageSource::key`).
     #[test]
     fn a_key_at_another_size_is_a_miss() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize(1024));
+        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(1024));
         c.insert(ImageKey(1), entry(16, 2, 2, 0));
         assert_eq!(c.get(ImageKey(1), Size::new(Px::new(4), Px::new(4))), None);
         assert!(
@@ -1420,26 +1420,26 @@ mod image_cache_tests {
     /// the picture the user is looking at to keep one they scrolled past.
     #[test]
     fn the_least_recently_drawn_entry_is_evicted_first() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize(100));
+        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(100));
         c.insert(ImageKey(1), entry(40, 1, 1, 5)); // drawn recently
         c.insert(ImageKey(2), entry(40, 2, 2, 1)); // drawn long ago
-        assert_eq!(c.bytes, ByteSize(80));
+        assert_eq!(c.bytes, ByteSize::new(80));
         c.insert(ImageKey(3), entry(40, 3, 3, 9));
         assert!(c.bound(ImageKey(2)).is_none(), "the stalest entry stays");
         assert!(c.bound(ImageKey(1)).is_some());
         assert!(c.bound(ImageKey(3)).is_some());
-        assert_eq!(c.bytes, ByteSize(80));
+        assert_eq!(c.bytes, ByteSize::new(80));
     }
 
     /// Re-inserting a key replaces it rather than counting its bytes twice. An
     /// image re-uploaded at a new size must not leak the budget of the old one.
     #[test]
     fn reinserting_a_key_replaces_its_cost() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize(1024));
+        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(1024));
         c.insert(ImageKey(1), entry(40, 1, 1, 0));
         c.insert(ImageKey(1), entry(64, 1, 1, 0));
         assert_eq!(c.map.len(), 1);
-        assert_eq!(c.bytes, ByteSize(64));
+        assert_eq!(c.bytes, ByteSize::new(64));
     }
 
     /// The cache keeps one picture larger than the whole budget. Evicting down
@@ -1447,7 +1447,7 @@ mod image_cache_tests {
     /// and the next insert reclaims it anyway.
     #[test]
     fn a_lone_oversized_entry_survives() {
-        let mut c: ImageCache<u32> = ImageCache::new(ByteSize(100));
+        let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(100));
         c.insert(ImageKey(1), entry(4096, 1, 1, 0));
         assert!(c.bound(ImageKey(1)).is_some());
         assert_eq!(c.map.len(), 1);

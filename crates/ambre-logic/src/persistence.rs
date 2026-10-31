@@ -644,7 +644,7 @@ impl PersistenceStore {
         };
         let mut value = [0u8; 24];
         let (head, tail) = value.split_at_mut(8);
-        head.copy_from_slice(&peer.0.to_le_bytes());
+        head.copy_from_slice(&peer.get().to_le_bytes());
         tail.copy_from_slice(nonce.as_slice());
         if let Err(e) = store.put_with_key(bytes_to_js(&value).as_ref(), &key.to_js()) {
             tracing::warn!("Persistence: session put failed for {key}: {e:?}");
@@ -1030,7 +1030,7 @@ fn session_of(row: &[u8]) -> Option<(ambre_core::PeerId, FixedBytes<SessionNonce
     if !rest.is_empty() {
         return None;
     }
-    Some((ambre_core::PeerId(u64::from_le_bytes(*peer)), nonce))
+    Some((ambre_core::PeerId::new(u64::from_le_bytes(*peer)), nonce))
 }
 
 /// The key range holding every row of `document`, in a store whose keys open
@@ -1377,24 +1377,27 @@ mod wasm_tests {
             FixedBytes::<SessionNonce>::from_array([2; 16]),
         );
 
-        store.save_session(doc, PeerId(11), one);
-        store.save_session(doc, PeerId(22), two);
-        store.save_session(other, PeerId(33), one);
+        store.save_session(doc, PeerId::new(11), one);
+        store.save_session(doc, PeerId::new(22), two);
+        store.save_session(other, PeerId::new(33), one);
         let mut sessions = store.load_sessions(doc).await.unwrap();
         sessions.sort_by_key(|(peer, _)| *peer);
-        assert_eq!(sessions, vec![(PeerId(11), one), (PeerId(22), two)]);
+        assert_eq!(
+            sessions,
+            vec![(PeerId::new(11), one), (PeerId::new(22), two)]
+        );
 
-        store.forget_session(doc, PeerId(11));
+        store.forget_session(doc, PeerId::new(11));
         assert_eq!(
             store.load_sessions(doc).await.unwrap(),
-            vec![(PeerId(22), two)]
+            vec![(PeerId::new(22), two)]
         );
 
         store.delete_snapshot(doc);
         assert!(store.load_sessions(doc).await.unwrap().is_empty());
         assert_eq!(
             store.load_sessions(other).await.unwrap(),
-            vec![(PeerId(33), one)]
+            vec![(PeerId::new(33), one)]
         );
     }
 
@@ -1412,10 +1415,10 @@ mod wasm_tests {
         store.save_delta(doc, &row(&[4]));
         assert_eq!(store.load_deltas(doc).await.unwrap(), vec![row(&[4])]);
         let nonce = FixedBytes::<SessionNonce>::from_array([3; 16]);
-        store.save_session(doc, PeerId(5), nonce);
+        store.save_session(doc, PeerId::new(5), nonce);
         assert_eq!(
             store.load_sessions(doc).await.unwrap(),
-            vec![(PeerId(5), nonce)]
+            vec![(PeerId::new(5), nonce)]
         );
     }
 }

@@ -8,7 +8,7 @@ use loro::{LoroDoc, LoroValue};
 use crate::schema::{DocumentKind, HeaderKey, read_version};
 use crate::{ChannelState, ChannelType, Listing, MurmureError, SCHEMA_VERSION, SpaceState};
 
-const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 
 fn channel(channel_type: ChannelType, name: &str) -> ChannelState {
     ChannelState::create(

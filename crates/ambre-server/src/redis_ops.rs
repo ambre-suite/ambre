@@ -107,7 +107,7 @@ pub async fn verify_clock_and_assign_seq(
         .map_err(|e| clock_refusal(&e.to_string(), clock))?;
 
     // The script answers `INCR`, which never falls below 1.
-    Ok(ambre_core::Seq(u64::try_from(result).unwrap_or(0)))
+    Ok(ambre_core::Seq::new(u64::try_from(result).unwrap_or(0)))
 }
 
 /// Reads the script's `CLOCK_MISMATCH:<current>` refusal out of a store error.
@@ -161,7 +161,7 @@ pub async fn document_seqs(
         .map_err(|e| AppError::Redis(format!("sequence counters: {e}")))?;
     Ok(counters
         .into_iter()
-        .map(|c| c.map(ambre_core::Seq))
+        .map(|c| c.map(ambre_core::Seq::new))
         .collect())
 }
 
@@ -220,7 +220,7 @@ pub async fn seed_clock_state(
     let clocks_key = ClocksKey::of(document_id);
     let seq_key = SeqKey::of(document_id);
     let gone_key = GoneKey::of(document_id);
-    let mut argv = vec![max_seq.0.to_string()];
+    let mut argv = vec![max_seq.get().to_string()];
     for (key, clock) in author_clocks {
         argv.push(key.to_hex());
         argv.push(clock.to_string());
@@ -494,7 +494,7 @@ pub async fn try_acquire_flush_lock(
     token: &LockToken,
     ttl: ambre_core::Seconds,
 ) -> Result<bool, AppError> {
-    let ttl = ttl.0.to_string();
+    let ttl = ttl.get().to_string();
     let res: Option<String> = redis
         .eval::<Option<String>>(
             ACQUIRE_LUA,
@@ -534,7 +534,7 @@ pub async fn claim_snapshot_ask(
     ttl: ambre_core::Seconds,
 ) -> Result<bool, AppError> {
     let key = SnapshotAskedKey::of(document_id);
-    let ttl = ttl.0.to_string();
+    let ttl = ttl.get().to_string();
     let res: Option<String> = redis
         .eval::<Option<String>>(ACQUIRE_LUA, [key.as_str()], ["1", ttl.as_str()])
         .await
@@ -552,7 +552,7 @@ pub async fn current_seq(
         .get(SeqKey::of(document_id).as_str())
         .await
         .map_err(|e| AppError::Redis(format!("current seq: {e}")))?;
-    Ok(ambre_core::Seq(seq.unwrap_or(0)))
+    Ok(ambre_core::Seq::new(seq.unwrap_or(0)))
 }
 
 /// Retrieves a refresh-token record from Redis.
@@ -602,7 +602,7 @@ pub async fn refresh_create(
     data: &RefreshData,
     ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
-    let ttl_secs = ttl.0;
+    let ttl_secs = ttl.get();
 
     let user_id = data.user_id.to_string();
     let signing_pubkey_hex = data.signing_pubkey.as_ref().map(FixedBytes::to_hex);
@@ -752,7 +752,7 @@ pub async fn doc_presence_update(
 ) -> Result<(), AppError> {
     let pub_key_hex = pub_key.to_hex();
     use base64::Engine;
-    let presence_b64 = base64::engine::general_purpose::URL_SAFE.encode(&presence.0);
+    let presence_b64 = base64::engine::general_purpose::URL_SAFE.encode(presence.as_bytes());
     // Expire THIS member's field individually (Redis 7.4+ `HEXPIRE`, `SRV-241`),
     // so a member who leaves without a clean unsubscribe self-prunes from the
     // hash. Without a per-field TTL the presence hash grew one dead field per
@@ -772,7 +772,7 @@ return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
     let key = PresenceKey::of(document_id);
     let gone_key = GoneKey::of(document_id);
     let owed_key = RotationOwedKey::of(document_id);
-    let ttl = ttl.0.to_string();
+    let ttl = ttl.get().to_string();
     redis
         .eval::<Vec<i64>>(
             LUA,
@@ -815,7 +815,7 @@ pub async fn doc_presence_remove(
 /// session with the same key, so the count is what tells their sessions apart.
 /// An instance that dies closes none of its sessions; the expiry bounds the
 /// count that death leaves behind (`PRESENCE-015`).
-const SESSION_COUNT_TTL: ambre_core::Seconds = ambre_core::Seconds(24 * 3600);
+const SESSION_COUNT_TTL: ambre_core::Seconds = ambre_core::Seconds::new(24 * 3600);
 
 /// Counts one more session of `pub_key_hex` watching the document, on every
 /// instance (`1-Foundations/ambre-spec-presence.md`, `PRESENCE-015`). A
@@ -836,7 +836,7 @@ return 1
 "#;
     let key = SessionsKey::of(document_id);
     let gone_key = GoneKey::of(document_id);
-    let ttl = SESSION_COUNT_TTL.0.to_string();
+    let ttl = SESSION_COUNT_TTL.get().to_string();
     let _: i64 = redis
         .eval(
             LUA,
@@ -884,7 +884,7 @@ pub async fn mark_document_gone(
 ) -> Result<(), AppError> {
     const LUA: &str = "return redis.call('SET', KEYS[1], '1', 'EX', ARGV[1])";
     let gone_key = GoneKey::of(document_id);
-    let ttl = ttl.0.to_string();
+    let ttl = ttl.get().to_string();
     let _: String = redis
         .eval::<String>(LUA, [gone_key.as_str()], [ttl.as_str()])
         .await
@@ -939,7 +939,7 @@ return 1
                 FlushDirtySet.as_str(),
                 gone_key.as_str(),
             ],
-            [ttl.0.to_string()],
+            [ttl.get().to_string()],
         )
         .await
         .map_err(|e| AppError::Redis(format!("purge document state: {e}")))?;
@@ -992,7 +992,7 @@ return tonumber(redis.call('GET', KEYS[2])) or 0
         .eval::<i64>(LUA, [locked.as_str(), seq.as_str()], Vec::<String>::new())
         .await
         .map_err(|e| AppError::Redis(format!("lock segment now: {e}")))?;
-    Ok(ambre_core::Seq(answer.unsigned_abs()))
+    Ok(ambre_core::Seq::new(answer.unsigned_abs()))
 }
 
 /// Seal an amendments document a fold holds up to its delta `folded_seq`
@@ -1022,7 +1022,7 @@ return 1
         .eval::<i64>(
             LUA,
             [pending.as_str(), locked.as_str(), seq.as_str()],
-            [folded_seq.0.to_string()],
+            [folded_seq.get().to_string()],
         )
         .await
         .map_err(|e| AppError::Redis(format!("seal folded: {e}")))?;
@@ -1240,7 +1240,7 @@ mod tests {
 
     /// A presence sample: its bytes stand for an encrypted cursor.
     pub(super) fn sample() -> ambre_protocol::messages::Ciphertext {
-        ambre_protocol::messages::Ciphertext(b"blob".to_vec())
+        ambre_protocol::messages::Ciphertext::new(b"blob".to_vec())
     }
 
     #[test]
@@ -1299,7 +1299,7 @@ mod lua_tests {
             &doc_id,
             pk_hex,
             &super::tests::sample(),
-            ambre_core::Seconds(15),
+            ambre_core::Seconds::new(15),
         )
         .await;
         assert!(
@@ -1315,7 +1315,7 @@ mod lua_tests {
         let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1))
             .await
             .expect("the same clock is accepted once the debt clears");
-        assert_eq!(seq, ambre_core::Seq(1));
+        assert_eq!(seq, ambre_core::Seq::new(1));
 
         let _ = redis
             .del(DocumentStateKeys::of(&doc_id).texts())
@@ -1347,7 +1347,7 @@ mod lua_tests {
         let _: usize = redis.del(&pending).await.unwrap();
         assert_eq!(
             lock_segment(&redis, &doc_id).await.unwrap(),
-            Some(ambre_core::Seq(2))
+            Some(ambre_core::Seq::new(2))
         );
         let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(3)).await;
         assert!(
@@ -1378,7 +1378,7 @@ mod lua_tests {
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xd1; 32]);
         assert_eq!(
             lock_segment_now(&redis, &doc_id).await.unwrap(),
-            ambre_core::Seq(0)
+            ambre_core::Seq::new(0)
         );
         let _ = redis
             .del(DocumentStateKeys::of(&doc_id).texts())
@@ -1396,7 +1396,7 @@ mod lua_tests {
             .unwrap();
         assert_eq!(
             lock_segment_now(&redis, &doc_id).await.unwrap(),
-            ambre_core::Seq(2)
+            ambre_core::Seq::new(2)
         );
         let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(3)).await;
         assert!(
@@ -1427,14 +1427,14 @@ mod lua_tests {
                 .expect("amendments take deltas");
         }
         assert!(
-            !seal_folded(&redis, &doc_id, ambre_core::Seq(1))
+            !seal_folded(&redis, &doc_id, ambre_core::Seq::new(1))
                 .await
                 .unwrap(),
             "a delta came past the fold"
         );
         let _: usize = redis.rpush(&pending, "entry").await.unwrap();
         assert!(
-            !seal_folded(&redis, &doc_id, ambre_core::Seq(2))
+            !seal_folded(&redis, &doc_id, ambre_core::Seq::new(2))
                 .await
                 .unwrap(),
             "a delta waits to be flushed"
@@ -1444,7 +1444,7 @@ mod lua_tests {
 
         let _: usize = redis.del(&pending).await.unwrap();
         assert!(
-            seal_folded(&redis, &doc_id, ambre_core::Seq(2))
+            seal_folded(&redis, &doc_id, ambre_core::Seq::new(2))
                 .await
                 .unwrap()
         );
@@ -1470,7 +1470,7 @@ mod lua_tests {
         let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1))
             .await
             .expect("first update should succeed");
-        assert_eq!(seq, ambre_core::Seq(1));
+        assert_eq!(seq, ambre_core::Seq::new(1));
 
         let _ = redis
             .del([
@@ -1497,9 +1497,9 @@ mod lua_tests {
         let s3 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(3))
             .await
             .unwrap();
-        assert_eq!(s1, ambre_core::Seq(1));
-        assert_eq!(s2, ambre_core::Seq(2));
-        assert_eq!(s3, ambre_core::Seq(3));
+        assert_eq!(s1, ambre_core::Seq::new(1));
+        assert_eq!(s2, ambre_core::Seq::new(2));
+        assert_eq!(s3, ambre_core::Seq::new(3));
 
         let _ = redis
             .del([
@@ -1594,9 +1594,9 @@ mod lua_tests {
             .await
             .unwrap();
 
-        assert_eq!(s_a, ambre_core::Seq(1));
-        assert_eq!(s_b, ambre_core::Seq(2));
-        assert_eq!(s_a2, ambre_core::Seq(3));
+        assert_eq!(s_a, ambre_core::Seq::new(1));
+        assert_eq!(s_b, ambre_core::Seq::new(2));
+        assert_eq!(s_a2, ambre_core::Seq::new(3));
 
         let _ = redis
             .del([
@@ -1647,7 +1647,7 @@ mod redis_integration_tests {
                 &redis,
                 &lock_key,
                 &LockToken("tokA".to_owned()),
-                ambre_core::Seconds(60)
+                ambre_core::Seconds::new(60)
             )
             .await
             .unwrap()
@@ -1657,7 +1657,7 @@ mod redis_integration_tests {
                 &redis,
                 &lock_key,
                 &LockToken("tokB".to_owned()),
-                ambre_core::Seconds(60)
+                ambre_core::Seconds::new(60)
             )
             .await
             .unwrap()
@@ -1672,7 +1672,7 @@ mod redis_integration_tests {
                 &redis,
                 &lock_key,
                 &LockToken("tokB".to_owned()),
-                ambre_core::Seconds(60)
+                ambre_core::Seconds::new(60)
             )
             .await
             .unwrap()
@@ -1687,7 +1687,7 @@ mod redis_integration_tests {
                 &redis,
                 &lock_key,
                 &LockToken("tokB".to_owned()),
-                ambre_core::Seconds(60)
+                ambre_core::Seconds::new(60)
             )
             .await
             .unwrap()
@@ -1718,7 +1718,7 @@ mod redis_integration_tests {
             .filter_map(|r| r.as_ref().ok())
             .copied()
             .collect();
-        assert_eq!(numbered, [ambre_core::Seq(1)], "results {results:?}");
+        assert_eq!(numbered, [ambre_core::Seq::new(1)], "results {results:?}");
         let refused = results
             .iter()
             .filter(|r| {
@@ -1739,7 +1739,7 @@ mod redis_integration_tests {
             verify_clock_and_assign_seq(&redis, &doc, &ab, Clock(2))
                 .await
                 .unwrap(),
-            ambre_core::Seq(2)
+            ambre_core::Seq::new(2)
         );
         let _ = redis
             .del([format!("doc:{doc}:seq"), format!("doc:{doc}:clocks")])
@@ -1763,7 +1763,7 @@ mod redis_integration_tests {
         append_pending_delta(
             &redis,
             &doc,
-            ambre_core::Seq(1),
+            ambre_core::Seq::new(1),
             &ambre_core::ObjectKey::from("s3-x"),
             &Payload::new(vec![1, 2, 3]),
         )
@@ -1812,7 +1812,7 @@ mod redis_integration_tests {
         append_pending_delta(
             &redis,
             &doc,
-            ambre_core::Seq(7),
+            ambre_core::Seq::new(7),
             &ambre_core::ObjectKey::from("s3-a"),
             &Payload::new(vec![1, 2, 3]),
         )
@@ -1821,7 +1821,7 @@ mod redis_integration_tests {
         append_pending_delta(
             &redis,
             &doc,
-            ambre_core::Seq(8),
+            ambre_core::Seq::new(8),
             &ambre_core::ObjectKey::from("s3-b"),
             &Payload::new(vec![4, 5]),
         )
@@ -1831,11 +1831,11 @@ mod redis_integration_tests {
         let map = get_pending_deltas_map(&redis, &doc).await.unwrap();
         assert_eq!(map.len(), 2);
         assert_eq!(
-            map.get(&ambre_core::Seq(7)).map(Payload::expose_bytes),
+            map.get(&ambre_core::Seq::new(7)).map(Payload::expose_bytes),
             Some(&[1u8, 2, 3][..])
         );
         assert_eq!(
-            map.get(&ambre_core::Seq(8)).map(Payload::expose_bytes),
+            map.get(&ambre_core::Seq::new(8)).map(Payload::expose_bytes),
             Some(&[4u8, 5][..])
         );
 
@@ -1858,7 +1858,7 @@ mod redis_integration_tests {
             &doc,
             pk,
             &super::tests::sample(),
-            ambre_core::Seconds(15),
+            ambre_core::Seconds::new(15),
         )
         .await
         .unwrap();
@@ -1919,7 +1919,7 @@ mod redis_integration_tests {
             &doc,
             pk,
             &super::tests::sample(),
-            ambre_core::Seconds(15),
+            ambre_core::Seconds::new(15),
         )
         .await
         .unwrap();
@@ -1960,9 +1960,14 @@ mod redis_integration_tests {
         assert!(clock_state_is_cold(&redis, &doc).await.unwrap());
 
         // The durable index says this author reached clock 5, global seq 5.
-        seed_clock_state(&redis, &doc, ambre_core::Seq(5), &[(*author, Clock(5))])
-            .await
-            .expect("seed");
+        seed_clock_state(
+            &redis,
+            &doc,
+            ambre_core::Seq::new(5),
+            &[(*author, Clock(5))],
+        )
+        .await
+        .expect("seed");
 
         // No longer cold, and the author's next update (clock 6) validates.
         assert!(!clock_state_is_cold(&redis, &doc).await.unwrap());
@@ -1971,7 +1976,7 @@ mod redis_integration_tests {
             .expect("clock 6 should validate against a rehydrated current=5");
         assert_eq!(
             seq,
-            ambre_core::Seq(6),
+            ambre_core::Seq::new(6),
             "seq counter must continue past the durable max"
         );
 
@@ -1991,7 +1996,7 @@ mod redis_integration_tests {
             user_id: Id::<User>::mint(),
             signing_pubkey: Some(FixedBytes::<PublicKey>::from_array([3u8; 32])),
         };
-        refresh_create(redis, &token, &data, ambre_core::Seconds(60))
+        refresh_create(redis, &token, &data, ambre_core::Seconds::new(60))
             .await
             .expect("refresh create");
         token

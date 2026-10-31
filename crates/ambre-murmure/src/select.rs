@@ -142,7 +142,7 @@ mod tests {
         let messages = bodies
             .iter()
             .enumerate()
-            .map(|(i, body)| message(ada, ambre_bus::Timestamp(i as u64 * 60_000), body))
+            .map(|(i, body)| message(ada, ambre_bus::Timestamp::new(i as u64 * 60_000), body))
             .collect();
         list.absorb(Id::<Segment>::mint(), messages);
         list
@@ -157,7 +157,7 @@ mod tests {
 
     fn copy(list: &MessageList, selection: TextSelection) -> Option<String> {
         selection.copied(list, &|_| ambre_core::DisplayName::new("Ada").ok(), &|ts| {
-            format!("t{}", ts.0)
+            format!("t{}", ts.get())
         })
     }
 
@@ -230,9 +230,13 @@ mod tests {
     #[test]
     fn a_copy_holds_only_text_a_member_wrote() {
         let mut list = list(&["hello", "", "again"]);
-        let mut edited = message(Id::<User>::mint(), ambre_bus::Timestamp(200_000), "again");
+        let mut edited = message(
+            Id::<User>::mint(),
+            ambre_bus::Timestamp::new(200_000),
+            "again",
+        );
         edited.edited = ambre_bus::Revision::Edited;
-        let mut gone = message(Id::<User>::mint(), ambre_bus::Timestamp(100_000), "");
+        let mut gone = message(Id::<User>::mint(), ambre_bus::Timestamp::new(100_000), "");
         gone.deleted = ambre_bus::Deletion::Deleted;
         let segment = Id::<Segment>::mint();
         list.absorb(segment, vec![gone, edited]);

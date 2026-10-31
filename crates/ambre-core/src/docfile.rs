@@ -541,7 +541,7 @@ pub fn write_ambre_sealed(
     out.extend_from_slice(sealed_aad(salt).as_bytes());
     nonce.push_to(&mut out);
     debug_assert_eq!(out.len(), SEALED_HEADER_LEN);
-    out.extend_from_slice(&ciphertext.0);
+    out.extend_from_slice(ciphertext.as_bytes());
     Payload::new(out)
 }
 
@@ -587,7 +587,7 @@ pub fn parse_sealed_header(file: &Payload<SealedContainer>) -> Result<SealedAmbr
         version,
         salt,
         nonce,
-        ciphertext: Ciphertext(ciphertext.to_vec()),
+        ciphertext: Ciphertext::new(ciphertext.to_vec()),
     })
 }
 
@@ -984,7 +984,12 @@ mod tests {
     const NONCE: FixedBytes<Nonce> = FixedBytes::from_array([0x5A; SEAL_NONCE_LEN]);
 
     fn sealed_sample() -> Vec<u8> {
-        write_ambre_sealed(&SALT, &NONCE, &Ciphertext(b"ciphertext-bytes".to_vec())).into_bytes()
+        write_ambre_sealed(
+            &SALT,
+            &NONCE,
+            &Ciphertext::new(b"ciphertext-bytes".to_vec()),
+        )
+        .into_bytes()
     }
 
     #[test]
@@ -1020,7 +1025,7 @@ mod tests {
         assert_eq!(envelope.version, AMBRE_SEALED_VERSION);
         assert_eq!(envelope.salt, SALT);
         assert_eq!(envelope.nonce, NONCE);
-        assert_eq!(envelope.ciphertext.0, b"ciphertext-bytes");
+        assert_eq!(envelope.ciphertext.as_bytes(), b"ciphertext-bytes");
         assert_eq!(
             write_ambre_sealed(&envelope.salt, &envelope.nonce, &envelope.ciphertext),
             sealed_sample()
@@ -1148,9 +1153,12 @@ mod tests {
         // This module owns no tag width (`DOCFILE-006`), so it cannot tell a
         // ciphertext too short to be one from a valid short document. It reports
         // the envelope faithfully; the open fails one layer up.
-        let envelope =
-            parse_sealed_header(&write_ambre_sealed(&SALT, &NONCE, &Ciphertext(Vec::new())))
-                .expect("a header with no ciphertext is still a header");
+        let envelope = parse_sealed_header(&write_ambre_sealed(
+            &SALT,
+            &NONCE,
+            &Ciphertext::new(Vec::new()),
+        ))
+        .expect("a header with no ciphertext is still a header");
         assert!(envelope.ciphertext.is_empty());
     }
 }

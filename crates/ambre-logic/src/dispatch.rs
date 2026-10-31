@@ -845,8 +845,8 @@ mod tests {
     fn a_prose_document_saves_to_a_native_file_and_reopens() {
         let document_id = Id::<Document>::mint();
         let bytes = exported_file(DocType::Prose, document_id);
-        let mut reopened =
-            ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId(9)).expect("a document");
+        let mut reopened = ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId::new(9))
+            .expect("a document");
         let (id, _) = reopened
             .import_ambre_plaintext(&ambre_core::Payload::<ambre_core::PlaintextContainer>::new(
                 bytes,
@@ -1894,7 +1894,7 @@ mod tests {
             id: Some(id),
             request: ambre_bus::ApiRequest::UploadMedia,
             failure: ambre_bus::ApiFailure::Relay {
-                status: ambre_bus::HttpStatus(500),
+                status: ambre_bus::HttpStatus::new(500),
                 code: None,
             },
             message: "boom".into(),
@@ -1921,7 +1921,7 @@ mod tests {
             id: None,
             request: ambre_bus::ApiRequest::ListDocuments,
             failure: ambre_bus::ApiFailure::Relay {
-                status: ambre_bus::HttpStatus(500),
+                status: ambre_bus::HttpStatus::new(500),
                 code: None,
             },
             message: "boom".into(),
@@ -2024,7 +2024,7 @@ mod tests {
                 invitee: user,
                 role: Role::Editor,
                 expect_exchange_pub_key: FixedBytes::from_array([0; 32]),
-                now: ambre_bus::Timestamp(0),
+                now: ambre_bus::Timestamp::new(0),
             },
             RestCommand::RevokeFromDocument {
                 document_id: doc,

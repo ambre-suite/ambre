@@ -372,7 +372,7 @@ pub(crate) async fn lock_retired_segments(state: &AppState, document_id: &Id<Doc
         for segment in db::retired_unlocked_segments(&state.db, document_id).await? {
             let horizon = crate::redis_ops::lock_segment_now(&state.redis, &segment).await?;
             db::record_lock(&state.db, &segment, horizon).await?;
-            tracing::info!(segment = %segment, horizon = horizon.0, "segment locked by a rotation");
+            tracing::info!(segment = %segment, horizon = horizon.get(), "segment locked by a rotation");
         }
         Ok::<(), AppError>(())
     };
@@ -468,14 +468,14 @@ pub async fn take_finalize_lease(
             horizon,
             expires_in,
         } => {
-            tracing::info!(channel_id = %channel_id, segment = %segment, horizon = horizon.0, "finalize lease granted");
+            tracing::info!(channel_id = %channel_id, segment = %segment, horizon = horizon.get(), "finalize lease granted");
             FinalizeLeaseJson {
                 lease: Some(GrantedLeaseJson {
                     lease_id,
                     horizon,
                     expires_in: ambre_core::Millis::from_duration(expires_in),
                 }),
-                retry_in: ambre_core::Millis(0),
+                retry_in: ambre_core::Millis::new(0),
             }
         }
         db::FinalizeLease::Wait { retry_in } => FinalizeLeaseJson {
@@ -574,7 +574,7 @@ pub async fn take_fold_lease(
             amendments_seq,
             expires_in,
         } => {
-            tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %amendments, amendments_seq = amendments_seq.0, "fold lease granted");
+            tracing::info!(channel_id = %channel_id, segment = %segment, amendments = %amendments, amendments_seq = amendments_seq.get(), "fold lease granted");
             FoldLeaseJson {
                 lease: Some(GrantedFoldJson {
                     lease_id,
@@ -583,7 +583,7 @@ pub async fn take_fold_lease(
                     amendments_seq,
                     expires_in: ambre_core::Millis::from_duration(expires_in),
                 }),
-                retry_in: ambre_core::Millis(0),
+                retry_in: ambre_core::Millis::new(0),
             }
         }
         db::FoldLease::Wait { retry_in } => FoldLeaseJson {
@@ -613,7 +613,7 @@ pub async fn fold_segment(
         req.amendments_seq,
     )
     .await?;
-    tracing::info!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, amendments_seq = req.amendments_seq.0, "amendments folded");
+    tracing::info!(channel_id = %channel_id, segment = %segment, snapshot_id = %req.snapshot_id, amendments_seq = req.amendments_seq.get(), "amendments folded");
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -2156,7 +2156,10 @@ mod tests {
         let env = &state.config.s3_env_prefix;
         let documents = |c: &Channel| [c.meta.document_id(), c.segment.document_id()];
         for document in documents(&gone).into_iter().chain(documents(&kept)) {
-            stub.put(crate::s3::format_s3_delta_key(env, &document, ambre_core::Seq(1)).0);
+            stub.put(
+                crate::s3::format_s3_delta_key(env, &document, ambre_core::Seq::new(1))
+                    .into_inner(),
+            );
         }
 
         assert_eq!(delete(&state, alice, gone.id).await, StatusCode::NO_CONTENT);
@@ -2180,7 +2183,7 @@ mod tests {
         left.sort();
         let mut expected: Vec<String> = documents(&kept)
             .iter()
-            .map(|d| crate::s3::format_s3_delta_key(env, d, ambre_core::Seq(1)).0)
+            .map(|d| crate::s3::format_s3_delta_key(env, d, ambre_core::Seq::new(1)).into_inner())
             .collect();
         expected.sort();
         assert_eq!(left, expected);
@@ -2870,9 +2873,9 @@ mod tests {
                 .into_iter()
                 .map(|c| (c.channel_id, c.meta_last))
                 .collect();
-        assert_eq!(lasts[&direct], ambre_core::Seq(6), "the live counter");
-        assert_eq!(lasts[&public.id], ambre_core::Seq(4), "the register");
-        assert_eq!(lasts[&private.id], ambre_core::Seq(0), "nothing held");
+        assert_eq!(lasts[&direct], ambre_core::Seq::new(6), "the live counter");
+        assert_eq!(lasts[&public.id], ambre_core::Seq::new(4), "the register");
+        assert_eq!(lasts[&private.id], ambre_core::Seq::new(0), "nothing held");
     }
 
     /// The next message on `stream`, decoded, or `None` after `millis`.
@@ -3756,7 +3759,7 @@ mod tests {
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &snapshot,
             ambre_protocol::messages::Clock(seq.unsigned_abs()),
-            ambre_core::Seq(seq.unsigned_abs()),
+            ambre_core::Seq::new(seq.unsigned_abs()),
             &ambre_core::ObjectKey::from("k"),
         )
         .await
@@ -3858,7 +3861,7 @@ mod tests {
             .expect("age");
         let granted = lease(&state, alice, &channel).await.expect("lease");
         let held = granted.lease.expect("the grace period has passed");
-        assert_eq!(held.horizon, ambre_core::Seq(4));
+        assert_eq!(held.horizon, ambre_core::Seq::new(4));
         assert_eq!(
             held.expires_in,
             ambre_core::Millis::from_duration(FINALIZE_LEASE)
@@ -3878,7 +3881,7 @@ mod tests {
         let second = lease(&state, bob, &channel).await.expect("lease");
         assert!(second.lease.is_none(), "one lease at a time");
         assert!(
-            second.retry_in > ambre_core::Millis(0)
+            second.retry_in > ambre_core::Millis::new(0)
                 && second.retry_in <= ambre_core::Millis::from_duration(FINALIZE_LEASE)
         );
         forget_store(&state, &channel).await;
@@ -3917,7 +3920,7 @@ mod tests {
 
         let granted = lease(&state, bob, &channel).await.expect("lease");
         let held = granted.lease.expect("a rotation lock waits out no grace");
-        assert_eq!(held.horizon, ambre_core::Seq(3));
+        assert_eq!(held.horizon, ambre_core::Seq::new(3));
         forget_store(&state, &channel).await;
     }
 
@@ -4132,7 +4135,7 @@ mod tests {
 
         let again = lease(&state, bob, &channel).await.expect("lease");
         let again = again.lease.expect("no grace period this time");
-        assert_eq!(again.horizon, ambre_core::Seq(2));
+        assert_eq!(again.horizon, ambre_core::Seq::new(2));
         let resealed = snapshot(&state, segment, 2).await;
         assert_eq!(
             finalize(&state, bob, &channel, again.lease_id, resealed).await,
@@ -4249,7 +4252,7 @@ mod tests {
                 Json(FoldSegmentRequest {
                     lease_id,
                     snapshot_id,
-                    amendments_seq: ambre_core::Seq(amendments_seq),
+                    amendments_seq: ambre_core::Seq::new(amendments_seq),
                 }),
             )
             .await,
@@ -4360,7 +4363,7 @@ mod tests {
         let early = fold_lease(&state, alice, &channel).await.expect("lease");
         assert!(early.lease.is_none());
         assert!(
-            early.retry_in > ambre_core::Millis(6 * 24 * 3600 * 1000),
+            early.retry_in > ambre_core::Millis::new(6 * 24 * 3600 * 1000),
             "{:?}",
             early.retry_in
         );
@@ -4378,11 +4381,11 @@ mod tests {
         let held = held.lease.expect("granted");
         assert_eq!(
             (held.horizon, held.amendments, held.amendments_seq),
-            (ambre_core::Seq(2), amendments, ambre_core::Seq(3))
+            (ambre_core::Seq::new(2), amendments, ambre_core::Seq::new(3))
         );
         let second = fold_lease(&state, bob, &channel).await.expect("lease");
         assert!(second.lease.is_none(), "one writer at a time");
-        assert!(second.retry_in > ambre_core::Millis(0));
+        assert!(second.retry_in > ambre_core::Millis::new(0));
         forget_store(&state, &channel).await;
         set_seq(&state, amendments, 0).await;
     }
@@ -4434,7 +4437,7 @@ mod tests {
         set_seq(&state, amendments, 4).await;
         let waits = fold_lease(&state, bob, &channel).await.expect("lease");
         assert!(
-            waits.retry_in > ambre_core::Millis(6 * 24 * 3600 * 1000),
+            waits.retry_in > ambre_core::Millis::new(6 * 24 * 3600 * 1000),
             "the delay restarts"
         );
 
@@ -4445,7 +4448,7 @@ mod tests {
         assert_eq!(folded(&state, amendments).await.0, None);
         let again = fold_lease(&state, bob, &channel).await.expect("lease");
         let again = again.lease.expect("owed at once");
-        assert_eq!(again.amendments_seq, ambre_core::Seq(4));
+        assert_eq!(again.amendments_seq, ambre_core::Seq::new(4));
         forget_store(&state, &channel).await;
         set_seq(&state, amendments, 0).await;
     }
@@ -4503,7 +4506,7 @@ mod tests {
         .expect("age");
         let held = fold_lease(&state, bob, &channel).await.expect("lease");
         let held = held.lease.expect("granted");
-        assert_eq!(held.amendments_seq, ambre_core::Seq(4));
+        assert_eq!(held.amendments_seq, ambre_core::Seq::new(4));
         let second = snapshot(&state, segment, 2).await;
         assert_eq!(
             fold(&state, bob, &channel, held.lease_id, second, 4).await,

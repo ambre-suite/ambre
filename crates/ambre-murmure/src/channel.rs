@@ -167,7 +167,7 @@ impl Created {
                     doc,
                     DocumentKind::Meta,
                     channel_id,
-                    ambre_bus::Timestamp(now.0),
+                    ambre_bus::Timestamp::new(now.get()),
                 )?;
                 let channel = crate::schema::channel(doc);
                 channel.insert(ChannelKey::Type, channel_type.as_str())?;
@@ -181,7 +181,7 @@ impl Created {
                     doc,
                     DocumentKind::Segment,
                     channel_id,
-                    ambre_bus::Timestamp(now.0),
+                    ambre_bus::Timestamp::new(now.get()),
                 )?;
             }
             Self::Amendments { segment, now } => {
@@ -189,7 +189,7 @@ impl Created {
                     doc,
                     DocumentKind::Amendments,
                     channel_id,
-                    ambre_bus::Timestamp(now.0),
+                    ambre_bus::Timestamp::new(now.get()),
                 )?;
                 crate::schema::header(doc)
                     .insert(schema::HeaderKey::Segment, segment.to_string())?;
@@ -199,7 +199,7 @@ impl Created {
                     doc,
                     DocumentKind::Thread,
                     channel_id,
-                    ambre_bus::Timestamp(now.0),
+                    ambre_bus::Timestamp::new(now.get()),
                 )?;
                 let header = crate::schema::header(doc);
                 header.insert(schema::HeaderKey::Segment, segment.to_string())?;
@@ -417,8 +417,12 @@ impl ChannelState {
         let ids: Vec<Id<Document>> = self.live().map(|held| held.id).collect();
         for id in ids {
             let peer = crate::session::next_peer();
-            self.adopt_session(id, peer, PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()))
-                .expect("adopt");
+            self.adopt_session(
+                id,
+                peer,
+                PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()),
+            )
+            .expect("adopt");
         }
         self
     }
@@ -1542,7 +1546,7 @@ impl ChannelState {
         }
         if let Some(held) = self.held_mut(document_id) {
             if let Some(session) = held.session {
-                fresh.set_peer_id(session.peer().0)?;
+                fresh.set_peer_id(session.peer().get())?;
             }
             held.doc = fresh;
         } else if let Some(doc) = self
@@ -1989,8 +1993,8 @@ fn segment_span(meta: &LoroDoc, segment: Id<Segment>) -> Option<(Timestamp, Opti
     let to = spans
         .get(position + 1)
         .and_then(|(_, _, next)| *next)
-        .map(Timestamp);
-    Some((Timestamp((*from)?), to))
+        .map(Timestamp::new);
+    Some((Timestamp::new((*from)?), to))
 }
 
 /// The messages of a segment, in list order. A malformed message is skipped
@@ -2025,7 +2029,7 @@ fn content_of(map: &Fields<MessageKey>) -> Option<LoroText> {
 fn read_message(item: ValueOrContainer, channel: Id<Channel>) -> Option<MessageView> {
     let map = crate::schema::fields_of(item)?;
     let (id, author) = identity_of(&map)?;
-    let ts = Timestamp(schema::unsigned(&map, MessageKey::Ts)?);
+    let ts = Timestamp::new(schema::unsigned(&map, MessageKey::Ts)?);
     let content = content_of(&map)?;
     let deleted = schema::flag(&map, MessageKey::Deleted);
     Some(MessageView {

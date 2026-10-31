@@ -10,10 +10,10 @@ use ambre_core::{Millis, UnixMillis};
 use ambre_protocol::ws::CloseCode;
 
 /// The first reconnect delay.
-const BASE_DELAY: Millis = Millis(250);
+const BASE_DELAY: Millis = Millis::new(250);
 
 /// The longest reconnect delay before jitter.
-const MAX_DELAY: Millis = Millis(10_000);
+const MAX_DELAY: Millis = Millis::new(10_000);
 
 /// The worker's wall clock. A host test swaps in one it advances by hand.
 pub(crate) type Clock = Rc<dyn Fn() -> UnixMillis>;
@@ -24,14 +24,14 @@ pub(crate) fn system_clock() -> Clock {
     // The wall clock is a positive count of milliseconds well below 2^53, so
     // the conversion is exact.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    Rc::new(|| UnixMillis(js_sys::Date::now() as u64))
+    Rc::new(|| UnixMillis::new(js_sys::Date::now() as u64))
 }
 
 /// The clock of a native build: the system's wall clock.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn system_clock() -> Clock {
     Rc::new(|| {
-        UnixMillis(
+        UnixMillis::new(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)),
@@ -80,11 +80,11 @@ impl Lifecycle {
     /// The delay before jitter after `attempts` failures in a row. It starts at
     /// 250 ms and doubles, capped at 10 s.
     pub(crate) fn delay(attempts: u32) -> Millis {
-        Millis(
+        Millis::new(
             BASE_DELAY
-                .0
+                .get()
                 .saturating_mul(1 << attempts.min(6))
-                .min(MAX_DELAY.0),
+                .min(MAX_DELAY.get()),
         )
     }
 
@@ -117,7 +117,7 @@ impl Lifecycle {
     /// Arms the next reconnect. The delay grows with each attempt until a
     /// frame arrives (`SYNC-064`).
     pub(crate) fn back_off(&mut self, now: UnixMillis, jitter: f64) -> Next {
-        let capped = Self::delay(self.attempts).0;
+        let capped = Self::delay(self.attempts).get();
         self.attempts = self.attempts.saturating_add(1);
         // `capped` is at most 10 s, so the product fits and is not negative.
         #[allow(
@@ -126,7 +126,7 @@ impl Lifecycle {
             clippy::cast_precision_loss
         )]
         let spread = (capped as f64 * jitter.clamp(0.0, 1.0)) as u64;
-        let delay = Millis(capped.saturating_add(spread));
+        let delay = Millis::new(capped.saturating_add(spread));
         self.deadline = Some(now.plus(delay));
         Next::Wait { delay }
     }
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn the_wait_grows_while_no_frame_arrives() {
         let mut lifecycle = Lifecycle::default();
-        let mut now = UnixMillis(0);
+        let mut now = UnixMillis::new(0);
         let mut waits = Vec::new();
         for _ in 0..8 {
             let Next::Wait { delay } =
@@ -185,10 +185,12 @@ mod tests {
             else {
                 panic!("a close backs off");
             };
-            waits.push(delay.0);
+            waits.push(delay.get());
             assert_eq!(
-                lifecycle.poll(UnixMillis(now.0 + delay.0 - 1)),
-                Next::Wait { delay: Millis(1) }
+                lifecycle.poll(UnixMillis::new(now.get() + delay.get() - 1)),
+                Next::Wait {
+                    delay: Millis::new(1)
+                }
             );
             now = now.plus(delay);
             assert_eq!(lifecycle.poll(now), Next::Open);
@@ -202,18 +204,37 @@ mod tests {
     #[test]
     fn the_wait_resets_on_a_frame_alone() {
         let mut lifecycle = Lifecycle::default();
-        lifecycle.closed(CloseCode::new(1006), Demand::Needed, UnixMillis(0), 0.0);
-        lifecycle.poll(UnixMillis(250));
+        lifecycle.closed(
+            CloseCode::new(1006),
+            Demand::Needed,
+            UnixMillis::new(0),
+            0.0,
+        );
+        lifecycle.poll(UnixMillis::new(250));
         // Opened and closed again with no frame between.
         assert_eq!(
-            lifecycle.closed(CloseCode::new(1006), Demand::Needed, UnixMillis(250), 0.0),
-            Next::Wait { delay: Millis(500) }
+            lifecycle.closed(
+                CloseCode::new(1006),
+                Demand::Needed,
+                UnixMillis::new(250),
+                0.0
+            ),
+            Next::Wait {
+                delay: Millis::new(500)
+            }
         );
-        lifecycle.poll(UnixMillis(750));
+        lifecycle.poll(UnixMillis::new(750));
         lifecycle.frame();
         assert_eq!(
-            lifecycle.closed(CloseCode::new(1006), Demand::Needed, UnixMillis(800), 0.0),
-            Next::Wait { delay: Millis(250) }
+            lifecycle.closed(
+                CloseCode::new(1006),
+                Demand::Needed,
+                UnixMillis::new(800),
+                0.0
+            ),
+            Next::Wait {
+                delay: Millis::new(250)
+            }
         );
     }
 
@@ -222,25 +243,37 @@ mod tests {
     #[test]
     fn an_authentication_refusal_renews_and_reopens() {
         let mut lifecycle = Lifecycle::default();
-        lifecycle.closed(CloseCode::new(1006), Demand::Needed, UnixMillis(0), 0.0);
+        lifecycle.closed(
+            CloseCode::new(1006),
+            Demand::Needed,
+            UnixMillis::new(0),
+            0.0,
+        );
         assert_eq!(
             lifecycle.closed(
                 Some(CloseCode::UNAUTHORIZED),
                 Demand::Needed,
-                UnixMillis(10),
+                UnixMillis::new(10),
                 0.0
             ),
             Next::Renew
         );
         assert_eq!(lifecycle.renewed(), Next::Open);
         assert_eq!(
-            lifecycle.poll(UnixMillis(10_000)),
+            lifecycle.poll(UnixMillis::new(10_000)),
             Next::Idle,
             "the old deadline is gone"
         );
         assert_eq!(
-            lifecycle.closed(CloseCode::new(1006), Demand::Needed, UnixMillis(20), 0.0),
-            Next::Wait { delay: Millis(250) }
+            lifecycle.closed(
+                CloseCode::new(1006),
+                Demand::Needed,
+                UnixMillis::new(20),
+                0.0
+            ),
+            Next::Wait {
+                delay: Millis::new(250)
+            }
         );
     }
 
@@ -251,32 +284,49 @@ mod tests {
         let mut errored = Lifecycle::default();
         let mut closed = Lifecycle::default();
         assert_eq!(
-            errored.closed(None, Demand::Needed, UnixMillis(0), 0.5),
-            closed.closed(CloseCode::new(1006), Demand::Needed, UnixMillis(0), 0.5)
+            errored.closed(None, Demand::Needed, UnixMillis::new(0), 0.5),
+            closed.closed(
+                CloseCode::new(1006),
+                Demand::Needed,
+                UnixMillis::new(0),
+                0.5
+            )
         );
         assert_eq!(
-            errored.closed(None, Demand::Needed, UnixMillis(0), 0.0),
-            Next::Wait { delay: Millis(500) }
+            errored.closed(None, Demand::Needed, UnixMillis::new(0), 0.0),
+            Next::Wait {
+                delay: Millis::new(500)
+            }
         );
 
         let mut lifecycle = Lifecycle::default();
-        lifecycle.closed(CloseCode::new(1006), Demand::Needed, UnixMillis(0), 0.0);
+        lifecycle.closed(
+            CloseCode::new(1006),
+            Demand::Needed,
+            UnixMillis::new(0),
+            0.0,
+        );
         assert_eq!(
             lifecycle.closed(
                 Some(CloseCode::SETUP_REQUIRED),
                 Demand::Needed,
-                UnixMillis(0),
+                UnixMillis::new(0),
                 0.0
             ),
             Next::SetupOwed
         );
         assert_eq!(
-            lifecycle.poll(UnixMillis(u64::MAX)),
+            lifecycle.poll(UnixMillis::new(u64::MAX)),
             Next::Idle,
             "no timer reopens it"
         );
         assert_eq!(
-            lifecycle.closed(CloseCode::new(1006), Demand::Unneeded, UnixMillis(0), 0.0),
+            lifecycle.closed(
+                CloseCode::new(1006),
+                Demand::Unneeded,
+                UnixMillis::new(0),
+                0.0
+            ),
             Next::Idle
         );
     }

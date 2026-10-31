@@ -485,7 +485,7 @@ mod media_request_tests {
             ambre_core::Size::new(ambre_core::Px::new(4), ambre_core::Px::new(2))
         );
         // RGBA8, row-major, no padding: exactly four bytes a texel.
-        assert_eq!(answer.2, ambre_core::ByteSize(4 * 2 * 4));
+        assert_eq!(answer.2, ambre_core::ByteSize::new(4 * 2 * 4));
     }
 
     /// `TOILE-IO-103`: the board answers an address it does not carry with nothing. The element

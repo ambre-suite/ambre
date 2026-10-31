@@ -8,7 +8,7 @@ use ambre_core::id::{self, Document, Id, User};
 #[test]
 fn update_roundtrip() {
     let update = Update {
-        ciphertext: Ciphertext(vec![1, 2, 3, 4]),
+        ciphertext: Ciphertext::new(vec![1, 2, 3, 4]),
         nonce: FixedBytes::from_array([0u8; 24]),
         public_data: UpdatePublicData {
             document_id: Id::<Document>::mint(),
@@ -43,7 +43,7 @@ fn update_roundtrip() {
 #[test]
 fn snapshot_roundtrip() {
     let snapshot = Snapshot {
-        ciphertext: Ciphertext(vec![8, 9, 10]),
+        ciphertext: Ciphertext::new(vec![8, 9, 10]),
         nonce: FixedBytes::from_array([11u8; 24]),
         public_data: SnapshotPublicData {
             document_id: Id::<Document>::mint(),
@@ -89,7 +89,7 @@ fn snapshot_roundtrip() {
 #[test]
 fn ephemeral_roundtrip() {
     let ephemeral = Ephemeral {
-        ciphertext: Ciphertext(vec![21, 22, 23]),
+        ciphertext: Ciphertext::new(vec![21, 22, 23]),
         nonce: FixedBytes::from_array([24u8; 24]),
         public_data: EphemeralPublicData {
             document_id: Id::<Document>::mint(),
@@ -119,7 +119,7 @@ fn ephemeral_roundtrip() {
 #[test]
 fn ws_messages_roundtrip() {
     let update = Update {
-        ciphertext: Ciphertext(vec![1]),
+        ciphertext: Ciphertext::new(vec![1]),
         nonce: FixedBytes::from_array([2u8; 24]),
         public_data: UpdatePublicData {
             document_id: Id::<Document>::mint(),
@@ -143,7 +143,7 @@ fn ws_messages_roundtrip() {
     }
 
     let server_msg = WsServerMsg::Update {
-        seq: Seq(100),
+        seq: Seq::new(100),
         update,
     };
     let bytes = postcard::to_allocvec(&server_msg).unwrap();
@@ -153,8 +153,8 @@ fn ws_messages_roundtrip() {
             seq,
             update: decoded_update,
         } => {
-            assert_eq!(seq, Seq(100));
-            assert_eq!(decoded_update.ciphertext, Ciphertext(vec![1]));
+            assert_eq!(seq, Seq::new(100));
+            assert_eq!(decoded_update.ciphertext, Ciphertext::new(vec![1]));
         }
         _ => panic!("wrong variant"),
     }
@@ -248,7 +248,7 @@ const FROZEN_LAYOUT: (u8, &str) = (1, "c1985c0e3889a14100b99c48d8952d65");
 
 fn sample_update(fill: u8) -> Update {
     Update {
-        ciphertext: Ciphertext(vec![fill, fill + 1]),
+        ciphertext: Ciphertext::new(vec![fill, fill + 1]),
         nonce: FixedBytes::from_array([fill; 24]),
         public_data: UpdatePublicData {
             document_id: Id::<Document>::from_bytes([fill; 16]),
@@ -264,7 +264,7 @@ fn sample_update(fill: u8) -> Update {
 
 fn sample_ephemeral(fill: u8) -> Ephemeral {
     Ephemeral {
-        ciphertext: Ciphertext(vec![fill]),
+        ciphertext: Ciphertext::new(vec![fill]),
         nonce: FixedBytes::from_array([fill + 1; 24]),
         public_data: EphemeralPublicData {
             document_id: Id::<Document>::from_bytes([fill + 2; 16]),
@@ -288,7 +288,7 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
         C::Ephemeral(sample_ephemeral(20)),
         C::RequestMissing {
             document_id: doc,
-            after_seq: Seq(3),
+            after_seq: Seq::new(3),
         },
         C::Authenticate {
             token: crate::ws::Credential::new("t".into()),
@@ -307,7 +307,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
     vec![
         S::Subscribed { document_id: doc },
         S::Update {
-            seq: Seq(4),
+            seq: Seq::new(4),
             update: sample_update(50),
         },
         S::Ephemeral(sample_ephemeral(60)),
@@ -318,7 +318,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::MissingUpdates {
             document_id: doc,
             updates: vec![SeqUpdate {
-                seq: Seq(6),
+                seq: Seq::new(6),
                 update: sample_update(70),
             }],
         },
@@ -326,7 +326,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::SnapshotAvailable {
             document_id: doc,
             snapshot_id: Id::<id::Snapshot>::from_bytes([7; 16]),
-            covered_seq: Seq(12),
+            covered_seq: Seq::new(12),
         },
         S::KeyRotationRequired { document_id: doc },
         S::DocumentRevoked { document_id: doc },
@@ -352,7 +352,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::MembersChanged { document_id: doc },
         S::ReplayStopped {
             document_id: doc,
-            after_seq: Seq(15),
+            after_seq: Seq::new(15),
         },
         S::DeltaRefused {
             document_id: doc,
@@ -448,7 +448,7 @@ fn the_relay_reads_only_the_listed_fields() {
     let pk = FixedBytes::from_array([5u8; 32]);
     let kid = FixedBytes::from_array([8u8; 16]);
     let update = Update {
-        ciphertext: Ciphertext(vec![1]),
+        ciphertext: Ciphertext::new(vec![1]),
         nonce: FixedBytes::from_array([0u8; 24]),
         public_data: UpdatePublicData {
             document_id: doc,
@@ -461,7 +461,7 @@ fn the_relay_reads_only_the_listed_fields() {
         signature: FixedBytes::from_array([7u8; 64]),
     };
     let snapshot = Snapshot {
-        ciphertext: Ciphertext(vec![1]),
+        ciphertext: Ciphertext::new(vec![1]),
         nonce: FixedBytes::from_array([0u8; 24]),
         public_data: SnapshotPublicData {
             document_id: doc,
@@ -475,7 +475,7 @@ fn the_relay_reads_only_the_listed_fields() {
         signature: FixedBytes::from_array([7u8; 64]),
     };
     let ephemeral = Ephemeral {
-        ciphertext: Ciphertext(vec![1]),
+        ciphertext: Ciphertext::new(vec![1]),
         nonce: FixedBytes::from_array([0u8; 24]),
         public_data: EphemeralPublicData {
             document_id: doc,

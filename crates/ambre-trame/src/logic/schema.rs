@@ -365,12 +365,12 @@ fn gate_through<'a>(
             let heads = scratch.oplog_frontiers();
             let peer = migration_peer(heads.iter().map(|id| {
                 (
-                    ambre_core::PeerId(id.peer),
-                    ambre_core::OpCounter(id.counter),
+                    ambre_core::PeerId::new(id.peer),
+                    ambre_core::OpCounter::new(id.counter),
                 )
             }));
             scratch
-                .set_peer_id(peer.0)
+                .set_peer_id(peer.get())
                 .map_err(|e| SchemaError::MigrationFailed {
                     from: found,
                     to: SCHEMA_VERSION,
@@ -401,7 +401,7 @@ mod tests {
     #[test]
     fn a_filter_column_is_a_uid_stored_as_its_key_part() {
         let uid = Uid {
-            peer: ambre_core::PeerId(1),
+            peer: ambre_core::PeerId::new(1),
             counter: ambre_core::IdCounter::new(1),
         };
         let kind = FilterKind::Values(vec!["v".to_owned()]);

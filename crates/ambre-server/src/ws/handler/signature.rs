@@ -90,7 +90,7 @@ pub(crate) fn verify_sealed_signature(
 
     let mut signed_data = Vec::new();
     push_framed(&mut signed_data, nonce.as_slice());
-    push_framed(&mut signed_data, &ciphertext.0);
+    push_framed(&mut signed_data, ciphertext.as_bytes());
     push_framed(&mut signed_data, public_data.as_bytes());
     push_framed(&mut signed_data, commitment_tag.as_slice());
 

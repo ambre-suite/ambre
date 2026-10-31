@@ -19,6 +19,16 @@ fn secret(bytes: &[u8]) -> ambre_core::SecretBytes {
     ambre_core::SecretBytes::new(bytes.to_vec())
 }
 
+/// The ciphertext with the byte at `at` XORed by `mask`, as an attacker
+/// tampers with it on the wire. An index past the end changes nothing.
+fn flipped(ciphertext: &Ciphertext, at: usize, mask: u8) -> Ciphertext {
+    let mut bytes = ciphertext.as_bytes().to_vec();
+    if let Some(byte) = bytes.get_mut(at) {
+        *byte ^= mask;
+    }
+    Ciphertext::new(bytes)
+}
+
 fn fixed_doc_key() -> DocumentKey {
     DocumentKey::from_array([0x11; 32])
 }
@@ -73,7 +83,7 @@ fn an_envelope_debug_form_prints_no_byte_of_it() {
     )
     .unwrap();
     // Bytes no length or field name can spell, so a match is a leak.
-    sealed.ciphertext = Ciphertext(vec![0xAB; 7]);
+    sealed.ciphertext = Ciphertext::new(vec![0xAB; 7]);
     sealed.nonce = FixedBytes::from_array([0xCD; aead::NONCE_LEN]);
     let shown = format!("{sealed:?}");
     assert_eq!(shown, "Sealed { ciphertext_len: 7, .. }");
@@ -88,7 +98,7 @@ fn tampered_ciphertext_fails() {
     let aad = &Aad::of(b"aad");
 
     let mut sealed = envelope::seal(&secret(b"payload"), aad, &doc_key, &signing).unwrap();
-    sealed.ciphertext.0[0] ^= 0xFF;
+    sealed.ciphertext = flipped(&sealed.ciphertext, 0, 0xFF);
     // Signature covers the ciphertext, so this trips the signature check first.
     assert!(matches!(
         envelope::open(&sealed, aad, &doc_key, &author),
@@ -150,7 +160,7 @@ fn every_seal_draws_a_fresh_nonce() {
     let nonces: std::collections::HashSet<FixedBytes<Nonce>> =
         sealed.iter().map(|s| s.nonce).collect();
     let ciphertexts: std::collections::HashSet<&[u8]> =
-        sealed.iter().map(|s| s.ciphertext.0.as_slice()).collect();
+        sealed.iter().map(|s| s.ciphertext.as_bytes()).collect();
     assert_eq!(nonces.len(), sealed.len());
     assert_eq!(ciphertexts.len(), sealed.len());
 }
@@ -169,7 +179,7 @@ fn the_signature_is_checked_before_the_tag_and_the_cipher() {
         FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"aad");
     let mut forged = envelope::seal(&secret(b"payload"), aad, &other_key, &signing).unwrap();
-    forged.ciphertext.0[0] ^= 0xFF;
+    forged.ciphertext = flipped(&forged.ciphertext, 0, 0xFF);
     let resign = |sealed: &mut envelope::Sealed| {
         sealed.signature = signature::sign(
             &signing,
@@ -431,9 +441,7 @@ fn the_log_anchor_travels_sealed_with_the_key() {
 
     // A flipped byte of the sealed anchor fails the tag: nobody swaps it.
     let mut tampered = anchored;
-    if let Some(byte) = tampered.ciphertext.0.get_mut(40) {
-        *byte ^= 1;
-    }
+    tampered.ciphertext = flipped(&tampered.ciphertext, 40, 1);
     assert!(ecdh::unwrap_anchored(&bob, &alice_pub, &tampered).is_err());
 }
 
@@ -569,13 +577,13 @@ fn argon2_deterministic() {
 
 #[test]
 fn blake2_chain_hash() {
-    let snapshot = Ciphertext(b"snapshot".to_vec());
+    let snapshot = Ciphertext::new(b"snapshot".to_vec());
     let genesis = hash::chain_hash(None, &snapshot);
     assert_eq!(genesis, hash::chain_hash(None, &snapshot));
     // The parent is part of the link: a different parent breaks the chain.
     let child = hash::chain_hash(Some(&genesis), &snapshot);
     assert_ne!(child, genesis);
-    let other = hash::chain_hash(None, &Ciphertext(b"snapshoT".to_vec()));
+    let other = hash::chain_hash(None, &Ciphertext::new(b"snapshoT".to_vec()));
     assert_ne!(child, hash::chain_hash(Some(&other), &snapshot));
 }
 
@@ -590,7 +598,7 @@ fn the_keyless_digests_keep_their_bytes() {
     let file = ambre_core::Payload::<ambre_core::PickedContainer>::new(b"file".to_vec());
     assert_eq!(hash::file_digest(&file).as_array()[..], full[..32]);
     assert_eq!(
-        hash::chain_hash(None, &Ciphertext(b"file".to_vec())).as_array(),
+        hash::chain_hash(None, &Ciphertext::new(b"file".to_vec())).as_array(),
         hash::file_digest(&file).as_array()
     );
 }
@@ -702,7 +710,7 @@ proptest! {
         let mut sealed = envelope::seal(&secret(&data), aad, &doc_key, &signing).unwrap();
         let mask = 1u8 << bit;
         match idx {
-            0 => sealed.ciphertext.0[0] ^= mask,
+            0 => sealed.ciphertext = flipped(&sealed.ciphertext, 0, mask),
             1 => {
                 let mut tag = *sealed.commitment_tag.as_array();
                 tag[0] ^= mask;
@@ -949,7 +957,7 @@ fn golden(hex: &str) -> Vec<u8> {
 fn golden_envelope() -> (FixedBytes<Nonce>, Ciphertext, Aad) {
     (
         FixedBytes::from_array([0x07; 24]),
-        Ciphertext(b"a sealed body".to_vec()),
+        Ciphertext::new(b"a sealed body".to_vec()),
         Aad::of(b"public-data"),
     )
 }
@@ -1008,7 +1016,8 @@ fn the_chain_hash_and_the_keyless_digests_keep_their_bytes() {
         hash::chain_hash(None, &snapshot).as_slice().to_vec(),
         headless
     );
-    let file = ambre_core::Payload::<ambre_core::PickedContainer>::new(snapshot.0.clone());
+    let file =
+        ambre_core::Payload::<ambre_core::PickedContainer>::new(snapshot.as_bytes().to_vec());
     assert_eq!(hash::file_digest(&file).as_array().to_vec(), headless);
 }
 

@@ -291,10 +291,10 @@ fn logic_event_roundtrips_through_postcard() {
     roundtrip_event(&LogicEvent::RemoteUpdate {
         document_id: doc,
         delta: ambre_bus::SignedDelta {
-            seq: ambre_bus::Seq(8),
+            seq: ambre_bus::Seq::new(8),
             payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![3, 1, 4, 1, 5, 9]),
             nonce: ambre_core::FixedBytes::from_array([2; 16]),
-            peer: ambre_core::PeerId(7),
+            peer: ambre_core::PeerId::new(7),
             user: Some(Id::<User>::from_bytes([1; 16])),
             summary: Some(ambre_bus::ActivitySummary {
                 kind: ambre_bus::ActivityKind::Content,
@@ -306,7 +306,7 @@ fn logic_event_roundtrips_through_postcard() {
     });
     roundtrip_event(&LogicEvent::SessionIdentity {
         document_id: doc,
-        peer: ambre_core::PeerId(7),
+        peer: ambre_core::PeerId::new(7),
         entry: an_entry(8),
         nonce: ambre_core::FixedBytes::from_array([9; 16]),
     });
@@ -453,10 +453,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
     let user = Id::<User>::mint();
     let snapshot = Id::<Snapshot>::genesis(doc);
     let delta = SignedDelta {
-        seq: ambre_bus::Seq(3),
+        seq: ambre_bus::Seq::new(3),
         payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![1, 2, 255]),
         nonce: FixedBytes::from_array([4; 16]),
-        peer: ambre_core::PeerId(9),
+        peer: ambre_core::PeerId::new(9),
         user: Some(user),
         summary: None,
     };
@@ -475,7 +475,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::CloseDocument { document_id: doc },
         SyncCommand::ReleaseDocument {
             document_id: doc,
-            applied_seq: ambre_bus::Seq(12),
+            applied_seq: ambre_bus::Seq::new(12),
         },
         SyncCommand::SendUpdate {
             document_id: doc,
@@ -495,7 +495,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         SyncCommand::SendSnapshot {
             document_id: doc,
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![1; 4]),
-            covered_seq: ambre_bus::Seq(40),
+            covered_seq: ambre_bus::Seq::new(40),
         },
         SyncCommand::SnapshotVerdict {
             document_id: doc,
@@ -503,7 +503,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             purpose: SnapshotPurpose::Confirm,
             verdict: SnapshotVerdict::Match {
                 extras: vec![(
-                    ambre_core::PeerId(41),
+                    ambre_core::PeerId::new(41),
                     ambre_core::PeerEntryBytes::new(vec![2, 3]),
                 )],
             },
@@ -562,7 +562,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             lease: Id::<Lease>::mint(),
-            horizon: ambre_bus::Seq(42),
+            horizon: ambre_bus::Seq::new(42),
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![4; 3]),
         },
         SyncCommand::TakeFoldLease {
@@ -573,21 +573,21 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             channel_id: chan,
             segment,
             lease: Id::<Lease>::mint(),
-            horizon: ambre_bus::Seq(42),
-            amendments_seq: ambre_bus::Seq(7),
+            horizon: ambre_bus::Seq::new(42),
+            amendments_seq: ambre_bus::Seq::new(7),
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![5; 3]),
         },
         SyncCommand::WatchSegment { segment, meta },
         SyncCommand::WatchThread {
             thread: doc,
             meta,
-            after: Seq(3),
+            after: Seq::new(3),
         },
         SyncCommand::WatchChannel {
             channel_id: chan,
             meta,
-            meta_last: Some(Seq(2)),
-            documents: vec![(doc, Some(Seq(3))), (doc, None)],
+            meta_last: Some(Seq::new(2)),
+            documents: vec![(doc, Some(Seq::new(3))), (doc, None)],
         },
         SyncCommand::DeleteChannel { channel_id: chan },
         SyncCommand::LeaveChannel { channel_id: chan },
@@ -610,7 +610,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             finals: Vec::new(),
         },
         SyncCommand::MoveReadCursors {
-            cursors: vec![(segment, Seq(4))],
+            cursors: vec![(segment, Seq::new(4))],
         },
         SyncCommand::MarkThreadRead { thread: doc },
         SyncCommand::MarkAllRead,
@@ -627,7 +627,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::SessionIdentity {
             document_id: doc,
-            peer: ambre_core::PeerId(9),
+            peer: ambre_core::PeerId::new(9),
             entry: an_entry(3),
             nonce: FixedBytes::from_array([1; 16]),
         },
@@ -642,12 +642,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::RemoteSnapshot {
             document_id: doc,
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![9; 3]),
-            covered_seq: ambre_bus::Seq(30),
+            covered_seq: ambre_bus::Seq::new(30),
         },
         LogicEvent::PendingSnapshot {
             document_id: doc,
             snapshot_id: snapshot,
-            covered_seq: ambre_bus::Seq(31),
+            covered_seq: ambre_bus::Seq::new(31),
             payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![4]),
             purpose: SnapshotPurpose::Open,
         },
@@ -728,8 +728,8 @@ fn every_envelope_variant_roundtrips_through_postcard() {
                 document_id: segment.document_id(),
                 kind: ChannelDocumentKind::Segment,
                 active: ambre_bus::Activity::Active,
-                read: Seq(2),
-                last: Some(Seq(5)),
+                read: Seq::new(2),
+                last: Some(Seq::new(5)),
             }],
         },
         LogicEvent::ChannelCreated {
@@ -781,8 +781,8 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             answer: LeaseAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_bus::Seq(42),
-                expires_in: ambre_core::Millis(30_000),
+                horizon: ambre_bus::Seq::new(42),
+                expires_in: ambre_core::Millis::new(30_000),
             },
         },
         LogicEvent::SegmentFinalized {
@@ -800,10 +800,10 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             answer: FoldAnswer::Granted {
                 lease: Id::<Lease>::mint(),
-                horizon: ambre_bus::Seq(42),
+                horizon: ambre_bus::Seq::new(42),
                 amendments: Id::<Document>::mint(),
-                amendments_seq: ambre_bus::Seq(7),
-                expires_in: ambre_core::Millis(30_000),
+                amendments_seq: ambre_bus::Seq::new(7),
+                expires_in: ambre_core::Millis::new(30_000),
             },
         },
         LogicEvent::SegmentFolded {
@@ -861,7 +861,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             metas: vec![ChannelMeta {
                 channel_id: chan,
                 meta: Id::<Meta>::from_document(doc),
-                last: Some(Seq(5)),
+                last: Some(Seq::new(5)),
             }],
         },
         LogicEvent::MeetingParticipantJoined {
@@ -951,7 +951,7 @@ fn request_id_echo_is_preserved_across_the_hop() {
             invitee: Id::<User>::mint(),
             role: Role::Editor,
             expect_exchange_pub_key: ambre_core::FixedBytes::from_array([0u8; 32]),
-            now: Timestamp(0),
+            now: Timestamp::new(0),
         },
     };
     let bytes = postcard::to_allocvec(&cmd).unwrap();
@@ -1005,7 +1005,7 @@ fn read_only_and_local_commands_are_not_mutating() {
         // Toile: ephemeral only -- a viewer still shows a cursor (`toile-presence`).
         AppCommand::Toile(ToileCommand::Presence {
             payload: PresencePayload::default(),
-            now: ambre_core::PageTime(0.0),
+            now: ambre_core::PageTime::new(0.0),
         }),
     ];
     for cmd in cases {
@@ -1036,7 +1036,7 @@ fn writing_commands_are_mutating() {
         // Reacting writes a per-user CRDT entry (`toile-reactions`): not presence.
         AppCommand::Toile(ToileCommand::React {
             target: Id::<Element>::mint_from(
-                ambre_core::PeerId(1),
+                ambre_core::PeerId::new(1),
                 ambre_bus::app::toile::IdCounter::new(1),
             ),
             reaction: None,

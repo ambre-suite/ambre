@@ -6,7 +6,7 @@ use ambre_protocol::messages::Signature;
 
 /// The delay before Sync sends again the first delta the relay failed to
 /// sequence. Each later failure doubles it (`ambre-spec-budgets.md` section 8).
-const RESEND_RETRY_BASE: ambre_core::Millis = ambre_core::Millis(1_000);
+const RESEND_RETRY_BASE: ambre_core::Millis = ambre_core::Millis::new(1_000);
 
 /// The failures Sync sends again after. One more holds the document
 /// (`ambre-spec-budgets.md` section 8, `SYNC-159`).
@@ -90,7 +90,7 @@ impl SyncState {
         if !doc_state.first_arrival(seq) {
             tracing::debug!(
                 "[Sync] dropping a second copy of seq={} doc={document_id}",
-                seq.0
+                seq.get()
             );
             return None;
         }
@@ -114,9 +114,9 @@ impl SyncState {
             let opened = doc_state.open_signed_update(&update, seq);
             tracing::info!(
                 "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
-                seq.0,
+                seq.get(),
                 update.public_data.clock.0,
-                opened.as_ref().map_or(0, |d| d.payload.len().0),
+                opened.as_ref().map_or(0, |d| d.payload.len().get()),
             );
             return Some(opened);
         }
@@ -128,7 +128,7 @@ impl SyncState {
             .push((seq, update));
         tracing::debug!(
             "[Sync] quarantined update doc={document_id} seq={} snapshot={snapshot_id:?}",
-            seq.0,
+            seq.get(),
         );
         self.enforce_quarantine_bounds(document_id);
         None
@@ -903,7 +903,7 @@ impl SyncState {
                 .documents
                 .get(&document_id)
                 .map(|d| d.last_seq)
-                .unwrap_or(Seq(0));
+                .unwrap_or(Seq::new(0));
             self.ws_send(&WsClientMsg::Subscribe { document_id });
             self.ws_send(&WsClientMsg::RequestMissing {
                 document_id,
@@ -1802,7 +1802,7 @@ mod tests {
         let refused = crate::http::HttpError::refused(
             crate::http::Method::Get,
             &crate::http::Target::relay("https://relay.test/api/documents/d/members"),
-            ambre_core::HttpStatus(403),
+            ambre_core::HttpStatus::new(403),
             Some(ambre_core::RefusalCode::Forbidden),
         );
         let answer = MembersAnswer::<()>::classify(Err(refused.clone()));
@@ -1828,7 +1828,7 @@ mod tests {
         let refused = crate::http::HttpError::refused(
             crate::http::Method::Get,
             &at,
-            ambre_core::HttpStatus(403),
+            ambre_core::HttpStatus::new(403),
             Some(ambre_core::RefusalCode::Forbidden),
         );
         assert_eq!(
@@ -1840,7 +1840,7 @@ mod tests {
         let down = crate::http::HttpError::refused(
             crate::http::Method::Get,
             &at,
-            ambre_core::HttpStatus(503),
+            ambre_core::HttpStatus::new(503),
             None,
         );
         assert_eq!(members_failure_cause(&down), OpenFailure::Transient);
@@ -2022,7 +2022,11 @@ mod tests {
         let under = |key: &DocumentKey| {
             make_update(document_id, snapshot, Clock(1), b"d", key, &signing_key)
         };
-        let opened = |key: &DocumentKey| doc_state.open_signed_update(&under(key), Seq(1)).unwrap();
+        let opened = |key: &DocumentKey| {
+            doc_state
+                .open_signed_update(&under(key), Seq::new(1))
+                .unwrap()
+        };
         assert_eq!(opened(&new_key).payload, b"d");
         assert_eq!(opened(&old_key).payload, b"d");
         assert_eq!(
@@ -2059,7 +2063,7 @@ mod tests {
             doc_key: current.clone(),
             snapshot_payload: Some(blob),
             snapshot_id,
-            covered_seq: Seq(3),
+            covered_seq: Seq::new(3),
             held_snapshot: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
@@ -2076,7 +2080,10 @@ mod tests {
         let doc_state = &state.documents[&doc];
         let old = make_update(doc, snapshot_id, Clock(1), b"d", &keys[1], &sk);
         assert_eq!(
-            doc_state.open_signed_update(&old, Seq(1)).unwrap().payload,
+            doc_state
+                .open_signed_update(&old, Seq::new(1))
+                .unwrap()
+                .payload,
             b"d"
         );
         assert_eq!(doc_state.doc_key.id(), current.id());
@@ -2121,7 +2128,7 @@ mod tests {
         let (mut state, rx, doc, key, sk, snap) = setup();
         let update = make_update(doc, snap, Clock(1), b"hello", &key, &sk);
 
-        state.receive_update(Seq(1), update);
+        state.receive_update(Seq::new(1), update);
 
         let events = drain(&rx);
         assert_eq!(events.len(), 1);
@@ -2157,9 +2164,9 @@ mod tests {
         let body = pipeline::update_body(&TEST_NONCE, Some(&summary), &b"liked".to_vec().into())
             .expect("bounds");
         let sealed = pipeline::seal_update(&body, public_data, &key, &sk).expect("seal");
-        state.receive_update(Seq(1), sealed);
+        state.receive_update(Seq::new(1), sealed);
         state.receive_update(
-            Seq(2),
+            Seq::new(2),
             make_update(doc, snap, Clock(2), b"plain", &key, &sk),
         );
         let handed: Vec<_> = drain(&rx)
@@ -2195,12 +2202,12 @@ mod tests {
             .unwrap()
             .set_signing_keys([(signer, alice)]);
         state.receive_update(
-            Seq(1),
+            Seq::new(1),
             make_update(doc, snap, Clock(1), b"hello", &key, &sk),
         );
         let stranger = MasterSeed::generate().derive_signing_key();
         state.receive_update(
-            Seq(2),
+            Seq::new(2),
             make_update(doc, snap, Clock(1), b"hi", &key, &stranger),
         );
 
@@ -2212,7 +2219,7 @@ mod tests {
             })
             .collect();
         let expected = SignedDelta {
-            seq: ambre_bus::Seq(1),
+            seq: ambre_bus::Seq::new(1),
             payload: b"hello".to_vec().into(),
             nonce: TEST_NONCE,
             peer: ambre_crypto::peer::derive_peer_id(&signer, &TEST_NONCE),
@@ -2269,7 +2276,7 @@ mod tests {
         };
         let short = UpdateFrame::from_bytes(vec![6; 16]);
         let short = pipeline::seal_update(&short, public_data, &key, &sk).unwrap();
-        state.receive_update(Seq(1), short);
+        state.receive_update(Seq::new(1), short);
         let events = drain(&rx);
         assert!(matches!(
             events.as_slice(),
@@ -2286,7 +2293,7 @@ mod tests {
         let unknown = Id::<Snapshot>::mint();
         let update = make_update(doc, unknown, Clock(1), b"later", &key, &sk);
 
-        state.receive_update(Seq(1), update);
+        state.receive_update(Seq::new(1), update);
 
         assert!(drain(&rx).is_empty(), "nothing should be delivered yet");
         assert_eq!(state.documents[&doc].quarantine_len(), 1);
@@ -2298,11 +2305,11 @@ mod tests {
         let parent = Id::<Snapshot>::mint();
         // Arrive out of clock order: clock 5 then clock 2.
         state.receive_update(
-            Seq(1),
+            Seq::new(1),
             make_update(doc, parent, Clock(5), b"five", &key, &sk),
         );
         state.receive_update(
-            Seq(2),
+            Seq::new(2),
             make_update(doc, parent, Clock(2), b"two", &key, &sk),
         );
         assert!(drain(&rx).is_empty());
@@ -2338,11 +2345,11 @@ mod tests {
         );
         let parent = Id::<Snapshot>::mint();
         state.receive_update(
-            Seq(1),
+            Seq::new(1),
             make_update(doc, parent, Clock(5), b"five", &key, &sk),
         );
         state.receive_update(
-            Seq(2),
+            Seq::new(2),
             make_update(doc, parent, Clock(2), b"two", &key, &sk),
         );
         assert!(drain(&rx).is_empty(), "an unknown parent holds both");
@@ -2366,7 +2373,7 @@ mod tests {
         let parent = Id::<Snapshot>::mint();
         for clock in 1..=(QUARANTINE_LIMIT as u64) {
             state.receive_update(
-                Seq(clock),
+                Seq::new(clock),
                 make_update(doc, parent, Clock(clock), b"x", &key, &sk),
             );
         }
@@ -2392,7 +2399,7 @@ mod tests {
         for (i, clock) in clocks.enumerate() {
             let parent = parents[i % 2];
             state.receive_update(
-                Seq(i as u64 + 1),
+                Seq::new(i as u64 + 1),
                 make_update(doc, parent, Clock(clock), b"x", &key, &sk),
             );
         }
@@ -2432,7 +2439,7 @@ mod tests {
             doc_key: key,
             snapshot_payload: Some(blob),
             snapshot_id,
-            covered_seq: Seq(1500),
+            covered_seq: Seq::new(1500),
             held_snapshot: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
@@ -2443,7 +2450,7 @@ mod tests {
         });
 
         // The replay cursor advanced to the snapshot's covered seq.
-        assert_eq!(state.documents[&doc].last_seq, Seq(1500));
+        assert_eq!(state.documents[&doc].last_seq, Seq::new(1500));
         // The downloaded snapshot id is registered as a known parent.
         assert!(state.documents[&doc].known_snapshots.contains(&snapshot_id));
 
@@ -2454,7 +2461,7 @@ mod tests {
         });
         assert_eq!(
             after,
-            Some(Seq(1500)),
+            Some(Seq::new(1500)),
             "RequestMissing must skip the history folded into the snapshot"
         );
     }
@@ -2472,7 +2479,7 @@ mod tests {
             doc_key: key,
             snapshot_payload: None,
             snapshot_id: Id::<Snapshot>::genesis(doc),
-            covered_seq: Seq(0),
+            covered_seq: Seq::new(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
@@ -2482,13 +2489,13 @@ mod tests {
             links: Vec::new(),
         });
 
-        assert_eq!(state.documents[&doc].last_seq, Seq(0));
+        assert_eq!(state.documents[&doc].last_seq, Seq::new(0));
         let msgs = drain_ws(&ws_rx);
         let after = msgs.iter().find_map(|m| match m {
             WsClientMsg::RequestMissing { after_seq, .. } => Some(*after_seq),
             _ => None,
         });
-        assert_eq!(after, Some(Seq(0)));
+        assert_eq!(after, Some(Seq::new(0)));
     }
 
     /// Count of `DocumentReady` events for `doc` in a drained event list.
@@ -2818,7 +2825,7 @@ mod tests {
             doc_key: key,
             snapshot_payload: Some(blob),
             snapshot_id,
-            covered_seq: Seq(0),
+            covered_seq: Seq::new(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
@@ -2880,10 +2887,10 @@ mod tests {
             doc_key: key.clone(),
             snapshot_payload: Some(snapshot_blob(doc, reference, b"reference", &key, &sk)),
             snapshot_id: reference,
-            covered_seq: Seq(3),
+            covered_seq: Seq::new(3),
             held_snapshot: Some(HeldSnapshot {
                 snapshot_id: held,
-                covered_seq: Seq(9),
+                covered_seq: Seq::new(9),
                 blob: snapshot_blob(doc, held, b"latest", &key, &sk),
             }),
             doc_type: DocType::Trame,
@@ -2910,8 +2917,8 @@ mod tests {
         assert!(
             after_replay.iter().any(|e| matches!(
                 e,
-                LogicEvent::PendingSnapshot { payload, covered_seq: ambre_bus::Seq(9), purpose: SnapshotPurpose::Open, .. }
-                    if payload == b"latest"
+                LogicEvent::PendingSnapshot { payload, covered_seq, purpose: SnapshotPurpose::Open, .. }
+                    if payload == b"latest" && covered_seq.get() == 9
             )),
             "the held snapshot is checked after the replay: {after_replay:?}"
         );
@@ -2937,7 +2944,7 @@ mod tests {
             doc_key: key,
             snapshot_payload: None,
             snapshot_id: Id::<Snapshot>::genesis(doc),
-            covered_seq: Seq(0),
+            covered_seq: Seq::new(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
@@ -2977,7 +2984,7 @@ mod tests {
             doc_key: key,
             snapshot_payload: None,
             snapshot_id: Id::<Snapshot>::genesis(doc),
-            covered_seq: Seq(0),
+            covered_seq: Seq::new(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
@@ -3004,7 +3011,7 @@ mod tests {
             doc_key: key,
             snapshot_payload: None,
             snapshot_id: Id::<Snapshot>::genesis(doc),
-            covered_seq: Seq(0),
+            covered_seq: Seq::new(0),
             held_snapshot: None,
             doc_type: DocType::Trame,
             existence: crate::Existence::OnRelay,
@@ -3041,7 +3048,7 @@ mod tests {
         // Session keys are required to reach the seal step.
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
 
-        state.handle_send_snapshot(doc, b"crdt-snapshot-state".to_vec().into(), Seq(0));
+        state.handle_send_snapshot(doc, b"crdt-snapshot-state".to_vec().into(), Seq::new(0));
 
         // No event_tx in this setup: the upload path is skipped, the current
         // snapshot id is unchanged (no SnapshotUploaded round-trip).
@@ -3056,13 +3063,13 @@ mod tests {
         let (mut state, rx, doc, key, sk, _snap) = setup();
         let announced = Id::<Snapshot>::mint();
         state.receive_update(
-            Seq(1),
+            Seq::new(1),
             make_update(doc, announced, Clock(1), b"after", &key, &sk),
         );
         state.handle_ws_message(WsServerMsg::SnapshotAvailable {
             document_id: doc,
             snapshot_id: announced,
-            covered_seq: Seq(0),
+            covered_seq: Seq::new(0),
         });
         assert!(
             drain(&rx).is_empty(),
@@ -3074,7 +3081,7 @@ mod tests {
         state.handle_sync_event(SyncEvent::SnapshotFetched {
             document_id: doc,
             snapshot_id: announced,
-            covered_seq: Seq(0),
+            covered_seq: Seq::new(0),
             blob: Some(blob),
         });
         let events = drain(&rx);
@@ -3109,14 +3116,14 @@ mod tests {
             let blob = snapshot_blob(doc, held, b"base", &key, &sk);
             state.documents.get_mut(&doc).expect("open").held_snapshot = Some(HeldSnapshot {
                 snapshot_id: held,
-                covered_seq: Seq(7),
+                covered_seq: Seq::new(7),
                 blob,
             });
             state.check_held_snapshot(doc);
             assert!(matches!(
                 &drain(&rx)[..],
-                [LogicEvent::PendingSnapshot { payload, covered_seq: ambre_bus::Seq(7), purpose: SnapshotPurpose::Open, .. }]
-                    if payload == b"base"
+                [LogicEvent::PendingSnapshot { payload, covered_seq, purpose: SnapshotPurpose::Open, .. }]
+                    if payload == b"base" && covered_seq.get() == 7
             ));
 
             let author = if signer { &sk } else { &mallory };
@@ -3137,9 +3144,9 @@ mod tests {
                 assert!(matches!(
                     &events[..],
                     [
-                        LogicEvent::RemoteSnapshot { payload, covered_seq: ambre_bus::Seq(7), .. },
+                        LogicEvent::RemoteSnapshot { payload, covered_seq, .. },
                         LogicEvent::DocumentReady { .. },
-                    ] if payload == b"base"
+                    ] if payload == b"base" && covered_seq.get() == 7
                 ));
                 assert_eq!(state.documents[&doc].current_snapshot_id, held);
             } else {
@@ -3168,7 +3175,7 @@ mod tests {
             state.signing_key = Some(reporter.clone());
             let pending = Id::<Snapshot>::mint();
             let blob = snapshot_blob(doc, pending, b"base", &key, &author);
-            state.adopt_fetched_snapshot(doc, pending, Seq(3), Some(blob));
+            state.adopt_fetched_snapshot(doc, pending, Seq::new(3), Some(blob));
             drain(&rx);
             let expected = match verdict {
                 SnapshotVerdict::Match { .. } => Some("confirm"),
@@ -3240,7 +3247,7 @@ mod tests {
             SnapshotUpload {
                 document_id: doc,
                 author_pubkey: FixedBytes::from_array(sk.verifying_key().to_bytes()),
-                covered_seq: ambre_bus::Seq(3),
+                covered_seq: ambre_bus::Seq::new(3),
                 blob: pipeline::snapshot_blob(
                     &ambre_core::Payload::new(b"base".to_vec()),
                     public_data,
@@ -3314,7 +3321,7 @@ mod tests {
             state.handle_sync_event(SyncEvent::SnapshotFetched {
                 document_id: doc,
                 snapshot_id: announced,
-                covered_seq: Seq(0),
+                covered_seq: Seq::new(0),
                 blob,
             });
         }
@@ -3338,7 +3345,7 @@ mod tests {
         let parent = Id::<Snapshot>::mint();
         for clock in 1..=(QUARANTINE_ALERT as u64 + 50) {
             state.receive_update(
-                Seq(clock),
+                Seq::new(clock),
                 make_update(doc, parent, Clock(clock), b"x", &key, &sk),
             );
         }
@@ -3356,7 +3363,7 @@ mod tests {
         let first = QUARANTINE_ALERT as u64 + 50;
         for clock in 1..=(QUARANTINE_ALERT as u64) {
             let update = make_update(doc, other, Clock(clock), b"x", &key, &sk);
-            state.receive_update(Seq(first + clock), update);
+            state.receive_update(Seq::new(first + clock), update);
         }
         assert_eq!(asks(&ws_rx), 1, "one request for the next gap");
     }
@@ -3545,7 +3552,7 @@ mod tests {
                 channel,
                 segment,
                 Id::<Lease>::mint(),
-                ambre_bus::Seq(3),
+                ambre_bus::Seq::new(3),
                 &ambre_core::Payload::new(b"s".to_vec()),
             );
         };
@@ -3684,7 +3691,7 @@ mod tests {
         let resend = fail_sequencing(&mut state, doc, sent[0]);
         state.handle_ws_message(WsServerMsg::ReplayStopped {
             document_id: doc,
-            after_seq: Seq(0),
+            after_seq: Seq::new(0),
         });
         let replay = state.replay_ticket.latest();
         assert!(drain_ws(&ws_rx).is_empty(), "no timer fired yet");
@@ -3725,7 +3732,7 @@ mod tests {
         assert_eq!(resend_retry_delay(failure(1)), Some(RESEND_RETRY_BASE));
         assert_eq!(
             resend_retry_delay(failure(2)),
-            Some(ambre_core::Millis(2 * RESEND_RETRY_BASE.0))
+            Some(ambre_core::Millis::new(2 * RESEND_RETRY_BASE.get()))
         );
         assert_eq!(resend_retry_delay(RESEND_RETRY_LIMIT.incremented()), None);
 
@@ -3776,7 +3783,7 @@ mod tests {
         assert_eq!(state.documents[&doc].rekey.sent_len(), 1);
 
         let theirs = make_update(doc, snap, Clock(1), b"other session", &key, &sk);
-        state.receive_update(Seq(1), theirs);
+        state.receive_update(Seq::new(1), theirs);
         assert_eq!(
             state.documents[&doc].rekey.sent_len(),
             1,
@@ -3786,7 +3793,7 @@ mod tests {
         let Some(WsClientMsg::Update(echo)) = ours.into_iter().next() else {
             panic!("an update left");
         };
-        state.receive_update(Seq(2), echo);
+        state.receive_update(Seq::new(2), echo);
         assert_eq!(state.documents[&doc].rekey.sent_len(), 0);
     }
 
@@ -3886,7 +3893,10 @@ mod tests {
         assert_eq!(cached, vec![k1.id()]);
         let late = make_update(doc, snap, Clock(1), b"late", &k1, &sk);
         assert_eq!(
-            doc_state.open_signed_update(&late, Seq(1)).unwrap().payload,
+            doc_state
+                .open_signed_update(&late, Seq::new(1))
+                .unwrap()
+                .payload,
             b"late"
         );
         let departed = drain(&rx).into_iter().any(|e| {
@@ -3964,7 +3974,7 @@ mod tests {
 
         let mut messages = Vec::new();
         for (seq, update) in [(1, unsigned), (2, under_stranger), (3, corrupt)] {
-            state.receive_update(Seq(seq), update);
+            state.receive_update(Seq::new(seq), update);
             match drain(&rx).as_slice() {
                 [
                     LogicEvent::SyncWarning {
@@ -3995,7 +4005,7 @@ mod tests {
                 doc_key: DocumentKey::generate(),
                 snapshot_payload: None,
                 snapshot_id: Id::<Snapshot>::genesis(doc),
-                covered_seq: Seq(0),
+                covered_seq: Seq::new(0),
                 held_snapshot: None,
                 doc_type: DocType::Trame,
                 existence: crate::Existence::OnRelay,
@@ -4034,8 +4044,14 @@ mod tests {
             doc,
             SyncDocumentState::new(doc, key.clone(), DocType::Trame, crate::Existence::OnRelay),
         );
-        state.receive_update(Seq(1), make_update(doc, snap, Clock(1), b"a", &key, &sk));
-        state.receive_update(Seq(2), make_update(doc, snap, Clock(2), b"b", &key, &sk));
+        state.receive_update(
+            Seq::new(1),
+            make_update(doc, snap, Clock(1), b"a", &key, &sk),
+        );
+        state.receive_update(
+            Seq::new(2),
+            make_update(doc, snap, Clock(2), b"b", &key, &sk),
+        );
         state.handle_send_update(doc, b"c".to_vec());
         assert_eq!(
             sent_updates(&ws_rx, &[&key]),
@@ -4065,7 +4081,7 @@ mod tests {
                 } else {
                     Id::<Snapshot>::genesis(doc)
                 },
-                covered_seq: Seq(u64::from(with_snapshot)),
+                covered_seq: Seq::new(u64::from(with_snapshot)),
                 held_snapshot: None,
                 doc_type: DocType::Trame,
                 existence: crate::Existence::OnRelay,
@@ -4094,11 +4110,11 @@ mod tests {
     fn a_reconnect_replay_applies_nothing_twice() {
         let (mut state, rx, doc, key, sk, snap) = setup();
         let update = |seq: u64, parent| SeqUpdate {
-            seq: Seq(seq),
+            seq: Seq::new(seq),
             update: make_update(doc, parent, Clock(seq), &[seq as u8], &key, &sk),
         };
         state.handle_ws_message(WsServerMsg::Update {
-            seq: Seq(3),
+            seq: Seq::new(3),
             update: update(3, snap).update,
         });
         state.handle_ws_message(WsServerMsg::MissingUpdates {
@@ -4118,8 +4134,8 @@ mod tests {
         assert_eq!(delivered, [vec![3], vec![2]]);
 
         let parent = Id::<Snapshot>::mint();
-        state.receive_update(Seq(9), update(9, parent).update);
-        state.receive_update(Seq(9), update(9, parent).update);
+        state.receive_update(Seq::new(9), update(9, parent).update);
+        state.receive_update(Seq::new(9), update(9, parent).update);
         assert_eq!(state.documents[&doc].quarantine_len(), 1);
     }
 
@@ -4130,7 +4146,7 @@ mod tests {
         let (mut state, rx, doc, key, sk, snap) = setup();
         let updates = (1..=5)
             .map(|seq| SeqUpdate {
-                seq: Seq(seq),
+                seq: Seq::new(seq),
                 update: make_update(doc, snap, Clock(seq), &[seq as u8], &key, &sk),
             })
             .collect();
@@ -4162,11 +4178,11 @@ mod tests {
         state.set_mock_ws(ws_tx);
         let peer = MasterSeed::generate().derive_signing_key();
         state.receive_update(
-            Seq(1),
+            Seq::new(1),
             make_update(doc, snap, Clock(41), b"mine", &key, &sk),
         );
         state.receive_update(
-            Seq(2),
+            Seq::new(2),
             make_update(doc, snap, Clock(99), b"peer", &key, &peer),
         );
         assert_eq!(state.documents[&doc].local_clock, Clock(41));
@@ -4194,7 +4210,7 @@ mod tests {
         let (mut state, rx, doc, _key, sk, _snap) = setup();
         let stranger = DocumentKey::generate();
         let update = make_update(doc, Id::<Snapshot>::mint(), Clock(1), b"x", &stranger, &sk);
-        state.receive_update(Seq(1), update);
+        state.receive_update(Seq::new(1), update);
         assert_eq!(state.documents[&doc].quarantine_len(), 1);
         assert!(drain(&rx).is_empty(), "the arrival opened the update");
     }
@@ -4209,7 +4225,7 @@ mod tests {
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let before = make_update(doc, snap, Clock(1), b"hello", &k1, &sk);
-        state.receive_update(Seq(1), before.clone());
+        state.receive_update(Seq::new(1), before.clone());
         let _ = drain(&rx);
 
         let k2 = DocumentKey::generate();
@@ -4238,7 +4254,7 @@ mod tests {
         assert_eq!(doc_state.doc_key.id(), k2.id());
         assert_eq!(
             doc_state
-                .open_signed_update(&before, Seq(1))
+                .open_signed_update(&before, Seq::new(1))
                 .unwrap()
                 .payload,
             b"hello"
@@ -4410,7 +4426,9 @@ mod tests {
     fn a_refused_frame_is_applied_in_no_part() {
         let (mut state, rx, doc, key, sk, snap) = setup();
         let mut forged = make_update(doc, snap, Clock(2), b"forged", &key, &sk);
-        forged.ciphertext.0[0] ^= 1;
+        let mut bytes = forged.ciphertext.as_bytes().to_vec();
+        bytes[0] ^= 1;
+        forged.ciphertext = ambre_core::Ciphertext::new(bytes);
         let mut unsigned = make_update(doc, snap, Clock(3), b"unsigned", &key, &sk);
         unsigned.signature = FixedBytes::from_array([0; 64]);
         let updates = [
@@ -4421,7 +4439,7 @@ mod tests {
         ]
         .into_iter()
         .map(|(seq, update)| SeqUpdate {
-            seq: Seq(seq),
+            seq: Seq::new(seq),
             update,
         })
         .collect();
@@ -4480,13 +4498,13 @@ mod tests {
         assert_eq!(state.read_up_to(Id::<Document>::mint()), None, "not open");
 
         state.receive_update(
-            Seq(4),
+            Seq::new(4),
             make_update(doc, snap, Clock(1), b"shown", &key, &sk),
         );
-        assert_eq!(state.read_up_to(doc), Some(Seq(4)));
+        assert_eq!(state.read_up_to(doc), Some(Seq::new(4)));
 
         let held = make_update(doc, Id::<Snapshot>::mint(), Clock(2), b"held", &key, &sk);
-        state.receive_update(Seq(5), held);
+        state.receive_update(Seq::new(5), held);
         assert_eq!(state.read_up_to(doc), None, "a held update stays unread");
     }
 }

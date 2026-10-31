@@ -899,14 +899,14 @@ pub(crate) mod tests {
 
     #[test]
     fn a_new_table_holds_one_cell_per_column_in_every_row() {
-        let (state, table) = document_with_table(ambre_core::PeerId(1), 3, 4);
+        let (state, table) = document_with_table(ambre_core::PeerId::new(1), 3, 4);
         assert_eq!(row_lengths(&state, table), vec![4, 4, 4]);
         assert_eq!(state.column_widths(&table).len(), 4);
     }
 
     #[test]
     fn every_table_command_leaves_every_row_one_cell_per_column() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         let first_row = state.grid_of(&table).expect("a table").rows[0];
         for command in [
             ProseCommand::InsertTableRow {
@@ -934,7 +934,8 @@ pub(crate) mod tests {
 
     #[test]
     fn a_table_of_no_row_or_no_column_is_refused() {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document is built");
         for (rows, cols) in [(0, 3), (3, 0)] {
             let outcome = state.handle_command(ProseCommand::InsertTable {
                 parent_id: None,
@@ -955,7 +956,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_region_is_stored_as_two_corners_and_a_stamp_alone() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 3, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 3, 3);
         merge(&mut state, table, (0, 0), (1, 1));
         let tree = doc::blocks(state.document());
         let map = doc::merged_read(&tree, &table).expect("a region map");
@@ -983,7 +984,7 @@ pub(crate) mod tests {
     fn the_regions_that_stand_are_decided_by_the_records_and_the_grid() {
         // Two records, the same grid: the answer is a function of the two, and
         // no text of any cell moves it.
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         merge(&mut state, table, (0, 0), (1, 1));
         let before = state.merged_rects(&table);
         let cell = cell_at(&state, table, 1, 1);
@@ -1000,7 +1001,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_column_insert_splices_one_width_beside_the_cells() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
             col_index: Col::new(1),
@@ -1027,7 +1028,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_column_insert_carrying_no_width_takes_the_default() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 1);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 1, 1);
         state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
             at_col: Col::new(0),
@@ -1041,7 +1042,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_column_insert_past_the_grid_is_refused_and_reported() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         let outcome = state.handle_command(ProseCommand::InsertTableCol {
             table_id: block_id(table),
             at_col: Col::new(3),
@@ -1054,7 +1055,7 @@ pub(crate) mod tests {
 
     #[test]
     fn an_insert_leaves_widths_texts_and_corners_alone() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 3, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 3, 3);
         merge(&mut state, table, (0, 0), (2, 1));
         let corner = cell_at(&state, table, 2, 2);
         type_in(&mut state, corner, "text");
@@ -1085,7 +1086,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_column_delete_removes_one_width_beside_the_cells() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 3);
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
             col_index: Col::new(2),
@@ -1104,7 +1105,7 @@ pub(crate) mod tests {
 
     #[test]
     fn deleting_a_corner_drops_the_region_and_frees_its_cells() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 3, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 3, 3);
         merge(&mut state, table, (0, 1), (1, 2));
         let first_row = state.grid_of(&table).expect("a table").rows[0];
         state.handle_command(ProseCommand::DeleteTableRow {
@@ -1126,7 +1127,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_column_delete_drops_a_region_cornered_in_it() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 3);
         merge(&mut state, table, (0, 0), (1, 1));
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
@@ -1137,7 +1138,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_region_a_delete_crosses_keeps_its_corners_and_narrows() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 3, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 3, 3);
         merge(&mut state, table, (0, 0), (2, 2));
         let regions = state.regions_of(&table);
         let middle = state.grid_of(&table).expect("a table").rows[1];
@@ -1155,7 +1156,7 @@ pub(crate) mod tests {
 
     #[test]
     fn deleting_the_last_column_deletes_the_table() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 1);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 1);
         state.handle_command(ProseCommand::DeleteTableCol {
             table_id: block_id(table),
             col_index: Col::new(0),
@@ -1166,7 +1167,7 @@ pub(crate) mod tests {
 
     #[test]
     fn deleting_the_last_row_deletes_the_table() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 1, 2);
         let row = state.grid_of(&table).expect("a table").rows[0];
         state.handle_command(ProseCommand::DeleteTableRow {
             row_id: block_id(row),
@@ -1176,7 +1177,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_delete_leaves_surviving_widths_and_texts_alone() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 3);
         state.handle_command(ProseCommand::ResizeTableCol {
             table_id: block_id(table),
             col_index: Col::new(0),
@@ -1206,7 +1207,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_resize_rewrites_one_width_and_nothing_else() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 3);
         let cell = cell_at(&state, table, 0, 1);
         type_in(&mut state, cell, "x");
         state.handle_command(ProseCommand::ResizeTableCol {
@@ -1233,7 +1234,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_merge_over_a_ragged_grid_is_refused() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         let cell = cell_at(&state, table, 1, 1);
         state.handle_command(ProseCommand::DeleteBlock {
             block_id: block_id(cell),
@@ -1245,7 +1246,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_merge_over_a_cell_holding_text_is_refused_and_writes_nothing() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         let covered = cell_at(&state, table, 1, 0);
         type_in(&mut state, covered, "in the way");
         let outcome = merge(&mut state, table, (0, 0), (1, 1));
@@ -1256,7 +1257,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_merge_resolves_its_positions_to_two_corner_ids() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 3, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 3, 3);
         // The corners arrive in either order.
         merge(&mut state, table, (2, 2), (1, 1));
         let region = state.regions_of(&table)[0];
@@ -1266,7 +1267,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_merge_supersedes_the_regions_it_overlaps() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 3, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 3, 3);
         merge(&mut state, table, (0, 0), (1, 1));
         merge(&mut state, table, (2, 0), (2, 2));
         merge(&mut state, table, (1, 1), (2, 2));
@@ -1277,7 +1278,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_merge_writes_one_entry_keyed_on_the_anchor() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         merge(&mut state, table, (0, 0), (0, 1));
         let regions = state.regions_of(&table);
         assert_eq!(regions.len(), 1);
@@ -1287,7 +1288,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_merge_of_one_cell_writes_nothing() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         let outcome = merge(&mut state, table, (1, 1), (1, 1));
         assert!(outcome.update.is_none());
         assert!(outcome.display.is_empty());
@@ -1297,7 +1298,7 @@ pub(crate) mod tests {
 
     #[test]
     fn an_unmerge_from_any_cell_of_a_region_removes_it() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         for cell in [(0, 0), (1, 1)] {
             merge(&mut state, table, (0, 0), (1, 1));
             let named = cell_at(&state, table, cell.0, cell.1);
@@ -1310,7 +1311,7 @@ pub(crate) mod tests {
 
     #[test]
     fn an_unmerge_of_a_cell_in_no_region_writes_nothing() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         let cell = cell_at(&state, table, 0, 0);
         let outcome = state.handle_command(ProseCommand::UnmergeTableCell {
             cell_id: block_id(cell),
@@ -1323,7 +1324,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_cell_style_lands_on_the_named_cell_alone() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 1, 2);
         let styled = cell_at(&state, table, 0, 0);
         let other = cell_at(&state, table, 0, 1);
         type_in(&mut state, styled, "text");
@@ -1361,7 +1362,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_bad_width_or_padding_is_refused() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 1, 1);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 1, 1);
         let cell = cell_at(&state, table, 0, 0);
         let style = |padding| ProseCommand::SetCellStyle {
             cell_id: block_id(cell),
@@ -1416,7 +1417,7 @@ pub(crate) mod tests {
 
     #[test]
     fn traversal_lands_on_an_anchor_and_skips_what_it_covers() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 3);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 3);
         merge(&mut state, table, (0, 1), (1, 2));
         let first = cell_at(&state, table, 0, 0);
         let outcome = step(&mut state, first, StepDirection::Forward);
@@ -1433,7 +1434,7 @@ pub(crate) mod tests {
 
     #[test]
     fn stepping_between_cells_writes_nothing() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         let first = cell_at(&state, table, 0, 0);
         let outcome = step(&mut state, first, StepDirection::Forward);
         assert!(outcome.update.is_none());
@@ -1443,7 +1444,7 @@ pub(crate) mod tests {
 
     #[test]
     fn stepping_past_the_last_cell_appends_a_row_and_enters_it() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         let last = cell_at(&state, table, 1, 1);
         type_in(&mut state, last, "end");
         state.handle_command(ProseCommand::ResizeTableCol {
@@ -1469,7 +1470,7 @@ pub(crate) mod tests {
 
     #[test]
     fn a_region_whose_corner_is_gone_is_dropped_by_validation() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         merge(&mut state, table, (0, 0), (1, 1));
         // A delete the table command did not make: the corner goes, and the
         // record stays until a pass settles it.
@@ -1484,7 +1485,7 @@ pub(crate) mod tests {
 
     #[test]
     fn of_two_regions_over_one_cell_the_later_stands() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         merge(&mut state, table, (0, 0), (0, 1));
         let earlier = state.regions_of(&table);
         // A second record over the same cell, written as a peer's concurrent
@@ -1527,10 +1528,14 @@ pub(crate) mod tests {
     /// the standing one is the one dropped.
     #[test]
     fn region_resolution_orders_by_the_lamport_stamp() {
-        let (mut state, table) = document_with_table(ambre_core::PeerId(1), 2, 2);
+        let (mut state, table) = document_with_table(ambre_core::PeerId::new(1), 2, 2);
         merge(&mut state, table, (0, 0), (0, 1));
         let first = state.regions_of(&table)[0];
-        assert!(first.stamp > ambre_core::LamportStamp(0), "{}", first.stamp);
+        assert!(
+            first.stamp > ambre_core::LamportStamp::new(0),
+            "{}",
+            first.stamp
+        );
         let (anchor, extent) = (cell_at(&state, table, 0, 1), cell_at(&state, table, 1, 1));
         let map = state
             .table_attrs(&table)

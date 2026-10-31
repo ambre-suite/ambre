@@ -42,8 +42,8 @@ impl CrossRefMark {
 #[must_use]
 pub fn encode(target: TreeID, kind: &CrossRefKind) -> CrossRefMark {
     let record = Record {
-        peer: ambre_core::PeerId(target.peer),
-        counter: ambre_core::OpCounter(target.counter),
+        peer: ambre_core::PeerId::new(target.peer),
+        counter: ambre_core::OpCounter::new(target.counter),
         kind: kind.clone(),
     };
     CrossRefMark(
@@ -69,7 +69,10 @@ pub fn decode(value: &str) -> Option<(TreeID, CrossRefKind)> {
         })
         .collect();
     let record: Record = postcard::from_bytes(&bytes?).ok()?;
-    Some((TreeID::new(record.peer.0, record.counter.0), record.kind))
+    Some((
+        TreeID::new(record.peer.get(), record.counter.get()),
+        record.kind,
+    ))
 }
 
 /// What a reference to `target` shows, or `None` for the broken mark

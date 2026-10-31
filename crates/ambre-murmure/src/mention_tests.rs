@@ -14,7 +14,7 @@ use crate::{
     Screened, Sent, Signer, screen,
 };
 
-const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 
 /// Alice's channel, created empty, and the user she writes for.
 fn alice() -> (ChannelState, Id<User>) {
@@ -68,7 +68,7 @@ fn deliver(to: &mut ChannelState, from: &ChannelState, author: Id<User>, sent: &
         peer: from.peer(document_id).expect("a session"),
         user: Some(author),
     };
-    to.apply_signed(document_id, Seq(seq), &sent.delta, signer)
+    to.apply_signed(document_id, Seq::new(seq), &sent.delta, signer)
         .expect("a delta the check passes");
 }
 

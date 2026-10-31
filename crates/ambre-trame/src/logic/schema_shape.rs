@@ -233,7 +233,7 @@ fn postcard_layouts() -> Vec<(String, String)> {
     };
     // A fixed uid, so the layout holds the column's key part bytes.
     let col = Uid {
-        peer: ambre_core::PeerId(1),
+        peer: ambre_core::PeerId::new(1),
         counter: ambre_core::IdCounter::new(1),
     };
     let condition = FilterRecord {
@@ -338,7 +338,7 @@ pub(super) fn declared_string_consts(source: &str) -> Vec<String> {
 /// and a styled cell. It is deliberately not a realistic workbook: its job is
 /// width, and the coverage assertion fails when it stops having it.
 pub(super) fn workbook_of_every_key() -> TrameState {
-    let mut state = TrameState::with_peer(ambre_core::PeerId(1));
+    let mut state = TrameState::with_peer(ambre_core::PeerId::new(1));
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
         col: Col::new(0),
@@ -461,11 +461,11 @@ fn steps_written() -> Vec<String> {
                 .set_peer_id(
                     migration_peer(heads.iter().map(|id| {
                         (
-                            ambre_core::PeerId(id.peer),
-                            ambre_core::OpCounter(id.counter),
+                            ambre_core::PeerId::new(id.peer),
+                            ambre_core::OpCounter::new(id.counter),
                         )
                     }))
-                    .0,
+                    .get(),
                 )
                 .expect("the migration identity");
             let before = scratch.oplog_vv();

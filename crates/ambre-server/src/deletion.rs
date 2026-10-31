@@ -126,7 +126,7 @@ fn fence_ttl(
     sweep_due: ambre_core::UnixSeconds,
     now: ambre_core::UnixSeconds,
 ) -> ambre_core::Seconds {
-    sweep_due.since(now).max(ambre_core::Seconds(1))
+    sweep_due.since(now).max(ambre_core::Seconds::new(1))
 }
 
 #[cfg(test)]
@@ -137,8 +137,8 @@ mod tests {
     fn a_fence_lives_until_the_sweep_and_never_less_than_a_second() {
         use ambre_core::Seconds;
         use ambre_core::UnixSeconds as At;
-        assert_eq!(fence_ttl(At(100), At(40)), Seconds(60));
-        assert_eq!(fence_ttl(At(100), At(100)), Seconds(1));
-        assert_eq!(fence_ttl(At(100), At(500)), Seconds(1));
+        assert_eq!(fence_ttl(At::new(100), At::new(40)), Seconds::new(60));
+        assert_eq!(fence_ttl(At::new(100), At::new(100)), Seconds::new(1));
+        assert_eq!(fence_ttl(At::new(100), At::new(500)), Seconds::new(1));
     }
 }

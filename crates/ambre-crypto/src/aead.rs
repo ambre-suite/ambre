@@ -16,7 +16,7 @@ use crate::keys::{DocumentKey, FileKey, StoreKey};
 /// own layouts. A crate that frames a nonce reads [`FixedBytes::<Nonce>::SIZE`](FixedBytes::SIZE).
 pub(crate) const NONCE_LEN: usize = 24;
 
-const _: () = assert!(FixedBytes::<Nonce>::SIZE.0 == NONCE_LEN as u64);
+const _: () = assert!(FixedBytes::<Nonce>::SIZE.get() == NONCE_LEN as u64);
 
 /// Encrypts `plaintext` under `key` with the given `aad`, returning a freshly
 /// generated nonce and the ciphertext (Poly1305 tag appended).
@@ -50,7 +50,7 @@ pub fn open(
     aad: &ambre_core::Aad,
     key: &DocumentKey,
 ) -> Result<SecretBytes, CryptoError> {
-    open_under(nonce, &ciphertext.0, aad, key.as_bytes()).map(SecretBytes::new)
+    open_under(nonce, ciphertext.as_bytes(), aad, key.as_bytes()).map(SecretBytes::new)
 }
 
 /// Seals one passphrase-sealed `.ambre` file under its own [`FileKey`].
@@ -86,7 +86,7 @@ pub fn open_file(
     aad: &ambre_core::Aad,
     key: &FileKey,
 ) -> Result<SecretBytes, CryptoError> {
-    open_under(nonce, &ciphertext.0, aad, key.as_bytes()).map(SecretBytes::new)
+    open_under(nonce, ciphertext.as_bytes(), aad, key.as_bytes()).map(SecretBytes::new)
 }
 
 ambre_core::define_layout_version! {
@@ -117,7 +117,7 @@ pub fn seal_row(
     let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
     row.push(RowLayout::CURRENT.byte());
     row.extend_from_slice(nonce.as_slice());
-    row.extend_from_slice(&ciphertext.0);
+    row.extend_from_slice(ciphertext.as_bytes());
     Ok(ambre_core::Payload::new(row))
 }
 
@@ -217,7 +217,12 @@ pub fn open_anchored_key(
     aad: &ambre_core::Aad,
     outer: &DocumentKey,
 ) -> Result<(DocumentKey, Option<FixedBytes<EntryDigest>>), CryptoError> {
-    let plain = Secret::new(open_under(nonce, &ciphertext.0, aad, outer.as_bytes())?);
+    let plain = Secret::new(open_under(
+        nonce,
+        ciphertext.as_bytes(),
+        aad,
+        outer.as_bytes(),
+    )?);
     crate::keys::split_anchored(plain.expose())
 }
 
@@ -243,7 +248,7 @@ fn seal_under(
             },
         )
         .map_err(|_| CryptoError::EncryptionFailed)?;
-    Ok((FixedBytes::from_array(nonce), Ciphertext(ciphertext)))
+    Ok((FixedBytes::from_array(nonce), Ciphertext::new(ciphertext)))
 }
 
 /// The inverse, over raw key bytes. Private for the same reason as

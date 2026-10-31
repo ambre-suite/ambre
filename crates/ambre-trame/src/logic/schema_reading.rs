@@ -368,7 +368,7 @@ fn reopened(state: &TrameState) -> TrameState {
         .doc
         .export(ExportMode::Snapshot)
         .expect("a workbook exports its snapshot");
-    let mut reader = TrameState::with_peer(ambre_core::PeerId(2));
+    let mut reader = TrameState::with_peer(ambre_core::PeerId::new(2));
     reader
         .import_snapshot(&ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
             snapshot.to_vec(),

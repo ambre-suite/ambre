@@ -47,7 +47,7 @@ fn message(
             + commitment_tag.as_slice().len(),
     );
     push_framed(&mut msg, nonce.as_slice());
-    push_framed(&mut msg, &ciphertext.0);
+    push_framed(&mut msg, ciphertext.as_bytes());
     push_framed(&mut msg, aad.as_bytes());
     push_framed(&mut msg, commitment_tag.as_slice());
     msg
@@ -150,7 +150,7 @@ mod tests {
     }
 
     fn ct(bytes: &[u8]) -> Ciphertext {
-        Ciphertext(bytes.to_vec())
+        Ciphertext::new(bytes.to_vec())
     }
 
     fn tag() -> FixedBytes<CommitmentTag> {

@@ -608,7 +608,7 @@ mod handler_tests {
             crate::redis_ops::append_pending_delta(
                 redis,
                 &doc,
-                ambre_core::Seq(8),
+                ambre_core::Seq::new(8),
                 &ambre_core::ObjectKey::from("k"),
                 &frame
             )
@@ -618,27 +618,27 @@ mod handler_tests {
             crate::redis_ops::push_dead_letter(
                 redis,
                 &doc,
-                ambre_core::Seq(8),
+                ambre_core::Seq::new(8),
                 &ambre_core::ObjectKey::from("k"),
                 &frame
             )
             .await
         ));
-        let sample = ambre_protocol::messages::Ciphertext(b"blob".to_vec());
+        let sample = ambre_protocol::messages::Ciphertext::new(b"blob".to_vec());
         assert!(gone(
             crate::redis_ops::doc_presence_update(
                 redis,
                 &doc,
                 &aa,
                 &sample,
-                ambre_core::Seconds(15)
+                ambre_core::Seconds::new(15)
             )
             .await
         ));
         crate::redis_ops::seed_clock_state(
             redis,
             &doc,
-            ambre_core::Seq(9),
+            ambre_core::Seq::new(9),
             &[(aa, ambre_protocol::messages::Clock(9))],
         )
         .await
@@ -1412,7 +1412,7 @@ mod handler_tests {
         for (configured, minted) in [(24 * 3600, 900), (60, 60)] {
             let state = AppState {
                 config: Arc::new(Config {
-                    access_ttl: ambre_core::Seconds(configured),
+                    access_ttl: ambre_core::Seconds::new(configured),
                     ..Config::default()
                 }),
                 ..(*base).clone()
@@ -1421,8 +1421,11 @@ mod handler_tests {
                 .await
                 .unwrap();
             let claims = state.jwt.verify(&tokens.access_token).unwrap();
-            assert_eq!(claims.exp.since(claims.iat), ambre_core::Seconds(minted));
-            assert_eq!(tokens.access_expires_in, ambre_core::Seconds(minted));
+            assert_eq!(
+                claims.exp.since(claims.iat),
+                ambre_core::Seconds::new(minted)
+            );
+            assert_eq!(tokens.access_expires_in, ambre_core::Seconds::new(minted));
         }
     }
 
@@ -1464,7 +1467,7 @@ mod handler_tests {
                 &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1u8; 32]),
                 &snapshot,
                 ambre_protocol::messages::Clock(seq),
-                ambre_core::Seq(seq),
+                ambre_core::Seq::new(seq),
                 &ambre_core::ObjectKey::from("k"),
             )
             .await
@@ -2748,7 +2751,7 @@ mod handler_tests {
             &ambre_core::ContentHash::parse(&hash).expect("a hash"),
         );
         let snapshot = format!("{env}/documents/{doc_id}/snapshots/s1");
-        let stub = S3Stub::spawn([media.0.clone(), snapshot.clone()]).await;
+        let stub = S3Stub::spawn([media.as_str().to_owned(), snapshot.clone()]).await;
         let state = test_app_state_with_s3(pool, offline_s3(Some(&stub.endpoint))).await;
         let app = shipped_router(state.clone());
         let confirm = serde_json::json!({ "content_hash": hash, "size_bytes": 7 });
@@ -2972,8 +2975,8 @@ mod handler_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs postgres; run with --features db")]
     async fn a_blob_above_its_kind_cap_is_refused(pool: sqlx::PgPool) {
         let state = test_app_state_presigning(pool).await;
-        let media_cap = state.config.media_max_size.0;
-        let snapshot_cap = state.config.snapshot_max_size.0;
+        let media_cap = state.config.media_max_size.get();
+        let snapshot_cap = state.config.snapshot_max_size.get();
         let setup = build_test_router(state.clone());
         let app = shipped_router(state);
         let owner = setup_and_get_auth(&setup).await;
@@ -3363,8 +3366,8 @@ mod handler_tests {
                 &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
                 &Id::<Snapshot>::mint(),
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
-                ambre_core::Seq(seq.unsigned_abs()),
-                &ambre_core::ObjectKey(format!("k{seq}")),
+                ambre_core::Seq::new(seq.unsigned_abs()),
+                &ambre_core::ObjectKey::new(format!("k{seq}")),
             )
             .await
             .unwrap();
@@ -3401,7 +3404,7 @@ mod handler_tests {
         let deltas = crate::db::get_updates_after(
             &state.db,
             &document,
-            ambre_core::Seq(0),
+            ambre_core::Seq::new(0),
             crate::db::QueryLimit::saturating(10),
         )
         .await;

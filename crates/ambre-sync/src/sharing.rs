@@ -2332,7 +2332,7 @@ mod tests {
             Err(http::HttpError::refused(
                 http::Method::Post,
                 &crate::http::Target::relay("https://api.test/revoke"),
-                ambre_core::HttpStatus(409),
+                ambre_core::HttpStatus::new(409),
                 Some(RefusalCode::MembersChanged),
             )),
             Ok(serde_json::json!({ "members": [
@@ -2384,7 +2384,7 @@ mod tests {
             script.push(Err(http::HttpError::refused(
                 http::Method::Post,
                 &crate::http::Target::relay("https://api.test/revoke"),
-                ambre_core::HttpStatus(409),
+                ambre_core::HttpStatus::new(409),
                 Some(RefusalCode::MembersChanged),
             )));
         }
@@ -2396,11 +2396,11 @@ mod tests {
             lrx.try_recv(),
             Ok(LogicEvent::ApiError {
                 failure: ApiFailure::Relay {
-                    status: ambre_core::HttpStatus(409),
+                    status,
                     code: Some(RefusalCode::MembersChanged),
                 },
                 ..
-            })
+            }) if status.get() == 409
         ));
         assert_eq!(http.calls().len(), 2 * ROTATION_TRIES);
     }
@@ -2421,7 +2421,7 @@ mod tests {
             Err(http::HttpError::refused(
                 http::Method::Post,
                 &crate::http::Target::relay("https://api.test/rotate-key"),
-                ambre_core::HttpStatus(409),
+                ambre_core::HttpStatus::new(409),
                 Some(RefusalCode::MembersChanged),
             )),
             Ok(serde_json::json!({ "members": [
@@ -2473,7 +2473,7 @@ mod tests {
             Err(http::HttpError::refused(
                 http::Method::Post,
                 &crate::http::Target::relay("https://api.test/share"),
-                ambre_core::HttpStatus(409),
+                ambre_core::HttpStatus::new(409),
                 Some(RefusalCode::KeyChanged),
             )),
         ]);
@@ -2484,11 +2484,11 @@ mod tests {
             lrx.try_recv(),
             Ok(LogicEvent::ApiError {
                 failure: ApiFailure::Relay {
-                    status: ambre_core::HttpStatus(409),
+                    status,
                     ..
                 },
                 ..
-            })
+            }) if status.get() == 409
         ));
     }
 
@@ -2886,7 +2886,7 @@ mod tests {
             http::HttpError::refused(
                 http::Method::Delete,
                 &crate::http::Target::relay("https://api.test/share"),
-                ambre_core::HttpStatus(403),
+                ambre_core::HttpStatus::new(403),
                 Some(RefusalCode::SetupRequired),
             )
         };
@@ -2997,7 +2997,7 @@ mod tests {
         let changed = http::HttpError::refused(
             http::Method::Post,
             &crate::http::Target::relay("x"),
-            ambre_core::HttpStatus(409),
+            ambre_core::HttpStatus::new(409),
             Some(RefusalCode::MembersChanged),
         );
         let http = FakeHttp::new(vec![
@@ -3553,7 +3553,7 @@ mod tests {
             Err(http::HttpError::refused(
                 http::Method::Post,
                 &crate::http::Target::relay("https://api.test/share"),
-                ambre_core::HttpStatus(409),
+                ambre_core::HttpStatus::new(409),
                 Some(RefusalCode::LogMoved),
             )),
             Ok(logged.answer()),

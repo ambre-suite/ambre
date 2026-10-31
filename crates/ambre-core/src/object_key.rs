@@ -7,12 +7,22 @@ use serde::{Deserialize, Serialize};
 /// type, so a content hash or a URL never takes its place.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ObjectKey(pub String);
+pub struct ObjectKey(String);
 
 impl ObjectKey {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
     /// The key text.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// Returns the raw text, for a foreign call that takes it by value.
+    pub fn into_inner(self) -> String {
+        self.0
     }
 }
 

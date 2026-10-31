@@ -128,7 +128,7 @@ entry   = Ed25519 signature over b"ambre-peer-entry-v1" || document || peer_id |
 A PeerID of `u64::MAX` is moved to the value below it, because Loro reserves that one.
 
 ```rust
-pub struct PeerId(pub u64);
+pub struct PeerId(u64);
 pub struct SessionNonce(pub [u8; 16]);
 pub struct PeerEntry {
     pub user: Id<User>,

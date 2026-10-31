@@ -200,7 +200,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
     #[must_use]
     pub fn evictions(&self, budget: ByteSize) -> Vec<K> {
         let mut over = self.bytes().saturating_sub(budget);
-        if over == ByteSize(0) {
+        if over == ByteSize::new(0) {
             return Vec::new();
         }
         let mut candidates: Vec<(&K, &Held)> = self
@@ -214,7 +214,7 @@ impl<K: Copy + Eq + Hash> Residency<K> {
         candidates
             .into_iter()
             .take_while(|(_, held)| {
-                let take = over > ByteSize(0);
+                let take = over > ByteSize::new(0);
                 over = over.saturating_sub(held.bytes);
                 take
             })
@@ -229,7 +229,7 @@ mod tests {
 
     /// `n` mebibytes.
     const fn mb(n: u64) -> ByteSize {
-        ByteSize(n << 20)
+        ByteSize::new(n << 20)
     }
 
     /// Three documents of 10 MB each, held in the order 1, 2, 3.
@@ -271,7 +271,7 @@ mod tests {
     fn a_pinned_document_never_leaves() {
         let mut tier = three();
         tier.pin(1);
-        assert_eq!(evict(&mut tier, ByteSize(0)), vec![2, 3]);
+        assert_eq!(evict(&mut tier, ByteSize::new(0)), vec![2, 3]);
         assert!(tier.holds(1));
     }
 
@@ -281,9 +281,9 @@ mod tests {
     fn an_unsent_change_keeps_its_document() {
         let mut tier = three();
         tier.set_unsent(1, Delivery::Unsent);
-        assert_eq!(evict(&mut tier, ByteSize(0)), vec![2, 3]);
+        assert_eq!(evict(&mut tier, ByteSize::new(0)), vec![2, 3]);
         tier.set_unsent(1, Delivery::Sent);
-        assert_eq!(evict(&mut tier, ByteSize(0)), vec![1]);
+        assert_eq!(evict(&mut tier, ByteSize::new(0)), vec![1]);
     }
 
     /// Holds `RESID-007`: an immutable document leaves first, whatever its

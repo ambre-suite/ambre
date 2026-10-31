@@ -200,7 +200,7 @@ mod tests {
     use super::*;
     use ambre_bus::{DirectMember, MurmureCommand, Notice};
 
-    const NOW: Timestamp = Timestamp(1_700_000_000_000);
+    const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
         let (to_ui, ui_rx) = test_link();

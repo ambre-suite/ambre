@@ -273,7 +273,7 @@ impl ProseState {
         // Before any operation: every block the tree mints captures it. The
         // scaffolding is written under the identity every peer shares
         // (`PROSE-129`), so it is the same bytes whatever `peer` is.
-        doc.set_peer_id(peer.0).ok()?;
+        doc.set_peer_id(peer.get()).ok()?;
         // No wall clock in the operations: a recorded timestamp would differ
         // between two runs of the same generator.
         doc.set_record_timestamp(false);
@@ -290,7 +290,7 @@ impl ProseState {
         // copy is one change, the root paragraph included. Under the
         // document's own identity, a reader that has sent nothing would import
         // each change against the whole history (`PROSE-129`).
-        doc.set_peer_id(scaffold_identity()?.0).ok()?;
+        doc.set_peer_id(scaffold_identity()?.get()).ok()?;
         write_scaffold(&doc)?;
         doc.commit();
         doc.set_peer_id(peer).ok()?;
@@ -310,7 +310,7 @@ impl ProseState {
         // retracts it (`AUTHOR-009`).
         undo.add_exclude_origin_prefix(ambre_core::crdt::CommitOrigin::Peers.as_str());
         let stamped_counter =
-            ambre_core::OpCounter(doc.oplog_vv().get(&peer).copied().unwrap_or(0));
+            ambre_core::OpCounter::new(doc.oplog_vv().get(&peer).copied().unwrap_or(0));
         // After the scaffolding: a document never laid out measures whole.
         let touched = touched::Touched::watch(&doc);
         Some(Self {
@@ -318,7 +318,7 @@ impl ProseState {
             undo,
             media_cache: HashMap::new(),
             last_exported_vv: VersionVector::default(),
-            peer: ambre_core::PeerId(peer),
+            peer: ambre_core::PeerId::new(peer),
             my_user_id: None,
             my_name: None,
             orphans: std::collections::HashSet::new(),
@@ -514,7 +514,7 @@ impl ProseState {
         entry: ambre_core::PeerEntry,
     ) -> bool {
         self.doc.commit();
-        if let Err(e) = self.doc.set_peer_id(peer.0) {
+        if let Err(e) = self.doc.set_peer_id(peer.get()) {
             tracing::error!("Prose: the session identity was refused: {e:?}");
             return false;
         }
@@ -532,9 +532,9 @@ impl ProseState {
                 );
                 self.doc
                     .oplog_vv()
-                    .get(&peer.0)
+                    .get(&peer.get())
                     .copied()
-                    .map(ambre_core::OpCounter)
+                    .map(ambre_core::OpCounter::new)
             }
             Err(e) => {
                 tracing::error!("Prose: the registry entry was refused: {e:?}");
@@ -1318,7 +1318,7 @@ impl ProseState {
         // The registry entry alone is no edit: it waits for the first one and
         // travels with it (`AUTHOR-009`).
         if let Some(end) = self.entry_end {
-            if current.get(&self.peer.0) == Some(&end.0) {
+            if current.get(&self.peer.get()) == Some(&end.get()) {
                 return None;
             }
             self.entry_end = None;
@@ -1349,14 +1349,14 @@ impl ProseState {
         // wrote, and the next layout re-measures those alone.
         // A collaborator can bring a mark back, so no orphan is taken on trust.
         self.orphans.clear();
-        let ours = self.last_exported_vv.get(&self.peer.0).copied();
+        let ours = self.last_exported_vv.get(&self.peer.get()).copied();
         self.last_exported_vv = self.doc.oplog_vv();
         match ours {
             Some(counter) => {
-                self.last_exported_vv.insert(self.peer.0, counter);
+                self.last_exported_vv.insert(self.peer.get(), counter);
             }
             None => {
-                self.last_exported_vv.remove(&self.peer.0);
+                self.last_exported_vv.remove(&self.peer.get());
             }
         }
     }
@@ -1438,7 +1438,7 @@ mod tests {
     #[test]
     fn a_refusal_names_the_command_it_refused() {
         let mut state = ProseState::new().expect("a document is built");
-        let absent = BlockId::new(ambre_core::PeerId(9), ambre_core::OpCounter(9));
+        let absent = BlockId::new(ambre_core::PeerId::new(9), ambre_core::OpCounter::new(9));
         let outcome = state.handle_command(ProseCommand::DeleteText {
             block_id: absent,
             range: DocSpan::from_usize_range(0..1),
@@ -1463,7 +1463,7 @@ mod tests {
     #[test]
     fn two_commands_refused_for_one_reason_name_themselves_apart() {
         let mut state = ProseState::new().expect("a document is built");
-        let absent = BlockId::new(ambre_core::PeerId(9), ambre_core::OpCounter(9));
+        let absent = BlockId::new(ambre_core::PeerId::new(9), ambre_core::OpCounter::new(9));
         let deleting = state.handle_command(ProseCommand::DeleteText {
             block_id: absent,
             range: DocSpan::from_usize_range(0..1),
@@ -1819,7 +1819,8 @@ mod tests {
     /// document while it has none, and the pagination Story owns that half.
     #[test]
     fn the_picture_cache_and_the_history_never_enter_the_document() {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(11)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(11)).expect("a document is built");
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
@@ -1839,7 +1840,7 @@ mod tests {
         // The history is session state too. A restored document carries the
         // text and no stack, so an undo on it retracts nothing.
         let mut restored =
-            ProseState::with_peer(ambre_core::PeerId(12)).expect("a document is built");
+            ProseState::with_peer(ambre_core::PeerId::new(12)).expect("a document is built");
         restored.import_snapshot(&before).expect("it imports");
         assert_eq!(restored.text_of(&block).as_deref(), Some("same text"));
         let outcome = restored.handle_command(ProseCommand::Undo);
@@ -1876,7 +1877,8 @@ mod tests {
     #[test]
     fn a_write_reports_the_history_and_a_no_op_reports_none() {
         use ambre_core::Availability::{Disabled, Enabled};
-        let mut state = ProseState::with_peer(ambre_core::PeerId(13)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(13)).expect("a document is built");
         let block = state.root_blocks()[0];
         let insert = ProseCommand::InsertText {
             block_id: block,
@@ -1922,7 +1924,8 @@ mod tests {
     /// its start.
     #[test]
     fn an_undo_with_nothing_to_revert_writes_nothing() {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(13)).expect("a document is built");
+        let mut state =
+            ProseState::with_peer(ambre_core::PeerId::new(13)).expect("a document is built");
         let block = state.root_blocks()[0];
         let undo_on_nothing = |state: &mut ProseState| {
             let before = state.document().oplog_vv();
@@ -1943,8 +1946,10 @@ mod tests {
     /// remote peer wrote in place.
     #[test]
     fn an_undo_leaves_a_remote_edit_alone() {
-        let mut alice = ProseState::with_peer(ambre_core::PeerId(13)).expect("a document is built");
-        let mut bob = ProseState::with_peer(ambre_core::PeerId(14)).expect("a document is built");
+        let mut alice =
+            ProseState::with_peer(ambre_core::PeerId::new(13)).expect("a document is built");
+        let mut bob =
+            ProseState::with_peer(ambre_core::PeerId::new(14)).expect("a document is built");
         bob.import_snapshot(&alice.export_snapshot())
             .expect("the seed imports");
         let block = alice.root_blocks()[0];

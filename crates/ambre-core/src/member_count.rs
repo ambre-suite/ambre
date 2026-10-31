@@ -42,7 +42,19 @@ impl MemberCount {
 /// A store's count that is not one: negative, or past 32 bits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
 #[error("a member count of {0} does not fit 32 bits")]
-pub struct MemberCountError(pub i64);
+pub struct MemberCountError(i64);
+
+impl MemberCountError {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: i64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
 
 impl TryFrom<i64> for MemberCount {
     type Error = MemberCountError;

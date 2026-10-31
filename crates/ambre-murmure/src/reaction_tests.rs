@@ -12,7 +12,7 @@ use crate::{
     ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Refusal, Sent, Signer,
 };
 
-const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 const THUMB: &str = "\u{1F44D}";
 
 /// One member of the channel: its state, and the user it writes for.
@@ -42,7 +42,7 @@ impl Member {
         self.state
             .apply_signed(
                 sent.segment.document_id(),
-                Seq(seq),
+                Seq::new(seq),
                 &sent.delta,
                 from.signer(),
             )
@@ -308,7 +308,7 @@ fn a_reaction_under_another_members_key_is_refused() {
     for (seq, forged) in [(3, &inserted), (4, &removed)] {
         let verdict = alice
             .state
-            .apply_signed(document_id, Seq(seq), forged, bob.signer());
+            .apply_signed(document_id, Seq::new(seq), forged, bob.signer());
         assert_eq!(
             verdict.map(|_| ()),
             Err(MurmureError::Refused(Refusal::ForeignReaction))
@@ -342,7 +342,7 @@ fn a_reaction_under_another_members_key_is_refused() {
     let replaced = written_since(&alice, &before);
     assert_eq!(
         bob.state
-            .apply_signed(document_id, Seq(6), &replaced, alice.signer())
+            .apply_signed(document_id, Seq::new(6), &replaced, alice.signer())
             .map(|_| ()),
         Err(MurmureError::Refused(Refusal::ForeignReaction))
     );
@@ -356,7 +356,11 @@ fn a_reaction_under_another_members_key_is_refused() {
 fn a_reaction_never_counts_as_unread() {
     let (mut alice, mut bob, message) = pair();
     let segment = bob.segment();
-    let count = |bob: &Member| bob.state.unread(segment, Seq(1), bob.user).expect("count");
+    let count = |bob: &Member| {
+        bob.state
+            .unread(segment, Seq::new(1), bob.user)
+            .expect("count")
+    };
     assert_eq!(count(&bob), UnreadCount(1), "Alice's message is unread");
     let sent = alice.react(message, THUMB);
     bob.receive(&alice, &sent, 2);

@@ -155,7 +155,7 @@ impl ChannelState {
     ) -> Result<(), MurmureError> {
         if let Some(held) = self.closing.as_mut().filter(|held| held.id == document_id) {
             if let Some(session) = held.session.as_mut() {
-                rewound.set_peer_id(session.peer().0)?;
+                rewound.set_peer_id(session.peer().get())?;
                 session.rewind(kept);
             }
             held.doc = rewound;

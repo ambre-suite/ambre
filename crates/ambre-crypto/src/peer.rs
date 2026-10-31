@@ -47,7 +47,7 @@ pub fn derive_peer_id(
     for (out, byte) in head.iter_mut().zip(digest.iter()) {
         *out = *byte;
     }
-    PeerId(u64::from_le_bytes(head).min(u64::MAX - 1))
+    PeerId::new(u64::from_le_bytes(head).min(u64::MAX - 1))
 }
 
 /// The bytes a registry entry signs: the document, the PeerID and the nonce,
@@ -61,7 +61,7 @@ fn entry_transcript(
         Vec::with_capacity(ENTRY_DOMAIN.len() + 16 + 8 + FixedBytes::<SessionNonce>::SIZE.as_len());
     msg.extend_from_slice(ENTRY_DOMAIN);
     msg.extend_from_slice(document.as_bytes());
-    msg.extend_from_slice(&peer.0.to_le_bytes());
+    msg.extend_from_slice(&peer.get().to_le_bytes());
     msg.extend_from_slice(nonce.as_slice());
     msg
 }
@@ -160,7 +160,7 @@ mod tests {
         // Computed outside Rust: the first eight bytes, little-endian, of
         // Python's `hashlib.blake2b(b"ambre-peer-v1" + bytes([1]*32) + bytes([9]*16))`.
         let pinned = derive_peer_id(&FixedBytes::from_array([1; 32]), &nonce);
-        assert_eq!(pinned, ambre_core::PeerId(0x280d_a166_ca77_5390));
+        assert_eq!(pinned, ambre_core::PeerId::new(0x280d_a166_ca77_5390));
     }
 
     #[test]

@@ -13,7 +13,7 @@ use crate::doc;
 use crate::events::{DateFieldFormat, HeaderField, PageCount, PageIndex};
 
 /// The span of one day.
-const DAY: Millis = Millis(86_400_000);
+const DAY: Millis = Millis::new(86_400_000);
 
 /// The text of `block` as drawn on `page` of `page_count`.
 #[must_use]
@@ -193,7 +193,7 @@ impl std::fmt::Display for CivilDate {
 /// (`PROSE-FEAT-066`). The civil-from-days algorithm of H. Hinnant.
 #[must_use]
 pub fn civil_date(at: Timestamp) -> CivilDate {
-    let day_ms = i64::try_from(DAY.0).unwrap_or(i64::MAX);
+    let day_ms = i64::try_from(DAY.get()).unwrap_or(i64::MAX);
     let days = at.to_i64_saturating().div_euclid(day_ms) + 719_468;
     let era = days.div_euclid(146_097);
     let day_of_era = days.rem_euclid(146_097);
@@ -356,7 +356,7 @@ mod tests {
     use super::*;
 
     /// 2026-03-05T12:00:00Z.
-    const MARCH_FIFTH: Timestamp = Timestamp(1_772_712_000_000);
+    const MARCH_FIFTH: Timestamp = Timestamp::new(1_772_712_000_000);
 
     fn ymd(at: Timestamp) -> (i64, u32, u32) {
         let date = civil_date(at);
@@ -423,10 +423,10 @@ mod tests {
 
     #[test]
     fn a_stamp_reads_as_its_utc_calendar_date() {
-        assert_eq!(ymd(Timestamp(0)), (1970, 1, 1));
+        assert_eq!(ymd(Timestamp::new(0)), (1970, 1, 1));
         assert_eq!(ymd(MARCH_FIFTH), (2026, 3, 5));
-        assert_eq!(ymd(Timestamp(86_399_999)), (1970, 1, 1));
-        assert_eq!(ymd(Timestamp(951_782_400_000)), (2000, 2, 29));
+        assert_eq!(ymd(Timestamp::new(86_399_999)), (1970, 1, 1));
+        assert_eq!(ymd(Timestamp::new(951_782_400_000)), (2000, 2, 29));
         assert_eq!(civil_date(MARCH_FIFTH).to_string(), "2026-03-05");
     }
 

@@ -317,7 +317,7 @@ mod tests {
             &FixedBytes::<ambre_core::PublicKey>::from_array(author),
             &clocks,
             &ambre_core::ObjectKey::from("s3/key/snap"),
-            ambre_core::Seq(1500),
+            ambre_core::Seq::new(1500),
         )
         .await
         .expect("create snapshot");
@@ -337,14 +337,14 @@ mod tests {
             .expect("snapshot exists");
         assert_eq!(latest.id, sid);
         assert_eq!(latest.s3_key, ambre_core::ObjectKey::from("s3/key/snap"));
-        assert_eq!(latest.covered_seq, ambre_core::Seq(1500));
+        assert_eq!(latest.covered_seq, ambre_core::Seq::new(1500));
 
         // get_snapshot (the download-url path) carries it too.
         let by_id = get_snapshot(&pool, &document_id, &sid)
             .await
             .expect("query by id")
             .expect("snapshot exists");
-        assert_eq!(by_id.covered_seq, ambre_core::Seq(1500));
+        assert_eq!(by_id.covered_seq, ambre_core::Seq::new(1500));
 
         // IDOR regression guard: resolving the same snapshot id under a foreign
         // document must return None (never leak another document's blob).
@@ -389,8 +389,8 @@ mod tests {
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
-                ambre_core::Seq(seq.unsigned_abs()),
-                &ambre_core::ObjectKey(format!("k{seq}")),
+                ambre_core::Seq::new(seq.unsigned_abs()),
+                &ambre_core::ObjectKey::new(format!("k{seq}")),
             )
             .await
             .expect("insert update");
@@ -403,7 +403,7 @@ mod tests {
             &FixedBytes::<ambre_core::PublicKey>::from_array(author),
             &serde_json::json!({}),
             &ambre_core::ObjectKey::from("s3/snap"),
-            ambre_core::Seq(6),
+            ambre_core::Seq::new(6),
         )
         .await
         .expect("create snapshot");
@@ -425,7 +425,7 @@ mod tests {
         let remaining = get_updates_after(
             &pool,
             &document_id,
-            ambre_core::Seq(0),
+            ambre_core::Seq::new(0),
             crate::db::QueryLimit::saturating(100),
         )
         .await
@@ -469,8 +469,8 @@ mod tests {
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
-                ambre_core::Seq(seq.unsigned_abs()),
-                &ambre_core::ObjectKey(format!("k{seq}")),
+                ambre_core::Seq::new(seq.unsigned_abs()),
+                &ambre_core::ObjectKey::new(format!("k{seq}")),
             )
             .await
             .expect("insert update");
@@ -482,7 +482,7 @@ mod tests {
                 &document_id,
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &serde_json::json!({}),
-                &ambre_core::ObjectKey(format!("s3/snap-{covered}")),
+                &ambre_core::ObjectKey::new(format!("s3/snap-{covered}")),
                 ambre_core::Seq::try_from(covered).expect("a relay number"),
             )
             .await
@@ -506,7 +506,7 @@ mod tests {
         let remaining = get_updates_after(
             &pool,
             &document_id,
-            ambre_core::Seq(0),
+            ambre_core::Seq::new(0),
             crate::db::QueryLimit::saturating(100),
         )
         .await

@@ -27,7 +27,7 @@ use crate::fixed_bytes::{DebugForm, FixedBytes, FixedRole};
 use crate::{CommitmentTag, KeyId, Nonce, PublicKey, Signature};
 
 /// The nonce an AEAD seal opens with, as `ambre_crypto::aead` writes it.
-const NONCE_LEN: usize = FixedBytes::<Nonce>::SIZE.0 as usize;
+const NONCE_LEN: usize = FixedBytes::<Nonce>::SIZE.get() as usize;
 /// The tag an AEAD seal closes with.
 const TAG_LEN: usize = 16;
 /// A document key, and a master seed.
@@ -38,13 +38,13 @@ const ANCHOR_LEN: usize = 32;
 /// id, the author's key, the signature, the commitment and the nonce, each at
 /// the size its own type states. The layout byte's type lives in `ambre-sync`,
 /// which this crate cannot see, so its one byte is written here.
-const OBJECT_HEADER_LEN: usize = crate::ByteSize(1)
+const OBJECT_HEADER_LEN: usize = crate::ByteSize::new(1)
     .saturating_add(FixedBytes::<KeyId>::SIZE)
     .saturating_add(FixedBytes::<PublicKey>::SIZE)
     .saturating_add(FixedBytes::<Signature>::SIZE)
     .saturating_add(FixedBytes::<CommitmentTag>::SIZE)
     .saturating_add(FixedBytes::<Nonce>::SIZE)
-    .0 as usize;
+    .get() as usize;
 /// The most bytes one character takes in UTF-8.
 const UTF8_MAX_LEN: usize = 4;
 
@@ -220,9 +220,9 @@ impl Encoded<WrappedDocKey> {
     /// parts fix the length; nothing checks it against [`Self::LENGTHS`] here.
     #[must_use]
     pub fn from_parts(nonce: &FixedBytes<Nonce>, ciphertext: &crate::Ciphertext) -> Self {
-        let mut bytes = Vec::with_capacity(NONCE_LEN + ciphertext.0.len());
+        let mut bytes = Vec::with_capacity(NONCE_LEN + ciphertext.as_bytes().len());
         nonce.push_to(&mut bytes);
-        bytes.extend_from_slice(&ciphertext.0);
+        bytes.extend_from_slice(ciphertext.as_bytes());
         Self::new(bytes)
     }
 
@@ -231,7 +231,7 @@ impl Encoded<WrappedDocKey> {
     #[must_use]
     pub fn parts(&self) -> Option<(FixedBytes<Nonce>, crate::Ciphertext)> {
         let (nonce, ciphertext) = FixedBytes::<Nonce>::split_from(&self.bytes)?;
-        Some((nonce, crate::Ciphertext(ciphertext.to_vec())))
+        Some((nonce, crate::Ciphertext::new(ciphertext.to_vec())))
     }
 }
 
@@ -376,10 +376,10 @@ mod tests {
     #[test]
     fn a_wrapped_key_is_its_nonce_then_its_ciphertext() {
         let nonce = FixedBytes::<crate::Nonce>::from_array([1; NONCE_LEN]);
-        let ciphertext = crate::Ciphertext(vec![2; KEY_LEN + TAG_LEN]);
+        let ciphertext = crate::Ciphertext::new(vec![2; KEY_LEN + TAG_LEN]);
         let key = Encoded::<WrappedDocKey>::from_parts(&nonce, &ciphertext);
         assert_eq!(&key.as_bytes()[..NONCE_LEN], &[1; NONCE_LEN]);
-        assert_eq!(&key.as_bytes()[NONCE_LEN..], &ciphertext.0[..]);
+        assert_eq!(&key.as_bytes()[NONCE_LEN..], ciphertext.as_bytes());
         assert!(Encoded::<WrappedDocKey>::LENGTHS.contains(&key.as_bytes().len()));
         assert_eq!(key.parts(), Some((nonce, ciphertext)));
         let short = Encoded::<WrappedDocKey>::new(vec![0; NONCE_LEN - 1]);

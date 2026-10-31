@@ -516,7 +516,7 @@ mod tests {
     fn file_bytes_print_their_length_alone() {
         let bytes = Payload::<FileBytes>::new(b"secret".to_vec());
         assert_eq!(format!("{bytes:?}"), "FileBytes(6 bytes)");
-        assert_eq!(bytes.size(), ByteSize(6));
+        assert_eq!(bytes.size(), ByteSize::new(6));
     }
 
     /// A name holds the document's title: its `Debug` form prints the length

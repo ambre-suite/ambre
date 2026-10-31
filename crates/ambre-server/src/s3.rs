@@ -95,7 +95,7 @@ pub fn format_s3_snapshot_key(
     document_id: &Id<Document>,
     snapshot_id: &Id<Snapshot>,
 ) -> ambre_core::ObjectKey {
-    ambre_core::ObjectKey(format!(
+    ambre_core::ObjectKey::new(format!(
         "{env_prefix}/documents/{document_id}/snapshots/{snapshot_id}"
     ))
 }
@@ -106,8 +106,8 @@ pub fn format_s3_delta_key(
     document_id: &Id<Document>,
     seq: ambre_core::Seq,
 ) -> ambre_core::ObjectKey {
-    let seq = seq.0;
-    ambre_core::ObjectKey(format!(
+    let seq = seq.get();
+    ambre_core::ObjectKey::new(format!(
         "{env_prefix}/documents/{document_id}/deltas/{seq:010}"
     ))
 }
@@ -140,13 +140,13 @@ pub fn format_s3_media_key(
     content_hash: &ambre_core::ContentHash,
 ) -> ambre_core::ObjectKey {
     let content_hash = content_hash.as_str();
-    ambre_core::ObjectKey(format!(
+    ambre_core::ObjectKey::new(format!(
         "{env_prefix}/documents/{document_id}/media/{content_hash}"
     ))
 }
 
 /// The longest a presigned URL may live: 15 minutes (`ZK-014`, `SRV-052`).
-pub const PRESIGNED_URL_MAX_TTL: ambre_core::Seconds = ambre_core::Seconds(15 * 60);
+pub const PRESIGNED_URL_MAX_TTL: ambre_core::Seconds = ambre_core::Seconds::new(15 * 60);
 
 /// The lifetime a presigned URL is signed for: the configured one, held under
 /// the ceiling. A misconfigured day comes out as 15 minutes.
@@ -176,7 +176,7 @@ pub async fn generate_presigned_upload_url(
     s3.put_object()
         .bucket(bucket.as_str())
         .key(key.as_str())
-        .content_length(i64::try_from(content_length.0).unwrap_or(i64::MAX))
+        .content_length(i64::try_from(content_length.get()).unwrap_or(i64::MAX))
         .presigned(config)
         .await
         .map(|req| ambre_core::Credential::new(req.uri().to_string()))
@@ -380,7 +380,7 @@ async fn flush_cycle(state: &crate::state::AppState, kind: Cycle) {
 /// How long the per-document flush lock lives. It comfortably exceeds one
 /// flush; if the holder dies mid-flush the lock expires and the next cycle
 /// retries.
-const FLUSH_LOCK_TTL: ambre_core::Seconds = ambre_core::Seconds(60);
+const FLUSH_LOCK_TTL: ambre_core::Seconds = ambre_core::Seconds::new(60);
 
 /// How long a write that began before a delete may still land after it
 /// (`SRV-057`). A presigned upload link stays valid for its lifetime. A flush
@@ -390,17 +390,17 @@ const FLUSH_LOCK_TTL: ambre_core::Seconds = ambre_core::Seconds(60);
 pub fn late_write_window(presigned_url_ttl: ambre_core::Seconds) -> ambre_core::Seconds {
     // `presign_lifetime` caps the configured TTL, so the sum stays far below
     // the bound. Saturating keeps a window that never ends if it did not.
-    ambre_core::Seconds(
+    ambre_core::Seconds::new(
         presign_lifetime(presigned_url_ttl)
             .as_secs()
-            .saturating_add(FLUSH_LOCK_TTL.0)
+            .saturating_add(FLUSH_LOCK_TTL.get())
             .saturating_add(60),
     )
 }
 
 /// The current instant: the clock of a token's `iat` and of a delete's sweep.
 pub fn unix_now() -> ambre_core::UnixSeconds {
-    ambre_core::UnixSeconds(
+    ambre_core::UnixSeconds::new(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs()),
@@ -571,7 +571,7 @@ async fn drain_front(
         let Some((seq, s3_key, update_wire)) = entry.read_pending() else {
             tracing::error!(
                 key = %pending_key,
-                seq = entry.pending_seq().map_or(0, |s| s.0),
+                seq = entry.pending_seq().map_or(0, |s| s.get()),
                 entry_len = entry.len(),
                 reason = "malformed json / missing fields / bad base64",
                 "flush: dead-lettering poison entry"
@@ -583,13 +583,13 @@ async fn drain_front(
 
         match sink.store(&s3_key, update_wire).await {
             Ok(()) => {
-                tracing::debug!(s3_key = %s3_key, seq = seq.0, "flushed delta to S3");
+                tracing::debug!(s3_key = %s3_key, seq = seq.get(), "flushed delta to S3");
                 processed = processed.incremented();
             }
             Err(e) => {
                 // Transient (retryable) failure: stop here so the front trim
                 // keeps this entry and everything after it for the next cycle.
-                tracing::error!(s3_key = %s3_key, seq = seq.0, error = %e, "flush: S3 upload failed, will retry");
+                tracing::error!(s3_key = %s3_key, seq = seq.get(), error = %e, "flush: S3 upload failed, will retry");
                 break;
             }
         }
@@ -646,7 +646,7 @@ mod tests {
                 if s3_key.as_str() == "d/4" {
                     return Err("unavailable".to_owned());
                 }
-                self.stored.push(s3_key.0.clone());
+                self.stored.push(s3_key.as_str().to_owned());
                 Ok(())
             }
             async fn dead_letter(&mut self, entry: &Payload) {
@@ -705,21 +705,21 @@ mod tests {
     #[test]
     fn delta_key_zero_pads_seq() {
         let doc_id = Id::<Document>::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq(42));
+        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq::new(42));
         assert!(key.as_str().ends_with("deltas/0000000042"));
     }
 
     #[test]
     fn delta_key_pads_small_seq() {
         let doc_id = Id::<Document>::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq(7));
+        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq::new(7));
         assert!(key.as_str().ends_with("deltas/0000000007"));
     }
 
     #[test]
     fn delta_key_handles_large_seq() {
         let doc_id = Id::<Document>::from_bytes([2u8; 16]);
-        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq(9999999999u64));
+        let key = format_s3_delta_key(&env("dev"), &doc_id, ambre_core::Seq::new(9999999999u64));
         assert!(key.as_str().ends_with("deltas/9999999999"));
     }
 
@@ -751,19 +751,19 @@ mod tests {
         assert!(!is_valid_snapshot_key(
             &env("dev"),
             &doc,
-            &ambre_core::ObjectKey(format!(
+            &ambre_core::ObjectKey::new(format!(
                 "dev/documents/{doc}/snapshots/../../{other}/snapshots/x"
             ))
         ));
         assert!(!is_valid_snapshot_key(
             &env("dev"),
             &doc,
-            &ambre_core::ObjectKey(format!("dev/documents/{doc}/snapshots/"))
+            &ambre_core::ObjectKey::new(format!("dev/documents/{doc}/snapshots/"))
         ));
         assert!(!is_valid_snapshot_key(
             &env("dev"),
             &doc,
-            &ambre_core::ObjectKey(format!("dev/documents/{doc}/snapshots/a/b"))
+            &ambre_core::ObjectKey::new(format!("dev/documents/{doc}/snapshots/a/b"))
         ));
     }
 
@@ -793,8 +793,8 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("dev/documents/x/media/y"),
-            ambre_core::Seconds(900),
-            ambre_core::ByteSize(4096),
+            ambre_core::Seconds::new(900),
+            ambre_core::ByteSize::new(4096),
         )
         .await
         .expect("presign")
@@ -824,8 +824,8 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
-            ambre_core::Seconds(day),
-            ambre_core::ByteSize(1),
+            ambre_core::Seconds::new(day),
+            ambre_core::ByteSize::new(1),
         )
         .await
         .expect("presign")
@@ -836,7 +836,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
-            ambre_core::Seconds(day),
+            ambre_core::Seconds::new(day),
         )
         .await
         .expect("presign")
@@ -850,7 +850,7 @@ mod tests {
             &s3,
             &BucketName::new("bucket".to_owned()),
             &ambre_core::ObjectKey::from("k"),
-            ambre_core::Seconds(60),
+            ambre_core::Seconds::new(60),
         )
         .await
         .expect("presign")

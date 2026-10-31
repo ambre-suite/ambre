@@ -203,7 +203,7 @@ fn read_file_into(
 ) {
     // The browser leaves the type empty for a format it does not know. Fall
     // back to the extension, all an `.svg` drop carries on some platforms.
-    let mut mime = ambre_core::MediaType(file.type_());
+    let mut mime = ambre_core::MediaType::new(file.type_());
     if mime.as_str().is_empty() && file.name().to_ascii_lowercase().ends_with(".svg") {
         mime = ambre_core::MediaType::from("image/svg+xml");
     }

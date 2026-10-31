@@ -116,9 +116,14 @@ impl Serialize for ContentHash {
 /// The media type of a file, as the browser named it, such as `image/png`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct MediaType(pub String);
+pub struct MediaType(String);
 
 impl MediaType {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
     /// The type, as the browser spelled it.
     pub fn as_str(&self) -> &str {
         &self.0
@@ -197,9 +202,19 @@ impl KnownMediaType {
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct ByteSize(pub u64);
+pub struct ByteSize(u64);
 
 impl ByteSize {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The size of a buffer `len` bytes long, saturating at `u64::MAX`.
     #[must_use]
     pub fn of_len(len: usize) -> Self {

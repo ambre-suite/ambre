@@ -22,7 +22,7 @@ use crate::doc::StoredLevel;
 use crate::mark::InlineCode;
 
 /// The largest file a Markdown import reads.
-pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize(16 * 1024 * 1024);
+pub const MAX_SIZE: ambre_core::ByteSize = ambre_core::ByteSize::new(16 * 1024 * 1024);
 
 /// The deepest list the form keeps. A deeper item lands at this depth, so a
 /// hostile file cannot grow the recursion of the passes that follow.

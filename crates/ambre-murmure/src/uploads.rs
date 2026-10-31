@@ -52,16 +52,16 @@ impl std::fmt::Debug for PickedFile {
 
 /// A size as a reader reads it: "512 B", "2 KB", "3.4 MB".
 pub fn size_label(size: ByteSize) -> String {
-    const KB: ByteSize = ByteSize(1024);
-    const MB: ByteSize = ByteSize(1024 * 1024);
+    const KB: ByteSize = ByteSize::new(1024);
+    const MB: ByteSize = ByteSize::new(1024 * 1024);
     // Kilobytes round up, so the unit follows the rounded size: a size short
     // of a megabyte by less than a kilobyte reads in megabytes.
-    let kilobytes = size.0.div_ceil(KB.0);
-    let rounded = ByteSize(kilobytes.saturating_mul(KB.0));
+    let kilobytes = size.get().div_ceil(KB.get());
+    let rounded = ByteSize::new(kilobytes.saturating_mul(KB.get()));
     match size {
-        size if size < KB => format!("{} B", size.0),
+        size if size < KB => format!("{} B", size.get()),
         _ if rounded < MB => format!("{kilobytes} KB"),
-        size => format!("{:.1} MB", size.0 as f64 / MB.0 as f64),
+        size => format!("{:.1} MB", size.get() as f64 / MB.get() as f64),
     }
 }
 
@@ -73,7 +73,7 @@ impl PickedFile {
     pub fn media_type(&self) -> MediaType {
         match self.media_type.as_str().trim() {
             "" => UNKNOWN_TYPE.media_type(),
-            named => MediaType(named.to_owned()),
+            named => MediaType::new(named.to_owned()),
         }
     }
 }
@@ -288,13 +288,13 @@ mod tests {
     /// size just short of a megabyte reads "1.0 MB", never "1024 KB".
     #[test]
     fn a_size_label_never_reads_1024_kb() {
-        assert_eq!(size_label(ByteSize(512)), "512 B");
-        assert_eq!(size_label(ByteSize(1024)), "1 KB");
-        assert_eq!(size_label(ByteSize(1025)), "2 KB");
-        assert_eq!(size_label(ByteSize(1023 * 1024)), "1023 KB");
-        assert_eq!(size_label(ByteSize(1023 * 1024 + 1)), "1.0 MB");
-        assert_eq!(size_label(ByteSize(1024 * 1024 - 1)), "1.0 MB");
-        assert_eq!(size_label(ByteSize(3_565_158)), "3.4 MB");
+        assert_eq!(size_label(ByteSize::new(512)), "512 B");
+        assert_eq!(size_label(ByteSize::new(1024)), "1 KB");
+        assert_eq!(size_label(ByteSize::new(1025)), "2 KB");
+        assert_eq!(size_label(ByteSize::new(1023 * 1024)), "1023 KB");
+        assert_eq!(size_label(ByteSize::new(1023 * 1024 + 1)), "1.0 MB");
+        assert_eq!(size_label(ByteSize::new(1024 * 1024 - 1)), "1.0 MB");
+        assert_eq!(size_label(ByteSize::new(3_565_158)), "3.4 MB");
     }
 
     fn begin(uploads: &mut Uploads, id: u64, of: DraftOf, name: &str) -> bool {
@@ -302,8 +302,8 @@ mod tests {
             Generation::nth(id),
             of,
             name.to_owned(),
-            MediaType("image/png".to_owned()),
-            ByteSize(10),
+            MediaType::new("image/png".to_owned()),
+            ByteSize::new(10),
         )
     }
 
@@ -313,7 +313,7 @@ mod tests {
     fn a_file_name_debugs_its_length_alone() {
         let picked = PickedFile {
             name: "secret.pdf".to_owned(),
-            media_type: MediaType("application/pdf".to_owned()),
+            media_type: MediaType::new("application/pdf".to_owned()),
             data: ambre_core::Payload::<ambre_core::MediaBytes>::new(b"secret".to_vec()),
         };
         let shown = format!("{picked:?}");
@@ -347,8 +347,8 @@ mod tests {
         Attachment {
             media_ref: ContentHash::parse(HASH).expect("an address"),
             name: name.to_owned(),
-            media_type: MediaType("application/pdf".to_owned()),
-            size: ByteSize(10),
+            media_type: MediaType::new("application/pdf".to_owned()),
+            size: ByteSize::new(10),
         }
     }
 
@@ -421,7 +421,7 @@ mod tests {
     /// A raster image opens; a type that can carry script saves.
     #[test]
     fn only_a_raster_image_opens_in_a_tab() {
-        let opens = |named: &str| opens_as(&MediaType(named.to_owned()));
+        let opens = |named: &str| opens_as(&MediaType::new(named.to_owned()));
         assert_eq!(opens("image/png"), Some(KnownMediaType::Png));
         assert_eq!(opens(" IMAGE/JPEG "), Some(KnownMediaType::Jpeg));
         for saves in ["image/svg+xml", "text/html", "application/pdf", ""] {

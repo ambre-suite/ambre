@@ -4,7 +4,7 @@ use ambre_core::RefusalCode;
 
 /// The delay before Sync asks again for the first stopped replay of a
 /// document. Each later stop doubles it (`ambre-spec-budgets.md` section 8).
-const REPLAY_RETRY_BASE: ambre_core::Millis = ambre_core::Millis(1_000);
+const REPLAY_RETRY_BASE: ambre_core::Millis = ambre_core::Millis::new(1_000);
 
 /// The stops Sync asks again after. One more reaches Logic as an error
 /// (`ambre-spec-budgets.md` section 8, `SYNC-154`).
@@ -18,8 +18,8 @@ fn replay_retry_delay(stop: u32) -> Option<ambre_core::Millis> {
         .filter(|doublings| *doublings < REPLAY_RETRY_LIMIT)?;
     2_u64
         .checked_pow(doublings)
-        .and_then(|factor| REPLAY_RETRY_BASE.0.checked_mul(factor))
-        .map(ambre_core::Millis)
+        .and_then(|factor| REPLAY_RETRY_BASE.get().checked_mul(factor))
+        .map(ambre_core::Millis::new)
 }
 
 /// The stops of one document's replay since its budget last started.
@@ -257,9 +257,9 @@ impl SyncState {
         if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
             let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
                 cb.as_ref().unchecked_ref(),
-                i32::try_from(delay.0).unwrap_or(i32::MAX),
+                i32::try_from(delay.get()).unwrap_or(i32::MAX),
             );
-            tracing::warn!("Sync: reconnect scheduled in {}ms", delay.0);
+            tracing::warn!("Sync: reconnect scheduled in {}ms", delay.get());
         }
         // Keep the closure alive until it fires (replaces any previous pending one).
         self._reconnect_timer = Some(cb);
@@ -286,7 +286,7 @@ impl SyncState {
         if let Ok(scope) = js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>() {
             let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
                 cb.unchecked_ref(),
-                i32::try_from(delay.0).unwrap_or(i32::MAX),
+                i32::try_from(delay.get()).unwrap_or(i32::MAX),
             );
         }
     }
@@ -733,7 +733,7 @@ impl SyncState {
                         .documents
                         .get(&document_id)
                         .map(|d| d.last_seq)
-                        .unwrap_or(Seq(0));
+                        .unwrap_or(Seq::new(0));
                     self.ws_send(&WsClientMsg::RequestMissing {
                         document_id,
                         after_seq,
@@ -1299,7 +1299,7 @@ impl SyncState {
             WsServerMsg::Update { seq, update } => {
                 tracing::debug!(
                     "[Sync<-Server] WS Update seq={} doc={} clock={}",
-                    seq.0,
+                    seq.get(),
                     update.public_data.document_id,
                     update.public_data.clock.0,
                 );
@@ -1705,7 +1705,7 @@ mod tests {
         let (mut state, _rx) = with_open_document();
         let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
         let clock = now.clone();
-        state.clock = std::rc::Rc::new(move || ambre_core::UnixMillis(clock.get()));
+        state.clock = std::rc::Rc::new(move || ambre_core::UnixMillis::new(clock.get()));
         let fire_at = |state: &mut SyncState, at: u64| {
             now.set(at);
             state.handle_sync_event(SyncEvent::ReconnectNow);
@@ -1739,7 +1739,7 @@ mod tests {
         let reopens = |state: &mut SyncState| {
             let now = std::rc::Rc::new(std::cell::Cell::new(0_u64));
             let clock = now.clone();
-            state.clock = std::rc::Rc::new(move || ambre_core::UnixMillis(clock.get()));
+            state.clock = std::rc::Rc::new(move || ambre_core::UnixMillis::new(clock.get()));
             state.handle_sync_event(closed(CloseCode::new(1006)));
             now.set(60_000);
             state.handle_sync_event(SyncEvent::ReconnectNow);
@@ -1760,7 +1760,7 @@ mod tests {
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: SecretToken::from("access".to_owned()),
             refresh_token: SecretToken::from("refresh".to_owned()),
-            access_expires_in: ambre_core::Seconds(60),
+            access_expires_in: ambre_core::Seconds::new(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
@@ -1805,7 +1805,7 @@ mod tests {
             tokens: TokenPair {
                 access_token: SecretToken::from("access".to_owned()),
                 refresh_token: SecretToken::from("refresh".to_owned()),
-                access_expires_in: ambre_core::Seconds(60),
+                access_expires_in: ambre_core::Seconds::new(60),
             },
         });
         assert_eq!(state.socket_opens, 1);
@@ -1868,7 +1868,7 @@ mod tests {
             DocType::Prose,
             crate::Existence::OnRelay,
         );
-        doc.last_seq = Seq(7);
+        doc.last_seq = Seq::new(7);
         state.documents.insert(id, doc);
         state
             .session_nonces
@@ -1899,9 +1899,9 @@ mod tests {
         assert!(matches!(
             sent[1],
             WsClientMsg::RequestMissing {
-                after_seq: Seq(7),
+                after_seq,
                 ..
-            }
+            } if after_seq.get() == 7
         ));
         assert!(matches!(sent[2], WsClientMsg::Update(_)));
         assert_eq!(sent.len(), 3);
@@ -1926,9 +1926,9 @@ mod tests {
                 DocType::Trame,
                 crate::Existence::OnRelay,
             );
-            doc.last_seq = Seq(last);
+            doc.last_seq = Seq::new(last);
             state.documents.insert(id, doc);
-            cursors.insert(id, Seq(last));
+            cursors.insert(id, Seq::new(last));
         }
         let local = Id::<Document>::mint();
         state.documents.insert(
@@ -2001,7 +2001,7 @@ mod tests {
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: SecretToken::from("acc-s3cr3t".to_owned()),
             refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
-            access_expires_in: ambre_core::Seconds(60),
+            access_expires_in: ambre_core::Seconds::new(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
@@ -2024,7 +2024,7 @@ mod tests {
         let pair = TokenPair {
             access_token: SecretToken::from("acc-s3cr3t".to_owned()),
             refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
-            access_expires_in: ambre_core::Seconds(60),
+            access_expires_in: ambre_core::Seconds::new(60),
         };
         let shown = format!("{pair:?}");
         assert!(!shown.contains("s3cr3t"), "{shown}");
@@ -2051,7 +2051,7 @@ mod tests {
         let id = *state.documents.keys().next().unwrap();
         let doc = state.documents.get_mut(&id).unwrap();
         doc.existence = crate::Existence::OnRelay;
-        doc.last_seq = Seq(7);
+        doc.last_seq = Seq::new(7);
         let (tx, wire) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(tx);
         (state, rx, wire, id)
@@ -2064,7 +2064,7 @@ mod tests {
     fn stopped_after(document_id: Id<Document>, after: u64) -> SyncEvent {
         SyncEvent::WsMessage(WsServerMsg::ReplayStopped {
             document_id,
-            after_seq: Seq(after),
+            after_seq: Seq::new(after),
         })
     }
 
@@ -2114,7 +2114,7 @@ mod tests {
         assert_eq!(asked.len(), 1);
         assert!(matches!(
             asked[0],
-            WsClientMsg::RequestMissing { document_id, after_seq: Seq(7) } if document_id == id
+            WsClientMsg::RequestMissing { document_id, after_seq } if document_id == id && after_seq.get() == 7
         ));
     }
 
@@ -2123,7 +2123,7 @@ mod tests {
     #[test]
     fn the_replay_retry_delay_doubles_up_to_its_budget() {
         let delays: Vec<Option<u64>> = (0..=6)
-            .map(|stop| replay_retry_delay(stop).map(|d| d.0))
+            .map(|stop| replay_retry_delay(stop).map(|d| d.get()))
             .collect();
         assert_eq!(
             delays,
@@ -2155,11 +2155,11 @@ mod tests {
                     e,
                     LogicEvent::ApiError {
                         failure: ambre_bus::ApiFailure::Relay {
-                            status: ambre_core::HttpStatus(500),
+                            status,
                             ..
                         },
                         ..
-                    }
+                    } if status.get() == 500
                 )
             })
             .count();
@@ -2175,9 +2175,9 @@ mod tests {
         assert!(matches!(
             sent(&wire)[..],
             [WsClientMsg::RequestMissing {
-                after_seq: Seq(7),
+                after_seq,
                 ..
-            }]
+            }] if after_seq.get() == 7
         ));
     }
 
@@ -2261,10 +2261,10 @@ mod tests {
             matches!(
                 told[..],
                 [
-                    LogicEvent::ApiError { failure: ambre_bus::ApiFailure::Relay { status: ambre_core::HttpStatus(429), .. }, .. },
-                    LogicEvent::ApiError { failure: ambre_bus::ApiFailure::Relay { status: ambre_core::HttpStatus(403), .. }, .. },
+                    LogicEvent::ApiError { failure: ambre_bus::ApiFailure::Relay { status: status_1, .. }, .. },
+                    LogicEvent::ApiError { failure: ambre_bus::ApiFailure::Relay { status: status_2, .. }, .. },
                     LogicEvent::MemberRevoked { document_id, revoked_user_id },
-                ] if document_id == id && revoked_user_id == me
+                ] if document_id == id && revoked_user_id == me && status_1.get() == 429 && status_2.get() == 403
             ),
             "{told:?}"
         );
@@ -2292,9 +2292,9 @@ mod tests {
             matches!(
                 told[..],
                 [
-                    LogicEvent::ApiError { failure: ambre_bus::ApiFailure::Relay { status: ambre_core::HttpStatus(404), .. }, .. },
+                    LogicEvent::ApiError { failure: ambre_bus::ApiFailure::Relay { status, .. }, .. },
                     LogicEvent::DocumentGone { document_id },
-                ] if document_id == id
+                ] if document_id == id && status.get() == 404
             ),
             "{told:?}"
         );
@@ -2314,11 +2314,11 @@ mod tests {
             told[..],
             [LogicEvent::ApiError {
                 failure: ambre_bus::ApiFailure::Relay {
-                    status: ambre_core::HttpStatus(413),
+                    status,
                     ..
                 },
                 ..
-            }]
+            }] if status.get() == 413
         ));
     }
 }

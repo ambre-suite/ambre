@@ -42,7 +42,7 @@ impl MockBlindRelay {
         Self {
             documents: HashMap::new(),
             clients: HashMap::new(),
-            next_seq: Seq(1),
+            next_seq: Seq::new(1),
         }
     }
 
@@ -132,7 +132,7 @@ impl MockBlindRelay {
                     let missing: Vec<_> = state
                         .updates
                         .iter()
-                        .filter(|(s, _)| s.0 > after_seq.0)
+                        .filter(|(s, _)| s.get() > after_seq.get())
                         .map(|(s, u)| ambre_protocol::messages::SeqUpdate {
                             seq: *s,
                             update: u.clone(),
@@ -178,7 +178,7 @@ impl MockBlindRelay {
             });
         state.snapshots.push(snapshot_id);
         // The snapshot folds in every delta the document holds so far.
-        let covered_seq = state.updates.last().map_or(Seq(0), |(seq, _)| *seq);
+        let covered_seq = state.updates.last().map_or(Seq::new(0), |(seq, _)| *seq);
         for tx in self.clients.values() {
             let _ = tx.send(WsServerMsg::SnapshotAvailable {
                 document_id,
@@ -213,7 +213,7 @@ mod tests {
         let (_tx_b, rx_b) = relay.connect(user_b);
 
         let update = Update {
-            ciphertext: ambre_protocol::messages::Ciphertext(b"cipher".to_vec()),
+            ciphertext: ambre_protocol::messages::Ciphertext::new(b"cipher".to_vec()),
             nonce: ambre_core::FixedBytes::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc,

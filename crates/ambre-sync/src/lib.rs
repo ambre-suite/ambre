@@ -811,7 +811,7 @@ impl SyncDocumentState {
             current_snapshot_id,
             local_clock: Clock(0),
             ephemeral_counter: Counter(0),
-            last_seq: Seq(0),
+            last_seq: Seq::new(0),
             ingested: BTreeSet::new(),
             known_snapshots: HashSet::from([current_snapshot_id]),
             quarantine: HashMap::new(),
@@ -1416,7 +1416,7 @@ impl SyncState {
             } => {
                 tracing::info!(
                     "[Sync] received SendUpdate doc={document_id} delta_size={}",
-                    payload.len().0
+                    payload.len().get()
                 );
                 self.send_summarized_update(document_id, payload, summary);
             }
@@ -1814,7 +1814,7 @@ mod setup_tests {
         let refused = http::HttpError::refused(
             http::Method::Get,
             &crate::http::Target::relay(url),
-            ambre_core::HttpStatus(403),
+            ambre_core::HttpStatus::new(403),
             Some(ambre_core::RefusalCode::SetupRequired),
         );
         let _ = sink.send(LogicEvent::ApiError {
@@ -1833,7 +1833,7 @@ mod setup_tests {
         let bare = http::HttpError::refused(
             http::Method::Get,
             &crate::http::Target::relay(url),
-            ambre_core::HttpStatus(403),
+            ambre_core::HttpStatus::new(403),
             None,
         );
         let _ = sink.send(LogicEvent::ApiError {
@@ -1856,11 +1856,11 @@ mod setup_tests {
             told[3],
             LogicEvent::ApiError {
                 failure: ApiFailure::Relay {
-                    status: ambre_core::HttpStatus(403),
+                    status,
                     code: None
                 },
                 ..
-            }
+            } if status.get() == 403
         ));
     }
 
@@ -2075,7 +2075,7 @@ mod seal_tests {
         let pub_key = FixedBytes::<PublicKey>::from_array([2u8; 32]);
         let key_id = FixedBytes::<KeyId>::from_array([4u8; 16]);
         state.ws_send(&WsClientMsg::Update(Update {
-            ciphertext: Ciphertext(typed.clone()),
+            ciphertext: Ciphertext::new(typed.clone()),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: id,
@@ -2088,7 +2088,7 @@ mod seal_tests {
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
         }));
         state.ws_send(&WsClientMsg::Ephemeral(Ephemeral {
-            ciphertext: Ciphertext(typed.clone()),
+            ciphertext: Ciphertext::new(typed.clone()),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: id,
@@ -2120,7 +2120,7 @@ mod seal_tests {
         let WsClientMsg::Update(update) = &frames[0] else {
             panic!("the first frame is not the update: {:?}", frames[0]);
         };
-        assert_ne!(update.ciphertext.0, typed);
+        assert_ne!(update.ciphertext.as_bytes(), typed);
         let body = pipeline::open_update(update, key).expect("opens");
         assert_eq!(
             pipeline::split_update_body(body).expect("splits").delta,

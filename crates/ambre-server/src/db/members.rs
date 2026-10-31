@@ -359,7 +359,7 @@ pub async fn list_document_members(
         .map(|r| {
             Ok(MemberWithUserRow {
                 user_id: r.try_get::<PgId, _>("user_id")?.into(),
-                email: ambre_core::Email(r.try_get("email")?),
+                email: ambre_core::Email::new(r.try_get("email")?),
                 email_verified: r.try_get("email_verified")?,
                 display_name: decode_display_name(r.try_get("display_name")?)?,
                 role: decode_role(r.try_get("role")?)?,

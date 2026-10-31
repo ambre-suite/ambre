@@ -621,7 +621,7 @@ mod tests {
     /// session's user (`PROSE-FEAT-263`, `PROSE-FEAT-265`, `PROSE-FEAT-262`).
     #[test]
     fn typed_text_becomes_a_suggested_insertion_by_its_author() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello"]);
         suggest(&mut state);
         type_at(&mut state, ids[0], DocOffset::new(5), " world");
         assert_eq!(text(&state, ids[0]), "Hello world");
@@ -636,7 +636,7 @@ mod tests {
     /// one copy of it, and nothing else does (`PROSE-FEAT-257`).
     #[test]
     fn a_suggestion_is_a_mark_over_the_text_itself() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["ab"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["ab"]);
         suggest(&mut state);
         type_at(&mut state, ids[0], DocOffset::new(1), "X");
         assert_eq!(text(&state, ids[0]), "aXb");
@@ -649,7 +649,7 @@ mod tests {
     /// it off applies and cancels nothing (`PROSE-FEAT-264`, `PROSE-FEAT-089`).
     #[test]
     fn turning_the_mode_off_leaves_the_pending_ones_and_marks_nothing_new() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello"]);
         suggest(&mut state);
         type_at(&mut state, ids[0], DocOffset::new(5), "!");
         let before = state.suggestions();
@@ -667,7 +667,7 @@ mod tests {
     /// burst starts another (`PROSE-FEAT-086`).
     #[test]
     fn a_keystroke_away_from_the_burst_starts_a_new_suggestion() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello world"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello world"]);
         suggest(&mut state);
         type_at(&mut state, ids[0], DocOffset::new(5), ",");
         type_at(&mut state, ids[0], DocOffset::new(6), " my");
@@ -680,8 +680,8 @@ mod tests {
     /// (`PROSE-FEAT-266`).
     #[test]
     fn typing_inside_another_suggestion_leaves_its_span_alone() {
-        let (mut alice, ids) = document(ambre_core::PeerId(1), ALICE, &["ab"]);
-        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
+        let (mut alice, ids) = document(ambre_core::PeerId::new(1), ALICE, &["ab"]);
+        let mut bob = join(&alice, ambre_core::PeerId::new(2), BOB);
         suggest(&mut alice);
         suggest(&mut bob);
         let typed = type_at(&mut alice, ids[0], DocOffset::new(1), "XYZ");
@@ -699,7 +699,7 @@ mod tests {
     /// joins no suggestion (`PROSE-FEAT-304`).
     #[test]
     fn plain_typing_inside_a_suggestion_joins_none() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["ab"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["ab"]);
         suggest(&mut state);
         type_at(&mut state, ids[0], DocOffset::new(1), "XY");
         state.handle_command(ProseCommand::EnableTrackChanges {
@@ -718,7 +718,7 @@ mod tests {
     /// (`PROSE-FEAT-267`, `PROSE-FEAT-087`, `PROSE-FEAT-088`).
     #[test]
     fn a_delete_removes_its_own_suggestion_and_marks_the_rest() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello"]);
         suggest(&mut state);
         type_at(&mut state, ids[0], DocOffset::new(5), "XY");
         delete(&mut state, ids[0], (3, 7));
@@ -731,7 +731,7 @@ mod tests {
     /// Consecutive backspaces grow one deletion rather than several.
     #[test]
     fn backspaces_in_a_row_are_one_deletion() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello"]);
         suggest(&mut state);
         for at in (2..5).rev() {
             delete(&mut state, ids[0], (at, at + 1));
@@ -744,8 +744,8 @@ mod tests {
     /// (`PROSE-FEAT-258`, `PROSE-FEAT-260`).
     #[test]
     fn deleting_another_peers_insertion_marks_it_rather_than_removing_it() {
-        let (mut alice, ids) = document(ambre_core::PeerId(1), ALICE, &["ab"]);
-        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
+        let (mut alice, ids) = document(ambre_core::PeerId::new(1), ALICE, &["ab"]);
+        let mut bob = join(&alice, ambre_core::PeerId::new(2), BOB);
         suggest(&mut alice);
         suggest(&mut bob);
         let typed = type_at(&mut alice, ids[0], DocOffset::new(1), "XY");
@@ -766,8 +766,8 @@ mod tests {
     /// is (`PROSE-FEAT-268`).
     #[test]
     fn a_delete_never_takes_over_another_peers_deletion() {
-        let (mut alice, ids) = document(ambre_core::PeerId(1), ALICE, &["abcd"]);
-        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
+        let (mut alice, ids) = document(ambre_core::PeerId::new(1), ALICE, &["abcd"]);
+        let mut bob = join(&alice, ambre_core::PeerId::new(2), BOB);
         suggest(&mut alice);
         suggest(&mut bob);
         let marked = delete(&mut alice, ids[0], (1, 3));
@@ -785,7 +785,7 @@ mod tests {
     /// (`PROSE-FEAT-259`, `PROSE-FEAT-083`).
     #[test]
     fn a_deletion_across_a_break_is_one_suggestion_and_one_accept() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello", "world"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello", "world"]);
         suggest(&mut state);
         state.handle_command(ProseCommand::DeleteRange {
             anchor: (ids[0], DocOffset::new(3)),
@@ -806,7 +806,7 @@ mod tests {
     /// (`PROSE-FEAT-273`, `PROSE-FEAT-272`).
     #[test]
     fn rejecting_a_deletion_across_a_break_keeps_every_span() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello", "world"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello", "world"]);
         suggest(&mut state);
         state.handle_command(ProseCommand::DeleteRange {
             anchor: (ids[1], DocOffset::new(2)),
@@ -832,7 +832,7 @@ mod tests {
             (false, false, "Hello"),
         ];
         for (insertion, accept, expected) in cases {
-            let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
+            let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello"]);
             suggest(&mut state);
             if insertion {
                 type_at(&mut state, ids[0], DocOffset::new(5), " world");
@@ -863,8 +863,8 @@ mod tests {
     #[test]
     fn resolving_one_suggestion_leaves_the_other_one_its_span() {
         for accept in [true, false] {
-            let (mut alice, ids) = document(ambre_core::PeerId(1), ALICE, &["abcd"]);
-            let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
+            let (mut alice, ids) = document(ambre_core::PeerId::new(1), ALICE, &["abcd"]);
+            let mut bob = join(&alice, ambre_core::PeerId::new(2), BOB);
             suggest(&mut alice);
             suggest(&mut bob);
             let a = delete(&mut alice, ids[0], (0, 1));
@@ -897,8 +897,8 @@ mod tests {
     #[test]
     fn a_span_under_both_marks_goes_when_either_side_removes_it() {
         for (resolve_insertion, accept) in [(true, false), (false, true)] {
-            let (mut alice, ids) = document(ambre_core::PeerId(1), ALICE, &["ab"]);
-            let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
+            let (mut alice, ids) = document(ambre_core::PeerId::new(1), ALICE, &["ab"]);
+            let mut bob = join(&alice, ambre_core::PeerId::new(2), BOB);
             suggest(&mut alice);
             suggest(&mut bob);
             let typed = type_at(&mut alice, ids[0], DocOffset::new(1), "XY");
@@ -931,8 +931,11 @@ mod tests {
     fn resolving_all_is_each_resolved_alone() {
         for accept in [true, false] {
             let build = || {
-                let (mut state, ids) =
-                    document(ambre_core::PeerId(1), ALICE, &["one two three", "four"]);
+                let (mut state, ids) = document(
+                    ambre_core::PeerId::new(1),
+                    ALICE,
+                    &["one two three", "four"],
+                );
                 suggest(&mut state);
                 type_at(&mut state, ids[0], DocOffset::ZERO, ">");
                 delete(&mut state, ids[0], (5, 8));
@@ -974,8 +977,8 @@ mod tests {
     /// edit inside it (`PROSE-FEAT-082`).
     #[test]
     fn a_suggestion_keeps_its_identity_on_every_peer() {
-        let (mut alice, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
-        let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
+        let (mut alice, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello"]);
+        let mut bob = join(&alice, ambre_core::PeerId::new(2), BOB);
         suggest(&mut alice);
         let typed = type_at(&mut alice, ids[0], DocOffset::new(5), " world");
         bob.apply_remote(&typed.update.expect("a delta"));
@@ -992,14 +995,14 @@ mod tests {
     #[test]
     fn a_concurrent_accept_and_reject_converge_on_one_outcome() {
         for insertion in [true, false] {
-            let (mut alice, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
+            let (mut alice, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello"]);
             suggest(&mut alice);
             if insertion {
                 type_at(&mut alice, ids[0], DocOffset::new(5), " world");
             } else {
                 delete(&mut alice, ids[0], (1, 4));
             }
-            let mut bob = join(&alice, ambre_core::PeerId(2), BOB);
+            let mut bob = join(&alice, ambre_core::PeerId::new(2), BOB);
             let id = only(&alice).suggestion_id;
             let a = alice.handle_command(ProseCommand::AcceptSuggestion { suggestion_id: id });
             let b = bob.handle_command(ProseCommand::RejectSuggestion { suggestion_id: id });
@@ -1014,7 +1017,7 @@ mod tests {
     /// Structure and format commands wait for the mode to be off.
     #[test]
     fn a_structure_command_is_refused_while_suggesting() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello"]);
         suggest(&mut state);
         for command in [
             ProseCommand::SplitBlock {
@@ -1038,7 +1041,7 @@ mod tests {
     /// author (`PROSE-FEAT-262`).
     #[test]
     fn a_session_with_no_user_cannot_suggest() {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document");
+        let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
         let outcome = state.handle_command(ProseCommand::EnableTrackChanges {
             mode: crate::events::EditMode::Suggesting,
         });
@@ -1049,7 +1052,7 @@ mod tests {
     /// One undo takes back the text, its mark and its entry together.
     #[test]
     fn an_undo_takes_back_the_whole_suggestion() {
-        let (mut state, ids) = document(ambre_core::PeerId(1), ALICE, &["Hello"]);
+        let (mut state, ids) = document(ambre_core::PeerId::new(1), ALICE, &["Hello"]);
         suggest(&mut state);
         type_at(&mut state, ids[0], DocOffset::new(5), "!");
         state.handle_command(ProseCommand::Undo);
@@ -1067,8 +1070,8 @@ mod tests {
         fn accepting_everything_is_the_edits_made_plainly(
             edits in proptest::collection::vec((any::<bool>(), 0_u32..20, 1_u32..4), 1..16)
         ) {
-            let (mut tracked, ids) = document(ambre_core::PeerId(1), ALICE, &["abcdefghij"]);
-            let (mut plain, plain_ids) = document(ambre_core::PeerId(1), ALICE, &["abcdefghij"]);
+            let (mut tracked, ids) = document(ambre_core::PeerId::new(1), ALICE, &["abcdefghij"]);
+            let (mut plain, plain_ids) = document(ambre_core::PeerId::new(1), ALICE, &["abcdefghij"]);
             suggest(&mut tracked);
             for (insert, at, len) in edits {
                 // The tracked text still holds what it proposes to delete, so

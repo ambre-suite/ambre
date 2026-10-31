@@ -39,9 +39,19 @@ impl FixedRole for Signature {
 /// AEAD ciphertext wrapper. `Debug` prints its length and none of its bytes,
 /// so a logged message logs no ciphertext (`ZK-006`).
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Ciphertext(#[serde(with = "serde_bytes")] pub Vec<u8>);
+pub struct Ciphertext(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl Ciphertext {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw bytes.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
     /// The length in bytes, the one reading of a ciphertext a log may carry.
     pub fn len(&self) -> usize {
         self.0.len()
@@ -118,12 +128,12 @@ mod tests {
     /// array.
     #[test]
     fn a_fixed_size_type_states_the_length_of_its_array() {
-        assert_eq!(FixedBytes::<Nonce>::SIZE, ByteSize(24));
-        assert_eq!(FixedBytes::<CommitmentTag>::SIZE, ByteSize(32));
-        assert_eq!(FixedBytes::<Signature>::SIZE, ByteSize(64));
-        assert_eq!(FixedBytes::<KeyId>::SIZE, ByteSize(16));
-        assert_eq!(FixedBytes::<SessionNonce>::SIZE, ByteSize(16));
-        assert_eq!(FixedBytes::<PublicKey>::SIZE, ByteSize(32));
+        assert_eq!(FixedBytes::<Nonce>::SIZE, ByteSize::new(24));
+        assert_eq!(FixedBytes::<CommitmentTag>::SIZE, ByteSize::new(32));
+        assert_eq!(FixedBytes::<Signature>::SIZE, ByteSize::new(64));
+        assert_eq!(FixedBytes::<KeyId>::SIZE, ByteSize::new(16));
+        assert_eq!(FixedBytes::<SessionNonce>::SIZE, ByteSize::new(16));
+        assert_eq!(FixedBytes::<PublicKey>::SIZE, ByteSize::new(32));
     }
 
     /// A split reads one value from the front and hands back the bytes after

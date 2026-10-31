@@ -40,7 +40,19 @@ impl fmt::Display for SnapshotStatus {
 /// A word that names no status of its set.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("unknown status: {0}")]
-pub struct StatusError(pub String);
+pub struct StatusError(String);
+
+impl StatusError {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 /// Parses a snapshot status from its word, exactly as `as_str` writes it.
 impl FromStr for SnapshotStatus {
@@ -252,9 +264,19 @@ impl RefusalCode {
 /// with no answer has no status, and [`ApiFailure`] names it apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct HttpStatus(pub u16);
+pub struct HttpStatus(u16);
 
 impl HttpStatus {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u16) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+
     /// Whether the status is a success, `2xx`.
     #[must_use]
     pub const fn is_success(self) -> bool {

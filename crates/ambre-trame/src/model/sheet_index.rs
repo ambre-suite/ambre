@@ -59,7 +59,7 @@ impl Uid {
     pub fn parse_hex(s: &str) -> Option<Self> {
         let (peer, ctr) = s.split_once('_')?;
         Some(Uid {
-            peer: ambre_core::PeerId(u64::from_str_radix(peer, 16).ok()?),
+            peer: ambre_core::PeerId::new(u64::from_str_radix(peer, 16).ok()?),
             counter: ambre_core::IdCounter::new(u32::from_str_radix(ctr, 16).ok()?),
         })
     }
@@ -356,7 +356,7 @@ mod tests {
         for i in 0..n_rows {
             rows.push(
                 Uid {
-                    peer: ambre_core::PeerId(1),
+                    peer: ambre_core::PeerId::new(1),
                     counter: ambre_core::IdCounter::new(i as u32),
                 }
                 .to_key_part()
@@ -367,7 +367,7 @@ mod tests {
         for i in 0..n_cols {
             cols.push(
                 Uid {
-                    peer: ambre_core::PeerId(2),
+                    peer: ambre_core::PeerId::new(2),
                     counter: ambre_core::IdCounter::new(i as u32),
                 }
                 .to_key_part()
@@ -448,7 +448,7 @@ mod tests {
 
         // Insert a synthetic id at position 0: the old row 0 becomes row 1.
         let new_id = Uid {
-            peer: ambre_core::PeerId(999),
+            peer: ambre_core::PeerId::new(999),
             counter: ambre_core::IdCounter::new(7),
         };
         idx.apply_insert_row(Row::new(0), new_id);
@@ -484,7 +484,7 @@ mod tests {
     #[test]
     fn a_uid_reads_back_from_its_canonical_spelling_alone() {
         let uid = Uid {
-            peer: ambre_core::PeerId(0xab),
+            peer: ambre_core::PeerId::new(0xab),
             counter: ambre_core::IdCounter::new(2),
         };
         assert_eq!(Uid::parse("00000000000000ab_00000002"), Some(uid));
@@ -532,11 +532,11 @@ mod tests {
     #[test]
     fn cell_key_is_fixed_length_and_stable() {
         let r = Uid {
-            peer: ambre_core::PeerId(0x1234_5678_9abc_def0),
+            peer: ambre_core::PeerId::new(0x1234_5678_9abc_def0),
             counter: ambre_core::IdCounter::new(0xffff_ffff),
         };
         let c = Uid {
-            peer: ambre_core::PeerId(1),
+            peer: ambre_core::PeerId::new(1),
             counter: ambre_core::IdCounter::new(2),
         };
         let key = CellKey::of(r, c);
@@ -589,7 +589,7 @@ mod tests {
                 let rows = doc.get_movable_list(axis(SheetRoot::Rows).as_str());
                 let cols = doc.get_movable_list(axis(SheetRoot::Cols).as_str());
                 for (n, op) in ops.into_iter().enumerate() {
-                    let id = Uid { peer: ambre_core::PeerId(9), counter: ambre_core::IdCounter::new(n as u32) };
+                    let id = Uid { peer: ambre_core::PeerId::new(9), counter: ambre_core::IdCounter::new(n as u32) };
                     let key = id.to_key_part();
                     let (nr, nc) = (idx.row_len().get() as usize, idx.col_len().get() as usize);
                     let row = |p: usize| Row::from_index(p).expect("a row in range");

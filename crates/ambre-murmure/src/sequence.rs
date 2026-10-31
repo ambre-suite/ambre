@@ -23,7 +23,7 @@ use crate::schema::{self, MessageKey, Root};
 /// `loro`, so the two never read as each other.
 pub(crate) const FRAME_MAGIC: &[u8; 4] = b"amsq";
 /// One table row: a message identifier, then its number.
-const ROW_SIZE: ByteSize = ByteSize(16 + 8);
+const ROW_SIZE: ByteSize = ByteSize::new(16 + 8);
 
 /// Where a payload stands in the relay's order of its document.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,7 +92,7 @@ impl Sequence {
                 let Ok(meta) = blob_meta(payload) else {
                     tracing::warn!(
                         "[Murmure] update {} has no readable range; not numbered",
-                        seq.0
+                        seq.get()
                     );
                     return;
                 };
@@ -226,7 +226,7 @@ impl Sequence {
         let mut rows: Vec<([u8; 16], u64)> = self
             .exact
             .iter()
-            .map(|(id, seq)| (*id.as_bytes(), seq.0))
+            .map(|(id, seq)| (*id.as_bytes(), seq.get()))
             .collect();
         rows.sort_unstable();
         let count = u32::try_from(rows.len()).unwrap_or(u32::MAX);
@@ -354,7 +354,7 @@ fn table(
             .chunks_exact(ROW_SIZE.as_len())
             .filter_map(|row| {
                 let (id, seq) = row.split_first_chunk::<16>()?;
-                let seq = Seq(u64::from_le_bytes(seq.try_into().ok()?));
+                let seq = Seq::new(u64::from_le_bytes(seq.try_into().ok()?));
                 Some((Id::<Message>::from_bytes(*id), seq))
             }),
     )

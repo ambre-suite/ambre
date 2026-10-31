@@ -76,7 +76,7 @@ impl FixtureSeed {
     /// the same peer on every run.
     #[must_use]
     pub const fn peer(self) -> crate::PeerId {
-        crate::PeerId(self.0)
+        crate::PeerId::new(self.0)
     }
 }
 
@@ -166,7 +166,7 @@ pub fn seeded_document_id(seed: FixtureSeed) -> Id<Document> {
 /// deterministic and lets [`fixture_peer_count`] subtract one known id. The
 /// value is the loader's alone: a generator seeds its peer from its own seed
 /// and must never pick this one.
-pub const FIXTURE_IMPORT_PEER: crate::PeerId = crate::PeerId(0x10AD_0000_0000_0001);
+pub const FIXTURE_IMPORT_PEER: crate::PeerId = crate::PeerId::new(0x10AD_0000_0000_0001);
 
 /// Counts the *document's* own peers in `peers`, the oplog peer set.
 /// [`FIXTURE_IMPORT_PEER`] is the reader, not an author, so it does not count.

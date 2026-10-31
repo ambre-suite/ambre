@@ -312,7 +312,7 @@ impl ToileState {
     pub fn with_peer(peer: ambre_core::PeerId) -> Self {
         let doc = LoroDoc::new();
         // `set_peer_id` before any op: every minted element id captures it.
-        doc.set_peer_id(peer.0)
+        doc.set_peer_id(peer.get())
             .expect("a fresh LoroDoc accepts a peer id");
         // No wall clock in the ops: a recorded timestamp would differ between two
         // runs of the same generator and defeat the byte diff of `fixtures`.
@@ -333,7 +333,7 @@ impl ToileState {
         // copy is one change. Under the board's own identity, a reader that has
         // sent nothing would import each change against the whole history
         // (`TOILE-265`).
-        doc.set_peer_id(scaffold_identity().0)
+        doc.set_peer_id(scaffold_identity().get())
             .expect("a document outside a transaction takes a peer id");
         write_scaffold(&doc);
         doc.commit();
@@ -363,7 +363,7 @@ impl ToileState {
             wires_gone: std::cell::RefCell::default(),
             board_walks: Cell::new(BoardWalkCount::ZERO),
             counter: IdCounter::ZERO,
-            peer: ambre_core::PeerId(peer),
+            peer: ambre_core::PeerId::new(peer),
             viewport: Viewport::default(),
             viewport_version: ambre_core::Generation::ZERO,
             exported_vv: VersionVector::default(),
@@ -371,7 +371,7 @@ impl ToileState {
             my_user_id: None,
             my_name: None,
             presence: HashMap::new(),
-            now: ambre_core::PageTime(0.0),
+            now: ambre_core::PageTime::new(0.0),
             present: PresentMode::Editing,
             playback: PlaybackState::default(),
             broadcasting: Broadcast::Private,
@@ -399,7 +399,7 @@ impl ToileState {
         entry: ambre_core::PeerEntry,
     ) -> bool {
         self.doc.commit();
-        if let Err(e) = self.doc.set_peer_id(peer.0) {
+        if let Err(e) = self.doc.set_peer_id(peer.get()) {
             tracing::error!("Toile: the session identity was refused: {e:?}");
             return false;
         }
@@ -417,9 +417,9 @@ impl ToileState {
                 );
                 self.doc
                     .oplog_vv()
-                    .get(&peer.0)
+                    .get(&peer.get())
                     .copied()
-                    .map(ambre_core::OpCounter)
+                    .map(ambre_core::OpCounter::new)
             }
             Err(e) => {
                 tracing::error!("Toile: the registry entry was refused: {e:?}");
@@ -1118,7 +1118,7 @@ impl ToileState {
         // The registry entry alone is no edit: it waits for the first one and
         // travels with it (`AUTHOR-009`).
         if let Some(end) = self.entry_end {
-            if current.get(&self.peer.0) == Some(&end.0) {
+            if current.get(&self.peer.get()) == Some(&end.get()) {
                 return None;
             }
             self.entry_end = None;
@@ -1173,14 +1173,14 @@ impl ToileState {
     ///   cannot resolve a dependency keeps the edit pending forever rather than
     ///   showing it.
     fn absorb_imported(&mut self) {
-        let ours = self.exported_vv.get(&self.peer.0).copied();
+        let ours = self.exported_vv.get(&self.peer.get()).copied();
         self.exported_vv = self.doc.oplog_vv();
         match ours {
             Some(counter) => {
-                self.exported_vv.insert(self.peer.0, counter);
+                self.exported_vv.insert(self.peer.get(), counter);
             }
             None => {
-                self.exported_vv.remove(&self.peer.0);
+                self.exported_vv.remove(&self.peer.get());
             }
         }
     }

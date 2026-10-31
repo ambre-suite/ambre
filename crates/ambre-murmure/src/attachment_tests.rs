@@ -9,14 +9,14 @@ use ambre_core::id::{Channel, Id, User};
 
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel};
 
-const NOW: Timestamp = Timestamp(1_700_000_000_000);
+const NOW: Timestamp = Timestamp::new(1_700_000_000_000);
 
 fn file(hex: char, name: &str) -> Attachment {
     Attachment {
         media_ref: ContentHash::parse(&hex.to_string().repeat(64)).expect("an address"),
         name: name.to_owned(),
-        media_type: MediaType("image/png".to_owned()),
-        size: ByteSize(4_096),
+        media_type: MediaType::new("image/png".to_owned()),
+        size: ByteSize::new(4_096),
     }
 }
 

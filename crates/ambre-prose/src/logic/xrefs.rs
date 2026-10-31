@@ -87,7 +87,7 @@ mod tests {
 
     /// A heading "Intro", a paragraph, and a second heading "Details".
     fn document() -> (ProseState, Vec<BlockId>) {
-        let mut state = ProseState::with_peer(ambre_core::PeerId(1)).expect("a document");
+        let mut state = ProseState::with_peer(ambre_core::PeerId::new(1)).expect("a document");
         state.load_faces(&crate::layout::fonts::shipped_faces());
         let mut ids = state.root_blocks();
         for init in [
@@ -206,7 +206,7 @@ mod tests {
     fn a_target_an_undo_restores_resolves_again_on_the_other_peer() {
         let (mut alice, ids) = document();
         refer(&mut alice, ids[1], ids[2], CrossRefKind::HeadingNumber);
-        let mut bob = ProseState::with_peer(ambre_core::PeerId(2)).expect("a document");
+        let mut bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document");
         bob.load_faces(&crate::layout::fonts::shipped_faces());
         bob.import_snapshot(&alice.export_snapshot())
             .expect("the seed imports");

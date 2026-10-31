@@ -97,7 +97,7 @@ impl PresenceSender {
     /// is about to paint.
     pub fn reset(&mut self) {
         self.last = None;
-        self.last_sent = ambre_bus::PageTime(0.0);
+        self.last_sent = ambre_bus::PageTime::new(0.0);
     }
 }
 
@@ -425,7 +425,7 @@ mod tests {
     }
 
     fn paint(cursors: &PeerCursors, vp: &DisplayViewport) -> RecordingSurface {
-        paint_at(cursors, vp, ambre_bus::PageTime(0.0))
+        paint_at(cursors, vp, ambre_bus::PageTime::new(0.0))
     }
 
     /// Paint at a frame clock, for the trail's age fade.
@@ -446,7 +446,7 @@ mod tests {
     fn adopt_one(cursors: &mut PeerCursors, user_id: Id<User>, presence: PresencePayload) {
         cursors.adopt(
             vec![PresenceUpdate { user_id, presence }],
-            ambre_bus::PageTime(0.0),
+            ambre_bus::PageTime::new(0.0),
         );
     }
 
@@ -625,7 +625,7 @@ mod tests {
                     presence: at(10.0),
                 },
             ],
-            ambre_bus::PageTime(0.0),
+            ambre_bus::PageTime::new(0.0),
         );
         assert_eq!(
             paint(&cursors, &vp_with(vec![]))
@@ -641,7 +641,7 @@ mod tests {
                 user_id: a,
                 presence: at(0.0),
             }],
-            ambre_bus::PageTime(0.0),
+            ambre_bus::PageTime::new(0.0),
         );
         let s = paint(&cursors, &vp_with(vec![]));
         assert_eq!(
@@ -651,7 +651,7 @@ mod tests {
         );
 
         // And an empty set paints nothing at all.
-        cursors.adopt(Vec::new(), ambre_bus::PageTime(0.0));
+        cursors.adopt(Vec::new(), ambre_bus::PageTime::new(0.0));
         assert!(cursors.is_empty());
         assert!(paint(&cursors, &vp_with(vec![])).ops().is_empty());
     }
@@ -670,12 +670,12 @@ mod tests {
                         ..Default::default()
                     },
                 }],
-                ambre_bus::PageTime(0.0),
+                ambre_bus::PageTime::new(0.0),
             );
         }
         // Read at the sample clock: the segments are there.
         assert_eq!(
-            paint_at(&cursors, &vp_with(vec![]), ambre_bus::PageTime(0.0))
+            paint_at(&cursors, &vp_with(vec![]), ambre_bus::PageTime::new(0.0))
                 .count(|o| matches!(o, DrawOp::StrokeLine { .. }))
                 .get(),
             2
@@ -685,7 +685,7 @@ mod tests {
             paint_at(
                 &cursors,
                 &vp_with(vec![]),
-                ambre_bus::PageTime(LASER_FADE.get() + 1.0)
+                ambre_bus::PageTime::new(LASER_FADE.get() + 1.0)
             )
             .count(|o| matches!(o, DrawOp::StrokeLine { .. }))
             .get(),
@@ -693,19 +693,22 @@ mod tests {
             "an aged trail is not painted"
         );
         assert_eq!(
-            laser_alpha(ambre_bus::PageTime(0.0), ambre_bus::PageTime(0.0)),
+            laser_alpha(ambre_bus::PageTime::new(0.0), ambre_bus::PageTime::new(0.0)),
             ambre_core::Opacity::OPAQUE
         );
         assert_eq!(
             laser_alpha(
-                ambre_bus::PageTime(0.0),
-                ambre_bus::PageTime(LASER_FADE.get())
+                ambre_bus::PageTime::new(0.0),
+                ambre_bus::PageTime::new(LASER_FADE.get())
             ),
             ambre_core::Opacity::TRANSPARENT
         );
         // A sample from the future reads as fresh, never as invisible.
         assert_eq!(
-            laser_alpha(ambre_bus::PageTime(100.0), ambre_bus::PageTime(0.0)),
+            laser_alpha(
+                ambre_bus::PageTime::new(100.0),
+                ambre_bus::PageTime::new(0.0)
+            ),
             ambre_core::Opacity::OPAQUE
         );
     }
@@ -715,10 +718,10 @@ mod tests {
     /// fresh.
     #[test]
     fn a_laser_alpha_stays_in_range_on_a_nan_clock() {
-        let nan = ambre_bus::PageTime(f64::NAN);
+        let nan = ambre_bus::PageTime::new(f64::NAN);
         for (at, now) in [
-            (nan, ambre_bus::PageTime(0.0)),
-            (ambre_bus::PageTime(0.0), nan),
+            (nan, ambre_bus::PageTime::new(0.0)),
+            (ambre_bus::PageTime::new(0.0), nan),
         ] {
             assert_eq!(laser_alpha(at, now), ambre_core::Opacity::OPAQUE);
         }
@@ -745,20 +748,23 @@ mod tests {
             ..Default::default()
         };
         assert!(
-            sender.due(at(0.0), ambre_bus::PageTime(0.0)).is_some(),
+            sender.due(at(0.0), ambre_bus::PageTime::new(0.0)).is_some(),
             "the first sample sends"
         );
         assert!(
-            sender.due(at(0.0), ambre_bus::PageTime(1.0)).is_none(),
+            sender.due(at(0.0), ambre_bus::PageTime::new(1.0)).is_none(),
             "an unchanged sample waits for the heartbeat"
         );
         assert!(
-            sender.due(at(1.0), ambre_bus::PageTime(2.0)).is_some(),
+            sender.due(at(1.0), ambre_bus::PageTime::new(2.0)).is_some(),
             "a moved pointer sends at once"
         );
         assert!(
             sender
-                .due(at(1.0), ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT.get()))
+                .due(
+                    at(1.0),
+                    ambre_bus::PageTime::new(2.0 + PRESENCE_HEARTBEAT.get())
+                )
                 .is_some(),
             "an idle peer still says it is there"
         );
@@ -767,7 +773,10 @@ mod tests {
         sender.reset();
         assert!(
             sender
-                .due(at(1.0), ambre_bus::PageTime(2.0 + PRESENCE_HEARTBEAT.get()))
+                .due(
+                    at(1.0),
+                    ambre_bus::PageTime::new(2.0 + PRESENCE_HEARTBEAT.get())
+                )
                 .is_some()
         );
     }
@@ -787,7 +796,7 @@ mod tests {
         };
         let painted = |peers: Vec<PresenceUpdate>| {
             let mut cursors = PeerCursors::default();
-            cursors.adopt(peers, ambre_bus::PageTime(0.0));
+            cursors.adopt(peers, ambre_bus::PageTime::new(0.0));
             paint(&cursors, &vp_with(vec![]))
         };
 
@@ -826,7 +835,7 @@ mod tests {
                     },
                 },
             ],
-            ambre_bus::PageTime(0.0),
+            ambre_bus::PageTime::new(0.0),
         );
         let s = paint(&cursors, &vp_with(vec![]));
         // Two arrows, each its own peer colour.

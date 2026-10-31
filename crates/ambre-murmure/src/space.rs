@@ -126,7 +126,7 @@ impl SpaceState {
     #[cfg(test)]
     pub(crate) fn identify(mut self) -> Self {
         let peer = crate::session::next_peer();
-        self.adopt_session(peer, PeerEntryBytes::new(peer.0.to_le_bytes().to_vec()))
+        self.adopt_session(peer, PeerEntryBytes::new(peer.get().to_le_bytes().to_vec()))
             .expect("adopt");
         self
     }

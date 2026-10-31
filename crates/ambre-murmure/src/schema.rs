@@ -658,11 +658,11 @@ pub(crate) fn import_through(
             doc.set_peer_id(
                 migration_peer(heads.iter().map(|id| {
                     (
-                        ambre_core::PeerId(id.peer),
-                        ambre_core::OpCounter(id.counter),
+                        ambre_core::PeerId::new(id.peer),
+                        ambre_core::OpCounter::new(id.counter),
                     )
                 }))
-                .0,
+                .get(),
             )?;
             migrate_schema(steps, found, target, &doc)?;
         }

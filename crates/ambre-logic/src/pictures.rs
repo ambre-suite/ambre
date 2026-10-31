@@ -24,14 +24,14 @@ const PREVIEW_EDGE: Size<Px<Image>> = Size::new(Px::new(480), Px::new(320));
 /// this first.
 const MAX_SIZE: Size<Px<Image>> = Size::new(Px::new(4096), Px::new(4096));
 /// The most a decoder may allocate for one image.
-const MAX_ALLOC: ByteSize = ByteSize(128 * 1024 * 1024);
+const MAX_ALLOC: ByteSize = ByteSize::new(128 * 1024 * 1024);
 /// The bytes the frames of one preview may hold. An animation past it plays
 /// the frames that fit (`ambre-spec-budgets.md section 6`).
-pub(crate) const PICTURE_MAX_SIZE: ByteSize = ByteSize(8 * 1024 * 1024);
+pub(crate) const PICTURE_MAX_SIZE: ByteSize = ByteSize::new(8 * 1024 * 1024);
 /// A frame delay at or under this plays at [`SLOW_DELAY`], as browsers do:
 /// a file that asks for none would otherwise spin.
-const FAST_DELAY: Millis = Millis(10);
-const SLOW_DELAY: Millis = Millis(100);
+const FAST_DELAY: Millis = Millis::new(10);
+const SLOW_DELAY: Millis = Millis::new(100);
 
 impl LogicState {
     /// Fetch the image `media_ref`, stored under `document_id`, for the view
@@ -103,7 +103,7 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
     let mut limits = Limits::default();
     limits.max_image_width = Some(MAX_SIZE.width.get());
     limits.max_image_height = Some(MAX_SIZE.height.get());
-    limits.max_alloc = Some(MAX_ALLOC.0);
+    limits.max_alloc = Some(MAX_ALLOC.get());
     match format {
         ImageFormat::Gif => {
             let mut decoder = GifDecoder::new(Cursor::new(bytes)).ok()?;
@@ -111,7 +111,7 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
             let (width, height) = decoder.dimensions();
             let size = fit(Size::new(Px::new(width), Px::new(height)));
             let mut frames = Vec::new();
-            let mut held = ByteSize(0);
+            let mut held = ByteSize::new(0);
             for frame in decoder.into_frames() {
                 // A broken frame ends the animation; the frames before it play.
                 let Ok(frame) = frame else { break };
@@ -124,7 +124,9 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
                 held = after;
                 frames.push(PictureFrame {
                     pixels,
-                    delay: delay(Millis(u64::from(numer.checked_div(denom).unwrap_or(0)))),
+                    delay: delay(Millis::new(u64::from(
+                        numer.checked_div(denom).unwrap_or(0),
+                    ))),
                 });
             }
             (!frames.is_empty()).then_some(Picture { size, frames })
@@ -139,7 +141,7 @@ pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
                 size,
                 frames: vec![PictureFrame {
                     pixels: scale(image, size),
-                    delay: ambre_core::Millis(0),
+                    delay: ambre_core::Millis::new(0),
                 }],
             })
         }
@@ -222,13 +224,13 @@ mod tests {
             picture
                 .frames
                 .iter()
-                .all(|f| f.delay == ambre_core::Millis(70))
+                .all(|f| f.delay == ambre_core::Millis::new(70))
         );
         assert!(
             picture
                 .frames
                 .iter()
-                .all(|f| f.pixels.len() == ambre_bus::ByteSize(480 * 160 * 4))
+                .all(|f| f.pixels.len() == ambre_bus::ByteSize::new(480 * 160 * 4))
         );
         assert_ne!(picture.frames[0].pixels, picture.frames[1].pixels);
         let spinning = decode(&Payload::new(gif(2, (8, 8), 0))).expect("a GIF");

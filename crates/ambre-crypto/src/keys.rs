@@ -154,7 +154,7 @@ impl MasterSeed {
     ) -> Result<Encoded<WrappedMasterKey>, CryptoError> {
         let (nonce, ciphertext) = aead::seal(self.0.expose(), aad, key)?;
         let mut wrapped = nonce.as_slice().to_vec();
-        wrapped.extend_from_slice(&ciphertext.0);
+        wrapped.extend_from_slice(ciphertext.as_bytes());
         Ok(Encoded::new(wrapped))
     }
 
@@ -179,7 +179,7 @@ impl MasterSeed {
             .ok_or(CryptoError::InvalidKeyLength)?;
         let opened = aead::open(
             &FixedBytes::from_array(*nonce),
-            &ambre_core::Ciphertext(ciphertext.to_vec()),
+            &ambre_core::Ciphertext::new(ciphertext.to_vec()),
             aad,
             &key.document_key(),
         )?;

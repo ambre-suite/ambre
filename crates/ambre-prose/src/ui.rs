@@ -1149,7 +1149,7 @@ mod tests {
     fn the_draft_echo_never_reaches_the_wire() {
         let (tx, rx) =
             ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(4));
-        let block = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
+        let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
             ambre_bus::app::prose::TextAck(1),
@@ -1181,7 +1181,7 @@ mod tests {
 
     #[test]
     fn a_confirming_change_clears_the_draft_it_covers() {
-        let block = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
+        let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
             ambre_bus::app::prose::TextAck(1),
@@ -1217,7 +1217,7 @@ mod tests {
 
     #[test]
     fn an_event_carrying_no_change_leaves_the_draft_alone() {
-        let block = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
+        let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
             ambre_bus::app::prose::TextAck(1),
@@ -1234,8 +1234,8 @@ mod tests {
 
     #[test]
     fn a_split_leaves_the_caret_at_the_start_of_the_new_paragraph() {
-        let source = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
-        let new_block = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(4));
+        let source = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
+        let new_block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(4));
         let mut state = ProseUiState::default();
         state.apply_event(&ProseEvent::BlockSplit { source, new_block });
         let cursor = state.cursor.expect("the caret moved");
@@ -1245,8 +1245,8 @@ mod tests {
 
     #[test]
     fn the_draft_lays_its_entries_over_the_laid_text_in_order() {
-        let block = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0));
-        let other = BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(1));
+        let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
+        let other = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(1));
         let mut draft = DraftBuffer::default();
         draft.push_str(
             ambre_bus::app::prose::TextAck(1),
@@ -1287,7 +1287,7 @@ mod tests {
                     ambre_core::DeltaBytes,
                 >::new(vec![1])),
             });
-            recounts += usize::from(state.tick(ambre_core::PageTime(now)).is_some());
+            recounts += usize::from(state.tick(ambre_core::PageTime::new(now)).is_some());
             now += 16.0;
         }
         assert_eq!(recounts, 0);
@@ -1295,7 +1295,7 @@ mod tests {
         // delay has run out, and no second one.
         let stopped = now;
         while now < stopped + 2000.0 {
-            if let Some(command) = state.tick(ambre_core::PageTime(now)) {
+            if let Some(command) = state.tick(ambre_core::PageTime::new(now)) {
                 assert_eq!(command, ProseCommand::CountWords);
                 assert!(now - stopped >= RECOUNT_DELAY.get() - 16.0);
                 recounts += 1;
@@ -1309,7 +1309,7 @@ mod tests {
     fn a_closed_search_leaves_nothing_highlighted() {
         let mut ui = ProseUiState::default();
         let hit = FindMatch {
-            block_id: BlockId::new(ambre_core::PeerId(1), ambre_core::OpCounter(0)),
+            block_id: BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0)),
             range: DocSpan::from_usize_range(0..3),
         };
         ui.apply_event(&ProseEvent::FindResults {

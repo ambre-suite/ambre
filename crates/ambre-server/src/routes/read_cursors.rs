@@ -60,7 +60,7 @@ pub async fn set_read_cursor(
         .ok_or_else(not_found)?;
     // The register holds a signed 64-bit number: a cursor past it is refused,
     // never clamped.
-    if i64::try_from(req.seq.0).is_err() {
+    if i64::try_from(req.seq.get()).is_err() {
         return Err(AppError::Conflict {
             detail: "sequence number out of range".into(),
         });
@@ -243,7 +243,7 @@ mod tests {
             who,
             PathId(document),
             Json(ReadCursorRequest {
-                seq: ambre_core::Seq(seq),
+                seq: ambre_core::Seq::new(seq),
             }),
         )
         .await
@@ -597,9 +597,15 @@ mod tests {
             put_cursor(&state, session(alice, 1), segment, 1).await;
         }
 
-        db::remove_document_member(&state.db, &meta, &bob, None, ambre_core::UnixSeconds(0))
-            .await
-            .expect("remove");
+        db::remove_document_member(
+            &state.db,
+            &meta,
+            &bob,
+            None,
+            ambre_core::UnixSeconds::new(0),
+        )
+        .await
+        .expect("remove");
         for &segment in &segments {
             assert_eq!(cursor_of(&state.db, bob, segment).await, None);
             assert_eq!(cursor_of(&state.db, alice, segment).await, Some(1));

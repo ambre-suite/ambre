@@ -138,7 +138,7 @@ mod tests {
             &mut kinetic,
             Vector::new(Px::<Css>::new(6.0), Px::<Css>::new(12.0)),
             WheelDeltaMode::Pixel,
-            ambre_bus::PageTime(0.0),
+            ambre_bus::PageTime::new(0.0),
         );
         let after = cam.world_to_screen() * world;
         assert!(
@@ -165,14 +165,18 @@ mod tests {
                 &mut kinetic,
                 Vector::new(Px::<Css>::new(0.0), Px::<Css>::new(16.0)),
                 WheelDeltaMode::Pixel,
-                ambre_bus::PageTime(16.0 * f64::from(step)),
+                ambre_bus::PageTime::new(16.0 * f64::from(step)),
             );
         }
         let glided = (cam.world_to_screen() * world).y;
-        coast(&mut cam, &mut kinetic, ambre_bus::PageTime(64.0));
+        coast(&mut cam, &mut kinetic, ambre_bus::PageTime::new(64.0));
         assert_eq!(kinetic.speed(), None, "no motion while the glide lasts");
         // The frame past the pause launches the motion, and the next one moves.
-        coast(&mut cam, &mut kinetic, ambre_bus::PageTime(64.0 + 70.0));
+        coast(
+            &mut cam,
+            &mut kinetic,
+            ambre_bus::PageTime::new(64.0 + 70.0),
+        );
         let vy = kinetic
             .speed()
             .expect("the paused glide carries on")
@@ -182,7 +186,7 @@ mod tests {
         assert!(coast(
             &mut cam,
             &mut kinetic,
-            ambre_bus::PageTime(64.0 + 86.0)
+            ambre_bus::PageTime::new(64.0 + 86.0)
         ));
         assert!(
             (cam.world_to_screen() * world).y < glided,
@@ -197,12 +201,16 @@ mod tests {
                 &mut kinetic,
                 Vector::new(Px::<Css>::new(0.0), Px::<Css>::new(16.0)),
                 WheelDeltaMode::Line,
-                ambre_bus::PageTime(16.0 * f64::from(step)),
+                ambre_bus::PageTime::new(16.0 * f64::from(step)),
             );
         }
         let stepped = (cam.world_to_screen() * world).y;
         assert!(
-            !coast(&mut cam, &mut kinetic, ambre_bus::PageTime(64.0 + 70.0)),
+            !coast(
+                &mut cam,
+                &mut kinetic,
+                ambre_bus::PageTime::new(64.0 + 70.0)
+            ),
             "a notch never coasts"
         );
         assert_eq!((cam.world_to_screen() * world).y, stepped);
@@ -217,7 +225,7 @@ mod tests {
         let step = Kinetic::default().wheel(
             Vector::new(Px::<Css>::ZERO, Px::<Css>::new(30.0)),
             WheelDeltaMode::Line,
-            ambre_bus::PageTime(0.0),
+            ambre_bus::PageTime::new(0.0),
         );
         for zoom in [0.25, 1.0, 4.0] {
             let mut cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));

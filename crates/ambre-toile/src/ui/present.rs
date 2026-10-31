@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn start_frame_holds_source_camera_and_content() {
         let mut t = transition();
-        let f = t.advance(ambre_bus::PageTime(1000.0));
+        let f = t.advance(ambre_bus::PageTime::new(1000.0));
         // t = 0: camera is exactly the source, no progress yet.
         assert_eq!(f.cam.center, Point::new(0.0, 0.0));
         assert_eq!(f.cam.zoom.get(), 1.0);
@@ -187,8 +187,8 @@ mod tests {
     #[test]
     fn end_frame_lands_on_target_camera_and_content() {
         let mut t = transition();
-        t.advance(ambre_bus::PageTime(1000.0)); // stamp start
-        let f = t.advance(ambre_bus::PageTime(1000.0 + 300.0));
+        t.advance(ambre_bus::PageTime::new(1000.0)); // stamp start
+        let f = t.advance(ambre_bus::PageTime::new(1000.0 + 300.0));
         assert_eq!(
             f.phase,
             TransitionPhase::Done,
@@ -216,8 +216,8 @@ mod tests {
     #[test]
     fn midpoint_tweens_between_endpoints() {
         let mut t = transition();
-        t.advance(ambre_bus::PageTime(0.0)); // start at 0
-        let f = t.advance(ambre_bus::PageTime(150.0)); // half of 300 ms
+        t.advance(ambre_bus::PageTime::new(0.0)); // start at 0
+        let f = t.advance(ambre_bus::PageTime::new(150.0)); // half of 300 ms
         assert_eq!(f.phase, TransitionPhase::Running);
         // Eased 0.5 == 0.5, so the shared element sits at the geometric midpoint
         // and the camera is halfway to the target.
@@ -245,7 +245,7 @@ mod tests {
             to,
             std::time::Duration::ZERO,
         );
-        let f = t.advance(ambre_bus::PageTime(42.0));
+        let f = t.advance(ambre_bus::PageTime::new(42.0));
         assert_eq!(
             f.phase,
             TransitionPhase::Done,

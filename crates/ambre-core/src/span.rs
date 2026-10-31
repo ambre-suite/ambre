@@ -21,9 +21,19 @@ crate::define_tally! {
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct Millis(pub u64);
+pub struct Millis(u64);
 
 impl Millis {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The span `duration` covers, saturating past `u64::MAX` milliseconds.
     pub fn from_duration(duration: Duration) -> Self {
         Self(u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
@@ -68,9 +78,19 @@ impl Millis {
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct Nanos(pub u64);
+pub struct Nanos(u64);
 
 impl Nanos {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The span of a measured mean, a float of nanoseconds. A negative or NaN
     /// mean reads as zero, and a mean past `u64::MAX` saturates there.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -84,9 +104,19 @@ impl Nanos {
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct Seconds(pub u64);
+pub struct Seconds(u64);
 
 impl Seconds {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The span, as the standard library counts it.
     pub const fn to_duration(self) -> Duration {
         Duration::from_secs(self.0)
@@ -103,7 +133,7 @@ impl Seconds {
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct Timestamp(pub u64);
+pub struct Timestamp(u64);
 
 impl std::fmt::Display for Timestamp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -112,6 +142,16 @@ impl std::fmt::Display for Timestamp {
 }
 
 impl Timestamp {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The instant `span` after this one, saturating at `u64::MAX`.
     #[must_use]
     pub const fn plus(self, span: Millis) -> Self {
@@ -146,7 +186,7 @@ impl Timestamp {
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct LamportStamp(pub u64);
+pub struct LamportStamp(u64);
 
 impl std::fmt::Display for LamportStamp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -155,6 +195,16 @@ impl std::fmt::Display for LamportStamp {
 }
 
 impl LamportStamp {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The stamp as a CRDT stores it, a signed 64-bit integer, saturating at
     /// `i64::MAX`.
     pub fn to_i64_saturating(self) -> i64 {
@@ -177,9 +227,19 @@ impl LamportStamp {
 /// constants.
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct PageTime(pub f64);
+pub struct PageTime(f64);
 
 impl PageTime {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: f64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+
     /// The instant `span` after this one.
     #[must_use]
     pub fn after(self, span: PageMillis) -> Self {
@@ -294,9 +354,19 @@ pub mod timestamp_as_i64 {
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct UnixMillis(pub u64);
+pub struct UnixMillis(u64);
 
 impl UnixMillis {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The instant `span` after this one, saturating at `u64::MAX`.
     #[must_use]
     pub const fn plus(self, span: Millis) -> Self {
@@ -321,9 +391,19 @@ impl UnixMillis {
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct UnixSeconds(pub u64);
+pub struct UnixSeconds(u64);
 
 impl UnixSeconds {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The instant `span` after this one, saturating at `u64::MAX`.
     #[must_use]
     pub const fn plus(self, span: Seconds) -> Self {

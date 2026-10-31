@@ -236,7 +236,10 @@ mod tests {
             bytes.as_bytes().starts_with(b"%PDF"),
             "output must be a PDF"
         );
-        assert!(bytes.size().0 > 400, "content stream should be non-trivial");
+        assert!(
+            bytes.size().get() > 400,
+            "content stream should be non-trivial"
+        );
     }
 
     /// Export is deterministic: two runs of the same pages produce identical

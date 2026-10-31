@@ -3144,7 +3144,7 @@ mod tests {
     /// same.
     #[test]
     fn a_minted_id_spells_its_peer_and_counter_in_hex() {
-        let peer = ambre_core::PeerId(0x1f);
+        let peer = ambre_core::PeerId::new(0x1f);
         let counter = IdCounter::new(0x2a);
         assert_eq!(
             Id::<Element>::mint_from(peer, counter).as_str(),
@@ -3175,9 +3175,9 @@ mod tests {
     /// length in `Debug`, and none of the text.
     #[test]
     fn a_typed_text_prints_its_length_alone() {
-        let id = Id::<Element>::mint_from(ambre_core::PeerId(1), IdCounter::new(2));
-        let frame_id = Id::<Frame>::mint_from(ambre_core::PeerId(1), IdCounter::new(5));
-        let thread = Id::<Thread>::mint_from(ambre_core::PeerId(1), IdCounter::new(6));
+        let id = Id::<Element>::mint_from(ambre_core::PeerId::new(1), IdCounter::new(2));
+        let frame_id = Id::<Frame>::mint_from(ambre_core::PeerId::new(1), IdCounter::new(5));
+        let thread = Id::<Thread>::mint_from(ambre_core::PeerId::new(1), IdCounter::new(6));
         let secret = "Q3 layoffs".to_owned();
         let delta = TextDelta {
             insert: secret.clone(),
@@ -3237,7 +3237,7 @@ mod tests {
                 ts,
             },
             ToileCommand::SetConnectorLabel {
-                id: Id::<Connector>::mint_from(ambre_core::PeerId(1), IdCounter::new(3)),
+                id: Id::<Connector>::mint_from(ambre_core::PeerId::new(1), IdCounter::new(3)),
                 base: secret.clone(),
                 text: secret.clone(),
             },
@@ -3281,7 +3281,7 @@ mod tests {
             format!(
                 "{:?}",
                 DisplayConnector {
-                    id: Id::<Connector>::mint_from(ambre_core::PeerId(1), IdCounter::new(4)),
+                    id: Id::<Connector>::mint_from(ambre_core::PeerId::new(1), IdCounter::new(4)),
                     path: BezPath::new(),
                     style: ElementStyle::default(),
                     arrows: EndCaps {

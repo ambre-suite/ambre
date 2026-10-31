@@ -401,7 +401,7 @@ impl LogicState {
         if let Some(payload) = update {
             tracing::debug!(
                 "[Logic->Sync] pushing SendUpdate doc={document_id} delta_size={}",
-                payload.len().0,
+                payload.len().get(),
             );
             // The delta that leaves for the relay is the one saved: it holds
             // every operation the command wrote.
@@ -677,13 +677,13 @@ impl LogicState {
             if Some(peer) == doc.identity {
                 continue;
             }
-            let end = held.get(&peer.0).copied().unwrap_or(0);
-            let start = doc.relay.get(&peer.0).copied().unwrap_or(0);
+            let end = held.get(&peer.get()).copied().unwrap_or(0);
+            let start = doc.relay.get(&peer.get()).copied().unwrap_or(0);
             if end <= start {
                 forgotten.push(peer);
                 continue;
             }
-            let span = loro::IdSpan::new(peer.0, start, end);
+            let span = loro::IdSpan::new(peer.get(), start, end);
             match doc
                 .state
                 .crdt()

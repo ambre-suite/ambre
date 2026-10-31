@@ -58,7 +58,7 @@ fn doc_id() -> Id<Document> {
 /// A workbook with literals, a formula chain over them, a second sheet and a
 /// merge. Enough that a lost op shows up in the bytes.
 fn build_trame(seed: u64, doc_id: Id<Document>) -> Vec<u8> {
-    let mut state = TrameState::with_peer(ambre_core::PeerId(seed));
+    let mut state = TrameState::with_peer(ambre_core::PeerId::new(seed));
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
         col: Col::new(0),
@@ -88,7 +88,7 @@ fn build_trame(seed: u64, doc_id: Id<Document>) -> Vec<u8> {
 /// A board with several shapes and a frame, so the dump and the shape summary
 /// have more than one node kind to report.
 fn build_toile(seed: u64, doc_id: Id<Document>) -> Vec<u8> {
-    let mut state = ToileState::with_peer(ambre_core::PeerId(seed));
+    let mut state = ToileState::with_peer(ambre_core::PeerId::new(seed));
     for i in 0..4 {
         state.handle_command(ToileCommand::CreateElement {
             kind: ElementKind::Shape(ShapeKind::Rect),
@@ -244,8 +244,8 @@ fn a_two_peer_merge_is_deterministic() {
     // result must be reproducible, or no post-convergence fixture (`FIXTURES
     // P1`) can ever be committed.
     let merged = |()| {
-        let mut alice = TrameState::with_peer(ambre_core::PeerId(SEED));
-        let mut bob = TrameState::with_peer(ambre_core::PeerId(SEED ^ 0xFFFF_FFFF));
+        let mut alice = TrameState::with_peer(ambre_core::PeerId::new(SEED));
+        let mut bob = TrameState::with_peer(ambre_core::PeerId::new(SEED ^ 0xFFFF_FFFF));
         alice.handle_command(TrameCommand::SetCellText {
             row: Row::new(0),
             col: Col::new(0),
@@ -293,7 +293,7 @@ fn a_large_document_is_deterministic() {
     // case is `FIXTURES P2`'s benchmark corpus, which builds it under `criterion`
     // in release and can afford it.
     let build = |()| {
-        let mut state = TrameState::with_peer(ambre_core::PeerId(SEED));
+        let mut state = TrameState::with_peer(ambre_core::PeerId::new(SEED));
         state.handle_command(TrameCommand::SetCellsBatch {
             cells: (0..250)
                 .flat_map(|row| {
@@ -310,7 +310,7 @@ fn a_large_document_is_deterministic() {
     };
     let first = build(());
     assert!(
-        first.len() > ambre_bus::ByteSize(10_000),
+        first.len() > ambre_bus::ByteSize::new(10_000),
         "a 5k-cell document, not an empty one"
     );
     assert_eq!(first, build(()));
@@ -376,7 +376,7 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
     // "Every variant" is the point. `DocState::export_snapshot` had to be lifted
     // to the enum for this belt to be writable at all (B5).
     // `ToileState::import_snapshot` had to exist for the Toile arm.
-    let mut trame = TrameState::with_peer(ambre_core::PeerId(SEED));
+    let mut trame = TrameState::with_peer(ambre_core::PeerId::new(SEED));
     trame.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
         col: Col::new(0),
@@ -384,7 +384,7 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
     });
     assert_round_trip(&DocState::Trame(Box::new(trame)), DocType::Trame);
 
-    let mut toile = ToileState::with_peer(ambre_core::PeerId(SEED));
+    let mut toile = ToileState::with_peer(ambre_core::PeerId::new(SEED));
     toile.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Shape(ShapeKind::Rect),
         at: Point::new(1.0, 2.0),
@@ -395,7 +395,8 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
     });
     assert_round_trip(&DocState::Toile(Box::new(toile)), DocType::Toile);
 
-    let mut prose = ProseState::with_peer(ambre_core::PeerId(SEED)).expect("a document is built");
+    let mut prose =
+        ProseState::with_peer(ambre_core::PeerId::new(SEED)).expect("a document is built");
     let block = prose.root_blocks()[0];
     prose.handle_command(ProseCommand::InsertText {
         block_id: block,

@@ -344,7 +344,8 @@ pub(crate) async fn handle_update(
     if cipher_len > state.config.delta_max_size {
         let detail = format!(
             "delta ciphertext {} bytes exceeds max {}",
-            cipher_len.0, state.config.delta_max_size.0
+            cipher_len.get(),
+            state.config.delta_max_size.get()
         );
         refuse_delta(outbound_tx, &update, RefusalCode::PayloadTooLarge, &detail).await;
         return;
@@ -645,7 +646,7 @@ pub(crate) async fn handle_ephemeral(
         &doc_id,
         &eph.public_data.pub_key,
         &eph.ciphertext,
-        ambre_core::Seconds(15),
+        ambre_core::Seconds::new(15),
     )
     .await
     .is_err()
@@ -774,7 +775,7 @@ pub(crate) async fn handle_request_missing(
                             Ok(Some(bytes)) => Some(bytes),
                             Ok(None) => pending.get(&seq).cloned(),
                             Err(e) => {
-                                tracing::error!(seq = seq.0, error = %e, "replay: S3 fetch failed");
+                                tracing::error!(seq = seq.get(), error = %e, "replay: S3 fetch failed");
                                 pending.get(&seq).cloned()
                             }
                         }
@@ -783,7 +784,7 @@ pub(crate) async fn handle_request_missing(
                 };
                 let Some(wire) = wire else {
                     tracing::error!(
-                        seq = seq.0,
+                        seq = seq.get(),
                         "replay: delta not found in its row, its batch, S3 or pending"
                     );
                     return (seq, None);
@@ -791,7 +792,7 @@ pub(crate) async fn handle_request_missing(
                 match wire.open::<ambre_protocol::Update>() {
                     Ok(update) => (seq, Some(ambre_protocol::SeqUpdate { seq, update })),
                     Err(e) => {
-                        tracing::error!(seq = seq.0, error = %e, "replay: Update decode failed");
+                        tracing::error!(seq = seq.get(), error = %e, "replay: Update decode failed");
                         (seq, None)
                     }
                 }
@@ -811,7 +812,10 @@ pub(crate) async fn handle_request_missing(
             return;
         }
         if let Some(seq) = unreadable {
-            tracing::warn!(seq = seq.0, "replay stopped at a delta it could not read");
+            tracing::warn!(
+                seq = seq.get(),
+                "replay stopped at a delta it could not read"
+            );
             let msg = Payload::server_msg(&WsServerMsg::ReplayStopped {
                 document_id,
                 after_seq: delivered,
@@ -905,7 +909,7 @@ mod postcard_tests {
 
     fn make_update() -> Update {
         Update {
-            ciphertext: Ciphertext(vec![1, 2, 3]),
+            ciphertext: Ciphertext::new(vec![1, 2, 3]),
             nonce: FixedBytes::<Nonce>::from_array([4u8; 24]),
             public_data: UpdatePublicData {
                 document_id: Id::<Document>::from_bytes([5u8; 16]),
@@ -921,7 +925,7 @@ mod postcard_tests {
 
     fn make_ephemeral() -> Ephemeral {
         Ephemeral {
-            ciphertext: Ciphertext(vec![10, 11]),
+            ciphertext: Ciphertext::new(vec![10, 11]),
             nonce: FixedBytes::<Nonce>::from_array([12u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: Id::<Document>::from_bytes([13u8; 16]),
@@ -974,7 +978,7 @@ mod postcard_tests {
     fn roundtrip_client_request_missing() {
         let msg = WsClientMsg::RequestMissing {
             document_id: Id::<Document>::from_bytes([1u8; 16]),
-            after_seq: Seq(5),
+            after_seq: Seq::new(5),
         };
         let decoded = decode_client_msg(&encode_client_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsClientMsg::RequestMissing { .. }));
@@ -992,7 +996,7 @@ mod postcard_tests {
     #[test]
     fn roundtrip_server_update() {
         let msg = WsServerMsg::Update {
-            seq: Seq(100),
+            seq: Seq::new(100),
             update: make_update(),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
@@ -1011,7 +1015,7 @@ mod postcard_tests {
         let msg = WsServerMsg::MissingUpdates {
             document_id: Id::<Document>::from_bytes([3u8; 16]),
             updates: vec![SeqUpdate {
-                seq: Seq(1),
+                seq: Seq::new(1),
                 update: make_update(),
             }],
         };
@@ -1033,7 +1037,7 @@ mod postcard_tests {
         let msg = WsServerMsg::SnapshotAvailable {
             document_id: Id::<Document>::from_bytes([5u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([6u8; 16]),
-            covered_seq: Seq(9),
+            covered_seq: Seq::new(9),
         };
         let decoded = decode_server_msg(&encode_server_msg(&msg)).unwrap();
         assert!(matches!(decoded, WsServerMsg::SnapshotAvailable { .. }));
@@ -1164,7 +1168,7 @@ mod ephemeral_binding_tests {
     /// the signature is ever examined.
     fn unsigned_ephemeral(pub_key: FixedBytes<PublicKey>, doc_id: Id<Document>) -> Ephemeral {
         Ephemeral {
-            ciphertext: Ciphertext(vec![1, 2, 3]),
+            ciphertext: Ciphertext::new(vec![1, 2, 3]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: EphemeralPublicData {
                 document_id: doc_id,
@@ -1202,7 +1206,7 @@ mod ephemeral_binding_tests {
         push_framed(&mut signed_data, commitment_tag.as_slice());
         let sig = signing_key.sign(&signed_data);
         Ephemeral {
-            ciphertext: Ciphertext(ciphertext),
+            ciphertext: Ciphertext::new(ciphertext),
             nonce,
             public_data,
             commitment_tag,
@@ -1304,7 +1308,7 @@ mod ephemeral_binding_tests {
 
         // Correct author key, but tamper the ciphertext after signing.
         let mut eph = signed_ephemeral(&signing_key, &session_key, doc_id, vec![1, 2, 3]);
-        eph.ciphertext = Ciphertext(vec![9, 9, 9]);
+        eph.ciphertext = Ciphertext::new(vec![9, 9, 9]);
         handle_ephemeral(&state, &mut conn, eph).await;
 
         let after: std::collections::HashMap<String, String> =
@@ -1327,7 +1331,7 @@ mod ephemeral_binding_tests {
         };
         // Tighten the cap so the test payload is unambiguously oversized.
         Arc::get_mut(&mut state).unwrap().config = Arc::new(crate::state::Config {
-            ephemeral_max_size: ambre_core::ByteSize(8),
+            ephemeral_max_size: ambre_core::ByteSize::new(8),
             ..Default::default()
         });
         let doc_id = Id::<Document>::mint();
@@ -1380,10 +1384,16 @@ mod ephemeral_binding_tests {
                 .await
                 .unwrap();
         }
-        let blob = ambre_protocol::messages::Ciphertext(b"blob".to_vec());
-        redis_ops::doc_presence_update(&state.redis, &doc_id, &key, &blob, ambre_core::Seconds(15))
-            .await
-            .unwrap();
+        let blob = ambre_protocol::messages::Ciphertext::new(b"blob".to_vec());
+        redis_ops::doc_presence_update(
+            &state.redis,
+            &doc_id,
+            &key,
+            &blob,
+            ambre_core::Seconds::new(15),
+        )
+        .await
+        .unwrap();
 
         announce_departure(&state, &doc_id, &key).await;
         let kept: bool = state
@@ -1440,7 +1450,7 @@ mod delta_size_cap_tests {
             .connect_lazy("postgres://localhost/ambre")
             .ok()?;
         let config = crate::state::Config {
-            delta_max_size: ambre_core::ByteSize(delta_max_bytes),
+            delta_max_size: ambre_core::ByteSize::new(delta_max_bytes),
             ..Default::default()
         };
         Some(Arc::new(AppState {
@@ -1486,7 +1496,7 @@ mod delta_size_cap_tests {
         cipher_len: usize,
     ) -> Update {
         Update {
-            ciphertext: Ciphertext(vec![0u8; cipher_len]),
+            ciphertext: Ciphertext::new(vec![0u8; cipher_len]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc_id,
@@ -1511,7 +1521,7 @@ mod delta_size_cap_tests {
         let doc_id = Id::<Document>::mint();
         let session_key = FixedBytes::<PublicKey>::from_array([1u8; 32]);
         let mut empty = update_with(session_key, doc_id, 16);
-        empty.ciphertext = Ciphertext(Vec::new());
+        empty.ciphertext = Ciphertext::new(Vec::new());
         let cases = [
             (empty, RefusalCode::BadRequest),
             (
@@ -1672,7 +1682,7 @@ mod delta_size_cap_tests {
             &state,
             &mut conn,
             doc_id,
-            ambre_protocol::messages::Seq(0),
+            ambre_protocol::messages::Seq::new(0),
             &tx,
         )
         .await;
@@ -1752,7 +1762,7 @@ mod access_tests {
 
     fn update_for(pub_key: FixedBytes<PublicKey>, doc_id: Id<Document>) -> Update {
         Update {
-            ciphertext: Ciphertext(vec![1, 2, 3]),
+            ciphertext: Ciphertext::new(vec![1, 2, 3]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc_id,
@@ -1827,7 +1837,7 @@ mod access_tests {
             &state,
             &mut conn,
             doc_id,
-            ambre_protocol::messages::Seq(0),
+            ambre_protocol::messages::Seq::new(0),
             &tx,
         )
         .await;
@@ -1858,9 +1868,15 @@ mod access_tests {
         let state = state_on(pool.clone()).await;
         let (doc_id, editor) = shared_document(&pool).await;
         let key = FixedBytes::<PublicKey>::from_array([32u8; 32]);
-        db::remove_document_member(&pool, &doc_id, &editor, None, ambre_core::UnixSeconds(0))
-            .await
-            .unwrap();
+        db::remove_document_member(
+            &pool,
+            &doc_id,
+            &editor,
+            None,
+            ambre_core::UnixSeconds::new(0),
+        )
+        .await
+        .unwrap();
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
 
         let mut conn = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
@@ -1907,7 +1923,7 @@ mod access_tests {
             &state,
             &mut kept,
             doc_id,
-            ambre_protocol::messages::Seq(0),
+            ambre_protocol::messages::Seq::new(0),
             &tx,
         )
         .await;
@@ -1919,15 +1935,21 @@ mod access_tests {
             "a member is answered"
         );
 
-        db::remove_document_member(&pool, &doc_id, &editor, None, ambre_core::UnixSeconds(0))
-            .await
-            .unwrap();
+        db::remove_document_member(
+            &pool,
+            &doc_id,
+            &editor,
+            None,
+            ambre_core::UnixSeconds::new(0),
+        )
+        .await
+        .unwrap();
         let mut removed = conn_of(editor, key, doc_id, MEMBERSHIP_RECHECK_TTL);
         handle_request_missing(
             &state,
             &mut removed,
             doc_id,
-            ambre_protocol::messages::Seq(0),
+            ambre_protocol::messages::Seq::new(0),
             &tx,
         )
         .await;
@@ -1976,7 +1998,7 @@ mod access_tests {
             db::get_updates_after(
                 &pool,
                 &doc_id,
-                ambre_core::Seq(0),
+                ambre_core::Seq::new(0),
                 crate::db::QueryLimit::saturating(10)
             )
             .await
@@ -2015,13 +2037,13 @@ mod ed25519_tests {
             clock: Clock(1),
         };
         let nonce = FixedBytes::<Nonce>::from_array([3u8; 24]);
-        let ciphertext = Ciphertext(vec![4, 5, 6]);
+        let ciphertext = Ciphertext::new(vec![4, 5, 6]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([7u8; 32]);
 
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
         let mut signed_data = Vec::new();
         push_framed(&mut signed_data, nonce.as_slice());
-        push_framed(&mut signed_data, &ciphertext.0);
+        push_framed(&mut signed_data, ciphertext.as_bytes());
         push_framed(&mut signed_data, &public_data_bytes);
         push_framed(&mut signed_data, commitment_tag.as_slice());
 
@@ -2051,10 +2073,15 @@ mod ed25519_tests {
         let signing_key = SigningKey::from_bytes(&[9u8; 32]);
         let pubkey = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let nonce = FixedBytes::<Nonce>::from_array([1; 24]);
-        let ciphertext = ambre_protocol::messages::Ciphertext(b"c".to_vec());
+        let ciphertext = ambre_protocol::messages::Ciphertext::new(b"c".to_vec());
         let tag = FixedBytes::<CommitmentTag>::from_array([2; 32]);
         let mut signed = Vec::new();
-        for field in [nonce.as_slice(), &ciphertext.0, b"p", tag.as_slice()] {
+        for field in [
+            nonce.as_slice(),
+            ciphertext.as_bytes(),
+            b"p",
+            tag.as_slice(),
+        ] {
             push_framed(&mut signed, field);
         }
         let sig = signing_key.sign(&signed).to_bytes();
@@ -2095,7 +2122,7 @@ mod ed25519_tests {
         let pubkey = FixedBytes::<PublicKey>::from_array([42u8; 32]);
 
         let update = Update {
-            ciphertext: Ciphertext(vec![1u8]),
+            ciphertext: Ciphertext::new(vec![1u8]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: Id::<Document>::from_bytes([0u8; 16]),
@@ -2129,20 +2156,20 @@ mod ed25519_tests {
             clock: Clock(0),
         };
         let nonce = FixedBytes::<Nonce>::from_array([0u8; 24]);
-        let ciphertext = Ciphertext(vec![1, 2, 3]);
+        let ciphertext = Ciphertext::new(vec![1, 2, 3]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([0u8; 32]);
 
         let public_data_bytes = postcard::to_allocvec(&public_data).unwrap();
         let mut signed_data = vec![];
         push_framed(&mut signed_data, nonce.as_slice());
-        push_framed(&mut signed_data, &ciphertext.0);
+        push_framed(&mut signed_data, ciphertext.as_bytes());
         push_framed(&mut signed_data, &public_data_bytes);
         push_framed(&mut signed_data, commitment_tag.as_slice());
 
         let sig = signing_key.sign(&signed_data);
 
         let tampered = Update {
-            ciphertext: Ciphertext(vec![9, 9, 9]),
+            ciphertext: Ciphertext::new(vec![9, 9, 9]),
             nonce,
             public_data,
             commitment_tag,
@@ -2176,7 +2203,7 @@ mod ed25519_tests {
         push_framed(&mut signed_data, commitment_tag.as_slice());
         let sig = signing_key.sign(&signed_data);
         ambre_protocol::Ephemeral {
-            ciphertext: Ciphertext(ciphertext),
+            ciphertext: Ciphertext::new(ciphertext),
             nonce,
             public_data,
             commitment_tag,
@@ -2200,7 +2227,7 @@ mod ed25519_tests {
         let doc_id = Id::<Document>::from_bytes([9u8; 16]);
         let mut eph = sign_ephemeral(&signing_key, &pubkey, doc_id, vec![1, 2, 3, 4]);
         // Flip the ciphertext after signing: the signature must no longer verify.
-        eph.ciphertext = Ciphertext(vec![9, 9, 9, 9]);
+        eph.ciphertext = Ciphertext::new(vec![9, 9, 9, 9]);
         assert!(verify_ephemeral_signature(&pubkey, &eph).is_err());
     }
 
@@ -2209,7 +2236,7 @@ mod ed25519_tests {
         // The old handler broadcast this (all-zero signature) unverified.
         let pubkey = FixedBytes::<PublicKey>::from_array([7u8; 32]);
         let eph = ambre_protocol::Ephemeral {
-            ciphertext: Ciphertext(vec![1, 2, 3]),
+            ciphertext: Ciphertext::new(vec![1, 2, 3]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: ambre_protocol::public_data::EphemeralPublicData {
                 document_id: Id::<Document>::from_bytes([0u8; 16]),
@@ -2231,9 +2258,9 @@ mod refusal_tests {
     fn seq_update(seq: u64) -> ambre_protocol::SeqUpdate {
         use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Nonce, Seq, Signature};
         ambre_protocol::SeqUpdate {
-            seq: Seq(seq),
+            seq: Seq::new(seq),
             update: ambre_protocol::Update {
-                ciphertext: Ciphertext(vec![seq as u8]),
+                ciphertext: Ciphertext::new(vec![seq as u8]),
                 nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
                 public_data: ambre_protocol::public_data::UpdatePublicData {
                     document_id: Id::<Document>::mint(),
@@ -2252,19 +2279,19 @@ mod refusal_tests {
     fn a_replay_page_stops_at_the_first_unreadable_delta() {
         use ambre_core::Seq;
         let fetched = vec![
-            (Seq(4), Some(seq_update(4))),
-            (Seq(2), Some(seq_update(2))),
-            (Seq(3), None),
-            (Seq(1), Some(seq_update(1))),
+            (Seq::new(4), Some(seq_update(4))),
+            (Seq::new(2), Some(seq_update(2))),
+            (Seq::new(3), None),
+            (Seq::new(1), Some(seq_update(1))),
         ];
         let (page, unreadable) = contiguous_prefix(fetched);
-        let seqs: Vec<u64> = page.iter().map(|u| u.seq.0).collect();
+        let seqs: Vec<u64> = page.iter().map(|u| u.seq.get()).collect();
         assert_eq!(seqs, [1, 2], "seq 4 is held back behind the hole at 3");
-        assert_eq!(unreadable, Some(Seq(3)));
+        assert_eq!(unreadable, Some(Seq::new(3)));
 
         let (page, unreadable) = contiguous_prefix(vec![
-            (ambre_core::Seq(2), Some(seq_update(2))),
-            (ambre_core::Seq(1), Some(seq_update(1))),
+            (ambre_core::Seq::new(2), Some(seq_update(2))),
+            (ambre_core::Seq::new(1), Some(seq_update(1))),
         ]);
         assert_eq!(page.len(), 2);
         assert_eq!(unreadable, None);
@@ -2494,7 +2521,7 @@ mod hot_tail_tests {
         push_framed(&mut signed, &postcard::to_allocvec(&public_data).unwrap());
         push_framed(&mut signed, commitment_tag.as_slice());
         Update {
-            ciphertext: Ciphertext(ciphertext),
+            ciphertext: Ciphertext::new(ciphertext),
             nonce,
             public_data,
             commitment_tag,
@@ -2510,7 +2537,14 @@ mod hot_tail_tests {
     ) -> Vec<Vec<u8>> {
         conn.last_replay_at.clear();
         let (tx, mut rx) = mpsc::channel::<Payload>(8);
-        handle_request_missing(state, conn, doc_id, ambre_protocol::messages::Seq(0), &tx).await;
+        handle_request_missing(
+            state,
+            conn,
+            doc_id,
+            ambre_protocol::messages::Seq::new(0),
+            &tx,
+        )
+        .await;
         std::iter::from_fn(|| rx.try_recv().ok())
             .map(|frame| frame.expose_bytes().to_vec())
             .collect()
@@ -2535,7 +2569,7 @@ mod hot_tail_tests {
         let rows = db::get_updates_after(
             &state.db,
             &doc_id,
-            ambre_core::Seq(0),
+            ambre_core::Seq::new(0),
             crate::db::QueryLimit::saturating(10),
         )
         .await
@@ -2555,7 +2589,7 @@ mod hot_tail_tests {
         let rows = db::get_updates_after(
             &state.db,
             &doc_id,
-            ambre_core::Seq(1),
+            ambre_core::Seq::new(1),
             crate::db::QueryLimit::saturating(10),
         )
         .await
@@ -2596,7 +2630,7 @@ mod hot_tail_tests {
             db::get_updates_after(
                 &state.db,
                 &doc_id,
-                ambre_core::Seq(0),
+                ambre_core::Seq::new(0),
                 crate::db::QueryLimit::saturating(10),
             )
             .await
@@ -2673,8 +2707,8 @@ mod hot_tail_tests {
         let batch = crate::hot_tail::batch_key(
             &state.config.s3_env_prefix,
             &doc_id,
-            ambre_core::Seq(1),
-            ambre_core::Seq(4),
+            ambre_core::Seq::new(1),
+            ambre_core::Seq::new(4),
         );
         assert_eq!(replay(&state, &mut conn, doc_id).await, before);
         assert_eq!(
@@ -2769,7 +2803,7 @@ mod channel_gate_tests {
 
     fn update_on(pub_key: FixedBytes<PublicKey>, doc_id: Id<Document>) -> Update {
         Update {
-            ciphertext: Ciphertext(vec![0u8; 16]),
+            ciphertext: Ciphertext::new(vec![0u8; 16]),
             nonce: FixedBytes::<Nonce>::from_array([0u8; 24]),
             public_data: UpdatePublicData {
                 document_id: doc_id,

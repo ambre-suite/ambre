@@ -368,7 +368,7 @@ impl AuthContext {
             Ok::<_, HttpError>((request, resp))
         };
         let (mut request, mut resp) = send().await?;
-        if resp.status == HttpStatus(401) {
+        if resp.status == HttpStatus::new(401) {
             self.refresh_via(transport).await?;
             (request, resp) = send().await?;
         }
@@ -379,7 +379,7 @@ impl AuthContext {
 /// Per-request timeout for every Sync HTTP call (M9). Without it a hung TCP
 /// connection or a stalled proxy would block the Sync worker's request future
 /// forever (the browser `fetch` has no default timeout).
-const REQUEST_TIMEOUT: ambre_core::Millis = ambre_core::Millis(30_000);
+const REQUEST_TIMEOUT: ambre_core::Millis = ambre_core::Millis::new(30_000);
 
 /// The method of one request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -530,7 +530,7 @@ impl std::fmt::Display for TransportError {
             Self::Body(reason) => write!(f, "body error: {reason}"),
             Self::Fetch(reason) => f.write_str(reason),
             Self::Truncated(reason) => write!(f, "binary error: {reason}"),
-            Self::Deadline(span) => write!(f, "no answer within {} ms", span.0),
+            Self::Deadline(span) => write!(f, "no answer within {} ms", span.get()),
         }
     }
 }
@@ -557,7 +557,7 @@ impl Transport for Fetch {
         // down the moment it is created. gloo-net copies it into the request,
         // so it may be dropped here while `fetch` still holds it.
         let signal = web_sys::AbortSignal::timeout_with_u32(
-            u32::try_from(request.timeout.0).unwrap_or(u32::MAX),
+            u32::try_from(request.timeout.get()).unwrap_or(u32::MAX),
         );
         let mut builder = request
             .url
@@ -589,7 +589,7 @@ impl Transport for Fetch {
             .await
             .map_err(|e| TransportError::Truncated(e.to_string()))?;
         Ok(Incoming {
-            status: HttpStatus(resp.status()),
+            status: HttpStatus::new(resp.status()),
             body: HttpBody::new(body),
         })
     }
@@ -605,7 +605,7 @@ impl Transport for Fetch {
         let timer = js_sys::Promise::new(&mut |resolve, _reject| {
             let _ = scope.set_timeout_with_callback_and_timeout_and_arguments_0(
                 &resolve,
-                i32::try_from(span.0).unwrap_or(i32::MAX),
+                i32::try_from(span.get()).unwrap_or(i32::MAX),
             );
         });
         let _ = wasm_bindgen_futures::JsFuture::from(timer).await;
@@ -678,7 +678,7 @@ impl HttpError {
         code: Option<RefusalCode>,
     ) -> Self {
         use RefusalCode::{Forbidden, KeyChanged, LogMoved, MembersChanged, SetupRequired};
-        let code = match (status.0, code) {
+        let code = match (status.get(), code) {
             (403, Some(code @ (SetupRequired | Forbidden)))
             | (409, Some(code @ (MembersChanged | KeyChanged | LogMoved))) => Some(code),
             _ => None,
@@ -710,10 +710,10 @@ impl HttpError {
         matches!(
             self,
             Self::Refused {
-                status: HttpStatus(409),
+                status,
                 code: None,
                 ..
-            }
+            } if status.get() == 409
         )
     }
 
@@ -829,7 +829,7 @@ fn expect_ok(request: &Outgoing, resp: &Incoming) -> Result<(), HttpError> {
     if resp.status.is_success() {
         return Ok(());
     }
-    let code = if matches!(resp.status, HttpStatus(403 | 409)) {
+    let code = if matches!(resp.status.get(), 403 | 409) {
         serde_json::from_slice::<RefusalBody>(resp.body.as_bytes())
             .ok()
             .map(|body| body.error)
@@ -894,7 +894,7 @@ async fn exchange_auth(
 ) -> Result<Incoming, HttpError> {
     request.bearer = Some(auth.access_token()?);
     let resp = exchange(transport, request).await?;
-    if resp.status != HttpStatus(401) {
+    if resp.status != HttpStatus::new(401) {
         return Ok(resp);
     }
     auth.refresh_via(transport).await?;
@@ -910,7 +910,7 @@ pub(crate) async fn get_json_opt_via<T: serde::de::DeserializeOwned>(
 ) -> Result<Option<T>, HttpError> {
     let mut request = Outgoing::new(Method::Get, url.into());
     let resp = exchange_auth(transport, auth, &mut request).await?;
-    if resp.status == HttpStatus(404) {
+    if resp.status == HttpStatus::new(404) {
         return Ok(None);
     }
     read_json(&request, &resp).map(Some)
@@ -2054,7 +2054,7 @@ pub(crate) mod scripted {
                 .into_iter()
                 .map(|answer| {
                     answer.map(|(status, body)| Incoming {
-                        status: HttpStatus(status),
+                        status: HttpStatus::new(status),
                         body: HttpBody::new(serde_json::to_vec(&body).unwrap()),
                     })
                 })
@@ -2105,7 +2105,7 @@ pub(crate) mod scripted {
             tokens: Rc::new(RefCell::new(Some(TokenPair {
                 access_token: access.to_owned().into(),
                 refresh_token: refresh.to_owned().into(),
-                access_expires_in: ambre_core::Seconds(900),
+                access_expires_in: ambre_core::Seconds::new(900),
             }))),
         }
     }
@@ -2132,7 +2132,7 @@ mod tests {
         } else {
             Method::Post
         };
-        HttpError::refused(method, &Target::relay(url), HttpStatus(status), code)
+        HttpError::refused(method, &Target::relay(url), HttpStatus::new(status), code)
     }
 
     /// The relay's JSON `bool` reads as a [`ambre_core::Creation`] and an
@@ -2235,13 +2235,13 @@ mod tests {
         let changed = HttpError::refused(
             Method::Post,
             &Target::relay(url),
-            HttpStatus(409),
+            HttpStatus::new(409),
             Some(RefusalCode::KeyChanged),
         );
         assert_eq!(
             changed.failure(),
             ApiFailure::Relay {
-                status: HttpStatus(409),
+                status: HttpStatus::new(409),
                 code: Some(RefusalCode::KeyChanged),
             }
         );
@@ -2249,11 +2249,11 @@ mod tests {
         let plain = HttpError::refused(
             Method::Post,
             &Target::relay(url),
-            HttpStatus(500),
+            HttpStatus::new(500),
             Some(RefusalCode::KeyChanged),
         );
         assert_eq!(plain.code(), None);
-        assert_eq!(plain.failure().status(), Some(HttpStatus(500)));
+        assert_eq!(plain.failure().status(), Some(HttpStatus::new(500)));
         assert_eq!(plain.to_string(), format!("POST {url}: HTTP 500"));
         assert_eq!(
             HttpError::Local("no token".into()).failure(),
@@ -2456,7 +2456,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            format!("POST {url}: no answer within {} ms", REQUEST_TIMEOUT.0)
+            format!("POST {url}: no answer within {} ms", REQUEST_TIMEOUT.get())
         );
         assert_eq!(transport.calls(), [(Method::Post, url.to_string())]);
         assert_eq!(*transport.waited.borrow(), [REQUEST_TIMEOUT]);
@@ -2725,11 +2725,11 @@ mod tests {
         let expected = ["content_hash", "size_bytes"];
         let ask = UploadUrlRequest {
             content_hash: ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash"),
-            size: ambre_core::ByteSize(64),
+            size: ambre_core::ByteSize::new(64),
         };
         let confirm = ConfirmUploadRequest {
             content_hash: ambre_core::ContentHash::parse(&"ab".repeat(32)).expect("a hash"),
-            size: ambre_core::ByteSize(64),
+            size: ambre_core::ByteSize::new(64),
         };
         assert_eq!(
             fields(serde_json::to_value(&ask).expect("serializes")),

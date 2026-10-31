@@ -66,7 +66,7 @@ pub async fn get_user(pool: &PgPool, user_id: &Id<User>) -> Result<Option<UserRo
             oidc_subject: r
                 .try_get::<Option<String>, _>("oidc_subject")?
                 .map(openidconnect::SubjectIdentifier::new),
-            email: ambre_core::Email(r.try_get("email")?),
+            email: ambre_core::Email::new(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: decode_display_name(r.try_get("display_name")?)?,
             master_key_enc: r
@@ -118,7 +118,7 @@ pub async fn get_user_by_email(
             oidc_subject: r
                 .try_get::<Option<String>, _>("oidc_subject")?
                 .map(openidconnect::SubjectIdentifier::new),
-            email: ambre_core::Email(r.try_get("email")?),
+            email: ambre_core::Email::new(r.try_get("email")?),
             email_verified: r.try_get("email_verified")?,
             display_name: decode_display_name(r.try_get("display_name")?)?,
             master_key_enc: r
@@ -168,7 +168,7 @@ pub async fn create_user(
         oidc_subject: row
             .try_get::<Option<String>, _>("oidc_subject")?
             .map(openidconnect::SubjectIdentifier::new),
-        email: ambre_core::Email(row.try_get("email")?),
+        email: ambre_core::Email::new(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
@@ -245,7 +245,7 @@ pub async fn upsert_user_from_oidc(
         oidc_subject: row
             .try_get::<Option<String>, _>("oidc_subject")?
             .map(openidconnect::SubjectIdentifier::new),
-        email: ambre_core::Email(row.try_get("email")?),
+        email: ambre_core::Email::new(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
@@ -306,7 +306,7 @@ pub async fn dev_upsert_user(
         oidc_subject: row
             .try_get::<Option<String>, _>("oidc_subject")?
             .map(openidconnect::SubjectIdentifier::new),
-        email: ambre_core::Email(row.try_get("email")?),
+        email: ambre_core::Email::new(row.try_get("email")?),
         email_verified: row.try_get("email_verified")?,
         display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
@@ -349,7 +349,7 @@ pub async fn search_users(pool: &PgPool, query: &UserSearch) -> Result<Vec<UserI
         .map(|r| {
             Ok(UserInfoRow {
                 id: r.try_get::<PgId, _>("id")?.into(),
-                email: ambre_core::Email(r.try_get("email")?),
+                email: ambre_core::Email::new(r.try_get("email")?),
                 email_verified: r.try_get("email_verified")?,
                 display_name: decode_display_name(r.try_get("display_name")?)?,
                 signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,

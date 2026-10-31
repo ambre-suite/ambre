@@ -543,7 +543,7 @@ pub fn resolve_menu_command(
                 selection,
                 Some(Reaction {
                     kind: ReactionKind::Emoji(emoji),
-                    ts: ambre_bus::Timestamp(0),
+                    ts: ambre_bus::Timestamp::new(0),
                 }),
             )
         }

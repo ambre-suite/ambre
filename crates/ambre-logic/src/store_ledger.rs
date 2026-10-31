@@ -17,7 +17,7 @@ use crate::SealedWrite;
 
 /// The bytes the local store may hold on one client: the row "Local store,
 /// per client" of `ambre-spec-budgets.md` section 6.
-pub const LOCAL_STORE_BUDGET: ByteSize = ByteSize(500 << 20);
+pub const LOCAL_STORE_BUDGET: ByteSize = ByteSize::new(500 << 20);
 
 /// What one document costs in the store, by kind of row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -80,8 +80,8 @@ impl Meta {
     pub fn encode(&self) -> [u8; Self::LEN] {
         let mut row = [0u8; Self::LEN];
         let fields = [
-            self.cost.snapshot.0,
-            self.cost.deltas.0,
+            self.cost.snapshot.get(),
+            self.cost.deltas.get(),
             self.viewed.stored(),
         ];
         for (chunk, field) in row.chunks_exact_mut(8).zip(fields) {
@@ -98,7 +98,7 @@ impl Meta {
     fn settled(self) -> Self {
         Self {
             cost: Cost {
-                deltas: ByteSize(0),
+                deltas: ByteSize::new(0),
                 ..self.cost
             },
             ..self
@@ -118,8 +118,8 @@ impl Meta {
         let flags = *flags.first()?;
         Some(Self {
             cost: Cost {
-                snapshot: ByteSize(snapshot),
-                deltas: ByteSize(deltas),
+                snapshot: ByteSize::new(snapshot),
+                deltas: ByteSize::new(deltas),
             },
             viewed: Generation::from_stored(viewed),
             immutable: if flags & 1 == 0 {
@@ -193,7 +193,7 @@ impl StoreLedger {
             SealedWrite::Snapshot(bytes) => {
                 cost = Cost {
                     snapshot: bytes.len(),
-                    deltas: ByteSize(0),
+                    deltas: ByteSize::new(0),
                 };
                 self.charge(id, cost, Delivery::Unsent);
             }
@@ -337,10 +337,10 @@ mod tests {
     /// until the rest fits, and stops counting them.
     #[test]
     fn the_store_stays_within_its_budget() {
-        let mut ledger = StoreLedger::new(ByteSize(100));
+        let mut ledger = StoreLedger::new(ByteSize::new(100));
         assert!(settled(&mut ledger, doc(1), 60).is_empty());
         assert_eq!(settled(&mut ledger, doc(2), 60), vec![doc(1)]);
-        assert_eq!(ledger.bytes(), ByteSize(60));
+        assert_eq!(ledger.bytes(), ByteSize::new(60));
         assert!(ledger.meta(doc(1)).is_none());
     }
 
@@ -348,7 +348,7 @@ mod tests {
     /// acknowledged, never leaves, even past the budget.
     #[test]
     fn a_shown_or_unsent_copy_never_leaves() {
-        let mut ledger = StoreLedger::new(ByteSize(100));
+        let mut ledger = StoreLedger::new(ByteSize::new(100));
         ledger.observe(doc(1), &SealedWrite::Shown);
         ledger.observe(
             doc(1),
@@ -363,7 +363,7 @@ mod tests {
         );
         assert!(observed.evict.is_empty(), "both stay");
         assert_eq!(
-            ledger.refused(doc(2), ByteSize(10), QuotaAttempt::First),
+            ledger.refused(doc(2), ByteSize::new(10), QuotaAttempt::First),
             Refusal::Full
         );
         let observed = ledger.observe(doc(1), &SealedWrite::Sent);
@@ -374,7 +374,7 @@ mod tests {
     /// once. A second refusal stops editing only for an unsent change.
     #[test]
     fn a_refused_write_frees_what_the_relay_holds_then_retries_once() {
-        let mut ledger = StoreLedger::new(ByteSize(1_000));
+        let mut ledger = StoreLedger::new(ByteSize::new(1_000));
         settled(&mut ledger, doc(1), 30);
         settled(&mut ledger, doc(2), 30);
         settled(&mut ledger, doc(3), 30);
@@ -384,19 +384,19 @@ mod tests {
             &SealedWrite::Delta(Payload::<SealedRowBytes>::new(vec![0; 10])),
         );
         assert_eq!(
-            ledger.refused(doc(4), ByteSize(50), QuotaAttempt::First),
+            ledger.refused(doc(4), ByteSize::new(50), QuotaAttempt::First),
             Refusal::Retry {
                 evict: vec![doc(1), doc(2)]
             },
             "the least recently viewed leave until the write fits"
         );
-        assert_eq!(ledger.bytes(), ByteSize(40));
+        assert_eq!(ledger.bytes(), ByteSize::new(40));
         assert_eq!(
-            ledger.refused(doc(4), ByteSize(50), QuotaAttempt::Retried),
+            ledger.refused(doc(4), ByteSize::new(50), QuotaAttempt::Retried),
             Refusal::Full
         );
         assert_eq!(
-            ledger.refused(doc(3), ByteSize(50), QuotaAttempt::Retried),
+            ledger.refused(doc(3), ByteSize::new(50), QuotaAttempt::Retried),
             Refusal::Drop
         );
     }
@@ -404,12 +404,12 @@ mod tests {
     /// `RESID-008`: what a reload restores keeps the order of the views.
     #[test]
     fn a_reload_keeps_the_order_of_the_views() {
-        let mut ledger = StoreLedger::new(ByteSize(100));
+        let mut ledger = StoreLedger::new(ByteSize::new(100));
         settled(&mut ledger, doc(1), 40);
         settled(&mut ledger, doc(2), 40);
         ledger.observe(doc(1), &SealedWrite::Shown);
         ledger.observe(doc(1), &SealedWrite::Hidden);
-        let mut reloaded = StoreLedger::new(ByteSize(100));
+        let mut reloaded = StoreLedger::new(ByteSize::new(100));
         for id in [doc(1), doc(2)] {
             let row = ledger.meta(id).map(|meta| meta.encode());
             let meta = row.and_then(|row| Meta::decode(&row));
@@ -447,7 +447,7 @@ mod tests {
                 .observe(
                     doc(1),
                     &SealedWrite::ForgetSession {
-                        peer: ambre_core::PeerId(1)
+                        peer: ambre_core::PeerId::new(1)
                     }
                 )
                 .record,

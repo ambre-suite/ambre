@@ -7,9 +7,14 @@ use serde::{Deserialize, Serialize};
 /// the key's own hex never takes its place in the trust check.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct KeyFingerprint(pub String);
+pub struct KeyFingerprint(String);
 
 impl KeyFingerprint {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
     /// The fingerprint, as the trust dialog shows it.
     pub fn as_str(&self) -> &str {
         &self.0

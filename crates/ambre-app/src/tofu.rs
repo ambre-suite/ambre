@@ -124,7 +124,7 @@ pub(crate) fn confirm(
 /// It names the user the key came with, and the instant it leaves, which the
 /// Logic thread cannot read for itself.
 fn request(prompt: &TofuPrompt, role: Role) -> LogicCommand {
-    let now = Timestamp(js_sys::Date::now() as u64);
+    let now = Timestamp::new(js_sys::Date::now() as u64);
     match &prompt.purpose {
         Purpose::Invite { document_id, email } => LogicCommand::Rest {
             id: ambre_bus::next_request(),
@@ -213,7 +213,7 @@ pub(crate) fn TofuDialog(
                                             </p>
                                         }
                                     })}
-                                <p class="ambre-tofu-fingerprint">{p.fingerprint.0.clone()}</p>
+                                <p class="ambre-tofu-fingerprint">{p.fingerprint.as_str().to_owned()}</p>
                                 <button
                                     r#type="button"
                                     class="ambre-tofu-copy"
@@ -282,7 +282,7 @@ mod tests {
             user_id: Id::<User>::mint(),
             display_name: ambre_core::DisplayName::new("Bob").ok(),
             exchange_pub_key: FixedBytes::from_array([byte; 32]),
-            fingerprint: ambre_bus::KeyFingerprint("ABCD EFGH".to_owned()),
+            fingerprint: ambre_bus::KeyFingerprint::new("ABCD EFGH".to_owned()),
             contact: KeyContact::New,
         }
     }
