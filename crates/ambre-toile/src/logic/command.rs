@@ -15,21 +15,22 @@
 pub use ambre_bus::app::toile::{
     BoolOp, Broadcast, ClipBytes, ClipConnector, ClipElement, ClipMembership, ClipSlot,
     ClipSlotVec, ClipValue, ClipboardPayload, CommentAnchor, CommentMessage, CommentPin,
-    CommentSummary, CommentThread, CorrelationToken, DeckFrame, DeckView, DisplayConnector,
-    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, End, FindOptions, FindQuery,
+    CommentSummary, CommentThread, DeckFrame, DeckView, DisplayConnector, DisplayElement,
+    DisplayGeom, DisplayNode, DisplayViewport, ElementCreation, End, FindOptions, FindQuery,
     FindResults, ImportSlot, InitContent, MediaRef, PlaybackState, PresencePayload, PresenceUpdate,
     PresentFocus, PresentMode, Reaction, ReactionKind, ReactionTally, SelectionStats, SlideChange,
     SlideCount, SlideIndex, SlidePosition, Sources, StatsRequestKind, TextDelta,
     ThreadMessageIndex, ToileCommand, ToileError, ToileEvent, Viewport, ZOrderIndex, ZTarget,
 };
-pub use ambre_bus::rest::RequestId;
+pub use ambre_bus::rest::Request;
+use ambre_core::Generation;
 
 // -----------------------------------------------------------------------------
 // Outcome -- engine-local, like `TrameOutcome`.
 // -----------------------------------------------------------------------------
 
 /// A Logic->Sync service-plane request a Toile command needs to make
-/// (`toile-media`). Toile allocates the [`RequestId`], owning the correlation so
+/// (`toile-media`). Toile allocates the [`Request`] id, owning the correlation so
 /// it can match the answering `RestEvent` back to a pending import. The
 /// `ambre-logic` dispatcher supplies the `document_id` and lowers this to a
 /// `RestCommand`. Toile never constructs a `RestCommand` nor knows its own
@@ -38,11 +39,11 @@ pub use ambre_bus::rest::RequestId;
 #[derive(Debug)]
 pub enum ToileRequest {
     UploadMedia {
-        id: RequestId,
+        id: Generation<Request>,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
     DownloadMedia {
-        id: RequestId,
+        id: Generation<Request>,
         content_hash: ambre_core::ContentHash,
     },
 }

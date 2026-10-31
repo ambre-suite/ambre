@@ -529,7 +529,7 @@ pub(crate) mod tests {
 
     fn a_layout(version: u64, pages: u32) -> ShapedLayout {
         ShapedLayout::new(
-            crate::layout::run::LayoutVersion::new(version),
+            ambre_core::Generation::nth(version),
             Arc::new(PageLayout {
                 page_width: DocPx::new(800.0),
                 page_height: DocPx::new(1000.0),
@@ -553,7 +553,7 @@ pub(crate) mod tests {
         let mut ui = a_view();
         assert!(ui.apply_layout(a_layout(1, 3)));
         assert!(ui.apply_layout(a_layout(2, 7)));
-        assert_eq!(ui.layout_version, crate::layout::run::LayoutVersion::new(2));
+        assert_eq!(ui.layout_version, ambre_core::Generation::nth(2));
         assert_eq!(
             ui.shaped.layout.page_count,
             crate::events::PageCount::new(7)
@@ -568,7 +568,7 @@ pub(crate) mod tests {
         assert!(ui.apply_layout(a_layout(5, 9)));
         assert!(!ui.apply_layout(a_layout(4, 2)));
         assert!(!ui.apply_layout(a_layout(5, 2)));
-        assert_eq!(ui.layout_version, crate::layout::run::LayoutVersion::new(5));
+        assert_eq!(ui.layout_version, ambre_core::Generation::nth(5));
         assert_eq!(
             ui.shaped.layout.page_count,
             crate::events::PageCount::new(9)

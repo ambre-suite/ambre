@@ -95,8 +95,8 @@ top_row: u32,   // first visible row: the axis scrolls by index, not by pixel
 left_col: u32,
 cell_cache: HashMap<(u32, u32), CellData>,  // a miss draws as pending or blank
 dirty_cells: HashSet<(u32, u32)>,           // edited locally, not yet confirmed
-accepted_version: ViewportVersion,          // the last answer taken (`TRAME-UI-005`)
-next_version: ViewportVersion,
+accepted_version: Generation<ViewportVersion>, // the last answer taken (`TRAME-UI-005`)
+next_version: Generation<ViewportVersion>,
 col_widths: HashMap<Col, DocPx>,            // only a size that differs from the default
 row_heights: HashMap<Row, DocPx>,
 zoom: f64,

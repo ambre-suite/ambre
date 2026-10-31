@@ -77,7 +77,7 @@ impl SyncState {
     /// (`SYNC-145`).
     pub(crate) fn handle_upload_media(
         &mut self,
-        id: RequestId,
+        id: Generation<Request>,
         document_id: DocumentId,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     ) {
@@ -181,7 +181,7 @@ impl SyncState {
     /// 4. Emits [`SyncEvent::MediaDownloaded`] with the plaintext data.
     pub(crate) fn handle_download_media(
         &self,
-        id: RequestId,
+        id: Generation<Request>,
         document_id: DocumentId,
         content_hash: ambre_core::ContentHash,
     ) {
@@ -228,7 +228,7 @@ impl SyncState {
     /// it could read (`SRV-139`).
     pub(crate) fn handle_erase_media(
         &self,
-        id: RequestId,
+        id: Generation<Request>,
         document_id: DocumentId,
         content_hash: ambre_core::ContentHash,
     ) {
@@ -309,7 +309,12 @@ impl MediaHttp for GlooHttp {
 }
 
 /// Reports a failed media leg to the caller that asked for it.
-fn report(logic_tx: &LogicSink, id: RequestId, request: ApiRequest, error: impl http::Reported) {
+fn report(
+    logic_tx: &LogicSink,
+    id: Generation<Request>,
+    request: ApiRequest,
+    error: impl http::Reported,
+) {
     let _ = logic_tx.send(LogicEvent::ApiError {
         id: Some(id),
         request,
@@ -321,7 +326,7 @@ fn report(logic_tx: &LogicSink, id: RequestId, request: ApiRequest, error: impl 
 /// One upload a caller asked for: the plaintext, where it goes, and the keys
 /// that seal it.
 pub(crate) struct Upload {
-    id: RequestId,
+    id: Generation<Request>,
     document_id: DocumentId,
     data: ambre_core::Payload<ambre_core::MediaBytes>,
     address: FixedBytes<MediaAddress>,
@@ -370,7 +375,7 @@ async fn upload_media(
 async fn download_media(
     http: &impl MediaHttp,
     base: &http::RelayUrl,
-    id: RequestId,
+    id: Generation<Request>,
     content_hash: ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
@@ -397,7 +402,7 @@ async fn download_media(
 async fn erase_media(
     http: &impl MediaHttp,
     base: &http::RelayUrl,
-    id: RequestId,
+    id: Generation<Request>,
     document_id: DocumentId,
     content_hash: ambre_core::ContentHash,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
@@ -509,7 +514,11 @@ mod tests {
                 crate::Existence::OnRelay,
             );
             state.documents.insert(document_id, doc_state);
-            state.handle_upload_media(RequestId::next(), document_id, picture.clone().into());
+            state.handle_upload_media(
+                ambre_bus::next_request(),
+                document_id,
+                picture.clone().into(),
+            );
             let answer = rx.try_iter().find_map(|event| match event {
                 LogicEvent::Rest {
                     evt: RestEvent::MediaUploaded { content_hash, .. },
@@ -558,7 +567,11 @@ mod tests {
                 crate::Existence::LocalOnly,
             );
             state.documents.insert(document_id, doc_state);
-            state.handle_upload_media(RequestId::next(), document_id, picture.clone().into());
+            state.handle_upload_media(
+                ambre_bus::next_request(),
+                document_id,
+                picture.clone().into(),
+            );
             assert!(
                 answered(&rx).is_empty(),
                 "the upload went ahead of its document"
@@ -677,7 +690,7 @@ mod tests {
         ] {
             let mut http = FakeMedia::new(fail, Vec::new());
             http.erase_status = ambre_core::HttpStatus(status);
-            let id = RequestId::next();
+            let id = ambre_bus::next_request();
             let hash = ambre_core::ContentHash::parse(&"cd".repeat(32)).expect("a hash");
             erase_media(&http, &base(), id, document_id, hash, &tx, &logic).await;
             let (errors, sent) = answers(&logic_rx, &events);
@@ -696,10 +709,14 @@ mod tests {
 
     /// The answers one request drew: the error reports the application got,
     /// and the success events the worker sent.
+    #[expect(
+        clippy::type_complexity,
+        reason = "a test helper returns the pair its callers destructure"
+    )]
     fn answers(
         logic: &ambre_bus::conduit::Receiver<LogicEvent>,
         events: &ambre_bus::conduit::Receiver<SyncEvent>,
-    ) -> (Vec<(Option<RequestId>, String)>, Vec<SyncEvent>) {
+    ) -> (Vec<(Option<Generation<Request>>, String)>, Vec<SyncEvent>) {
         let errors = logic
             .try_iter()
             .filter_map(|event| match event {
@@ -735,7 +752,7 @@ mod tests {
             ("confirm", &["link", "put", "confirm"][..]),
         ] {
             let http = FakeMedia::new(fail, Vec::new());
-            let id = RequestId::next();
+            let id = ambre_bus::next_request();
             upload_media(&http, &base(), upload(id), &tx, &logic).await;
             assert_eq!(*http.steps.borrow(), ran);
             let (errors, sent) = answers(&logic_rx, &events);
@@ -743,7 +760,7 @@ mod tests {
             assert!(sent.is_empty(), "{fail} answered a success");
         }
         let http = FakeMedia::new("", Vec::new());
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         upload_media(&http, &base(), upload(id), &tx, &logic).await;
         assert_eq!(*http.steps.borrow(), ["link", "put", "confirm"]);
         let (errors, sent) = answers(&logic_rx, &events);
@@ -787,14 +804,14 @@ mod tests {
             ("", foreign),
         ] {
             let http = FakeMedia::new(fail, served);
-            let id = RequestId::next();
+            let id = ambre_bus::next_request();
             download_media(&http, &base(), id, hash.clone(), &keyring, &tx, &logic).await;
             let (errors, sent) = answers(&logic_rx, &events);
             assert_eq!(errors, [(Some(id), "DownloadMedia".to_owned())], "{fail}");
             assert!(sent.is_empty(), "{fail} delivered bytes");
         }
         let http = FakeMedia::new("", blob);
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         download_media(&http, &base(), id, hash.clone(), &keyring, &tx, &logic).await;
         let (errors, sent) = answers(&logic_rx, &events);
         assert!(errors.is_empty());

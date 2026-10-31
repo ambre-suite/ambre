@@ -331,7 +331,8 @@ impl LocalStore {
 #[cfg(test)]
 mod tests {
     use ambre_bus::conduit::{self, Receiver};
-    use ambre_bus::{RequestId, RestCommand, RestEvent, SecretBytes};
+    use ambre_bus::{Request, RestCommand, RestEvent, SecretBytes};
+    use ambre_core::Generation;
     use ambre_core::{Payload, SealedRowBytes};
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -358,7 +359,7 @@ mod tests {
     }
 
     /// The next service request the vault sent.
-    async fn request(rx: &Receiver<LogicCommand>) -> (RequestId, RestCommand) {
+    async fn request(rx: &Receiver<LogicCommand>) -> (Generation<Request>, RestCommand) {
         match next(rx).await {
             LogicCommand::Rest { id, cmd } => (id, cmd),
             other => panic!("expected a service request, got {other:?}"),
@@ -416,13 +417,13 @@ mod tests {
         // The delta's seal answers first: the store still waits for the
         // snapshot's, so the delta never lands under it.
         vault.answer(
-            second,
+            Some(second),
             RestEvent::LocalRowSealed {
                 sealed: Payload::<SealedRowBytes>::new(b"sealed edit".to_vec()),
             },
         );
         vault.answer(
-            first,
+            Some(first),
             RestEvent::LocalRowSealed {
                 sealed: Payload::<SealedRowBytes>::new(b"sealed document".to_vec()),
             },
@@ -450,7 +451,7 @@ mod tests {
         let sealed: Vec<&[u8]> = rows.iter().map(|row| row.sealed.as_bytes()).collect();
         assert_eq!(sealed, [b"sealed document".as_slice(), b"sealed edit"]);
         vault.answer(
-            id,
+            Some(id),
             RestEvent::LocalRowsOpened {
                 rows: vec![
                     Some(SecretBytes::new(b"the document".to_vec())),
@@ -472,7 +473,7 @@ mod tests {
         );
         let (id, _) = request(&vault_rx).await;
         vault.answer(
-            id,
+            Some(id),
             RestEvent::LocalRowsOpened {
                 rows: vec![Some(SecretBytes::new(b"the document".to_vec())), None],
             },

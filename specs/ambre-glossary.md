@@ -166,6 +166,9 @@
 | mechanism ladder | the ordered strengths a verification can claim | | `1-Foundations/ambre-spec-testing.md` |
 | regime | the verification a component shape owes | | `1-Foundations/ambre-spec-testing.md` |
 | primitive allowlist | the file naming each site that keeps a bare primitive, and why | | `1-Foundations/ambre-spec-testing.md` |
+| generation | a counted number that tells a late answer from the current one | | `1-Foundations/ambre-spec-architecture.md` |
+| issuer | the one source of the generations of a family | | `1-Foundations/ambre-spec-architecture.md` |
+| IssueRight | the value that opens an issuer of a family | | `1-Foundations/ambre-spec-architecture.md` |
 | fixture | a stored artifact a test reads instead of building | | `1-Foundations/ambre-spec-fixtures.md` |
 | freeze | pin an artifact at a version | | `1-Foundations/ambre-spec-fixtures.md` |
 | frozen artifact | a fixture pinned at an older version | | `1-Foundations/ambre-spec-fixtures.md` |

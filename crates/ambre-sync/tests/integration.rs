@@ -11,18 +11,22 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::{DocType, LogicEvent, RequestId, RestCommand, RestEvent, SyncCommand};
+use ambre_bus::{DocType, LogicEvent, Request, RestCommand, RestEvent, SyncCommand, next_request};
+use ambre_core::Generation;
 use ambre_sync::mock::MockWsTransport;
 
-fn drain_rest(rx: &ambre_bus::conduit::Receiver<LogicEvent>, expected_id: RequestId) -> RestEvent {
+fn drain_rest(
+    rx: &ambre_bus::conduit::Receiver<LogicEvent>,
+    expected_id: Generation<Request>,
+) -> RestEvent {
     let events: Vec<LogicEvent> = rx.try_iter().collect();
     for evt in events {
         if let LogicEvent::Rest { id, evt } = evt {
-            assert_eq!(id, expected_id, "RequestId mismatch");
+            assert_eq!(id, Some(expected_id), "request id mismatch");
             return evt;
         }
     }
-    panic!("no Rest event found for RequestId {expected_id:?}");
+    panic!("no Rest event found for request {expected_id:?}");
 }
 
 /// Build a SyncState + mock transport + logic_rx for a test.
@@ -43,7 +47,7 @@ fn setup(
     (state, logic_rx, mock)
 }
 
-fn send_rest(state: &mut ambre_sync::SyncState, id: RequestId, cmd: RestCommand) {
+fn send_rest(state: &mut ambre_sync::SyncState, id: Generation<Request>, cmd: RestCommand) {
     state.handle_command(SyncCommand::Rest { id, cmd });
 }
 
@@ -54,7 +58,7 @@ fn send_rest(state: &mut ambre_sync::SyncState, id: RequestId, cmd: RestCommand)
 #[test]
 fn unlock_returns_session_ready() {
     let (mut state, rx, _mock) = setup(false);
-    let id = RequestId::next();
+    let id = next_request();
 
     send_rest(
         &mut state,
@@ -73,7 +77,7 @@ fn unlock_returns_session_ready() {
 #[test]
 fn setup_account_returns_created_with_recovery_words() {
     let (mut state, rx, _mock) = setup(false);
-    let id = RequestId::next();
+    let id = next_request();
 
     send_rest(
         &mut state,
@@ -102,14 +106,14 @@ fn logout_returns_logged_out_and_clears_session() {
     // Unlock first to populate session keys.
     send_rest(
         &mut state,
-        RequestId::next(),
+        next_request(),
         RestCommand::Unlock {
             passphrase: ambre_core::Passphrase::new("secret".to_owned()),
         },
     );
     rx.try_iter().count(); // drain SessionReady
 
-    let id = RequestId::next();
+    let id = next_request();
     send_rest(&mut state, id, RestCommand::Logout);
 
     match drain_rest(&rx, id) {
@@ -125,7 +129,7 @@ fn logout_returns_logged_out_and_clears_session() {
 #[test]
 fn create_document_returns_created() {
     let (mut state, rx, _mock) = setup(false);
-    let id = RequestId::next();
+    let id = next_request();
 
     send_rest(
         &mut state,
@@ -151,7 +155,7 @@ fn create_document_returns_created() {
 fn list_documents_includes_created() {
     let (mut state, rx, _mock) = setup(false);
 
-    let create_id = RequestId::next();
+    let create_id = next_request();
     send_rest(
         &mut state,
         create_id,
@@ -165,7 +169,7 @@ fn list_documents_includes_created() {
         other => panic!("expected DocumentCreated, got {other:?}"),
     };
 
-    let list_id = RequestId::next();
+    let list_id = next_request();
     send_rest(&mut state, list_id, RestCommand::ListDocuments);
 
     match drain_rest(&rx, list_id) {
@@ -185,7 +189,7 @@ fn list_documents_includes_created() {
 fn delete_document_removes_from_list() {
     let (mut state, rx, _mock) = setup(false);
 
-    let create_id = RequestId::next();
+    let create_id = next_request();
     send_rest(
         &mut state,
         create_id,
@@ -199,7 +203,7 @@ fn delete_document_removes_from_list() {
         other => panic!("expected DocumentCreated, got {other:?}"),
     };
 
-    let del_id = RequestId::next();
+    let del_id = next_request();
     send_rest(
         &mut state,
         del_id,
@@ -216,7 +220,7 @@ fn delete_document_removes_from_list() {
     }
 
     // Confirm it's gone.
-    let list_id = RequestId::next();
+    let list_id = next_request();
     send_rest(&mut state, list_id, RestCommand::ListDocuments);
     match drain_rest(&rx, list_id) {
         RestEvent::DocumentList { documents } => assert!(documents.is_empty()),
@@ -228,7 +232,7 @@ fn delete_document_removes_from_list() {
 fn rename_document_updates_name() {
     let (mut state, rx, _mock) = setup(false);
 
-    let create_id = RequestId::next();
+    let create_id = next_request();
     send_rest(
         &mut state,
         create_id,
@@ -242,7 +246,7 @@ fn rename_document_updates_name() {
         other => panic!("expected DocumentCreated, got {other:?}"),
     };
 
-    let rename_id = RequestId::next();
+    let rename_id = next_request();
     send_rest(
         &mut state,
         rename_id,
@@ -260,7 +264,7 @@ fn rename_document_updates_name() {
     }
 
     // Confirm name changed.
-    let list_id = RequestId::next();
+    let list_id = next_request();
     send_rest(&mut state, list_id, RestCommand::ListDocuments);
     match drain_rest(&rx, list_id) {
         RestEvent::DocumentList { documents } => {
@@ -285,7 +289,7 @@ fn open_document_subscribes_via_mock_ws() {
     // Unlock first (required for ws_connected).
     send_rest(
         &mut state,
-        RequestId::next(),
+        next_request(),
         RestCommand::Unlock {
             passphrase: ambre_core::Passphrase::new("secret".to_owned()),
         },
@@ -325,7 +329,7 @@ fn close_document_unsubscribes_via_mock_ws() {
     // Unlock first.
     send_rest(
         &mut state,
-        RequestId::next(),
+        next_request(),
         RestCommand::Unlock {
             passphrase: ambre_core::Passphrase::new("secret".to_owned()),
         },
@@ -360,7 +364,7 @@ fn send_update_after_open_document_encrypts_and_sends() {
     // Unlock first.
     send_rest(
         &mut state,
-        RequestId::next(),
+        next_request(),
         RestCommand::Unlock {
             passphrase: ambre_core::Passphrase::new("secret".to_owned()),
         },
@@ -404,7 +408,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
     let (mut state, rx, mock) = setup(true);
 
     // 1. Unlock
-    let id1 = RequestId::next();
+    let id1 = next_request();
     send_rest(
         &mut state,
         id1,
@@ -418,7 +422,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
     }
 
     // 2. Create a document
-    let id2 = RequestId::next();
+    let id2 = next_request();
     send_rest(
         &mut state,
         id2,
@@ -433,7 +437,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
     };
 
     // 3. List documents
-    let id3 = RequestId::next();
+    let id3 = next_request();
     send_rest(&mut state, id3, RestCommand::ListDocuments);
     match drain_rest(&rx, id3) {
         RestEvent::DocumentList { documents } => {
@@ -484,7 +488,7 @@ fn full_session_flow_unlock_create_open_close_logout() {
     );
 
     // 7. Logout
-    let id4 = RequestId::next();
+    let id4 = next_request();
     send_rest(&mut state, id4, RestCommand::Logout);
     match drain_rest(&rx, id4) {
         RestEvent::LoggedOut => {}
@@ -514,7 +518,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
         &ambre_core::Payload::new(b"body".to_vec()),
     );
 
-    let seal_id = RequestId::next();
+    let seal_id = next_request();
     send_rest(
         &mut state,
         seal_id,
@@ -542,7 +546,7 @@ fn a_sealed_file_round_trips_through_the_service_plane() {
     let misread = ambre_core::Payload::<ambre_core::PlaintextContainer>::new(sealed.clone());
     assert!(ambre_core::read_ambre_plaintext(&misread).is_err());
 
-    let open_id = RequestId::next();
+    let open_id = next_request();
     send_rest(
         &mut state,
         open_id,
@@ -575,7 +579,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
         &ambre_core::Payload::new(b"body".to_vec()),
     );
 
-    let seal_id = RequestId::next();
+    let seal_id = next_request();
     send_rest(
         &mut state,
         seal_id,
@@ -611,7 +615,7 @@ fn a_wrong_passphrase_and_a_tampered_file_fail_the_same_way() {
             "correct horse",
         ),
     ] {
-        let id = RequestId::next();
+        let id = next_request();
         send_rest(
             &mut state,
             id,
@@ -638,7 +642,7 @@ fn opening_a_plaintext_file_fails_without_deriving_a_key() {
 
     // The header says plaintext, so the answer comes from the parse. Nothing
     // pays the work factor: an unsealed file is not a guessing attempt.
-    let id = RequestId::next();
+    let id = next_request();
     send_rest(
         &mut state,
         id,

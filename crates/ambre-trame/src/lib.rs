@@ -44,7 +44,7 @@ pub use ambre_bus::{
     BorderEdit, BorderPreset, BorderStyle, Borders, CellBorder, CellFormat, CellPos, CellRect,
     CellStyle, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan, ColVec,
     CondFormatKind, CondStyle, CsvDelimiter, Decimals, DecimalsStep, DefinedName, DisplayCell,
-    EditSessionId, FillMode, FilterKind, FilterOp, HAlign, HeaderRow, MergeSpan, Row, RowCount,
+    EditSession, FillMode, FilterKind, FilterOp, HAlign, HeaderRow, MergeSpan, Row, RowCount,
     RowDelta, RowSpan, RowVec, SelectionKind, SheetTabPos, SortKey, SortOrder, StylePatch,
     TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };

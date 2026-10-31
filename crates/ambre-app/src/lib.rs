@@ -39,8 +39,8 @@ use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
 use ambre_bus::conduit::{self, ChannelCapacity, Marks};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    AppCommand, DocumentId, LogicCommand, LogicEvent, MemberInfo, RequestId, RestCommand, Role,
-    SheetId, SheetTab, SyncCommand, UiEvent, UserId,
+    AppCommand, DocumentId, LogicCommand, LogicEvent, MemberInfo, RestCommand, Role, SheetId,
+    SheetTab, SyncCommand, UiEvent, UserId,
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
@@ -818,7 +818,7 @@ pub fn main() {
     if let Some(ret) = signin::take_boot_return() {
         tracing::info!("Provider return for '{}'", ret.provider);
         let _ = ui_to_logic_tx.try_send(LogicCommand::Rest {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             cmd: RestCommand::ProviderReturn {
                 provider: ret.provider,
                 code: ret.code,
@@ -832,7 +832,7 @@ pub fn main() {
         tracing::info!("Dev login requested for user '{username}'");
         remember_dev_user(&username);
         let _ = ui_to_logic_tx.try_send(LogicCommand::Rest {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             cmd: RestCommand::DevLogin { username },
         });
     }
@@ -1379,7 +1379,7 @@ pub fn main() {
                     if !list_requested {
                         list_requested = true;
                         let _ = relay_tx.try_send(LogicCommand::Rest {
-                            id: RequestId::next(),
+                            id: ambre_bus::next_request(),
                             cmd: RestCommand::ListDocuments,
                         });
                         // A Murmure page lists its channels and their activity.
@@ -1457,7 +1457,7 @@ pub fn main() {
                     ..
                 } => {
                     let _ = relay_tx.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
+                        id: ambre_bus::next_request(),
                         cmd: RestCommand::ListDocuments,
                     });
                 }
@@ -1503,7 +1503,7 @@ pub fn main() {
                 } => {
                     toasts.success(format!("Invited {display_name}"));
                     let _ = relay_tx.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
+                        id: ambre_bus::next_request(),
                         cmd: RestCommand::ListDocumentMembers {
                             document_id: *document_id,
                         },
@@ -1572,7 +1572,7 @@ pub fn main() {
                 } => {
                     toasts.success("Member revoked");
                     let _ = relay_tx.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
+                        id: ambre_bus::next_request(),
                         cmd: RestCommand::ListDocumentMembers {
                             document_id: *document_id,
                         },
@@ -1584,7 +1584,7 @@ pub fn main() {
                     ..
                 } => {
                     let _ = relay_tx.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
+                        id: ambre_bus::next_request(),
                         cmd: RestCommand::ListDocumentMembers {
                             document_id: *document_id,
                         },
@@ -1623,7 +1623,7 @@ pub fn main() {
                 UiEvent::DocumentShared { .. } => {
                     toasts.info("A document was shared with you");
                     let _ = relay_tx.try_send(LogicCommand::Rest {
-                        id: RequestId::next(),
+                        id: ambre_bus::next_request(),
                         cmd: RestCommand::ListDocuments,
                     });
                 }

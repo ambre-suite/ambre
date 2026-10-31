@@ -48,7 +48,7 @@ impl LogicState {
         if self.picturing.values().any(|held| *held == asked) {
             return;
         }
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         let content_hash = asked.1.clone();
         self.picturing.insert(id, asked);
         self.send_to_sync(SyncCommand::Rest {
@@ -62,7 +62,7 @@ impl LogicState {
 
     /// The answer to an image fetched for a preview: decoded, and handed to
     /// the view. Returns `false` for any other answer.
-    pub(crate) fn pictured(&mut self, id: RequestId, evt: &RestEvent) -> bool {
+    pub(crate) fn pictured(&mut self, id: Generation<Request>, evt: &RestEvent) -> bool {
         let Some((channel_id, media_ref)) = self.picturing.remove(&id) else {
             return false;
         };
@@ -76,7 +76,7 @@ impl LogicState {
 
     /// An image the relay did not serve: the view keeps its chip. Returns
     /// `false` for any other request.
-    pub(crate) fn picture_failed(&mut self, id: RequestId) -> bool {
+    pub(crate) fn picture_failed(&mut self, id: Generation<Request>) -> bool {
         let Some((channel_id, media_ref)) = self.picturing.remove(&id) else {
             return false;
         };

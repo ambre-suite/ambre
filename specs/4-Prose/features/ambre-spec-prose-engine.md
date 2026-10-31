@@ -230,7 +230,7 @@ pub struct ProseState {
     faces:            Vec<FontBytes>,
     handed:           Option<(loro::Frontiers, usize, PageSpan)>,
     window:           PageSpan,
-    handed_version:   LayoutVersion,
+    handed_version:   Generation<LayoutVersion>,
     in_view:          Vec<Arc<ShapedLayout>>,
     ids:              ids::IdSource,
     word_count:       WordCount,
@@ -332,7 +332,7 @@ list is `ambre-roadmap.md` E5.
 pub enum ProseCommand {
     Noop,
     /// The view has taken every text change up to `seen`; the answer is `Synced`.
-    Sync          { seen: TextChangeSeq },
+    Sync          { seen: Generation<TextChangeSeq> },
 
     // -- Text editing (`features/ambre-spec-prose-text-editing.md`) --
     InsertText    { block_id: BlockId, pos: DocOffset, text: String },
@@ -553,7 +553,7 @@ pub enum ProseEvent {
     DocUpdated    { payload: LoroPayload },
     /// What that change did to the text, in code points, for a view that holds no document
     /// (`PROSE-UI-001`). The draft and the caret follow it.
-    TextChanged   { origin: ChangeOrigin, seq: TextChangeSeq, acked: TextAck,
+    TextChanged   { origin: ChangeOrigin, seq: Generation<TextChangeSeq>, acked: TextAck,
                     edits: Vec<TextEdit>, removed: Vec<BlockId> },
     /// The paragraph that parted, and the one that carries its tail. The view needs the new
     /// block's identity to leave the caret at its start (`PROSE-UI-141`): it cannot mint the
@@ -758,7 +758,7 @@ pub struct ProseUiState {
     /// (`features/ambre-spec-prose-page-rendering.md`).
     shaped:          Arc<ShapedLayout>,
     /// An older layout is dropped (`features/ambre-spec-prose-page-rendering.md`).
-    layout_version:  LayoutVersion,
+    layout_version:  Generation<LayoutVersion>,
     /// The whole live peer set, replaced on each event (`PRESENCE-009`).
     remote_cursors:  Vec<RemoteCursor>,
     word_count:      WordCount,

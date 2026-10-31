@@ -14,9 +14,8 @@ use std::rc::Rc;
 use ambre_core::{Payload, SealedRowBytes};
 
 use ambre_bus::conduit::{Sender, TrySendError};
-use ambre_bus::{
-    LogicCommand, RequestId, RestCommand, RestEvent, RowPlace, SealedRow, SecretBytes,
-};
+use ambre_bus::{LogicCommand, Request, RestCommand, RestEvent, RowPlace, SealedRow, SecretBytes};
+use ambre_core::Generation;
 
 /// What one sealed row comes back as: `None` when the store is locked.
 type Sealed = Box<dyn FnOnce(Option<Payload<SealedRowBytes>>)>;
@@ -37,7 +36,7 @@ pub(crate) struct Vault {
 
 struct Inner {
     to_logic: Sender<LogicCommand>,
-    waiting: HashMap<RequestId, Pending>,
+    waiting: HashMap<Generation<Request>, Pending>,
     /// Requests the channel to Logic did not take, in order.
     outbox: VecDeque<LogicCommand>,
 }
@@ -82,7 +81,7 @@ impl Vault {
     }
 
     fn ask(&self, cmd: RestCommand, pending: Pending) {
-        let id = RequestId::next();
+        let id = ambre_bus::next_request();
         let mut inner = self.inner.borrow_mut();
         inner.waiting.insert(id, pending);
         inner.outbox.push_back(LogicCommand::Rest { id, cmd });
@@ -98,8 +97,13 @@ impl Vault {
     /// row then reaches `done` with one owner, so it moves out of its wrapper
     /// with no copy. An event that is not the vault's comes back for the rest
     /// of the relay.
-    pub(crate) fn answer(&self, id: RequestId, evt: RestEvent) -> Option<RestEvent> {
-        let Some(pending) = self.inner.borrow_mut().waiting.remove(&id) else {
+    pub(crate) fn answer(
+        &self,
+        id: Option<Generation<Request>>,
+        evt: RestEvent,
+    ) -> Option<RestEvent> {
+        let pending = id.and_then(|id| self.inner.borrow_mut().waiting.remove(&id));
+        let Some(pending) = pending else {
             return Some(evt);
         };
         // The borrow ends before the answer runs, which may ask again.
@@ -143,7 +147,7 @@ mod tests {
     use super::*;
 
     /// The one request on `rx`, as Logic would relay it to Sync.
-    fn request(rx: &Receiver<LogicCommand>) -> (RequestId, RestCommand) {
+    fn request(rx: &Receiver<LogicCommand>) -> (Generation<Request>, RestCommand) {
         match rx.try_recv() {
             Ok(LogicCommand::Rest { id, cmd }) => (id, cmd),
             other => panic!("expected a service request, got {other:?}"),
@@ -176,19 +180,19 @@ mod tests {
 
         assert!(
             vault
-                .answer(RequestId(u64::MAX), RestEvent::LocalStoreLocked)
+                .answer(Some(Generation::nth(u64::MAX)), RestEvent::LocalStoreLocked)
                 .is_some()
         );
         let sealed = RestEvent::LocalRowSealed {
             sealed: Payload::<SealedRowBytes>::new(b"sealed".to_vec()),
         };
-        assert!(vault.answer(id, sealed.clone()).is_none());
+        assert!(vault.answer(Some(id), sealed.clone()).is_none());
         assert_eq!(
             *got.borrow(),
             Some(Some(Payload::<SealedRowBytes>::new(b"sealed".to_vec())))
         );
         assert!(
-            vault.answer(id, sealed).is_some(),
+            vault.answer(Some(id), sealed).is_some(),
             "an answer is taken once"
         );
     }
@@ -219,7 +223,11 @@ mod tests {
         });
         for _ in 0..2 {
             let (id, _) = request(&rx);
-            assert!(vault.answer(id, RestEvent::LocalStoreLocked).is_none());
+            assert!(
+                vault
+                    .answer(Some(id), RestEvent::LocalStoreLocked)
+                    .is_none()
+            );
         }
         assert!(sealed.get() && opened.get());
     }
@@ -248,7 +256,7 @@ mod tests {
         let answer = RestEvent::LocalRowsOpened {
             rows: vec![Some(opened)],
         };
-        assert!(vault.answer(id, answer).is_none());
+        assert!(vault.answer(Some(id), answer).is_none());
         assert_eq!(moved.get(), Some(before));
     }
 

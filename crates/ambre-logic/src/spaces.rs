@@ -568,7 +568,7 @@ impl LogicState {
     /// viewer: the same member on every client that reads the same rows.
     pub(crate) fn hand_off_before_leave(
         &mut self,
-        leave: RequestId,
+        leave: Generation<Request>,
         document_id: DocumentId,
     ) -> bool {
         let (Some(space), Some(me)) = (
@@ -592,7 +592,7 @@ impl LogicState {
         let Some(successor) = first(Role::Editor).or_else(|| first(Role::Viewer)) else {
             return false;
         };
-        let change = RequestId::next();
+        let change = ambre_bus::next_request();
         self.handing_off.insert(change, (leave, document_id));
         self.send_to_sync(SyncCommand::Rest {
             id: change,
@@ -608,7 +608,7 @@ impl LogicState {
     /// The answer to a role change this thread asked for before a leave.
     /// The leave it held goes now, under the id the view gave it. Returns
     /// `false` for any other answer.
-    pub(crate) fn handed_off(&mut self, id: RequestId, evt: &RestEvent) -> bool {
+    pub(crate) fn handed_off(&mut self, id: Generation<Request>, evt: &RestEvent) -> bool {
         let Some((leave, document_id)) = self.handing_off.remove(&id) else {
             return false;
         };
@@ -2034,7 +2034,8 @@ mod tests {
 
     // --- The members of a space, and their presence ---
 
-    use ambre_bus::{MemberInfo, MemberView, Presence, RequestId, RestCommand};
+    use ambre_bus::{MemberInfo, MemberView, Presence, Request, RestCommand};
+    use ambre_core::Generation;
     use ambre_murmure::PRESENCE_EXPIRY;
 
     /// The member list of the last members event the view got.
@@ -2064,7 +2065,7 @@ mod tests {
     }
 
     /// The member listing this thread asked for, with the document it names.
-    fn member_request(sent: &[SyncCommand]) -> Option<(RequestId, DocumentId)> {
+    fn member_request(sent: &[SyncCommand]) -> Option<(Generation<Request>, DocumentId)> {
         sent.iter().find_map(|c| match c {
             SyncCommand::Rest {
                 id,
@@ -2399,7 +2400,7 @@ mod tests {
         ];
         let space_id = space_with(&mut state, &ui, &sync, rows);
         let document_id = space_id.document_id();
-        let leave = RequestId::next();
+        let leave = ambre_bus::next_request();
         state.handle_logic_command(LogicCommand::Rest {
             id: leave,
             cmd: RestCommand::LeaveDocument { document_id },
@@ -2414,7 +2415,7 @@ mod tests {
                 if *d == document_id && *user_id == low
         ));
         state.handle_logic_event(LogicEvent::Rest {
-            id: *change,
+            id: Some(*change),
             evt: RestEvent::MemberRoleUpdated {
                 document_id,
                 user_id: low,
@@ -2472,7 +2473,7 @@ mod tests {
             let space_id = space_with(&mut state, &ui, &sync, rows);
             for document_id in [space_id.document_id(), DocumentId::new()] {
                 state.handle_logic_command(LogicCommand::Rest {
-                    id: RequestId::next(),
+                    id: ambre_bus::next_request(),
                     cmd: RestCommand::LeaveDocument { document_id },
                 });
                 assert!(matches!(

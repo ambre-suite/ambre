@@ -1263,7 +1263,9 @@ impl SyncState {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
-        let ticket = self.resend_ticket.next();
+        // A number issued for a delta this log forgot is never armed, and
+        // the next failure takes the one after it: only order is compared.
+        let ticket = self.resend_ticket.issue();
         let Some(failure) = doc_state.rekey.failed(&signature, ticket) else {
             // A delta this log forgot: answer, so the fence never stands.
             self.ws_send(&WsClientMsg::ClockResync {
@@ -1272,7 +1274,6 @@ impl SyncState {
             });
             return;
         };
-        self.resend_ticket = ticket;
         match resend_retry_delay(failure) {
             Some(delay) => {
                 tracing::warn!("[Sync] delta failed doc={document_id} (failure {failure})");
@@ -1295,7 +1296,7 @@ impl SyncState {
     pub(crate) fn resend_failed(
         &mut self,
         document_id: DocumentId,
-        ticket: crate::generation::ResendTicket,
+        ticket: ambre_core::Generation<crate::generation::ResendTicket>,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
@@ -2609,8 +2610,8 @@ mod tests {
         let (mut state, rx, doc, _key, _signing_key, _snap) = setup();
         state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
         assert_eq!(
-            state.documents[&doc].directory_asked,
-            crate::generation::RequestGeneration::nth(1),
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Generation::nth(1),
             "one listing"
         );
         assert_eq!(rows_handed(&drain(&rx)), None, "nothing before the answer");
@@ -2618,7 +2619,7 @@ mod tests {
         let carol = UserId::new();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: crate::generation::RequestGeneration::nth(1),
+            asked: ambre_core::Generation::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2635,7 +2636,7 @@ mod tests {
 
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: crate::generation::RequestGeneration::nth(1),
+            asked: ambre_core::Generation::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2653,8 +2654,8 @@ mod tests {
             document_id: elsewhere,
         });
         assert_eq!(
-            state.documents[&doc].directory_asked,
-            crate::generation::RequestGeneration::nth(1)
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Generation::nth(1)
         );
         assert_eq!(rows_handed(&drain(&rx)), None, "a document not open here");
     }
@@ -2677,8 +2678,8 @@ mod tests {
         state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
         state.handle_ws_message(WsServerMsg::MembersChanged { document_id: doc });
         assert_eq!(
-            state.documents[&doc].directory_asked,
-            crate::generation::RequestGeneration::nth(2),
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Generation::nth(2),
             "each word lists again"
         );
         drain(&rx);
@@ -2686,7 +2687,7 @@ mod tests {
         let carol = UserId::new();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: crate::generation::RequestGeneration::nth(2),
+            asked: ambre_core::Generation::nth(2),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2696,7 +2697,7 @@ mod tests {
         let bob = UserId::new();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: crate::generation::RequestGeneration::nth(1),
+            asked: ambre_core::Generation::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2738,14 +2739,14 @@ mod tests {
 
         state.handle_ws_message(WsServerMsg::Subscribed { document_id: doc });
         assert_eq!(
-            state.documents[&doc].directory_asked,
-            crate::generation::RequestGeneration::nth(1),
+            state.documents[&doc].directory_asked.latest(),
+            ambre_core::Generation::nth(1),
             "one listing"
         );
         drain(&rx);
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
             id: None,
-            asked: crate::generation::RequestGeneration::nth(1),
+            asked: ambre_core::Generation::nth(1),
             document_id: doc,
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2775,8 +2776,8 @@ mod tests {
             state.handle_ws_message(WsServerMsg::Subscribed { document_id });
         }
         assert_eq!(
-            state.documents[&local].directory_asked,
-            crate::generation::RequestGeneration::nth(0)
+            state.documents[&local].directory_asked.latest(),
+            ambre_core::Generation::nth(0)
         );
         assert!(
             !drain(&rx)
@@ -3604,13 +3605,13 @@ mod tests {
         state: &mut SyncState,
         doc: DocumentId,
         signature: FixedBytes<Signature>,
-    ) -> crate::generation::ResendTicket {
+    ) -> ambre_core::Generation<crate::generation::ResendTicket> {
         state.handle_ws_message(WsServerMsg::DeltaRefused {
             document_id: doc,
             signature,
             code: ambre_core::RefusalCode::InternalError,
         });
-        state.resend_ticket
+        state.resend_ticket.latest()
     }
 
     /// `SYNC-159`: a delta the relay failed to sequence waits for its timer.
@@ -3674,7 +3675,7 @@ mod tests {
             document_id: doc,
             after_seq: Seq(0),
         });
-        let replay = state.replay_ticket;
+        let replay = state.replay_ticket.latest();
         assert!(drain_ws(&ws_rx).is_empty(), "no timer fired yet");
 
         state.handle_sync_event(SyncEvent::ReplayRetry {
@@ -4203,7 +4204,7 @@ mod tests {
         let k2 = DocumentKey::generate();
         let link = pipeline::seal_link(doc, &k1, &k2, &sk).unwrap();
         state.handle_sync_event(SyncEvent::RevocationComplete {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             document_id: doc,
             new_doc_key: k2.clone(),
             link,
@@ -4250,7 +4251,7 @@ mod tests {
 
         let k2 = DocumentKey::generate();
         state.handle_sync_event(SyncEvent::RevocationComplete {
-            id: RequestId::next(),
+            id: ambre_bus::next_request(),
             document_id: doc,
             new_doc_key: k2.clone(),
             link: pipeline::seal_link(doc, &k1, &k2, &sk).unwrap(),

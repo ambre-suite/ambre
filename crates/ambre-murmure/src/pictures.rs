@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::{ContentHash, MediaType, Picture};
-use ambre_core::{ByteSize, KnownMediaType};
+use ambre_core::{ByteSize, Generation, GenerationKind, KnownMediaType};
 use ambre_draw::ImageKey;
 
 use crate::Region;
@@ -32,10 +32,13 @@ pub fn previews(media_type: &MediaType) -> bool {
     KnownMediaType::of(media_type).is_some_and(|known| PREVIEWS.contains(&known))
 }
 
-ambre_core::define_generation! {
-    /// The number of a paint of the shelf's pictures, which orders the
-    /// pictures by their last one.
-    struct PaintNumber;
+/// A paint of the shelf's pictures, which orders the pictures by their last
+/// one.
+enum PaintNumber {}
+
+impl GenerationKind for PaintNumber {
+    type IssueRight = ();
+    const NAME: &'static str = "PaintNumber";
 }
 
 ambre_core::define_index! {
@@ -57,7 +60,7 @@ enum Held {
     /// Decoded, and the paint that last drew it.
     Shown {
         picture: Picture,
-        painted: PaintNumber,
+        painted: Generation<PaintNumber>,
     },
     /// Neither fetched nor decoded: its chip stands alone.
     Failed,
@@ -66,13 +69,13 @@ enum Held {
 /// The paint each screen last started: what it drew is on screen.
 #[derive(Default)]
 struct Screens {
-    channel: PaintNumber,
-    thread: PaintNumber,
+    channel: Generation<PaintNumber>,
+    thread: Generation<PaintNumber>,
 }
 
 impl Screens {
     /// Whether the last paint of a screen is `paint`.
-    fn last_painted(&self, paint: PaintNumber) -> bool {
+    fn last_painted(&self, paint: Generation<PaintNumber>) -> bool {
         self.channel == paint || self.thread == paint
     }
 }
@@ -83,7 +86,7 @@ pub struct Pictures {
     bytes: ByteSize,
     cap: ByteSize,
     /// The latest paint, which orders the pictures by their last one.
-    paint: PaintNumber,
+    paint: Generation<PaintNumber>,
     screens: Screens,
 }
 
@@ -100,7 +103,7 @@ impl Pictures {
             held: HashMap::new(),
             bytes: ByteSize(0),
             cap,
-            paint: PaintNumber::ZERO,
+            paint: Generation::ZERO,
             screens: Screens::default(),
         }
     }
