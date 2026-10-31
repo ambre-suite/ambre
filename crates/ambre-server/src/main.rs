@@ -72,6 +72,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let redis = rustis::client::Client::connect(redis_url.as_str())
         .await
         .map_err(|e| format!("failed to connect to Redis: {e}"))?;
+    let store_version = redis_ops::require_store_version(&redis)
+        .await
+        .map_err(|e| format!("refusing to start: {e}"))?;
+    tracing::info!(
+        "Redis {}.{} meets the minimum",
+        store_version.major,
+        store_version.minor
+    );
 
     // `Config::builder()` alone carries no region or credentials, so the SDK
     // falls back to the default chain (ending at the EC2 metadata endpoint).

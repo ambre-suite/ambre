@@ -30,6 +30,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
 | `SRV-001` | `INV` | The relay MUST NOT store or log a plaintext document payload. | `ZK-001`, `ZK-006`; this spec section 3 | type-level -- every payload the relay stores, reads back or forwards is a `Payload`, with no `Debug` and no `Display`, so a log line naming one under any name does not compile; `ambre_protocol::messages::validate_tests::a_message_debug_form_prints_no_byte_of_its_ciphertext` -- a decoded message prints each ciphertext as its length; ci-gate -- `scripts/crate_boundaries.py` refuses a log line in a file that reads a payload's or a ciphertext's bytes | none | verified |
 | `SRV-014` | `INV` | Relay code MUST contain no unchecked memory access. | README pillar "Security" | lint-wall -- `unsafe_code = "forbid"` in the root `[workspace.lints.rust]`, which every crate inherits (`ARCH-032`) | none | verified |
 | `SRV-021` | `INV` | Any instance MUST be able to serve any client: no request state MUST live in the process. | this spec section 3 | `ambre_server::routes::tests::handler_tests::a_session_crosses_instances_and_a_sign_out_ends_it_on_both` -- two instances over one database and one Redis server: a session opened, renewed and ended on either is served by the other | none | verified |
+| `SRV-241` | `INV` | The relay MUST NOT serve a request over a Redis server older than 7.4. | this spec section 3 | `ambre_server::redis_ops::tests::a_store_older_than_the_minimum_is_refused` -- an older version, a missing version line and an unparsed version are each refused, and 7.4 or later passes | none | verified |
 | `SRV-171` | `INV` | The development server MUST serve the page that loads the client cross-origin isolated. | `ambre-spec-architecture.md section 2` | `ambre_server::isolation_tests::the_page_is_served_cross_origin_isolated` -- the development server's configuration sets both headers | none | verified |
 | `SRV-069` | `INV` | The page that loads the client MUST be served cross-origin isolated in every deployment. | `ambre-spec-architecture.md section 2` | qa-manual -- `crossOriginIsolated` read in the console of each deployment's page | unheld -- `deployment` -- the relay serves the requests and not the page, and the development server's headers, which a test reads, say nothing of a deployment's | qa-manual |
 | `SRV-103` | `INV` | Membership of a channel MUST grant access to each document the channel groups, and to no other document. | this spec section 3; `5-Murmure/ambre-spec-murmure-schema.md` | `ambre_server::db::channels::tests::channel_membership_reaches_every_document_it_groups`; `ambre_server::db::channels::tests::channel_membership_reaches_no_other_document`; `ambre_server::db::channels::tests::a_member_row_on_a_segment_grants_nothing` -- database tier | none | verified |
@@ -155,7 +156,7 @@ status values are normative in `ambre-spec-template.md`. The prefix is `SRV`, sh
   draws. `SRV-001` keeps the payload out of the process and the logs, and `SRV-012` refuses the
   relay the ability to open one. `SRV-005` keeps the routing metadata behind the membership check,
   and `SRV-096` keeps a store's words out of an answer.
-* **Verification.** 81 `verified`, 1 `qa-manual`, 6 `unimplemented`. A request test drives what
+* **Verification.** 82 `verified`, 1 `qa-manual`, 6 `unimplemented`. A request test drives what
   holds: the roles, the rank clamps, the signature gate, the error mapping, the origin list and the
   delete. No log line can name the payload type. A deployment's isolation is read by hand.
 ---
@@ -189,6 +190,10 @@ makes a restart of any one of them survivable.
 | the durable register | users, organizations, documents, members, and the index of every snapshot and delta | everything: it is the authority |
 | the ephemeral store | the sequence counters, the per-author clocks, the unflushed deltas, the refresh tokens, the presence blobs, the sign-in handshakes, the tombstones of deleted documents, and the mirror of each owed rotation | recoverable for the ordering (`ambre-spec-sequencer.md`) and the mirror, final for a session |
 | object storage | every sealed blob: snapshots, deltas and media | the content itself, which nothing else holds |
+
+**The ephemeral store is Redis 7.4 or later.** The presence and session scripts expire one hash field
+at a time with `HEXPIRE`. An older server accepts every other command, so the failure would come late.
+The relay reads `INFO server` at boot and refuses an older version (`SRV-241`).
 
 **A delete fences the document before it empties it.** The relay first marks the delete in the
 register. It then sets a tombstone in the ephemeral store. Every script that writes a key of the
