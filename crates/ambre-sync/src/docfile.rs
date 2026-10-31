@@ -58,7 +58,7 @@ impl SyncState {
     pub(crate) fn handle_open_doc_file(
         &self,
         id: Generation<Request>,
-        sealed: ambre_core::SealedContainer,
+        sealed: ambre_core::Payload<ambre_core::SealedContainer>,
         passphrase: ambre_core::Passphrase,
     ) {
         let Ok(envelope) = parse_sealed_header(&sealed) else {

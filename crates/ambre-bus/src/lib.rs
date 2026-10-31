@@ -93,7 +93,7 @@ pub struct ClipboardBlob {
     /// The `text/html` half, for an application that reads formatting but
     /// not Ambre's own bytes. `None` when the active app writes none.
     pub html: Option<String>,
-    pub ambre: Option<ambre_core::ClipboardBytes>,
+    pub ambre: Option<ambre_core::Payload<ambre_core::ClipboardBytes>>,
     /// [`PasteForm::Plain`] when the user asked for the plain text alone: a
     /// view ignores every richer half, and the copy it kept in memory too.
     pub form: ambre_core::PasteForm,
@@ -244,8 +244,8 @@ pub use ambre_core::text_offset::{
     Utf16Offset, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes, char_to_byte,
 };
 pub use ambre_core::{
-    ApiFailure, ChannelDocumentKind, DocType, Email, HttpStatus, KeyFingerprint, Millis,
-    PageMillis, PageTime, PublicKey, RefusalCode, Role, Seq, UnreadableCause, Uuid,
+    ApiFailure, ChannelDocumentKind, DocType, Email, FixedBytes, HttpStatus, KeyFingerprint,
+    Millis, PageMillis, PageTime, PublicKey, RefusalCode, Role, Seq, UnreadableCause, Uuid,
 };
 
 #[cfg(test)]
@@ -255,7 +255,7 @@ mod clipboard_tests {
     fn blob(text: &str, ambre: u8) -> ClipboardBlob {
         ClipboardBlob {
             text: text.into(),
-            ambre: Some(ambre_core::ClipboardBytes::new(vec![ambre])),
+            ambre: Some(ambre_core::Payload::new(vec![ambre])),
             ..ClipboardBlob::default()
         }
     }

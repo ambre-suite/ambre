@@ -285,7 +285,7 @@ impl FixtureGen for TrameFixture {
         GeneratorVersion::new(1)
     }
 
-    fn build(&self) -> ambre_core::PlaintextContainer {
+    fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
         let seed = self.seed();
         let mut state = TrameState::with_peer(seed.peer());
         match self {
@@ -549,7 +549,7 @@ impl FixtureGen for TrameBenchFixture {
         GeneratorVersion::new(1)
     }
 
-    fn build(&self) -> ambre_core::PlaintextContainer {
+    fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
         let seed = self.seed();
         let mut state = TrameState::with_peer(seed.peer());
         match self {

@@ -958,7 +958,7 @@ impl QuadRenderer {
                 level.width,
                 level.height,
             );
-            bytes = bytes.saturating_add(ByteSize::of_len(level.pixels.len()));
+            bytes = bytes.saturating_add(level.pixels.len());
         }
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

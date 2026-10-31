@@ -16,8 +16,8 @@ use std::rc::Rc;
 
 use ambre_bus::conduit::{Receiver, Sender};
 use ambre_bus::{
-    Attachment, ByteSize, Emoji, LogicCommand, MessageAt, MessageView, MurmureCommand,
-    MurmureEvent, ReplyEcho, Request, RestEvent, TextStyle, Timestamp, UiEvent,
+    Attachment, Emoji, LogicCommand, MessageAt, MessageView, MurmureCommand, MurmureEvent,
+    ReplyEcho, Request, RestEvent, TextStyle, Timestamp, UiEvent,
 };
 use ambre_canvas::{
     ContentRepaint, FrameStats, InputEvent, LayerRepaint, PointerButton, RepaintPlan, TextCache,
@@ -138,7 +138,7 @@ pub struct PageReads {
 }
 
 /// What the page does with a file fetched, and its bytes.
-pub type SaveFile = Rc<dyn Fn(&Attachment, ambre_core::MediaBytes)>;
+pub type SaveFile = Rc<dyn Fn(&Attachment, ambre_core::Payload<ambre_core::MediaBytes>)>;
 
 /// The id of the content canvas, which the channel's region paints. The
 /// shell names it.
@@ -715,7 +715,7 @@ impl MurmureView {
         };
         for file in files {
             let id = ambre_bus::next_request();
-            let (media_type, size) = (file.media_type(), ByteSize(file.data.len() as u64));
+            let (media_type, size) = (file.media_type(), file.data.len());
             let of = DraftOf::Channel(channel_id);
             if !self
                 .composer
@@ -1895,7 +1895,7 @@ impl MurmureView {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::{ByteSpan, CharSpan};
+    use ambre_bus::{ByteSize, ByteSpan, CharSpan};
     use std::cell::Cell;
 
     use ambre_bus::conduit::local;
@@ -1998,7 +1998,7 @@ mod tests {
     }
 
     /// A file the view handed the page, and its bytes.
-    type Saved = (Attachment, ambre_core::MediaBytes);
+    type Saved = (Attachment, ambre_core::Payload<ambre_core::MediaBytes>);
 
     /// A format bar the view handed the page, and whether the thread's
     /// region shows it.

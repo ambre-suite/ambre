@@ -89,11 +89,11 @@ pub struct MemberChannelJson {
     pub meta_id: Id<Meta>,
     /// The name sealed beside the channel's `meta`, base64, as the document
     /// list carries one (`SRV-219`). The relay never reads it.
-    pub name_enc: Option<ambre_core::SealedName>,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     /// The caller's copy of the channel key, base64, and the hex exchange key
-    /// of whoever wrapped it, empty for a self-wrapped row.
-    pub doc_key_enc: ambre_core::WrappedDocKey,
-    pub wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex,
+    /// of whoever wrapped it, `null` for a self-wrapped row.
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
+    pub wrapper_exchange_pub_key: Option<ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     /// For a direct message, the display names of its other members, which
     /// the client composes a name from (`SRV-220`). Empty otherwise.
     pub peers: Vec<ambre_core::DisplayName>,
@@ -135,10 +135,7 @@ pub async fn list_member_channels(
                 meta_id: row.meta_id,
                 name_enc: row.name_enc,
                 doc_key_enc: row.doc_key_enc,
-                wrapper_exchange_pub_key: row
-                    .wrapper_exchange_pubkey
-                    .map(ambre_core::ExchangeKeyHex::encode)
-                    .unwrap_or_default(),
+                wrapper_exchange_pub_key: row.wrapper_exchange_pubkey,
                 peers: row.peers,
                 meta_last: last,
             }
@@ -187,7 +184,7 @@ pub struct CreateChannelRequest {
 pub struct DirectMemberJson {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
 }
 
 /// The body of a direct message request. Every id is one the client
@@ -203,15 +200,15 @@ pub struct CreateDirectMessageRequest {
     /// Every member but the caller.
     pub members: Vec<DirectMemberJson>,
     /// The channel key wrapped for the caller.
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// The identifier of the channel key, in hex, which the creation and every
     /// invite of the log name.
     #[serde(with = "ambre_core::serde_id::text")]
-    pub key_id: ambre_core::KeyId,
+    pub key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
     /// The log of `meta`, signed by the caller. In order, it holds its
     /// `Create`, one editor `Invite` per member in the order of `members`,
     /// then the caller's own `ChangeRole` to editor.
-    pub entries: Vec<ambre_core::EncodedLogEntry>,
+    pub entries: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// The direct message a request reached: the one it created, or the one
@@ -228,9 +225,9 @@ pub struct DirectMessageJson {
 /// A `meta` whose log holds entries takes no self-join without one.
 #[derive(serde::Deserialize)]
 pub struct JoinChannelRequest {
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     #[serde(default)]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// The end of the log of `meta`, which a joining member extends: the
@@ -245,7 +242,7 @@ pub struct JoinHeadJson {
     /// The number of entries, the position the self-join takes.
     pub length: ambre_protocol::LogPosition,
     /// The last entry, base64 url-safe, absent on an empty log.
-    pub last: Option<ambre_core::EncodedLogEntry>,
+    pub last: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// The body of a segment close: the active segment the caller saw, and the
@@ -1026,7 +1023,7 @@ mod tests {
     fn session(user_id: Id<User>) -> auth::AuthSession {
         auth::AuthSession {
             user_id,
-            signing_pubkey: ambre_core::PublicKey::from_array(
+            signing_pubkey: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
                 signing_key().verifying_key().to_bytes(),
             ),
         }
@@ -1041,22 +1038,26 @@ mod tests {
         who: Id<User>,
         act: MembershipAct,
         role: Role,
-    ) -> ambre_core::EncodedLogEntry {
+    ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
         use ed25519_dalek::Signer;
         let key = signing_key();
         let mut entry = ambre_protocol::MembershipEntry {
             document,
             position: ambre_protocol::LogPosition::new(position),
             member: who,
-            member_key: ambre_core::PublicKey::from_array(key.verifying_key().to_bytes()),
+            member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+                key.verifying_key().to_bytes(),
+            ),
             act,
             role,
             key: None,
-            previous: (position > 0).then_some(ambre_protocol::EntryDigest([1; 32])),
+            previous: (position > 0).then_some(
+                ambre_core::FixedBytes::<ambre_protocol::EntryDigest>::from_array([1; 32]),
+            ),
             author: who,
-            signature: ambre_protocol::Signature([0; 64]),
+            signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
-        entry.signature = ambre_protocol::Signature(
+        entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
             key.sign(entry.signed_bytes().expect("signed bytes").as_bytes())
                 .to_bytes(),
         );
@@ -1082,7 +1083,7 @@ mod tests {
             &meta,
             &creator,
             Role::Owner,
-            &ambre_core::WrappedDocKey::new([6; 32].to_vec()),
+            &ambre_core::Encoded::new([6; 32].to_vec()),
             &creator,
             Some(&entry),
         )
@@ -1102,15 +1103,17 @@ mod tests {
     }
 
     async fn named_user(state: &AppState, email: &str, display_name: &str) -> Id<User> {
-        let signing = ambre_core::PublicKey::from_array(signing_key().verifying_key().to_bytes());
+        let signing = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+            signing_key().verifying_key().to_bytes(),
+        );
         let row = db::create_user(
             &state.db,
             &ambre_core::Email::from(email),
             &ambre_core::DisplayName::new(display_name).unwrap(),
-            &ambre_core::WrappedMasterKey::new([1; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([2; 32]),
+            &ambre_core::Encoded::new([1; 32].to_vec()),
+            &ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([2; 32]),
             &signing,
-            &ambre_core::ExchangePublicKey::from_array([4; 32]),
+            &ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4; 32]),
         )
         .await
         .expect("user");
@@ -1127,7 +1130,7 @@ mod tests {
             &document,
             &member,
             role,
-            &ambre_core::WrappedDocKey::new([6; 32].to_vec()),
+            &ambre_core::Encoded::new([6; 32].to_vec()),
             &member,
             None,
         )
@@ -1209,7 +1212,7 @@ mod tests {
         state: &AppState,
         who: Id<User>,
         channel: Id<id::Channel>,
-    ) -> Option<ambre_core::EncodedLogEntry> {
+    ) -> Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>> {
         let Joinable {
             meta_id: meta,
             role,
@@ -1240,7 +1243,7 @@ mod tests {
                 session(who),
                 OpaquePathId(channel),
                 Json(JoinChannelRequest {
-                    doc_key_enc: ambre_core::WrappedDocKey::new([key; 48].to_vec()),
+                    doc_key_enc: ambre_core::Encoded::new([key; 48].to_vec()),
                     entry,
                 }),
             )
@@ -1302,7 +1305,7 @@ mod tests {
             Json(crate::routes::CreateDocumentRequest {
                 doc_type,
                 name_enc: None,
-                doc_key_enc: ambre_core::WrappedDocKey::new([1u8; 48].to_vec()),
+                doc_key_enc: ambre_core::Encoded::new([1u8; 48].to_vec()),
                 document_id: Some(document),
                 entry: Some(signed_entry(
                     document,
@@ -1517,10 +1520,7 @@ mod tests {
             .await
             .expect("query")
             .expect("the join reaches the segment");
-        assert_eq!(
-            row.doc_key_enc,
-            ambre_core::WrappedDocKey::new([9; 48].to_vec())
-        );
+        assert_eq!(row.doc_key_enc, ambre_core::Encoded::new([9; 48].to_vec()));
         assert_eq!(row.invited_by, Some(bob));
     }
 
@@ -1655,7 +1655,7 @@ mod tests {
             session(alice),
             OpaquePathId(channel.id),
             Json(JoinChannelRequest {
-                doc_key_enc: ambre_core::WrappedDocKey::new([1; 48].to_vec()),
+                doc_key_enc: ambre_core::Encoded::new([1; 48].to_vec()),
                 entry: entry.clone(),
             }),
         )
@@ -1689,7 +1689,7 @@ mod tests {
             session(alice),
             OpaquePathId(channel.id),
             Json(JoinChannelRequest {
-                doc_key_enc: ambre_core::WrappedDocKey::new([1; 48].to_vec()),
+                doc_key_enc: ambre_core::Encoded::new([1; 48].to_vec()),
                 entry: None,
             }),
         )
@@ -1718,7 +1718,7 @@ mod tests {
             session(alice),
             OpaquePathId(channel.id),
             Json(JoinChannelRequest {
-                doc_key_enc: ambre_core::WrappedDocKey::new([1; 48].to_vec()),
+                doc_key_enc: ambre_core::Encoded::new([1; 48].to_vec()),
                 entry: Some(entry),
             }),
         )
@@ -1796,7 +1796,7 @@ mod tests {
             .expect("the creator");
         assert_eq!(
             creator.doc_key_enc,
-            ambre_core::WrappedDocKey::new([5; 32].to_vec()),
+            ambre_core::Encoded::new([5; 32].to_vec()),
             "nor swaps its key"
         );
     }
@@ -1847,10 +1847,7 @@ mod tests {
         let served = db::document_key_links(&state.db, &channel.segment.document_id())
             .await
             .expect("links");
-        assert_eq!(
-            served,
-            vec![ambre_core::EncodedKeyLink::new(b"link".to_vec())]
-        );
+        assert_eq!(served, vec![ambre_core::Encoded::new(b"link".to_vec())]);
         let alone = document(&state, alice).await;
         assert!(
             db::document_key_links(&state.db, &alone)
@@ -1902,8 +1899,8 @@ mod tests {
                     invitee_email: Some(invitee.into()),
                     invitee_id: None,
                     role: Role::Editor,
-                    doc_key_enc: ambre_core::WrappedDocKey::new([9u8; 48].to_vec()),
-                    key_id: ambre_core::KeyId::from_array(key),
+                    doc_key_enc: ambre_core::Encoded::new([9u8; 48].to_vec()),
+                    key_id: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array(key),
                     entry: None,
                 }),
             )
@@ -1963,7 +1960,7 @@ mod tests {
             db::document_key_links(&state.db, &segment)
                 .await
                 .expect("links"),
-            vec![ambre_core::EncodedKeyLink::new(b"link".to_vec())],
+            vec![ambre_core::Encoded::new(b"link".to_vec())],
             "the chain under meta serves the segment"
         );
     }
@@ -2553,7 +2550,7 @@ mod tests {
                 )
             })
             .collect();
-        let key = |byte: u8| ambre_core::WrappedDocKey::new([byte; 48].to_vec());
+        let key = |byte: u8| ambre_core::Encoded::new([byte; 48].to_vec());
         CreateDirectMessageRequest {
             channel_id: Id::<id::Channel>::mint(),
             meta_id: meta,
@@ -2573,7 +2570,8 @@ mod tests {
     }
 
     /// The channel key every test direct message names.
-    const DIRECT_KEY: ambre_core::KeyId = ambre_core::KeyId::from_array([8; 16]);
+    const DIRECT_KEY: ambre_core::FixedBytes<ambre_core::KeyId> =
+        ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([8; 16]);
 
     /// The entry `author` signs about `member` at `position` of `document`'s
     /// log, in the form a request carries it. The relay walks no digest, so
@@ -2584,24 +2582,28 @@ mod tests {
         member: Id<User>,
         act: MembershipAct,
         role: Role,
-        key: Option<ambre_core::KeyId>,
+        key: Option<ambre_core::FixedBytes<ambre_core::KeyId>>,
         author: Id<User>,
-    ) -> ambre_core::EncodedLogEntry {
+    ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
         use ed25519_dalek::Signer;
         let signing = signing_key();
         let mut entry = ambre_protocol::MembershipEntry {
             document,
             position: ambre_protocol::LogPosition::new(position),
             member,
-            member_key: ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes()),
+            member_key: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+                signing.verifying_key().to_bytes(),
+            ),
             act,
             role,
             key,
-            previous: (position > 0).then_some(ambre_protocol::EntryDigest([1; 32])),
+            previous: (position > 0).then_some(
+                ambre_core::FixedBytes::<ambre_protocol::EntryDigest>::from_array([1; 32]),
+            ),
             author,
-            signature: ambre_protocol::Signature([0; 64]),
+            signature: ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array([0; 64]),
         };
-        entry.signature = ambre_protocol::Signature(
+        entry.signature = ambre_core::FixedBytes::<ambre_protocol::Signature>::from_array(
             signing
                 .sign(entry.signed_bytes().expect("signed bytes").as_bytes())
                 .to_bytes(),
@@ -2682,7 +2684,7 @@ mod tests {
                 .expect("a member");
             assert_eq!(
                 row.doc_key_enc,
-                ambre_core::WrappedDocKey::new([byte; 48].to_vec())
+                ambre_core::Encoded::new([byte; 48].to_vec())
             );
         }
     }
@@ -2756,38 +2758,35 @@ mod tests {
             session(bob),
             PathId(meta),
             Json(crate::routes::RenameDocumentRequest {
-                name_enc: ambre_core::SealedName::new(sealed.clone()),
+                name_enc: ambre_core::Encoded::new(sealed.clone()),
             }),
         )
         .await;
         assert_eq!(status(renamed), StatusCode::OK);
         let bobs = listed(bob).await.expect("listed").0.channels;
         assert_eq!(
-            bobs[0]
-                .name_enc
-                .as_ref()
-                .map(ambre_core::SealedName::as_bytes),
+            bobs[0].name_enc.as_ref().map(ambre_core::Encoded::as_bytes),
             Some(sealed.as_slice())
         );
         assert_eq!(
             bobs[0].doc_key_enc,
-            ambre_core::WrappedDocKey::new([2u8; 48].to_vec())
+            ambre_core::Encoded::new([2u8; 48].to_vec())
         );
         assert_eq!(
             bobs[0].wrapper_exchange_pub_key,
-            ambre_core::ExchangeKeyHex::encode([4u8; 32])
+            Some(ambre_core::FixedBytes::from_array([4u8; 32]))
         );
         let alices = listed(alice).await.expect("listed").0.channels;
         assert_eq!(
             alices[0]
                 .name_enc
                 .as_ref()
-                .map(ambre_core::SealedName::as_bytes),
+                .map(ambre_core::Encoded::as_bytes),
             Some(sealed.as_slice())
         );
         assert_eq!(
             alices[0].doc_key_enc,
-            ambre_core::WrappedDocKey::new([1u8; 48].to_vec())
+            ambre_core::Encoded::new([1u8; 48].to_vec())
         );
     }
 
@@ -3168,7 +3167,7 @@ mod tests {
             &public.meta,
             &bob,
             Role::Editor,
-            &ambre_core::WrappedDocKey::new([1; 48].to_vec()),
+            &ambre_core::Encoded::new([1; 48].to_vec()),
             None,
         )
         .await;
@@ -3188,9 +3187,9 @@ mod tests {
         let [public, shared, own] = bobs_channels(&state, alice, bob, space).await;
         let link = ambre_protocol::KeyLink {
             document_id: space.document_id(),
-            key: ambre_core::KeyId::from_array([2; 16]),
-            previous: ambre_core::KeyId::from_array([1; 16]),
-            sealed: ambre_core::SealedPreviousKey::new(vec![2; 200]),
+            key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([2; 16]),
+            previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([1; 16]),
+            sealed: ambre_core::Payload::new(vec![2; 200]),
         };
         let revoked = crate::routes::share::revoke_and_rotate(
             State(state.clone()),
@@ -3200,7 +3199,7 @@ mod tests {
                 user_id: bob,
                 keys: vec![crate::routes::share::RotateKeyEntry {
                     user_id: alice,
-                    doc_key_enc: ambre_core::WrappedDocKey::new([4u8; 48].to_vec()),
+                    doc_key_enc: ambre_core::Encoded::new([4u8; 48].to_vec()),
                 }],
                 members: vec![alice],
                 link: link.encode().expect("encode"),
@@ -3385,15 +3384,15 @@ mod tests {
     ) -> StatusCode {
         let link = ambre_protocol::KeyLink {
             document_id: meta,
-            key: ambre_core::KeyId::from_array([2; 16]),
-            previous: ambre_core::KeyId::from_array([1; 16]),
-            sealed: ambre_core::SealedPreviousKey::new(vec![2; 200]),
+            key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([2; 16]),
+            previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([1; 16]),
+            sealed: ambre_core::Payload::new(vec![2; 200]),
         };
         let keys = members
             .iter()
             .map(|&user_id| crate::routes::share::RotateKeyEntry {
                 user_id,
-                doc_key_enc: ambre_core::WrappedDocKey::new([4u8; 48].to_vec()),
+                doc_key_enc: ambre_core::Encoded::new([4u8; 48].to_vec()),
             })
             .collect();
         status(
@@ -3754,7 +3753,7 @@ mod tests {
         db::insert_update(
             &state.db,
             &document,
-            &ambre_core::PublicKey::from_array([1; 32]),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &snapshot,
             ambre_protocol::messages::Clock(seq.unsigned_abs()),
             ambre_core::Seq(seq.unsigned_abs()),
@@ -3780,7 +3779,7 @@ mod tests {
         db::create_snapshot(
             &state.db,
             &document,
-            &ambre_core::PublicKey::from_array([1; 32]),
+            &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &clocks,
             &ambre_core::ObjectKey::from("s"),
             ambre_core::Seq::try_from(covered).expect("a relay number"),
@@ -4168,7 +4167,7 @@ mod tests {
         let held = lease(&state, alice, &channel).await.expect("lease");
         let held = held.lease.expect("granted");
         let exact = snapshot(&state, segment, 2).await;
-        let author = ambre_core::PublicKey::from_array([1; 32]);
+        let author = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]);
         assert_eq!(
             db::confirm_snapshot(&state.db, &segment, &exact, &author)
                 .await
@@ -4200,7 +4199,7 @@ mod tests {
                 &state.db,
                 &segment,
                 &exact,
-                &ambre_core::PublicKey::from_array([2; 32])
+                &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([2; 32])
             )
             .await
             .expect("confirm"),

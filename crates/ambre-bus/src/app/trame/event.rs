@@ -424,7 +424,7 @@ pub enum TrameEvent {
     /// extension.
     ExportComplete {
         filename: ambre_core::ExportFilename,
-        data: ambre_core::FileBytes,
+        data: ambre_core::Payload<ambre_core::FileBytes>,
     },
 
     /// A remote delta edited a protected range its author was not allowed to

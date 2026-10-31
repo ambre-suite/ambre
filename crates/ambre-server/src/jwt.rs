@@ -19,7 +19,7 @@ use ambre_core::Secret;
 use ambre_core::id::{Id, User};
 
 use crate::secrets::SeedText;
-use ambre_protocol::ws::AccessToken;
+use ambre_protocol::ws::{AccessToken, Credential};
 use ed25519_dalek::SigningKey;
 use ed25519_dalek::pkcs8::EncodePrivateKey;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -36,7 +36,7 @@ pub struct Claims {
     #[serde(with = "ambre_core::serde_id::text")]
     pub sub: Id<User>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub spk: Option<ambre_core::SigningKeyHex>,
+    pub spk: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
     pub iat: ambre_core::UnixSeconds,
     pub exp: ambre_core::UnixSeconds,
 }
@@ -177,14 +177,20 @@ impl JwtKeys {
     }
 
     /// Mint a signed access token for `claims`.
-    pub fn mint(&self, claims: &Claims) -> Result<AccessToken, jsonwebtoken::errors::Error> {
+    pub fn mint(
+        &self,
+        claims: &Claims,
+    ) -> Result<Credential<AccessToken>, jsonwebtoken::errors::Error> {
         jsonwebtoken::encode(&Header::new(Algorithm::EdDSA), claims, &self.encoding)
-            .map(AccessToken::new)
+            .map(Credential::new)
     }
 
     /// Verify a token's signature and expiry, returning its claims. A `sub`
     /// that is not a user id fails the decode.
-    pub fn verify(&self, token: &AccessToken) -> Result<Claims, jsonwebtoken::errors::Error> {
+    pub fn verify(
+        &self,
+        token: &Credential<AccessToken>,
+    ) -> Result<Claims, jsonwebtoken::errors::Error> {
         Ok(
             crate::secrets::token::decode_access::<Claims>(
                 token,
@@ -200,7 +206,7 @@ impl JwtKeys {
 mod tests {
     use super::*;
 
-    use ambre_core::{Seconds, SigningKeyHex, UnixSeconds};
+    use ambre_core::{FixedBytes, Seconds, UnixSeconds};
 
     fn now() -> UnixSeconds {
         crate::s3::unix_now()
@@ -212,7 +218,7 @@ mod tests {
         let iat = now();
         let claims = Claims {
             sub: Id::<User>::parse_str("11111111-1111-7111-8111-111111111111").unwrap(),
-            spk: Some(SigningKeyHex("ab".repeat(32))),
+            spk: Some(FixedBytes::from_array([0xab; 32])),
             iat,
             exp: iat.plus(Seconds(900)),
         };
@@ -253,7 +259,7 @@ mod tests {
         let iat = UnixSeconds(now().0 - 10_000);
         let claims = Claims {
             sub: Id::<User>::mint(),
-            spk: Some(SigningKeyHex("y".into())),
+            spk: Some(FixedBytes::from_array([0x79; 32])),
             iat,
             exp: iat.plus(Seconds(1)), // long past
         };
@@ -269,7 +275,7 @@ mod tests {
         let token = a
             .mint(&Claims {
                 sub: Id::<User>::mint(),
-                spk: Some(SigningKeyHex("p".into())),
+                spk: Some(FixedBytes::from_array([0x70; 32])),
                 iat,
                 exp: iat.plus(Seconds(900)),
             })

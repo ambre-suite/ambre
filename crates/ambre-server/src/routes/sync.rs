@@ -3,6 +3,7 @@ use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use ambre_core::id::{Document, Id, Snapshot};
+use ambre_core::{FixedBytes, PublicKey};
 
 use crate::auth;
 use crate::db;
@@ -24,7 +25,7 @@ pub struct SnapshotResponse {
     pub status: db::SnapshotStatus,
     /// The author's signing key, hex, which a self-confirmed snapshot is checked
     /// against (`AUTHOR-022`).
-    pub author_pubkey: ambre_core::SigningKeyHex,
+    pub author_pubkey: FixedBytes<PublicKey>,
     /// For a self-confirmed snapshot, the reference snapshot an open starts
     /// from, `None` when no member other than an author confirmed one yet.
     pub reference: Option<ReferenceSnapshot>,
@@ -67,7 +68,7 @@ pub async fn get_snapshot_metadata(
         s3_key: snap.s3_key,
         covered_seq: snap.covered_seq,
         status: snap.status,
-        author_pubkey: ambre_core::SigningKeyHex::encode(&snap.author_pubkey),
+        author_pubkey: snap.author_pubkey,
         reference,
     }))
 }
@@ -133,7 +134,7 @@ pub async fn confirm_snapshot(
 pub struct ReportSnapshotRequest {
     /// The reporter's Ed25519 signature over
     /// [`ambre_protocol::snapshot_report::report_transcript`], hex.
-    pub signature: ambre_core::SignatureHex,
+    pub signature: FixedBytes<ambre_core::Signature>,
 }
 
 /// Drops a pending snapshot a member found at odds with its deltas (`SRV-133`).
@@ -156,10 +157,7 @@ pub async fn report_snapshot(
             resource: Resource::Snapshot,
         })?;
     let author = snap.author_pubkey;
-    let signature = hex::decode(req.signature.as_str())
-        .ok()
-        .and_then(|bytes| Signature::from_slice(&bytes).ok())
-        .ok_or(AppError::InvalidSignature)?;
+    let signature = Signature::from_bytes(req.signature.as_array());
     let transcript = ambre_protocol::snapshot_report::report_transcript(doc_id, snap_id, &author);
     VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
         .and_then(|key| key.verify_strict(transcript.as_bytes(), &signature))
@@ -209,7 +207,7 @@ pub struct CreateSnapshotRequest {
     #[allow(dead_code)]
     #[serde(with = "ambre_core::serde_id::text")]
     pub snapshot_id: Id<Snapshot>,
-    pub author_pubkey: ambre_core::SigningKeyHex,
+    pub author_pubkey: FixedBytes<PublicKey>,
     /// No client builds a parent proof yet, so one that arrives is refused
     /// rather than stored unread (`SRV-228`). `null` reads as none.
     pub parent_snapshot_proof: Option<serde::de::IgnoredAny>,
@@ -247,14 +245,11 @@ pub async fn create_snapshot(
         return Err(AppError::BadRequest("invalid s3_key for document".into()));
     }
 
-    let apk = hex::decode(req.author_pubkey.as_str()).map_err(|e| AppError::Conflict {
-        detail: e.to_string(),
-    })?;
     // Bind the snapshot author to the session identity, like the WS `Update`
     // author-key check. Each user has one signing key (the token's `spk` claim).
     // A member may only create a snapshot under their own key, never attribute
     // one to another member.
-    if apk != s.signing_pubkey.as_slice() {
+    if req.author_pubkey != s.signing_pubkey {
         return Err(AppError::Forbidden);
     }
     if req.parent_snapshot_proof.is_some() {
@@ -305,7 +300,7 @@ pub struct SnapshotUploadUrlRequest {
 /// Presigned PUT URL for direct client-to-S3 upload of an encrypted snapshot.
 #[derive(serde::Serialize)]
 pub struct SnapshotUploadUrlResponse {
-    pub upload_url: ambre_core::PresignedUrl,
+    pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
     pub s3_key: ambre_core::ObjectKey,
 }
 
@@ -356,7 +351,7 @@ pub struct SnapshotDownloadUrlRequest {
 }
 #[derive(serde::Serialize)]
 pub struct SnapshotDownloadUrlResponse {
-    pub download_url: ambre_core::PresignedUrl,
+    pub download_url: ambre_core::Credential<ambre_core::PresignedUrl>,
 }
 
 pub async fn snapshot_download_url(
@@ -400,7 +395,7 @@ pub struct DeltasQuery {
 pub struct DeltaEntry {
     pub seq: ambre_core::Seq,
     pub clock: ambre_protocol::messages::Clock,
-    pub author_pubkey: ambre_core::SigningKeyHex,
+    pub author_pubkey: FixedBytes<PublicKey>,
     /// The object of its own, for a delta over the inline size. A delta in the
     /// hot tail or in a batch has none, and is read over the socket replay.
     pub s3_key: Option<ambre_core::ObjectKey>,
@@ -430,7 +425,7 @@ pub async fn get_deltas(
         .map(|u| DeltaEntry {
             seq: u.seq,
             clock: u.clock,
-            author_pubkey: ambre_core::SigningKeyHex::encode(&u.author_pubkey),
+            author_pubkey: u.author_pubkey,
             s3_key: u.s3_key,
         })
         .collect();

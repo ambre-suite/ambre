@@ -22,6 +22,7 @@
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::FixedBytes;
 use crate::id::{Entity, Id};
 use crate::key_id::KeyId;
 use crate::uuid::Uuid;
@@ -57,14 +58,14 @@ impl<E: Entity<Repr = Uuid>> TextId for Id<E> {
     }
 }
 
-impl sealed::Sealed for KeyId {}
-impl TextId for KeyId {
+impl sealed::Sealed for FixedBytes<KeyId> {}
+impl TextId for FixedBytes<KeyId> {
     fn to_text(&self) -> String {
         self.to_hex()
     }
 
     fn from_text(text: &str) -> Result<Self, String> {
-        Self::parse_hex(text).map_err(|error| error.to_string())
+        Self::from_hex(text).map_err(|error| format!("not a key identifier: {error}"))
     }
 }
 
@@ -195,6 +196,7 @@ pub mod text {
 mod tests {
     use serde::{Deserialize, Serialize};
 
+    use crate::FixedBytes;
     use crate::id::{Document, Id, Org, User};
     use crate::key_id::KeyId;
 
@@ -207,7 +209,7 @@ mod tests {
         #[serde(with = "super::text::vec")]
         members: Vec<Id<User>>,
         #[serde(with = "super::text")]
-        key_id: KeyId,
+        key_id: FixedBytes<KeyId>,
         #[serde(default, with = "super::text::option_vec")]
         wanted: Option<Vec<Id<Document>>>,
     }
@@ -217,7 +219,7 @@ mod tests {
             document_id: Id::from_bytes([0x11; 16]),
             org_id: Some(Id::from_bytes([0x22; 16])),
             members: vec![Id::from_bytes([0x33; 16])],
-            key_id: KeyId::from_array([0xab; 16]),
+            key_id: FixedBytes::from_array([0xab; 16]),
             wanted: Some(vec![Id::from_bytes([0x44; 16])]),
         }
     }

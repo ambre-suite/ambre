@@ -56,9 +56,10 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::fixed_bytes::{DebugForm, FixedBytes, FixedRole};
 use crate::id::{Document, Id};
 use crate::{
-    Ciphertext, DocType, Nonce, PickedContainer, PlaintextContainer, SealedContainer,
+    Ciphertext, DocType, Nonce, Payload, PickedContainer, PlaintextContainer, SealedContainer,
     SnapshotBytes, Uuid,
 };
 
@@ -88,22 +89,16 @@ pub const AMBRE_SEALED_VERSION: ContainerVersion = ContainerVersion(0x80);
 /// Argon2id salt width in a sealed header.
 pub const SALT_LEN: usize = 16;
 
-/// The Argon2id salt of one sealed `.ambre`, fresh per file. Public in the
-/// file, so not a secret; distinct from the account's
-/// [`MasterKeySalt`](crate::MasterKeySalt), which no file ever carries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct FileSalt([u8; SALT_LEN]);
+/// The role of the Argon2id salt of one sealed `.ambre`, fresh per file:
+/// `FixedBytes<FileSalt>`. Public in the file, so not a secret; distinct from
+/// the account's [`MasterKeySalt`](crate::MasterKeySalt), which no file ever
+/// carries.
+pub enum FileSalt {}
 
-impl FileSalt {
-    /// Wraps the salt bytes a header carries or a CSPRNG drew.
-    pub const fn from_array(bytes: [u8; SALT_LEN]) -> Self {
-        Self(bytes)
-    }
-
-    /// The salt bytes, for the KDF and for the header.
-    pub const fn as_array(&self) -> &[u8; SALT_LEN] {
-        &self.0
-    }
+impl FixedRole for FileSalt {
+    const NAME: &'static str = "FileSalt";
+    const DEBUG: DebugForm = DebugForm::Length;
+    type Array = [u8; SALT_LEN];
 }
 
 /// XChaCha20 nonce width in a sealed header. Mirrors `ambre_crypto::aead::NONCE_LEN`,
@@ -194,7 +189,7 @@ pub struct AmbreHeader {
     /// Document identity, UUID v7.
     pub document_id: Id<Document>,
     /// Offset 22 onward: the raw Loro snapshot, uncompressed and unencrypted.
-    pub payload: crate::SnapshotBytes,
+    pub payload: Payload<SnapshotBytes>,
 }
 
 /// Container-level failures. Fatal by nature: a header failure leaves no
@@ -289,24 +284,14 @@ pub enum ContainerKind {
 
 /// The keyless digest of a whole `.ambre` file, header included, so a flipped
 /// `document_id` byte changes it. The fixture sidecar records it to catch a
-/// flipped byte. It is never a link of the snapshot chain. Serde sees it as hex
-/// text, the shape the sidecar always held.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct FileDigest(#[serde(with = "hex")] [u8; 32]);
+/// flipped byte. It is never a link of the snapshot chain. A readable format
+/// sees it as hex text, the shape the sidecar always held. The role of
+/// `FixedBytes<FileDigest>`.
+pub enum FileDigest {}
 
-impl FileDigest {
-    /// The digest a hasher wrote.
-    #[must_use]
-    pub const fn from_array(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-
-    /// The digest bytes.
-    #[must_use]
-    pub const fn as_array(&self) -> &[u8; 32] {
-        &self.0
-    }
+impl FixedRole for FileDigest {
+    const NAME: &'static str = "FileDigest";
+    type Array = [u8; 32];
 }
 
 /// A whole `.ambre` file in one of its roles: picked, plaintext or sealed.
@@ -318,14 +303,14 @@ pub trait ContainerFile: AsRef<[u8]> + container_file::Sealed {}
 mod container_file {
     /// Closes [`super::ContainerFile`] to the three container roles.
     pub trait Sealed {}
-    impl Sealed for crate::PickedContainer {}
-    impl Sealed for crate::PlaintextContainer {}
-    impl Sealed for crate::SealedContainer {}
+    impl Sealed for crate::Payload<crate::PickedContainer> {}
+    impl Sealed for crate::Payload<crate::PlaintextContainer> {}
+    impl Sealed for crate::Payload<crate::SealedContainer> {}
 }
 
-impl ContainerFile for PickedContainer {}
-impl ContainerFile for PlaintextContainer {}
-impl ContainerFile for SealedContainer {}
+impl ContainerFile for Payload<PickedContainer> {}
+impl ContainerFile for Payload<PlaintextContainer> {}
+impl ContainerFile for Payload<SealedContainer> {}
 
 /// Read the magic and the version byte, and say which lineage the file belongs
 /// to -- nothing more.
@@ -367,16 +352,16 @@ pub fn classify<F: ContainerFile>(file: &F) -> Result<ContainerKind, DocFileErro
 pub fn write_ambre_plaintext(
     doc_type: DocType,
     document_id: Id<Document>,
-    payload: &SnapshotBytes,
-) -> PlaintextContainer {
-    let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
+    payload: &Payload<SnapshotBytes>,
+) -> Payload<PlaintextContainer> {
+    let mut out = Vec::with_capacity(HEADER_LEN + payload.as_bytes().len());
     out.extend_from_slice(&AMBRE_MAGIC);
     out.push(AMBRE_VERSION.as_u8());
     out.push(doc_type.as_u8());
     out.extend_from_slice(document_id.as_bytes());
     debug_assert_eq!(out.len(), HEADER_LEN);
     out.extend_from_slice(payload.as_bytes());
-    PlaintextContainer::new(out)
+    Payload::new(out)
 }
 
 // -----------------------------------------------------------------------------
@@ -398,7 +383,7 @@ pub fn write_ambre_plaintext(
 /// * [`DocFileError::UnsupportedVersion`] on any other version.
 /// * [`DocFileError::UnknownDocType`] when the type byte names no app this
 ///   build knows.
-pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError> {
+pub fn parse_header(file: &Payload<PlaintextContainer>) -> Result<AmbreHeader, DocFileError> {
     let Some((head, payload)) = file.as_bytes().split_first_chunk::<HEADER_LEN>() else {
         return Err(DocFileError::TruncatedHeader);
     };
@@ -428,7 +413,7 @@ pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileErr
         version,
         doc_type,
         document_id,
-        payload: crate::SnapshotBytes::new(payload.to_vec()),
+        payload: crate::Payload::new(payload.to_vec()),
     })
 }
 
@@ -447,7 +432,9 @@ pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileErr
 /// the container needs the migration walk. A version above [`AMBRE_VERSION`]
 /// keeps its [`DocFileError::UnsupportedVersion`]: this build cannot read
 /// forward.
-pub fn read_ambre_plaintext(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError> {
+pub fn read_ambre_plaintext(
+    file: &Payload<PlaintextContainer>,
+) -> Result<AmbreHeader, DocFileError> {
     match parse_header(file) {
         // Older container: migrate forward, then parse the result. The migrated
         // buffer is a fresh allocation, so nothing here touches `file`.
@@ -473,7 +460,7 @@ pub fn read_ambre_plaintext(file: &PlaintextContainer) -> Result<AmbreHeader, Do
 /// the same bytes.
 pub fn read_ambre_plaintext_as(
     expected: DocType,
-    file: &PlaintextContainer,
+    file: &Payload<PlaintextContainer>,
 ) -> Result<AmbreHeader, DocFileError> {
     let header = read_ambre_plaintext(file)?;
     if header.doc_type != expected {
@@ -501,9 +488,9 @@ pub struct SealedAmbre {
     /// once the parser has returned.
     pub version: ContainerVersion,
     /// Argon2id salt, fresh per file.
-    pub salt: FileSalt,
+    pub salt: FixedBytes<FileSalt>,
     /// AEAD nonce, fresh per file.
-    pub nonce: Nonce,
+    pub nonce: FixedBytes<Nonce>,
     /// Offset [`SEALED_HEADER_LEN`] onward: the sealed bytes, authentication tag
     /// included. Opens to a whole plaintext container.
     pub ciphertext: Ciphertext,
@@ -523,7 +510,7 @@ impl SealedAmbre {
 /// Assemble the authenticated prefix of a sealed header. The one place that
 /// writes the sealed layout down, called by [`sealed_aad`] and by
 /// [`SealedAmbre::aad`].
-fn sealed_aad_at(version: ContainerVersion, salt: &FileSalt) -> crate::Aad {
+fn sealed_aad_at(version: ContainerVersion, salt: &FixedBytes<FileSalt>) -> crate::Aad {
     let mut out = [0u8; SEALED_AAD_LEN];
     out[..MAGIC_LEN].copy_from_slice(&AMBRE_MAGIC);
     out[VERSION_AT] = version.as_u8();
@@ -537,7 +524,7 @@ fn sealed_aad_at(version: ContainerVersion, salt: &FileSalt) -> crate::Aad {
 /// associated data *before* it has a ciphertext to put in a [`SealedAmbre`], so
 /// it asks here. It hands the same salt to [`write_ambre_sealed`] afterwards,
 /// along with the nonce the cipher drew.
-pub fn sealed_aad(salt: &FileSalt) -> crate::Aad {
+pub fn sealed_aad(salt: &FixedBytes<FileSalt>) -> crate::Aad {
     sealed_aad_at(AMBRE_SEALED_VERSION, salt)
 }
 
@@ -546,16 +533,16 @@ pub fn sealed_aad(salt: &FileSalt) -> crate::Aad {
 /// The writer rule of the sealed lineage, and it takes no version either: this
 /// emits [`AMBRE_SEALED_VERSION`] or nothing at all.
 pub fn write_ambre_sealed(
-    salt: &FileSalt,
-    nonce: &Nonce,
+    salt: &FixedBytes<FileSalt>,
+    nonce: &FixedBytes<Nonce>,
     ciphertext: &Ciphertext,
-) -> SealedContainer {
+) -> Payload<SealedContainer> {
     let mut out = Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len());
     out.extend_from_slice(sealed_aad(salt).as_bytes());
-    out.extend_from_slice(&nonce.0);
+    nonce.push_to(&mut out);
     debug_assert_eq!(out.len(), SEALED_HEADER_LEN);
     out.extend_from_slice(&ciphertext.0);
-    SealedContainer::new(out)
+    Payload::new(out)
 }
 
 /// Parse a sealed `.ambre` header, at the current sealed layout exactly.
@@ -577,7 +564,7 @@ pub fn write_ambre_sealed(
 /// Every error of [`classify`], plus [`DocFileError::NotSealed`] on a plaintext
 /// container, [`DocFileError::SealedVersionUnsupported`] on an unknown layout,
 /// and [`DocFileError::TruncatedHeader`] below [`SEALED_HEADER_LEN`].
-pub fn parse_sealed_header(file: &SealedContainer) -> Result<SealedAmbre, DocFileError> {
+pub fn parse_sealed_header(file: &Payload<SealedContainer>) -> Result<SealedAmbre, DocFileError> {
     let version = match classify(file)? {
         ContainerKind::Plaintext(_) => return Err(DocFileError::NotSealed),
         ContainerKind::Sealed(version) => version,
@@ -590,13 +577,11 @@ pub fn parse_sealed_header(file: &SealedContainer) -> Result<SealedAmbre, DocFil
     };
     let salt = head
         .get(SALT_AT..SEAL_NONCE_AT)
-        .and_then(|s| <[u8; SALT_LEN]>::try_from(s).ok())
-        .map(FileSalt)
+        .and_then(|s| FixedBytes::<FileSalt>::from_slice(s).ok())
         .ok_or(DocFileError::TruncatedHeader)?;
     let nonce = head
         .get(SEAL_NONCE_AT..)
-        .and_then(|s| <[u8; SEAL_NONCE_LEN]>::try_from(s).ok())
-        .map(Nonce)
+        .and_then(|s| FixedBytes::<Nonce>::from_slice(s).ok())
         .ok_or(DocFileError::TruncatedHeader)?;
     Ok(SealedAmbre {
         version,
@@ -620,7 +605,7 @@ pub fn parse_sealed_header(file: &SealedContainer) -> Result<SealedAmbre, DocFil
 struct Migration {
     from: ContainerVersion,
     to: ContainerVersion,
-    apply: fn(&PlaintextContainer) -> Result<PlaintextContainer, DocFileError>,
+    apply: fn(&Payload<PlaintextContainer>) -> Result<Payload<PlaintextContainer>, DocFileError>,
 }
 
 /// The version registry: one row per container version bump, appended
@@ -646,8 +631,8 @@ const MIGRATIONS: &[Migration] = &[];
 /// unchanged.
 pub fn migrate_ambre(
     from: ContainerVersion,
-    file: &PlaintextContainer,
-) -> Result<PlaintextContainer, DocFileError> {
+    file: &Payload<PlaintextContainer>,
+) -> Result<Payload<PlaintextContainer>, DocFileError> {
     // The walk would refuse a sealed version anyway, since every one of them
     // sits above `AMBRE_VERSION`. But it would call it an unknown *plaintext*
     // version, the one message that sends the user to the changelog instead of
@@ -664,8 +649,8 @@ fn migrate_steps(
     steps: &[Migration],
     from: ContainerVersion,
     target: ContainerVersion,
-    file: &PlaintextContainer,
-) -> Result<PlaintextContainer, DocFileError> {
+    file: &Payload<PlaintextContainer>,
+) -> Result<Payload<PlaintextContainer>, DocFileError> {
     if from > target {
         return Err(DocFileError::UnsupportedVersion { found: from });
     }
@@ -697,20 +682,20 @@ mod tests {
         Id::<Document>::from_bytes(DOC_ID)
     }
 
-    fn plain(bytes: &[u8]) -> PlaintextContainer {
-        PlaintextContainer::new(bytes.to_vec())
+    fn plain(bytes: &[u8]) -> Payload<PlaintextContainer> {
+        Payload::new(bytes.to_vec())
     }
 
-    fn sealed(bytes: &[u8]) -> SealedContainer {
-        SealedContainer::new(bytes.to_vec())
+    fn sealed(bytes: &[u8]) -> Payload<SealedContainer> {
+        Payload::new(bytes.to_vec())
     }
 
-    fn picked(bytes: &[u8]) -> PickedContainer {
-        PickedContainer::new(bytes.to_vec())
+    fn picked(bytes: &[u8]) -> Payload<PickedContainer> {
+        Payload::new(bytes.to_vec())
     }
 
-    fn snap(bytes: &[u8]) -> SnapshotBytes {
-        SnapshotBytes::new(bytes.to_vec())
+    fn snap(bytes: &[u8]) -> Payload<SnapshotBytes> {
+        Payload::new(bytes.to_vec())
     }
 
     fn sample(doc_type: DocType) -> Vec<u8> {
@@ -899,21 +884,25 @@ mod tests {
     // the row is the whole change.
 
     /// `0x01` -> `0x02`: rewrite the version byte, leave the payload alone.
-    fn bump_to_2(file: &PlaintextContainer) -> Result<PlaintextContainer, DocFileError> {
+    fn bump_to_2(
+        file: &Payload<PlaintextContainer>,
+    ) -> Result<Payload<PlaintextContainer>, DocFileError> {
         let mut out = file.as_bytes().to_vec();
         *out.get_mut(VERSION_AT)
             .ok_or(DocFileError::TruncatedHeader)? = 2;
-        Ok(PlaintextContainer::new(out))
+        Ok(Payload::new(out))
     }
 
     /// `0x02` -> `0x03`: same shape, plus a payload edit, so the multi-step walk
     /// must chain outputs rather than re-read the original.
-    fn bump_to_3(file: &PlaintextContainer) -> Result<PlaintextContainer, DocFileError> {
+    fn bump_to_3(
+        file: &Payload<PlaintextContainer>,
+    ) -> Result<Payload<PlaintextContainer>, DocFileError> {
         let mut out = file.as_bytes().to_vec();
         *out.get_mut(VERSION_AT)
             .ok_or(DocFileError::TruncatedHeader)? = 3;
         out.extend_from_slice(b"+v3");
-        Ok(PlaintextContainer::new(out))
+        Ok(Payload::new(out))
     }
 
     const SYNTHETIC: &[Migration] = &[
@@ -991,8 +980,8 @@ mod tests {
 
     // -- the sealed lineage ----------------------------------------------
 
-    const SALT: FileSalt = FileSalt::from_array([0xA5; SALT_LEN]);
-    const NONCE: Nonce = Nonce([0x5A; SEAL_NONCE_LEN]);
+    const SALT: FixedBytes<FileSalt> = FixedBytes::from_array([0xA5; SALT_LEN]);
+    const NONCE: FixedBytes<Nonce> = FixedBytes::from_array([0x5A; SEAL_NONCE_LEN]);
 
     fn sealed_sample() -> Vec<u8> {
         write_ambre_sealed(&SALT, &NONCE, &Ciphertext(b"ciphertext-bytes".to_vec())).into_bytes()
@@ -1004,7 +993,7 @@ mod tests {
         assert_eq!(&bytes[..4], b"AMBR");
         assert_eq!(bytes[VERSION_AT], AMBRE_SEALED_VERSION.as_u8());
         assert_eq!(&bytes[SALT_AT..SEAL_NONCE_AT], SALT.as_array());
-        assert_eq!(&bytes[SEAL_NONCE_AT..SEALED_HEADER_LEN], &NONCE.0);
+        assert_eq!(&bytes[SEAL_NONCE_AT..SEALED_HEADER_LEN], NONCE.as_slice());
         assert_eq!(&bytes[SEALED_HEADER_LEN..], b"ciphertext-bytes");
         assert_eq!(SEALED_HEADER_LEN, 45);
         assert_eq!(bytes.len(), SEALED_HEADER_LEN + b"ciphertext-bytes".len());

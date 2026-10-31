@@ -28,12 +28,13 @@ use ambre_bus::app::prose::{BlockType, MarkKey};
 
 /// What opens the bytes, so a payload another Ambre application wrote under
 /// the same clipboard type never decodes as this one.
-const MAGIC: ambre_core::FormatMagic = ambre_core::FormatMagic::new(*b"APR1");
+const MAGIC: ambre_core::FixedBytes<ambre_core::FormatMagic> =
+    ambre_core::FixedBytes::from_array(*b"APR1");
 
 /// What a copy carries in this application's own bytes.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 struct Payload {
-    magic: ambre_core::FormatMagic,
+    magic: ambre_core::FixedBytes<ambre_core::FormatMagic>,
     blocks: Vec<ClipBlock>,
 }
 
@@ -309,7 +310,7 @@ impl ProseState {
             Ok(payload) => outcome.display.push(ProseEvent::Clipboard {
                 text,
                 html,
-                payload: ambre_core::ClipboardBytes::new(payload),
+                payload: ambre_core::Payload::<ambre_core::ClipboardBytes>::new(payload),
             }),
             Err(e) => tracing::warn!("Prose: a copy could not be encoded: {e}"),
         }
@@ -353,7 +354,7 @@ impl ProseState {
         at: (TreeID, DocOffset),
         text: &str,
         html: Option<&str>,
-        bytes: Option<&ambre_core::ClipboardBytes>,
+        bytes: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>,
     ) -> ProseOutcome {
         if let Some(Ok(payload)) =
             bytes.map(|bytes| postcard::from_bytes::<Payload>(bytes.as_bytes()))
@@ -498,7 +499,11 @@ mod tests {
         state: &mut ProseState,
         anchor: (BlockId, u32),
         focus: (BlockId, u32),
-    ) -> (String, ambre_core::ClipboardBytes, bool) {
+    ) -> (
+        String,
+        ambre_core::Payload<ambre_core::ClipboardBytes>,
+        bool,
+    ) {
         let (anchor, focus) = (
             (anchor.0, DocOffset::new(anchor.1)),
             (focus.0, DocOffset::new(focus.1)),
@@ -608,7 +613,9 @@ mod tests {
             at: (first, DocOffset::ZERO),
             text: "x".repeat(len),
             html: None,
-            payload: Some(ambre_core::ClipboardBytes::new(bytes)),
+            payload: Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
+                bytes,
+            )),
         });
         assert_eq!(state.text_of(&first), Some("x".repeat(len)));
         let body = state.body_of(&tree_id(first)).expect("the paragraph");
@@ -750,7 +757,9 @@ mod tests {
             at: (first, DocOffset::ZERO),
             text: "one\ntwo".to_owned(),
             html: None,
-            payload: Some(ambre_core::ClipboardBytes::new(b"not a payload".to_vec())),
+            payload: Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
+                b"not a payload".to_vec(),
+            )),
         });
         let roots = state.root_blocks();
         assert_eq!(state.text_of(&roots[0]).as_deref(), Some("one"));
@@ -956,24 +965,27 @@ mod tests {
         else {
             panic!("a copy answers with the clipboard");
         };
-        let paste = |state: &mut ProseState,
-                     html: Option<&str>,
-                     payload: Option<ambre_core::ClipboardBytes>| {
-            let target = append(state, BlockInit::Paragraph, "");
-            state.handle_command(ProseCommand::Paste {
-                at: (target, DocOffset::ZERO),
-                text: "plain".to_owned(),
-                html: html.map(str::to_owned),
-                payload,
-            });
-            state.text_of(&target).unwrap_or_default()
-        };
+        let paste =
+            |state: &mut ProseState,
+             html: Option<&str>,
+             payload: Option<ambre_core::Payload<ambre_core::ClipboardBytes>>| {
+                let target = append(state, BlockInit::Paragraph, "");
+                state.handle_command(ProseCommand::Paste {
+                    at: (target, DocOffset::ZERO),
+                    text: "plain".to_owned(),
+                    html: html.map(str::to_owned),
+                    payload,
+                });
+                state.text_of(&target).unwrap_or_default()
+            };
         assert_eq!(paste(&mut state, Some("<p>html</p>"), Some(payload)), "own");
         assert_eq!(
             paste(
                 &mut state,
                 Some("<p>html</p>"),
-                Some(ambre_core::ClipboardBytes::new(b"foreign".to_vec()))
+                Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
+                    b"foreign".to_vec()
+                ))
             ),
             "html"
         );

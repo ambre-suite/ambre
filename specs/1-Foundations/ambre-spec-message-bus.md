@@ -72,6 +72,7 @@ is what a full queue means.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `BUS-003` | `POST` | The Logic to Sync hop MUST return every field it was given: the encode and the decode MUST agree. | this spec section 2 | `ambre_bus::host::every_envelope_variant_roundtrips_through_postcard` -- every `SyncCommand` and `LogicEvent` variant, named by an exhaustive match; `::sync_command_roundtrips_through_postcard`; `::logic_event_roundtrips_through_postcard` | none | verified |
+| `BUS-031` | `POST` | A fixed-width byte value -- a key, a nonce, a signature, a digest -- MUST cross the worker hop as its bytes in order, with no length prefix. | this spec section 2; `BUS-003` | `ambre_core::fixed_bytes::tests::a_binary_format_writes_the_bytes_with_no_length_prefix` -- a 64-byte value between two bytes of a frame encodes as those 64 bytes alone, reads back, and a frame one byte short is refused; type-level -- every fixed-width value is a `FixedBytes<R>`, whose one hand-written serde writes that form | none | verified |
 | `BUS-025` | `POST` | An event from the Sync worker MUST reach the Logic thread in arrival order. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order`; `::a_backlog_never_lets_a_new_value_overtake_a_held_one` | none | verified |
 | `BUS-026` | `POST` | An event from the Sync worker MUST NOT be dropped on a full queue. | this spec section 2; `ambre-spec-architecture.md`, `ARCH-021` | `ambre_bus::conduit::tests::a_backlog_holds_past_a_full_channel_and_keeps_the_order` | none | verified |
 | `BUS-021` | `FRAME` | The worker hop MUST NOT decode an application payload: a CRDT delta MUST cross it as opaque bytes. | this spec section 2; `ambre-spec-zero-knowledge.md`, `ZK-002` | ci-gate -- `scripts/crate_boundaries.py`, run by `just crate-boundaries` in the CI `lint` job, refuses a path into the application module of `ambre-bus`, or an app command or event, in `ambre-sync` above its tests; cargo-deny -- `deny.toml` grants `loro` to the application crates, and the CI `deny` job fails a worker that takes it; `ambre_bus::host::every_envelope_variant_roundtrips_through_postcard` -- the bytes come back identical | none | verified |
@@ -81,7 +82,7 @@ is what a full queue means.
 * **Boundary.** none of its own. The bus carries plaintext and reaches no relay: every byte that
   leaves does so through the Sync worker, sealed. `ZK-002` is what forbids a key type here, and the
   worker hop itself is the accepted internal boundary of `ambre-spec-zero-knowledge.md`.
-* **Verification.** 30 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
+* **Verification.** 31 `verified`. Host tests drive the Logic dispatcher: an unknown document, a
   viewer's edit, a child's role. They also drive a service round trip, a late response, the lossy
   gate and a full queue. Native views drive the input gate, the re-offer and the refused commit. A
   gate refuses a handler that sends on a queue, and the browser tier reads the busy notice.
@@ -176,6 +177,17 @@ not leave (`BUS-018`), and re-offers a dropped request (`BUS-024`).
 mark it asks the worker to stop reading the relay, and at a low mark to start again
 (`ambre-spec-sync.md`, `SYNC-059`). The relay holds what was not read, so the backlog stays bounded
 and loses nothing.
+
+**A fixed-width value crosses as its bytes.** A key, a nonce, a signature or a digest has a width
+its role states once. The worker hop encodes it as that many bytes, in order, with no length
+prefix, since the type already fixes the length (`BUS-031`). A readable codec, such as the JSON of
+the relay, spells the same value as lowercase hexadecimal (`ambre-spec-server.md`, `SRV-242`).
+One generic type writes both forms, so no role chooses its form by an attribute.
+
+These forms replaced older ones with no version bump and no migration, since nothing had shipped.
+A key, a nonce or a signature once carried a length prefix, and a salt once travelled as base64.
+So the update blobs, the snapshots and the membership log a development database stored before the
+change do not read after it. The break is deliberate, not a defect.
 
 **Code.** `crates/ambre-bus/src/` for the contract, `crates/ambre-logic/src/dispatch.rs` for the
 routing, `crates/ambre-logic/src/data.rs` for the role gate.

@@ -1648,7 +1648,9 @@ pub fn main() {
                     evt: ambre_bus::RestEvent::DocFileOpened { plaintext },
                     ..
                 } => platform::open_plaintext_container(
-                    ambre_core::PlaintextContainer::new(plaintext.into_plaintext()),
+                    ambre_core::Payload::<ambre_core::PlaintextContainer>::new(
+                        plaintext.into_plaintext(),
+                    ),
                     toasts,
                     vault_frame.clone(),
                 ),

@@ -11,14 +11,14 @@ use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
-use ambre_core::SealedRowBytes;
+use ambre_core::{Payload, SealedRowBytes};
 
 use ambre_bus::conduit::{Sender, TrySendError};
 use ambre_bus::{LogicCommand, Request, RestCommand, RestEvent, RowPlace, SealedRow, SecretBytes};
 use ambre_core::Generation;
 
 /// What one sealed row comes back as: `None` when the store is locked.
-type Sealed = Box<dyn FnOnce(Option<SealedRowBytes>)>;
+type Sealed = Box<dyn FnOnce(Option<Payload<SealedRowBytes>>)>;
 /// What rows read back open to, one slot each: `None` when the store is
 /// locked.
 type Opened = Box<dyn FnOnce(Option<Vec<Option<SecretBytes>>>)>;
@@ -57,7 +57,7 @@ impl Vault {
         &self,
         place: RowPlace,
         plaintext: SecretBytes,
-        done: impl FnOnce(Option<SealedRowBytes>) + 'static,
+        done: impl FnOnce(Option<Payload<SealedRowBytes>>) + 'static,
     ) {
         let cmd = RestCommand::SealLocalRow { place, plaintext };
         self.ask(cmd, Pending::Seal(Box::new(done)));
@@ -184,12 +184,12 @@ mod tests {
                 .is_some()
         );
         let sealed = RestEvent::LocalRowSealed {
-            sealed: SealedRowBytes::new(b"sealed".to_vec()),
+            sealed: Payload::<SealedRowBytes>::new(b"sealed".to_vec()),
         };
         assert!(vault.answer(Some(id), sealed.clone()).is_none());
         assert_eq!(
             *got.borrow(),
-            Some(Some(SealedRowBytes::new(b"sealed".to_vec())))
+            Some(Some(Payload::<SealedRowBytes>::new(b"sealed".to_vec())))
         );
         assert!(
             vault.answer(Some(id), sealed).is_some(),
@@ -215,7 +215,7 @@ mod tests {
         );
         let row = SealedRow {
             place: RowPlace::Draft(ambre_bus::DraftKey::new("k".into())),
-            sealed: SealedRowBytes::new(vec![1]),
+            sealed: Payload::<SealedRowBytes>::new(vec![1]),
         };
         vault.open(vec![row], {
             let opened = Rc::clone(&opened);
@@ -241,7 +241,7 @@ mod tests {
         let moved = Rc::new(Cell::new(None));
         let row = SealedRow {
             place: RowPlace::Draft(ambre_bus::DraftKey::new("k".into())),
-            sealed: SealedRowBytes::new(vec![1]),
+            sealed: Payload::<SealedRowBytes>::new(vec![1]),
         };
         vault.open(vec![row], {
             let moved = Rc::clone(&moved);

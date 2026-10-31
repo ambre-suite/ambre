@@ -27,7 +27,12 @@ pub(crate) struct Waiting {
 impl Waiting {
     /// Note what the delta numbered `seq` waits on, read after its import.
     /// A seq of 0 is no relay's number and is ignored.
-    pub(crate) fn note(&mut self, seq: Seq, payload: &ambre_core::DeltaBytes, doc: &LoroDoc) {
+    pub(crate) fn note(
+        &mut self,
+        seq: Seq,
+        payload: &ambre_core::Payload<ambre_core::DeltaBytes>,
+        doc: &LoroDoc,
+    ) {
         if seq == Seq::ZERO {
             return;
         }
@@ -59,7 +64,7 @@ impl Waiting {
 }
 
 /// The dependencies of a delta the document does not hold.
-fn missing(payload: &ambre_core::DeltaBytes, doc: &LoroDoc) -> Vec<ID> {
+fn missing(payload: &ambre_core::Payload<ambre_core::DeltaBytes>, doc: &LoroDoc) -> Vec<ID> {
     let Ok(meta) = LoroDoc::decode_import_blob_meta(payload.as_bytes(), false) else {
         return Vec::new();
     };

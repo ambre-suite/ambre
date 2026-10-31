@@ -13,7 +13,7 @@
 //! `ws/handler/message.rs::verify_update_signature` (it must not link
 //! `ambre-crypto`); the two layouts MUST stay byte-identical.
 
-use ambre_core::{Ciphertext, CommitmentTag, Nonce, PublicKey, Signature};
+use ambre_core::{Ciphertext, CommitmentTag, FixedBytes, Nonce, PublicKey, Signature};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
 
 use crate::error::CryptoError;
@@ -35,31 +35,34 @@ fn push_framed(msg: &mut Vec<u8>, field: &[u8]) {
 /// The signed transcript. Each field takes its own type, so a swap of two
 /// fields does not compile, and the bytes unwrap here alone.
 fn message(
-    nonce: &Nonce,
+    nonce: &FixedBytes<Nonce>,
     ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
-    commitment_tag: &CommitmentTag,
+    commitment_tag: &FixedBytes<CommitmentTag>,
 ) -> Vec<u8> {
     let mut msg = Vec::with_capacity(
-        16 + nonce.0.len() + ciphertext.len() + aad.as_bytes().len() + commitment_tag.0.len(),
+        16 + nonce.as_slice().len()
+            + ciphertext.len()
+            + aad.as_bytes().len()
+            + commitment_tag.as_slice().len(),
     );
-    push_framed(&mut msg, &nonce.0);
+    push_framed(&mut msg, nonce.as_slice());
     push_framed(&mut msg, &ciphertext.0);
     push_framed(&mut msg, aad.as_bytes());
-    push_framed(&mut msg, &commitment_tag.0);
+    push_framed(&mut msg, commitment_tag.as_slice());
     msg
 }
 
 /// Signs `nonce || ciphertext || aad || commitment_tag` with `signing_key`.
 pub fn sign(
     signing_key: &SigningKey,
-    nonce: &Nonce,
+    nonce: &FixedBytes<Nonce>,
     ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
-    commitment_tag: &CommitmentTag,
-) -> Signature {
+    commitment_tag: &FixedBytes<CommitmentTag>,
+) -> FixedBytes<Signature> {
     let msg = message(nonce, ciphertext, aad, commitment_tag);
-    Signature(signing_key.sign(&msg).to_bytes())
+    FixedBytes::from_array(signing_key.sign(&msg).to_bytes())
 }
 
 /// Verifies `signature` over the envelope against the author's 32-byte public key.
@@ -70,16 +73,16 @@ pub fn sign(
 /// point, or when strict verification refuses the signature. Ambre rejects a
 /// malleable signature, so a re-encoded one fails here too.
 pub fn verify(
-    author_pub: &PublicKey,
-    nonce: &Nonce,
+    author_pub: &FixedBytes<PublicKey>,
+    nonce: &FixedBytes<Nonce>,
     ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
-    commitment_tag: &CommitmentTag,
-    signature: &Signature,
+    commitment_tag: &FixedBytes<CommitmentTag>,
+    signature: &FixedBytes<Signature>,
 ) -> Result<(), CryptoError> {
     let verifying_key = VerifyingKey::from_bytes(author_pub.as_array())
         .map_err(|_| CryptoError::InvalidSignature)?;
-    let sig = ed25519_dalek::Signature::from_bytes(&signature.0);
+    let sig = ed25519_dalek::Signature::from_bytes(signature.as_array());
     let msg = message(nonce, ciphertext, aad, commitment_tag);
     // Strict verification rejects non-canonical `S` and small-order `A`, so a
     // valid `(R, S)` cannot be transformed into a distinct valid signature over
@@ -92,8 +95,8 @@ pub fn verify(
 
 /// Signs `message` whole with `signing_key`. The caller's message opens with
 /// its own domain, so the signature serves no other use.
-pub fn sign_message(signing_key: &SigningKey, message: &[u8]) -> Signature {
-    Signature(signing_key.sign(message).to_bytes())
+pub fn sign_message(signing_key: &SigningKey, message: &[u8]) -> FixedBytes<Signature> {
+    FixedBytes::from_array(signing_key.sign(message).to_bytes())
 }
 
 /// Verifies a signature [`sign_message`] made, strictly, as [`verify`] does.
@@ -104,13 +107,13 @@ pub fn sign_message(signing_key: &SigningKey, message: &[u8]) -> Signature {
 /// signature that does not verify. A signature of the wrong length is not a
 /// [`Signature`], so it never reaches here.
 pub fn verify_message(
-    author_pub: &PublicKey,
+    author_pub: &FixedBytes<PublicKey>,
     message: &[u8],
-    signature: &Signature,
+    signature: &FixedBytes<Signature>,
 ) -> Result<(), CryptoError> {
     let verifying_key = VerifyingKey::from_bytes(author_pub.as_array())
         .map_err(|_| CryptoError::InvalidSignature)?;
-    let sig = ed25519_dalek::Signature::from_bytes(&signature.0);
+    let sig = ed25519_dalek::Signature::from_bytes(signature.as_array());
     verifying_key
         .verify_strict(message, &sig)
         .map_err(|_| CryptoError::InvalidSignature)
@@ -126,11 +129,11 @@ mod tests {
     #[test]
     fn a_message_signature_checks_under_its_author_alone() {
         let sk = test_key();
-        let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
+        let pk = FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes());
         let sig = sign_message(&sk, b"entry");
         assert!(verify_message(&pk, b"entry", &sig).is_ok());
         assert!(verify_message(&pk, b"entrY", &sig).is_err());
-        let other = PublicKey::from_array(
+        let other = FixedBytes::<PublicKey>::from_array(
             SigningKey::from_bytes(&[8u8; 32])
                 .verifying_key()
                 .to_bytes(),
@@ -142,22 +145,22 @@ mod tests {
         SigningKey::from_bytes(&[7u8; 32])
     }
 
-    fn nonce() -> Nonce {
-        Nonce([1; 24])
+    fn nonce() -> FixedBytes<Nonce> {
+        FixedBytes::from_array([1; 24])
     }
 
     fn ct(bytes: &[u8]) -> Ciphertext {
         Ciphertext(bytes.to_vec())
     }
 
-    fn tag() -> CommitmentTag {
-        CommitmentTag([2; 32])
+    fn tag() -> FixedBytes<CommitmentTag> {
+        FixedBytes::from_array([2; 32])
     }
 
     #[test]
     fn sign_then_verify_roundtrips() {
         let sk = test_key();
-        let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
+        let pk = FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes());
         let sig = sign(
             &sk,
             &nonce(),
@@ -181,7 +184,7 @@ mod tests {
     #[test]
     fn tampered_field_rejected() {
         let sk = test_key();
-        let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
+        let pk = FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes());
         let sig = sign(
             &sk,
             &nonce(),
@@ -210,15 +213,15 @@ mod tests {
 
     /// The same signature with its scalar raised by the group order: a second
     /// encoding that a lax verifier accepts over the same message.
-    fn malleated(sig: &Signature) -> Signature {
-        let mut out = *sig;
+    fn malleated(sig: &FixedBytes<Signature>) -> FixedBytes<Signature> {
+        let mut out = *sig.as_array();
         let mut carry = 0u16;
-        for (s, l) in out.0[32..].iter_mut().zip(GROUP_ORDER) {
+        for (s, l) in out[32..].iter_mut().zip(GROUP_ORDER) {
             let sum = u16::from(*s) + u16::from(l) + carry;
             *s = sum as u8;
             carry = sum >> 8;
         }
-        out
+        FixedBytes::from_array(out)
     }
 
     /// Holds `SYNC-072` on the client: the non-canonical second form of a
@@ -227,7 +230,7 @@ mod tests {
     #[test]
     fn only_the_canonical_signature_is_accepted() {
         let sk = test_key();
-        let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
+        let pk = FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes());
         let sig = sign(&sk, &nonce(), &ct(b"c"), &ambre_core::Aad::of(b"a"), &tag());
         assert!(
             verify(
@@ -255,9 +258,10 @@ mod tests {
         // The identity point, and the signature (R = identity, S = 0).
         let mut identity = [0u8; 32];
         identity[0] = 1;
-        let mut forged = Signature([0u8; 64]);
-        forged.0[..32].copy_from_slice(&identity);
-        let identity_key = PublicKey::from_array(identity);
+        let mut forged = [0u8; 64];
+        forged[..32].copy_from_slice(&identity);
+        let forged = FixedBytes::<Signature>::from_array(forged);
+        let identity_key = FixedBytes::<PublicKey>::from_array(identity);
         assert!(
             verify(
                 &identity_key,
@@ -278,7 +282,7 @@ mod tests {
     #[test]
     fn ciphertext_aad_boundary_is_unambiguous() {
         let sk = test_key();
-        let pk = ambre_core::PublicKey::from_array(sk.verifying_key().to_bytes());
+        let pk = FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes());
         let sig = sign(
             &sk,
             &nonce(),

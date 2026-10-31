@@ -207,10 +207,10 @@ impl ImportReport {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaBlob {
     pub media: MediaRef,
-    pub plaintext: ambre_core::MediaBytes,
+    pub plaintext: ambre_core::Payload<ambre_core::MediaBytes>,
     pub mime: ambre_core::MediaType,
     pub size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
-    pub thumb: ambre_core::ThumbnailPng,
+    pub thumb: ambre_core::Payload<ambre_core::ThumbnailPng>,
 }
 
 /// A converter / limit failure. Any variant aborts the import atomically:
@@ -266,7 +266,7 @@ pub struct ExportElement {
     /// Ambre resolves the picture (`TOILE-IO-087`). This is the thumbnail the
     /// board holds in plaintext; the full blob is ciphertext on the relay and
     /// no path here fetches it (`TOILE-IO-100`).
-    pub image_png: Option<ambre_core::ThumbnailPng>,
+    pub image_png: Option<ambre_core::Payload<ambre_core::ThumbnailPng>>,
 }
 
 /// The body and the outline print as their sizes alone (`ZK-006`); the

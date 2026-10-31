@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{DocumentRank, KeyId, PublicKey, Role};
+use ambre_core::{DocumentRank, FixedBytes, KeyId, PublicKey, Role};
 use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
 use ambre_protocol::{EntryDigest, LogPosition, MembershipAct, MembershipEntry, Signature};
@@ -41,7 +41,7 @@ pub(crate) fn public_channel_self_join(entry: &MembershipEntry) -> bool {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct SpaceWord {
     /// Every key the space log granted a writing role, at any point.
-    pub(crate) writers: HashSet<PublicKey>,
+    pub(crate) writers: HashSet<FixedBytes<PublicKey>>,
     /// The members a valid entry of the space log removed, and no later one
     /// added back.
     pub(crate) removed: HashSet<Id<User>>,
@@ -86,16 +86,16 @@ impl LogRule {
 struct Held {
     role: Role,
     /// The signing key the entry that added the member named.
-    key: PublicKey,
+    key: FixedBytes<PublicKey>,
     /// Still a member: no later valid entry removed them.
     present: bool,
     /// The key the entry that added the member wraps (`SYNC-123`).
-    wraps: Option<KeyId>,
+    wraps: Option<FixedBytes<KeyId>>,
 }
 
 /// The digest of one entry, as the next entry names it. `None` for an entry
 /// that does not encode, which no decoded entry is.
-pub(crate) fn digest(entry: &MembershipEntry) -> Option<EntryDigest> {
+pub(crate) fn digest(entry: &MembershipEntry) -> Option<FixedBytes<EntryDigest>> {
     let encoded = entry.encode().ok()?;
     Some(ambre_crypto::hash::entry_digest(&encoded))
 }
@@ -106,7 +106,7 @@ pub(crate) struct LogHead {
     /// The place the next entry is signed for.
     pub position: LogPosition,
     /// The digest of the last entry, absent on an empty log.
-    pub previous: Option<EntryDigest>,
+    pub previous: Option<FixedBytes<EntryDigest>>,
 }
 
 impl LogHead {
@@ -122,7 +122,7 @@ impl LogHead {
     }
 
     /// The head after an entry with `digest` lands at this one.
-    pub(crate) const fn after(self, digest: EntryDigest) -> Self {
+    pub(crate) const fn after(self, digest: FixedBytes<EntryDigest>) -> Self {
         Self {
             position: self.position.next(),
             previous: Some(digest),
@@ -134,7 +134,7 @@ impl LogHead {
 pub(crate) struct Log {
     held: HashMap<Id<User>, Held>,
     /// Every key the log granted a writing role, at any point.
-    signers: HashSet<PublicKey>,
+    signers: HashSet<FixedBytes<PublicKey>>,
     /// Whether the wrapped key carried an anchor at all.
     anchored: bool,
     /// The place and the previous digest the next entry takes.
@@ -146,7 +146,7 @@ impl Log {
     /// at the first entry that fails a check.
     pub(crate) fn walk(
         document: Id<Document>,
-        anchor: Option<EntryDigest>,
+        anchor: Option<FixedBytes<EntryDigest>>,
         entries: &[MembershipEntry],
         self_join: SelfJoinRule,
     ) -> Self {
@@ -186,7 +186,7 @@ impl Log {
     /// log says so.
     pub(crate) fn walk_under(
         document: Id<Document>,
-        anchor: Option<EntryDigest>,
+        anchor: Option<FixedBytes<EntryDigest>>,
         entries: &[MembershipEntry],
         rule: &LogRule,
     ) -> Self {
@@ -257,7 +257,7 @@ impl Log {
                     entry.member,
                     Held {
                         role: entry.role,
-                        key: entry.member_key.clone(),
+                        key: entry.member_key,
                         present: true,
                         wraps: entry.key,
                     },
@@ -281,7 +281,7 @@ impl Log {
                 .document_rank()
                 .is_some_and(|r| r >= DocumentRank::Editor)
         {
-            self.signers.insert(held.key.clone());
+            self.signers.insert(held.key);
         }
     }
 
@@ -298,12 +298,12 @@ impl Log {
     /// The keys a key link may be signed by (`SYNC-121`): every key the log
     /// granted a writing role. `None` for a document whose wrap carried no
     /// anchor, which predates the log.
-    pub(crate) fn signers(&self) -> Option<&HashSet<PublicKey>> {
+    pub(crate) fn signers(&self) -> Option<&HashSet<FixedBytes<PublicKey>>> {
         self.anchored.then_some(&self.signers)
     }
 
     /// The key the entry that added `member` wraps, when the log reaches it.
-    pub(crate) fn wraps(&self, member: Id<User>) -> Option<KeyId> {
+    pub(crate) fn wraps(&self, member: Id<User>) -> Option<FixedBytes<KeyId>> {
         self.held
             .get(&member)
             .filter(|held| held.present)
@@ -318,7 +318,7 @@ impl Log {
 }
 
 /// Whether `key` signed `entry`.
-fn signed_by(entry: &MembershipEntry, key: &PublicKey) -> bool {
+fn signed_by(entry: &MembershipEntry, key: &FixedBytes<PublicKey>) -> bool {
     entry.signed_bytes().is_ok_and(|bytes| {
         ambre_crypto::signature::verify_message(key, bytes.as_bytes(), &entry.signature).is_ok()
     })
@@ -328,10 +328,10 @@ fn signed_by(entry: &MembershipEntry, key: &PublicKey) -> bool {
 pub(crate) struct Draft {
     pub document: Id<Document>,
     pub member: Id<User>,
-    pub member_key: ambre_core::PublicKey,
+    pub member_key: FixedBytes<PublicKey>,
     pub act: MembershipAct,
     pub role: Role,
-    pub key: Option<KeyId>,
+    pub key: Option<FixedBytes<KeyId>>,
 }
 
 /// Signs `draft` as the entry after `next`, by `author` (`SYNC-132`).
@@ -355,7 +355,7 @@ pub(crate) fn sign(
         key: draft.key,
         previous: next.previous,
         author,
-        signature: Signature([0; ENTRY_SIGNATURE_LEN]),
+        signature: FixedBytes::<Signature>::from_array([0; ENTRY_SIGNATURE_LEN]),
     };
     let bytes = entry.signed_bytes()?;
     entry.signature = ambre_crypto::signature::sign_message(signing_key, bytes.as_bytes());
@@ -369,13 +369,15 @@ pub(crate) fn sign(
 /// The encoder's error.
 pub(crate) fn encode(
     entry: &MembershipEntry,
-) -> Result<ambre_core::EncodedLogEntry, SerializationError> {
+) -> Result<ambre_core::Encoded<ambre_core::EncodedLogEntry>, SerializationError> {
     entry.encode()
 }
 
 /// The entries a members answer carries, up to the first that does not
 /// decode. The walk could not pass it anyway.
-pub(crate) fn decode(texts: &[ambre_core::EncodedLogEntry]) -> Vec<MembershipEntry> {
+pub(crate) fn decode(
+    texts: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
+) -> Vec<MembershipEntry> {
     texts
         .iter()
         .map_while(|text| MembershipEntry::decode(text).ok())
@@ -400,8 +402,8 @@ pub(crate) mod tests {
             }
         }
 
-        pub(crate) fn public(&self) -> PublicKey {
-            PublicKey::from_array(self.key.verifying_key().to_bytes())
+        pub(crate) fn public(&self) -> FixedBytes<PublicKey> {
+            FixedBytes::from_array(self.key.verifying_key().to_bytes())
         }
     }
 
@@ -425,7 +427,7 @@ pub(crate) mod tests {
             member_key: member.public(),
             act,
             role,
-            key: Some(KeyId::from_array([log.len() as u8; 16])),
+            key: Some(FixedBytes::from_array([log.len() as u8; 16])),
         };
         log.push(sign(draft, next, by.id, &by.key).unwrap());
     }
@@ -438,7 +440,7 @@ pub(crate) mod tests {
         log
     }
 
-    fn anchor(log: &[MembershipEntry]) -> Option<EntryDigest> {
+    fn anchor(log: &[MembershipEntry]) -> Option<FixedBytes<EntryDigest>> {
         log.first().and_then(digest)
     }
 
@@ -466,7 +468,7 @@ pub(crate) mod tests {
         // An entry whose previous digest is not the one before it.
         let mut broken = log.clone();
         if let Some(entry) = broken.get_mut(2) {
-            entry.previous = Some(EntryDigest([0; 32]));
+            entry.previous = Some(FixedBytes::from_array([0; 32]));
         }
         let view = walk(&broken);
         assert_eq!(view.standing(bob.id).0, MemberStanding::Verified);
@@ -606,10 +608,10 @@ pub(crate) mod tests {
         let signers = view.signers().unwrap();
         assert!(signers.contains(&alice.public()) && signers.contains(&bob.public()));
         assert!(!signers.contains(&carol.public()));
-        assert_eq!(view.wraps(bob.id), Some(KeyId::from_array([1; 16])));
+        assert_eq!(view.wraps(bob.id), Some(FixedBytes::from_array([1; 16])));
         assert!(Log::walk(DOC, None, &log, no_self_join).signers().is_none());
         // The entries travel through their request form.
-        let texts: Vec<ambre_core::EncodedLogEntry> =
+        let texts: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>> =
             log.iter().map(|e| encode(e).unwrap()).collect();
         assert_eq!(decode(&texts), log);
     }

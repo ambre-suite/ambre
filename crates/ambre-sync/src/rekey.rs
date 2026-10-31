@@ -20,7 +20,7 @@
 
 use std::collections::VecDeque;
 
-use ambre_core::KeyId;
+use ambre_core::{FixedBytes, KeyId};
 use ambre_protocol::messages::{Clock, Signature};
 
 use crate::generation::ResendTicket;
@@ -37,9 +37,9 @@ pub(crate) const UNCONFIRMED_LIMIT: usize = 1024;
 pub(crate) struct SentFrame {
     pub clock: Clock,
     /// The key the frame was last sealed under.
-    pub key_id: KeyId,
+    pub key_id: FixedBytes<KeyId>,
     /// The signature of its last seal. The relay's echo and refusal carry it.
-    pub signature: Signature,
+    pub signature: FixedBytes<Signature>,
     /// The plaintext body, its session nonce ahead of the delta, kept to seal
     /// it again under another key.
     pub payload: UpdateFrame,
@@ -89,7 +89,7 @@ pub(crate) struct Rekey {
     refused: bool,
     /// The delta the relay failed to sequence, waiting for its resend, and
     /// the ticket of the timer armed for it (`SYNC-159`).
-    failed: Option<(Signature, Generation<ResendTicket>)>,
+    failed: Option<(FixedBytes<Signature>, Generation<ResendTicket>)>,
     /// Sequencing failures since the relay last echoed a delta of this log.
     failures: ambre_core::FailureCount,
 }
@@ -108,7 +108,7 @@ impl Rekey {
     /// The relay echoed our update signed `signature`: it and every delta
     /// that left before it landed. An echo of a delta not here, such as
     /// another session's at the same clock, confirms nothing (`SYNC-148`).
-    pub(crate) fn confirm(&mut self, signature: &Signature) {
+    pub(crate) fn confirm(&mut self, signature: &FixedBytes<Signature>) {
         let Some((at, clock)) = self.position(signature) else {
             return;
         };
@@ -126,7 +126,10 @@ impl Rekey {
     /// seal again at the next clocks. The relay dropped those later deltas
     /// behind its fence (`SRV-169`, `SYNC-147`). `None` when no delta here
     /// carries that signature: a refusal of a delta already sent again.
-    pub(crate) fn clock_refused(&mut self, signature: &Signature) -> Option<Vec<UpdateFrame>> {
+    pub(crate) fn clock_refused(
+        &mut self,
+        signature: &FixedBytes<Signature>,
+    ) -> Option<Vec<UpdateFrame>> {
         self.take_from(signature).map(|(_, bodies)| bodies)
     }
 
@@ -136,7 +139,7 @@ impl Rekey {
     /// last echo, or `None` when no delta here carries that signature.
     pub(crate) fn failed(
         &mut self,
-        signature: &Signature,
+        signature: &FixedBytes<Signature>,
         ticket: Generation<ResendTicket>,
     ) -> Option<ambre_core::FailureCount> {
         self.position(signature)?;
@@ -151,7 +154,7 @@ impl Rekey {
     pub(crate) fn resend_failed(
         &mut self,
         ticket: Generation<ResendTicket>,
-    ) -> Option<(Signature, Clock, Vec<UpdateFrame>)> {
+    ) -> Option<(FixedBytes<Signature>, Clock, Vec<UpdateFrame>)> {
         let (signature, armed) = self.failed?;
         if armed != ticket {
             return None;
@@ -163,7 +166,10 @@ impl Rekey {
 
     /// Takes the delta signed `signature` and every later one out of the log.
     /// Returns its clock and their bodies, in order.
-    fn take_from(&mut self, signature: &Signature) -> Option<(Clock, Vec<UpdateFrame>)> {
+    fn take_from(
+        &mut self,
+        signature: &FixedBytes<Signature>,
+    ) -> Option<(Clock, Vec<UpdateFrame>)> {
         let (at, from) = self.position(signature)?;
         if self.refused_from.is_some_and(|c| c >= from) {
             self.refused_from = None;
@@ -175,7 +181,7 @@ impl Rekey {
     /// (`SYNC-155`). It and every delta that left after it are dropped: those
     /// build on it, and the relay took no clock for it. Returns whether this
     /// is the first refusal, the one to report.
-    pub(crate) fn delta_refused(&mut self, signature: &Signature) -> bool {
+    pub(crate) fn delta_refused(&mut self, signature: &FixedBytes<Signature>) -> bool {
         if let Some((at, _)) = self.position(signature) {
             for dropped in self.sent.drain(at..) {
                 dropped.payload.wipe();
@@ -191,7 +197,10 @@ impl Rekey {
     /// their bodies return in order. Nothing is held: the lock refuses them
     /// all, and the caller moves what they wrote. `None` for a delta the log
     /// no longer holds, so a later refusal of the same batch returns nothing.
-    pub(crate) fn delta_locked(&mut self, signature: &Signature) -> Option<Vec<UpdateFrame>> {
+    pub(crate) fn delta_locked(
+        &mut self,
+        signature: &FixedBytes<Signature>,
+    ) -> Option<Vec<UpdateFrame>> {
         let (_, bodies) = self.take_from(signature)?;
         if self
             .failed
@@ -215,14 +224,14 @@ impl Rekey {
     }
 
     /// The delta at `clock` was sealed again, under a new signature.
-    pub(crate) fn resealed(&mut self, clock: Clock, signature: Signature) {
+    pub(crate) fn resealed(&mut self, clock: Clock, signature: FixedBytes<Signature>) {
         if let Some(frame) = self.sent.iter_mut().find(|f| f.clock == clock) {
             frame.signature = signature;
         }
     }
 
     /// The index and the clock of the delta signed `signature`.
-    fn position(&self, signature: &Signature) -> Option<(usize, Clock)> {
+    fn position(&self, signature: &FixedBytes<Signature>) -> Option<(usize, Clock)> {
         self.sent
             .iter()
             .enumerate()
@@ -232,7 +241,12 @@ impl Rekey {
 
     /// The relay refused the frame at `clock`, sealed under `key_id`, while
     /// `current` is the key this client now holds.
-    pub(crate) fn refused(&mut self, key_id: KeyId, clock: Clock, current: KeyId) -> Refusal {
+    pub(crate) fn refused(
+        &mut self,
+        key_id: FixedBytes<KeyId>,
+        clock: Clock,
+        current: FixedBytes<KeyId>,
+    ) -> Refusal {
         let named = self
             .sent
             .iter()
@@ -304,7 +318,10 @@ impl Rekey {
     /// A key was installed: the debt is paid, by us or by someone else.
     /// Returns the refused frames to seal again under `current`, at their own
     /// clocks and in order, then the edits that waited.
-    pub(crate) fn key_installed(&mut self, current: KeyId) -> (RefusedFrames, Vec<UpdateFrame>) {
+    pub(crate) fn key_installed(
+        &mut self,
+        current: FixedBytes<KeyId>,
+    ) -> (RefusedFrames, Vec<UpdateFrame>) {
         self.rotation = Rotation::Settled;
         (
             self.take_refused(current),
@@ -314,7 +331,7 @@ impl Rekey {
 
     /// Every refused frame, marked as sealed under `current` from now on, so a
     /// late refusal of its earlier sealing reads as stale.
-    pub(crate) fn take_refused(&mut self, current: KeyId) -> RefusedFrames {
+    pub(crate) fn take_refused(&mut self, current: FixedBytes<KeyId>) -> RefusedFrames {
         let Some(from) = self.refused_from.take() else {
             return Vec::new();
         };
@@ -338,12 +355,12 @@ impl Rekey {
 mod tests {
     use super::*;
 
-    fn key(n: u8) -> KeyId {
-        KeyId::from_array([n; 16])
+    fn key(n: u8) -> FixedBytes<KeyId> {
+        FixedBytes::from_array([n; 16])
     }
 
-    fn sig(n: u8) -> Signature {
-        Signature([n; 64])
+    fn sig(n: u8) -> FixedBytes<Signature> {
+        FixedBytes::from_array([n; 64])
     }
 
     /// A frame of one byte, which no seal reads here.

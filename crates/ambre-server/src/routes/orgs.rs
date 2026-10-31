@@ -18,8 +18,9 @@ use crate::state::AppState;
 pub struct CreateOrgRequest {
     /// A name blank or past the cap does not decode (`SRV-233`).
     pub name: db::OrgName,
-    /// X25519 organization public key (hex encoded).
-    pub org_pubkey: ambre_core::ExchangeKeyHex,
+    /// X25519 organization public key (hex encoded). Any other text refuses
+    /// the body when it is read (`SRV-242`).
+    pub org_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
     /// A split out of range does not decode (`SRV-062`).
     #[serde(flatten)]
     pub shamir: db::ShamirParams,
@@ -32,7 +33,7 @@ pub struct CreateOrgResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub id: Id<Org>,
     pub name: String,
-    pub org_pubkey: ambre_core::ExchangeKeyHex,
+    pub org_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
     #[serde(flatten)]
     pub shamir: db::ShamirParams,
 }
@@ -41,7 +42,7 @@ fn org_to_response(org: &db::OrganizationRow) -> CreateOrgResponse {
     CreateOrgResponse {
         id: org.id,
         name: org.name.clone(),
-        org_pubkey: ambre_core::ExchangeKeyHex::encode(&org.org_pubkey),
+        org_pubkey: org.org_pubkey,
         shamir: org.shamir,
     }
 }
@@ -169,11 +170,9 @@ pub async fn create_org(
     validate_shamir_params(req.shamir)?;
     refuse_share(req.owner_shamir_share_enc.as_ref())?;
 
-    // A key that is not 32 bytes of hex is refused here, not stored to fail
-    // later in a client.
-    let org_pubkey = req.org_pubkey.decode().map_err(|e| AppError::Conflict {
-        detail: format!("invalid org_pubkey: {e}"),
-    })?;
+    // The read of the body refused a key that is not 32 bytes of hex. So no
+    // such key is stored to fail later in a client.
+    let org_pubkey = req.org_pubkey;
 
     let org = db::create_organization(&state.db, &name, &org_pubkey, req.shamir, &owner_id).await?;
 
@@ -447,7 +446,7 @@ pub async fn recover_master_key(
 #[derive(serde::Serialize)]
 pub struct RecoveredResponse {
     pub status: ambre_core::WriteStatus,
-    pub master_key_enc: ambre_core::EscrowedKey,
+    pub master_key_enc: ambre_core::Encoded<ambre_core::EscrowedKey>,
 }
 
 #[cfg(test)]
@@ -566,7 +565,9 @@ mod tests {
         let org = db::OrganizationRow {
             id: Id::<Org>::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
             name: "Test Org".into(),
-            org_pubkey: ambre_core::ExchangePublicKey::from_array([0u8; 32]),
+            org_pubkey: ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+                [0u8; 32],
+            ),
             shamir: split(3, 5),
             created_at: chrono::Utc::now(),
         };
@@ -576,7 +577,7 @@ mod tests {
         assert_eq!(resp.shamir, split(3, 5));
         assert_eq!(
             resp.org_pubkey,
-            ambre_core::ExchangeKeyHex::encode(vec![0u8; 32])
+            ambre_core::FixedBytes::from_array([0u8; 32])
         );
     }
 
@@ -587,7 +588,7 @@ mod tests {
             email: "user@test.com".into(),
             display_name: ambre_core::DisplayName::new("Test User").unwrap(),
             role: Role::Admin,
-            shamir_share_enc: Some(ambre_core::SealedShare::new(vec![1, 2, 3])),
+            shamir_share_enc: Some(ambre_core::Encoded::new(vec![1, 2, 3])),
             created_at: chrono::Utc::now(),
         };
         let resp = member_to_response(&member);
@@ -742,7 +743,7 @@ mod tests {
                 "email": email,
                 "display_name": "Org User",
                 "master_key_enc": base64::engine::general_purpose::URL_SAFE.encode([1u8; 72]),
-                "master_key_salt": base64::engine::general_purpose::URL_SAFE.encode([2u8; 32]),
+                "master_key_salt": hex::encode([2u8; 32]),
                 "signing_pubkey": hex::encode([spk; 32]),
                 "exchange_pubkey": hex::encode([spk; 32]),
             });
@@ -1324,7 +1325,12 @@ mod tests {
             for released in 1..=2 {
                 let (status, body) = release().await;
                 assert_eq!(status, StatusCode::OK);
-                assert!(body.contains(&ambre_core::EscrowedKey::new(vec![0xA5u8; 48]).to_base64()));
+                assert!(
+                    body.contains(
+                        &ambre_core::Encoded::<ambre_core::EscrowedKey>::new(vec![0xA5u8; 48])
+                            .to_base64()
+                    )
+                );
                 let records: Vec<(String, String, String)> = sqlx::query_as(
                     "SELECT org_id::text, target_user_id::text, recovered_by::text \
                      FROM org_recovery_log",
@@ -1350,7 +1356,10 @@ mod tests {
             let (status, body) = release().await;
             assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
             assert!(
-                !body.contains(&ambre_core::EscrowedKey::new(vec![0xA5u8; 48]).to_base64()),
+                !body.contains(
+                    &ambre_core::Encoded::<ambre_core::EscrowedKey>::new(vec![0xA5u8; 48])
+                        .to_base64()
+                ),
                 "an unrecorded release answers no key"
             );
         }

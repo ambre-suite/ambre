@@ -1315,7 +1315,7 @@ impl SyncState {
                 // Anti-replay: reject ephemerals with a non-monotonic counter for
                 // the same author. The counter map is bounded (see
                 // `accept_ephemeral_counter` / `MAX_EPHEMERAL_REMOTE_AUTHORS`).
-                let author_pk = eph.public_data.pub_key.clone();
+                let author_pk = eph.public_data.pub_key;
                 if !doc_state.accept_ephemeral_counter(&author_pk, eph.public_data.counter) {
                     tracing::debug!(
                         "Sync: dropping replayed ephemeral from {:?} (counter {})",
@@ -1642,7 +1642,7 @@ impl SyncState {
     pub(crate) fn handle_key_refused(
         &mut self,
         document_id: Id<Document>,
-        key_id: KeyId,
+        key_id: FixedBytes<KeyId>,
         clock: Clock,
     ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
@@ -1756,7 +1756,7 @@ mod tests {
         let id = *state.documents.keys().next().expect("one document");
         state
             .session_nonces
-            .insert(id, ambre_core::SessionNonce([1; 16]));
+            .insert(id, ambre_core::FixedBytes::from_array([1; 16]));
         *state.tokens.borrow_mut() = Some(TokenPair {
             access_token: SecretToken::from("access".to_owned()),
             refresh_token: SecretToken::from("refresh".to_owned()),
@@ -1872,7 +1872,7 @@ mod tests {
         state.documents.insert(id, doc);
         state
             .session_nonces
-            .insert(id, ambre_core::SessionNonce([1; 16]));
+            .insert(id, ambre_core::FixedBytes::from_array([1; 16]));
 
         state.handle_command(SyncCommand::HoldInbound);
         state.handle_sync_event(closed(CloseCode::new(1006)));

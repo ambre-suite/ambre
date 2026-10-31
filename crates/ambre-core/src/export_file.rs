@@ -6,6 +6,7 @@
 //! folder. So the name is a validated type (`DOCFILE-019`, `DOCFILE-020`).
 
 use crate::media::ByteSize;
+use crate::payload::{Payload, PayloadKind};
 use crate::text_offset::ByteCount;
 
 /// The extension an export file carries, one per format the suite writes.
@@ -252,33 +253,35 @@ fn is_kept_extension(extension: &str) -> bool {
         && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
-crate::payload::define_payload! {
-    /// The bytes of a file crossing an import or an export. They are what the
-    /// browser read from a picked file, or what an export writes for it to
-    /// save.
-    ///
-    /// The bytes are the user's content, so `Debug` prints their length alone.
-    FileBytes
+/// The role of the bytes of a file crossing an import or an export:
+/// `Payload<FileBytes>`. They are what the browser read from a picked file,
+/// or what an export writes for it to save.
+///
+/// The bytes are the user's content, so `Debug` prints their length alone.
+pub enum FileBytes {}
+
+impl PayloadKind for FileBytes {
+    const NAME: &'static str = "FileBytes";
 }
 
-impl FileBytes {
+impl Payload<FileBytes> {
     /// The size of the file.
     #[must_use]
     pub fn size(&self) -> ByteSize {
-        ByteSize::of_len(self.len())
+        self.len()
     }
 }
 
 /// A plaintext `.ambre` export saves the whole container, header included.
-impl From<crate::PlaintextContainer> for FileBytes {
-    fn from(container: crate::PlaintextContainer) -> Self {
+impl From<Payload<crate::PlaintextContainer>> for Payload<FileBytes> {
+    fn from(container: Payload<crate::PlaintextContainer>) -> Self {
         Self::new(container.into_bytes())
     }
 }
 
 /// A sealed `.ambre` export saves the whole sealed container.
-impl From<crate::SealedContainer> for FileBytes {
-    fn from(container: crate::SealedContainer) -> Self {
+impl From<Payload<crate::SealedContainer>> for Payload<FileBytes> {
+    fn from(container: Payload<crate::SealedContainer>) -> Self {
         Self::new(container.into_bytes())
     }
 }
@@ -511,7 +514,7 @@ mod tests {
     /// The bytes of a file print their length alone, never their content.
     #[test]
     fn file_bytes_print_their_length_alone() {
-        let bytes = FileBytes::new(b"secret".to_vec());
+        let bytes = Payload::<FileBytes>::new(b"secret".to_vec());
         assert_eq!(format!("{bytes:?}"), "FileBytes(6 bytes)");
         assert_eq!(bytes.size(), ByteSize(6));
     }

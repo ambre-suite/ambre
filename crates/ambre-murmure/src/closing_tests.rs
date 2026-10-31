@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, StyleMark, TextStyle, Timestamp};
 use ambre_core::id::{Channel, Id, Lease, Segment, User};
-use ambre_core::{ByteSize, DeltaBytes, PeerEntryBytes, Seq, SnapshotBytes};
+use ambre_core::{ByteSize, DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
 
 use crate::channel::live_segments;
 use crate::session::next_peer;
@@ -32,7 +32,7 @@ fn channel(size: usize) -> ChannelState {
 
 /// A second member's copy of `state`, opened from its live documents.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<Id<Segment>, SnapshotBytes> = state
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -49,7 +49,9 @@ fn peer_of(state: &ChannelState) -> ChannelState {
 /// Close the active segment of `state` into a successor it created, and
 /// adopt the successor's identity. Returns the successor, the `meta` delta,
 /// and the successor's first update.
-fn close_created(state: &mut ChannelState) -> (Id<Segment>, DeltaBytes, DeltaBytes) {
+fn close_created(
+    state: &mut ChannelState,
+) -> (Id<Segment>, Payload<DeltaBytes>, Payload<DeltaBytes>) {
     let closing = state.active_id();
     let successor = Id::<Segment>::mint();
     let closed = state
@@ -143,12 +145,10 @@ fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
         alice.send(&draft(&body), author, NOW).expect("send");
         sent += 1;
         let segment = alice.active_id();
-        let bytes = ByteSize::of_len(
-            alice
-                .snapshot(segment.document_id())
-                .expect("snapshot")
-                .len(),
-        );
+        let bytes = alice
+            .snapshot(segment.document_id())
+            .expect("snapshot")
+            .len();
         let asked = alice.wants_close();
         if bytes >= BYTES {
             assert_eq!(asked, Some(segment), "asked at the send that passes");

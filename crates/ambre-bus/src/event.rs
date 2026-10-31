@@ -23,7 +23,7 @@ use crate::{
 use ambre_core::id::{
     Channel, Document, Id, Lease, Meeting, Message, Segment, Snapshot, Space, User,
 };
-use ambre_core::{Generation, Seq, SessionNonce};
+use ambre_core::{FixedBytes, Generation, Seq, SessionNonce};
 
 // -----------------------------------------------------------------------------
 // LogicEvent
@@ -55,7 +55,7 @@ pub enum LogicEvent {
         /// The nonce `peer` derives from. The Logic thread keeps it in the
         /// local store, so a later open can send what this session left
         /// unsent (`AUTHOR-028`).
-        nonce: SessionNonce,
+        nonce: FixedBytes<SessionNonce>,
     },
 
     /// Decrypted and decompressed CRDT delta, with its signer, ready for `LoroDoc::import()`.
@@ -77,7 +77,7 @@ pub enum LogicEvent {
     /// Decrypted and decompressed CRDT snapshot.
     RemoteSnapshot {
         document_id: Id<Document>,
-        payload: ambre_core::SnapshotBytes,
+        payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         /// The last delta `seq` it folds in, 0 when unknown. The Logic thread
         /// counts the deltas a later snapshot must hold from it (`AUTHOR-016`).
         covered_seq: Seq,
@@ -93,7 +93,7 @@ pub enum LogicEvent {
         /// The last delta `seq` it claims to fold in.
         covered_seq: Seq,
         /// Decrypted and decompressed, as in `RemoteSnapshot`.
-        payload: ambre_core::SnapshotBytes,
+        payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         purpose: SnapshotPurpose,
     },
 
@@ -120,7 +120,7 @@ pub enum LogicEvent {
     RemoteEphemeral {
         document_id: Id<Document>,
         from_user_id: Id<User>,
-        payload: ambre_core::EphemeralBytes,
+        payload: ambre_core::Payload<ambre_core::EphemeralBytes>,
     },
 
     /// A peer stopped watching a document (`PRESENCE-014`): they unsubscribed, or their
@@ -352,7 +352,7 @@ pub enum LogicEvent {
     /// again: the new messages they carry go to the active segment.
     DeltasLocked {
         document_id: Id<Document>,
-        deltas: Vec<ambre_core::DeltaBytes>,
+        deltas: Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
     },
     /// A public channel of the space has a new key, sealed under the current
     /// space key, answering
@@ -547,9 +547,9 @@ pub struct SignedDelta {
     /// which deltas a horizon covers from it (`AUTHOR-016`).
     pub seq: Seq,
     /// The Loro update, decrypted and decompressed.
-    pub payload: ambre_core::DeltaBytes,
+    pub payload: ambre_core::Payload<ambre_core::DeltaBytes>,
     /// The session nonce of its author, opened from inside the ciphertext.
-    pub nonce: SessionNonce,
+    pub nonce: FixedBytes<SessionNonce>,
     /// The only PeerID its operations may carry.
     pub peer: ambre_core::PeerId,
     /// The member the signing key resolves to, `None` when the directory does

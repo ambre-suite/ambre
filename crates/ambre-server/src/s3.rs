@@ -169,7 +169,7 @@ pub async fn generate_presigned_upload_url(
     key: &ambre_core::ObjectKey,
     ttl: ambre_core::Seconds,
     content_length: ambre_core::ByteSize,
-) -> Result<ambre_core::PresignedUrl, AppError> {
+) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
@@ -179,7 +179,7 @@ pub async fn generate_presigned_upload_url(
         .content_length(i64::try_from(content_length.0).unwrap_or(i64::MAX))
         .presigned(config)
         .await
-        .map(|req| ambre_core::PresignedUrl::new(req.uri().to_string()))
+        .map(|req| ambre_core::Credential::new(req.uri().to_string()))
         .map_err(|e| AppError::S3(format!("presigned upload URL: {e}")))
 }
 
@@ -189,7 +189,7 @@ pub async fn generate_presigned_download_url(
     bucket: &BucketName,
     key: &ambre_core::ObjectKey,
     ttl: ambre_core::Seconds,
-) -> Result<ambre_core::PresignedUrl, AppError> {
+) -> Result<ambre_core::Credential<ambre_core::PresignedUrl>, AppError> {
     let config = PresigningConfig::expires_in(presign_lifetime(ttl))
         .map_err(|e| AppError::S3(format!("presigning config: {e}")))?;
 
@@ -198,7 +198,7 @@ pub async fn generate_presigned_download_url(
         .key(key.as_str())
         .presigned(config)
         .await
-        .map(|req| ambre_core::PresignedUrl::new(req.uri().to_string()))
+        .map(|req| ambre_core::Credential::new(req.uri().to_string()))
         .map_err(|e| AppError::S3(format!("presigned download URL: {e}")))
 }
 

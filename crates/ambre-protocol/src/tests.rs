@@ -2,23 +2,23 @@
 
 use super::*;
 use crate::messages::{Ciphertext, Clock, Counter, Seq};
+use ambre_core::FixedBytes;
 use ambre_core::id::{self, Document, Id, User};
-use ambre_core::{KeyId, PublicKey};
 
 #[test]
 fn update_roundtrip() {
     let update = Update {
         ciphertext: Ciphertext(vec![1, 2, 3, 4]),
-        nonce: Nonce([0u8; 24]),
+        nonce: FixedBytes::from_array([0u8; 24]),
         public_data: UpdatePublicData {
             document_id: Id::<Document>::mint(),
-            pub_key: PublicKey::from_array([5u8; 32]),
-            key_id: KeyId::from_array([8u8; 16]),
+            pub_key: FixedBytes::from_array([5u8; 32]),
+            key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Clock(42),
         },
-        commitment_tag: CommitmentTag([6u8; 32]),
-        signature: Signature([7u8; 64]),
+        commitment_tag: FixedBytes::from_array([6u8; 32]),
+        signature: FixedBytes::from_array([7u8; 64]),
     };
 
     let bytes = postcard::to_allocvec(&update).expect("serialization failed");
@@ -44,20 +44,20 @@ fn update_roundtrip() {
 fn snapshot_roundtrip() {
     let snapshot = Snapshot {
         ciphertext: Ciphertext(vec![8, 9, 10]),
-        nonce: Nonce([11u8; 24]),
+        nonce: FixedBytes::from_array([11u8; 24]),
         public_data: SnapshotPublicData {
             document_id: Id::<Document>::mint(),
-            pub_key: PublicKey::from_array([12u8; 32]),
-            key_id: KeyId::from_array([8u8; 16]),
+            pub_key: FixedBytes::from_array([12u8; 32]),
+            key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
-            parent_snapshot_proof: Some(ambre_core::ChainHash([13u8; 32])),
+            parent_snapshot_proof: Some(FixedBytes::from_array([13u8; 32])),
             parent_snapshot_update_clocks: vec![
-                (PublicKey::from_array([15u8; 32]), Clock(16)),
-                (PublicKey::from_array([17u8; 32]), Clock(18)),
+                (FixedBytes::from_array([15u8; 32]), Clock(16)),
+                (FixedBytes::from_array([17u8; 32]), Clock(18)),
             ],
         },
-        commitment_tag: CommitmentTag([19u8; 32]),
-        signature: Signature([20u8; 64]),
+        commitment_tag: FixedBytes::from_array([19u8; 32]),
+        signature: FixedBytes::from_array([20u8; 64]),
     };
 
     let bytes = postcard::to_allocvec(&snapshot).unwrap();
@@ -90,15 +90,15 @@ fn snapshot_roundtrip() {
 fn ephemeral_roundtrip() {
     let ephemeral = Ephemeral {
         ciphertext: Ciphertext(vec![21, 22, 23]),
-        nonce: Nonce([24u8; 24]),
+        nonce: FixedBytes::from_array([24u8; 24]),
         public_data: EphemeralPublicData {
             document_id: Id::<Document>::mint(),
-            pub_key: PublicKey::from_array([25u8; 32]),
-            key_id: KeyId::from_array([8u8; 16]),
+            pub_key: FixedBytes::from_array([25u8; 32]),
+            key_id: FixedBytes::from_array([8u8; 16]),
             counter: Counter(26),
         },
-        commitment_tag: CommitmentTag([27u8; 32]),
-        signature: Signature([28u8; 64]),
+        commitment_tag: FixedBytes::from_array([27u8; 32]),
+        signature: FixedBytes::from_array([28u8; 64]),
     };
 
     let bytes = postcard::to_allocvec(&ephemeral).unwrap();
@@ -120,16 +120,16 @@ fn ephemeral_roundtrip() {
 fn ws_messages_roundtrip() {
     let update = Update {
         ciphertext: Ciphertext(vec![1]),
-        nonce: Nonce([2u8; 24]),
+        nonce: FixedBytes::from_array([2u8; 24]),
         public_data: UpdatePublicData {
             document_id: Id::<Document>::mint(),
-            pub_key: PublicKey::from_array([3u8; 32]),
-            key_id: KeyId::from_array([8u8; 16]),
+            pub_key: FixedBytes::from_array([3u8; 32]),
+            key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Clock(4),
         },
-        commitment_tag: CommitmentTag([5u8; 32]),
-        signature: Signature([6u8; 64]),
+        commitment_tag: FixedBytes::from_array([5u8; 32]),
+        signature: FixedBytes::from_array([6u8; 64]),
     };
 
     let client_msg = WsClientMsg::Update(update.clone());
@@ -244,36 +244,36 @@ fn only_a_newer_wire_version_calls_for_an_update() {
 
 /// The digest of one frame per message variant, frozen under the version
 /// byte it was taken at (`ambre-spec-broadcast.md`, `SRV-166`).
-const FROZEN_LAYOUT: (u8, &str) = (1, "7ab33ba537221250a1ea60609e35ba2c");
+const FROZEN_LAYOUT: (u8, &str) = (1, "c1985c0e3889a14100b99c48d8952d65");
 
 fn sample_update(fill: u8) -> Update {
     Update {
         ciphertext: Ciphertext(vec![fill, fill + 1]),
-        nonce: Nonce([fill; 24]),
+        nonce: FixedBytes::from_array([fill; 24]),
         public_data: UpdatePublicData {
             document_id: Id::<Document>::from_bytes([fill; 16]),
-            pub_key: PublicKey::from_array([fill + 2; 32]),
-            key_id: KeyId::from_array([fill + 3; 16]),
+            pub_key: FixedBytes::from_array([fill + 2; 32]),
+            key_id: FixedBytes::from_array([fill + 3; 16]),
             snapshot_id: Id::<id::Snapshot>::from_bytes([fill + 4; 16]),
             clock: Clock(u64::from(fill) + 5),
         },
-        commitment_tag: CommitmentTag([fill + 6; 32]),
-        signature: Signature([fill + 7; 64]),
+        commitment_tag: FixedBytes::from_array([fill + 6; 32]),
+        signature: FixedBytes::from_array([fill + 7; 64]),
     }
 }
 
 fn sample_ephemeral(fill: u8) -> Ephemeral {
     Ephemeral {
         ciphertext: Ciphertext(vec![fill]),
-        nonce: Nonce([fill + 1; 24]),
+        nonce: FixedBytes::from_array([fill + 1; 24]),
         public_data: EphemeralPublicData {
             document_id: Id::<Document>::from_bytes([fill + 2; 16]),
-            pub_key: PublicKey::from_array([fill + 3; 32]),
-            key_id: KeyId::from_array([fill + 4; 16]),
+            pub_key: FixedBytes::from_array([fill + 3; 32]),
+            key_id: FixedBytes::from_array([fill + 4; 16]),
             counter: Counter(u64::from(fill) + 5),
         },
-        commitment_tag: CommitmentTag([fill + 6; 32]),
-        signature: Signature([fill + 7; 64]),
+        commitment_tag: FixedBytes::from_array([fill + 6; 32]),
+        signature: FixedBytes::from_array([fill + 7; 64]),
     }
 }
 
@@ -291,11 +291,11 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
             after_seq: Seq(3),
         },
         C::Authenticate {
-            token: crate::ws::AccessToken::new("t".into()),
+            token: crate::ws::Credential::new("t".into()),
         },
         C::ClockResync {
             document_id: doc,
-            signature: Signature([41; 64]),
+            signature: FixedBytes::from_array([41; 64]),
         },
     ]
 }
@@ -313,7 +313,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::Ephemeral(sample_ephemeral(60)),
         S::PeerLeft {
             document_id: doc,
-            pub_key: PublicKey::from_array([5; 32]),
+            pub_key: FixedBytes::from_array([5; 32]),
         },
         S::MissingUpdates {
             document_id: doc,
@@ -340,14 +340,14 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         },
         S::KeyRefused {
             document_id: doc,
-            key_id: KeyId::from_array([10; 16]),
+            key_id: FixedBytes::from_array([10; 16]),
             clock: Clock(11),
         },
         S::ClockRefused {
             document_id: doc,
             clock: Clock(12),
             expected: Clock(13),
-            signature: Signature([14; 64]),
+            signature: FixedBytes::from_array([14; 64]),
         },
         S::MembersChanged { document_id: doc },
         S::ReplayStopped {
@@ -356,14 +356,14 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         },
         S::DeltaRefused {
             document_id: doc,
-            signature: Signature([16; 64]),
+            signature: FixedBytes::from_array([16; 64]),
             code: ambre_core::RefusalCode::PayloadTooLarge,
         },
         S::SnapshotDropped {
             document_id: doc,
             snapshot_id: Id::<id::Snapshot>::from_bytes([17; 16]),
-            author: PublicKey::from_array([18; 32]),
-            reporter: PublicKey::from_array([19; 32]),
+            author: FixedBytes::from_array([18; 32]),
+            reporter: FixedBytes::from_array([19; 32]),
             after: ambre_core::AfterDrop::Refinalize,
         },
         S::ThreadActivity { document_id: doc },
@@ -445,46 +445,46 @@ fn the_wire_layout_is_frozen_under_its_version() {
 #[test]
 fn the_relay_reads_only_the_listed_fields() {
     let doc = Id::<Document>::mint();
-    let pk = PublicKey::from_array([5u8; 32]);
-    let kid = KeyId::from_array([8u8; 16]);
+    let pk = FixedBytes::from_array([5u8; 32]);
+    let kid = FixedBytes::from_array([8u8; 16]);
     let update = Update {
         ciphertext: Ciphertext(vec![1]),
-        nonce: Nonce([0u8; 24]),
+        nonce: FixedBytes::from_array([0u8; 24]),
         public_data: UpdatePublicData {
             document_id: doc,
-            pub_key: pk.clone(),
+            pub_key: pk,
             key_id: kid,
             snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Clock(1),
         },
-        commitment_tag: CommitmentTag([6u8; 32]),
-        signature: Signature([7u8; 64]),
+        commitment_tag: FixedBytes::from_array([6u8; 32]),
+        signature: FixedBytes::from_array([7u8; 64]),
     };
     let snapshot = Snapshot {
         ciphertext: Ciphertext(vec![1]),
-        nonce: Nonce([0u8; 24]),
+        nonce: FixedBytes::from_array([0u8; 24]),
         public_data: SnapshotPublicData {
             document_id: doc,
-            pub_key: pk.clone(),
+            pub_key: pk,
             key_id: kid,
             snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: vec![],
         },
-        commitment_tag: CommitmentTag([6u8; 32]),
-        signature: Signature([7u8; 64]),
+        commitment_tag: FixedBytes::from_array([6u8; 32]),
+        signature: FixedBytes::from_array([7u8; 64]),
     };
     let ephemeral = Ephemeral {
         ciphertext: Ciphertext(vec![1]),
-        nonce: Nonce([0u8; 24]),
+        nonce: FixedBytes::from_array([0u8; 24]),
         public_data: EphemeralPublicData {
             document_id: doc,
-            pub_key: pk.clone(),
+            pub_key: pk,
             key_id: kid,
             counter: Counter(1),
         },
-        commitment_tag: CommitmentTag([6u8; 32]),
-        signature: Signature([7u8; 64]),
+        commitment_tag: FixedBytes::from_array([6u8; 32]),
+        signature: FixedBytes::from_array([7u8; 64]),
     };
 
     let Update {
@@ -571,32 +571,32 @@ fn frozen_digest(frame: &[u8]) -> String {
 /// verifying. A type that wraps one of them leaves these digests as they are.
 #[test]
 fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
-    use crate::membership::{ENTRY_SIGNATURE_LEN, EntryDigest};
+    use crate::membership::ENTRY_SIGNATURE_LEN;
     use crate::snapshot_report::report_transcript;
     use ambre_core::Role;
     let document = Id::<Document>::from_bytes([1; 16]);
     let link = KeyLink {
         document_id: document,
-        key: KeyId::from_array([2; 16]),
-        previous: KeyId::from_array([3; 16]),
-        sealed: ambre_core::SealedPreviousKey::new(vec![7; 5]),
+        key: FixedBytes::from_array([2; 16]),
+        previous: FixedBytes::from_array([3; 16]),
+        sealed: ambre_core::Payload::new(vec![7; 5]),
     };
     let entry = MembershipEntry {
         document,
         position: LogPosition::new(1),
         member: Id::<User>::from_bytes([2; 16]),
-        member_key: PublicKey::from_array([3; 32]),
+        member_key: FixedBytes::from_array([3; 32]),
         act: MembershipAct::Invite,
         role: Role::Editor,
-        key: Some(KeyId::from_array([4; 16])),
-        previous: Some(EntryDigest([5; 32])),
+        key: Some(FixedBytes::from_array([4; 16])),
+        previous: Some(FixedBytes::from_array([5; 32])),
         author: Id::<User>::from_bytes([6; 16]),
-        signature: Signature([7; ENTRY_SIGNATURE_LEN]),
+        signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
     };
     let transcript = report_transcript(
         document,
         Id::<id::Snapshot>::from_bytes([8; 16]),
-        &PublicKey::from_array([9; 32]),
+        &FixedBytes::from_array([9; 32]),
     );
     let peer = Id::<User>::from_bytes([10; 16]);
     let client = [
@@ -664,7 +664,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         digests,
         [
             ("key link", "cbf2375a41882f5485f3e8bc4221acf7".to_owned()),
-            ("entry", "c934239d013f5c75ff1467e32d503f16".to_owned()),
+            ("entry", "9ae9a8b1e141a84e0dfc37395bb2947d".to_owned()),
             (
                 "entry signed",
                 "5794caa1a99cb3f42d232280d662a90b".to_owned()

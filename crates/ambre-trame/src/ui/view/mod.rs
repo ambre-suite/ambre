@@ -254,7 +254,10 @@ fn formula_input_focused() -> bool {
 /// does not leak. Best-effort: any missing DOM handle is logged and skipped
 /// (the export bytes are already computed, only the download is lost).
 #[cfg(target_arch = "wasm32")]
-fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::FileBytes) {
+fn trigger_download(
+    filename: &ambre_core::ExportFilename,
+    data: &ambre_core::Payload<ambre_core::FileBytes>,
+) {
     use wasm_bindgen::JsCast;
     let array = js_sys::Uint8Array::from(data.as_bytes());
     let parts = js_sys::Array::new();
@@ -288,7 +291,11 @@ fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::Fi
 /// Host-build stub: there is no DOM to download into outside the browser. Kept
 /// so the exhaustive `dispatch_trame` compiles in headless tests.
 #[cfg(not(target_arch = "wasm32"))]
-fn trigger_download(_filename: &ambre_core::ExportFilename, _data: &ambre_core::FileBytes) {}
+fn trigger_download(
+    _filename: &ambre_core::ExportFilename,
+    _data: &ambre_core::Payload<ambre_core::FileBytes>,
+) {
+}
 
 /// Trame's view: a virtual-scroll spreadsheet grid (an `AppView::Trame`).
 /// A deferred cell-edit commit (applied at the next paint, after the editor

@@ -58,7 +58,10 @@ impl ToileState {
     /// The PNG bytes stored as one media address's thumbnail, if the document
     /// carries one (`toile-media`). Handed to the SVG export, which writes them
     /// inline (`TOILE-IO-087`).
-    fn thumbnail_png(&self, hash: &ambre_core::ContentHash) -> Option<ambre_core::ThumbnailPng> {
+    fn thumbnail_png(
+        &self,
+        hash: &ambre_core::ContentHash,
+    ) -> Option<ambre_core::Payload<ambre_core::ThumbnailPng>> {
         let loro::LoroValue::Map(entries) = self.doc.get_map(Root::Media.as_str()).get_deep_value()
         else {
             return None;
@@ -71,7 +74,9 @@ impl ToileState {
         else {
             return None;
         };
-        Some(ambre_core::ThumbnailPng::new(thumb.to_vec()))
+        Some(ambre_core::Payload::<ambre_core::ThumbnailPng>::new(
+            thumb.to_vec(),
+        ))
     }
 
     /// Serialize the board to an SVG document (`TOILE-IO-021`). Emits one
@@ -95,7 +100,7 @@ impl ToileState {
         );
         ToileOutcome::display_only(vec![ToileEvent::ExportComplete {
             filename: ambre_core::ExportFilename::named(SVG_STEM, ambre_core::ExportExtension::Svg),
-            data: ambre_core::FileBytes::new(export.document.into_bytes()),
+            data: ambre_core::Payload::<ambre_core::FileBytes>::new(export.document.into_bytes()),
             // What no SVG shape expresses, named rather than dropped in
             // silence (`TOILE-IO-025`).
             skipped: export.skipped,
@@ -184,7 +189,8 @@ impl ToileState {
         &self,
         page: crate::logic::interop::PageSize,
         font_cx: &mut ambre_draw::FontContext,
-    ) -> Result<ambre_core::FileBytes, crate::logic::interop::PdfExportError> {
+    ) -> Result<ambre_core::Payload<ambre_core::FileBytes>, crate::logic::interop::PdfExportError>
+    {
         let pages = self.pdf_pages(page);
         // The page camera maps world units onto PDF points 1:1, so the text
         // cache runs at unit scale like the export walk itself.
@@ -437,10 +443,10 @@ mod media_request_tests {
             media: crate::logic::command::MediaRef::Stored(
                 ContentHash::parse(hash).expect("a hash"),
             ),
-            plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
+            plaintext: ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from("image/png"),
             size: ambre_core::Size::new(ambre_core::Px::new(w), ambre_core::Px::new(h)),
-            thumb: ambre_core::ThumbnailPng::new(thumb),
+            thumb: ambre_core::Payload::<ambre_core::ThumbnailPng>::new(thumb),
         }
     }
 
@@ -479,7 +485,7 @@ mod media_request_tests {
             ambre_core::Size::new(ambre_core::Px::new(4), ambre_core::Px::new(2))
         );
         // RGBA8, row-major, no padding: exactly four bytes a texel.
-        assert_eq!(answer.2, 4 * 2 * 4);
+        assert_eq!(answer.2, ambre_core::ByteSize(4 * 2 * 4));
     }
 
     /// `TOILE-IO-103`: the board answers an address it does not carry with nothing. The element

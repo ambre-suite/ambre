@@ -309,7 +309,10 @@ fn a_large_document_is_deterministic() {
             .expect("the document reads")
     };
     let first = build(());
-    assert!(first.len() > 10_000, "a 5k-cell document, not an empty one");
+    assert!(
+        first.len() > ambre_bus::ByteSize(10_000),
+        "a 5k-cell document, not an empty one"
+    );
     assert_eq!(first, build(()));
 }
 

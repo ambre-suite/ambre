@@ -11,7 +11,7 @@ use std::io::Cursor;
 
 use super::*;
 use ambre_bus::{ContentHash, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent};
-use ambre_core::{ByteSize, MediaBytes};
+use ambre_core::{ByteSize, MediaBytes, Payload};
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
@@ -97,7 +97,7 @@ impl LogicState {
 
 /// Decode `media` into the frames of a preview. `None` for a type this
 /// client does not preview, a header past [`MAX_SIZE`], or a broken file.
-pub(crate) fn decode(media: &MediaBytes) -> Option<Picture> {
+pub(crate) fn decode(media: &Payload<MediaBytes>) -> Option<Picture> {
     let bytes = media.as_bytes();
     let format = image::guess_format(bytes).ok()?;
     let mut limits = Limits::default();
@@ -117,7 +117,7 @@ pub(crate) fn decode(media: &MediaBytes) -> Option<Picture> {
                 let Ok(frame) = frame else { break };
                 let (numer, denom) = frame.delay().numer_denom_ms();
                 let pixels = scale(frame.into_buffer(), size);
-                let after = held.saturating_add(ByteSize::of_len(pixels.len()));
+                let after = held.saturating_add(pixels.len());
                 if !frames.is_empty() && after > PICTURE_MAX_SIZE {
                     break;
                 }
@@ -161,7 +161,7 @@ fn fit(size: Size<Px<Image>>) -> Size<Px<Image>> {
 }
 
 /// The pixels of `image` at `size`.
-fn scale(image: RgbaImage, size: Size<Px<Image>>) -> ambre_core::RgbaPixels {
+fn scale(image: RgbaImage, size: Size<Px<Image>>) -> Payload<ambre_core::RgbaPixels> {
     if image.dimensions() == (size.width.get(), size.height.get()) {
         return image.into_raw().into();
     }
@@ -215,7 +215,7 @@ mod tests {
     /// with its delay, scaled into the preview. A delay of none plays slow.
     #[test]
     fn an_animated_gif_decodes_into_its_frames_at_the_preview_size() {
-        let picture = decode(&MediaBytes::new(gif(3, (960, 320), 70))).expect("a GIF");
+        let picture = decode(&Payload::new(gif(3, (960, 320), 70))).expect("a GIF");
         assert_eq!(picture.size, Size::new(Px::new(480), Px::new(160)));
         assert_eq!(picture.frames.len(), 3);
         assert!(
@@ -228,10 +228,10 @@ mod tests {
             picture
                 .frames
                 .iter()
-                .all(|f| f.pixels.len() == 480 * 160 * 4)
+                .all(|f| f.pixels.len() == ambre_bus::ByteSize(480 * 160 * 4))
         );
         assert_ne!(picture.frames[0].pixels, picture.frames[1].pixels);
-        let spinning = decode(&MediaBytes::new(gif(2, (8, 8), 0))).expect("a GIF");
+        let spinning = decode(&Payload::new(gif(2, (8, 8), 0))).expect("a GIF");
         assert!(spinning.frames.iter().all(|f| f.delay == SLOW_DELAY));
     }
 
@@ -239,11 +239,11 @@ mod tests {
     /// this client does not preview, or a broken one, decodes to nothing.
     #[test]
     fn a_still_image_is_one_frame_and_a_stranger_none() {
-        let picture = decode(&MediaBytes::new(png((40, 30)))).expect("a PNG");
+        let picture = decode(&Payload::new(png((40, 30)))).expect("a PNG");
         assert_eq!(picture.size, Size::new(Px::new(40), Px::new(30)));
         assert_eq!(picture.frames.len(), 1);
-        assert!(decode(&MediaBytes::new(b"%PDF-1.7".to_vec())).is_none());
-        assert!(decode(&MediaBytes::new(png((40, 30))[..20].to_vec())).is_none());
+        assert!(decode(&Payload::new(b"%PDF-1.7".to_vec())).is_none());
+        assert!(decode(&Payload::new(png((40, 30))[..20].to_vec())).is_none());
     }
 
     /// A header past the bound is refused before its pixels are allocated.
@@ -252,7 +252,7 @@ mod tests {
         let mut big = png((1, 1));
         // The IHDR width, past `MAX_SIZE`; the CRC no longer matches either.
         big[16..20].copy_from_slice(&(MAX_SIZE.width.get() + 1).to_be_bytes());
-        assert!(decode(&MediaBytes::new(big)).is_none());
+        assert!(decode(&Payload::new(big)).is_none());
     }
 
     /// An animation past the byte bound keeps the frames that fit.
@@ -260,7 +260,7 @@ mod tests {
     fn an_animation_past_the_bound_keeps_the_frames_that_fit() {
         let frame = 480 * 320 * 4;
         let fit = PICTURE_MAX_SIZE.as_len() / frame;
-        let picture = decode(&MediaBytes::new(gif(fit + 3, (480, 320), 50))).expect("a GIF");
+        let picture = decode(&Payload::new(gif(fit + 3, (480, 320), 50))).expect("a GIF");
         assert_eq!(picture.frames.len(), fit);
         assert!(picture.bytes() <= PICTURE_MAX_SIZE);
     }

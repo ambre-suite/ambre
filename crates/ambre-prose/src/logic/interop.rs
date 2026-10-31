@@ -485,7 +485,7 @@ impl ProseState {
         ProseOutcome::display_only(vec![ProseEvent::ExportReady {
             filename,
             media_type: format.media_type(),
-            data: ambre_core::FileBytes::new(text.into_bytes()),
+            data: ambre_core::Payload::<ambre_core::FileBytes>::new(text.into_bytes()),
             report,
         }])
     }
@@ -496,7 +496,7 @@ impl ProseState {
     pub(super) fn import_document(
         &mut self,
         format: ImportFormat,
-        data: &ambre_core::FileBytes,
+        data: &ambre_core::Payload<ambre_core::FileBytes>,
     ) -> ProseOutcome {
         let ImportFormat::Markdown = format;
         let (ir, report) = match markdown_read::read(data) {
@@ -654,7 +654,7 @@ mod tests {
     fn import(state: &mut ProseState, markdown: &str) -> ProseOutcome {
         state.handle_command(ProseCommand::ImportDocument {
             format: ImportFormat::Markdown,
-            data: ambre_core::FileBytes::new(markdown.as_bytes().to_vec()),
+            data: ambre_core::Payload::<ambre_core::FileBytes>::new(markdown.as_bytes().to_vec()),
         })
     }
 
@@ -773,7 +773,7 @@ mod tests {
         let before = state.doc.oplog_vv();
         let outcome = state.handle_command(ProseCommand::ImportDocument {
             format: ImportFormat::Markdown,
-            data: ambre_core::FileBytes::new(vec![0xff, 0xfe, 0xfd]),
+            data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![0xff, 0xfe, 0xfd]),
         });
         assert!(outcome.update.is_none());
         assert!(matches!(

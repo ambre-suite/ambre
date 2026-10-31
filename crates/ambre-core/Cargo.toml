@@ -25,9 +25,10 @@ testing = []
 # body is read so a malformed one is refused there (`SRV-178`).
 base64 = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-# The envelope byte newtypes (`envelope`) keep the wire form `ambre-protocol`
-# gave them: a length-prefixed byte string, not a tuple of integers. A serde
-# helper with no code of its own beyond that encoding.
+# The ciphertext of the envelope (`envelope`) keeps the wire form
+# `ambre-protocol` gave it: a length-prefixed byte string, not a sequence of
+# integers. A serde helper with no code of its own beyond that encoding. A
+# fixed-width value does not use it: `fixed_bytes` writes its own form.
 serde_bytes = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }

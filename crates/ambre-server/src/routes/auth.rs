@@ -50,12 +50,13 @@ pub async fn auth_config(
 /// The pubkeys are hex-encoded and derived deterministically client-side from
 /// the username; the server stores them so it can verify signatures. The name
 /// is the account's display name, so a body whose name breaks that rule does
-/// not decode (`SRV-234`).
+/// not decode (`SRV-234`). Nor does a key of the wrong length, so it is refused
+/// before any row is written (`SRV-232`).
 #[derive(serde::Deserialize)]
 pub struct DevLoginRequest {
     pub username: ambre_core::DisplayName,
-    pub signing_pub_key: ambre_core::SigningKeyHex,
-    pub exchange_pub_key: ambre_core::ExchangeKeyHex,
+    pub signing_pub_key: ambre_core::FixedBytes<ambre_core::PublicKey>,
+    pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
 }
 
 /// Response for `POST /api/auth/dev/login`.
@@ -65,9 +66,9 @@ pub struct DevLoginResponse {
     pub user_id: Id<User>,
     pub display_name: ambre_core::DisplayName,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
-    pub access_token: ambre_protocol::ws::AccessToken,
+    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
     pub access_expires_in: ambre_core::Seconds,
 }
@@ -86,21 +87,13 @@ pub async fn dev_login(
     if state.config.dev_mode == crate::state::DevMode::Off {
         return Err(AppError::Unauthorized);
     }
-    // A key of the wrong length is refused before any row is written
-    // (`SRV-232`).
-    let signing_pubkey = hex::decode(req.signing_pub_key.as_str())
-        .map_err(|e| e.to_string())
-        .and_then(|bytes| ambre_core::PublicKey::from_slice(&bytes).map_err(|e| e.to_string()))
-        .map_err(|e| AppError::BadRequest(format!("invalid signing_pub_key: {e}")))?;
-    let exchange_pubkey = hex::decode(req.exchange_pub_key.as_str())
-        .map_err(|e| e.to_string())
-        .and_then(|bytes| {
-            ambre_core::ExchangePublicKey::from_slice(&bytes).map_err(|e| e.to_string())
-        })
-        .map_err(|e| AppError::BadRequest(format!("invalid exchange_pub_key: {e}")))?;
-
-    let user =
-        db::dev_upsert_user(&state.db, &req.username, &signing_pubkey, &exchange_pubkey).await?;
+    let user = db::dev_upsert_user(
+        &state.db,
+        &req.username,
+        &req.signing_pub_key,
+        &req.exchange_pub_key,
+    )
+    .await?;
 
     let user_id = user.id;
     // The upsert above writes both keys, so a dev account always holds one.
@@ -127,21 +120,23 @@ pub async fn dev_login(
 ///
 /// A stored key that does not parse never reaches here: the row read refuses
 /// it, rather than a fallback key every such account would share.
-fn account_session_key(user: &db::UserRow) -> Option<ambre_core::PublicKey> {
-    user.signing_pubkey.clone()
+fn account_session_key(
+    user: &db::UserRow,
+) -> Option<ambre_core::FixedBytes<ambre_core::PublicKey>> {
+    user.signing_pubkey
 }
 
 /// Request body for `POST /api/auth/refresh`: the opaque refresh token.
 #[derive(serde::Deserialize)]
 pub struct RefreshRequest {
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
 }
 
 /// Response for `POST /api/auth/refresh`: a freshly rotated token pair.
 #[derive(serde::Serialize)]
 pub struct RefreshResponse {
-    pub access_token: ambre_protocol::ws::AccessToken,
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     pub access_expires_in: ambre_core::Seconds,
 }
 
@@ -312,11 +307,13 @@ mod tests {
         assert!(crate::db::decode_key(Vec::new()).is_err());
         assert_eq!(
             crate::db::decode_key(vec![3u8; 32]).unwrap(),
-            ambre_core::PublicKey::from_array([3u8; 32])
+            ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32])
         );
     }
 
-    fn provider_row(signing_pubkey: Option<ambre_core::PublicKey>) -> db::UserRow {
+    fn provider_row(
+        signing_pubkey: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
+    ) -> db::UserRow {
         db::UserRow {
             id: Id::<User>::mint(),
             oidc_subject: Some(openidconnect::SubjectIdentifier::new("subject".into())),
@@ -325,11 +322,11 @@ mod tests {
             display_name: ambre_core::DisplayName::new("A").unwrap(),
             master_key_enc: signing_pubkey
                 .as_ref()
-                .map(|_| ambre_core::WrappedMasterKey::new(vec![1u8; 56])),
+                .map(|_| ambre_core::Encoded::new(vec![1u8; 56])),
             master_key_salt: None,
-            exchange_pubkey: signing_pubkey
-                .as_ref()
-                .map(|_| ambre_core::ExchangePublicKey::from_array([4u8; 32])),
+            exchange_pubkey: signing_pubkey.as_ref().map(|_| {
+                ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32])
+            }),
             signing_pubkey,
         }
     }
@@ -341,10 +338,14 @@ mod tests {
         let fresh = provider_row(None);
         assert_eq!(account_session_key(&fresh), None);
 
-        let set_up = provider_row(Some(ambre_core::PublicKey::from_array([3u8; 32])));
+        let set_up = provider_row(Some(
+            ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
+        ));
         assert_eq!(
             account_session_key(&set_up),
-            Some(ambre_core::PublicKey::from_array([3u8; 32]))
+            Some(ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+                [3u8; 32]
+            ))
         );
     }
 }

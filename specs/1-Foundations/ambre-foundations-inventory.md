@@ -26,7 +26,7 @@
 | `kinetic-scroll` | A finger moves the view the same way in every editor. | implemented | 15 |  |
 | `media` | A picture in a document travels apart from it. | implemented | 18 |  |
 | `membership` | Sharing a document hands one person the key to it, sealed for that person alone. | implemented | 35 |  |
-| `message-bus` | The contract the three threads talk over. | implemented | 30 |  |
+| `message-bus` | The contract the three threads talk over. | implemented | 31 |  |
 | `op-authorship` | Who wrote each operation of a document. | implemented | 29 |  |
 | `presence` | Where the other collaborators are, right now: a position in each peer's colour, their name beside it, and what they hold selected. | implemented | 15 |  |
 | `residency` | Which documents a client holds, in memory and on disk, and what a document it does not hold still costs. | implemented | 27 |  |
@@ -51,7 +51,7 @@
 | `profile` | The avatar that stands for a user in every application: a picture the user chooses, or their initials on their identity colour. | partial | 9 |  |
 | `render-assets` | What the renderer loads before it can draw anything: the fonts a script needs, the glyphs rasterized from them, the icons, the embedded images. | partial | 23 |  |
 | `sealed-envelope` | Nothing a user writes leaves the browser readable. | partial | 24 |  |
-| `server` | The one process every client talks to. | partial | 89 | 1 |
+| `server` | The one process every client talks to. | partial | 90 | 1 |
 | `sync` | The one part of the client that talks to the network. | partial | 52 |  |
 | `text-editor` | Typing inside one unit of text drawn on the canvas: a spreadsheet cell, a sticky note, a label on a shape. | partial | 20 |  |
 | `ui` | The page's own thread. | partial | 20 |  |
@@ -62,4 +62,4 @@
 | `user-settings` | The choices one user makes for themselves, kept in one sealed document that follows them from device to device. | design-only | 15 |  |
 | `zoom` | A user zooms with the same keys, the same wheel and the same pinch in every editor, and reads the factor from one chip. | design-only | 10 |  |
 
-**46 features: 20 implemented, 21 partial, 5 design-only. 1139 contract rows, 9 loose.**
+**46 features: 20 implemented, 21 partial, 5 design-only. 1141 contract rows, 9 loose.**

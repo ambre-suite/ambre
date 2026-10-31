@@ -678,7 +678,7 @@ fn clip(origin: Rect) -> ambre_bus::ClipboardBlob {
         html: None,
         ambre: postcard::to_allocvec(&payload)
             .ok()
-            .map(ambre_core::ClipboardBytes::new),
+            .map(ambre_core::Payload::<ambre_core::ClipboardBytes>::new),
         form: ambre_core::PasteForm::Rich,
     }
 }
@@ -1056,7 +1056,7 @@ fn a_finished_export_is_handed_to_the_browser_and_nothing_else() {
 
     rig.answer(ToileEvent::ExportComplete {
         filename: ambre_core::ExportFilename::named("deck", ambre_core::ExportExtension::Pdf),
-        data: ambre_core::FileBytes::new(b"%PDF-1.7".to_vec()),
+        data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"%PDF-1.7".to_vec()),
         skipped: Vec::new(),
     });
     rig.frame();

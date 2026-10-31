@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use ambre_core::FixedBytes;
 use ambre_core::id::{
     Channel, Document, Entity, Id, Lease, Message, Meta, Org, Segment, Snapshot, Space, User,
 };
@@ -80,14 +81,14 @@ fn decode_clock(value: i64) -> Result<ambre_protocol::messages::Clock, sqlx::Err
 
 /// A stored public key. Any length but 32 bytes is a decode error: the relay
 /// never hands a peer a key it could not have registered.
-pub(crate) fn decode_key(bytes: Vec<u8>) -> Result<ambre_core::PublicKey, sqlx::Error> {
-    ambre_core::PublicKey::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+pub(crate) fn decode_key(bytes: Vec<u8>) -> Result<FixedBytes<ambre_core::PublicKey>, sqlx::Error> {
+    FixedBytes::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
 /// A stored document key identifier. Any length but its own is a decode
 /// error.
-fn decode_key_id(bytes: Vec<u8>) -> Result<ambre_core::KeyId, sqlx::Error> {
-    ambre_core::KeyId::split_from(&bytes)
+fn decode_key_id(bytes: Vec<u8>) -> Result<FixedBytes<ambre_core::KeyId>, sqlx::Error> {
+    FixedBytes::<ambre_core::KeyId>::split_from(&bytes)
         .filter(|(_, rest)| rest.is_empty())
         .map(|(key_id, _)| key_id)
         .ok_or_else(|| sqlx::Error::Decode(format!("a key id of {} bytes", bytes.len()).into()))
@@ -111,30 +112,32 @@ impl<T: From<Vec<u8>>> From<PgOptBytes> for Option<T> {
 #[sqlx(transparent)]
 pub(crate) struct PgKey(Vec<u8>);
 
-impl TryFrom<PgKey> for ambre_core::PublicKey {
-    type Error = ambre_core::PublicKeyError;
+impl TryFrom<PgKey> for FixedBytes<ambre_core::PublicKey> {
+    type Error = ambre_core::FixedBytesError;
 
     fn try_from(PgKey(bytes): PgKey) -> Result<Self, Self::Error> {
-        ambre_core::PublicKey::from_slice(&bytes)
+        FixedBytes::from_slice(&bytes)
     }
 }
 
-impl TryFrom<PgKey> for ambre_core::ExchangePublicKey {
-    type Error = ambre_core::PublicKeyError;
+impl TryFrom<PgKey> for FixedBytes<ambre_core::ExchangePublicKey> {
+    type Error = ambre_core::FixedBytesError;
 
     fn try_from(PgKey(bytes): PgKey) -> Result<Self, Self::Error> {
-        ambre_core::ExchangePublicKey::from_slice(&bytes)
+        FixedBytes::from_slice(&bytes)
     }
 }
 
-/// A stored master-key salt. Any length but [`ambre_core::MasterKeySalt::LEN`]
+/// A stored master-key salt. Any length but [`ambre_core::MASTER_KEY_SALT_LEN`]
 /// is a decode error, as for [`decode_key`].
-fn decode_salt(bytes: Vec<u8>) -> Result<ambre_core::MasterKeySalt, sqlx::Error> {
-    ambre_core::MasterKeySalt::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+fn decode_salt(bytes: Vec<u8>) -> Result<FixedBytes<ambre_core::MasterKeySalt>, sqlx::Error> {
+    FixedBytes::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
 /// A stored public key that may be `NULL`, as [`decode_key`] reads one.
-fn decode_opt_key(bytes: Option<Vec<u8>>) -> Result<Option<ambre_core::PublicKey>, sqlx::Error> {
+fn decode_opt_key(
+    bytes: Option<Vec<u8>>,
+) -> Result<Option<FixedBytes<ambre_core::PublicKey>>, sqlx::Error> {
     bytes.map(decode_key).transpose()
 }
 
@@ -142,15 +145,15 @@ fn decode_opt_key(bytes: Option<Vec<u8>>) -> Result<Option<ambre_core::PublicKey
 /// as for [`decode_key`].
 pub(crate) fn decode_exchange_key(
     bytes: Vec<u8>,
-) -> Result<ambre_core::ExchangePublicKey, sqlx::Error> {
-    ambre_core::ExchangePublicKey::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
+) -> Result<FixedBytes<ambre_core::ExchangePublicKey>, sqlx::Error> {
+    FixedBytes::from_slice(&bytes).map_err(|e| sqlx::Error::Decode(Box::new(e)))
 }
 
 /// A stored exchange key that may be `NULL`, as [`decode_exchange_key`]
 /// reads one.
 fn decode_opt_exchange_key(
     bytes: Option<Vec<u8>>,
-) -> Result<Option<ambre_core::ExchangePublicKey>, sqlx::Error> {
+) -> Result<Option<FixedBytes<ambre_core::ExchangePublicKey>>, sqlx::Error> {
     bytes.map(decode_exchange_key).transpose()
 }
 
@@ -291,10 +294,10 @@ mod tests {
             &pool,
             &ambre_core::Email::from("snap@test.dev"),
             &ambre_core::DisplayName::new("Snap").unwrap(),
-            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
-            &ambre_core::PublicKey::from_array([3u8; 32]),
-            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
+            &ambre_core::Encoded::new([1u8; 32].to_vec()),
+            &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
         )
         .await
         .expect("create user");
@@ -311,7 +314,7 @@ mod tests {
         let sid = create_snapshot(
             &pool,
             &document_id,
-            &ambre_core::PublicKey::from_array(author),
+            &FixedBytes::<ambre_core::PublicKey>::from_array(author),
             &clocks,
             &ambre_core::ObjectKey::from("s3/key/snap"),
             ambre_core::Seq(1500),
@@ -322,7 +325,7 @@ mod tests {
             &pool,
             &document_id,
             &sid,
-            &ambre_core::PublicKey::from_array([9u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32]),
         )
         .await
         .expect("confirm snapshot");
@@ -363,10 +366,10 @@ mod tests {
             &pool,
             &ambre_core::Email::from("purge@test.dev"),
             &ambre_core::DisplayName::new("Purge").unwrap(),
-            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
-            &ambre_core::PublicKey::from_array([3u8; 32]),
-            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
+            &ambre_core::Encoded::new([1u8; 32].to_vec()),
+            &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
         )
         .await
         .expect("create user");
@@ -383,7 +386,7 @@ mod tests {
             insert_update(
                 &pool,
                 &document_id,
-                &ambre_core::PublicKey::from_array(author),
+                &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
                 ambre_core::Seq(seq.unsigned_abs()),
@@ -397,7 +400,7 @@ mod tests {
         let sid = create_snapshot(
             &pool,
             &document_id,
-            &ambre_core::PublicKey::from_array(author),
+            &FixedBytes::<ambre_core::PublicKey>::from_array(author),
             &serde_json::json!({}),
             &ambre_core::ObjectKey::from("s3/snap"),
             ambre_core::Seq(6),
@@ -408,7 +411,7 @@ mod tests {
             &pool,
             &document_id,
             &sid,
-            &ambre_core::PublicKey::from_array([9u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32]),
         )
         .await
         .expect("confirm snapshot");
@@ -444,10 +447,10 @@ mod tests {
             &pool,
             &ambre_core::Email::from("horizon@test.dev"),
             &ambre_core::DisplayName::new("Horizon").unwrap(),
-            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
-            &ambre_core::MasterKeySalt::from_array([2u8; 32]),
-            &ambre_core::PublicKey::from_array([3u8; 32]),
-            &ambre_core::ExchangePublicKey::from_array([4u8; 32]),
+            &ambre_core::Encoded::new([1u8; 32].to_vec()),
+            &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
+            &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
+            &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
         )
         .await
         .expect("create user");
@@ -463,7 +466,7 @@ mod tests {
             insert_update(
                 &pool,
                 &document_id,
-                &ambre_core::PublicKey::from_array(author),
+                &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
                 ambre_core::Seq(seq.unsigned_abs()),
@@ -477,7 +480,7 @@ mod tests {
             let sid = create_snapshot(
                 &pool,
                 &document_id,
-                &ambre_core::PublicKey::from_array(author),
+                &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &serde_json::json!({}),
                 &ambre_core::ObjectKey(format!("s3/snap-{covered}")),
                 ambre_core::Seq::try_from(covered).expect("a relay number"),
@@ -488,7 +491,7 @@ mod tests {
                 &pool,
                 &document_id,
                 &sid,
-                &ambre_core::PublicKey::from_array([9u8; 32]),
+                &FixedBytes::<ambre_core::PublicKey>::from_array([9u8; 32]),
             )
             .await
             .expect("confirm snapshot");

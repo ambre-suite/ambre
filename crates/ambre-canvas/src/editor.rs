@@ -1214,7 +1214,7 @@ mod tests {
             faces
                 .iter()
                 .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"))
-                .map(ambre_core::FontBytes::new),
+                .map(ambre_core::Payload::new),
         )
     }
 

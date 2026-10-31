@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_core::id::{Channel, Document, Id, Meta, Segment};
-use ambre_core::{DeltaBytes, LoroPayloadRef, Seq};
+use ambre_core::{DeltaBytes, LoroPayloadRef, Payload, Seq};
 use loro::LoroDoc;
 
 use crate::channel::{ChannelState, live_segments};
@@ -149,7 +149,7 @@ impl OpeningChannel {
         &mut self,
         document_id: Id<Document>,
         seq: Seq,
-        payload: &DeltaBytes,
+        payload: &Payload<DeltaBytes>,
         signer: Signer,
     ) -> Result<(), MurmureError> {
         if !self.expects(document_id) {

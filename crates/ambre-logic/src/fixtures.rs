@@ -521,7 +521,9 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(Id<Document>, DocSta
         }
         Err(e) => return Err(FixtureError::Io(e)),
     };
-    import_fixture(&ambre_core::PlaintextContainer::new(bytes))
+    import_fixture(&ambre_core::Payload::<ambre_core::PlaintextContainer>::new(
+        bytes,
+    ))
 }
 
 /// Parse plaintext `.ambre` bytes into a live state through the production import
@@ -545,7 +547,7 @@ pub fn load_fixture_from(dir: &Path, name: &str) -> Result<(Id<Document>, DocSta
 /// [`FixtureError::Container`] on bytes the container or the engine refuses,
 /// and [`FixtureError::NoEngine`] for a type with no engine.
 pub fn import_fixture(
-    container: &ambre_core::PlaintextContainer,
+    container: &ambre_core::Payload<ambre_core::PlaintextContainer>,
 ) -> Result<(Id<Document>, DocState), FixtureError> {
     let doc_type = read_ambre_plaintext(container)?.doc_type;
     // Pinned reader, not `DocState::new`: the receiving state commits its own
@@ -629,7 +631,7 @@ pub fn read_manifest(dir: &Path, name: &str) -> Result<FixtureManifest, FixtureE
 /// another type than the generator declares.
 pub fn manifest_for(
     generator: &dyn FixtureGen,
-    container: &ambre_core::PlaintextContainer,
+    container: &ambre_core::Payload<ambre_core::PlaintextContainer>,
 ) -> Result<FixtureManifest, FixtureError> {
     let (_document_id, state) = import_fixture(container)?;
     if state.doc_type() != generator.doc_type() {
@@ -657,7 +659,9 @@ pub fn manifest_for(
 ///
 /// The keyless digest is [`ambre_crypto::hash::file_digest`], never a link
 /// of the snapshot chain.
-pub fn digest_of(container: &ambre_core::PlaintextContainer) -> ambre_core::FileDigest {
+pub fn digest_of(
+    container: &ambre_core::Payload<ambre_core::PlaintextContainer>,
+) -> ambre_core::FixedBytes<ambre_core::FileDigest> {
     ambre_crypto::hash::file_digest(container)
 }
 
@@ -1024,7 +1028,7 @@ pub fn check_corpus(
         let name = name.as_str();
         let fresh = write_fixture(*generator, scratch)?;
         let committed = match fs::read(artifact_path(&current, name)) {
-            Ok(bytes) => ambre_core::PlaintextContainer::new(bytes),
+            Ok(bytes) => ambre_core::Payload::<ambre_core::PlaintextContainer>::new(bytes),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 report.drifts.push(Drift::Missing {
                     name: name.to_owned(),
@@ -1140,8 +1144,9 @@ fn check_frozen(
             Some(slot) => slot.1 += 1,
             None => per_type.push((manifest.doc_type, 1)),
         }
-        let bytes =
-            ambre_core::PlaintextContainer::new(fs::read(artifact_path(&frozen, &entry.stem))?);
+        let bytes = ambre_core::Payload::<ambre_core::PlaintextContainer>::new(fs::read(
+            artifact_path(&frozen, &entry.stem),
+        )?);
         if digest_of(&bytes) != manifest.digest {
             report.drifts.push(Drift::Frozen {
                 stem: entry.stem.clone(),

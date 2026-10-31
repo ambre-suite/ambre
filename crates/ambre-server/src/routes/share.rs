@@ -20,7 +20,7 @@ pub(crate) struct Expected {
     pub role: Option<Role>,
     /// The key the entry names, when the route knows it. That is the key an
     /// invite wraps, the key a revoke installs, or none for a role change.
-    pub key: Option<Option<ambre_core::KeyId>>,
+    pub key: Option<Option<ambre_core::FixedBytes<ambre_core::KeyId>>>,
 }
 
 /// Decodes and checks the signed membership entry a request carries
@@ -32,7 +32,7 @@ pub(crate) async fn checked_entry(
     state: &AppState,
     auth: &auth::AuthSession,
     doc_id: Id<Document>,
-    entry: Option<&ambre_core::EncodedLogEntry>,
+    entry: Option<&ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
     expected: Expected,
 ) -> Result<Option<db::LogEntry>, AppError> {
     use ed25519_dalek::{Signature, VerifyingKey};
@@ -53,7 +53,7 @@ pub(crate) async fn checked_entry(
         && expected.role.is_none_or(|role| entry.role == role)
         && expected.key.is_none_or(|key| entry.key == key)
         && first == entry.position.is_first()
-        && member_key.as_ref().map(ambre_core::PublicKey::as_slice)
+        && member_key.as_ref().map(ambre_core::FixedBytes::as_slice)
             == Some(entry.member_key.as_slice());
     if !records {
         return Err(AppError::BadRequest(
@@ -63,7 +63,7 @@ pub(crate) async fn checked_entry(
     let signed = entry
         .signed_bytes()
         .map_err(|e| AppError::BadRequest(format!("entry: {e}")))?;
-    let signature = Signature::from_bytes(&entry.signature.0);
+    let signature = Signature::from_bytes(entry.signature.as_array());
     VerifyingKey::from_bytes(auth.signing_pubkey.as_array())
         .and_then(|key| key.verify_strict(signed.as_bytes(), &signature))
         .map_err(|_| AppError::InvalidSignature)?;
@@ -88,14 +88,14 @@ pub struct InviteRequest {
     /// always has, rather than the extractor's 422.
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
     /// refuses the invitation (`SRV-168`).
     #[serde(with = "ambre_core::serde_id::text")]
-    pub key_id: ambre_core::KeyId,
+    pub key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
     /// The signed entry the invite appends to the log (`SYNC-105`).
     #[serde(default)]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 #[derive(serde::Serialize)]
 pub struct InviteResponse {
@@ -241,7 +241,7 @@ pub async fn invite_to_document(
 #[derive(serde::Deserialize)]
 pub struct RemovalRequest {
     #[serde(default)]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 pub async fn revoke_from_document(
@@ -340,10 +340,10 @@ pub struct RevokeRequest {
     #[serde(with = "ambre_core::serde_id::text::vec")]
     pub members: Vec<Id<User>>,
     /// The link back to the key the revoke replaces (`SYNC-118`).
-    pub link: ambre_core::EncodedKeyLink,
+    pub link: ambre_core::Encoded<ambre_core::EncodedKeyLink>,
     /// The signed entry that records the removal (`SYNC-132`).
     #[serde(default)]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// Removes a member and installs the new key for everyone who stays, in one
@@ -362,7 +362,7 @@ pub async fn revoke_and_rotate(
     if m.role != Role::Owner {
         return Err(AppError::Forbidden);
     }
-    let keys = decode_keys(&req.keys)?;
+    let keys = decode_keys(&req.keys);
     let members = req.members;
     let link = decode_link(&req.link, doc_id)?;
     let expected = Expected {
@@ -532,17 +532,17 @@ async fn restore_debt_mirror(state: &AppState, doc_id: &Id<Document>) {
 /// Decodes the wrapped copies of a rotation payload.
 fn decode_keys(
     entries: &[RotateKeyEntry],
-) -> Result<Vec<(Id<User>, ambre_core::WrappedDocKey)>, AppError> {
-    Ok(entries
+) -> Vec<(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)> {
+    entries
         .iter()
         .map(|e| (e.user_id, e.doc_key_enc.clone()))
-        .collect())
+        .collect()
 }
 
 /// Decodes a rotation's link and refuses one the relay must not store: a
 /// malformed one, one past the size bound, one of another document.
 fn decode_link(
-    sent: &ambre_core::EncodedKeyLink,
+    sent: &ambre_core::Encoded<ambre_core::EncodedKeyLink>,
     doc_id: Id<Document>,
 ) -> Result<ambre_protocol::KeyLink, AppError> {
     let link = ambre_protocol::KeyLink::decode(sent)
@@ -578,7 +578,7 @@ pub async fn list_key_links(
 /// Every link of a document, each in URL-safe base64, oldest first.
 #[derive(serde::Serialize)]
 pub struct KeyLinksResponse {
-    pub links: Vec<ambre_core::EncodedKeyLink>,
+    pub links: Vec<ambre_core::Encoded<ambre_core::EncodedKeyLink>>,
 }
 
 /// Request to rotate the Document Key after revoking a member.
@@ -590,14 +590,14 @@ pub struct RotateKeyRequest {
     #[serde(with = "ambre_core::serde_id::text::vec")]
     pub members: Vec<Id<User>>,
     /// The link back to the key the rotation replaces (`SYNC-118`).
-    pub link: ambre_core::EncodedKeyLink,
+    pub link: ambre_core::Encoded<ambre_core::EncodedKeyLink>,
 }
 /// One entry in the rotation payload: a user and their re-encrypted DocumentKey.
 #[derive(serde::Deserialize)]
 pub struct RotateKeyEntry {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
 }
 
 pub async fn rotate_document_key(
@@ -625,7 +625,7 @@ pub async fn rotate_document_key(
         return Err(AppError::Forbidden);
     }
 
-    let keys = decode_keys(&req.keys)?;
+    let keys = decode_keys(&req.keys);
     let members = req.members;
     let link = decode_link(&req.link, doc_id)?;
     db::rotate_document_keys(&state.db, &doc_id, &s.user_id, &keys, &members, &link).await?;

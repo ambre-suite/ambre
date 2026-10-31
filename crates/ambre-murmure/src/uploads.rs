@@ -37,7 +37,7 @@ pub struct PickedFile {
     pub name: String,
     /// The type the browser named, empty when it named none.
     pub media_type: MediaType,
-    pub data: ambre_core::MediaBytes,
+    pub data: ambre_core::Payload<ambre_core::MediaBytes>,
 }
 
 impl std::fmt::Debug for PickedFile {
@@ -314,7 +314,7 @@ mod tests {
         let picked = PickedFile {
             name: "secret.pdf".to_owned(),
             media_type: MediaType("application/pdf".to_owned()),
-            data: ambre_core::MediaBytes::new(b"secret".to_vec()),
+            data: ambre_core::Payload::<ambre_core::MediaBytes>::new(b"secret".to_vec()),
         };
         let shown = format!("{picked:?}");
         assert!(!shown.contains("secret"), "{shown}");

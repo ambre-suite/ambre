@@ -135,7 +135,9 @@ impl LogicState {
         document_id: Id<Document>,
         peer: ambre_core::PeerId,
         entry: &ambre_core::PeerEntry,
-    ) -> Option<Result<Option<ambre_core::DeltaBytes>, ambre_murmure::MurmureError>> {
+    ) -> Option<
+        Result<Option<ambre_core::Payload<ambre_core::DeltaBytes>>, ambre_murmure::MurmureError>,
+    > {
         let space = self
             .spaces
             .get_mut(&Id::<Space>::from_document(document_id))?;
@@ -248,7 +250,7 @@ impl LogicState {
     pub(crate) fn space_snapshot(
         &self,
         document_id: Id<Document>,
-    ) -> Option<(ambre_core::SnapshotBytes, Seq)> {
+    ) -> Option<(ambre_core::Payload<ambre_core::SnapshotBytes>, Seq)> {
         let space = self.spaces.get(&Id::<Space>::from_document(document_id))?;
         let payload = space
             .state
@@ -650,7 +652,7 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         from: Id<User>,
-        payload: &ambre_core::EphemeralBytes,
+        payload: &ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) -> bool {
         let space_id = Id::<Space>::from_document(document_id);
         if self.space_opening.contains_key(&space_id) {
@@ -2034,7 +2036,7 @@ mod tests {
             [SyncCommand::CloseDocument { .. }]
         ));
         assert!(state.spaces.is_empty());
-        let empty = ambre_core::DeltaBytes::default();
+        let empty = ambre_core::Payload::<ambre_core::DeltaBytes>::default();
         assert!(!state.apply_space_remote(
             space_id.document_id(),
             &[ambre_core::LoroPayloadRef::Delta(&empty)]
@@ -2059,7 +2061,12 @@ mod tests {
     }
 
     /// Every presence sample sent, with the document it went on.
-    fn samples(sent: &[SyncCommand]) -> Vec<(Id<Document>, ambre_core::EphemeralBytes)> {
+    fn samples(
+        sent: &[SyncCommand],
+    ) -> Vec<(
+        Id<Document>,
+        ambre_core::Payload<ambre_core::EphemeralBytes>,
+    )> {
         sent.iter()
             .filter_map(|c| match c {
                 SyncCommand::SendEphemeral {
@@ -2125,7 +2132,7 @@ mod tests {
         state: &mut LogicState,
         space_id: Id<Space>,
         from: Id<User>,
-        payload: ambre_core::EphemeralBytes,
+        payload: ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) {
         state.handle_logic_event(LogicEvent::RemoteEphemeral {
             document_id: space_id.document_id(),
@@ -2370,7 +2377,7 @@ mod tests {
             &mut state,
             space_id,
             bob,
-            ambre_core::EphemeralBytes::new(vec![9, 9, 9]),
+            ambre_core::Payload::<ambre_core::EphemeralBytes>::new(vec![9, 9, 9]),
         );
         assert!(drain(&ui).is_empty());
         assert!(drain(&sync).is_empty());

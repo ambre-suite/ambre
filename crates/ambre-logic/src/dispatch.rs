@@ -848,7 +848,9 @@ mod tests {
         let mut reopened =
             ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId(9)).expect("a document");
         let (id, _) = reopened
-            .import_ambre_plaintext(&ambre_core::PlaintextContainer::new(bytes))
+            .import_ambre_plaintext(&ambre_core::Payload::<ambre_core::PlaintextContainer>::new(
+                bytes,
+            ))
             .expect("the file opens");
         assert_eq!(id, document_id);
     }
@@ -1019,10 +1021,11 @@ mod tests {
         for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
             let document_id = Id::<Document>::mint();
             let bytes = exported_file(doc_type, document_id);
-            let header = ambre_core::docfile::read_ambre_plaintext(
-                &ambre_core::PlaintextContainer::new(bytes.to_vec()),
-            )
-            .expect("the command wrote a valid container");
+            let header =
+                ambre_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
+                    ambre_core::PlaintextContainer,
+                >::new(bytes.to_vec()))
+                .expect("the command wrote a valid container");
             assert_eq!(header.doc_type, doc_type, "the header names the wrong app");
             assert_eq!(
                 header.document_id, document_id,
@@ -1054,9 +1057,9 @@ mod tests {
             }),
         });
         let saved = exported_file_from(&state, document_id);
-        let header = ambre_core::docfile::read_ambre_plaintext(
-            &ambre_core::PlaintextContainer::new(saved.to_vec()),
-        )
+        let header = ambre_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
+            ambre_core::PlaintextContainer,
+        >::new(saved.to_vec()))
         .expect("valid container");
 
         // A second session, as a page load after the open gesture. Nothing is
@@ -1145,9 +1148,11 @@ mod tests {
     fn a_sealed_export_hands_the_plaintext_to_sync_and_nothing_to_the_ui() {
         for doc_type in [DocType::Trame, DocType::Toile] {
             let (_state, ui, _id, plaintext) = sealing(doc_type);
-            let header = ambre_core::docfile::read_ambre_plaintext(
-                &ambre_core::PlaintextContainer::new(plaintext.to_vec()),
-            )
+            let header = ambre_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
+                ambre_core::PlaintextContainer,
+            >::new(
+                plaintext.to_vec()
+            ))
             .expect("Sync was handed a valid plaintext container");
             assert_eq!(header.doc_type, doc_type);
             assert_eq!(
@@ -1167,7 +1172,9 @@ mod tests {
             state.handle_logic_event(LogicEvent::Rest {
                 id: Some(id),
                 evt: RestEvent::DocFileSealed {
-                    data: ambre_core::SealedContainer::new(b"sealed bytes".to_vec()),
+                    data: ambre_core::Payload::<ambre_core::SealedContainer>::new(
+                        b"sealed bytes".to_vec(),
+                    ),
                 },
             });
             assert_eq!(export_bytes(&ui).as_deref(), Some(&b"sealed bytes"[..]));
@@ -1223,7 +1230,9 @@ mod tests {
         state.handle_logic_event(LogicEvent::Rest {
             id: Some(id),
             evt: RestEvent::DocFileSealed {
-                data: ambre_core::SealedContainer::new(b"sealed bytes".to_vec()),
+                data: ambre_core::Payload::<ambre_core::SealedContainer>::new(
+                    b"sealed bytes".to_vec(),
+                ),
             },
         });
         assert_eq!(
@@ -1555,7 +1564,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Trame(TrameCommand::ImportCsv {
-                data: ambre_core::FileBytes::new(file.clone()),
+                data: ambre_core::Payload::<ambre_core::FileBytes>::new(file.clone()),
                 delimiter: None,
                 header: ambre_bus::HeaderRow::Absent,
                 target_sheet_id: None,
@@ -1796,7 +1805,7 @@ mod tests {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Toile(ToileCommand::ImportImage {
-                bytes: ambre_core::FileBytes::new(solid_png(8, 8)),
+                bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
                 mime: "image/png".into(),
                 at: kurbo::Point::ZERO,
             }),
@@ -2014,7 +2023,7 @@ mod tests {
                 invitee_email: Some(ambre_core::Email::from("a@b.c")),
                 invitee: user,
                 role: Role::Editor,
-                expect_exchange_pub_key: ambre_core::ExchangePublicKey::from_array([0; 32]),
+                expect_exchange_pub_key: FixedBytes::from_array([0; 32]),
                 now: ambre_bus::Timestamp(0),
             },
             RestCommand::RevokeFromDocument {
@@ -2048,7 +2057,7 @@ mod tests {
                 passphrase: typed(),
             },
             RestCommand::OpenDocFile {
-                sealed: ambre_core::SealedContainer::new(vec![1]),
+                sealed: ambre_core::Payload::<ambre_core::SealedContainer>::new(vec![1]),
                 passphrase: typed(),
             },
             RestCommand::SealLocalRow {
@@ -2058,7 +2067,7 @@ mod tests {
             RestCommand::OpenLocalRows {
                 rows: vec![ambre_bus::SealedRow {
                     place: ambre_bus::RowPlace::Document(doc),
-                    sealed: ambre_core::SealedRowBytes::new(vec![1]),
+                    sealed: ambre_core::Payload::<ambre_core::SealedRowBytes>::new(vec![1]),
                 }],
             },
             RestCommand::CreateMeeting {
@@ -2078,8 +2087,8 @@ mod tests {
             },
             RestCommand::ProviderReturn {
                 provider: ambre_core::OidcProvider::Google,
-                code: ambre_core::OidcCode::new("c".to_owned()),
-                state: ambre_core::OidcState::new("s".to_owned()),
+                code: ambre_core::Credential::new("c".to_owned()),
+                state: ambre_core::Credential::new("s".to_owned()),
             },
         ];
         for cmd in &all {
@@ -2169,12 +2178,12 @@ mod tests {
 
     /// The faces the workspace ships, read off the tree. A running peer gets
     /// the same bytes over the bus; here the test plays the Main thread.
-    fn shipped_faces() -> Vec<ambre_core::FontBytes> {
+    fn shipped_faces() -> Vec<ambre_core::Payload<ambre_core::FontBytes>> {
         const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         ["NotoSans-Regular.ttf", "DejaVuSerif.ttf"]
             .iter()
             .filter_map(|file| std::fs::read(format!("{DIR}{file}")).ok())
-            .map(ambre_core::FontBytes::new)
+            .map(ambre_core::Payload::<ambre_core::FontBytes>::new)
             .collect()
     }
 

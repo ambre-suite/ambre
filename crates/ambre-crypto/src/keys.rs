@@ -15,7 +15,10 @@
 
 use std::sync::Arc;
 
-use ambre_core::{EntryDigest, FileSalt, KeyId, SALT_LEN, Secret, SecretString, WrappedMasterKey};
+use ambre_core::{
+    Encoded, EntryDigest, FileSalt, FixedBytes, KeyId, SALT_LEN, Secret, SecretString,
+    WrappedMasterKey,
+};
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
 use x25519_dalek::StaticSecret;
@@ -67,7 +70,7 @@ fn key_of(bytes: &[u8]) -> Option<Secret<[u8; 32]>> {
 /// and an anchor.
 pub(crate) fn split_anchored(
     plain: &[u8],
-) -> Result<(DocumentKey, Option<EntryDigest>), CryptoError> {
+) -> Result<(DocumentKey, Option<FixedBytes<EntryDigest>>), CryptoError> {
     let (key, anchor) = match plain.len() {
         32 => (plain.get(..32), None),
         64 => (plain.get(..32), plain.get(32..)),
@@ -76,7 +79,7 @@ pub(crate) fn split_anchored(
     let key = key.and_then(key_of).ok_or(CryptoError::InvalidKeyLength)?;
     let anchor = anchor
         .and_then(|a| <[u8; 32]>::try_from(a).ok())
-        .map(EntryDigest);
+        .map(FixedBytes::from_array);
     Ok((DocumentKey::from_secret(key), anchor))
 }
 
@@ -148,11 +151,11 @@ impl MasterSeed {
         &self,
         key: &DocumentKey,
         aad: &ambre_core::Aad,
-    ) -> Result<WrappedMasterKey, CryptoError> {
+    ) -> Result<Encoded<WrappedMasterKey>, CryptoError> {
         let (nonce, ciphertext) = aead::seal(self.0.expose(), aad, key)?;
-        let mut wrapped = nonce.0.to_vec();
+        let mut wrapped = nonce.as_slice().to_vec();
         wrapped.extend_from_slice(&ciphertext.0);
-        Ok(WrappedMasterKey::new(wrapped))
+        Ok(Encoded::new(wrapped))
     }
 
     /// Opens a seed that [`Self::wrap_for_storage`] sealed under `key` with the
@@ -166,7 +169,7 @@ impl MasterSeed {
     /// * [`CryptoError::InvalidKeyLength`] when `wrapped` is too short to hold
     ///   a nonce, or the opened seed is not 32 bytes long.
     pub fn open_from_storage(
-        wrapped: &WrappedMasterKey,
+        wrapped: &Encoded<WrappedMasterKey>,
         key: &crate::passphrase::UserKey,
         aad: &ambre_core::Aad,
     ) -> Result<Self, CryptoError> {
@@ -175,7 +178,7 @@ impl MasterSeed {
             .split_first_chunk::<{ aead::NONCE_LEN }>()
             .ok_or(CryptoError::InvalidKeyLength)?;
         let opened = aead::open(
-            &ambre_core::Nonce(*nonce),
+            &FixedBytes::from_array(*nonce),
             &ambre_core::Ciphertext(ciphertext.to_vec()),
             aad,
             &key.document_key(),
@@ -222,12 +225,12 @@ impl DocumentKey {
     /// The identifier of this key: `BLAKE2b(domain || key)`, truncated
     /// (`SYNC-115`). It is derived from the key, so two keys never share one
     /// in practice, and it reveals nothing of the key it names.
-    pub fn id(&self) -> KeyId {
+    pub fn id(&self) -> FixedBytes<KeyId> {
         let digest = Blake2b512::new()
             .chain_update(KEY_ID_DOMAIN)
             .chain_update(self.0.expose())
             .finalize();
-        KeyId::from_array(crate::hash::prefix(&digest))
+        FixedBytes::from_array(crate::hash::prefix(&digest))
     }
 
     /// Seals `previous` under this key and signs it: one link of the key
@@ -261,7 +264,7 @@ impl DocumentKey {
         &self,
         sealed: &crate::Sealed,
         aad: &ambre_core::Aad,
-        author: &ambre_core::PublicKey,
+        author: &FixedBytes<ambre_core::PublicKey>,
     ) -> Result<DocumentKey, CryptoError> {
         let bytes = crate::envelope::open(sealed, aad, self, author)?;
         key_of(bytes.secret().expose())
@@ -324,7 +327,7 @@ impl FileKey {
     /// refuses. The BLAKE2b pass is infallible.
     pub fn from_passphrase(
         passphrase: &ambre_core::Passphrase,
-        salt: &FileSalt,
+        salt: &FixedBytes<FileSalt>,
     ) -> Result<Self, CryptoError> {
         let intermediate = crate::passphrase::argon2id(passphrase, salt.as_array())?;
         Ok(Self(derive32(FILE_DOMAIN, intermediate.expose())))
@@ -344,8 +347,8 @@ impl FileKey {
     /// draws is [`SALT_LEN`] bytes wide, which Argon2id accepts.
     pub fn for_new_file(
         passphrase: &ambre_core::Passphrase,
-    ) -> Result<(Self, FileSalt), CryptoError> {
-        let salt = FileSalt::from_array(random::bytes::<SALT_LEN>());
+    ) -> Result<(Self, FixedBytes<FileSalt>), CryptoError> {
+        let salt = FixedBytes::from_array(random::bytes::<SALT_LEN>());
         let key = Self::from_passphrase(passphrase, &salt)?;
         Ok((key, salt))
     }

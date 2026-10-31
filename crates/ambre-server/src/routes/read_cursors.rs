@@ -154,7 +154,7 @@ async fn last_numbers(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::PublicKey;
+    use ambre_core::{FixedBytes, PublicKey};
     use rustis::commands::StringCommands;
 
     fn uuid_of<E: ambre_core::id::Entity<Repr = ambre_core::Uuid>>(id: Id<E>) -> uuid::Uuid {
@@ -164,7 +164,7 @@ mod tests {
     fn session(user_id: Id<User>, key: u8) -> auth::AuthSession {
         auth::AuthSession {
             user_id,
-            signing_pubkey: PublicKey::from_array([key; 32]),
+            signing_pubkey: FixedBytes::<PublicKey>::from_array([key; 32]),
         }
     }
 
@@ -222,7 +222,7 @@ mod tests {
                 &meta,
                 member,
                 ambre_core::Role::Viewer,
-                &ambre_core::WrappedDocKey::new([6u8; 32].to_vec()),
+                &ambre_core::Encoded::new([6u8; 32].to_vec()),
                 &owner,
                 None,
             )

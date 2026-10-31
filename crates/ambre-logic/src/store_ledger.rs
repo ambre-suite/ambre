@@ -192,13 +192,13 @@ impl StoreLedger {
         match write {
             SealedWrite::Snapshot(bytes) => {
                 cost = Cost {
-                    snapshot: ByteSize::of_len(bytes.len()),
+                    snapshot: bytes.len(),
                     deltas: ByteSize(0),
                 };
                 self.charge(id, cost, Delivery::Unsent);
             }
             SealedWrite::Delta(bytes) => {
-                cost.deltas = cost.deltas.saturating_add(ByteSize::of_len(bytes.len()));
+                cost.deltas = cost.deltas.saturating_add(bytes.len());
                 self.charge(id, cost, Delivery::Unsent);
             }
             SealedWrite::Session { .. } => self.charge(id, cost, Delivery::Unsent),
@@ -313,7 +313,7 @@ impl StoreLedger {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::SealedRowBytes;
+    use ambre_core::{Payload, SealedRowBytes};
 
     fn doc(n: u8) -> Id<Document> {
         Id::from_bytes([n; 16])
@@ -324,7 +324,7 @@ mod tests {
     fn settled(ledger: &mut StoreLedger, id: Id<Document>, bytes: usize) -> Vec<Id<Document>> {
         [
             SealedWrite::Shown,
-            SealedWrite::Snapshot(SealedRowBytes::new(vec![0; bytes])),
+            SealedWrite::Snapshot(Payload::<SealedRowBytes>::new(vec![0; bytes])),
             SealedWrite::Hidden,
             SealedWrite::Sent,
         ]
@@ -352,14 +352,14 @@ mod tests {
         ledger.observe(doc(1), &SealedWrite::Shown);
         ledger.observe(
             doc(1),
-            &SealedWrite::Snapshot(SealedRowBytes::new(vec![0; 80])),
+            &SealedWrite::Snapshot(Payload::<SealedRowBytes>::new(vec![0; 80])),
         );
         ledger.observe(doc(1), &SealedWrite::Hidden);
         assert!(ledger.unsent(doc(1)));
         ledger.observe(doc(2), &SealedWrite::Shown);
         let observed = ledger.observe(
             doc(2),
-            &SealedWrite::Delta(SealedRowBytes::new(vec![0; 80])),
+            &SealedWrite::Delta(Payload::<SealedRowBytes>::new(vec![0; 80])),
         );
         assert!(observed.evict.is_empty(), "both stay");
         assert_eq!(
@@ -381,7 +381,7 @@ mod tests {
         ledger.observe(doc(4), &SealedWrite::Shown);
         ledger.observe(
             doc(4),
-            &SealedWrite::Delta(SealedRowBytes::new(vec![0; 10])),
+            &SealedWrite::Delta(Payload::<SealedRowBytes>::new(vec![0; 10])),
         );
         assert_eq!(
             ledger.refused(doc(4), ByteSize(50), QuotaAttempt::First),
@@ -435,7 +435,10 @@ mod tests {
         );
         assert_eq!(
             ledger
-                .observe(doc(1), &SealedWrite::Delta(SealedRowBytes::new(vec![1])))
+                .observe(
+                    doc(1),
+                    &SealedWrite::Delta(Payload::<SealedRowBytes>::new(vec![1]))
+                )
                 .record,
             RowChange::Changed
         );

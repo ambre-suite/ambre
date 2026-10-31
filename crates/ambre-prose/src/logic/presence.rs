@@ -19,6 +19,7 @@ use loro::{ContainerTrait, TreeID};
 use ambre_core::id::{Id, User};
 
 use ambre_bus::app::prose::{DocOffset, EncodedCursor};
+use ambre_core::Payload;
 
 use crate::doc;
 use crate::events::{
@@ -42,17 +43,17 @@ impl ProseState {
         };
         let anchor = pos.anchor.and_then(|(block_id, offset)| {
             self.cursor_at(&tree_id(block_id), offset)
-                .map(|cursor| (block_id, EncodedCursor::new(cursor.encode())))
+                .map(|cursor| (block_id, Payload::new(cursor.encode())))
         });
         let payload = PresencePayload {
             block_id: pos.block_id,
-            cursor: EncodedCursor::new(cursor.encode()),
+            cursor: Payload::new(cursor.encode()),
             anchor,
             display_name: self.my_name.clone(),
         };
         match postcard::to_allocvec(&payload) {
             Ok(bytes) => {
-                let bytes = ambre_core::EphemeralBytes::new(bytes);
+                let bytes = ambre_core::Payload::<ambre_core::EphemeralBytes>::new(bytes);
                 self.last_frame = Some(bytes.clone());
                 ProseOutcome::ephemeral_only(bytes)
             }
@@ -67,7 +68,7 @@ impl ProseState {
     /// sent, or a caret at the start of the first block. Sent once the document
     /// is ready, so a session that never moves its caret still counts as
     /// running (`PROSE-121`).
-    pub fn announce(&mut self) -> Option<ambre_core::EphemeralBytes> {
+    pub fn announce(&mut self) -> Option<ambre_core::Payload<ambre_core::EphemeralBytes>> {
         if let Some(frame) = &self.last_frame {
             return Some(frame.clone());
         }
@@ -82,7 +83,7 @@ impl ProseState {
 
     /// The answer owed to a session that joined since this one last spoke:
     /// it has not heard of this one yet. Taken once per newcomer.
-    pub fn take_greeting(&mut self) -> Option<ambre_core::EphemeralBytes> {
+    pub fn take_greeting(&mut self) -> Option<ambre_core::Payload<ambre_core::EphemeralBytes>> {
         if std::mem::take(&mut self.owe_greeting) == super::Greeting::Given {
             return None;
         }
@@ -107,7 +108,7 @@ impl ProseState {
     pub fn apply_ephemeral(
         &mut self,
         from_user_id: Id<User>,
-        payload: &ambre_core::EphemeralBytes,
+        payload: &ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) -> Vec<ProseEvent> {
         let frame: PresencePayload = match postcard::from_bytes(payload.as_bytes()) {
             Ok(frame) => frame,
@@ -180,7 +181,7 @@ impl ProseState {
     }
 
     /// One encoded cursor, resolved against this replica's own document.
-    fn resolve_one(&self, block: BlockId, encoded: &EncodedCursor) -> Option<DocOffset> {
+    fn resolve_one(&self, block: BlockId, encoded: &Payload<EncodedCursor>) -> Option<DocOffset> {
         // A block this peer has not received, or one already tombstoned, is not
         // a place a caret can sit.
         self.body_of(&tree_id(block))?;

@@ -927,7 +927,7 @@ fn a_finished_export_names_its_file() {
     let root = mount_notified(ToileEvent::ExportComplete {
         skipped: Vec::new(),
         filename: ambre_core::ExportFilename::named("board", ambre_core::ExportExtension::Svg),
-        data: ambre_core::FileBytes::default(),
+        data: ambre_core::Payload::<ambre_core::FileBytes>::default(),
     });
     let text = root
         .query_selector(".ambre-toast")

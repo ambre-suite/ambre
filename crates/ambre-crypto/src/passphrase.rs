@@ -69,9 +69,9 @@ impl UserKey {
 /// neither failure is reachable from a well-built salt.
 pub fn derive_user_key(
     passphrase: &ambre_core::Passphrase,
-    salt: &ambre_core::MasterKeySalt,
+    salt: &ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
 ) -> Result<UserKey, CryptoError> {
-    argon2id(passphrase, salt.as_bytes()).map(UserKey)
+    argon2id(passphrase, salt.as_slice()).map(UserKey)
 }
 
 /// Argon2id v1 over raw salt bytes, under the parameters above. The kernel of

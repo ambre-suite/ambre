@@ -702,8 +702,7 @@ ambre-core | src/authorship.rs | crate::authorship | PeerEntryBytes::new(bytes) 
 ambre-core | src/authorship.rs | crate::authorship | PeerId.0 | field | u64	newtype-inner	PeerId/SessionNonce newtype
 ambre-core | src/authorship.rs | crate::authorship | PeerKey.0 | field | String	newtype-inner	the registry key newtype, built from a PeerId alone
 ambre-core | src/authorship.rs | crate::authorship | PeerKey::as_str() | ret | &str	newtype-inner	the registry key, for the call into the Loro map
-ambre-core | src/authorship.rs | crate::authorship | SESSION_NONCE_LEN | const | usize	generic	length of the [u8;N] session nonce array; other crates read it only as an array length (an array literal, a const generic) and frame the nonce with SessionNonce::SIZE and SessionNonce::split_from
-ambre-core | src/authorship.rs | crate::authorship | SessionNonce.0 | field | [u8;SESSION_NONCE_LEN]	newtype-inner	PeerId/SessionNonce newtype
+ambre-core | src/authorship.rs | crate::authorship | SESSION_NONCE_LEN | const | usize	generic	length of the [u8;N] session nonce array; other crates read it only as an array length (an array literal, a const generic) and frame the nonce with FixedBytes::<SessionNonce>::SIZE and split_from
 ambre-core | src/authorship.rs | crate::authorship | PeerEntryBytes::into_bytes() | ret | Vec<u8>	newtype-inner	The bytes of a PeerEntryBytes, handed to the LoroMap insert of a document registry.
 ambre-core | src/calendar.rs | crate::calendar | Month.0 | field | u8	newtype-inner	a month of the year, 1 to 12
 ambre-core | src/calendar.rs | crate::calendar | Month::get() | ret | u8	newtype-inner	a month of the year, 1 to 12, for a date count or the text a date prints
@@ -772,43 +771,71 @@ ambre-core | src/docfile.rs | crate::docfile | SEALED_HEADER_LEN | const | usize
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_AT | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | SEAL_NONCE_LEN | const | usize	generic	container byte-layout constant
 ambre-core | src/docfile.rs | crate::docfile | VERSION_AT | const | usize	generic	container byte-layout constant
-ambre-core | src/docfile.rs | crate::docfile | FileSalt.0 | field | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
-ambre-core | src/docfile.rs | crate::docfile | FileSalt::as_array() | ret | &[u8;SALT_LEN]	newtype-inner	FileSalt newtype
-ambre-core | src/docfile.rs | crate::docfile | FileSalt::from_array(bytes) | param | [u8;SALT_LEN]	newtype-inner	FileSalt newtype
 ambre-core | src/email.rs | crate::email | <Email as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of Email copies into its text
 ambre-core | src/email.rs | crate::email | <Email as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of Email wraps
 ambre-core | src/email.rs | crate::email | Email.0 | field | String	newtype-inner	Email newtype
 ambre-core | src/email.rs | crate::email | Email::as_str() | ret | &str	newtype-inner	Email newtype
 ambre-core | src/encoded.rs | crate::encoded | ANCHOR_LEN | const | usize	generic	length constant
 ambre-core | src/encoded.rs | crate::encoded | KEY_LEN | const | usize	generic	length constant
-ambre-core | src/encoded.rs | crate::encoded | MasterKeySalt.0 | field | [u8;MasterKeySalt::LEN]	newtype-inner	MasterKeySalt newtype
-ambre-core | src/encoded.rs | crate::encoded | MasterKeySalt::LEN | const | usize	generic	length constant
-ambre-core | src/encoded.rs | crate::encoded | MasterKeySalt::as_bytes() | ret | &[u8]	newtype-inner	MasterKeySalt newtype
-ambre-core | src/encoded.rs | crate::encoded | MasterKeySalt::from_array(bytes) | param | [u8;Self::LEN]	newtype-inner	MasterKeySalt newtype
-ambre-core | src/encoded.rs | crate::encoded | MasterKeySalt::from_slice(bytes) | param | &[u8]	newtype-inner	MasterKeySalt newtype
-ambre-core | src/encoded.rs | crate::encoded | MasterKeySalt::to_base64() | ret | String	newtype-inner	MasterKeySalt newtype: its base64 text form
 ambre-core | src/encoded.rs | crate::encoded | NONCE_LEN | const | usize	generic	length constant
 ambre-core | src/encoded.rs | crate::encoded | OBJECT_HEADER_LEN | const | usize	generic	length constant
-ambre-core | src/encoded.rs | crate::encoded | SealedName::MAX_CHARS | const | usize	generic	length constant
-ambre-core | src/encoded.rs | crate::encoded | SealedName::OVERHEAD | const | usize	generic	length constant
 ambre-core | src/encoded.rs | crate::encoded | TAG_LEN | const | usize	generic	length constant
 ambre-core | src/encoded.rs | crate::encoded | UTF8_MAX_LEN | const | usize	generic	length constant
 ambre-core | src/envelope.rs | crate::envelope | Ciphertext.0 | field | Vec<u8>	newtype-inner	envelope byte newtype
 ambre-core | src/envelope.rs | crate::envelope | Ciphertext::is_empty() | ret | bool	newtype-inner	envelope byte newtype
 ambre-core | src/envelope.rs | crate::envelope | Ciphertext::len() | ret | usize	newtype-inner	envelope byte newtype
-ambre-core | src/envelope.rs | crate::envelope | CommitmentTag.0 | field | [u8;32]	newtype-inner	envelope byte newtype
-ambre-core | src/envelope.rs | crate::envelope | EntryDigest.0 | field | [u8;32]	newtype-inner	EntryDigest newtype
-ambre-core | src/envelope.rs | crate::envelope | Nonce.0 | field | [u8;24]	newtype-inner	envelope byte newtype
-ambre-core | src/envelope.rs | crate::envelope | Signature.0 | field | [u8;64]	newtype-inner	envelope byte newtype
 ambre-core | src/error.rs | crate::error | DocTypeError::InvalidDiscriminant.0 | field | u8	generic	the refused value the error echoes
 ambre-core | src/error.rs | crate::error | DocTypeError::InvalidString.0 | field | String	generic	the refused value the error echoes
-ambre-core | src/error.rs | crate::error | PublicKeyError::InvalidLength.0 | field | usize	generic	the length of the refused input, which the error echoes
 ambre-core | src/error.rs | crate::error | RoleError::InvalidDiscriminant.0 | field | u8	generic	the refused value the error echoes
 ambre-core | src/error.rs | crate::error | RoleError::InvalidString.0 | field | String	generic	the refused value the error echoes
 ambre-core | src/error.rs | crate::error | UuidError::InvalidLength.0 | field | usize	generic	the length of the refused input, which the error echoes
 ambre-core | src/error.rs | crate::error | VersionError::OutOfRange.0 | field | u8	generic	the refused value the error echoes
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint.0 | field | String	newtype-inner	KeyFingerprint newtype
 ambre-core | src/fingerprint.rs | crate::fingerprint | KeyFingerprint::as_str() | ret | &str	newtype-inner	KeyFingerprint newtype
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytes<R> as AsRef<[u8]>>::as_ref() | ret | &[u8]	newtype-inner	FixedBytes newtype, its bytes borrowed for a call that takes any bytes
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytes<R> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <FixedBytesVisitor<R> as Visitor<'de>>::visit_str(text) | param | &str	trait	signature fixed by foreign trait: serde hands the hexadecimal text of a readable format
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | <[u8;N] as ByteArray>::LEN | const | usize	generic	the width of a byte array, read only as the length of the role's array and of its tuple
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::as_slice() | ret | &[u8]	newtype-inner	FixedBytes newtype, its bytes borrowed
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::from_hex(text) | param | &str	newtype-inner	FixedBytes's own hex spelling, read back
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::from_slice(bytes) | param | &[u8]	newtype-inner	FixedBytes newtype, from bytes of its width
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::push_to(out) | param | &mut Vec<u8>	generic	the buffer of a layout that frames the value among fields of any type
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::split_from() | ret | Option<(Self,&[u8])>	generic	the bytes of the layout after the value, which the caller reads next
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::split_from(bytes) | param | &[u8]	generic	the bytes of a layout the value opens, followed by fields of any type
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::to_hex() | ret | String	newtype-inner	FixedBytes's own hex spelling
+ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytesError::InvalidLength.0 | field | usize	generic	the length of the refused input, which the error echoes
+ambre-core | src/authorship.rs | crate::authorship | <SessionNonce as FixedRole>::Array | assoc | [u8;SESSION_NONCE_LEN]	newtype-inner	the storage of FixedBytes<SessionNonce>, which states its width
+ambre-core | src/docfile.rs | crate::docfile | <FileDigest as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<FileDigest>, which states its width
+ambre-core | src/docfile.rs | crate::docfile | <FileSalt as FixedRole>::Array | assoc | [u8;SALT_LEN]	newtype-inner	the storage of FixedBytes<FileSalt>, which states its width
+ambre-core | src/encoded.rs | crate::encoded | <MasterKeySalt as FixedRole>::Array | assoc | [u8;MASTER_KEY_SALT_LEN]	newtype-inner	the storage of FixedBytes<MasterKeySalt>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <ChainHash as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<ChainHash>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <CommitmentTag as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<CommitmentTag>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <EntryDigest as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<EntryDigest>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <Nonce as FixedRole>::Array | assoc | [u8;24]	newtype-inner	the storage of FixedBytes<Nonce>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <Signature as FixedRole>::Array | assoc | [u8;64]	newtype-inner	the storage of FixedBytes<Signature>, which states its width
+ambre-core | src/key_id.rs | crate::key_id | <KeyId as FixedRole>::Array | assoc | [u8;KEY_ID_LEN]	newtype-inner	the storage of FixedBytes<KeyId>, which states its width
+ambre-core | src/media.rs | crate::media | <MediaAddress as FixedRole>::Array | assoc | [u8;MEDIA_ADDRESS_LEN]	newtype-inner	the storage of FixedBytes<MediaAddress>, which states its width
+ambre-core | src/payload.rs | crate::payload | <FormatMagic as crate::FixedRole>::Array | assoc | [u8;4]	newtype-inner	the storage of FixedBytes<FormatMagic>, which states its width
+ambre-core | src/public_key.rs | crate::public_key | <ExchangePublicKey as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<ExchangePublicKey>, which states its width
+ambre-core | src/public_key.rs | crate::public_key | <PublicKey as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<PublicKey>, which states its width
+ambre-core | src/authorship.rs | crate::authorship | <SessionNonce as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/docfile.rs | crate::docfile | <FileDigest as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/docfile.rs | crate::docfile | <FileSalt as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/encoded.rs | crate::encoded | <MasterKeySalt as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/encoded.rs | crate::encoded | MASTER_KEY_SALT_LEN | const | usize	generic	length of the [u8;N] master-key salt array, read only as an array length; a crate that frames a salt uses FixedBytes::<MasterKeySalt>::SIZE
+ambre-core | src/envelope.rs | crate::envelope | <ChainHash as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/envelope.rs | crate::envelope | <CommitmentTag as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/envelope.rs | crate::envelope | <EntryDigest as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/envelope.rs | crate::envelope | <Nonce as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/envelope.rs | crate::envelope | <Signature as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/key_id.rs | crate::key_id | <KeyId as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/media.rs | crate::media | <MediaAddress as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/payload.rs | crate::payload | <FormatMagic as crate::FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/public_key.rs | crate::public_key | <ExchangePublicKey as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/public_key.rs | crate::public_key | <PublicKey as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/serde_id.rs | crate::serde_id | <FixedBytes<KeyId> as TextId>::from_text() | ret | Result<Self,String>	free-text	the message of a refused key identifier, which read hands serde's de::Error::custom
+ambre-core | src/serde_id.rs | crate::serde_id | <FixedBytes<KeyId> as TextId>::from_text(text) | param | &str	newtype-inner	FixedBytes<KeyId>'s own hex spelling, read back
+ambre-core | src/serde_id.rs | crate::serde_id | <FixedBytes<KeyId> as TextId>::to_text() | ret | String	newtype-inner	FixedBytes<KeyId>'s own hex spelling
 ambre-core | src/font.rs | crate::font | <FontFamily as From<String>>::from(label) | param | String	generic	the codec of an enum that carries data: a font family label as written, read into a known family or kept whole
 ambre-core | src/font.rs | crate::font | <FontSize as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSize field, constructor or accessor
 ambre-core | src/font.rs | crate::font | FontSize.0 | field | f32	newtype-inner	FontSize field, constructor or accessor
@@ -879,11 +906,6 @@ ambre-core | src/id.rs | crate::id | Id<E>::parse_str(s) | param | &str	newtype-
 ambre-core | src/id.rs | crate::id | Id<E>::to_hyphenated() | ret | String	newtype-inner	the identifier's own hyphenated UUID text
 ambre-core | src/id.rs | crate::id | Id<E>::uuid() | ret | Uuid	newtype-inner	the Uuid an identifier holds, its one way out
 ambre-core | src/key_id.rs | crate::key_id | KEY_ID_LEN | const | usize	generic	length of the [u8;N] KeyId array, read only as an array length in KeyId's own signatures; a crate that frames a key id uses KeyId::SIZE and KeyId::split_from
-ambre-core | src/key_id.rs | crate::key_id | KeyId.0 | field | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
-ambre-core | src/key_id.rs | crate::key_id | KeyId::as_array() | ret | &[u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
-ambre-core | src/key_id.rs | crate::key_id | KeyId::from_array(bytes) | param | [u8;KEY_ID_LEN]	newtype-inner	KeyId newtype
-ambre-core | src/key_id.rs | crate::key_id | KeyId::parse_hex(text) | param | &str	newtype-inner	KeyId newtype
-ambre-core | src/key_id.rs | crate::key_id | KeyId::to_hex() | ret | String	newtype-inner	KeyId newtype
 ambre-core | src/lang.rs | crate::lang | LangTag.0 | field | String	newtype-inner	LangTag newtype accessor
 ambre-core | src/lang.rs | crate::lang | LangTag::as_str() | ret | &str	newtype-inner	LangTag newtype accessor
 ambre-core | src/lang.rs | crate::lang | LangTag::parse(text) | param | &str	newtype-inner	LangTag constructor, the text it validates
@@ -907,9 +929,6 @@ ambre-core | src/media.rs | crate::media | ContentHash::as_str() | ret | &str	ne
 ambre-core | src/media.rs | crate::media | ContentHash::parse(word) | param | &str	newtype-inner	the text the checked constructor of ContentHash reads
 ambre-core | src/media.rs | crate::media | KnownMediaType::as_str() | ret | &'static str	newtype-inner	closed-set enum word codec
 ambre-core | src/media.rs | crate::media | MEDIA_ADDRESS_LEN | const | usize	generic	length constant
-ambre-core | src/media.rs | crate::media | MediaAddress.0 | field | [u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
-ambre-core | src/media.rs | crate::media | MediaAddress::as_bytes() | ret | &[u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
-ambre-core | src/media.rs | crate::media | MediaAddress::from_array(bytes) | param | [u8;MEDIA_ADDRESS_LEN]	newtype-inner	MediaAddress newtype accessor
 ambre-core | src/media.rs | crate::media | MediaType.0 | field | String	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/media.rs | crate::media | MediaType::as_str() | ret | &str	newtype-inner	ContentHash/MediaType/ByteSize newtype
 ambre-core | src/name.rs | crate::name | <DisplayName as TryFrom<String>>::try_from(text) | param | String	newtype-inner	the String the fallible constructor of DisplayName validates
@@ -991,9 +1010,6 @@ ambre-core | src/serde_enums.rs | crate::serde_enums::space_flag | is_personal()
 ambre-core | src/serde_id.rs | crate::serde_id | <Id<E> as TextId>::from_text() | ret | Result<Self,String>	free-text	the fixed message of UuidError, which read hands serde's de::Error::custom
 ambre-core | src/serde_id.rs | crate::serde_id | <Id<E> as TextId>::from_text(text) | param | &str	newtype-inner	the identifier's own UUID text, read back
 ambre-core | src/serde_id.rs | crate::serde_id | <Id<E> as TextId>::to_text() | ret | String	newtype-inner	the identifier's own UUID text
-ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text() | ret | Result<Self,String>	free-text	the fixed message of KeyIdError, which read hands serde's de::Error::custom
-ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::from_text(text) | param | &str	newtype-inner	KeyId's own hex spelling, read back
-ambre-core | src/serde_id.rs | crate::serde_id | <KeyId as TextId>::to_text() | ret | String	newtype-inner	KeyId's own hex spelling
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::from_text() | ret | Result<Self,String>	generic	generic text-id serde helper
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::from_text(text) | param | &str	generic	generic text-id serde helper
 ambre-core | src/serde_id.rs | crate::serde_id | TextId::to_text() | ret | String	generic	generic text-id serde helper
@@ -1196,7 +1212,7 @@ ambre-logic | src/persistence.rs | crate::persistence | session_of(row) | param 
 ambre-logic | src/persistence.rs | crate::persistence | DbName.0 | field | &'a str	newtype-inner	DbName newtype
 ambre-logic | src/persistence.rs | crate::persistence | DbVersion.0 | field | u32	newtype-inner	DbVersion newtype
 ambre-logic | src/persistence.rs | crate::persistence | IdbKey.0 | field | String	newtype-inner	IdbKey newtype
-ambre-logic | src/persistence.rs | crate::persistence | IdbKey::document_of(text) | param | &str	foreign-api	a key as IndexedDB hands it back, parsed here to its DocumentId
+ambre-logic | src/persistence.rs | crate::persistence | IdbKey::document_of(text) | param | &str	foreign-api	a key as IndexedDB hands it back, parsed here to its Id<Document>
 ambre-logic | src/persistence.rs | crate::persistence | IdbStore::name() | ret | &'static str	newtype-inner	the enum's own store name, unwrapped at the IndexedDB call
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::picture_failed() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
 ambre-logic | src/pictures.rs | crate::pictures | LogicState::pictured() | ret | bool	generic	yes/no fact or predicate answer, selects no mode
@@ -1341,7 +1357,7 @@ ambre-murmure | src/delta.rs | crate::delta | check(reactions) | param | impl Fn
 ambre-murmure | src/delta.rs | crate::delta | is_root() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/delta.rs | crate::delta | message_key(key) | param | &str	foreign-api	an amendments or threads map key as Loro hands it back
 ambre-murmure | src/delta.rs | crate::delta | names() | ret | bool	generic	state flag/predicate
-ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	generic	state flag/predicate: the verdict on one write; the key is parsed as a MessageKey and the thread as a DocumentId inside
+ambre-murmure | src/delta.rs | crate::delta | thread_set() | ret | bool	generic	state flag/predicate: the verdict on one write; the key is parsed as a MessageKey and the thread as an Id<Document> inside
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::read(stored) | param | Option<String>	generic	enum<->stored string codec at the CRDT boundary: the raw string the Loro thread field stores, parsed into the enum here
 ambre-murmure | src/delta.rs | crate::delta | ThreadField::takes() | ret | bool	generic	state flag/predicate
 ambre-murmure | src/drafts.rs | crate::drafts | DraftRow.0 | field | String	newtype-inner	DraftRow newtype
@@ -3051,9 +3067,6 @@ ambre-prose | src/doc.rs | crate::doc | StoredLevel.0 | field | u8	newtype-inner
 ambre-prose | src/doc.rs | crate::doc | StoredLevel::from_stored(level) | param | u8	newtype-inner	a heading level as the document stores it, kept raw when an import wrote one past six
 ambre-prose | src/doc.rs | crate::doc | StoredLevel::get() | ret | u8	newtype-inner	a heading level as the document stores it, for an export and a diagnostic
 ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::drop_regions_cornered_in(doomed) | param | impl Fn(CellPos)->bool	generic	predicate result: whether a grid position is doomed
-ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::as_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | <LineSpacingMultiple as TryFrom<f32>>::try_from(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple.0 | field | f32	newtype-inner	the refused value an error reports
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor
@@ -3118,7 +3131,6 @@ ambre-bus | src/app/find.rs | crate::app::find | FindText.0 | field | String	new
 ambre-bus | src/app/find.rs | crate::app::find | FindText::new(text) | param | String	newtype-inner	the text the constructor validates
 ambre-bus | src/app/find.rs | crate::app::find | FindText::as_str() | ret | &str	newtype-inner	the find text the newtype wraps
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_name() | ret | nom::IResult<&str,SheetName>	generic	parser, renderer, lexer or freeze tooling over text or bytes
-ambre-core | src/envelope.rs | crate::envelope | ChainHash.0 | field | [u8;32]	newtype-inner	ChainHash newtype
 ambre-crypto | src/hash.rs | crate::hash | DEV_SEED_DOMAIN | const | &[u8]	generic	domain-separation tag, bytes fed to the hasher
 ambre-crypto | src/hash.rs | crate::hash | length_prefixed() | ret | [u8;HASH_LEN]	generic	private hashing construction; chain_hash and dev_seed wrap the result, file_digest returns it
 ambre-crypto | src/hash.rs | crate::hash | Head.0 | field | &'a[u8]	newtype-inner	the length-bounded input of length_prefixed, typed apart from Tail so a swap does not compile
@@ -3173,6 +3185,7 @@ ambre-bus | src/app/prose.rs | crate::app::prose | TodoMark::done_if(ticked) | p
 ambre-bus | src/app/prose.rs | crate::app::prose | TodoMark::is_done() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/prose.rs | crate::app::prose | UnsupportedFeature::label() | ret | &'static str	free-text	the closed set's display label
 ambre-bus | src/app/prose.rs | crate::app::prose | RefusedAction::label() | ret | &'static str	free-text	the words a refusal prints for what it refused
+ambre-bus | src/app/prose.rs | crate::app::prose | <EncodedCursor as ambre_core::PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-bus | src/app/toile.rs | crate::app::toile | LockState::is_locked() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/toile.rs | crate::app::toile | LockState::locked_if(locked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteTotal.0 | field | i64	newtype-inner	the newtype's own inside, accessor or constructor
@@ -3287,6 +3300,19 @@ ambre-core | src/secret.rs | crate::secret | Passphrase::is_empty() | ret | bool
 ambre-core | src/secret.rs | crate::secret | Passphrase::matches() | ret | bool	generic	a constant-time predicate
 ambre-core | src/secret.rs | crate::secret | Passphrase::new(text) | param | String	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | Passphrase::secret() | ret | &Secret<String>	newtype-inner	secret newtype over a shared ambre_core::Secret
+ambre-core | src/secret.rs | crate::secret | Credential.secret | field | Arc<Secret<String>>	newtype-inner	the shared wrapper of the generic credential, a PhantomData marker apart
+ambre-core | src/secret.rs | crate::secret | Credential<K>::new(text) | param | String	newtype-inner	the bearer text the generic credential wraps
+ambre-core | src/secret.rs | crate::secret | Credential<K>::secret() | ret | &Secret<String>	newtype-inner	the shared wrapper, for the code the gate admits to read the text
+ambre-core | src/secret.rs | crate::secret | Credential<K>::matches() | ret | bool	generic	a constant-time predicate
+ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::from_shared(secret) | param | Arc<Secret<String>>	newtype-inner	the shared wrapper of a credential, taken with no copy
+ambre-core | src/secret.rs | crate::secret | Credential<OidcState>::present_state(store) | param | impl FnOnce(&str)->R	generic	lends the state text to the one foreign call that stores it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
+ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | <AccessToken as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/secret.rs | crate::secret | <OidcCode as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/secret.rs | crate::secret | <OidcState as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/secret.rs | crate::secret | <PresignedUrl as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/secret.rs | crate::secret | <RefreshToken as CredentialKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
 ambre-core | src/secret.rs | crate::secret | SecretBytes.0 | field | Arc<Secret<Vec<u8>>>	newtype-inner	secret newtype over a shared ambre_core::Secret
 ambre-core | src/secret.rs | crate::secret | SecretBytes::into_plaintext() | ret | Vec<u8>	newtype-inner	the opened bytes moved out with no copy, into a role that keeps them in the clear by design; the wrapper is left empty, and a shared wrapper hands out a copy that leaves the original to its other owner, who wipes it (ARCH-047)
 ambre-core | src/secret.rs | crate::secret | SecretBytes::new(bytes) | param | Vec<u8>	newtype-inner	secret newtype over a shared ambre_core::Secret
@@ -3331,10 +3357,6 @@ ambre-primitives | src/secrets.rs | crate::secrets | renamed_wipers(renamed) | p
 ambre-core | src/credential.rs | crate::credential | ProviderUrl.0 | field | String	newtype-inner	the provider address, which the browser shows in clear
 ambre-core | src/credential.rs | crate::credential | ProviderUrl::as_str() | ret | &str	newtype-inner	the provider address, which the browser shows in clear
 ambre-core | src/credential.rs | crate::credential | ProviderUrl::new(text) | param | String	newtype-inner	the provider address, which the browser shows in clear
-ambre-core | src/secret.rs | crate::secret | AccessToken::from_shared(secret) | param | Arc<Secret<String>>	newtype-inner	the shared wrapper of a credential newtype
-ambre-core | src/secret.rs | crate::secret | OidcState::present_state(store) | param | impl FnOnce(&str)->R	generic	lends the state text to the one foreign call that stores it (ARCH-049)
-ambre-core | src/secret.rs | crate::secret | PresignedUrl::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
-ambre-core | src/secret.rs | crate::secret | PresignedUrl::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::count(pred) | param | impl Fn(&DrawOp)->bool	generic	a predicate over the recorded operations
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::clips_balanced() | ret | bool	generic	predicate result
 ambre-draw | src/testing.rs | crate::testing | RecordingSurface::holds_walk() | ret | bool	generic	predicate or handled-flag result
@@ -3458,13 +3480,71 @@ ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript.0 | fi
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::as_bytes() | ret | &[u8]	newtype-inner	the bytes one signature covers
 ambre-protocol | src/transcript.rs | crate::transcript | SignedTranscript::new(bytes) | param | Vec<u8>	newtype-inner	the bytes one signature covers
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength::is_below() | ret | bool	generic	predicate result: a const comparison, which Marks::new runs at compile time
-ambre-core | src/docfile.rs | crate::docfile | FileDigest.0 | field | [u8;32]	newtype-inner	FileDigest newtype, hex in the fixture sidecar
-ambre-core | src/docfile.rs | crate::docfile | FileDigest::as_array() | ret | &[u8;32]	newtype-inner	FileDigest newtype, hex in the fixture sidecar
-ambre-core | src/docfile.rs | crate::docfile | FileDigest::from_array(bytes) | param | [u8;32]	newtype-inner	FileDigest newtype, from the hasher that wrote it
 ambre-sync | src/pipeline.rs | crate::pipeline | <FetchedBlob as StoredObject>::object() | ret | &[u8]	newtype-inner	FetchedBlob's own accessor, through the object trait
 ambre-sync | src/pipeline.rs | crate::pipeline | <SealedBlob as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedBlob's own accessor, through the object trait
-ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::SealedName as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedName's own accessor, through the object trait
-ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::SealedPreviousKey as StoredObject>::object() | ret | &[u8]	newtype-inner	SealedPreviousKey's own accessor, through the object trait
+ambre-sync | src/pipeline.rs | crate::pipeline | <ambre_core::Encoded<ambre_core::SealedName> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed name's own bytes, through the object trait
+ambre-sync | src/pipeline.rs | crate::pipeline | <Payload<ambre_core::SealedPreviousKey> as StoredObject>::object() | ret | &[u8]	newtype-inner	the sealed previous key's own bytes, through the object trait
+ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<ambre_core::Payload<ambre_core::FileBytes>,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
+ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<ambre_core::Payload<ambre_core::FileBytes>,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
+ambre-core | src/export_file.rs | crate::export_file | <FileBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | Payload.bytes | field | Vec<u8>	newtype-inner	the bytes of the generic payload, a PhantomData marker apart
+ambre-core | src/payload.rs | crate::payload | Payload<K>::new(bytes) | param | Vec<u8>	newtype-inner	Payload newtype
+ambre-core | src/payload.rs | crate::payload | Payload<K>::as_bytes() | ret | &[u8]	newtype-inner	Payload newtype
+ambre-core | src/payload.rs | crate::payload | Payload<K>::into_bytes() | ret | Vec<u8>	newtype-inner	Payload newtype
+ambre-core | src/payload.rs | crate::payload | Payload<K>::is_empty() | ret | bool	generic	predicate
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as AsRef<[u8]>>::as_ref() | ret | &[u8]	newtype-inner	Payload newtype, its bytes borrowed for a call that takes any bytes
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	Payload newtype
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq<&[u8;N]>>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq<&[u8;N]>>::eq(other) | param | &&[u8;N]	generic	the bytes a test or a check compares a payload to
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq<Vec<u8>>>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq<Vec<u8>>>::eq(other) | param | &Vec<u8>	generic	the bytes a test or a check compares a payload to
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq<[u8;N]>>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq<[u8;N]>>::eq(other) | param | &[u8;N]	generic	the bytes a test or a check compares a payload to
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq<[u8]>>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/payload.rs | crate::payload | <Payload<K> as PartialEq<[u8]>>::eq(other) | param | &[u8]	generic	the bytes a test or a check compares a payload to
+ambre-core | src/payload.rs | crate::payload | <ClipboardBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <DeltaBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <EphemeralBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <FontBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <MediaBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <PickedContainer as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <PlaintextContainer as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <RgbaPixels as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <SealedContainer as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <SealedPreviousKey as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <SealedRowBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <SnapshotBytes as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/payload.rs | crate::payload | <ThumbnailPng as PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-core | src/encoded.rs | crate::encoded | Encoded.bytes | field | Vec<u8>	newtype-inner	the bytes of the generic encoded value, a PhantomData marker apart
+ambre-core | src/encoded.rs | crate::encoded | Encoded<K>::new(bytes) | param | Vec<u8>	newtype-inner	Encoded newtype
+ambre-core | src/encoded.rs | crate::encoded | Encoded<K>::as_bytes() | ret | &[u8]	newtype-inner	Encoded newtype
+ambre-core | src/encoded.rs | crate::encoded | Encoded<K>::into_bytes() | ret | Vec<u8>	newtype-inner	Encoded newtype
+ambre-core | src/encoded.rs | crate::encoded | Encoded<K>::is_empty() | ret | bool	generic	predicate
+ambre-core | src/encoded.rs | crate::encoded | Encoded<K>::to_base64() | ret | String	newtype-inner	Encoded's own base64 spelling, the text the wire carries
+ambre-core | src/encoded.rs | crate::encoded | Encoded<K>::refusal() | ret | Option<String>	generic	the refusal of a read, naming the role and echoing the refused length
+ambre-core | src/encoded.rs | crate::encoded | Encoded<K>::refusal(bytes) | param | &[u8]	generic	the decoded bytes of a read, checked against the role's lengths before they are wrapped
+ambre-core | src/encoded.rs | crate::encoded | <Encoded<K> as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	Encoded newtype
+ambre-core | src/encoded.rs | crate::encoded | <Encoded<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/encoded.rs | crate::encoded | <EncodedKeyLink as EncodedKind>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/encoded.rs | crate::encoded | <EncodedLogEntry as EncodedKind>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/encoded.rs | crate::encoded | <EscrowedKey as EncodedKind>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/encoded.rs | crate::encoded | <SealedName as EncodedKind>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/encoded.rs | crate::encoded | <SealedShare as EncodedKind>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/encoded.rs | crate::encoded | <WrappedDocKey as EncodedKind>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/encoded.rs | crate::encoded | <WrappedMasterKey as EncodedKind>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
+ambre-core | src/encoded.rs | crate::encoded | <SealedName as EncodedKind>::MAX_LEN | const | Option<usize>	generic	length constant: the bound a read holds a sealed name to
+ambre-core | src/encoded.rs | crate::encoded | <WrappedDocKey as EncodedKind>::LENGTHS | const | Option<&'static[usize]>	generic	length constants: the lengths a read holds a wrapped key to
+ambre-core | src/encoded.rs | crate::encoded | <WrappedMasterKey as EncodedKind>::LENGTHS | const | Option<&'static[usize]>	generic	length constants: the length a read holds a wrapped master key to
+ambre-core | src/encoded.rs | crate::encoded | Encoded<SealedName>::MAX_CHARS | const | usize	generic	length constant
+ambre-core | src/encoded.rs | crate::encoded | Encoded<SealedName>::MAX_LEN | const | usize	generic	length constant
+ambre-core | src/encoded.rs | crate::encoded | Encoded<SealedName>::OVERHEAD | const | usize	generic	length constant
+ambre-core | src/encoded.rs | crate::encoded | Encoded<WrappedDocKey>::LENGTHS | const | &'static[usize]	generic	length constants
+ambre-core | src/encoded.rs | crate::encoded | Encoded<WrappedMasterKey>::LENGTHS | const | &'static[usize]	generic	length constants
+ambre-core | src/encoded.rs | crate::encoded | SEALED_NAME_MAX_CHARS | const | usize	generic	length constant
+ambre-core | src/encoded.rs | crate::encoded | SEALED_NAME_MAX_LEN | const | usize	generic	length constant
+ambre-core | src/encoded.rs | crate::encoded | WRAPPED_DOC_KEY_LENGTHS | const | &[usize]	generic	length constants
+ambre-core | src/encoded.rs | crate::encoded | WRAPPED_MASTER_KEY_LENGTHS | const | &[usize]	generic	length constants
 ambre-sync | src/pipeline.rs | crate::pipeline | StoredObject::object() | ret | &[u8]	generic	the laid-out bytes the header readers split, from any role that holds an object
 ambre-murmure | src/members.rs | crate::members | SAMPLE | const | [u8;2]	generic	the two wire bytes of the space presence sample, its tag then its state
 ambre-murmure | src/members.rs | crate::members | SampleState::byte() | ret | u8	newtype-inner	byte codec of the private state byte of a presence sample
@@ -3472,10 +3552,6 @@ ambre-murmure | src/members.rs | crate::members | SampleTag::byte() | ret | u8	n
 ambre-murmure | src/watchers.rs | crate::watchers | SampleState::byte() | ret | u8	newtype-inner	byte codec of the private state byte of a channel sample
 ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::byte() | ret | u8	newtype-inner	byte codec of the private tag of a channel sample
 ambre-murmure | src/watchers.rs | crate::watchers | SampleTag::from_byte(byte) | param | u8	newtype-inner	byte codec of the private tag of a channel sample; an unknown byte reads as None
-ambre-core | src/payload.rs | crate::payload | FormatMagic.0 | field | [u8;4]	newtype-inner	FormatMagic newtype
-ambre-core | src/payload.rs | crate::payload | FormatMagic::new(bytes) | param | [u8;4]	newtype-inner	FormatMagic constructor
-ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
-ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount.0 | field | f64	newtype-inner	the inside of the wheel amount, a count of the delta's unit
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::new(units) | param | f64	newtype-inner	the constructor of the wheel amount, from the DOM delta
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f64	math	the CSS length of one unit, the factor the amount scales by

@@ -7,52 +7,34 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Gives a fixed-size byte type its size and its typed split. A crate that
-/// frames one in a layout then never counts its bytes by hand. The type is a tuple
-/// struct over `[u8; $len]`, and the macro runs in its own module, which
-/// builds it. A const assert holds the declared length to the array.
-macro_rules! fixed_bytes {
-    ($name:ident, $len:expr) => {
-        impl $name {
-            /// Bytes of one value where a layout frames it.
-            pub const SIZE: $crate::ByteSize = $crate::ByteSize($len as u64);
+use crate::fixed_bytes::{DebugForm, FixedRole};
 
-            /// Reads one value from the front of `bytes`, and returns the
-            /// bytes after it. `None` when `bytes` is shorter than
-            /// [`Self::SIZE`].
-            #[must_use]
-            pub fn split_from(bytes: &[u8]) -> Option<(Self, &[u8])> {
-                let (head, rest) = bytes.split_first_chunk::<{ $len }>()?;
-                Some((Self(*head), rest))
-            }
+/// The role of a 24-byte nonce used for XChaCha20-Poly1305 encryption:
+/// `FixedBytes<Nonce>`.
+pub enum Nonce {}
 
-            /// Appends the value to `out`, as [`Self::split_from`] reads it
-            /// back.
-            pub fn push_to(&self, out: &mut Vec<u8>) {
-                out.extend_from_slice(&self.0);
-            }
-        }
-
-        const _: () = assert!(::core::mem::size_of::<$name>() == $len);
-    };
+impl FixedRole for Nonce {
+    const NAME: &'static str = "Nonce";
+    type Array = [u8; 24];
 }
-pub(crate) use fixed_bytes;
 
-/// 24-byte nonce used for XChaCha20-Poly1305 encryption.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Nonce(#[serde(with = "serde_bytes")] pub [u8; 24]);
+/// The role of a 32-byte HMAC-SHA256 commitment tag:
+/// `FixedBytes<CommitmentTag>`.
+pub enum CommitmentTag {}
 
-/// 32-byte HMAC-SHA256 commitment tag.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CommitmentTag(#[serde(with = "serde_bytes")] pub [u8; 32]);
+impl FixedRole for CommitmentTag {
+    const NAME: &'static str = "CommitmentTag";
+    type Array = [u8; 32];
+}
 
-/// 64-byte Ed25519 signature.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Signature(#[serde(with = "serde_bytes")] pub [u8; 64]);
+/// The role of a 64-byte Ed25519 signature: `FixedBytes<Signature>`.
+pub enum Signature {}
 
-fixed_bytes!(Nonce, 24);
-fixed_bytes!(CommitmentTag, 32);
-fixed_bytes!(Signature, 64);
+impl FixedRole for Signature {
+    const NAME: &'static str = "Signature";
+    const DEBUG: DebugForm = DebugForm::HexPrefix;
+    type Array = [u8; 64];
+}
 
 /// AEAD ciphertext wrapper. `Debug` prints its length and none of its bytes,
 /// so a logged message logs no ciphertext (`ZK-006`).
@@ -104,64 +86,84 @@ impl Aad {
     }
 }
 
-/// One link of the snapshot integrity chain. It folds a parent proof with
-/// the bytes of a sealed snapshot, so a reordered or substituted snapshot
-/// breaks the chain. Distinct from [`EntryDigest`] and from any
-/// keyless digest, so no call can pass one where the other is meant.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ChainHash(#[serde(with = "serde_bytes")] pub [u8; 32]);
+/// The role of one link of the snapshot integrity chain:
+/// `FixedBytes<ChainHash>`. It folds a parent proof with the bytes of a sealed
+/// snapshot, so a reordered or substituted snapshot breaks the chain. Distinct
+/// from [`EntryDigest`] and from any keyless digest, so no call can pass one
+/// where the other is meant.
+pub enum ChainHash {}
 
-/// The digest of one membership-log entry, which the next entry names. A
-/// wrapped document key also seals the digest of the first entry, as the
-/// anchor of the log (`SYNC-104`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EntryDigest(pub [u8; 32]);
+impl FixedRole for ChainHash {
+    const NAME: &'static str = "ChainHash";
+    type Array = [u8; 32];
+}
+
+/// The role of the digest of one membership-log entry, which the next entry
+/// names: `FixedBytes<EntryDigest>`. A wrapped document key also seals the
+/// digest of the first entry, as the anchor of the log (`SYNC-104`).
+pub enum EntryDigest {}
+
+impl FixedRole for EntryDigest {
+    const NAME: &'static str = "EntryDigest";
+    type Array = [u8; 32];
+}
 
 #[cfg(test)]
 mod tests {
     use super::{CommitmentTag, Nonce, Signature};
     use crate::authorship::SessionNonce;
-    use crate::{ByteSize, KeyId, PublicKey};
+    use crate::{ByteSize, FixedBytes, KeyId, PublicKey};
 
     /// Each fixed-size type states the size it frames, the length of its
     /// array.
     #[test]
     fn a_fixed_size_type_states_the_length_of_its_array() {
-        assert_eq!(Nonce::SIZE, ByteSize(24));
-        assert_eq!(CommitmentTag::SIZE, ByteSize(32));
-        assert_eq!(Signature::SIZE, ByteSize(64));
-        assert_eq!(KeyId::SIZE, ByteSize(16));
-        assert_eq!(SessionNonce::SIZE, ByteSize(16));
-        assert_eq!(PublicKey::SIZE, ByteSize(32));
+        assert_eq!(FixedBytes::<Nonce>::SIZE, ByteSize(24));
+        assert_eq!(FixedBytes::<CommitmentTag>::SIZE, ByteSize(32));
+        assert_eq!(FixedBytes::<Signature>::SIZE, ByteSize(64));
+        assert_eq!(FixedBytes::<KeyId>::SIZE, ByteSize(16));
+        assert_eq!(FixedBytes::<SessionNonce>::SIZE, ByteSize(16));
+        assert_eq!(FixedBytes::<PublicKey>::SIZE, ByteSize(32));
     }
 
     /// A split reads one value from the front and hands back the bytes after
     /// it. Bytes short of one value give nothing.
     #[test]
     fn a_split_reads_one_value_from_the_front_and_refuses_short_bytes() {
+        let nonce = FixedBytes::<Nonce>::from_array([7; 24]);
         let mut bytes = vec![7; 24];
         bytes.extend_from_slice(b"rest");
         assert_eq!(
-            Nonce::split_from(&bytes),
-            Some((Nonce([7; 24]), &b"rest"[..]))
+            FixedBytes::<Nonce>::split_from(&bytes),
+            Some((nonce, &b"rest"[..]))
         );
-        assert_eq!(Nonce::split_from(&[7; 24]), Some((Nonce([7; 24]), &[][..])));
-        assert_eq!(Nonce::split_from(&[7; 23]), None);
-        let (key_id, rest) = KeyId::split_from(&[3; 20]).unwrap();
-        assert_eq!((key_id, rest), (KeyId::from_array([3; 16]), &[3; 4][..]));
-        assert_eq!(PublicKey::split_from(&[1; 31]), None);
-        assert_eq!(Signature::split_from(&[]), None);
+        assert_eq!(
+            FixedBytes::<Nonce>::split_from(&[7; 24]),
+            Some((nonce, &[][..]))
+        );
+        assert_eq!(FixedBytes::<Nonce>::split_from(&[7; 23]), None);
+        let (key_id, rest) = FixedBytes::<KeyId>::split_from(&[3; 20]).unwrap();
+        assert_eq!(
+            (key_id, rest),
+            (FixedBytes::from_array([3; 16]), &[3; 4][..])
+        );
+        assert_eq!(FixedBytes::<PublicKey>::split_from(&[1; 31]), None);
+        assert_eq!(FixedBytes::<Signature>::split_from(&[]), None);
     }
 
     /// A push appends the bytes a split reads back, after what `out` held.
     #[test]
     fn a_push_appends_the_bytes_a_split_reads_back() {
+        let nonce = FixedBytes::<Nonce>::from_array([7; 24]);
         let mut out = b"head".to_vec();
-        KeyId::from_array([3; 16]).push_to(&mut out);
-        Nonce([7; 24]).push_to(&mut out);
+        FixedBytes::<KeyId>::from_array([3; 16]).push_to(&mut out);
+        nonce.push_to(&mut out);
         let rest = out.strip_prefix(b"head").unwrap();
-        let (key_id, rest) = KeyId::split_from(rest).unwrap();
-        assert_eq!(key_id, KeyId::from_array([3; 16]));
-        assert_eq!(Nonce::split_from(rest), Some((Nonce([7; 24]), &[][..])));
+        let (key_id, rest) = FixedBytes::<KeyId>::split_from(rest).unwrap();
+        assert_eq!(key_id, FixedBytes::from_array([3; 16]));
+        assert_eq!(
+            FixedBytes::<Nonce>::split_from(rest),
+            Some((nonce, &[][..]))
+        );
     }
 }

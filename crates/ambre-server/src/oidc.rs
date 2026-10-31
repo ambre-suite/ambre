@@ -55,7 +55,7 @@ pub type OidcClients = Arc<HashMap<ambre_core::OidcProvider, OidcProviderState>>
 #[derive(serde::Serialize)]
 pub struct LoginResponse {
     pub url: ambre_core::ProviderUrl,
-    pub state: ambre_core::OidcState,
+    pub state: ambre_core::Credential<ambre_core::OidcState>,
 }
 
 /// Received by `POST /auth/{provider}/callback`.
@@ -65,8 +65,8 @@ pub struct LoginResponse {
 /// Redis, exchanges the code for tokens, and creates a session.
 #[derive(serde::Deserialize)]
 pub struct CallbackRequest {
-    pub code: ambre_core::OidcCode,
-    pub state: ambre_core::OidcState,
+    pub code: ambre_core::Credential<ambre_core::OidcCode>,
+    pub state: ambre_core::Credential<ambre_core::OidcState>,
 }
 
 ambre_core::define_flag! {
@@ -91,9 +91,9 @@ pub struct CallbackResponse {
     /// and the `bool` of the field.
     pub is_new_user: SignIn,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
-    pub access_token: ambre_protocol::ws::AccessToken,
+    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
     /// Opaque refresh token, exchanged at `/auth/refresh` for a new access JWT.
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
     pub access_expires_in: ambre_core::Seconds,
 }
@@ -228,7 +228,7 @@ pub async fn login_url(
     Ok((
         LoginResponse {
             url: ambre_core::ProviderUrl::new(auth_url.to_string()),
-            state: ambre_core::OidcState::new(csrf_secret),
+            state: ambre_core::Credential::new(csrf_secret),
         },
         oidc_state,
     ))
@@ -240,7 +240,7 @@ pub async fn login_url(
 /// to prevent code interception. The ID token is verified against the provider's JWKS keys.
 pub async fn exchange_code(
     provider: &OidcProviderState,
-    code: &ambre_core::OidcCode,
+    code: &ambre_core::Credential<ambre_core::OidcCode>,
     stored_state: &OidcAuthState,
 ) -> Result<CoreIdTokenClaims, AppError> {
     let auth_code = crate::secrets::oidc::authorization_code(code);
@@ -516,7 +516,7 @@ mod tests {
         let (login, kept) = login_url(&clients[&ambre_core::OidcProvider::Google])
             .await
             .unwrap();
-        let code = ambre_core::OidcCode::new(stub.authorize(login.url.as_str()));
+        let code = ambre_core::Credential::new(stub.authorize(login.url.as_str()));
         let claims = exchange_code(&clients[&ambre_core::OidcProvider::Google], &code, &kept)
             .await
             .unwrap();
@@ -544,7 +544,7 @@ mod tests {
             pkce_verifier_secret: kept.pkce_verifier_secret.clone(),
             nonce: Nonce::new("another".into()),
         };
-        let code = ambre_core::OidcCode::new(stub.authorize(login.url.as_str()));
+        let code = ambre_core::Credential::new(stub.authorize(login.url.as_str()));
         refused_at(
             exchange_code(provider, &code, &other_nonce).await,
             "id token verification failed",
@@ -557,7 +557,7 @@ mod tests {
             ),
             nonce: kept.nonce.clone(),
         };
-        let code = ambre_core::OidcCode::new(stub.authorize(login.url.as_str()));
+        let code = ambre_core::Credential::new(stub.authorize(login.url.as_str()));
         refused_at(
             exchange_code(provider, &code, &other_verifier).await,
             "token exchange failed",
@@ -565,7 +565,7 @@ mod tests {
 
         stub.forge();
         let (login, kept) = login_url(provider).await.unwrap();
-        let code = ambre_core::OidcCode::new(stub.authorize(login.url.as_str()));
+        let code = ambre_core::Credential::new(stub.authorize(login.url.as_str()));
         refused_at(
             exchange_code(provider, &code, &kept).await,
             "id token verification failed",

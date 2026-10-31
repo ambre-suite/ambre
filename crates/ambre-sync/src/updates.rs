@@ -1,6 +1,7 @@
 use super::*;
 use crate::pipeline::UpdateFrame;
 use crate::rekey::{RefusedFrames, SentFrame};
+use ambre_core::FixedBytes;
 use ambre_protocol::messages::Signature;
 
 /// The delay before Sync sends again the first delta the relay failed to
@@ -115,7 +116,7 @@ impl SyncState {
                 "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
                 seq.0,
                 update.public_data.clock.0,
-                opened.as_ref().map(|d| d.payload.len()).unwrap_or(0),
+                opened.as_ref().map_or(0, |d| d.payload.len().0),
             );
             return Some(opened);
         }
@@ -362,7 +363,7 @@ impl SyncState {
                     "Sync: snapshot {snapshot_id:?} of doc {document_id:?} contradicts its \
                      deltas, reporting it"
                 );
-                Some(Vouch::Report(ambre_core::SignatureHex::encode(signature)))
+                Some(Vouch::Report(FixedBytes::from_array(signature)))
             }
             SnapshotPurpose::Confirm => {
                 tracing::info!("Sync: snapshot {snapshot_id:?} left unchecked");
@@ -526,10 +527,7 @@ impl SyncState {
             let rule = self.log_rule(document_id);
             // A snapshot this user confirmed alone is this user's own work, and
             // opens as it is (`AUTHOR-022` reads another user's).
-            let own_key = self
-                .author_pub_key()
-                .map(|key| key.to_key_hex())
-                .unwrap_or_default();
+            let own_key = self.author_pub_key();
             wasm_bindgen_futures::spawn_local(async move {
                 let members_url = crate::http::ApiRoot::of(url_scheme, &api_base)
                     .route(format!("/documents/{doc_id}/members"));
@@ -646,7 +644,7 @@ impl SyncState {
                     {
                         Ok(Some(meta)) => {
                             let others = meta.status == ambre_core::SnapshotStatus::SelfConfirmed
-                                && meta.author_pubkey != own_key;
+                                && Some(meta.author_pubkey) != own_key;
                             let (start_id, start_covered) = match (others, &meta.reference) {
                                 (false, _) => (Some(meta.snapshot_id), meta.covered_seq),
                                 (true, Some(r)) => (Some(r.snapshot_id), r.covered_seq),
@@ -764,15 +762,19 @@ impl SyncState {
     pub(crate) fn unwrap_anchored(
         exchange_key: &x25519_dalek::StaticSecret,
         members: &[http::MemberEntry],
-    ) -> Result<(DocumentKey, Option<ambre_protocol::EntryDigest>), crate::error::SyncError> {
+    ) -> Result<
+        (DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>),
+        crate::error::SyncError,
+    > {
         crate::sharing::unwrap_own(
             exchange_key,
-            members.iter().map(|m| {
-                (
-                    &m.exchange_pub_key,
+            // A row whose exchange key does not parse is no row of ours.
+            members.iter().filter_map(|m| {
+                Some((
+                    m.exchange_pub_key.key()?,
                     &m.doc_key_enc,
-                    &m.wrapper_exchange_pub_key,
-                )
+                    m.wrapper_exchange_pub_key.key(),
+                ))
             }),
         )
     }
@@ -806,7 +808,9 @@ impl SyncState {
         let role =
             crate::sharing::own_role(resp.members.iter().map(|m| (m.user_id, m.role)), my_user_id);
         let signing_keys = crate::sharing::presence_directory(
-            resp.members.iter().map(|m| (m.user_id, &m.signing_pub_key)),
+            resp.members
+                .iter()
+                .map(|m| (m.user_id, m.signing_pub_key.key())),
         );
         Ok(OpenedMembers {
             doc_key,
@@ -832,7 +836,7 @@ impl SyncState {
     pub(crate) fn named_key_holds(
         document_id: Id<Document>,
         doc_key: &DocumentKey,
-        named_key: Option<ambre_core::KeyId>,
+        named_key: Option<FixedBytes<ambre_core::KeyId>>,
         links: &[ambre_protocol::KeyLink],
     ) -> Result<(), (OpenFailure, String)> {
         let Some(named) = named_key else {
@@ -912,10 +916,10 @@ impl SyncState {
 
     /// The author identity (Ed25519 verifying key) for outbound messages, or
     /// `None` before Unlock has seeded the session keys.
-    pub(crate) fn author_pub_key(&self) -> Option<PublicKey> {
+    pub(crate) fn author_pub_key(&self) -> Option<FixedBytes<PublicKey>> {
         self.signing_key
             .as_ref()
-            .map(|sk| PublicKey::from_array(sk.verifying_key().to_bytes()))
+            .map(|sk| FixedBytes::from_array(sk.verifying_key().to_bytes()))
     }
 
     /// Replays updates that were buffered before the session/document were ready
@@ -951,7 +955,7 @@ impl SyncState {
     pub(crate) fn send_summarized_update(
         &mut self,
         document_id: Id<Document>,
-        payload: ambre_core::DeltaBytes,
+        payload: ambre_core::Payload<ambre_core::DeltaBytes>,
         summary: Option<ActivitySummary>,
     ) {
         if self.signing_key.is_none() {
@@ -988,9 +992,9 @@ impl SyncState {
     fn send_update_body(
         &mut self,
         document_id: Id<Document>,
-        nonce: SessionNonce,
+        nonce: FixedBytes<SessionNonce>,
         summary: Option<&ambre_core::activity::ActivitySummary>,
-        delta: &ambre_core::DeltaBytes,
+        delta: &ambre_core::Payload<ambre_core::DeltaBytes>,
     ) {
         match pipeline::update_body(&nonce, summary, delta) {
             Ok(body) => self.send_body(document_id, body),
@@ -1004,8 +1008,8 @@ impl SyncState {
     pub(crate) fn handle_send_unsent(
         &mut self,
         document_id: Id<Document>,
-        payload: ambre_core::DeltaBytes,
-        nonce: SessionNonce,
+        payload: ambre_core::Payload<ambre_core::DeltaBytes>,
+        nonce: FixedBytes<SessionNonce>,
     ) {
         if self.signing_key.is_none() {
             // Sent after the document is ready, so after the session is.
@@ -1103,8 +1107,8 @@ impl SyncState {
         clock: Clock,
         body: &UpdateFrame,
         signing_key: &SigningKey,
-        pub_key: PublicKey,
-    ) -> Option<(KeyId, Signature)> {
+        pub_key: FixedBytes<PublicKey>,
+    ) -> Option<(FixedBytes<KeyId>, FixedBytes<Signature>)> {
         let doc_state = self.documents.get(&document_id)?;
         if doc_state.rekey.holds_refused() {
             return None;
@@ -1146,7 +1150,7 @@ impl SyncState {
         {
             for (clock, body) in refused {
                 if let Some((_, signature)) =
-                    self.seal_and_send(document_id, clock, &body, &signing_key, pub_key.clone())
+                    self.seal_and_send(document_id, clock, &body, &signing_key, pub_key)
                     && let Some(doc_state) = self.documents.get_mut(&document_id)
                 {
                     doc_state.rekey.resealed(clock, signature);
@@ -1166,7 +1170,7 @@ impl SyncState {
         &mut self,
         document_id: Id<Document>,
         expected: Clock,
-        signature: Signature,
+        signature: FixedBytes<Signature>,
     ) {
         // Answered even when no delta here carries it, so a delta this log
         // forgot never leaves the fence standing.
@@ -1199,7 +1203,7 @@ impl SyncState {
     pub(crate) fn handle_delta_refused(
         &mut self,
         document_id: Id<Document>,
-        signature: Signature,
+        signature: FixedBytes<Signature>,
         code: ambre_core::RefusalCode,
     ) {
         match code {
@@ -1217,7 +1221,11 @@ impl SyncState {
     /// segment (`SRV-115`). It and every later delta of the document return
     /// to the Logic thread, which moves their new messages to the active
     /// segment (`SYNC-165`). The document is not held.
-    fn handle_delta_locked(&mut self, document_id: Id<Document>, signature: &Signature) {
+    fn handle_delta_locked(
+        &mut self,
+        document_id: Id<Document>,
+        signature: &FixedBytes<Signature>,
+    ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -1238,7 +1246,12 @@ impl SyncState {
 
     /// Drops the delta signed `signature` and every later one, and holds the
     /// document. The first hold is reported (`SYNC-155`, `SYNC-156`).
-    fn hold_refused(&mut self, document_id: Id<Document>, signature: &Signature, cause: HoldCause) {
+    fn hold_refused(
+        &mut self,
+        document_id: Id<Document>,
+        signature: &FixedBytes<Signature>,
+        cause: HoldCause,
+    ) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -1257,7 +1270,7 @@ impl SyncState {
     /// fault of its own (`SRV-186`). It leaves again after a delay that
     /// doubles at each failure since the last echo. Past the budget the
     /// document holds it, as for a refusal (`SYNC-159`).
-    fn handle_delta_failed(&mut self, document_id: Id<Document>, signature: Signature) {
+    fn handle_delta_failed(&mut self, document_id: Id<Document>, signature: FixedBytes<Signature>) {
         let Some(doc_state) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -1463,7 +1476,7 @@ impl SyncState {
     pub(crate) fn handle_send_snapshot(
         &mut self,
         document_id: Id<Document>,
-        payload: ambre_core::SnapshotBytes,
+        payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         covered_seq: Seq,
     ) {
         let upload = match self.snapshot_upload(document_id, &payload, covered_seq) {
@@ -1506,13 +1519,13 @@ impl SyncState {
     pub(crate) fn snapshot_upload(
         &self,
         document_id: Id<Document>,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
         covered_seq: Seq,
     ) -> Result<SnapshotUpload, crate::error::SyncError> {
         use crate::error::SyncError;
         let signing_key = self.signing_key.as_ref().ok_or(SyncError::SessionLocked)?;
         let pub_key = self.author_pub_key().ok_or(SyncError::SessionLocked)?;
-        let author_pubkey = pub_key.to_key_hex();
+        let author_pubkey = pub_key;
         let doc_state = self.documents.get(&document_id).ok_or(SyncError::NotOpen)?;
         let public_data = SnapshotPublicData {
             document_id,
@@ -1542,7 +1555,7 @@ impl SyncState {
     pub(crate) fn handle_send_ephemeral(
         &mut self,
         document_id: Id<Document>,
-        payload: ambre_core::EphemeralBytes,
+        payload: ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) {
         let Some(signing_key) = self.signing_key.clone() else {
             tracing::warn!("Sync: SendEphemeral before session keys ready, dropping");
@@ -1580,8 +1593,8 @@ impl SyncState {
 pub(crate) enum Vouch {
     /// The snapshot matches the deltas it covers (`SRV-126`).
     Confirm,
-    /// It contradicts them: the hex signature of the report (`SRV-133`).
-    Report(ambre_core::SignatureHex),
+    /// It contradicts them: the signature of the report (`SRV-133`).
+    Report(FixedBytes<Signature>),
 }
 
 /// Posts `vouch` on `snapshot_id` to the relay at `base`, under the
@@ -1606,7 +1619,7 @@ pub(crate) async fn send_vouch(
         }
         Vouch::Report(signature) => {
             let body = http::ReportSnapshotRequest {
-                signature: signature.clone(),
+                signature: *signature,
             };
             http::send_json_auth_via(transport, post, &url.join("/report"), &body, auth).await?;
             Ok(None)
@@ -1618,8 +1631,8 @@ pub(crate) async fn send_vouch(
 pub(crate) struct SnapshotUpload {
     /// The document it compacts.
     pub document_id: Id<Document>,
-    /// Its author's signing key, in hex.
-    pub author_pubkey: ambre_core::SigningKeyHex,
+    /// Its author's signing key.
+    pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
     /// The last delta it covers.
     pub covered_seq: Seq,
     /// The sealed blob.
@@ -1686,15 +1699,15 @@ pub(crate) async fn upload_snapshot(
 /// What an open reads out of one members answer (`SYNC-092`).
 pub(crate) struct OpenedMembers {
     pub doc_key: DocumentKey,
-    pub signing_keys: Vec<(ambre_core::PublicKey, Id<User>)>,
+    pub signing_keys: Vec<(FixedBytes<ambre_core::PublicKey>, Id<User>)>,
     pub role: Role,
     pub rotation_owed: ambre_core::RotationDebt,
     /// The keys the membership log lets sign a key link (`SYNC-121`).
     /// `None` for a document older than the log.
-    pub signers: Option<std::collections::HashSet<ambre_core::PublicKey>>,
+    pub signers: Option<std::collections::HashSet<FixedBytes<ambre_core::PublicKey>>>,
     /// The key the entry that added us names, when the log verifies our row
     /// (`SYNC-123`).
-    pub named_key: Option<ambre_core::KeyId>,
+    pub named_key: Option<FixedBytes<ambre_core::KeyId>>,
     /// What the log says a channel listed in this space must heed.
     pub word: membership_log::SpaceWord,
 }
@@ -1847,12 +1860,12 @@ mod tests {
         let wrapper_pub = crate::sharing::own_exchange_key(wrapper);
         http::MemberEntry {
             user_id: uid,
-            signing_pub_key: ambre_core::SigningKeyHex::encode([uid.as_bytes()[0]; 32]),
-            exchange_pub_key: ambre_core::ExchangeKeyHex::encode(&holder_pub),
+            signing_pub_key: http::ServedKey::of(FixedBytes::from_array([uid.as_bytes()[0]; 32])),
+            exchange_pub_key: http::ServedKey::of(holder_pub),
             doc_key_enc: crate::sharing::wrap_anchored_b64(wrapper, &holder_pub, doc_key, None)
                 .unwrap(),
             role,
-            wrapper_exchange_pub_key: ambre_core::ExchangeKeyHex::encode(wrapper_pub),
+            wrapper_exchange_pub_key: http::ServedKey::of(wrapper_pub),
         }
     }
 
@@ -1905,7 +1918,7 @@ mod tests {
         let mut raw = row.doc_key_enc.as_bytes().to_vec();
         let last = raw.len() - 1;
         raw[last] ^= 1;
-        row.doc_key_enc = ambre_core::WrappedDocKey::new(raw.to_vec());
+        row.doc_key_enc = ambre_core::Encoded::new(raw.to_vec());
         let resp = http::MembersResponse {
             members: vec![row],
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -1979,7 +1992,7 @@ mod tests {
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
     ) -> Update {
-        let pub_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let pub_key = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let public_data = UpdatePublicData {
             document_id,
             pub_key,
@@ -1993,7 +2006,7 @@ mod tests {
     }
 
     /// The session nonce every update of these tests carries.
-    const TEST_NONCE: SessionNonce = SessionNonce([6; 16]);
+    const TEST_NONCE: FixedBytes<SessionNonce> = FixedBytes::from_array([6; 16]);
 
     /// A frame opens with the one key it names (`SYNC-045`). A previous key
     /// still cached opens its own frames, and a key this client never held
@@ -2083,14 +2096,14 @@ mod tests {
     ) -> pipeline::FetchedBlob {
         let public_data = SnapshotPublicData {
             document_id,
-            pub_key: PublicKey::from_array(signing_key.verifying_key().to_bytes()),
+            pub_key: FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes()),
             key_id: doc_key.id(),
             snapshot_id,
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
         let snapshot = pipeline::seal_snapshot(
-            &ambre_core::SnapshotBytes::new(payload.to_vec()),
+            &ambre_core::Payload::new(payload.to_vec()),
             public_data,
             doc_key,
             signing_key,
@@ -2136,7 +2149,7 @@ mod tests {
         };
         let public_data = UpdatePublicData {
             document_id: doc,
-            pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
+            pub_key: FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes()),
             key_id: key.id(),
             snapshot_id: snap,
             clock: Clock(1),
@@ -2175,12 +2188,12 @@ mod tests {
     fn an_opened_update_reaches_logic_with_its_nonce_its_peer_and_its_signer() {
         let (mut state, rx, doc, key, sk, snap) = setup();
         let alice = Id::<User>::mint();
-        let signer = PublicKey::from_array(sk.verifying_key().to_bytes());
+        let signer = FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes());
         state
             .documents
             .get_mut(&doc)
             .unwrap()
-            .set_signing_keys([(signer.clone(), alice)]);
+            .set_signing_keys([(signer, alice)]);
         state.receive_update(
             Seq(1),
             make_update(doc, snap, Clock(1), b"hello", &key, &sk),
@@ -2212,7 +2225,7 @@ mod tests {
         assert_eq!(
             unknown.peer,
             ambre_crypto::peer::derive_peer_id(
-                &PublicKey::from_array(stranger.verifying_key().to_bytes()),
+                &FixedBytes::<PublicKey>::from_array(stranger.verifying_key().to_bytes()),
                 &TEST_NONCE
             )
         );
@@ -2249,7 +2262,7 @@ mod tests {
         let (mut state, rx, doc, key, sk, snap) = setup();
         let public_data = UpdatePublicData {
             document_id: doc,
-            pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
+            pub_key: FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes()),
             key_id: key.id(),
             snapshot_id: snap,
             clock: Clock(1),
@@ -2495,18 +2508,18 @@ mod tests {
     #[test]
     fn peer_left_resolves_the_key_the_relay_named() {
         let (mut state, rx, doc, _key, signing_key, _snap) = setup();
-        let pub_key = PublicKey::from_array(signing_key.verifying_key().to_bytes());
+        let pub_key = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
         let alice = Id::<User>::mint();
         state
             .documents
             .get_mut(&doc)
             .expect("document")
             .signing_keys
-            .insert(pub_key.clone(), alice);
+            .insert(pub_key, alice);
 
         state.handle_ws_message(WsServerMsg::PeerLeft {
             document_id: doc,
-            pub_key: pub_key.clone(),
+            pub_key,
         });
         let events = drain(&rx);
         assert!(
@@ -2519,7 +2532,7 @@ mod tests {
         );
 
         // A key the member directory does not carry is dropped in silence.
-        let stranger = PublicKey::from_array([7u8; 32]);
+        let stranger = FixedBytes::<PublicKey>::from_array([7u8; 32]);
         state.handle_ws_message(WsServerMsg::PeerLeft {
             document_id: doc,
             pub_key: stranger,
@@ -2537,22 +2550,22 @@ mod tests {
     #[test]
     fn a_dropped_snapshot_names_its_author_and_reporter() {
         let (mut state, rx, doc, _key, signing_key, snapshot) = setup();
-        let author = PublicKey::from_array(signing_key.verifying_key().to_bytes());
-        let reporter = PublicKey::from_array([7u8; 32]);
+        let author = FixedBytes::<PublicKey>::from_array(signing_key.verifying_key().to_bytes());
+        let reporter = FixedBytes::<PublicKey>::from_array([7u8; 32]);
         let (alice, bob) = (Id::<User>::mint(), Id::<User>::mint());
         let keys = &mut state
             .documents
             .get_mut(&doc)
             .expect("document")
             .signing_keys;
-        keys.insert(author.clone(), alice);
-        keys.insert(reporter.clone(), bob);
+        keys.insert(author, alice);
+        keys.insert(reporter, bob);
         let dropped = |state: &mut SyncState| {
             state.handle_ws_message(WsServerMsg::SnapshotDropped {
                 document_id: doc,
                 snapshot_id: snapshot,
-                author: author.clone(),
-                reporter: reporter.clone(),
+                author,
+                reporter,
                 after: ambre_core::AfterDrop::Refinalize,
             });
         };
@@ -2622,7 +2635,7 @@ mod tests {
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
             members: vec![listed(carol)],
-            signing_keys: vec![(PublicKey::from_array([2u8; 32]), carol)],
+            signing_keys: vec![(FixedBytes::<PublicKey>::from_array([2u8; 32]), carol)],
         });
         let events = drain(&rx);
         assert_eq!(
@@ -2690,7 +2703,7 @@ mod tests {
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
             members: Vec::new(),
-            signing_keys: vec![(PublicKey::from_array([2u8; 32]), carol)],
+            signing_keys: vec![(FixedBytes::<PublicKey>::from_array([2u8; 32]), carol)],
         });
         let bob = Id::<User>::mint();
         state.handle_sync_event(SyncEvent::DocumentMembersReady {
@@ -2700,17 +2713,17 @@ mod tests {
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
             members: Vec::new(),
-            signing_keys: vec![(PublicKey::from_array([1u8; 32]), bob)],
+            signing_keys: vec![(FixedBytes::<PublicKey>::from_array([1u8; 32]), bob)],
         });
 
         let keys = &state.documents[&doc].signing_keys;
         assert_eq!(
-            keys.get(&PublicKey::from_array([2u8; 32])),
+            keys.get(&FixedBytes::<PublicKey>::from_array([2u8; 32])),
             Some(&carol),
             "the newer answer holds"
         );
         assert!(
-            !keys.contains_key(&PublicKey::from_array([1u8; 32])),
+            !keys.contains_key(&FixedBytes::<PublicKey>::from_array([1u8; 32])),
             "the crossed answer changes nothing"
         );
         assert!(
@@ -2732,7 +2745,7 @@ mod tests {
         assert!(
             !state.documents[&doc]
                 .signing_keys
-                .contains_key(&PublicKey::from_array([3u8; 32]))
+                .contains_key(&FixedBytes::<PublicKey>::from_array([3u8; 32]))
         );
 
         state.handle_ws_message(WsServerMsg::Subscribed { document_id: doc });
@@ -2749,11 +2762,11 @@ mod tests {
             word: Default::default(),
             rotation_owed: ambre_core::RotationDebt::Settled,
             members: vec![listed(carol)],
-            signing_keys: vec![(PublicKey::from_array([3u8; 32]), carol)],
+            signing_keys: vec![(FixedBytes::<PublicKey>::from_array([3u8; 32]), carol)],
         });
         let keys = &state.documents[&doc].signing_keys;
         assert_eq!(
-            keys.get(&PublicKey::from_array([3u8; 32])),
+            keys.get(&FixedBytes::<PublicKey>::from_array([3u8; 32])),
             Some(&carol),
             "the newcomer resolves"
         );
@@ -3084,7 +3097,7 @@ mod tests {
     /// stays on its reference.
     #[test]
     fn a_held_snapshot_is_adopted_only_when_its_extras_resolve_to_its_author() {
-        let nonce = ambre_core::SessionNonce([7; 16]);
+        let nonce = FixedBytes::<ambre_core::SessionNonce>::from_array([7; 16]);
         let mallory = MasterSeed::generate().derive_signing_key();
         for (signer, verdict_is_match, adopted) in [
             (true, true, true),
@@ -3190,9 +3203,9 @@ mod tests {
                 let transcript = ambre_protocol::snapshot_report::report_transcript(
                     doc,
                     pending,
-                    &PublicKey::from_array(author.verifying_key().to_bytes()),
+                    &FixedBytes::<PublicKey>::from_array(author.verifying_key().to_bytes()),
                 );
-                let bytes: [u8; 64] = hex::decode(signature.as_str()).unwrap().try_into().unwrap();
+                let bytes: [u8; 64] = *signature.as_array();
                 let signature = ed25519_dalek::Signature::from_bytes(&bytes);
                 assert!(
                     reporter
@@ -3218,7 +3231,7 @@ mod tests {
         let upload = || {
             let public_data = SnapshotPublicData {
                 document_id: doc,
-                pub_key: PublicKey::from_array(sk.verifying_key().to_bytes()),
+                pub_key: FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes()),
                 key_id: key.id(),
                 snapshot_id: reference,
                 parent_snapshot_proof: None,
@@ -3226,10 +3239,10 @@ mod tests {
             };
             SnapshotUpload {
                 document_id: doc,
-                author_pubkey: ambre_core::SigningKeyHex::encode(sk.verifying_key().to_bytes()),
+                author_pubkey: FixedBytes::from_array(sk.verifying_key().to_bytes()),
                 covered_seq: ambre_bus::Seq(3),
                 blob: pipeline::snapshot_blob(
-                    &ambre_core::SnapshotBytes::new(b"base".to_vec()),
+                    &ambre_core::Payload::new(b"base".to_vec()),
                     public_data,
                     &key,
                     &sk,
@@ -3352,13 +3365,16 @@ mod tests {
     fn sent_updates(
         rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
         keys: &[&DocumentKey],
-    ) -> Vec<(u64, KeyId, Vec<u8>)> {
+    ) -> Vec<(u64, FixedBytes<KeyId>, Vec<u8>)> {
         opened_updates(drain_ws(rx), keys)
     }
 
     /// Each update among `msgs`, as its clock, the key it names and its
     /// plaintext.
-    fn opened_updates(msgs: Vec<WsClientMsg>, keys: &[&DocumentKey]) -> Vec<(u64, KeyId, Vec<u8>)> {
+    fn opened_updates(
+        msgs: Vec<WsClientMsg>,
+        keys: &[&DocumentKey],
+    ) -> Vec<(u64, FixedBytes<KeyId>, Vec<u8>)> {
         msgs.into_iter()
             .filter_map(|msg| match msg {
                 WsClientMsg::Update(u) => {
@@ -3377,7 +3393,7 @@ mod tests {
     }
 
     /// The signature of each update among `msgs`, in order.
-    fn signatures(msgs: &[WsClientMsg]) -> Vec<Signature> {
+    fn signatures(msgs: &[WsClientMsg]) -> Vec<FixedBytes<Signature>> {
         msgs.iter()
             .filter_map(|msg| match msg {
                 WsClientMsg::Update(u) => Some(u.signature),
@@ -3432,7 +3448,7 @@ mod tests {
     }
 
     /// The relay refuses the delta signed `signature`, naming it.
-    fn refuse_by_name(state: &mut SyncState, doc: Id<Document>, signature: Signature) {
+    fn refuse_by_name(state: &mut SyncState, doc: Id<Document>, signature: FixedBytes<Signature>) {
         state.handle_ws_message(WsServerMsg::DeltaRefused {
             document_id: doc,
             signature,
@@ -3530,7 +3546,7 @@ mod tests {
                 segment,
                 Id::<Lease>::mint(),
                 ambre_bus::Seq(3),
-                &ambre_core::SnapshotBytes::new(b"s".to_vec()),
+                &ambre_core::Payload::new(b"s".to_vec()),
             );
         };
         let ends = |events: &[LogicEvent]| -> Vec<ambre_core::FinalizeEnd> {
@@ -3599,7 +3615,7 @@ mod tests {
     fn fail_sequencing(
         state: &mut SyncState,
         doc: Id<Document>,
-        signature: Signature,
+        signature: FixedBytes<Signature>,
     ) -> ambre_core::Generation<crate::generation::ResendTicket> {
         state.handle_ws_message(WsServerMsg::DeltaRefused {
             document_id: doc,
@@ -3906,8 +3922,8 @@ mod tests {
     }
 
     /// A copy unwraps against the exchange key of whoever wrapped it, never
-    /// against its holder's (`SYNC-034`). A row from an older relay names no
-    /// wrapper: it reads as self-wrapped, so a copy a peer wrapped fails.
+    /// against its holder's (`SYNC-034`). A row that names the holder as its
+    /// wrapper opens only a copy the holder wrapped itself.
     #[test]
     fn a_copy_unwraps_against_its_wrapper_and_never_its_holder() {
         let me = Id::<User>::mint();
@@ -3915,21 +3931,22 @@ mod tests {
         let peer_xk = ambre_crypto::MasterSeed::from_array([4; 32]).derive_exchange_key();
         let doc_key = DocumentKey::generate();
         // The row `wrapper` wrapped, its wrapper field rewritten to `named`.
-        let unwrapped = |wrapper: &x25519_dalek::StaticSecret, named: Option<String>| {
-            let mut row = member_row(me, &my_xk, wrapper, &doc_key, ambre_core::Role::Editor);
-            if let Some(named) = named {
-                row.wrapper_exchange_pub_key = ambre_core::ExchangeKeyHex(named);
-            }
-            SyncState::unwrap_document_key(&my_xk, &[row])
-                .map(|key| key.id())
-                .ok()
-        };
-        let mine = hex::encode(x25519_dalek::PublicKey::from(&my_xk).to_bytes());
+        let unwrapped =
+            |wrapper: &x25519_dalek::StaticSecret,
+             named: Option<FixedBytes<ambre_core::ExchangePublicKey>>| {
+                let mut row = member_row(me, &my_xk, wrapper, &doc_key, ambre_core::Role::Editor);
+                if let Some(named) = named {
+                    row.wrapper_exchange_pub_key = http::ServedKey::of(named);
+                }
+                SyncState::unwrap_document_key(&my_xk, &[row])
+                    .map(|key| key.id())
+                    .ok()
+            };
+        let mine = crate::sharing::own_exchange_key(&my_xk);
 
         assert_eq!(unwrapped(&peer_xk, None), Some(doc_key.id()));
         assert!(unwrapped(&peer_xk, Some(mine)).is_none());
-        assert!(unwrapped(&peer_xk, Some(String::new())).is_none());
-        assert_eq!(unwrapped(&my_xk, Some(String::new())), Some(doc_key.id()));
+        assert_eq!(unwrapped(&my_xk, Some(mine)), Some(doc_key.id()));
     }
 
     /// Every refusal of a live frame reaches the Logic thread as one warning
@@ -3939,11 +3956,11 @@ mod tests {
     fn every_refused_frame_reaches_logic_as_a_warning() {
         let (mut state, rx, doc, key, sk, snap) = setup();
         let mut unsigned = make_update(doc, snap, Clock(1), b"a", &key, &sk);
-        unsigned.signature.0 = [0; 64];
+        unsigned.signature = FixedBytes::from_array([0; 64]);
         let stranger = DocumentKey::generate();
         let under_stranger = make_update(doc, snap, Clock(2), b"b", &stranger, &sk);
         let mut corrupt = make_update(doc, snap, Clock(3), b"c", &key, &sk);
-        corrupt.commitment_tag.0 = [0; 32];
+        corrupt.commitment_tag = FixedBytes::from_array([0; 32]);
 
         let mut messages = Vec::new();
         for (seq, update) in [(1, unsigned), (2, under_stranger), (3, corrupt)] {
@@ -4308,7 +4325,7 @@ mod tests {
     fn sent_bodies(
         rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
         key: &DocumentKey,
-    ) -> Vec<(SessionNonce, Vec<u8>)> {
+    ) -> Vec<(FixedBytes<SessionNonce>, Vec<u8>)> {
         drain_ws(rx)
             .into_iter()
             .filter_map(|msg| match msg {
@@ -4331,7 +4348,7 @@ mod tests {
         state.signing_key = Some(sk);
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let earlier = SessionNonce([7; 16]);
+        let earlier = FixedBytes::<SessionNonce>::from_array([7; 16]);
 
         state.handle_send_unsent(doc, b"old".to_vec().into(), earlier);
         state.handle_send_update(doc, b"new".to_vec());
@@ -4395,7 +4412,7 @@ mod tests {
         let mut forged = make_update(doc, snap, Clock(2), b"forged", &key, &sk);
         forged.ciphertext.0[0] ^= 1;
         let mut unsigned = make_update(doc, snap, Clock(3), b"unsigned", &key, &sk);
-        unsigned.signature.0 = [0; 64];
+        unsigned.signature = FixedBytes::from_array([0; 64]);
         let updates = [
             (1, make_update(doc, snap, Clock(1), b"one", &key, &sk)),
             (2, forged),

@@ -4,6 +4,6 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    let file = ambre_core::FileBytes::new(data.to_vec());
+    let file = ambre_core::Payload::<ambre_core::FileBytes>::new(data.to_vec());
     let _ = ambre_prose::interop::markdown_read::read(&file);
 });

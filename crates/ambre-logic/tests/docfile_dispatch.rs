@@ -36,7 +36,7 @@ fn doc_id(tag: u8) -> Id<Document> {
     Id::from_bytes(bytes)
 }
 
-fn trame_file() -> ambre_core::PlaintextContainer {
+fn trame_file() -> ambre_core::Payload<ambre_core::PlaintextContainer> {
     let mut state = TrameState::new();
     state.handle_command(ambre_trame::TrameCommand::SetCellText {
         row: Row::new(0),
@@ -48,7 +48,7 @@ fn trame_file() -> ambre_core::PlaintextContainer {
         .expect("the document reads")
 }
 
-fn toile_file() -> ambre_core::PlaintextContainer {
+fn toile_file() -> ambre_core::Payload<ambre_core::PlaintextContainer> {
     let mut state = ToileState::new();
     state.handle_command(ambre_toile::ToileCommand::CreateElement {
         kind: ambre_toile::ElementKind::Sticky,

@@ -49,7 +49,7 @@ fn remap_for_child(view: &AppView, ev: &InputEvent) -> Option<InputEvent> {
 /// the next fetch is a fresh delivery. Whether they were sent.
 pub(crate) fn send_faces(
     to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
-    faces: Vec<ambre_core::FontBytes>,
+    faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
 ) -> bool {
     to_logic.try_send(LogicCommand::LoadFonts { faces }).is_ok()
 }
@@ -926,10 +926,15 @@ mod tests {
             ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(1));
         assert!(send_faces(
             &to_logic,
-            vec![ambre_core::FontBytes::new(vec![1, 2, 3])]
+            vec![ambre_core::Payload::<ambre_core::FontBytes>::new(vec![
+                1, 2, 3
+            ])]
         ));
         assert!(
-            !send_faces(&to_logic, vec![ambre_core::FontBytes::new(vec![4])]),
+            !send_faces(
+                &to_logic,
+                vec![ambre_core::Payload::<ambre_core::FontBytes>::new(vec![4])]
+            ),
             "a full channel took the face"
         );
         match from_ui.try_recv() {

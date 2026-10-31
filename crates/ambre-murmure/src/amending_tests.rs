@@ -9,7 +9,7 @@ use ambre_bus::{
     ActivityKind, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle, Timestamp,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
-use ambre_core::{DeltaBytes, PeerEntryBytes, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
 use loro::{LoroDoc, LoroMap, VersionVector};
 
 use crate::channel::read_messages;
@@ -69,7 +69,7 @@ fn locked_with(texts: &[&str], author: Id<User>) -> (ChannelState, Id<Segment>) 
 fn amended(
     state: &mut ChannelState,
     segment: Id<Segment>,
-) -> (Id<Document>, DeltaBytes, DeltaBytes) {
+) -> (Id<Document>, Payload<DeltaBytes>, Payload<DeltaBytes>) {
     let ChangeTarget::Create(amendments) = state.change_target(segment, NOW).expect("target")
     else {
         panic!("a locked segment with no amendments creates them");
@@ -90,7 +90,7 @@ fn amended(
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<Id<Segment>, SnapshotBytes> = state
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -119,7 +119,7 @@ fn messages_of(event: &MurmureEvent) -> &[MessageView] {
 }
 
 /// Every operation of `doc` past `before`, as a delta travels.
-fn json_since(doc: &LoroDoc, before: &VersionVector) -> DeltaBytes {
+fn json_since(doc: &LoroDoc, before: &VersionVector) -> Payload<DeltaBytes> {
     doc.commit();
     crate::delta::encode(&doc.export_json_updates_without_peer_compression(before, &doc.oplog_vv()))
         .expect("encode")
@@ -130,8 +130,8 @@ fn bob_holding(
     alice: &ChannelState,
     segment: Id<Segment>,
     amendments: Id<Document>,
-    first: &DeltaBytes,
-    meta: &DeltaBytes,
+    first: &Payload<DeltaBytes>,
+    meta: &Payload<DeltaBytes>,
     author: Id<User>,
 ) -> ChannelState {
     let mut bob = peer_of(alice);

@@ -19,12 +19,12 @@ const RETURN_PREFIX: &str = "/signin/";
 
 /// A return from the provider, as read from the page's address. Its code and
 /// state are secrets, so it derives no `PartialEq`: the state compares in
-/// constant time, through [`ambre_core::OidcState::matches`].
+/// constant time, through [`ambre_core::Credential::matches`].
 #[derive(Debug, Clone)]
 pub(crate) struct ProviderReturn {
     pub provider: ambre_core::OidcProvider,
-    pub code: ambre_core::OidcCode,
-    pub state: ambre_core::OidcState,
+    pub code: ambre_core::Credential<ambre_core::OidcCode>,
+    pub state: ambre_core::Credential<ambre_core::OidcState>,
 }
 
 /// Whether `path` is a provider return address, whatever its query.
@@ -46,8 +46,8 @@ pub(crate) fn parse_return(path: &str, query: &str) -> Option<ProviderReturn> {
     let state = params.get("state").filter(|s| !s.is_empty())?;
     Some(ProviderReturn {
         provider,
-        code: ambre_core::OidcCode::new(code),
-        state: ambre_core::OidcState::new(state),
+        code: ambre_core::Credential::new(code),
+        state: ambre_core::Credential::new(state),
     })
 }
 
@@ -56,7 +56,7 @@ pub(crate) fn parse_return(path: &str, query: &str) -> Option<ProviderReturn> {
 /// party, and would sign the person in as someone else.
 pub(crate) fn accept_return(
     ret: ProviderReturn,
-    pending: Option<ambre_core::OidcState>,
+    pending: Option<ambre_core::Credential<ambre_core::OidcState>>,
 ) -> Option<ProviderReturn> {
     pending
         .is_some_and(|pending| pending.matches(&ret.state))
@@ -74,7 +74,7 @@ pub(crate) fn is_followable(url: &ambre_core::ProviderUrl) -> bool {
 /// address is followable.
 pub(crate) fn follow_address(
     url: &ambre_core::ProviderUrl,
-    state: &ambre_core::OidcState,
+    state: &ambre_core::Credential<ambre_core::OidcState>,
     navigate: impl FnOnce(&ambre_core::ProviderUrl),
 ) -> bool {
     if !is_followable(url) {
@@ -133,11 +133,11 @@ fn session_storage() -> Option<web_sys::Storage> {
 }
 
 /// Read and clear the remembered state: one return per sign-in.
-fn take_pending_state() -> Option<ambre_core::OidcState> {
+fn take_pending_state() -> Option<ambre_core::Credential<ambre_core::OidcState>> {
     let storage = session_storage()?;
     let state = storage.get_item(PENDING_STATE_KEY).ok().flatten();
     let _ = storage.remove_item(PENDING_STATE_KEY);
-    state.map(ambre_core::OidcState::new)
+    state.map(ambre_core::Credential::new)
 }
 
 // -- Tests (wasm tier) -------------------------------------------------------
@@ -150,8 +150,8 @@ mod tests {
 
     wasm_bindgen_test_configure!(run_in_browser);
 
-    fn state(text: &str) -> ambre_core::OidcState {
-        ambre_core::OidcState::new(text.to_owned())
+    fn state(text: &str) -> ambre_core::Credential<ambre_core::OidcState> {
+        ambre_core::Credential::new(text.to_owned())
     }
 
     /// A return as its parts read, for a test that compares two.
@@ -166,15 +166,15 @@ mod tests {
     }
 
     /// A state as its text reads.
-    fn text(state: Option<ambre_core::OidcState>) -> Option<String> {
+    fn text(state: Option<ambre_core::Credential<ambre_core::OidcState>>) -> Option<String> {
         state.map(|state| state.secret().expose().clone())
     }
 
     fn google(state: &str) -> ProviderReturn {
         ProviderReturn {
             provider: ambre_core::OidcProvider::Google,
-            code: ambre_core::OidcCode::new("4/0Ab".to_owned()),
-            state: ambre_core::OidcState::new(state.to_owned()),
+            code: ambre_core::Credential::new("4/0Ab".to_owned()),
+            state: ambre_core::Credential::new(state.to_owned()),
         }
     }
 

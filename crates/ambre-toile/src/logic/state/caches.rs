@@ -454,12 +454,12 @@ mod peer_geometry_tests {
         id: &Id<Element>,
         key: ElementKey,
         value: f64,
-    ) -> ambre_core::DeltaBytes {
+    ) -> ambre_core::Payload<ambre_core::DeltaBytes> {
         let before = author.doc.oplog_vv();
         let em = author.element_map(id).expect("the board holds it");
         em.insert(key, value).expect("a number field");
         author.doc.commit();
-        ambre_core::DeltaBytes::new(
+        ambre_core::Payload::<ambre_core::DeltaBytes>::new(
             author
                 .doc
                 .export(ExportMode::updates(&before))

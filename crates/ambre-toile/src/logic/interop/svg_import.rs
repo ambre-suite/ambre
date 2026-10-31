@@ -66,7 +66,7 @@ use crate::logic::model::{ElementKind, ElementStyle, ShapeKind};
 /// [`Limits`] when the tree exceeds one, and [`ImportError::Empty`] when the
 /// walk yields no element. No command survives an error: the batch is atomic.
 pub fn import_svg(
-    file: &ambre_core::FileBytes,
+    file: &ambre_core::Payload<ambre_core::FileBytes>,
     limits: &Limits,
 ) -> Result<ImportBatch, ImportError> {
     let bytes = file.as_bytes();

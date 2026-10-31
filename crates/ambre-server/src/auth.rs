@@ -5,7 +5,7 @@ use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
 
 use ambre_core::id::{Id, User};
-use ambre_protocol::ws::AccessToken;
+use ambre_protocol::ws::{AccessToken, Credential};
 
 use crate::error::AppError;
 use crate::jwt::Claims;
@@ -23,18 +23,18 @@ pub struct AuthSession {
     /// Cached Ed25519 public key. It avoids a Postgres lookup per WS message,
     /// and binds every authored `Update` to this session identity (see the WS
     /// `handle_update` author-key check).
-    pub signing_pubkey: ambre_core::PublicKey,
+    pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
 }
 
 /// Extracts the bearer token from the `Authorization` header, if present.
-pub fn bearer_token(parts: &Parts) -> Option<AccessToken> {
+pub fn bearer_token(parts: &Parts) -> Option<Credential<AccessToken>> {
     parts
         .headers
         .get(AUTHORIZATION)?
         .to_str()
         .ok()?
         .strip_prefix("Bearer ")
-        .map(|s| AccessToken::new(s.trim().to_string()))
+        .map(|s| Credential::new(s.trim().to_string()))
 }
 
 /// A verified access token, whether or not its account has registered keys.
@@ -48,34 +48,32 @@ pub struct AccountSession {
     /// User the token belongs to.
     pub user_id: Id<User>,
     /// `None` until the account registers its keys.
-    pub signing_pubkey: Option<ambre_core::PublicKey>,
+    pub signing_pubkey: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
 }
 
 /// Verify an access token and resolve the account it names.
 pub fn authenticate_account(
     state: &AppState,
-    token: &AccessToken,
+    token: &Credential<AccessToken>,
 ) -> Result<AccountSession, AppError> {
     let claims = state
         .jwt
         .verify(token)
         .map_err(|_| AppError::Unauthorized)?;
-    let user_id = claims.sub;
-    let signing_pubkey = claims
-        .spk
-        .as_ref()
-        .map(ambre_core::SigningKeyHex::decode)
-        .transpose()
-        .map_err(|_| AppError::Unauthorized)?;
+    // A key that is not 32 bytes of hex fails the read of the claims, so
+    // `verify` refuses it above.
     Ok(AccountSession {
-        user_id,
-        signing_pubkey,
+        user_id: claims.sub,
+        signing_pubkey: claims.spk,
     })
 }
 
 /// Verify an access token and resolve the identity it carries. A session
 /// without a signing key is refused with [`AppError::SetupRequired`].
-pub fn authenticate_token(state: &AppState, token: &AccessToken) -> Result<AuthSession, AppError> {
+pub fn authenticate_token(
+    state: &AppState,
+    token: &Credential<AccessToken>,
+) -> Result<AuthSession, AppError> {
     authenticate_account(state, token)?.try_into()
 }
 
@@ -121,8 +119,8 @@ impl FromRequestParts<Arc<AppState>> for AccountSession {
 /// A freshly minted access + refresh pair, returned to the client in the login
 /// and refresh response bodies (never as cookies).
 pub struct TokenPair {
-    pub access_token: ambre_protocol::ws::AccessToken,
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     /// Access-token lifetime in seconds, so the client can schedule a refresh.
     pub access_expires_in: ambre_core::Seconds,
 }
@@ -137,15 +135,13 @@ pub struct TokenPair {
 pub async fn issue_session(
     state: &AppState,
     user_id: Id<User>,
-    signing_pubkey: Option<ambre_core::PublicKey>,
+    signing_pubkey: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
 ) -> Result<TokenPair, AppError> {
     let now = crate::s3::unix_now();
     let access_ttl = access_lifetime(state.config.access_ttl);
     let claims = Claims {
         sub: user_id,
-        spk: signing_pubkey
-            .as_ref()
-            .map(ambre_core::PublicKey::to_key_hex),
+        spk: signing_pubkey,
         iat: now,
         exp: now.plus(access_ttl),
     };
@@ -154,7 +150,9 @@ pub async fn issue_session(
         .mint(&claims)
         .map_err(|e| AppError::Internal(format!("jwt mint: {e}")))?;
 
-    let refresh_token = ambre_protocol::ws::RefreshToken::new(uuid::Uuid::new_v4().to_string());
+    let refresh_token = ambre_protocol::ws::Credential::<ambre_protocol::ws::RefreshToken>::new(
+        uuid::Uuid::new_v4().to_string(),
+    );
     redis_ops::refresh_create(
         &state.redis,
         &refresh_token,
@@ -194,7 +192,7 @@ mod tests {
     async fn the_token_check_reads_no_store(pool: sqlx::PgPool) {
         let state = crate::test_helpers::test_app_state(pool.clone()).await;
         let user = crate::test_helpers::create_test_user(&pool, "local@ambre.app").await;
-        let key = ambre_core::PublicKey::from_array([3u8; 32]);
+        let key = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]);
         let pair = issue_session(&state, user, Some(key)).await.unwrap();
         pool.close().await;
         state.redis.clone().close().await.unwrap();

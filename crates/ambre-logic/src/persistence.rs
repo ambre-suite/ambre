@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 use ambre_bus::DraftKey;
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{SealedRowBytes, SessionNonce};
+use ambre_core::{FixedBytes, Payload, SealedRowBytes, SessionNonce};
 use futures_channel::oneshot;
 
 use crate::store_ledger::Meta;
@@ -305,7 +305,7 @@ impl PersistenceStore {
     pub fn save_snapshot(
         &self,
         document_id: Id<Document>,
-        snapshot: &SealedRowBytes,
+        snapshot: &Payload<SealedRowBytes>,
     ) -> oneshot::Receiver<Stored> {
         outcome(self.write_snapshot(document_id, snapshot))
     }
@@ -317,7 +317,7 @@ impl PersistenceStore {
     pub fn save_delta(
         &self,
         document_id: Id<Document>,
-        delta: &SealedRowBytes,
+        delta: &Payload<SealedRowBytes>,
     ) -> oneshot::Receiver<Stored> {
         let key = IdbKey::fresh_delta(document_id);
         let txn = match self
@@ -431,7 +431,7 @@ impl PersistenceStore {
     fn write_snapshot(
         &self,
         document_id: Id<Document>,
-        snapshot: &SealedRowBytes,
+        snapshot: &Payload<SealedRowBytes>,
     ) -> Option<web_sys::IdbTransaction> {
         let key = IdbKey::document(document_id);
         let stores = js_sys::Array::of2(
@@ -489,7 +489,7 @@ impl PersistenceStore {
     pub fn save_snapshot_committed(
         &self,
         document_id: Id<Document>,
-        snapshot: SealedRowBytes,
+        snapshot: Payload<SealedRowBytes>,
     ) -> oneshot::Receiver<Commit> {
         let (tx, rx) = answer();
         let Some(txn) = self.write_snapshot(document_id, &snapshot) else {
@@ -528,7 +528,7 @@ impl PersistenceStore {
     pub fn load_snapshot(
         &self,
         document_id: Id<Document>,
-    ) -> oneshot::Receiver<Option<SealedRowBytes>> {
+    ) -> oneshot::Receiver<Option<Payload<SealedRowBytes>>> {
         let (tx, rx) = answer();
         let key = IdbKey::document(document_id);
 
@@ -564,7 +564,7 @@ impl PersistenceStore {
                     .ok()
                     .filter(|v| !v.is_undefined() && !v.is_null())
                     .and_then(|v| v.dyn_into::<Uint8Array>().ok())
-                    .map(|a| SealedRowBytes::new(a.to_vec()));
+                    .map(|a| Payload::<SealedRowBytes>::new(a.to_vec()));
                 tx_ok.send(data);
             });
         request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
@@ -582,7 +582,10 @@ impl PersistenceStore {
     /// Load every delta written since a document's snapshot, in no set order.
     ///
     /// Resolves to an empty list when there is none or the read failed.
-    pub fn load_deltas(&self, document_id: Id<Document>) -> oneshot::Receiver<Vec<SealedRowBytes>> {
+    pub fn load_deltas(
+        &self,
+        document_id: Id<Document>,
+    ) -> oneshot::Receiver<Vec<Payload<SealedRowBytes>>> {
         let (tx, rx) = answer();
         let request = self
             .db
@@ -607,7 +610,7 @@ impl PersistenceStore {
                     .map(|rows| {
                         rows.iter()
                             .filter_map(|row| row.dyn_into::<Uint8Array>().ok())
-                            .map(|a| SealedRowBytes::new(a.to_vec()))
+                            .map(|a| Payload::<SealedRowBytes>::new(a.to_vec()))
                             .collect()
                     })
                     .unwrap_or_default();
@@ -633,7 +636,7 @@ impl PersistenceStore {
         &self,
         document_id: Id<Document>,
         peer: ambre_core::PeerId,
-        nonce: SessionNonce,
+        nonce: FixedBytes<SessionNonce>,
     ) {
         let key = IdbKey::session(document_id, peer);
         let Some(store) = self.sessions_store(&key) else {
@@ -642,7 +645,7 @@ impl PersistenceStore {
         let mut value = [0u8; 24];
         let (head, tail) = value.split_at_mut(8);
         head.copy_from_slice(&peer.0.to_le_bytes());
-        tail.copy_from_slice(&nonce.0);
+        tail.copy_from_slice(nonce.as_slice());
         if let Err(e) = store.put_with_key(bytes_to_js(&value).as_ref(), &key.to_js()) {
             tracing::warn!("Persistence: session put failed for {key}: {e:?}");
         }
@@ -682,7 +685,7 @@ impl PersistenceStore {
     pub fn load_sessions(
         &self,
         document_id: Id<Document>,
-    ) -> oneshot::Receiver<Vec<(ambre_core::PeerId, SessionNonce)>> {
+    ) -> oneshot::Receiver<Vec<(ambre_core::PeerId, FixedBytes<SessionNonce>)>> {
         let (tx, rx) = answer();
         let request = self
             .db
@@ -734,7 +737,7 @@ impl PersistenceStore {
     pub fn load_trusted_key(
         &self,
         user_id: Id<User>,
-    ) -> oneshot::Receiver<Option<ambre_core::ExchangePublicKey>> {
+    ) -> oneshot::Receiver<Option<FixedBytes<ambre_core::ExchangePublicKey>>> {
         let (tx, rx) = answer();
         let key = IdbKey::user(user_id);
 
@@ -774,7 +777,7 @@ impl PersistenceStore {
                     .filter(|v| !v.is_undefined() && !v.is_null())
                     .and_then(|v| v.dyn_into::<Uint8Array>().ok())
                     .map(|a| a.to_vec())
-                    .and_then(|v| ambre_core::ExchangePublicKey::from_slice(&v).ok());
+                    .and_then(|v| FixedBytes::<ambre_core::ExchangePublicKey>::from_slice(&v).ok());
                 tx_ok.send(data);
             });
         request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
@@ -794,7 +797,11 @@ impl PersistenceStore {
     /// Called on the user's confirmation in the share dialog, and again when they
     /// deliberately re-pin after a "key changed" alert. The transaction
     /// auto-commits when the Main thread returns to its event loop.
-    pub fn save_trusted_key(&self, user_id: Id<User>, key: &ambre_core::ExchangePublicKey) {
+    pub fn save_trusted_key(
+        &self,
+        user_id: Id<User>,
+        key: &FixedBytes<ambre_core::ExchangePublicKey>,
+    ) {
         let row = IdbKey::user(user_id);
         let txn = match self.db.transaction_with_str_and_mode(
             IdbStore::TrustedKeys.name(),
@@ -856,7 +863,7 @@ impl PersistenceStore {
     /// Keep a draft's sealed `row` under `key`, in place of the row there
     /// (fire-and-forget). A lost write leaves the draft as it was at the
     /// write before.
-    pub fn save_draft(&self, key: &DraftKey, row: &SealedRowBytes) {
+    pub fn save_draft(&self, key: &DraftKey, row: &Payload<SealedRowBytes>) {
         if let Some(store) = self.drafts_store()
             && let Err(e) = store.put_with_key(
                 &bytes_to_js(row.as_bytes()),
@@ -922,7 +929,7 @@ impl PersistenceStore {
         &self,
         lower: &DraftKey,
         upper: &DraftKey,
-    ) -> oneshot::Receiver<Vec<(DraftKey, SealedRowBytes)>> {
+    ) -> oneshot::Receiver<Vec<(DraftKey, Payload<SealedRowBytes>)>> {
         let (tx, rx) = answer();
         let range = web_sys::IdbKeyRange::bound(
             &JsValue::from_str(lower.as_str()),
@@ -965,7 +972,10 @@ impl PersistenceStore {
                             Some(text) => text.into_bytes(),
                             None => row.dyn_into::<Uint8Array>().ok()?.to_vec(),
                         };
-                        Some((DraftKey::new(key.as_string()?), SealedRowBytes::new(row)))
+                        Some((
+                            DraftKey::new(key.as_string()?),
+                            Payload::<SealedRowBytes>::new(row),
+                        ))
                     })
                     .collect();
                 tx_ok.send(drafts);
@@ -1014,9 +1024,9 @@ fn outcome(txn: Option<web_sys::IdbTransaction>) -> oneshot::Receiver<Stored> {
 
 /// Parse one `sessions` row: the PeerID's eight little-endian bytes, then
 /// the bytes of the nonce. `None` for any other length.
-fn session_of(row: &[u8]) -> Option<(ambre_core::PeerId, SessionNonce)> {
+fn session_of(row: &[u8]) -> Option<(ambre_core::PeerId, FixedBytes<SessionNonce>)> {
     let (peer, rest) = row.split_first_chunk::<{ size_of::<u64>() }>()?;
-    let (nonce, rest) = SessionNonce::split_from(rest)?;
+    let (nonce, rest) = FixedBytes::<SessionNonce>::split_from(rest)?;
     if !rest.is_empty() {
         return None;
     }
@@ -1067,8 +1077,8 @@ mod wasm_tests {
     wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
     /// A stored row: the store keeps the bytes it is handed, sealed or not.
-    fn row(bytes: &[u8]) -> SealedRowBytes {
-        SealedRowBytes::new(bytes.to_vec())
+    fn row(bytes: &[u8]) -> Payload<SealedRowBytes> {
+        Payload::<SealedRowBytes>::new(bytes.to_vec())
     }
 
     /// The `IdbFactory` for this origin (headless Chrome always has one).
@@ -1161,7 +1171,7 @@ mod wasm_tests {
         assert_eq!(store.load_trusted_key(user).await.unwrap(), None);
 
         // Pin, then read it back byte-for-byte.
-        let key = ambre_core::ExchangePublicKey::from_array([0xAB; 32]);
+        let key = FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0xAB; 32]);
         store.save_trusted_key(user, &key);
         assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(key));
 
@@ -1190,7 +1200,7 @@ mod wasm_tests {
             Id::<User>::from_bytes([1; 16]),
             Id::<User>::from_bytes([2; 16]),
         );
-        let pin = ambre_core::ExchangePublicKey::from_array;
+        let pin = FixedBytes::<ambre_core::ExchangePublicKey>::from_array;
         store.save_trusted_key(alice, &pin([0xA1; 32]));
         store.save_trusted_key(bob, &pin([0xB1; 32]));
         store.save_trusted_key(alice, &pin([0xA2; 32]));
@@ -1228,7 +1238,7 @@ mod wasm_tests {
 
         // The new store is usable after the upgrade.
         let user = Id::<User>::from_bytes([4; 16]);
-        let key = ambre_core::ExchangePublicKey::from_array([0x5A; 32]);
+        let key = FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0x5A; 32]);
         store.save_trusted_key(user, &key);
         assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(key));
     }
@@ -1336,7 +1346,9 @@ mod wasm_tests {
         ledger.observe(doc, &crate::SealedWrite::Shown);
         ledger.observe(
             doc,
-            &crate::SealedWrite::Snapshot(ambre_core::SealedRowBytes::new(vec![1; 40])),
+            &crate::SealedWrite::Snapshot(ambre_core::Payload::<ambre_core::SealedRowBytes>::new(
+                vec![1; 40],
+            )),
         );
         let meta = ledger.meta(doc).expect("held");
         store.save_meta(doc, &meta);
@@ -1360,7 +1372,10 @@ mod wasm_tests {
             .expect("store opens");
         let doc = Id::<Document>::from_bytes([7; 16]);
         let other = Id::<Document>::from_bytes([8; 16]);
-        let (one, two) = (SessionNonce([1; 16]), SessionNonce([2; 16]));
+        let (one, two) = (
+            FixedBytes::<SessionNonce>::from_array([1; 16]),
+            FixedBytes::<SessionNonce>::from_array([2; 16]),
+        );
 
         store.save_session(doc, PeerId(11), one);
         store.save_session(doc, PeerId(22), two);
@@ -1396,7 +1411,7 @@ mod wasm_tests {
         assert_eq!(store.load_snapshot(doc).await.unwrap(), Some(row(&[1, 2])));
         store.save_delta(doc, &row(&[4]));
         assert_eq!(store.load_deltas(doc).await.unwrap(), vec![row(&[4])]);
-        let nonce = SessionNonce([3; 16]);
+        let nonce = FixedBytes::<SessionNonce>::from_array([3; 16]);
         store.save_session(doc, PeerId(5), nonce);
         assert_eq!(
             store.load_sessions(doc).await.unwrap(),

@@ -5,7 +5,8 @@ use proptest::prelude::*;
 use crate::keys::{DocumentKey, FileKey, MasterSeed};
 use crate::{CryptoError, aead, commitment, ecdh, envelope, hash, passphrase};
 use ambre_core::{
-    Aad, Ciphertext, EntryDigest, FileSalt, MasterKeySalt, MediaBytes, Nonce, SealedRowBytes,
+    Aad, Ciphertext, EntryDigest, FileSalt, FixedBytes, MasterKeySalt, MediaBytes, Nonce, Payload,
+    SealedRowBytes,
 };
 
 /// A passphrase as a prompt hands it over.
@@ -32,7 +33,8 @@ fn fixed_seed() -> MasterSeed {
 fn roundtrip_envelope() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+    let author =
+        FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"public-data");
     let plaintext = b"hello, encrypted world";
 
@@ -47,9 +49,10 @@ fn roundtrip_envelope() {
 fn a_media_seal_opens_as_any_envelope() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+    let author =
+        FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"public-data");
-    let media = MediaBytes::new(b"\x89PNG a picture".to_vec());
+    let media = Payload::<MediaBytes>::new(b"\x89PNG a picture".to_vec());
 
     let sealed = envelope::seal_media(&media, aad, &doc_key, &signing).unwrap();
     let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
@@ -71,7 +74,7 @@ fn an_envelope_debug_form_prints_no_byte_of_it() {
     .unwrap();
     // Bytes no length or field name can spell, so a match is a leak.
     sealed.ciphertext = Ciphertext(vec![0xAB; 7]);
-    sealed.nonce = Nonce([0xCD; aead::NONCE_LEN]);
+    sealed.nonce = FixedBytes::from_array([0xCD; aead::NONCE_LEN]);
     let shown = format!("{sealed:?}");
     assert_eq!(shown, "Sealed { ciphertext_len: 7, .. }");
 }
@@ -80,7 +83,8 @@ fn an_envelope_debug_form_prints_no_byte_of_it() {
 fn tampered_ciphertext_fails() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+    let author =
+        FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"aad");
 
     let mut sealed = envelope::seal(&secret(b"payload"), aad, &doc_key, &signing).unwrap();
@@ -96,7 +100,8 @@ fn tampered_ciphertext_fails() {
 fn commitment_tag_wrong_aad_rejected() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+    let author =
+        FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
 
     let sealed = envelope::seal(
         &secret(b"payload"),
@@ -142,7 +147,8 @@ fn every_seal_draws_a_fresh_nonce() {
             .unwrap()
         })
         .collect();
-    let nonces: std::collections::HashSet<Nonce> = sealed.iter().map(|s| s.nonce).collect();
+    let nonces: std::collections::HashSet<FixedBytes<Nonce>> =
+        sealed.iter().map(|s| s.nonce).collect();
     let ciphertexts: std::collections::HashSet<&[u8]> =
         sealed.iter().map(|s| s.ciphertext.0.as_slice()).collect();
     assert_eq!(nonces.len(), sealed.len());
@@ -159,7 +165,8 @@ fn the_signature_is_checked_before_the_tag_and_the_cipher() {
     let doc_key = fixed_doc_key();
     let other_key = DocumentKey::from_array([0x33; 32]);
     let signing = fixed_seed().derive_signing_key();
-    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+    let author =
+        FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"aad");
     let mut forged = envelope::seal(&secret(b"payload"), aad, &other_key, &signing).unwrap();
     forged.ciphertext.0[0] ^= 0xFF;
@@ -198,7 +205,7 @@ fn invalid_signature_rejected() {
     let aad = &Aad::of(b"aad");
 
     let sealed = envelope::seal(&secret(b"payload"), aad, &doc_key, &signing).unwrap();
-    let wrong_author = ambre_core::PublicKey::from_array(
+    let wrong_author = FixedBytes::<ambre_core::PublicKey>::from_array(
         MasterSeed::from_array([0x99; 32])
             .derive_signing_key()
             .verifying_key()
@@ -214,7 +221,8 @@ fn invalid_signature_rejected() {
 fn wrong_document_key_rejected() {
     let doc_key = fixed_doc_key();
     let signing = fixed_seed().derive_signing_key();
-    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+    let author =
+        FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"aad");
 
     let sealed = envelope::seal(&secret(b"payload"), aad, &doc_key, &signing).unwrap();
@@ -325,7 +333,7 @@ fn a_store_row_opens_only_where_it_was_sealed() {
     if let Some(last) = flipped.last_mut() {
         *last ^= 1;
     }
-    let flipped = SealedRowBytes::new(flipped);
+    let flipped = Payload::<SealedRowBytes>::new(flipped);
     assert!(aead::open_row(&flipped, &Aad::of(b"doc:0a"), &key).is_err());
     // A row the store held in the clear, or a stub, opens as nothing.
     for stub in [
@@ -333,7 +341,7 @@ fn a_store_row_opens_only_where_it_was_sealed() {
         Vec::new(),
         vec![aead::RowLayout::CURRENT.byte()],
     ] {
-        let stub = SealedRowBytes::new(stub);
+        let stub = Payload::<SealedRowBytes>::new(stub);
         assert!(aead::open_row(&stub, &Aad::of(b"doc:0a"), &key).is_err());
     }
 }
@@ -344,10 +352,12 @@ fn a_store_row_opens_only_where_it_was_sealed() {
 fn ecdh_symmetric() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
-    let alice_pub =
-        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&alice).to_bytes());
-    let bob_pub =
-        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
+    let alice_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&alice).to_bytes(),
+    );
+    let bob_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&bob).to_bytes(),
+    );
 
     assert_eq!(
         ecdh::shared_secret(&alice, &bob_pub).unwrap().as_bytes(),
@@ -359,8 +369,9 @@ fn ecdh_symmetric() {
 fn a_shared_secret_is_wiped_and_never_printed() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
-    let bob_pub =
-        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
+    let bob_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&bob).to_bytes(),
+    );
     let shared = ecdh::shared_secret(&alice, &bob_pub).unwrap();
     // The bytes sit in an `ambre_core::Secret`, which wipes them on drop.
     assert_eq!(format!("{shared:?}"), "SharedSecret(Secret([REDACTED]))");
@@ -370,10 +381,12 @@ fn a_shared_secret_is_wiped_and_never_printed() {
 fn wrap_unwrap_roundtrip() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
-    let alice_pub =
-        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&alice).to_bytes());
-    let bob_pub =
-        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
+    let alice_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&alice).to_bytes(),
+    );
+    let bob_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&bob).to_bytes(),
+    );
 
     let doc_key = DocumentKey::from_array([0x55; 32]);
     let wrapped = ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap();
@@ -388,17 +401,27 @@ fn wrap_unwrap_roundtrip() {
 fn the_log_anchor_travels_sealed_with_the_key() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
-    let alice_pub =
-        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&alice).to_bytes());
-    let bob_pub =
-        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
+    let alice_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&alice).to_bytes(),
+    );
+    let bob_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&bob).to_bytes(),
+    );
     let doc_key = DocumentKey::from_array([0x55; 32]);
 
-    let anchored =
-        ecdh::wrap_anchored(&alice, &bob_pub, &doc_key, Some(&EntryDigest([0x66; 32]))).unwrap();
+    let anchored = ecdh::wrap_anchored(
+        &alice,
+        &bob_pub,
+        &doc_key,
+        Some(&FixedBytes::<EntryDigest>::from_array([0x66; 32])),
+    )
+    .unwrap();
     let (key, anchor) = ecdh::unwrap_anchored(&bob, &alice_pub, &anchored).unwrap();
     assert_eq!(key.as_bytes(), doc_key.as_bytes());
-    assert_eq!(anchor, Some(EntryDigest([0x66; 32])));
+    assert_eq!(
+        anchor,
+        Some(FixedBytes::<EntryDigest>::from_array([0x66; 32]))
+    );
     let key = ecdh::unwrap_document_key(&bob, &alice_pub, &anchored).unwrap();
     assert_eq!(key.as_bytes(), doc_key.as_bytes());
 
@@ -420,22 +443,32 @@ fn the_log_anchor_travels_sealed_with_the_key() {
 #[test]
 fn a_wrap_has_a_length_the_wire_reads() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
-    let bob_pub = ambre_core::ExchangePublicKey::from_array(
+    let bob_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
         x25519_dalek::PublicKey::from(&MasterSeed::from_array([0x02; 32]).derive_exchange_key())
             .to_bytes(),
     );
     let doc_key = DocumentKey::from_array([0x55; 32]);
-    let length = |wrapped: ecdh::WrappedKey| wrapped.nonce.0.len() + wrapped.ciphertext.len();
+    let length =
+        |wrapped: ecdh::WrappedKey| wrapped.nonce.as_slice().len() + wrapped.ciphertext.len();
     let bare = length(ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap());
     let anchored = length(
-        ecdh::wrap_anchored(&alice, &bob_pub, &doc_key, Some(&EntryDigest([0x66; 32]))).unwrap(),
+        ecdh::wrap_anchored(
+            &alice,
+            &bob_pub,
+            &doc_key,
+            Some(&FixedBytes::<EntryDigest>::from_array([0x66; 32])),
+        )
+        .unwrap(),
     );
-    assert_eq!(ambre_core::WrappedDocKey::LENGTHS, [bare, anchored]);
+    assert_eq!(
+        ambre_core::Encoded::<ambre_core::WrappedDocKey>::LENGTHS,
+        [bare, anchored]
+    );
 
     let seed = MasterSeed::from_array([0x03; 32]);
     let wrapped = seed.wrap_for_storage(&doc_key, &Aad::of(b"aad")).unwrap();
     assert_eq!(
-        ambre_core::WrappedMasterKey::LENGTHS,
+        ambre_core::Encoded::<ambre_core::WrappedMasterKey>::LENGTHS,
         [wrapped.as_bytes().len()]
     );
 }
@@ -445,7 +478,7 @@ fn a_stored_seed_opens_under_its_user_key_and_its_aad_alone() {
     // The login path opens the seed this way, so it must give back the seed
     // that was sealed. A wrong passphrase gives the AEAD error, which the
     // login screen reads as "incorrect passphrase".
-    let salt = MasterKeySalt::from_array([0xAB; 32]);
+    let salt = FixedBytes::<MasterKeySalt>::from_array([0xAB; 32]);
     let user = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
     let seed = MasterSeed::from_array([0x03; 32]);
     let aad = Aad::of(b"ambre-master-seed");
@@ -467,7 +500,7 @@ fn a_stored_seed_opens_under_its_user_key_and_its_aad_alone() {
         Err(CryptoError::AeadFailed)
     ));
     assert!(matches!(
-        MasterSeed::open_from_storage(&ambre_core::WrappedMasterKey::new(vec![0; 10]), &user, &aad),
+        MasterSeed::open_from_storage(&ambre_core::Encoded::new(vec![0; 10]), &user, &aad),
         Err(CryptoError::InvalidKeyLength)
     ));
 }
@@ -478,7 +511,7 @@ fn weak_peer_public_key_rejected() {
     // predictable all-zero secret. Both the raw exchange and the wrap must reject
     // it (M14: reject a non-contributory shared secret).
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
-    let weak_pub = ambre_core::ExchangePublicKey::from_array([0u8; 32]);
+    let weak_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0u8; 32]);
 
     assert_eq!(
         ecdh::shared_secret(&alice, &weak_pub).err(),
@@ -501,10 +534,12 @@ fn kek_binds_peer_identity() {
     let alice = MasterSeed::from_array([0x01; 32]).derive_exchange_key();
     let bob = MasterSeed::from_array([0x02; 32]).derive_exchange_key();
     let carol = MasterSeed::from_array([0x03; 32]).derive_exchange_key();
-    let alice_pub =
-        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&alice).to_bytes());
-    let bob_pub =
-        ambre_core::ExchangePublicKey::from_array(x25519_dalek::PublicKey::from(&bob).to_bytes());
+    let alice_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&alice).to_bytes(),
+    );
+    let bob_pub = FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        x25519_dalek::PublicKey::from(&bob).to_bytes(),
+    );
 
     let doc_key = DocumentKey::from_array([0x55; 32]);
     let wrapped = ecdh::wrap_document_key(&alice, &bob_pub, &doc_key).unwrap();
@@ -517,12 +552,12 @@ fn kek_binds_peer_identity() {
 
 #[test]
 fn argon2_deterministic() {
-    let salt = MasterKeySalt::from_array([0xAB; 32]);
+    let salt = FixedBytes::<MasterKeySalt>::from_array([0xAB; 32]);
     let k1 = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
     let k2 = passphrase::derive_user_key(&pass("correct horse"), &salt).unwrap();
     assert_eq!(k1.as_bytes(), k2.as_bytes());
 
-    let other_salt = MasterKeySalt::from_array([0xCD; 32]);
+    let other_salt = FixedBytes::<MasterKeySalt>::from_array([0xCD; 32]);
     let k3 = passphrase::derive_user_key(&pass("correct horse"), &other_salt).unwrap();
     assert_ne!(k1.as_bytes(), k3.as_bytes());
 
@@ -552,10 +587,10 @@ fn the_keyless_digests_keep_their_bytes() {
     blake2::Digest::update(&mut hasher, 0u64.to_le_bytes());
     blake2::Digest::update(&mut hasher, b"file");
     let full = blake2::Digest::finalize(hasher);
-    let file = ambre_core::PickedContainer::new(b"file".to_vec());
+    let file = ambre_core::Payload::<ambre_core::PickedContainer>::new(b"file".to_vec());
     assert_eq!(hash::file_digest(&file).as_array()[..], full[..32]);
     assert_eq!(
-        &hash::chain_hash(None, &Ciphertext(b"file".to_vec())).0,
+        hash::chain_hash(None, &Ciphertext(b"file".to_vec())).as_array(),
         hash::file_digest(&file).as_array()
     );
 }
@@ -572,7 +607,7 @@ fn a_key_id_is_derived_from_the_key() {
     assert_ne!(key.id(), DocumentKey::from_array([0x12; 32]).id());
     assert_ne!(
         key.id().as_array()[..],
-        [0x11; 32][..ambre_core::KeyId::SIZE.as_len()]
+        [0x11; 32][..FixedBytes::<ambre_core::KeyId>::SIZE.as_len()]
     );
 }
 
@@ -586,7 +621,8 @@ fn a_previous_key_opens_under_the_next_one_and_no_other() {
     let sealed = next
         .seal_previous(&previous, &Aad::of(b"link"), &author)
         .unwrap();
-    let author_pub = ambre_core::PublicKey::from_array(author.verifying_key().to_bytes());
+    let author_pub =
+        FixedBytes::<ambre_core::PublicKey>::from_array(author.verifying_key().to_bytes());
 
     let opened = next
         .open_previous(&sealed, &Aad::of(b"link"), &author_pub)
@@ -602,7 +638,8 @@ fn a_previous_key_opens_under_the_next_one_and_no_other() {
             .is_err()
     );
     let stranger = MasterSeed::from_array([0x33; 32]).derive_signing_key();
-    let stranger_pub = ambre_core::PublicKey::from_array(stranger.verifying_key().to_bytes());
+    let stranger_pub =
+        FixedBytes::<ambre_core::PublicKey>::from_array(stranger.verifying_key().to_bytes());
     assert_eq!(
         next.open_previous(&sealed, &Aad::of(b"link"), &stranger_pub)
             .err(),
@@ -619,7 +656,7 @@ fn a_previous_key_opens_under_the_next_one_and_no_other() {
 fn a_media_address_needs_the_document_key() {
     use blake2::{Blake2b512, Digest};
 
-    let picture = MediaBytes::new(b"the same picture, used twice".to_vec());
+    let picture = Payload::<MediaBytes>::new(b"the same picture, used twice".to_vec());
     let address = commitment::media_address(&fixed_doc_key(), &picture);
     assert_eq!(
         address,
@@ -629,13 +666,13 @@ fn a_media_address_needs_the_document_key() {
         address,
         commitment::media_address(&DocumentKey::from_array([0x12; 32]), &picture)
     );
-    let another = MediaBytes::new(b"another picture".to_vec());
+    let another = Payload::<MediaBytes>::new(b"another picture".to_vec());
     assert_ne!(
         address,
         commitment::media_address(&fixed_doc_key(), &another)
     );
     let plain = Blake2b512::digest(picture.as_bytes());
-    assert_ne!(address.as_bytes()[..], plain[..32]);
+    assert_ne!(address.as_array()[..], plain[..32]);
 }
 
 // -- Property tests ----------------------------------------------------------
@@ -645,7 +682,7 @@ proptest! {
     fn prop_roundtrip_encrypt_decrypt(data in any::<Vec<u8>>(), key in any::<[u8; 32]>()) {
         let doc_key = DocumentKey::from_array(key);
         let signing = fixed_seed().derive_signing_key();
-        let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+        let author = FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
         let aad = &Aad::of(b"aad");
         let sealed = envelope::seal(&secret(&data), aad, &doc_key, &signing).unwrap();
         let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
@@ -660,14 +697,22 @@ proptest! {
     ) {
         let doc_key = fixed_doc_key();
         let signing = fixed_seed().derive_signing_key();
-        let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+        let author = FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
         let aad = &Aad::of(b"aad");
         let mut sealed = envelope::seal(&secret(&data), aad, &doc_key, &signing).unwrap();
         let mask = 1u8 << bit;
         match idx {
             0 => sealed.ciphertext.0[0] ^= mask,
-            1 => sealed.commitment_tag.0[0] ^= mask,
-            _ => sealed.signature.0[0] ^= mask,
+            1 => {
+                let mut tag = *sealed.commitment_tag.as_array();
+                tag[0] ^= mask;
+                sealed.commitment_tag = FixedBytes::from_array(tag);
+            }
+            _ => {
+                let mut signature = *sealed.signature.as_array();
+                signature[0] ^= mask;
+                sealed.signature = FixedBytes::from_array(signature);
+            }
         }
         prop_assert!(envelope::open(&sealed, aad, &doc_key, &author).is_err());
     }
@@ -681,7 +726,9 @@ fn fingerprint_is_stable_grouped_base32() {
     // out-of-band verification, so it is frozen. Any change to the domain tag,
     // truncation length, alphabet or grouping must break this test on purpose.
     // It must not silently shift what two people compare over the phone.
-    let fingerprint = hash::fingerprint(&ambre_core::ExchangePublicKey::from_array([0u8; 32]));
+    let fingerprint = hash::fingerprint(&FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        [0u8; 32],
+    ));
     let fp = fingerprint.as_str();
     assert_eq!(fp, "2HBA RR6Y FDOA EIJF ZZFT YWQZ MKRW N5FK");
 
@@ -698,7 +745,10 @@ fn fingerprint_is_stable_grouped_base32() {
     // Deterministic: recomputing yields the identical string.
     assert_eq!(
         fp,
-        hash::fingerprint(&ambre_core::ExchangePublicKey::from_array([0u8; 32])).as_str()
+        hash::fingerprint(&FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+            [0u8; 32]
+        ))
+        .as_str()
     );
 }
 
@@ -706,10 +756,14 @@ fn fingerprint_is_stable_grouped_base32() {
 fn fingerprint_distinguishes_keys() {
     // A single-bit difference in the key must change the fingerprint (the whole
     // point of pinning it): near-identical substituted keys stay distinguishable.
-    let a = hash::fingerprint(&ambre_core::ExchangePublicKey::from_array([0u8; 32]));
+    let a = hash::fingerprint(&FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        [0u8; 32],
+    ));
     let mut key_b = [0u8; 32];
     key_b[0] = 1;
-    let b = hash::fingerprint(&ambre_core::ExchangePublicKey::from_array(key_b));
+    let b = hash::fingerprint(&FixedBytes::<ambre_core::ExchangePublicKey>::from_array(
+        key_b,
+    ));
     assert_ne!(a, b);
 }
 
@@ -723,11 +777,14 @@ fn a_file_key_is_not_the_user_key_of_the_same_passphrase_and_salt() {
     // unwraps the account's master key.
     let user = passphrase::derive_user_key(
         &pass("correct horse"),
-        &MasterKeySalt::from_array([0xAB; 32]),
+        &FixedBytes::<MasterKeySalt>::from_array([0xAB; 32]),
     )
     .unwrap();
-    let file = FileKey::from_passphrase(&pass("correct horse"), &FileSalt::from_array([0xAB; 16]))
-        .unwrap();
+    let file = FileKey::from_passphrase(
+        &pass("correct horse"),
+        &FixedBytes::<FileSalt>::from_array([0xAB; 16]),
+    )
+    .unwrap();
     assert_ne!(file.as_bytes(), user.as_bytes());
 }
 
@@ -735,14 +792,16 @@ fn a_file_key_is_not_the_user_key_of_the_same_passphrase_and_salt() {
 fn a_file_key_is_deterministic_and_per_salt() {
     // Deterministic, or nothing reopens the file; per salt, or two files
     // sealed under one passphrase share a key.
-    let salt = FileSalt::from_array([0xAB; 16]);
+    let salt = FixedBytes::<FileSalt>::from_array([0xAB; 16]);
     let first = FileKey::from_passphrase(&pass("correct horse"), &salt).unwrap();
     let again = FileKey::from_passphrase(&pass("correct horse"), &salt).unwrap();
     assert_eq!(first.as_bytes(), again.as_bytes());
 
-    let elsewhere =
-        FileKey::from_passphrase(&pass("correct horse"), &FileSalt::from_array([0xCD; 16]))
-            .unwrap();
+    let elsewhere = FileKey::from_passphrase(
+        &pass("correct horse"),
+        &FixedBytes::<FileSalt>::from_array([0xCD; 16]),
+    )
+    .unwrap();
     assert_ne!(first.as_bytes(), elsewhere.as_bytes());
 }
 
@@ -764,7 +823,7 @@ fn each_new_file_draws_its_own_salt() {
 
 #[test]
 fn a_sealed_file_opens_under_its_passphrase_and_nothing_else() {
-    let salt = FileSalt::from_array([0x01; 16]);
+    let salt = FixedBytes::<FileSalt>::from_array([0x01; 16]);
     let aad = &Aad::of(b"the-sealed-header");
     let plaintext = b"a whole plaintext container";
     let key = FileKey::from_passphrase(&pass("open sesame"), &salt).unwrap();
@@ -844,13 +903,16 @@ fn the_log_anchor_travels_sealed_with_a_catalogue_key() {
         &inner,
         &Aad::of(b"channel-1"),
         &outer,
-        Some(&EntryDigest([0x33; 32])),
+        Some(&FixedBytes::<EntryDigest>::from_array([0x33; 32])),
     )
     .unwrap();
     let (key, anchor) =
         aead::open_anchored_key(&nonce, &sealed, &Aad::of(b"channel-1"), &outer).unwrap();
     assert_eq!(key.as_bytes(), inner.as_bytes());
-    assert_eq!(anchor, Some(EntryDigest([0x33; 32])));
+    assert_eq!(
+        anchor,
+        Some(FixedBytes::<EntryDigest>::from_array([0x33; 32]))
+    );
 
     let (nonce, bare) = aead::seal_document_key(&inner, &Aad::of(b"channel-1"), &outer).unwrap();
     let (_, anchor) =
@@ -884,9 +946,9 @@ fn golden(hex: &str) -> Vec<u8> {
 }
 
 /// The inputs every golden of the envelope shares.
-fn golden_envelope() -> (Nonce, Ciphertext, Aad) {
+fn golden_envelope() -> (FixedBytes<Nonce>, Ciphertext, Aad) {
     (
-        Nonce([0x07; 24]),
+        FixedBytes::from_array([0x07; 24]),
         Ciphertext(b"a sealed body".to_vec()),
         Aad::of(b"public-data"),
     )
@@ -897,20 +959,23 @@ fn the_commitment_tag_keeps_its_bytes() {
     let (nonce, ciphertext, aad) = golden_envelope();
     let tag = commitment::commitment_tag(&fixed_doc_key(), &nonce, &ciphertext, &aad);
     assert_eq!(
-        tag.0.to_vec(),
+        tag.as_slice().to_vec(),
         golden("bbb7a3f12f49c5ac3bb02be16a06d657ce026587d7c01053d69444d2f30ce622")
     );
 }
 
 #[test]
 fn the_media_address_keeps_its_bytes() {
-    let picture = MediaBytes::new(b"a picture".to_vec());
+    let picture = Payload::<MediaBytes>::new(b"a picture".to_vec());
     let address = commitment::media_address(&fixed_doc_key(), &picture);
     let expected: [u8; 32] =
         golden("c72a97882edaf9922202a868bba98c10b9d8391391ee833ce679124602fd0f98")
             .try_into()
             .unwrap();
-    assert_eq!(address, ambre_core::MediaAddress::from_array(expected));
+    assert_eq!(
+        address,
+        FixedBytes::<ambre_core::MediaAddress>::from_array(expected)
+    );
 }
 
 #[test]
@@ -920,7 +985,7 @@ fn the_envelope_signature_keeps_its_bytes() {
     let signing = ed25519_dalek::SigningKey::from_bytes(&[0x33; 32]);
     let signature = crate::signature::sign(&signing, &nonce, &ciphertext, &aad, &tag);
     assert_eq!(
-        signature.0.to_vec(),
+        signature.as_slice().to_vec(),
         golden(
             "ceb6340011299611cb720434c2ccbc24e44497db42b827870a1876a1110be99f\
              6100b0be0749510adc17b1b1fae731151e64e813b05fedb8a105a1be3bab9909"
@@ -931,14 +996,19 @@ fn the_envelope_signature_keeps_its_bytes() {
 #[test]
 fn the_chain_hash_and_the_keyless_digests_keep_their_bytes() {
     let (_, snapshot, _) = golden_envelope();
-    let parent = ambre_core::ChainHash([0x44; 32]);
+    let parent = FixedBytes::<ambre_core::ChainHash>::from_array([0x44; 32]);
     assert_eq!(
-        hash::chain_hash(Some(&parent), &snapshot).0.to_vec(),
+        hash::chain_hash(Some(&parent), &snapshot)
+            .as_slice()
+            .to_vec(),
         golden("e02ef1c5d7a3f1836f76be11227c66f52f0fc2f9d5beef621ea870e716d53186")
     );
     let headless = golden("997889dc0af01e9390d3155a446f283600e018a8cccc32c15085956fe8ef4a79");
-    assert_eq!(hash::chain_hash(None, &snapshot).0.to_vec(), headless);
-    let file = ambre_core::PickedContainer::new(snapshot.0.clone());
+    assert_eq!(
+        hash::chain_hash(None, &snapshot).as_slice().to_vec(),
+        headless
+    );
+    let file = ambre_core::Payload::<ambre_core::PickedContainer>::new(snapshot.0.clone());
     assert_eq!(hash::file_digest(&file).as_array().to_vec(), headless);
 }
 
@@ -964,15 +1034,18 @@ fn an_old_passphrase_derives_the_key_it_always_did() {
     // sealed file.
     let user = passphrase::derive_user_key(
         &pass("correct horse"),
-        &MasterKeySalt::from_array([0xAB; 32]),
+        &FixedBytes::<MasterKeySalt>::from_array([0xAB; 32]),
     )
     .unwrap();
     assert_eq!(
         user.as_bytes().to_vec(),
         golden("2d10bdb7ee0406ce92f33836f189f2527051e4ccd9666dec855d4dfa3bcebdfd")
     );
-    let file = FileKey::from_passphrase(&pass("correct horse"), &FileSalt::from_array([0xAB; 16]))
-        .unwrap();
+    let file = FileKey::from_passphrase(
+        &pass("correct horse"),
+        &FixedBytes::<FileSalt>::from_array([0xAB; 16]),
+    )
+    .unwrap();
     assert_eq!(
         file.as_bytes().to_vec(),
         golden("3aa4da2953c8cdf77f2c64d721d4926ec230466b9bf2e9bd670d8ac793ce5ebe")
@@ -984,7 +1057,7 @@ fn a_row_the_old_code_sealed_still_opens() {
     // A row sealed by the build that wrote `RowLayout::V1` as a bare byte:
     // the layout byte, the nonce, then the ciphertext. A store a user holds
     // today keeps rows of this shape, so every later build opens them.
-    let row = SealedRowBytes::new(golden(
+    let row = Payload::<SealedRowBytes>::new(golden(
         "01a11182bb03cf28fbbeb25b10c25f4d53019867ee3101ff1ca1d3e4b463358f16a8df15edbd570d3cfd0c5ac5fdcb",
     ));
     let key = fixed_seed().derive_store_key();

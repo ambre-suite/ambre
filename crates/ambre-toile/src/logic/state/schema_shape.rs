@@ -667,10 +667,10 @@ pub(super) fn board_of_every_key() -> ToileState {
         .expect("a 1x2 image encodes");
     st.seed_media(&[MediaBlob {
         media: crate::logic::command::MediaRef::Stored(sample_hash()),
-        plaintext: ambre_core::MediaBytes::new(vec![1]),
+        plaintext: ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![1]),
         mime: ambre_core::MediaType::from("image/png"),
         size: ambre_core::Size::new(Px::new(1), Px::new(2)),
-        thumb: ambre_core::ThumbnailPng::new(thumb),
+        thumb: ambre_core::Payload::<ambre_core::ThumbnailPng>::new(thumb),
     }]);
     st.doc.commit();
     st

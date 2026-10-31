@@ -423,7 +423,7 @@ mod tests {
     fn the_fatal_screen_covers_the_surface_and_names_the_error() {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         let face = std::fs::read(format!("{dir}NotoSans-Regular.ttf")).unwrap_or_default();
-        let mut font_cx = crate::fonts::font_context_from_bytes([ambre_core::FontBytes::new(face)]);
+        let mut font_cx = crate::fonts::font_context_from_bytes([ambre_core::Payload::new(face)]);
         let mut cache = TextCache::new();
         let mut surface = RecordingSurface::new();
         paint_fatal(

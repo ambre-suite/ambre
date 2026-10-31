@@ -8,7 +8,7 @@
 
 use ambre_bus::SnapshotVerdict;
 use ambre_core::id::{Document, Id};
-use ambre_core::{LoroPayloadRef, Seq, SnapshotBytes};
+use ambre_core::{LoroPayloadRef, Payload, Seq, SnapshotBytes};
 use loro::{LoroDoc, VersionVector};
 
 use super::{ChannelState, folding};
@@ -31,7 +31,7 @@ impl ChannelState {
         &self,
         document_id: Id<Document>,
         covered: Seq,
-        snapshot: &SnapshotBytes,
+        snapshot: &Payload<SnapshotBytes>,
     ) -> Result<SnapshotVerdict, MurmureError> {
         let own = self
             .doc(document_id)

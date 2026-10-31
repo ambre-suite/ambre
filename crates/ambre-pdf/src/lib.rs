@@ -234,7 +234,7 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         // krilla wants owned RGBA8 bytes; the source is a borrowed view, so copy
         // once into an image object krilla holds for the page's lifetime.
         let expected = image.size.width.get() as usize * image.size.height.get() as usize * 4;
-        if image.pixels.len() != expected || expected == 0 {
+        if image.pixels.as_bytes().len() != expected || expected == 0 {
             return; // malformed source: skip rather than embed garbage
         }
         let img = Image::from_rgba8(
@@ -439,7 +439,7 @@ mod tests {
             let mut surface = page.surface();
             let mut s = KrillaSurface::new(&mut surface);
             // 2x2 opaque RGBA checkerboard.
-            let pixels = ambre_draw::RgbaPixels::new(vec![
+            let pixels = ambre_draw::Payload::new(vec![
                 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
             ]);
             let src = ImageSource {
@@ -453,7 +453,7 @@ mod tests {
             // Malformed source (wrong length): skipped.
             let bad = ImageSource {
                 key: ImageKey(2),
-                pixels: &ambre_draw::RgbaPixels::new(vec![0, 1, 2]),
+                pixels: &ambre_draw::Payload::new(vec![0, 1, 2]),
                 size: ambre_core::Size::new(ambre_draw::Px::new(2), ambre_draw::Px::new(2)),
             };
             s.draw_image(&bad, Rect::new(0.0, 0.0, 10.0, 10.0));

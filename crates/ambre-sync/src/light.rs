@@ -34,7 +34,7 @@ pub(crate) struct LightSubscription {
     unopened_from: Option<Seq>,
     /// The keys a frame was sealed under that the relay was asked for, so
     /// each is asked once.
-    asked: HashSet<KeyId>,
+    asked: HashSet<FixedBytes<KeyId>>,
 }
 
 impl LightSubscription {
@@ -76,7 +76,7 @@ impl LightSubscription {
         seq: Seq,
         update: &Update,
         me: Option<Id<User>>,
-        mine: Option<&PublicKey>,
+        mine: Option<&FixedBytes<PublicKey>>,
     ) -> Option<ActivityCounters> {
         if seq.0 <= self.seen.0 {
             return None;
@@ -361,7 +361,7 @@ mod tests {
     use super::*;
     use ambre_core::activity::{ActivityKind, ActivitySummary};
 
-    const NONCE: SessionNonce = SessionNonce([6; 16]);
+    const NONCE: FixedBytes<SessionNonce> = FixedBytes::from_array([6; 16]);
 
     /// A state with one open document, released at `applied`.
     fn released(
@@ -404,7 +404,7 @@ mod tests {
         let signing_key = MasterSeed::from_array([2; 32]).derive_signing_key();
         let public_data = UpdatePublicData {
             document_id,
-            pub_key: PublicKey::from_array(signing_key.verifying_key().to_bytes()),
+            pub_key: FixedBytes::from_array(signing_key.verifying_key().to_bytes()),
             key_id: doc_key.id(),
             snapshot_id,
             clock: Clock(1),

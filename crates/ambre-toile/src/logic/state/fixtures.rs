@@ -269,7 +269,7 @@ impl FixtureGen for ToileFixture {
         GeneratorVersion::new(2)
     }
 
-    fn build(&self) -> ambre_core::PlaintextContainer {
+    fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
         let seed = self.seed();
         let mut state = ToileState::with_peer(seed.peer());
         match self {
@@ -491,7 +491,7 @@ impl FixtureGen for ToileBenchFixture {
         GeneratorVersion::new(1)
     }
 
-    fn build(&self) -> ambre_core::PlaintextContainer {
+    fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
         let seed = self.seed();
         let mut state = ToileState::with_peer(seed.peer());
         match self {

@@ -12,7 +12,7 @@
 
 use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
 use ambre_core::id::{Channel, Document, Id, Lease, Segment};
-use ambre_core::{DeltaBytes, FailureCount, Millis, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, FailureCount, Millis, Payload, Seq, SnapshotBytes};
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
@@ -79,7 +79,7 @@ pub struct FoldSnapshot {
     /// The last delta number of those amendments it holds.
     pub amendments_seq: Seq,
     /// The shallow snapshot, framed as every channel snapshot is.
-    pub payload: SnapshotBytes,
+    pub payload: Payload<SnapshotBytes>,
 }
 
 /// What a fold `meta` marks did to this copy.
@@ -242,8 +242,9 @@ impl ChannelState {
             folding.step = Step::Asked;
         }
         let doc = self.folded(segment, grant.amendments, reached)?;
-        let shallow =
-            SnapshotBytes::new(doc.export(ExportMode::shallow_snapshot(&doc.oplog_frontiers()))?);
+        let shallow = Payload::<SnapshotBytes>::new(
+            doc.export(ExportMode::shallow_snapshot(&doc.oplog_frontiers()))?,
+        );
         let payload = match self.sequences.get(&segment.document_id()) {
             Some(sequence) => sequence.frame(shallow),
             None => shallow,
@@ -344,7 +345,7 @@ impl ChannelState {
         &mut self,
         segment: Id<Segment>,
         amendments: Id<Document>,
-    ) -> Result<Option<DeltaBytes>, MurmureError> {
+    ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         if folded_amendments(&self.meta.doc, segment) == Some(amendments) {
             return Ok(None);
         }
@@ -367,7 +368,7 @@ impl ChannelState {
     pub fn amendments_gone(
         &mut self,
         amendments: Id<Document>,
-    ) -> Result<Option<DeltaBytes>, MurmureError> {
+    ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         let segment = self
             .amendments
             .iter()

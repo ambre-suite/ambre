@@ -6,7 +6,7 @@
 //! nothing before its PeerID lands: an operation under any other PeerID never
 //! travels (`AUTHOR-029`).
 
-use ambre_core::{DeltaBytes, OpCounter, PeerEntryBytes};
+use ambre_core::{DeltaBytes, OpCounter, Payload, PeerEntryBytes};
 use loro::{CommitOptions, ExportMode, IdSpan, LoroDoc, VersionVector};
 
 use crate::error::MurmureError;
@@ -67,13 +67,13 @@ impl Session {
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses the export.
-    pub(crate) fn export(&mut self, doc: &LoroDoc) -> Result<DeltaBytes, MurmureError> {
+    pub(crate) fn export(&mut self, doc: &LoroDoc) -> Result<Payload<DeltaBytes>, MurmureError> {
         doc.commit();
         let end = counter_of(&doc.oplog_vv(), self.peer);
         let span = IdSpan::new(self.peer.0, self.sent.0, end.0);
         let delta = doc.export(ExportMode::updates_in_range(vec![span]))?;
         self.sent = end;
-        Ok(DeltaBytes::new(delta))
+        Ok(Payload::<DeltaBytes>::new(delta))
     }
 
     /// [`Session::export`] as a JSON update, the form a segment delta travels
@@ -82,7 +82,10 @@ impl Session {
     ///
     /// # Errors
     /// [`MurmureError::Crdt`] when the update does not serialise.
-    pub(crate) fn export_json(&mut self, doc: &LoroDoc) -> Result<DeltaBytes, MurmureError> {
+    pub(crate) fn export_json(
+        &mut self,
+        doc: &LoroDoc,
+    ) -> Result<Payload<DeltaBytes>, MurmureError> {
         doc.commit();
         let end = doc.oplog_vv();
         let mut start = end.clone();

@@ -18,7 +18,7 @@
 //!     associated type, matched by the last segment of the trait. Its
 //!     accessor returns that associated type, or a borrow of it, never the
 //!     marker;
-//!   * a type a `define_*!` or `fixed_bytes!` macro writes is a newtype too;
+//!   * a type a `define_*!` macro writes is a newtype too;
 //!   * an accessor is a method of the newtype that takes `self` alone and
 //!     returns the primitive or a borrow of it;
 //!   * `len` and the `is_*` and `has_*` predicates are no accessors;
@@ -348,7 +348,7 @@ fn foreign_method(name: &str) -> bool {
 
 /// The macro families that write a newtype.
 fn writes_newtypes(name: &str) -> bool {
-    name.starts_with("define_") || name == "fixed_bytes"
+    name.starts_with("define_")
 }
 
 /// One site the report names.

@@ -47,7 +47,7 @@ use super::label::{LABEL_FONT_SIZE, label_rect};
 /// entry would paint nothing at all. Both halves land together
 /// (`ambre-roadmap.md` E6).
 pub struct DecodedImage {
-    pub pixels: ambre_core::RgbaPixels,
+    pub pixels: ambre_core::Payload<ambre_core::RgbaPixels>,
     pub size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
 }
 

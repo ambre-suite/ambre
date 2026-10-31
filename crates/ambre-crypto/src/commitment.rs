@@ -5,7 +5,7 @@
 //! message to a specific key, defeating inter-document substitution by a
 //! compromised relay. Distinct from the Poly1305 tag carried inside the AEAD.
 
-use ambre_core::{Ciphertext, CommitmentTag, Nonce, Secret};
+use ambre_core::{Ciphertext, CommitmentTag, FixedBytes, Nonce, Secret};
 use hmac::digest::FixedOutput;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -15,10 +15,10 @@ use crate::keys::DocumentKey;
 
 /// Length of the commitment tag, in bytes: the array length of the subkey
 /// this module derives. A crate that frames a tag reads
-/// [`ambre_core::CommitmentTag::SIZE`].
+/// [`FixedBytes::<CommitmentTag>::SIZE`](FixedBytes::SIZE).
 const TAG_LEN: usize = 32;
 
-const _: () = assert!(ambre_core::CommitmentTag::SIZE.0 == TAG_LEN as u64);
+const _: () = assert!(FixedBytes::<CommitmentTag>::SIZE.0 == TAG_LEN as u64);
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -35,12 +35,12 @@ fn keyed(key: &[u8]) -> HmacSha256 {
 /// so a swap of two fields does not compile.
 fn mac(
     key: &DocumentKey,
-    nonce: &Nonce,
+    nonce: &FixedBytes<Nonce>,
     ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
 ) -> HmacSha256 {
     let mut m = keyed(key.as_bytes());
-    m.update(&nonce.0);
+    m.update(nonce.as_slice());
     m.update(&ciphertext.0);
     m.update(aad.as_bytes());
     m
@@ -49,11 +49,11 @@ fn mac(
 /// Computes the commitment tag over `nonce || ciphertext || aad`.
 pub fn commitment_tag(
     key: &DocumentKey,
-    nonce: &Nonce,
+    nonce: &FixedBytes<Nonce>,
     ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
-) -> CommitmentTag {
-    CommitmentTag(
+) -> FixedBytes<CommitmentTag> {
+    FixedBytes::from_array(
         mac(key, nonce, ciphertext, aad)
             .finalize()
             .into_bytes()
@@ -77,8 +77,8 @@ const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v1";
 /// Never. HMAC accepts a key of any length, so its constructor cannot fail.
 pub fn media_address(
     key: &DocumentKey,
-    plaintext: &ambre_core::MediaBytes,
-) -> ambre_core::MediaAddress {
+    plaintext: &ambre_core::Payload<ambre_core::MediaBytes>,
+) -> FixedBytes<ambre_core::MediaAddress> {
     // The subkey is key material, so the HMAC writes it in place under the
     // wiping wrapper, and no bare copy of it leaves this function.
     let subkey: Secret<[u8; TAG_LEN]> = Secret::filled(|out: &mut [u8; TAG_LEN]| {
@@ -88,7 +88,7 @@ pub fn media_address(
     });
     let mut m = keyed(subkey.expose());
     m.update(plaintext.as_bytes());
-    ambre_core::MediaAddress::from_array(m.finalize().into_bytes().into())
+    FixedBytes::from_array(m.finalize().into_bytes().into())
 }
 
 // A media address is one HMAC output wide.
@@ -102,12 +102,12 @@ const _: () = assert!(ambre_core::MEDIA_ADDRESS_LEN == TAG_LEN);
 /// one: a substituted key, or an input the tag does not cover.
 pub fn verify_commitment(
     key: &DocumentKey,
-    nonce: &Nonce,
+    nonce: &FixedBytes<Nonce>,
     ciphertext: &Ciphertext,
     aad: &ambre_core::Aad,
-    tag: &CommitmentTag,
+    tag: &FixedBytes<CommitmentTag>,
 ) -> Result<(), CryptoError> {
     mac(key, nonce, ciphertext, aad)
-        .verify_slice(&tag.0)
+        .verify_slice(tag.as_slice())
         .map_err(|_| CryptoError::CommitmentMismatch)
 }

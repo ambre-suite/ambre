@@ -175,11 +175,8 @@ impl SyncState {
 
         if let Some(tx) = event_tx {
             let signing_pub_key =
-                ambre_core::SigningKeyHex::encode(signing_key.verifying_key().to_bytes());
-            let exchange_pub_key = {
-                let pub_key = crate::sharing::own_exchange_key(&exchange_key);
-                ambre_core::ExchangeKeyHex::encode(&pub_key)
-            };
+                ambre_core::FixedBytes::from_array(signing_key.verifying_key().to_bytes());
+            let exchange_pub_key = crate::sharing::own_exchange_key(&exchange_key);
             wasm_bindgen_futures::spawn_local(async move {
                 let url = crate::http::ApiRoot::of(url_scheme, &api_base).route("/auth/dev/login");
                 let body = http::DevLoginRequest {
@@ -270,8 +267,8 @@ impl SyncState {
         &mut self,
         id: Generation<Request>,
         provider: ambre_core::OidcProvider,
-        code: ambre_core::OidcCode,
-        state: ambre_core::OidcState,
+        code: ambre_core::Credential<ambre_core::OidcCode>,
+        state: ambre_core::Credential<ambre_core::OidcState>,
     ) {
         tracing::info!("Sync: ProviderReturn ({provider})");
         let Some(tx) = self.event_tx.clone() else {
@@ -351,17 +348,14 @@ impl SyncState {
                 let signing_key = master_seed.derive_signing_key();
                 let exchange_key = master_seed.derive_exchange_key();
                 let signing_pub_key =
-                    ambre_core::SigningKeyHex::encode(signing_key.verifying_key().to_bytes());
-                let exchange_pub_key = {
-                    let pub_key = crate::sharing::own_exchange_key(&exchange_key);
-                    ambre_core::ExchangeKeyHex::encode(&pub_key)
-                };
+                    ambre_core::FixedBytes::from_array(signing_key.verifying_key().to_bytes());
+                let exchange_pub_key = crate::sharing::own_exchange_key(&exchange_key);
                 // Each step below fails only on a broken platform or a bug. The
                 // account is not created then, and the user reads why.
                 let mut salt = [0u8; 32];
                 let wrapped = getrandom::fill(&mut salt)
                     .map_err(|e| format!("no CSPRNG for the account salt: {e}"))
-                    .map(|()| ambre_core::MasterKeySalt::from_array(salt))
+                    .map(|()| ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array(salt))
                     .and_then(|salt| {
                         ambre_crypto::passphrase::derive_user_key(&passphrase, &salt)
                             .map(|user_key| (salt, user_key))

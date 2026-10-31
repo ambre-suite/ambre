@@ -28,8 +28,8 @@ impl SecretToken {
 
     /// The token as the wire type of the socket's `Authenticate` frame. The
     /// two share one wrapper, so no copy of the text is made.
-    pub fn to_access_token(&self) -> ambre_core::AccessToken {
-        ambre_core::AccessToken::from_shared(Arc::clone(&self.0))
+    pub fn to_access_token(&self) -> ambre_core::Credential<ambre_core::AccessToken> {
+        ambre_core::Credential::from_shared(Arc::clone(&self.0))
     }
 
     /// Hands the `Authorization` header value, `Bearer` and the token, to

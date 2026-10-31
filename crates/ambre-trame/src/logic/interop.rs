@@ -16,7 +16,7 @@ impl TrameState {
     /// undo group.
     pub(super) fn import_csv(
         &mut self,
-        data: ambre_core::FileBytes,
+        data: ambre_core::Payload<ambre_core::FileBytes>,
         delimiter: Option<CsvDelimiter>,
         header: HeaderRow,
         target_sheet_id: Option<SheetId>,
@@ -235,7 +235,7 @@ impl TrameState {
                 "sheet",
                 ambre_core::ExportExtension::Csv,
             ),
-            data: ambre_core::FileBytes::new(data),
+            data: ambre_core::Payload::<ambre_core::FileBytes>::new(data),
         }])
     }
 
@@ -309,7 +309,7 @@ impl TrameState {
 /// tab, by frequency in the first kilobyte (`trame-import-export`). A separator
 /// inside a quoted field does not count. A tie goes to the earlier of the
 /// three. Any other separator, the caller names (`TRAME-IO-035`).
-fn detect_csv_delimiter(data: &ambre_core::FileBytes) -> CsvDelimiter {
+fn detect_csv_delimiter(data: &ambre_core::Payload<ambre_core::FileBytes>) -> CsvDelimiter {
     let data = data.as_bytes();
     let sample = data.get(..1024).unwrap_or(data);
     let mut counts = [

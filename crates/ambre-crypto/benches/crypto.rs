@@ -21,7 +21,9 @@ fn pass(text: &str) -> ambre_core::Passphrase {
 fn bench_envelope(c: &mut Criterion) {
     let doc_key = DocumentKey::from_array([0x11; 32]);
     let signing = MasterSeed::from_array([0x22; 32]).derive_signing_key();
-    let author = ambre_core::PublicKey::from_array(signing.verifying_key().to_bytes());
+    let author = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
+        signing.verifying_key().to_bytes(),
+    );
     let aad = &ambre_core::Aad::of(b"public-data-metadata");
     let payload = ambre_core::SecretBytes::new(vec![0x42u8; 1024]);
 
@@ -36,7 +38,7 @@ fn bench_envelope(c: &mut Criterion) {
 }
 
 fn bench_argon2(c: &mut Criterion) {
-    let salt = ambre_core::MasterKeySalt::from_array([0xAB; 32]);
+    let salt = ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([0xAB; 32]);
     c.bench_function("argon2id_derive", |b| {
         b.iter(|| {
             passphrase::derive_user_key(black_box(&pass("correct horse")), black_box(&salt))

@@ -217,7 +217,9 @@ fn read_file_into(
     wasm_bindgen_futures::spawn_local(async move {
         match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
             Ok(buf) => {
-                let bytes = ambre_core::FileBytes::new(js_sys::Uint8Array::new(&buf).to_vec());
+                let bytes = ambre_core::Payload::<ambre_core::FileBytes>::new(
+                    js_sys::Uint8Array::new(&buf).to_vec(),
+                );
                 dropped.set(Some(DroppedFile { bytes, mime, at }));
             }
             Err(_) => toasts.warning("Could not read the file"),

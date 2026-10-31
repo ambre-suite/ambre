@@ -139,7 +139,9 @@ impl LogicState {
         evt: &RestEvent,
     ) -> bool {
         let answer = match evt {
-            RestEvent::DocFileSealed { data } => Ok(ambre_core::FileBytes::from(data.clone())),
+            RestEvent::DocFileSealed { data } => Ok(
+                ambre_core::Payload::<ambre_core::FileBytes>::from(data.clone()),
+            ),
             RestEvent::DocFileSealFailed => Err("the file could not be encrypted".to_owned()),
             _ => return false,
         };
@@ -389,8 +391,8 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         display: Vec<AppEvent>,
-        update: Option<ambre_core::DeltaBytes>,
-        ephemeral: Option<ambre_core::EphemeralBytes>,
+        update: Option<ambre_core::Payload<ambre_core::DeltaBytes>>,
+        ephemeral: Option<ambre_core::Payload<ambre_core::EphemeralBytes>>,
         requests: Vec<ToileRequest>,
     ) {
         for event in display {
@@ -399,7 +401,7 @@ impl LogicState {
         if let Some(payload) = update {
             tracing::debug!(
                 "[Logic->Sync] pushing SendUpdate doc={document_id} delta_size={}",
-                payload.len(),
+                payload.len().0,
             );
             // The delta that leaves for the relay is the one saved: it holds
             // every operation the command wrote.
@@ -519,8 +521,8 @@ impl LogicState {
     pub(crate) fn restore_local(
         &mut self,
         document_id: Id<Document>,
-        snapshot: Option<ambre_core::SnapshotBytes>,
-        deltas: Vec<ambre_core::DeltaBytes>,
+        snapshot: Option<ambre_core::Payload<ambre_core::SnapshotBytes>>,
+        deltas: Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
         restore: Restore,
     ) -> bool {
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
@@ -598,7 +600,7 @@ impl LogicState {
         document_id: Id<Document>,
         peer: ambre_core::PeerId,
         entry: ambre_core::PeerEntry,
-        nonce: SessionNonce,
+        nonce: FixedBytes<SessionNonce>,
     ) {
         let Some(doc) = self.docs.get(&document_id) else {
             // A channel or a space document is no entry of `docs`.
@@ -641,7 +643,7 @@ impl LogicState {
     pub(crate) fn note_earlier_sessions(
         &mut self,
         document_id: Id<Document>,
-        sessions: Vec<(ambre_core::PeerId, SessionNonce)>,
+        sessions: Vec<(ambre_core::PeerId, FixedBytes<SessionNonce>)>,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
@@ -740,7 +742,7 @@ impl LogicState {
     pub(crate) fn track_waiting(
         &mut self,
         document_id: Id<Document>,
-        applied: &[(Seq, &ambre_core::DeltaBytes)],
+        applied: &[(Seq, &ambre_core::Payload<ambre_core::DeltaBytes>)],
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
@@ -780,7 +782,7 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         seq: Seq,
-        payload: Option<&ambre_core::DeltaBytes>,
+        payload: Option<&ambre_core::Payload<ambre_core::DeltaBytes>>,
     ) {
         if let Some(doc) = self.docs.get_mut(&document_id) {
             doc.ledger.record(seq, payload);
@@ -803,7 +805,7 @@ impl LogicState {
         {
             return;
         }
-        let accepted: Vec<(Seq, ambre_core::DeltaBytes)> = deltas
+        let accepted: Vec<(Seq, ambre_core::Payload<ambre_core::DeltaBytes>)> = deltas
             .into_iter()
             .filter_map(|delta| {
                 let accepted = authored_by(&delta.payload, delta.peer);
@@ -920,7 +922,7 @@ impl LogicState {
     pub(crate) fn merge_batch(
         &mut self,
         document_id: Id<Document>,
-        payloads: &[ambre_core::DeltaBytes],
+        payloads: &[ambre_core::Payload<ambre_core::DeltaBytes>],
     ) {
         self.settle_board_import(document_id);
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
@@ -963,7 +965,7 @@ impl LogicState {
         &mut self,
         document_id: Id<Document>,
         from_user_id: Id<User>,
-        payload: &ambre_core::EphemeralBytes,
+        payload: &ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id).map(|d| &mut d.state) else {
             return;
@@ -1050,7 +1052,7 @@ impl LogicState {
     pub(crate) fn export_covered_snapshot(
         &self,
         document_id: Id<Document>,
-    ) -> Option<(ambre_core::SnapshotBytes, Seq)> {
+    ) -> Option<(ambre_core::Payload<ambre_core::SnapshotBytes>, Seq)> {
         let doc = self.docs.get(&document_id)?;
         Some((doc.state.export_snapshot(), doc.ledger.contiguous_end()))
     }
@@ -1079,7 +1081,7 @@ impl LogicState {
     pub(crate) fn adopt_snapshot(
         &mut self,
         document_id: Id<Document>,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
         covered: Seq,
     ) {
         self.apply_remote(
@@ -1106,7 +1108,7 @@ impl LogicState {
         document_id: Id<Document>,
         snapshot_id: Id<Snapshot>,
         covered: Seq,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
         purpose: SnapshotPurpose,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
@@ -1143,7 +1145,7 @@ const PDF_STEM: &str = "deck";
 fn export_pdf_of(
     state: &ToileState,
     font_cx: Option<&mut parley::FontContext>,
-) -> Result<ambre_core::FileBytes, String> {
+) -> Result<ambre_core::Payload<ambre_core::FileBytes>, String> {
     let Some(font_cx) = font_cx else {
         // The faces are fetched once at boot and never re-requested, so this is
         // a race with startup, not a dead end: the next attempt succeeds.
@@ -1158,6 +1160,6 @@ fn export_pdf_of(
 fn export_pdf_of(
     _state: &ToileState,
     _font_cx: Option<&mut parley::FontContext>,
-) -> Result<ambre_core::FileBytes, String> {
+) -> Result<ambre_core::Payload<ambre_core::FileBytes>, String> {
     Err("PDF export is not compiled into this build".to_owned())
 }

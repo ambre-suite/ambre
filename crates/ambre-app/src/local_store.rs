@@ -277,9 +277,8 @@ impl LocalStore {
     fn refused(&self, id: Id<Document>, write: SealedWrite, attempt: Attempt) {
         let need = match &write {
             PersistWrite::Snapshot(bytes) | PersistWrite::Delta(bytes) => bytes.len(),
-            _ => 0,
+            _ => ambre_core::ByteSize(0),
         };
-        let need = ambre_core::ByteSize(u64::try_from(need).unwrap_or(u64::MAX));
         let decision = self.inner.ledger.borrow_mut().refused(
             id,
             need,
@@ -334,7 +333,7 @@ mod tests {
     use ambre_bus::conduit::{self, Receiver};
     use ambre_bus::{Request, RestCommand, RestEvent, SecretBytes};
     use ambre_core::Generation;
-    use ambre_core::SealedRowBytes;
+    use ambre_core::{Payload, SealedRowBytes};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::*;
@@ -373,10 +372,10 @@ mod tests {
             LogicCommand::RestoreLocalSnapshot {
                 snapshot, deltas, ..
             } => (
-                snapshot.map(ambre_core::SnapshotBytes::into_bytes),
+                snapshot.map(Payload::<ambre_core::SnapshotBytes>::into_bytes),
                 deltas
                     .into_iter()
-                    .map(ambre_core::DeltaBytes::into_bytes)
+                    .map(Payload::<ambre_core::DeltaBytes>::into_bytes)
                     .collect(),
             ),
             other => panic!("expected a restore, got {other:?}"),
@@ -400,11 +399,13 @@ mod tests {
 
         local.apply(
             doc,
-            PersistWrite::Snapshot(ambre_core::SnapshotBytes::new(b"the document".to_vec())),
+            PersistWrite::Snapshot(Payload::<ambre_core::SnapshotBytes>::new(
+                b"the document".to_vec(),
+            )),
         );
         local.apply(
             doc,
-            PersistWrite::Delta(ambre_core::DeltaBytes::new(b"an edit".to_vec())),
+            PersistWrite::Delta(Payload::<ambre_core::DeltaBytes>::new(b"an edit".to_vec())),
         );
         let (first, cmd) = request(&vault_rx).await;
         let RestCommand::SealLocalRow { place, plaintext } = cmd else {
@@ -418,22 +419,22 @@ mod tests {
         vault.answer(
             Some(second),
             RestEvent::LocalRowSealed {
-                sealed: SealedRowBytes::new(b"sealed edit".to_vec()),
+                sealed: Payload::<SealedRowBytes>::new(b"sealed edit".to_vec()),
             },
         );
         vault.answer(
             Some(first),
             RestEvent::LocalRowSealed {
-                sealed: SealedRowBytes::new(b"sealed document".to_vec()),
+                sealed: Payload::<SealedRowBytes>::new(b"sealed document".to_vec()),
             },
         );
         assert_eq!(
             store.load_snapshot(doc).await.unwrap(),
-            Some(SealedRowBytes::new(b"sealed document".to_vec()))
+            Some(Payload::<SealedRowBytes>::new(b"sealed document".to_vec()))
         );
         assert_eq!(
             store.load_deltas(doc).await.unwrap(),
-            [SealedRowBytes::new(b"sealed edit".to_vec())]
+            [Payload::<SealedRowBytes>::new(b"sealed edit".to_vec())]
         );
 
         // A read back asks the worker to open both rows, in order.

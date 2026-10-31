@@ -11,7 +11,7 @@ use crate::messages::{Clock, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
 use ambre_core::id::{Document, Id, Snapshot};
-use ambre_core::{DocType, KeyId, PublicKey, RefusalCode};
+use ambre_core::{DocType, FixedBytes, KeyId, PublicKey, RefusalCode};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ pub enum WsClientMsg {
     /// carries none, so no proxy record and no log line holds it
     /// (`ambre-spec-session.md`, `SRV-031`). The relay reads nothing else
     /// until this frame is accepted.
-    Authenticate { token: AccessToken },
+    Authenticate { token: Credential<AccessToken> },
 
     /// The author's answer to a [`WsServerMsg::ClockRefused`], naming the
     /// refused delta by its signature. The relay drops this socket's later
@@ -53,7 +53,7 @@ pub enum WsClientMsg {
     /// set the fence (`ambre-spec-sequencer.md`, `SRV-169`).
     ClockResync {
         document_id: Id<Document>,
-        signature: Signature,
+        signature: FixedBytes<Signature>,
     },
 }
 
@@ -61,7 +61,7 @@ pub enum WsClientMsg {
 /// [`ambre_core::Secret`], so `Debug` prints no byte of it and a logged frame
 /// logs no token (`SRV-031`). They live in the Secret module of `ambre-core`,
 /// whose hand-written serde keeps the bare text this wire carried before.
-pub use ambre_core::{AccessToken, RefreshToken};
+pub use ambre_core::{AccessToken, Credential, RefreshToken};
 
 /// The code of a WebSocket close frame, 1000 to 4999 (RFC 6455 section 7.4).
 /// The relay closes a refused upgrade with a code of the application range,
@@ -146,7 +146,7 @@ pub enum WsServerMsg {
     /// age out of the live set.
     PeerLeft {
         document_id: Id<Document>,
-        pub_key: PublicKey,
+        pub_key: FixedBytes<PublicKey>,
     },
 
     /// Response to RequestMissing.
@@ -205,7 +205,7 @@ pub enum WsServerMsg {
     /// the next key, at the same clock, and sends it again (`SYNC-129`).
     KeyRefused {
         document_id: Id<Document>,
-        key_id: KeyId,
+        key_id: FixedBytes<KeyId>,
         clock: Clock,
     },
 
@@ -217,7 +217,7 @@ pub enum WsServerMsg {
         document_id: Id<Document>,
         clock: Clock,
         expected: Clock,
-        signature: Signature,
+        signature: FixedBytes<Signature>,
     },
     /// The members of this document changed: someone joined, left, or took
     /// another role (`SRV-177`). It names the document alone; a client that
@@ -242,7 +242,7 @@ pub enum WsServerMsg {
     /// lacks (`SYNC-155`).
     DeltaRefused {
         document_id: Id<Document>,
-        signature: Signature,
+        signature: FixedBytes<Signature>,
         code: RefusalCode,
     },
 
@@ -254,8 +254,8 @@ pub enum WsServerMsg {
     SnapshotDropped {
         document_id: Id<Document>,
         snapshot_id: Id<Snapshot>,
-        author: PublicKey,
-        reporter: PublicKey,
+        author: FixedBytes<PublicKey>,
+        reporter: FixedBytes<PublicKey>,
         after: ambre_core::AfterDrop,
     },
 

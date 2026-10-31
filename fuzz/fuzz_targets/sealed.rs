@@ -5,7 +5,7 @@
 
 use std::sync::OnceLock;
 
-use ambre_core::{FileSalt, Passphrase, SealedContainer};
+use ambre_core::{FileSalt, FixedBytes, Passphrase, Payload, SealedContainer};
 use ambre_crypto::FileKey;
 use libfuzzer_sys::fuzz_target;
 
@@ -16,7 +16,7 @@ fn file_key() -> &'static FileKey {
     KEY.get_or_init(|| {
         match FileKey::from_passphrase(
             &Passphrase::new("passphrase".to_owned()),
-            &FileSalt::from_array([0x33; 16]),
+            &FixedBytes::<FileSalt>::from_array([0x33; 16]),
         ) {
             Ok(key) => key,
             Err(e) => panic!("a fixed salt is always accepted: {e:?}"),
@@ -28,7 +28,8 @@ fuzz_target!(|data: &[u8]| {
     let _ = ambre_sync::fuzz::open_relayed_update(data);
     let _ = ambre_sync::fuzz::open_stored_snapshot(data);
     let _ = ambre_sync::fuzz::open_authenticated(data);
-    if let Ok(file) = ambre_core::docfile::parse_sealed_header(&SealedContainer::new(data.to_vec()))
+    if let Ok(file) =
+        ambre_core::docfile::parse_sealed_header(&Payload::<SealedContainer>::new(data.to_vec()))
     {
         let _ =
             ambre_crypto::aead::open_file(&file.nonce, &file.ciphertext, &file.aad(), file_key());

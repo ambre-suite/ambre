@@ -111,6 +111,7 @@
 | Secret | the one wrapper that holds and wipes a typed secret value | | `1-Foundations/ambre-spec-zero-knowledge.md` |
 | sink | a function that lends secret text to one foreign call | | `1-Foundations/ambre-spec-architecture.md` |
 | bearer credential | a token or an address that grants access to whoever holds it | | `1-Foundations/ambre-spec-zero-knowledge.md` |
+| fixed-width value | bytes whose role fixes their count, such as a key | | `1-Foundations/ambre-spec-message-bus.md` |
 | key rotation | replacing a document key, and what follows | | `1-Foundations/ambre-spec-key-rotation.md` |
 | key chain | the links that seal each older document key under the next one | | `1-Foundations/ambre-spec-key-rotation.md` |
 | key identifier | the hash that names a document key without revealing it | | `1-Foundations/ambre-spec-key-rotation.md` |

@@ -5,8 +5,8 @@
 //! plaintext, and the decompression reads it after every check has passed.
 //! Each entry point below opens one of the two under a fixed key.
 
-use ambre_core::PublicKey;
 use ambre_core::id::{self, Document, Id};
+use ambre_core::{FixedBytes, PublicKey};
 use ambre_crypto::{DocumentKey, MasterSeed, envelope};
 use ambre_protocol::messages::Clock;
 use ambre_protocol::public_data::UpdatePublicData;
@@ -43,7 +43,7 @@ pub fn open_stored_snapshot(bytes: &[u8]) -> Result<Vec<u8>, PipelineError> {
         &FetchedBlob::new(bytes.to_vec()),
         named.public_data.document_id,
     )?;
-    open_snapshot(&snapshot, &doc_key()).map(ambre_core::SnapshotBytes::into_bytes)
+    open_snapshot(&snapshot, &doc_key()).map(ambre_core::Payload::into_bytes)
 }
 
 /// Opens an update whose sealed plaintext is `plaintext`, as a peer holding
@@ -58,7 +58,7 @@ pub fn open_authenticated(plaintext: &[u8]) -> Result<Vec<u8>, PipelineError> {
     let signing = MasterSeed::from_array([0x22; 32]).derive_signing_key();
     let public_data = UpdatePublicData {
         document_id: Id::<Document>::mint(),
-        pub_key: PublicKey::from_array(signing.verifying_key().to_bytes()),
+        pub_key: FixedBytes::<PublicKey>::from_array(signing.verifying_key().to_bytes()),
         key_id: key.id(),
         snapshot_id: Id::<id::Snapshot>::mint(),
         clock: Clock(1),

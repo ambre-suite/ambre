@@ -76,7 +76,7 @@ use ambre_bus::{
 
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::schema::SchemaError;
-use ambre_core::{Generation, SessionNonce};
+use ambre_core::{FixedBytes, Generation, SessionNonce};
 
 use ambre_murmure::Order;
 use ambre_prose::ProseState;
@@ -170,7 +170,7 @@ impl DocState {
     /// never loaded.
     pub fn import_snapshot(
         &mut self,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) -> Result<Vec<AppEvent>, SchemaError> {
         match self {
             DocState::Trame(state) => Ok(state
@@ -193,7 +193,10 @@ impl DocState {
 
     /// Import a batch of deltas, whichever application owns the document, and
     /// answer its display events.
-    pub fn apply_remote_batch(&mut self, payloads: &[ambre_core::DeltaBytes]) -> Vec<AppEvent> {
+    pub fn apply_remote_batch(
+        &mut self,
+        payloads: &[ambre_core::Payload<ambre_core::DeltaBytes>],
+    ) -> Vec<AppEvent> {
         match self {
             DocState::Trame(state) => state
                 .apply_remote_batch(payloads)
@@ -258,9 +261,10 @@ impl DocState {
     /// and lives on the Sync thread, which this one cannot read (`ZK-001`).
     fn ambre_file_event(&self, document_id: Id<Document>) -> AppEvent {
         match self.ambre_file_bytes(document_id) {
-            Some((filename, data)) => {
-                self.export_complete_event(filename, ambre_core::FileBytes::from(data))
-            }
+            Some((filename, data)) => self.export_complete_event(
+                filename,
+                ambre_core::Payload::<ambre_core::FileBytes>::from(data),
+            ),
             // A document the engine could not read becomes no file
             // (`TOILE-IO-069`). The user is told instead.
             None => self.export_failed_event("the document could not be read".to_owned()),
@@ -278,7 +282,10 @@ impl DocState {
     fn ambre_file_bytes(
         &self,
         document_id: Id<Document>,
-    ) -> Option<(ambre_core::ExportFilename, ambre_core::PlaintextContainer)> {
+    ) -> Option<(
+        ambre_core::ExportFilename,
+        ambre_core::Payload<ambre_core::PlaintextContainer>,
+    )> {
         let (stem, plaintext) = match self {
             DocState::Trame(state) => ("workbook", state.export_ambre_plaintext(document_id)?),
             DocState::Toile(state) => ("board", state.export_ambre_plaintext(document_id)?),
@@ -295,7 +302,7 @@ impl DocState {
     fn export_complete_event(
         &self,
         filename: ambre_core::ExportFilename,
-        data: ambre_core::FileBytes,
+        data: ambre_core::Payload<ambre_core::FileBytes>,
     ) -> AppEvent {
         match self {
             DocState::Trame(_) => {
@@ -344,7 +351,7 @@ impl DocState {
     /// `LogicState::export_covered_snapshot` cannot serve that belt: it takes a
     /// `Id<Document>` and needs a live registry entry, where the belt quantifies
     /// over a bare `DocState`.
-    pub fn export_snapshot(&self) -> ambre_core::SnapshotBytes {
+    pub fn export_snapshot(&self) -> ambre_core::Payload<ambre_core::SnapshotBytes> {
         match self {
             DocState::Trame(state) => state.export_snapshot(),
             DocState::Toile(state) => state.export_snapshot(),
@@ -379,7 +386,7 @@ impl DocState {
     /// Only Prose measures text on the Logic thread: pagination shapes on a
     /// sealed context, which holds nothing until these arrive (`PROSE-114`).
     /// Trame and Toile measure on the UI thread, which owns its own context.
-    fn load_faces(&mut self, faces: &[ambre_core::FontBytes]) {
+    fn load_faces(&mut self, faces: &[ambre_core::Payload<ambre_core::FontBytes>]) {
         match self {
             DocState::Prose(state) => state.load_faces(faces),
             DocState::Trame(_) | DocState::Toile(_) => {}
@@ -436,7 +443,10 @@ impl DocState {
 /// passes: a snapshot carries the whole history, every author's included.
 /// Bytes the engine cannot read are refused too, since nothing in them can be
 /// attributed.
-fn authored_by(payload: &ambre_core::DeltaBytes, peer: ambre_core::PeerId) -> bool {
+fn authored_by(
+    payload: &ambre_core::Payload<ambre_core::DeltaBytes>,
+    peer: ambre_core::PeerId,
+) -> bool {
     match loro::LoroDoc::decode_import_blob_meta(payload.as_bytes(), false) {
         Ok(meta) => {
             meta.mode == loro::EncodedBlobMode::Updates
@@ -514,7 +524,7 @@ struct LiveDoc {
     relay: loro::VersionVector,
     /// The earlier sessions of this user on the document, read back from the
     /// local store: each PeerID with the nonce it derives from.
-    earlier: Vec<(ambre_core::PeerId, SessionNonce)>,
+    earlier: Vec<(ambre_core::PeerId, FixedBytes<SessionNonce>)>,
     /// The document reopens from the local store after leaving memory, at
     /// this horizon. Sync is asked to open it once the read lands
     /// (`RESID-010`).
@@ -539,8 +549,8 @@ enum Restore {
 
 /// A local restore held until the document has its session identity.
 struct HeldRestore {
-    snapshot: Option<ambre_core::SnapshotBytes>,
-    deltas: Vec<ambre_core::DeltaBytes>,
+    snapshot: Option<ambre_core::Payload<ambre_core::SnapshotBytes>>,
+    deltas: Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
 }
 
 impl LiveDoc {
@@ -601,7 +611,7 @@ impl LogicState {
             document_id,
             peer,
             entry: test_entry(peer),
-            nonce: SessionNonce([0; 16]),
+            nonce: FixedBytes::from_array([0; 16]),
         });
         peer
     }
@@ -622,8 +632,8 @@ fn test_entry(peer: ambre_core::PeerId) -> ambre_core::PeerEntry {
     user[..8].copy_from_slice(&peer.0.to_le_bytes());
     ambre_core::PeerEntry {
         user: Id::<User>::from_bytes(user),
-        nonce: SessionNonce([0; 16]),
-        signature: ambre_core::Signature([0; 64]),
+        nonce: FixedBytes::from_array([0; 16]),
+        signature: FixedBytes::from_array([0; 64]),
     }
 }
 
@@ -673,7 +683,10 @@ const HELD_EDITS_LIMIT: usize = 256;
 /// [`SnapshotBytes`]: ambre_core::SnapshotBytes
 /// [`DeltaBytes`]: ambre_core::DeltaBytes
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PersistWrite<S = ambre_core::SnapshotBytes, D = ambre_core::DeltaBytes> {
+pub enum PersistWrite<
+    S = ambre_core::Payload<ambre_core::SnapshotBytes>,
+    D = ambre_core::Payload<ambre_core::DeltaBytes>,
+> {
     /// The whole document. It replaces the stored one and every delta logged
     /// since, which it holds.
     Snapshot(S),
@@ -684,7 +697,7 @@ pub enum PersistWrite<S = ambre_core::SnapshotBytes, D = ambre_core::DeltaBytes>
     /// open sends what the session left unsent (`AUTHOR-028`).
     Session {
         peer: ambre_core::PeerId,
-        nonce: SessionNonce,
+        nonce: FixedBytes<SessionNonce>,
     },
     /// An earlier session whose operations the relay holds: nothing of it is
     /// left to send.
@@ -706,7 +719,10 @@ pub enum PersistWrite<S = ambre_core::SnapshotBytes, D = ambre_core::DeltaBytes>
 
 /// A [`PersistWrite`] as the store receives it: its snapshot or delta is a
 /// row the Sync worker sealed.
-pub type SealedWrite = PersistWrite<ambre_core::SealedRowBytes, ambre_core::SealedRowBytes>;
+pub type SealedWrite = PersistWrite<
+    ambre_core::Payload<ambre_core::SealedRowBytes>,
+    ambre_core::Payload<ambre_core::SealedRowBytes>,
+>;
 
 impl<S, D> PersistWrite<S, D> {
     /// Whether it writes to the store, rather than read it back or tell the
@@ -831,7 +847,7 @@ struct LogicState {
     direct: HashMap<Id<Channel>, ambre_murmure::ChannelState>,
     /// The whole content of a document this client created, sent as its first
     /// update once the Sync worker holds its session.
-    unsent: HashMap<Id<Document>, ambre_core::DeltaBytes>,
+    unsent: HashMap<Id<Document>, ambre_core::Payload<ambre_core::DeltaBytes>>,
     /// The session identity Sync issued for a channel or a space document
     /// that no open channel or space holds yet, adopted once one does
     /// (`AUTHOR-002`).
@@ -870,7 +886,7 @@ struct LogicState {
     /// (`LogicCommand::LoadFonts`). Kept as bytes, so a document opened later
     /// gets the same set (`CANVAS-067`, `PROSE-115`). The Logic thread cannot
     /// fetch, so this is the whole of what it can measure on.
-    base_faces: Vec<ambre_core::FontBytes>,
+    base_faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
     /// Base fonts for PDF export (`toile-pdf-export`), seeded once by
     /// [`LogicCommand::LoadFonts`]. `None` until the Main thread's boot-time
     /// fetch lands; a fresh `FontContext` here would have zero faces and emit no
@@ -910,7 +926,7 @@ struct Owed {
     /// A full snapshot for local persistence, in place of any delta.
     snapshot: bool,
     /// The changes the pass made, each logged as it came.
-    deltas: Vec<ambre_core::DeltaBytes>,
+    deltas: Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
 }
 
 impl LogicState {
@@ -985,7 +1001,11 @@ impl LogicState {
     }
 
     /// Owe local persistence one change the pass made to a document.
-    fn owe_delta(&mut self, document_id: Id<Document>, delta: ambre_core::DeltaBytes) {
+    fn owe_delta(
+        &mut self,
+        document_id: Id<Document>,
+        delta: ambre_core::Payload<ambre_core::DeltaBytes>,
+    ) {
         self.owed.entry(document_id).or_default().deltas.push(delta);
     }
 
@@ -1200,7 +1220,10 @@ fn test_link<T>() -> (WorkerSender<T>, Receiver<T>) {
 /// A delta the relay delivers at `seq`, signed under the one PeerID its
 /// operations carry, as Sync would hand it over.
 #[cfg(test)]
-fn remote_delta(seq: u64, payload: ambre_core::DeltaBytes) -> ambre_bus::SignedDelta {
+fn remote_delta(
+    seq: u64,
+    payload: ambre_core::Payload<ambre_core::DeltaBytes>,
+) -> ambre_bus::SignedDelta {
     let peer = loro::LoroDoc::decode_import_blob_meta(payload.as_bytes(), false)
         .ok()
         .and_then(|meta| meta.partial_end_vv.keys().next().copied())
@@ -1208,7 +1231,7 @@ fn remote_delta(seq: u64, payload: ambre_core::DeltaBytes) -> ambre_bus::SignedD
     ambre_bus::SignedDelta {
         seq: ambre_core::Seq(seq),
         payload,
-        nonce: ambre_core::SessionNonce([0; 16]),
+        nonce: FixedBytes::from_array([0; 16]),
         peer: ambre_core::PeerId(peer),
         user: None,
         summary: None,
@@ -1555,7 +1578,7 @@ mod pass_tests {
         LogicCommand::App {
             document_id,
             command: AppCommand::Toile(ambre_bus::app::toile::ToileCommand::ImportSvg {
-                bytes: ambre_core::FileBytes::new(drawing(n)),
+                bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(n)),
                 at: kurbo::Point::ZERO,
             }),
         }
@@ -1666,7 +1689,7 @@ mod pass_tests {
         let mut peer = ambre_toile::ToileState::new();
         let delta = peer
             .handle_command(ambre_bus::app::toile::ToileCommand::ImportSvg {
-                bytes: ambre_core::FileBytes::new(drawing(1)),
+                bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(drawing(1)),
                 at: kurbo::Point::new(-50.0, 0.0),
             })
             .update
@@ -1702,7 +1725,6 @@ mod authorship_tests {
     use super::*;
     use ambre_bus::TrameCommand;
     use ambre_bus::{Col, Row};
-    use ambre_core::SessionNonce;
     use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
     const ALICE: ambre_core::PeerId = ambre_core::PeerId(0xA11CE);
@@ -1740,7 +1762,10 @@ mod authorship_tests {
     }
 
     /// The delta a session writing under `peer` sends for one cell edit.
-    fn written_by(peer: ambre_core::PeerId, text: &str) -> ambre_core::DeltaBytes {
+    fn written_by(
+        peer: ambre_core::PeerId,
+        text: &str,
+    ) -> ambre_core::Payload<ambre_core::DeltaBytes> {
         let mut author = TrameState::new();
         assert!(author.adopt_session(peer, crate::test_entry(peer)));
         author
@@ -1754,7 +1779,9 @@ mod authorship_tests {
     }
 
     /// One delta carrying the operations of every delta in `deltas`.
-    fn merged(deltas: &[ambre_core::DeltaBytes]) -> ambre_core::DeltaBytes {
+    fn merged(
+        deltas: &[ambre_core::Payload<ambre_core::DeltaBytes>],
+    ) -> ambre_core::Payload<ambre_core::DeltaBytes> {
         let doc = LoroDoc::new();
         doc.import(TrameState::new().export_snapshot().as_bytes())
             .expect("the scaffolding");
@@ -1767,11 +1794,14 @@ mod authorship_tests {
             .into()
     }
 
-    fn signed(payload: ambre_core::DeltaBytes, peer: ambre_core::PeerId) -> SignedDelta {
+    fn signed(
+        payload: ambre_core::Payload<ambre_core::DeltaBytes>,
+        peer: ambre_core::PeerId,
+    ) -> SignedDelta {
         SignedDelta {
             seq: ambre_core::Seq(0),
             payload,
-            nonce: SessionNonce([0; 16]),
+            nonce: FixedBytes::from_array([0; 16]),
             peer,
             user: None,
             summary: None,
@@ -1791,7 +1821,7 @@ mod authorship_tests {
         doc.oplog_vv()
     }
 
-    fn edit(rig: &mut Rig, text: &str) -> ambre_core::DeltaBytes {
+    fn edit(rig: &mut Rig, text: &str) -> ambre_core::Payload<ambre_core::DeltaBytes> {
         rig.state.handle_logic_command(LogicCommand::App {
             document_id: rig.document_id,
             command: AppCommand::Trame(TrameCommand::SetCellText {
@@ -1810,7 +1840,7 @@ mod authorship_tests {
     }
 
     /// The PeerIDs whose operations a delta carries.
-    fn authors(delta: &ambre_core::DeltaBytes) -> Vec<ambre_core::PeerId> {
+    fn authors(delta: &ambre_core::Payload<ambre_core::DeltaBytes>) -> Vec<ambre_core::PeerId> {
         let meta =
             LoroDoc::decode_import_blob_meta(delta.as_bytes(), false).expect("a readable delta");
         meta.partial_end_vv
@@ -1980,7 +2010,7 @@ mod authorship_tests {
     }
 
     /// A workbook snapshot holding the scaffolding and `deltas`.
-    fn snapshot_of(deltas: &[ambre_core::DeltaBytes]) -> Vec<u8> {
+    fn snapshot_of(deltas: &[ambre_core::Payload<ambre_core::DeltaBytes>]) -> Vec<u8> {
         let doc = LoroDoc::new();
         doc.import(TrameState::new().export_snapshot().as_bytes())
             .expect("the scaffolding");
@@ -1991,7 +2021,7 @@ mod authorship_tests {
     }
 
     /// Alice's delta, numbered `seq` by the relay, reaches the rig.
-    fn receive(rig: &mut Rig, payload: ambre_core::DeltaBytes, seq: u64) {
+    fn receive(rig: &mut Rig, payload: ambre_core::Payload<ambre_core::DeltaBytes>, seq: u64) {
         let mut delta = signed(payload, ALICE);
         delta.seq = ambre_core::Seq(seq);
         rig.state.handle_logic_event(LogicEvent::RemoteUpdate {
@@ -2019,7 +2049,9 @@ mod authorship_tests {
     }
 
     /// A delta Alice writes on a scaffolding another build wrote under `peer`.
-    fn on_foreign_scaffold(peer: ambre_core::PeerId) -> ambre_core::DeltaBytes {
+    fn on_foreign_scaffold(
+        peer: ambre_core::PeerId,
+    ) -> ambre_core::Payload<ambre_core::DeltaBytes> {
         let doc = LoroDoc::new();
         doc.set_peer_id(peer.0)
             .expect("a fresh document takes a peer id");
@@ -2190,7 +2222,7 @@ mod authorship_tests {
         assert!(rig.sync.try_recv().is_err(), "a held edit was sent");
 
         let peer = rig.state.grant_identity(rig.document_id);
-        let sent: Vec<ambre_core::DeltaBytes> = rig
+        let sent: Vec<ambre_core::Payload<ambre_core::DeltaBytes>> = rig
             .sync
             .try_iter()
             .filter_map(|cmd| match cmd {
@@ -2283,7 +2315,10 @@ mod authorship_tests {
     }
 
     /// The deltas one session writing under `peer` sends, one per text.
-    fn session_wrote(peer: ambre_core::PeerId, texts: &[&str]) -> Vec<ambre_core::DeltaBytes> {
+    fn session_wrote(
+        peer: ambre_core::PeerId,
+        texts: &[&str],
+    ) -> Vec<ambre_core::Payload<ambre_core::DeltaBytes>> {
         let mut author = TrameState::new();
         assert!(author.adopt_session(peer, crate::test_entry(peer)));
         texts
@@ -2309,7 +2344,7 @@ mod authorship_tests {
     ) -> (
         Vec<SyncCommand>,
         Vec<PersistWrite>,
-        Vec<ambre_core::DeltaBytes>,
+        Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
         ambre_core::PeerId,
     ) {
         let hers = session_wrote(ALICE, &["one", "two"]);
@@ -2320,7 +2355,7 @@ mod authorship_tests {
                 doc_type: DocType::Trame,
                 snapshot: Some(snapshot_of(&hers).into()),
                 deltas: Vec::new(),
-                sessions: vec![(ALICE, SessionNonce([7; 16]))],
+                sessions: vec![(ALICE, FixedBytes::from_array([7; 16]))],
             });
         let peer = rig.state.grant_identity(rig.document_id);
         for (seq, delta) in hers.iter().take(relayed).enumerate() {
@@ -2345,7 +2380,10 @@ mod authorship_tests {
     #[test]
     fn an_earlier_sessions_unsent_edits_travel_with_its_nonce() {
         let (sent, saved, hers, peer) = reopened(1);
-        let unsent: Vec<(ambre_core::DeltaBytes, SessionNonce)> = sent
+        let unsent: Vec<(
+            ambre_core::Payload<ambre_core::DeltaBytes>,
+            FixedBytes<SessionNonce>,
+        )> = sent
             .into_iter()
             .filter_map(|cmd| match cmd {
                 SyncCommand::SendUnsent { payload, nonce, .. } => Some((payload, nonce)),
@@ -2355,7 +2393,7 @@ mod authorship_tests {
         let [(payload, nonce)] = unsent.as_slice() else {
             panic!("expected one unsent delta, got {}", unsent.len());
         };
-        assert_eq!(*nonce, SessionNonce([7; 16]));
+        assert_eq!(*nonce, FixedBytes::from_array([7; 16]));
         assert_eq!(authors(payload), vec![ALICE]);
         let meta =
             LoroDoc::decode_import_blob_meta(payload.as_bytes(), false).expect("a readable delta");

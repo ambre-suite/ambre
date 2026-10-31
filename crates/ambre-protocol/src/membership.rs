@@ -8,7 +8,7 @@
 //! the signature, and computes no digest.
 
 use ambre_core::id::{Document, Id, User};
-use ambre_core::{EncodedLogEntry, KeyId, PublicKey, Role};
+use ambre_core::{Encoded, EncodedLogEntry, FixedBytes, KeyId, PublicKey, Role};
 use serde::{Deserialize, Serialize};
 
 use crate::error::SerializationError;
@@ -134,22 +134,21 @@ pub struct MembershipEntry {
     pub member: Id<User>,
     /// The member's signing key, so an entry that member signs later checks
     /// against the log alone.
-    pub member_key: ambre_core::PublicKey,
+    pub member_key: FixedBytes<PublicKey>,
     /// What the entry records.
     pub act: MembershipAct,
     /// The member's role after the entry.
     pub role: Role,
     /// The key an invite or a self-join wraps (`SYNC-123`), and the key a
     /// creation or a revoke installs.
-    pub key: Option<KeyId>,
+    pub key: Option<FixedBytes<KeyId>>,
     /// The digest of the entry before this one, absent on the first alone.
-    pub previous: Option<EntryDigest>,
+    pub previous: Option<FixedBytes<EntryDigest>>,
     /// The member who made the change and signed it.
     pub author: Id<User>,
     /// The author's signature over [`MembershipEntry::signed_bytes`]. It
-    /// encodes as a length-prefixed byte string, as the `Vec<u8>` it replaced
-    /// did, so a stored entry and its digest keep their bytes.
-    pub signature: Signature,
+    /// encodes as its 64 bytes, with no length prefix.
+    pub signature: FixedBytes<Signature>,
 }
 
 /// The fields a signature covers: every field but the signature.
@@ -158,11 +157,11 @@ struct Signed<'a> {
     document: &'a Id<Document>,
     position: LogPosition,
     member: &'a Id<User>,
-    member_key: &'a PublicKey,
+    member_key: &'a FixedBytes<PublicKey>,
     act: MembershipAct,
     role: Role,
-    key: &'a Option<KeyId>,
-    previous: &'a Option<EntryDigest>,
+    key: &'a Option<FixedBytes<KeyId>>,
+    previous: &'a Option<FixedBytes<EntryDigest>>,
     author: &'a Id<User>,
 }
 
@@ -203,8 +202,8 @@ impl MembershipEntry {
     /// # Errors
     ///
     /// [`SerializationError::Postcard`] from the encoder.
-    pub fn encode(&self) -> Result<EncodedLogEntry, SerializationError> {
-        Ok(EncodedLogEntry::new(postcard::to_allocvec(self)?))
+    pub fn encode(&self) -> Result<Encoded<EncodedLogEntry>, SerializationError> {
+        Ok(Encoded::new(postcard::to_allocvec(self)?))
     }
 
     /// Reads back what [`Self::encode`] wrote, and nothing else. The relay
@@ -217,7 +216,7 @@ impl MembershipEntry {
     /// * [`SerializationError::Postcard`] for bytes that are not an entry.
     /// * [`SerializationError::NotCanonical`] for bytes past the entry, or a
     ///   field written in a longer form than its encoding.
-    pub fn decode(encoded: &EncodedLogEntry) -> Result<Self, SerializationError> {
+    pub fn decode(encoded: &Encoded<EncodedLogEntry>) -> Result<Self, SerializationError> {
         let entry: Self = postcard::from_bytes(encoded.as_bytes())?;
         if entry.encode()? != *encoded {
             return Err(SerializationError::NotCanonical);
@@ -235,13 +234,13 @@ mod tests {
             document: Id::<Document>::from_bytes([1; 16]),
             position: LogPosition::new(1),
             member: Id::<User>::from_bytes([2; 16]),
-            member_key: PublicKey::from_array([3; 32]),
+            member_key: FixedBytes::from_array([3; 32]),
             act: MembershipAct::Invite,
             role: Role::Editor,
-            key: Some(KeyId::from_array([4; 16])),
-            previous: Some(EntryDigest([5; 32])),
+            key: Some(FixedBytes::from_array([4; 16])),
+            previous: Some(FixedBytes::from_array([5; 32])),
             author: Id::<User>::from_bytes([6; 16]),
-            signature: Signature([7; ENTRY_SIGNATURE_LEN]),
+            signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
         }
     }
 
@@ -257,11 +256,11 @@ mod tests {
             |e| e.document = Id::<Document>::from_bytes([9; 16]),
             |e| e.position = LogPosition::new(2),
             |e| e.member = Id::<User>::from_bytes([9; 16]),
-            |e| e.member_key = PublicKey::from_array([9; 32]),
+            |e| e.member_key = FixedBytes::from_array([9; 32]),
             |e| e.act = MembershipAct::Revoke,
             |e| e.role = Role::Viewer,
             |e| e.key = None,
-            |e| e.previous = Some(EntryDigest([9; 32])),
+            |e| e.previous = Some(FixedBytes::from_array([9; 32])),
             |e| e.author = Id::<User>::from_bytes([9; 16]),
         ];
         for change in changes {
@@ -270,7 +269,7 @@ mod tests {
             assert_ne!(changed.signed_bytes().unwrap(), signed);
         }
         let mut resigned = base.clone();
-        resigned.signature = Signature([8; ENTRY_SIGNATURE_LEN]);
+        resigned.signature = FixedBytes::from_array([8; ENTRY_SIGNATURE_LEN]);
         assert_eq!(resigned.signed_bytes().unwrap(), signed);
     }
 
@@ -291,19 +290,17 @@ mod tests {
         );
     }
 
-    /// The signature closes the encoding as a length-prefixed byte string,
-    /// the form a `Vec<u8>` wrote, so a stored entry keeps its bytes. A
-    /// signature of another length does not decode.
+    /// The signature closes the encoding as its bytes alone, with no length
+    /// prefix: the type fixes the length. A signature of another length does
+    /// not decode.
     #[test]
-    fn the_signature_keeps_its_length_prefixed_encoding() {
+    fn the_signature_closes_the_encoding_as_its_bare_bytes() {
         let sent = entry().encode().unwrap().into_bytes();
-        let tail = sent.len() - ENTRY_SIGNATURE_LEN - 1;
-        assert_eq!(sent[tail], ENTRY_SIGNATURE_LEN as u8);
-        assert_eq!(sent[tail + 1..], [7; ENTRY_SIGNATURE_LEN]);
-        let mut short = sent[..tail].to_vec();
-        short.push(ENTRY_SIGNATURE_LEN as u8 - 1);
-        short.extend([7; ENTRY_SIGNATURE_LEN - 1]);
-        assert!(MembershipEntry::decode(&EncodedLogEntry::new(short)).is_err());
+        let tail = sent.len() - ENTRY_SIGNATURE_LEN;
+        assert_ne!(sent[tail - 1], ENTRY_SIGNATURE_LEN as u8);
+        assert_eq!(sent[tail..], [7; ENTRY_SIGNATURE_LEN]);
+        let short = sent[..sent.len() - 1].to_vec();
+        assert!(MembershipEntry::decode(&Encoded::new(short)).is_err());
     }
 
     /// `SRV-227`: an entry reads from its own encoding alone. A byte past its
@@ -314,7 +311,7 @@ mod tests {
         let mut trailing = sent.clone();
         trailing.push(0);
         assert_eq!(
-            MembershipEntry::decode(&EncodedLogEntry::new(trailing)),
+            MembershipEntry::decode(&Encoded::new(trailing)),
             Err(SerializationError::NotCanonical)
         );
         // The position follows the 16 bytes of the document id. Position 1 is
@@ -323,7 +320,7 @@ mod tests {
         let mut longer = sent[..16].to_vec();
         longer.extend([0x81, 0x00]);
         longer.extend(&sent[17..]);
-        assert!(MembershipEntry::decode(&EncodedLogEntry::new(longer)).is_err());
+        assert!(MembershipEntry::decode(&Encoded::new(longer)).is_err());
     }
 
     /// An ownerless log opens with its creation, and leaves the creator and

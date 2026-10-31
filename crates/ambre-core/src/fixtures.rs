@@ -234,7 +234,7 @@ pub trait FixtureGen {
     /// is a bug, not a runtime condition. It **panics** rather than emit a
     /// half-built document -- a corpus that silently lost a merge is worse than a
     /// failed `just fixtures`.
-    fn build(&self) -> crate::PlaintextContainer;
+    fn build(&self) -> crate::Payload<crate::PlaintextContainer>;
 }
 
 // -----------------------------------------------------------------------------
@@ -283,7 +283,7 @@ pub struct FixtureManifest {
     /// is `hash::file_digest`, keyless and 32 bytes. Hex, not 32
     /// raw integers, which would defeat the readable diff this sidecar exists
     /// for.
-    pub digest: crate::FileDigest,
+    pub digest: crate::FixedBytes<crate::FileDigest>,
 
     pub shape: FixtureShape,
 }
@@ -332,7 +332,7 @@ mod tests {
             doc_type: DocType::Trame,
             ambre_version: crate::AMBRE_VERSION,
             schema_version: crate::SCHEMA_VERSION_ABSENT,
-            digest: crate::FileDigest::from_array([0xAB; 32]),
+            digest: crate::FixedBytes::from_array([0xAB; 32]),
             shape: FixtureShape {
                 peers: PeerCount::new(2),
                 body: ShapeBody::Trame {

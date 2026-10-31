@@ -133,7 +133,7 @@ mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, tree_id};
     use ambre_bus::app::prose::DocOffset;
-    use ambre_core::authorship::SessionNonce;
+    use ambre_core::FixedBytes;
     use ambre_core::id::{Id, User};
 
     /// Bob's user.
@@ -149,8 +149,8 @@ mod tests {
             .expect("the seed imports");
         let entry = PeerEntry {
             user: BOB,
-            nonce: SessionNonce([9; 16]),
-            signature: ambre_core::Signature([0; 64]),
+            nonce: FixedBytes::from_array([9; 16]),
+            signature: FixedBytes::from_array([0; 64]),
         };
         assert!(bob.adopt_session(ambre_core::PeerId(22), entry));
         let first = bob.root_blocks()[0];

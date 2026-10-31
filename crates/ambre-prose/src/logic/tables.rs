@@ -833,7 +833,7 @@ pub(crate) mod tests {
         state: &mut ProseState,
         cell: TreeID,
         text: &str,
-    ) -> Option<ambre_core::DeltaBytes> {
+    ) -> Option<ambre_core::Payload<ambre_core::DeltaBytes>> {
         let block = first_block_of(state, cell);
         state
             .handle_command(ProseCommand::InsertText {

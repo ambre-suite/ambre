@@ -26,7 +26,10 @@ const GROUP_SVG: &str = include_str!("fixtures/group_nested.svg");
 /// Import SVG text, held as the file bytes a drop hands the importer. It
 /// shadows the glob import, so each test passes its literal as it is.
 fn import_svg(svg: impl AsRef<[u8]>, limits: &Limits) -> Result<ImportBatch, ImportError> {
-    super::import_svg(&ambre_core::FileBytes::new(svg.as_ref().to_vec()), limits)
+    super::import_svg(
+        &ambre_core::Payload::<ambre_core::FileBytes>::new(svg.as_ref().to_vec()),
+        limits,
+    )
 }
 
 /// Convenience: the single command of a one-element import.

@@ -68,7 +68,7 @@ impl ChannelState {
     pub fn relocate_locked(
         &mut self,
         document_id: Id<Document>,
-        refused: &[ambre_core::DeltaBytes],
+        refused: &[ambre_core::Payload<ambre_core::DeltaBytes>],
     ) -> Result<Relocated, MurmureError> {
         if document_id == self.active.id {
             return Err(MurmureError::NotActive(document_id));

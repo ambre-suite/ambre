@@ -109,8 +109,8 @@ pub(crate) const MIGRATIONS: &[SchemaMigration<LoroDoc>] = &[];
 /// * [`SchemaError::DocumentTooNew`] when a newer client wrote the board.
 /// * A migration variant when the chain cannot carry an older board.
 pub fn gate(
-    payload: &ambre_core::SnapshotBytes,
-) -> Result<Cow<'_, ambre_core::SnapshotBytes>, SchemaError> {
+    payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
+) -> Result<Cow<'_, ambre_core::Payload<ambre_core::SnapshotBytes>>, SchemaError> {
     gate_through(MIGRATIONS, payload)
 }
 
@@ -118,8 +118,8 @@ pub fn gate(
 /// the walk stays proved while [`MIGRATIONS`] holds none.
 fn gate_through<'a>(
     steps: &[SchemaMigration<LoroDoc>],
-    payload: &'a ambre_core::SnapshotBytes,
-) -> Result<Cow<'a, ambre_core::SnapshotBytes>, SchemaError> {
+    payload: &'a ambre_core::Payload<ambre_core::SnapshotBytes>,
+) -> Result<Cow<'a, ambre_core::Payload<ambre_core::SnapshotBytes>>, SchemaError> {
     let scratch = LoroDoc::new();
     scratch.import(payload.as_bytes()).map_err(|e| {
         tracing::warn!("[Toile] snapshot rejected by the CRDT engine: {e:?}");
@@ -159,7 +159,9 @@ fn gate_through<'a>(
                         to: SCHEMA_VERSION,
                         reason: format!("re-exporting the migrated board failed: {e:?}"),
                     })?;
-            Ok(Cow::Owned(ambre_core::SnapshotBytes::new(bytes)))
+            Ok(Cow::Owned(
+                ambre_core::Payload::<ambre_core::SnapshotBytes>::new(bytes),
+            ))
         }
     }
 }
@@ -201,7 +203,7 @@ mod tests {
     #[test]
     fn a_board_at_the_current_version_is_handed_back_untouched() {
         let bytes = snapshot_at(Some(SCHEMA_VERSION));
-        let snapshot = ambre_core::SnapshotBytes::new(bytes.clone());
+        let snapshot = ambre_core::Payload::<ambre_core::SnapshotBytes>::new(bytes.clone());
         let gated = gate(&snapshot).expect("current");
         assert!(matches!(gated, Cow::Borrowed(_)));
         assert_eq!(&*gated, &bytes[..]);
@@ -223,7 +225,7 @@ mod tests {
             apply: stamp_step,
         }];
         let bytes = snapshot_at(None);
-        let snapshot = ambre_core::SnapshotBytes::new(bytes.clone());
+        let snapshot = ambre_core::Payload::<ambre_core::SnapshotBytes>::new(bytes.clone());
         let gated = gate_through(&steps, &snapshot).expect("version 0 migrates");
         let migrated = LoroDoc::new();
         migrated
@@ -245,7 +247,7 @@ mod tests {
     /// and a board with no register finds no path.
     #[test]
     fn a_board_written_before_the_register_finds_no_step() {
-        let snapshot = ambre_core::SnapshotBytes::new(snapshot_at(None));
+        let snapshot = ambre_core::Payload::<ambre_core::SnapshotBytes>::new(snapshot_at(None));
         assert_eq!(
             gate(&snapshot).expect_err("no step leaves version 0"),
             SchemaError::NoMigrationPath {

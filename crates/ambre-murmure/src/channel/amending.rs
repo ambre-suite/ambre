@@ -10,7 +10,7 @@
 
 use ambre_bus::{Deletion, MessageDraft, MessageView, MurmureEvent, ThreadHead, Timestamp};
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
-use ambre_core::{DeltaBytes, PeerEntryBytes, Seq};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq};
 use loro::{
     Container, LoroDoc, LoroList, LoroMap, LoroText, LoroValue, UpdateOptions, ValueOrContainer,
 };
@@ -84,7 +84,7 @@ pub enum ChangeTarget {
 pub struct Linked {
     /// The `meta` delta that names the document in the segment's entry,
     /// `None` when the entry named it already.
-    pub meta: Option<DeltaBytes>,
+    pub meta: Option<Payload<DeltaBytes>>,
     /// Whether the document is to open: this client's own, for its session,
     /// or another member's, for its bytes.
     pub open: super::LinkedOpening,
@@ -222,7 +222,7 @@ impl ChannelState {
         &mut self,
         segment: Id<Segment>,
         amendments: Id<Document>,
-    ) -> Result<Option<DeltaBytes>, MurmureError> {
+    ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         let Some(entry) = segment_entry(&self.meta.doc, segment) else {
             return Ok(None);
         };
@@ -328,7 +328,7 @@ impl ChannelState {
         &mut self,
         document_id: Id<Document>,
         seq: Seq,
-        payload: &DeltaBytes,
+        payload: &Payload<DeltaBytes>,
         signer: Signer,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
         let sequence = self.sequences.entry(document_id).or_default();

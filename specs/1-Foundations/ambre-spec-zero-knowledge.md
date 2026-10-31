@@ -133,11 +133,11 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
 * Every secret is a domain newtype over `ambre_core::Secret<T>`. The keys are `MasterSeed`,
   `UserKey`, `DocumentKey`, `StoreKey`, `FileKey` and `SharedSecret`. The text and bytes are
   `SecretToken`, `Passphrase`, `SecretString` and `SecretBytes`. Then come the bearer
-  credentials `AccessToken`, `RefreshToken`, `PresignedUrl`, `OidcCode` and `OidcState`, and the
-  relay's `OidcSecret` and `SeedText`. The relay's `JwtSeed` holds a boxed
-  `ed25519_dalek::SigningKey`, which wipes itself, decoded from the `SeedText` inside
-  `Secret::try_filled`. The newtype keeps the name and the meaning, and `Secret` carries the
-  hygiene (`ZK-019`, `ZK-020`):
+  credentials, one generic `Credential<K>` over the markers `AccessToken`, `RefreshToken`,
+  `PresignedUrl`, `OidcCode` and `OidcState`, and the relay's `OidcSecret` and `SeedText`. The
+  relay's `JwtSeed` holds a boxed `ed25519_dalek::SigningKey`, which wipes itself, decoded from
+  the `SeedText` inside `Secret::try_filled`. The newtype keeps the name and the meaning, and
+  `Secret` carries the hygiene (`ZK-019`, `ZK-020`):
   * the value sits in a `Box`, so a move copies no byte of it, and it is wiped on drop;
   * its debug form is `Secret([REDACTED])`, with no length, and it has no `Display`;
   * it has no `Clone`, no serde, no `PartialEq`, `Hash` or `Ord`. A value two owners share is an
@@ -155,9 +155,10 @@ A scenario row where Mallory acts is an attack. Its outcome column says what sto
     `seal_row` and `seal_file`. A sink that lends the text to one foreign call is named in the file
     of that call alone (`ARCH-049`). Only the Secret module names `zeroize` (`ARCH-046`). Code
     outside it that wipes a buffer does so through `Secret::wipe`.
-* The access token of `WsClientMsg::Authenticate` is the one secret `ambre-protocol` carries, and
-  it does so through the hand-written serde of `AccessToken`. One that crosses the bus or the store
-  does so through the hand-written serde of its newtype, never a derive (`ARCH-047`).
+* The access token of `WsClientMsg::Authenticate` is the one secret `ambre-protocol` carries. It
+  travels through the one hand-written serde of `Credential<K>`, which a marker admits by an
+  `impl WireCredential` line. One that crosses the bus or the store does so through the
+  hand-written serde of its newtype, never a derive (`ARCH-047`).
 * The Logic to Sync `postMessage` hop carries **decrypted** deltas. That internal boundary is accepted,
   because a structured clone stays inside the user's own browser process. The Main instance compiles
   no cryptography, so the keys live only in the Sync worker's own memory.

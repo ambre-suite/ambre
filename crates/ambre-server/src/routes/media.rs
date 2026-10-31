@@ -26,7 +26,7 @@ pub struct UploadUrlRequest {
 }
 #[derive(serde::Serialize)]
 pub struct UploadUrlResponse {
-    pub upload_url: ambre_core::PresignedUrl,
+    pub upload_url: ambre_core::Credential<ambre_core::PresignedUrl>,
     pub s3_key: ambre_core::ObjectKey,
 }
 
@@ -74,7 +74,7 @@ pub struct DownloadUrlRequest {
 }
 #[derive(serde::Serialize)]
 pub struct DownloadUrlResponse {
-    pub download_url: ambre_core::PresignedUrl,
+    pub download_url: ambre_core::Credential<ambre_core::PresignedUrl>,
 }
 
 pub async fn media_download_url(

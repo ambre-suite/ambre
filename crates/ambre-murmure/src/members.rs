@@ -60,13 +60,13 @@ const SAMPLE: [u8; 2] = [SampleTag::Presence.byte(), SampleState::Online.byte()]
 /// The presence sample of a space: its tag, then the state, and nothing else.
 /// It names no channel, so it cannot show which channel a member reads
 /// (`MURMURE-446`).
-pub fn presence_sample() -> ambre_core::EphemeralBytes {
-    ambre_core::EphemeralBytes::new(SAMPLE.to_vec())
+pub fn presence_sample() -> ambre_core::Payload<ambre_core::EphemeralBytes> {
+    ambre_core::Payload::<ambre_core::EphemeralBytes>::new(SAMPLE.to_vec())
 }
 
 /// Whether `payload` is a presence sample of a space. A sample that does not
 /// decode is dropped without an error (`PRESENCE-013`).
-pub fn is_presence_sample(payload: &ambre_core::EphemeralBytes) -> bool {
+pub fn is_presence_sample(payload: &ambre_core::Payload<ambre_core::EphemeralBytes>) -> bool {
     payload.as_bytes() == SAMPLE
 }
 
@@ -338,9 +338,10 @@ mod tests {
     #[test]
     fn the_sample_holds_the_state_alone() {
         let sample = presence_sample();
-        assert_eq!(sample.len(), 2);
+        assert_eq!(sample.len(), ambre_bus::ByteSize(2));
         assert!(is_presence_sample(&sample));
-        let sample_of = |bytes: &[u8]| ambre_core::EphemeralBytes::new(bytes.to_vec());
+        let sample_of =
+            |bytes: &[u8]| ambre_core::Payload::<ambre_core::EphemeralBytes>::new(bytes.to_vec());
         assert!(!is_presence_sample(&sample_of(&[])));
         let (tag, online) = (SampleTag::Presence.byte(), SampleState::Online.byte());
         assert!(!is_presence_sample(&sample_of(&[tag])));
@@ -353,7 +354,7 @@ mod tests {
     #[test]
     fn the_sample_keeps_its_bytes() {
         assert_eq!(presence_sample(), [0x50, 1]);
-        let earlier = ambre_core::EphemeralBytes::new(vec![0x50, 1]);
+        let earlier = ambre_core::Payload::<ambre_core::EphemeralBytes>::new(vec![0x50, 1]);
         assert!(is_presence_sample(&earlier));
     }
 

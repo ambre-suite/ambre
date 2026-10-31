@@ -10,7 +10,7 @@ use ambre_bus::{
     MurmureEvent, Timestamp,
 };
 use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
-use ambre_core::{DeltaBytes, PeerEntryBytes, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
 use loro::json::{JsonOpContent, MapOp};
 use loro::{ExportMode, LoroDoc, VersionVector};
 
@@ -49,7 +49,7 @@ fn message_at(state: &ChannelState, index: usize) -> MessageView {
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<Id<Segment>, SnapshotBytes> = state
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -73,7 +73,10 @@ fn signer(state: &ChannelState, document_id: Id<Document>, user: Id<User>) -> Si
 /// Create the thread of `root`, adopt its session and link it, as the Sync
 /// worker and the relay answer. Returns it, its first update, and the delta
 /// that names it in the root.
-fn threaded(state: &mut ChannelState, root: Id<Message>) -> (Id<Document>, DeltaBytes, Sent) {
+fn threaded(
+    state: &mut ChannelState,
+    root: Id<Message>,
+) -> (Id<Document>, Payload<DeltaBytes>, Sent) {
     let ThreadTarget::Create(thread) = state.reply_target(root, NOW).expect("target") else {
         panic!("a root with no thread creates one");
     };
@@ -99,7 +102,7 @@ fn thread_field(state: &ChannelState, index: usize) -> Option<Id<Document>> {
 }
 
 /// Every operation of `doc` past `before`, as a delta travels.
-fn json_since(doc: &LoroDoc, before: &VersionVector) -> DeltaBytes {
+fn json_since(doc: &LoroDoc, before: &VersionVector) -> Payload<DeltaBytes> {
     doc.commit();
     crate::delta::encode(&doc.export_json_updates_without_peer_compression(before, &doc.oplog_vv()))
         .expect("encode")
@@ -541,7 +544,7 @@ fn a_reply_takes_no_thread_field_from_another_member() {
 fn peer_with_thread(
     alice: &ChannelState,
     thread: Id<Document>,
-    updates: &[&DeltaBytes],
+    updates: &[&Payload<DeltaBytes>],
     author: Id<User>,
 ) -> ChannelState {
     let mut bob = peer_of(alice);
@@ -845,11 +848,11 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
 // --- MURMURE-545, MURMURE-546 and MURMURE-547 ---
 
 /// The bytes of an empty segment of `channel`.
-fn empty_segment(channel: Id<Channel>) -> SnapshotBytes {
+fn empty_segment(channel: Id<Channel>) -> Payload<SnapshotBytes> {
     let doc = LoroDoc::new();
     schema::write_header(&doc, DocumentKind::Segment, channel, NOW).expect("header");
     doc.commit();
-    SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"))
+    Payload::<SnapshotBytes>::new(doc.export(ExportMode::Snapshot).expect("snapshot"))
 }
 
 /// Bob's copy of the channel of `alice`, opened from a new active segment
@@ -869,7 +872,7 @@ fn far_copy(alice: &ChannelState, oldest: Option<Id<Segment>>) -> (ChannelState,
         push_segment_entry(&meta, id, Timestamp(from), state).expect("entry");
     }
     meta.commit();
-    let meta = SnapshotBytes::new(meta.export(ExportMode::Snapshot).expect("snapshot"));
+    let meta = Payload::<SnapshotBytes>::new(meta.export(ExportMode::Snapshot).expect("snapshot"));
     let segments = HashMap::from([(active, empty_segment(channel))]);
     let bob = ChannelState::open(channel, Id::<Meta>::mint(), &meta, &segments)
         .expect("open")
@@ -879,7 +882,7 @@ fn far_copy(alice: &ChannelState, oldest: Option<Id<Segment>>) -> (ChannelState,
 
 /// Load the older segment `segment` from `bytes`, as the Sync worker
 /// delivers it.
-fn load(state: &mut ChannelState, segment: Id<Segment>, bytes: &SnapshotBytes) {
+fn load(state: &mut ChannelState, segment: Id<Segment>, bytes: &Payload<SnapshotBytes>) {
     let _ = state
         .apply_remote(segment.document_id(), bytes.into())
         .expect("kept");

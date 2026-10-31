@@ -322,17 +322,14 @@ pub struct Picture {
 /// height * 4` bytes of its size, shown for `delay`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PictureFrame {
-    pub pixels: ambre_core::RgbaPixels,
+    pub pixels: ambre_core::Payload<ambre_core::RgbaPixels>,
     pub delay: ambre_core::Millis,
 }
 
 impl Picture {
     /// The bytes its frames hold.
     pub fn bytes(&self) -> ByteSize {
-        self.frames
-            .iter()
-            .map(|f| ByteSize::of_len(f.pixels.len()))
-            .sum()
+        self.frames.iter().map(|f| f.pixels.len()).sum()
     }
 }
 
@@ -490,7 +487,7 @@ pub enum MurmureCommand {
     /// holds no document of the channel, so the Logic thread names it.
     UploadFile {
         id: ambre_core::Generation<crate::Request>,
-        data: ambre_core::MediaBytes,
+        data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
     /// Fetch the file `media_ref` of a message, stored under the channel's
     /// `meta`. The answer is the `MediaDownloaded` of request `id`.
@@ -833,8 +830,8 @@ impl SealedChannelKey {
     /// The catalogue form of one seal: the id of the space key that sealed
     /// it, the nonce, then the ciphertext and its tag.
     pub fn from_parts(
-        key_id: ambre_core::KeyId,
-        nonce: &ambre_core::Nonce,
+        key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
+        nonce: &ambre_core::FixedBytes<ambre_core::Nonce>,
         ciphertext: &ambre_core::Ciphertext,
     ) -> Self {
         let mut bytes = Vec::new();
@@ -846,15 +843,21 @@ impl SealedChannelKey {
 
     /// The id of the space key that sealed it. `None` for bytes too short to
     /// name a key.
-    pub fn key_id(&self) -> Option<ambre_core::KeyId> {
-        ambre_core::KeyId::split_from(&self.0).map(|(key_id, _)| key_id)
+    pub fn key_id(&self) -> Option<ambre_core::FixedBytes<ambre_core::KeyId>> {
+        ambre_core::FixedBytes::<ambre_core::KeyId>::split_from(&self.0).map(|(key_id, _)| key_id)
     }
 
     /// The parts [`Self::from_parts`] joined. `None` for bytes too short to
     /// hold a key id and a nonce.
-    pub fn split(&self) -> Option<(ambre_core::KeyId, ambre_core::Nonce, ambre_core::Ciphertext)> {
-        let (key_id, rest) = ambre_core::KeyId::split_from(&self.0)?;
-        let (nonce, ciphertext) = ambre_core::Nonce::split_from(rest)?;
+    pub fn split(
+        &self,
+    ) -> Option<(
+        ambre_core::FixedBytes<ambre_core::KeyId>,
+        ambre_core::FixedBytes<ambre_core::Nonce>,
+        ambre_core::Ciphertext,
+    )> {
+        let (key_id, rest) = ambre_core::FixedBytes::<ambre_core::KeyId>::split_from(&self.0)?;
+        let (nonce, ciphertext) = ambre_core::FixedBytes::<ambre_core::Nonce>::split_from(rest)?;
         Some((key_id, nonce, ambre_core::Ciphertext(ciphertext.to_vec())))
     }
 
@@ -1022,7 +1025,7 @@ pub struct PrivateChannelDraft {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectMember {
     pub user_id: Id<User>,
-    pub exchange_pub_key: ambre_core::ExchangePublicKey,
+    pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
 }
 
 /// A direct message the view asks for: this user and `members`.
@@ -1139,13 +1142,16 @@ pub enum SpaceEvent {
 mod tests {
     use super::{MurmureCommand, SealedChannelKey, Topic};
     use ambre_core::id::{Id, Message, Segment, User};
-    use ambre_core::{Ciphertext, KeyId, Nonce};
+    use ambre_core::{Ciphertext, FixedBytes, KeyId, Nonce};
 
     /// A split gives back the parts a join wrote. Bytes too short to hold a
     /// key id and a nonce give nothing.
     #[test]
     fn a_sealed_channel_key_splits_into_the_parts_it_joined() {
-        let (key_id, nonce) = (KeyId::from_array([3; 16]), Nonce([7; 24]));
+        let (key_id, nonce) = (
+            FixedBytes::<KeyId>::from_array([3; 16]),
+            FixedBytes::<Nonce>::from_array([7; 24]),
+        );
         let ciphertext = Ciphertext(b"sealed".to_vec());
         let sealed = SealedChannelKey::from_parts(key_id, &nonce, &ciphertext);
         assert_eq!(sealed.key_id(), Some(key_id));

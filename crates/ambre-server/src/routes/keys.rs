@@ -2,6 +2,8 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
+use ambre_core::{ExchangePublicKey, FixedBytes, MasterKeySalt, PublicKey};
+
 use crate::auth;
 use crate::db;
 use crate::error::{AppError, Resource};
@@ -9,34 +11,15 @@ use crate::extract::Json;
 use crate::state::AppState;
 
 /// Request body for first-time master key upload.
-/// All binary fields are hex- or base64url-encoded.
+/// All binary fields are hex- or base64url-encoded. A key that is not 32
+/// bytes of hexadecimal refuses the body when it is read, before any row is
+/// written (`SRV-232`, `SRV-242`).
 #[derive(serde::Deserialize)]
 pub struct StoreMasterKeysRequest {
-    pub master_key_enc: ambre_core::WrappedMasterKey,
-    pub master_key_salt: ambre_core::MasterKeySalt,
-    pub signing_pubkey: ambre_core::SigningKeyHex,
-    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
-}
-
-/// Reads the two public keys an account registers. A key that is not 32
-/// bytes of hexadecimal answers a conflict, before any row is written
-/// (`SRV-232`).
-pub(crate) fn account_keys(
-    signing: &ambre_core::SigningKeyHex,
-    exchange: &ambre_core::ExchangeKeyHex,
-) -> Result<(ambre_core::PublicKey, ambre_core::ExchangePublicKey), AppError> {
-    let conflict = |detail: String| AppError::Conflict { detail };
-    let signing = hex::decode(signing.as_str())
-        .map_err(|e| conflict(e.to_string()))
-        .and_then(|bytes| {
-            ambre_core::PublicKey::from_slice(&bytes).map_err(|e| conflict(e.to_string()))
-        })?;
-    let exchange = hex::decode(exchange.as_str())
-        .map_err(|e| conflict(e.to_string()))
-        .and_then(|bytes| {
-            ambre_core::ExchangePublicKey::from_slice(&bytes).map_err(|e| conflict(e.to_string()))
-        })?;
-    Ok((signing, exchange))
+    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
+    pub master_key_salt: FixedBytes<MasterKeySalt>,
+    pub signing_pubkey: FixedBytes<PublicKey>,
+    pub exchange_pubkey: FixedBytes<ExchangePublicKey>,
 }
 
 pub async fn store_master_keys(
@@ -47,7 +30,7 @@ pub async fn store_master_keys(
     let s = auth;
     let mk_enc = req.master_key_enc;
     let mk_salt = req.master_key_salt;
-    let (spk, epk) = account_keys(&req.signing_pubkey, &req.exchange_pubkey)?;
+    let (spk, epk) = (req.signing_pubkey, req.exchange_pubkey);
 
     // Write the master key material and the pubkeys in ONE statement. They
     // describe a single identity. A partial write (new master_key_enc but stale
@@ -69,7 +52,7 @@ pub async fn store_master_keys(
     )
     .bind(uid)
     .bind(mk_enc.as_bytes())
-    .bind(mk_salt.as_bytes())
+    .bind(mk_salt.as_slice())
     .bind(spk.as_slice())
     .bind(epk.as_slice())
     .execute(&state.db)
@@ -103,21 +86,21 @@ pub async fn store_master_keys(
 #[derive(serde::Serialize)]
 pub struct KeysStoredResponse {
     pub status: ambre_core::WriteStatus,
-    pub access_token: ambre_protocol::ws::AccessToken,
-    pub refresh_token: ambre_protocol::ws::RefreshToken,
+    pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
+    pub refresh_token: ambre_protocol::ws::Credential<ambre_protocol::ws::RefreshToken>,
     /// Access-token lifetime in seconds.
     pub access_expires_in: ambre_core::Seconds,
 }
 
 /// Response containing the full key material for the authenticated user.
 /// The client decrypts `master_key_enc` with the User Key derived from the passphrase.
-/// Both are `null` until the key setup: no empty value stands for an absent one.
+/// Each is `null` until the key setup: no empty value stands for an absent one.
 #[derive(serde::Serialize)]
 pub struct MasterKeysResponse {
-    pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
-    pub master_key_salt: Option<ambre_core::MasterKeySalt>,
-    pub signing_pubkey: ambre_core::SigningKeyHex,
-    pub exchange_pubkey: ambre_core::ExchangeKeyHex,
+    pub master_key_enc: Option<ambre_core::Encoded<ambre_core::WrappedMasterKey>>,
+    pub master_key_salt: Option<FixedBytes<MasterKeySalt>>,
+    pub signing_pubkey: Option<FixedBytes<PublicKey>>,
+    pub exchange_pubkey: Option<FixedBytes<ExchangePublicKey>>,
 }
 
 pub async fn get_master_keys(
@@ -133,15 +116,8 @@ pub async fn get_master_keys(
     Ok(axum::Json(MasterKeysResponse {
         master_key_enc: u.master_key_enc,
         master_key_salt: u.master_key_salt,
-        // Empty until the key setup.
-        signing_pubkey: u
-            .signing_pubkey
-            .map(ambre_core::SigningKeyHex::encode)
-            .unwrap_or_default(),
-        exchange_pubkey: u
-            .exchange_pubkey
-            .map(ambre_core::ExchangeKeyHex::encode)
-            .unwrap_or_default(),
+        signing_pubkey: u.signing_pubkey,
+        exchange_pubkey: u.exchange_pubkey,
     }))
 }
 
@@ -164,8 +140,8 @@ impl RotatedResponse {
 /// Only `master_key_enc` and `master_key_salt` change; the seed is unchanged.
 #[derive(serde::Deserialize)]
 pub struct RotateMasterKeysRequest {
-    pub master_key_enc: ambre_core::WrappedMasterKey,
-    pub master_key_salt: ambre_core::MasterKeySalt,
+    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
+    pub master_key_salt: FixedBytes<MasterKeySalt>,
 }
 
 pub async fn rotate_master_keys(

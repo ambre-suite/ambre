@@ -134,7 +134,7 @@ pub struct ProseState {
     undo: UndoManager,
     /// Decrypted picture bytes, by content hash. Session state: it never enters
     /// the document (`PROSE-044`) and it dies with the tab.
-    media_cache: HashMap<ambre_core::ContentHash, ambre_core::MediaBytes>,
+    media_cache: HashMap<ambre_core::ContentHash, ambre_core::Payload<ambre_core::MediaBytes>>,
     /// The version vector already exported to Sync. A delta is every operation
     /// past it (`PROSE-050`, `PROSE-098`).
     last_exported_vv: VersionVector,
@@ -171,7 +171,7 @@ pub struct ProseState {
     /// it cannot place.
     live: std::collections::HashSet<Id<User>>,
     /// This session's last presence sample, re-sent to a newcomer.
-    last_frame: Option<ambre_core::EphemeralBytes>,
+    last_frame: Option<ambre_core::Payload<ambre_core::EphemeralBytes>>,
     /// Whether a newcomer has not heard from this session yet.
     owe_greeting: Greeting,
     /// The paginator, built on the first layout asked for. It is the one place
@@ -183,7 +183,7 @@ pub struct ProseState {
     /// discovers none on its own, so these are the whole of what pagination
     /// shapes on. They arrive from the Main thread, which is the only one that
     /// can fetch (`LogicCommand::LoadFonts`).
-    faces: Vec<ambre_core::FontBytes>,
+    faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
     /// What the last layout handed to the view was computed from: the
     /// document's state and how many faces it was shaped on. A layout from the
     /// same basis is the same picture, so it is not handed over twice.
@@ -476,7 +476,7 @@ impl ProseState {
     /// it shapes every run into tofu. A face that arrives after a layout was
     /// measured invalidates it, and the next call recomputes in full
     /// (`PROSE-111`).
-    pub fn load_faces(&mut self, faces: &[ambre_core::FontBytes]) {
+    pub fn load_faces(&mut self, faces: &[ambre_core::Payload<ambre_core::FontBytes>]) {
         for bytes in faces {
             if let Some(paginator) = self.paginator.as_mut() {
                 paginator.register_faces(bytes.clone());
@@ -887,7 +887,10 @@ impl ProseState {
     /// re-export of the current state (`PROSE-048`). A re-export after a local
     /// edit is a different set of operations from the one that came in. Nothing
     /// is re-broadcast (`SYNC-101`): the method answers display events alone.
-    pub fn apply_remote(&mut self, payload: &ambre_core::DeltaBytes) -> Vec<ProseEvent> {
+    pub fn apply_remote(
+        &mut self,
+        payload: &ambre_core::Payload<ambre_core::DeltaBytes>,
+    ) -> Vec<ProseEvent> {
         self.import_remote(ambre_core::LoroPayloadRef::Delta(payload))
     }
 
@@ -895,7 +898,7 @@ impl ProseState {
     /// applied: [`apply_remote`](Self::apply_remote) and this share one path.
     pub fn apply_remote_snapshot(
         &mut self,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) -> Vec<ProseEvent> {
         self.import_remote(ambre_core::LoroPayloadRef::Snapshot(payload))
     }
@@ -935,7 +938,10 @@ impl ProseState {
     /// change per delta that landed, so the view repaints once. A delta the
     /// engine refuses is skipped and the batch reports the failure rather than
     /// answering success.
-    pub fn apply_remote_batch(&mut self, payloads: &[ambre_core::DeltaBytes]) -> Vec<ProseEvent> {
+    pub fn apply_remote_batch(
+        &mut self,
+        payloads: &[ambre_core::Payload<ambre_core::DeltaBytes>],
+    ) -> Vec<ProseEvent> {
         if payloads.is_empty() {
             return Vec::new();
         }
@@ -971,8 +977,10 @@ impl ProseState {
     ///
     /// It reads through `&self` and advances no cursor (`PROSE-054`).
     #[must_use]
-    pub fn export_snapshot(&self) -> ambre_core::SnapshotBytes {
-        ambre_core::SnapshotBytes::new(self.doc.export(ExportMode::Snapshot).unwrap_or_default())
+    pub fn export_snapshot(&self) -> ambre_core::Payload<ambre_core::SnapshotBytes> {
+        ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
+            self.doc.export(ExportMode::Snapshot).unwrap_or_default(),
+        )
     }
 
     /// The CRDT document, read-only. A snapshot check compares its history
@@ -994,7 +1002,7 @@ impl ProseState {
     /// migration the registry cannot run, or bytes the CRDT engine refuses.
     pub fn import_snapshot(
         &mut self,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) -> Result<Vec<ProseEvent>, SchemaError> {
         let payload = schema::gate(payload)?;
         // A snapshot replaces the document whole (`PROSE-055`), so this peer's
@@ -1064,7 +1072,7 @@ impl ProseState {
     pub fn on_media_downloaded(
         &mut self,
         content_hash: ambre_core::ContentHash,
-        data: ambre_core::MediaBytes,
+        data: ambre_core::Payload<ambre_core::MediaBytes>,
     ) -> Vec<ProseEvent> {
         let blocks = self.blocks_showing(&content_hash);
         self.media_cache.insert(content_hash.clone(), data);
@@ -1079,7 +1087,7 @@ impl ProseState {
     pub fn cached_media(
         &self,
         content_hash: &ambre_core::ContentHash,
-    ) -> Option<&ambre_core::MediaBytes> {
+    ) -> Option<&ambre_core::Payload<ambre_core::MediaBytes>> {
         self.media_cache.get(content_hash)
     }
 
@@ -1302,7 +1310,7 @@ impl ProseState {
     /// stored version vector rather than a drain. An extra call therefore
     /// cannot truncate the stream. An export that fails leaves the cursor where
     /// it is, so the next flush offers the same range again.
-    fn flush_delta(&mut self) -> Option<ambre_core::DeltaBytes> {
+    fn flush_delta(&mut self) -> Option<ambre_core::Payload<ambre_core::DeltaBytes>> {
         let current = self.doc.oplog_vv();
         if current == self.last_exported_vv {
             return None;
@@ -1318,7 +1326,8 @@ impl ProseState {
         match self.doc.export(ExportMode::updates(&self.last_exported_vv)) {
             Ok(delta) => {
                 self.last_exported_vv = current;
-                (!delta.is_empty()).then_some(ambre_core::DeltaBytes::new(delta))
+                (!delta.is_empty())
+                    .then_some(ambre_core::Payload::<ambre_core::DeltaBytes>::new(delta))
             }
             Err(e) => {
                 tracing::error!("Prose: the export failed, the range is kept: {e:?}");
@@ -1553,7 +1562,9 @@ mod tests {
         let mut reader = ProseState::new().expect("a document is built");
         let grown = reader.root_blocks()[0];
         reader
-            .import_snapshot(&ambre_core::SnapshotBytes::new(snapshot.to_vec()))
+            .import_snapshot(&ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
+                snapshot.to_vec(),
+            ))
             .expect("the snapshot imports");
         assert!(!reader.root_blocks().contains(&grown));
         assert_eq!(reader.root_blocks().len(), 1);
@@ -1615,7 +1626,9 @@ mod tests {
             text: "mine".to_owned(),
         });
         reader
-            .import_snapshot(&ambre_core::SnapshotBytes::new(snapshot.to_vec()))
+            .import_snapshot(&ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
+                snapshot.to_vec(),
+            ))
             .expect("the snapshot imports");
         assert!(reader.root_blocks().contains(&mine));
         assert_eq!(reader.text_of(&mine).as_deref(), Some("mine"));
@@ -1731,12 +1744,14 @@ mod tests {
     fn a_picture_arriving_writes_nothing_to_the_document() {
         let mut state = ProseState::new().expect("a document is built");
         let before = state.export_snapshot();
-        let events =
-            state.on_media_downloaded(hash_of('a'), ambre_core::MediaBytes::new(vec![1, 2, 3]));
+        let events = state.on_media_downloaded(
+            hash_of('a'),
+            ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![1, 2, 3]),
+        );
         assert_eq!(
             state
                 .cached_media(&hash_of('a'))
-                .map(ambre_core::MediaBytes::as_bytes),
+                .map(ambre_core::Payload::<ambre_core::MediaBytes>::as_bytes),
             Some(&[1u8, 2, 3][..])
         );
         assert_eq!(events.len(), 1);
@@ -1777,7 +1792,10 @@ mod tests {
             .image_for_test(hash_of('d').as_str())
             .expect("an image block");
 
-        let events = state.on_media_downloaded(hash_of('c'), ambre_core::MediaBytes::new(vec![9]));
+        let events = state.on_media_downloaded(
+            hash_of('c'),
+            ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![9]),
+        );
         let named = events
             .iter()
             .find_map(|e| match e {
@@ -1809,7 +1827,10 @@ mod tests {
             text: "same text".to_owned(),
         });
         let before = state.export_snapshot();
-        state.on_media_downloaded(hash_of('e'), ambre_core::MediaBytes::new(vec![1, 2, 3, 4]));
+        state.on_media_downloaded(
+            hash_of('e'),
+            ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![1, 2, 3, 4]),
+        );
         assert!(state.cached_media(&hash_of('e')).is_some());
         // The cache is session state: the bytes the document exports are the
         // ones it exported before the picture arrived.
@@ -1964,7 +1985,9 @@ mod tests {
         let newer = doc.export(ExportMode::Snapshot).expect("snapshot");
         assert!(
             state
-                .import_snapshot(&ambre_core::SnapshotBytes::new(newer.to_vec()))
+                .import_snapshot(&ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
+                    newer.to_vec()
+                ))
                 .is_err()
         );
         assert_eq!(state.text_of(&block).as_deref(), Some("mine"));

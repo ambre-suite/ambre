@@ -47,7 +47,7 @@ pub use walk::DocumentWalk;
 /// The pixels of an image, and the pixel lengths of an image and of a stroke.
 /// The size of an image is an `ambre_core::Size`, which this crate does not
 /// re-export: its own `Size` is the kurbo one.
-pub use ambre_core::{Image, Px, RgbaPixels, Surface};
+pub use ambre_core::{Image, Payload, Px, RgbaPixels, Surface};
 
 #[cfg(feature = "testing")]
 pub mod testing;
@@ -73,7 +73,7 @@ pub struct ImageSource<'a> {
     /// key is the caller's bug, not the surface's.
     pub key: ImageKey,
     /// Non-premultiplied RGBA8 samples, row-major, `width * height * 4` bytes.
-    pub pixels: &'a RgbaPixels,
+    pub pixels: &'a Payload<RgbaPixels>,
     /// Native pixel size of the image.
     pub size: ambre_core::Size<Px<Image>>,
 }

@@ -176,7 +176,7 @@ pub enum RowPlace {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SealedRow {
     pub place: RowPlace,
-    pub sealed: ambre_core::SealedRowBytes,
+    pub sealed: ambre_core::Payload<ambre_core::SealedRowBytes>,
 }
 
 /// User (search result).
@@ -279,7 +279,7 @@ pub enum RestCommand {
         invitee_email: Option<ambre_core::Email>,
         invitee: Id<User>,
         role: Role,
-        expect_exchange_pub_key: ambre_core::ExchangePublicKey,
+        expect_exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
         now: Timestamp,
     },
     /// Revoke a member (triggers the full key-rotation sequence). -> `RevocationComplete`.
@@ -311,7 +311,7 @@ pub enum RestCommand {
     UploadMedia {
         document_id: Id<Document>,
         /// Raw (unencrypted) media bytes.
-        data: ambre_core::MediaBytes,
+        data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
     /// Download a media file. -> `MediaDownloaded`.
     DownloadMedia {
@@ -348,7 +348,7 @@ pub enum RestCommand {
     /// / `DocFileOpenFailed`.
     OpenDocFile {
         /// A whole sealed container, header included.
-        sealed: ambre_core::SealedContainer,
+        sealed: ambre_core::Payload<ambre_core::SealedContainer>,
         passphrase: ambre_core::Passphrase,
     },
 
@@ -386,8 +386,8 @@ pub enum RestCommand {
     /// the keys are unlocked or set up.
     ProviderReturn {
         provider: ambre_core::OidcProvider,
-        code: ambre_core::OidcCode,
-        state: ambre_core::OidcState,
+        code: ambre_core::Credential<ambre_core::OidcCode>,
+        state: ambre_core::Credential<ambre_core::OidcState>,
     },
 }
 
@@ -457,14 +457,14 @@ pub enum RestEvent {
         user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
-        exchange_pub_key: ambre_core::ExchangePublicKey,
+        exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
     },
     /// The answer to `FetchMemberKey`: the key the relay serves for that
     /// user, and its fingerprint, for the same comparison with the pin.
     MemberKey {
         user_id: Id<User>,
-        exchange_pub_key: ambre_core::ExchangePublicKey,
+        exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
     },
     InviteSent {
@@ -504,7 +504,7 @@ pub enum RestEvent {
         document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
         /// Decrypted raw media bytes, ready for display.
-        data: ambre_core::MediaBytes,
+        data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
     MediaErased {
         document_id: Id<Document>,
@@ -514,7 +514,7 @@ pub enum RestEvent {
     // -- The native file (`.ambre`) ----------------------------------------------
     /// The sealed file, ready for the user's disk.
     DocFileSealed {
-        data: ambre_core::SealedContainer,
+        data: ambre_core::Payload<ambre_core::SealedContainer>,
     },
     /// Sealing did not happen, so there is no file. Carries no detail. Two
     /// failures reach here: a key derivation out of memory, and a document past
@@ -534,7 +534,7 @@ pub enum RestEvent {
     // -- The local store ---------------------------------------------------------
     /// The row, sealed for the store.
     LocalRowSealed {
-        sealed: ambre_core::SealedRowBytes,
+        sealed: ambre_core::Payload<ambre_core::SealedRowBytes>,
     },
     /// The rows asked for, in their order. `None` is a row this session cannot
     /// open. It was sealed under another key or at another place, modified, or
@@ -563,7 +563,7 @@ pub enum RestEvent {
     /// The provider's authorization address, and the `state` the relay bound to it.
     ProviderAddress {
         url: ambre_core::ProviderUrl,
-        state: ambre_core::OidcState,
+        state: ambre_core::Credential<ambre_core::OidcState>,
     },
     /// The provider return was exchanged. The tokens stayed on the Sync worker;
     /// `keys_stored` says whether the next step is an unlock or a setup.

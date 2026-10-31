@@ -193,7 +193,7 @@ impl ToileState {
     /// Convert a dropped SVG document and apply it (`toile-import-export`).
     pub(super) fn import_svg_bytes(
         &mut self,
-        bytes: &ambre_core::FileBytes,
+        bytes: &ambre_core::Payload<ambre_core::FileBytes>,
         at: Point,
     ) -> ToileOutcome {
         self.begin_import(import_svg(bytes, &Limits::default()), at)
@@ -204,7 +204,7 @@ impl ToileState {
     /// the command surface but not needed here.
     pub(super) fn import_image_bytes(
         &mut self,
-        bytes: &ambre_core::FileBytes,
+        bytes: &ambre_core::Payload<ambre_core::FileBytes>,
         at: Point,
     ) -> ToileOutcome {
         self.begin_import(import_raster(bytes, &Limits::default()), at)
@@ -785,10 +785,10 @@ mod tests {
     fn blob(hash: &str, w: u32, h: u32, mime: &str) -> MediaBlob {
         MediaBlob {
             media: MediaRef::Stored(hash_of(hash)),
-            plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
+            plaintext: ambre_core::Payload::<ambre_core::MediaBytes>::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from(mime),
             size: ambre_core::Size::new(ambre_core::Px::new(w), ambre_core::Px::new(h)),
-            thumb: ambre_core::ThumbnailPng::new(vec![1, 2, 3]),
+            thumb: ambre_core::Payload::<ambre_core::ThumbnailPng>::new(vec![1, 2, 3]),
         }
     }
 
@@ -847,7 +847,7 @@ mod tests {
     fn a_placeholder_token_never_becomes_a_key() {
         let mut st = ToileState::new();
         let decoded = crate::logic::interop::import_raster(
-            &ambre_core::FileBytes::new(solid_png(4, 4)),
+            &ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(4, 4)),
             &crate::logic::interop::Limits::default(),
         )
         .expect("a picture");
@@ -902,7 +902,7 @@ mod tests {
         let mut st = ToileState::new();
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect x="0" y="0" width="5" height="5" fill="#ff0000"/></svg>"##;
         let out = st.handle_command(ToileCommand::ImportSvg {
-            bytes: ambre_core::FileBytes::new(svg.to_vec()),
+            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
             at: Point::ZERO,
         });
         // No media -> applied synchronously, one CRDT delta, no service request.
@@ -922,7 +922,7 @@ mod tests {
         // must be the batch's top-left corner that moves there.
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect x="40" y="40" width="5" height="5"/></svg>"##;
         st.handle_command(ToileCommand::ImportSvg {
-            bytes: ambre_core::FileBytes::new(svg.to_vec()),
+            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
             at: Point::new(300.0, 200.0),
         });
         let id = st
@@ -941,7 +941,7 @@ mod tests {
     fn a_broken_file_fails_without_touching_the_board() {
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportSvg {
-            bytes: ambre_core::FileBytes::new(b"this is not svg".to_vec()),
+            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(b"this is not svg".to_vec()),
             at: Point::ZERO,
         });
         assert!(
@@ -981,7 +981,7 @@ mod tests {
 
         let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g><rect x="0" y="0" width="5" height="5" fill="#ff0000"/><rect x="10" y="0" width="5" height="5"/></g></svg>"##;
         st.handle_command(ToileCommand::ImportSvg {
-            bytes: ambre_core::FileBytes::new(svg.to_vec()),
+            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(svg.to_vec()),
             at: Point::ZERO,
         });
         assert!(st.element_count() > ElementCount::new(1), "the file landed");
@@ -999,14 +999,14 @@ mod tests {
         for (cmd, name) in [
             (
                 ToileCommand::ImportFigma {
-                    bytes: ambre_core::FileBytes::new(b"{}".to_vec()),
+                    bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(b"{}".to_vec()),
                     at: Point::ZERO,
                 },
                 "Figma",
             ),
             (
                 ToileCommand::ImportMiro {
-                    bytes: ambre_core::FileBytes::new(b"{}".to_vec()),
+                    bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(b"{}".to_vec()),
                     at: Point::ZERO,
                 },
                 "Miro",
@@ -1029,7 +1029,7 @@ mod tests {
     fn image_import_defers_until_media_uploads() {
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportImage {
-            bytes: ambre_core::FileBytes::new(solid_png(8, 8)),
+            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
             mime: ambre_core::MediaType::from("image/png"),
             at: Point::ZERO,
         });
@@ -1074,7 +1074,7 @@ mod tests {
 
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportImage {
-            bytes: ambre_core::FileBytes::new(solid_png(8, 8)),
+            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
             mime: ambre_core::MediaType::from("image/png"),
             at: Point::ZERO,
         });
@@ -1114,7 +1114,7 @@ mod tests {
     fn undoing_an_image_import_takes_its_media_entry_back() {
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportImage {
-            bytes: ambre_core::FileBytes::new(solid_png(8, 8)),
+            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
             mime: ambre_core::MediaType::from("image/png"),
             at: Point::ZERO,
         });
@@ -1146,7 +1146,7 @@ mod tests {
     fn a_failed_upload_aborts_the_pending_import() {
         let mut st = ToileState::new();
         let out = st.handle_command(ToileCommand::ImportImage {
-            bytes: ambre_core::FileBytes::new(solid_png(8, 8)),
+            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(solid_png(8, 8)),
             mime: ambre_core::MediaType::from("image/png"),
             at: Point::ZERO,
         });
@@ -1202,7 +1202,7 @@ mod tests {
         }
         svg.push_str("</svg>");
         ToileCommand::ImportSvg {
-            bytes: ambre_core::FileBytes::new(svg.into_bytes()),
+            bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(svg.into_bytes()),
             at: Point::ZERO,
         }
     }

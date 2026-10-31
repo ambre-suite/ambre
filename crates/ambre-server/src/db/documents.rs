@@ -9,7 +9,7 @@ pub struct DocumentRow {
     pub id: Id<Document>,
     pub owner_id: Id<User>,
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<ambre_core::SealedName>,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -20,14 +20,14 @@ pub struct DocumentSummaryRow {
     pub id: Id<Document>,
     pub owner_id: Id<User>,
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<ambre_core::SealedName>,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub role: ambre_core::Role,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// Exchange public key of the member who wrapped the caller's `doc_key_enc`
     /// (the inviter, or the owner at creation). `None` for a self-wrapped owner
     /// row on older data; the client then falls back to its own key.
-    pub wrapper_exchange_pubkey: Option<ambre_core::ExchangePublicKey>,
+    pub wrapper_exchange_pubkey: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
     /// Total number of members on the document (routing metadata, plaintext).
     /// `> 1` means the document is shared.
     pub member_count: ambre_core::MemberCount,
@@ -53,7 +53,7 @@ pub async fn get_document(
             doc_type: decode_doc_type(r.try_get("doc_type")?)?,
             name_enc: r
                 .try_get::<Option<Vec<u8>>, _>("name_enc")?
-                .map(ambre_core::SealedName::new),
+                .map(ambre_core::Encoded::new),
             created_at: r.try_get("created_at")?,
             updated_at: r.try_get("updated_at")?,
         })),
@@ -91,10 +91,10 @@ pub async fn list_documents_for_user(
                 doc_type: decode_doc_type(r.try_get("doc_type")?)?,
                 name_enc: r
                     .try_get::<Option<Vec<u8>>, _>("name_enc")?
-                    .map(ambre_core::SealedName::new),
+                    .map(ambre_core::Encoded::new),
                 updated_at: r.try_get("updated_at")?,
                 role: decode_role(r.try_get("role")?)?,
-                doc_key_enc: ambre_core::WrappedDocKey::new(r.try_get("doc_key_enc")?),
+                doc_key_enc: ambre_core::Encoded::new(r.try_get("doc_key_enc")?),
                 wrapper_exchange_pubkey: decode_opt_exchange_key(
                     r.try_get("wrapper_exchange_pubkey")?,
                 )?,
@@ -127,7 +127,7 @@ pub async fn create_document(
     pool: &PgPool,
     owner_id: &Id<User>,
     doc_type: ambre_core::DocType,
-    name_enc: Option<&ambre_core::SealedName>,
+    name_enc: Option<&ambre_core::Encoded<ambre_core::SealedName>>,
     document_id: Option<&Id<Document>>,
 ) -> Result<(DocumentRow, Insertion), AppError> {
     let owner_uid = id_to_uuid(*owner_id);
@@ -140,7 +140,7 @@ pub async fn create_document(
             doc_type: decode_doc_type(row.try_get("doc_type")?)?,
             name_enc: row
                 .try_get::<Option<Vec<u8>>, _>("name_enc")?
-                .map(ambre_core::SealedName::new),
+                .map(ambre_core::Encoded::new),
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
         })
@@ -192,7 +192,7 @@ pub async fn create_document(
 pub async fn rename_document(
     pool: &PgPool,
     document_id: &Id<Document>,
-    name_enc: &ambre_core::SealedName,
+    name_enc: &ambre_core::Encoded<ambre_core::SealedName>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     sqlx::query("UPDATE documents SET name_enc = $2, updated_at = now() WHERE id = $1")

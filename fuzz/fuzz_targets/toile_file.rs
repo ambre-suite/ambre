@@ -5,7 +5,7 @@
 
 use ambre_core::id::{Document, Id};
 use ambre_core::{
-    DeltaBytes, DocType, FileBytes, SnapshotBytes, Uuid, docfile::write_ambre_plaintext,
+    DeltaBytes, DocType, FileBytes, Payload, SnapshotBytes, Uuid, docfile::write_ambre_plaintext,
 };
 use ambre_toile::ToileState;
 use ambre_toile::logic::interop::{Limits, import_raster, import_svg};
@@ -13,14 +13,14 @@ use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     let limits = Limits::default();
-    let picked = FileBytes::new(data.to_vec());
+    let picked = Payload::<FileBytes>::new(data.to_vec());
     let _ = import_svg(&picked, &limits);
     let _ = import_raster(&picked, &limits);
     let file = write_ambre_plaintext(
         DocType::Toile,
         Id::<Document>::from_uuid(Uuid::from_bytes([7; 16])),
-        &SnapshotBytes::new(data.to_vec()),
+        &Payload::<SnapshotBytes>::new(data.to_vec()),
     );
     let _ = ToileState::new().import_ambre_plaintext(&file);
-    let _ = ToileState::new().apply_remote(&DeltaBytes::new(data.to_vec()));
+    let _ = ToileState::new().apply_remote(&Payload::<DeltaBytes>::new(data.to_vec()));
 });

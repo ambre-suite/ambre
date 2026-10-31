@@ -238,7 +238,7 @@ mod tests {
     }
 
     fn entry(channel_id: Id<Channel>, space_key: &DocumentKey) -> SealedChannelKey {
-        let anchor = EntryDigest([7; 32]);
+        let anchor = ambre_core::FixedBytes::<EntryDigest>::from_array([7; 32]);
         seal_channel_key(channel_id, &DocumentKey::generate(), space_key, anchor).unwrap()
     }
 

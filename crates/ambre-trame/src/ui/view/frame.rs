@@ -185,7 +185,7 @@ impl TrameView {
                     html: None,
                     ambre: postcard::to_allocvec(&payload)
                         .ok()
-                        .map(ambre_core::ClipboardBytes::new),
+                        .map(ambre_core::Payload::<ambre_core::ClipboardBytes>::new),
                     form: ambre_core::PasteForm::Rich,
                 };
                 self.last_clip = Some(blob.clone());

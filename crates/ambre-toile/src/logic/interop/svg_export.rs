@@ -444,7 +444,9 @@ mod tests {
         let mut el = ExportElement::new(ElementKind::Image, Rect::new(0.0, 0.0, 8.0, 8.0));
         el.media_hash =
             Some(ambre_core::ContentHash::parse(&"b2b0ffee".repeat(8)).expect("a hash"));
-        el.image_png = Some(ambre_core::ThumbnailPng::new(vec![0x89, 0x50, 0x4E, 0x47]));
+        el.image_png = Some(ambre_core::Payload::<ambre_core::ThumbnailPng>::new(vec![
+            0x89, 0x50, 0x4E, 0x47,
+        ]));
         let export = export_svg(&[el]);
         assert!(
             export

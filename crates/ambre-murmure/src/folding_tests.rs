@@ -10,7 +10,7 @@ use ambre_bus::{
     Timestamp,
 };
 use ambre_core::id::{Channel, Document, Id, Lease, Message, Segment, User};
-use ambre_core::{DeltaBytes, PeerEntryBytes, Seq, SnapshotBytes};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::error::MurmureError;
@@ -43,7 +43,7 @@ fn draft(text: &str) -> MessageDraft {
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<Id<Segment>, SnapshotBytes> = state
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -67,11 +67,11 @@ struct Amended {
     amendments: Id<Document>,
     ids: Vec<Id<Message>>,
     /// The `meta` delta that names the amendments.
-    meta: DeltaBytes,
+    meta: Payload<DeltaBytes>,
     /// The three amendment deltas, in the relay's order.
-    deltas: Vec<DeltaBytes>,
+    deltas: Vec<Payload<DeltaBytes>>,
     /// The final snapshot of the segment, as the relay holds it.
-    sealed: SnapshotBytes,
+    sealed: Payload<SnapshotBytes>,
 }
 
 fn amended() -> Amended {
@@ -459,7 +459,7 @@ fn another_member_checks_the_fold_by_folding_its_own_copy() {
     };
     body.insert(0, "planted ").expect("forge");
     forged.commit();
-    let forged = SnapshotBytes::new(
+    let forged = Payload::<SnapshotBytes>::new(
         forged
             .export(ExportMode::shallow_snapshot(&forged.oplog_frontiers()))
             .expect("export"),
