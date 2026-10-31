@@ -8,7 +8,8 @@
 //! sheets and the selections before the walk, and the carets and the
 //! composition after it.
 
-use ambre_core::{Rgba, SurfacePx};
+use ambre_core::Rgba;
+use ambre_core::{Px, Surface};
 use ambre_draw::{
     Affine, Brush, Color, DocumentWalk, DrawSurface, Point, PositionedLayoutItem, Rect,
 };
@@ -73,9 +74,9 @@ pub(crate) fn to_rect(placed: &Placed, rect: &ambre_draw::BoundingBox) -> Rect {
 pub(crate) struct Insertion {
     pub line: RunLine,
     /// Where the text goes in, from the start of the run.
-    pub x: SurfacePx,
+    pub x: Px<Surface>,
     /// How far the glyphs after it move right.
-    pub width: SurfacePx,
+    pub width: Px<Surface>,
 }
 
 /// One block of text a page shows.
@@ -111,9 +112,9 @@ pub(crate) enum PageItem {
     Shape { run: ShapedRun, placed: Placed },
     /// The separator above the footnotes.
     Rule {
-        x0: SurfacePx,
-        x1: SurfacePx,
-        y: SurfacePx,
+        x0: Px<Surface>,
+        x1: Px<Surface>,
+        y: Px<Surface>,
     },
 }
 
@@ -121,7 +122,7 @@ pub(crate) enum PageItem {
 #[derive(Clone, Debug)]
 pub(crate) struct PagePaint {
     /// The top of the page down the column.
-    pub top: SurfacePx,
+    pub top: Px<Surface>,
     /// What it shows, in the order it is drawn.
     pub items: Vec<PageItem>,
 }
@@ -130,8 +131,8 @@ pub(crate) struct PagePaint {
 pub struct PageView<'v> {
     pub(crate) palette: &'v PagePalette,
     /// The size of a page.
-    pub(crate) width: SurfacePx,
-    pub(crate) height: SurfacePx,
+    pub(crate) width: Px<Surface>,
+    pub(crate) height: Px<Surface>,
     pub(crate) pages: &'v [PagePaint],
 }
 
@@ -197,7 +198,7 @@ impl PageWalk<'_> {
                 surface.stroke_line(
                     ambre_draw::Line::new((x0.get(), y.get()), (x1.get(), y.get())),
                     palette.sheet_border,
-                    ambre_core::SurfacePx::new(1.0),
+                    ambre_core::Px::<ambre_core::Surface>::new(1.0),
                 );
             }
         }
@@ -235,7 +236,7 @@ impl PageWalk<'_> {
                         surface.stroke_line(
                             ambre_draw::Line::new((rect.x0, middle), (rect.x1, middle)),
                             palette.error,
-                            ambre_core::SurfacePx::new(1.0),
+                            ambre_core::Px::<ambre_core::Surface>::new(1.0),
                         );
                     }
                     HighlightKind::Insertion => {
@@ -243,7 +244,7 @@ impl PageWalk<'_> {
                         surface.stroke_line(
                             ambre_draw::Line::new((rect.x0, base), (rect.x1, base)),
                             palette.success,
-                            ambre_core::SurfacePx::new(1.0),
+                            ambre_core::Px::<ambre_core::Surface>::new(1.0),
                         );
                     }
                     HighlightKind::Comment | HighlightKind::Find => {}
@@ -255,7 +256,7 @@ impl PageWalk<'_> {
 }
 
 /// Far enough past any page that a clip band never cuts a glyph vertically.
-const BAND: SurfacePx = SurfacePx::new(1.0e7);
+const BAND: Px<Surface> = Px::<Surface>::new(1.0e7);
 
 /// Draw the glyphs of a run, building its drawing state on its first paint.
 ///
@@ -351,7 +352,7 @@ fn draw_lines<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((left, at), (right, at)),
             color,
-            ambre_core::SurfacePx::new(f64::from(size)),
+            ambre_core::Px::<ambre_core::Surface>::new(f64::from(size)),
         );
     }
 }
@@ -392,7 +393,7 @@ fn paint_cell_box<S: DrawSurface>(
         surface.stroke_rect(
             bounds,
             palette.sheet_border,
-            ambre_core::SurfacePx::new(1.0),
+            ambre_core::Px::<ambre_core::Surface>::new(1.0),
         );
         return;
     };

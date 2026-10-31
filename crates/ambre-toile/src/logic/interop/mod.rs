@@ -209,7 +209,7 @@ pub struct MediaBlob {
     pub media: MediaRef,
     pub plaintext: ambre_core::MediaBytes,
     pub mime: ambre_core::MediaType,
-    pub size: ambre_core::ImageSize,
+    pub size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
     pub thumb: ambre_core::ThumbnailPng,
 }
 
@@ -236,8 +236,8 @@ pub enum ImportError {
         limit.height
     )]
     ImageTooLarge {
-        size: ambre_core::ImageSize,
-        limit: ambre_core::ImageSize,
+        size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
+        limit: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
     },
     #[error("import produced no elements")]
     Empty,

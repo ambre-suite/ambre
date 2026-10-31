@@ -20,7 +20,8 @@ use crate::input::ProseInput;
 use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
 use crate::layout::run::LayoutVersion;
 use ambre_bus::app::prose::DocOffset;
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, DocPx, char_len, char_to_byte};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, char_len, char_to_byte};
+use ambre_core::{Doc, Px};
 
 use crate::layout::run::{RunCount, RunOffset, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
@@ -185,11 +186,11 @@ impl ProseUiState {
 
     /// The run a cell block is laid out in, and the width of its cell's
     /// text: the column's, inside the padding.
-    pub(crate) fn cell_run(&self, block: BlockId) -> Option<(&ShapedRun, DocPx)> {
+    pub(crate) fn cell_run(&self, block: BlockId) -> Option<(&ShapedRun, Px<Doc>)> {
         let (cell, run) = self.shaped.cell_run(&tree_id(block))?;
         Some((
             run,
-            (cell.width - cell.style.padding * 2.0).max(DocPx::ZERO),
+            (cell.width - cell.style.padding * 2.0).max(Px::<Doc>::ZERO),
         ))
     }
 
@@ -197,12 +198,12 @@ impl ProseUiState {
     /// runs, and what it grew. A block pushes the blocks below it in its
     /// cell, and a cell its last row when it outgrows the rows it spans. A
     /// row never shrinks before the answer.
-    fn provisional_table(&self, table: &TableShape) -> (TableShape, DocPx) {
+    fn provisional_table(&self, table: &TableShape) -> (TableShape, Px<Doc>) {
         let mut shape = table.clone();
         let rows = table.row_tops.len().saturating_sub(RowCount::ONE);
-        let mut growth: RowVec<DocPx> = vec![DocPx::ZERO; rows.to_usize()].into();
+        let mut growth: RowVec<Px<Doc>> = vec![Px::<Doc>::ZERO; rows.to_usize()].into();
         for cell in &mut shape.cells {
-            let mut shift = DocPx::ZERO;
+            let mut shift = Px::<Doc>::ZERO;
             for (block, top, run) in &mut cell.blocks {
                 *top += shift;
                 if let Some(new) = self.provisional.runs.get(&crate::events::block_id(*block)) {
@@ -210,10 +211,10 @@ impl ProseUiState {
                     *run = new.clone();
                 }
             }
-            if shift == DocPx::ZERO {
+            if shift == Px::<Doc>::ZERO {
                 continue;
             }
-            cell.content_height = (cell.content_height + shift).max(DocPx::ZERO);
+            cell.content_height = (cell.content_height + shift).max(Px::<Doc>::ZERO);
             let spanned = match (table.row_top(cell.rows.start), table.row_top(cell.rows.end)) {
                 (Some(y0), Some(y1)) => y1 - y0,
                 _ => continue,
@@ -223,9 +224,9 @@ impl ProseUiState {
                 *slot = slot.max(lack);
             }
         }
-        let mut grown = DocPx::ZERO;
+        let mut grown = Px::<Doc>::ZERO;
         for (at, lack) in growth.iter_enumerated() {
-            grown += lack.max(DocPx::ZERO);
+            grown += lack.max(Px::<Doc>::ZERO);
             if let Some(top) = shape.row_tops.get_mut(at.next()) {
                 *top += grown;
             }
@@ -356,7 +357,7 @@ impl ProseUiState {
         let body = self.shaped.layout.body_height();
         let drawn = self.provisional_drawn();
         let ghost = self.provisional.ghost.as_ref().filter(|_| drawn);
-        let mut shift = DocPx::ZERO;
+        let mut shift = Px::<Doc>::ZERO;
         let mut ghost_at = None;
         let mut pieces = Vec::new();
         for index in self.blocks_on(page) {
@@ -372,7 +373,7 @@ impl ProseUiState {
                 let mut provisional = false;
                 if drawn && page == block.last_page() {
                     let (grown_table, grown) = self.provisional_table(&table);
-                    if grown > DocPx::ZERO || grown_table.cells != table.cells {
+                    if grown > Px::<Doc>::ZERO || grown_table.cells != table.cells {
                         piece.height += grown;
                         shift += grown;
                         table = Arc::new(grown_table);
@@ -407,7 +408,7 @@ impl ProseUiState {
             let last = page == block.last_page();
             if last && let (Some(new), Some(old)) = (provisional, laid) {
                 let grown = new.data().height() - old.data().height();
-                piece.height = (piece.height + grown).max(DocPx::ZERO);
+                piece.height = (piece.height + grown).max(Px::<Doc>::ZERO);
                 shift += grown;
             }
             if last && let Some(ghost) = ghost.filter(|ghost| ghost.below == id) {
@@ -415,7 +416,7 @@ impl ProseUiState {
                 ghost_at = Some(Fragment {
                     top: piece.top + piece.height,
                     height,
-                    run_top: DocPx::ZERO,
+                    run_top: Px::<Doc>::ZERO,
                 });
                 shift += height;
             }

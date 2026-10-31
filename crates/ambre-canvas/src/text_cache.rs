@@ -12,7 +12,7 @@
 // ============================================================================
 
 use ambre_bus::ByteSpan;
-use ambre_core::{DocPx, ViewPx};
+use ambre_core::{Doc, Parley, Px, View, WholeParley};
 
 use ambre_draw::{Brush, BundledFamily, Color};
 use parley::style::{
@@ -87,58 +87,6 @@ impl std::hash::Hash for CacheKey {
 
 pub use ambre_core::{Slant, Weight, WordBreak};
 
-/// How far right a paragraph starts, in whole units of the width its text
-/// breaks to (`CANVAS-084`). Whole, so a span keeps its `Eq` and its `Hash`
-/// in the cache key.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct IndentPx(u16);
-
-impl IndentPx {
-    /// No indent: the paragraph starts at the edge.
-    pub const ZERO: Self = Self(0);
-
-    /// An indent of `units`.
-    #[must_use]
-    pub const fn new(units: u16) -> Self {
-        Self(units)
-    }
-
-    /// The bare count of units.
-    #[must_use]
-    pub const fn get(self) -> u16 {
-        self.0
-    }
-
-    /// The indent in the units of the width a layout breaks to.
-    #[must_use]
-    pub fn layout_units(self) -> LayoutPx {
-        LayoutPx(f32::from(self.0))
-    }
-}
-
-/// A length in the units of a parley layout. These are the units of its
-/// caller: [`ViewPx`] for a screen text, [`DocPx`] for a board text.
-///
-/// A drawn glyph run no longer knows which, so the units get a type of their
-/// own. A font size, a wrap width and an indent of one layout share it. The
-/// `f32` is unwrapped at the parley call, the cache key and the raster size.
-#[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
-pub struct LayoutPx(f32);
-
-impl LayoutPx {
-    /// A length of `units` layout units, as parley hands one back.
-    #[must_use]
-    pub const fn new(units: f32) -> Self {
-        Self(units)
-    }
-
-    /// The number of layout units, for the parley call that takes the float.
-    #[must_use]
-    pub const fn get(self) -> f32 {
-        self.0
-    }
-}
-
 /// What a span shapes over its byte range: a weight, a slant, a family, an
 /// underline, an indent. Its ink and its tint are drawn over the layout, so
 /// they stay out of the cache key (`CANVAS-081`).
@@ -151,7 +99,7 @@ pub struct SpanShape {
     pub underline: ambre_core::Underline,
     /// How far right each paragraph holding bytes of the range starts, in
     /// the units of the width the text breaks to (`CANVAS-084`).
-    pub indent: IndentPx,
+    pub indent: Px<WholeParley>,
 }
 
 /// Break `layout`, laid out from `text`, to `width`. Each paragraph holding
@@ -162,8 +110,8 @@ pub struct SpanShape {
 pub(crate) fn break_indented<B: parley::Brush>(
     layout: &mut Layout<B>,
     text: &str,
-    width: LayoutPx,
-    indents: &[(ByteSpan, LayoutPx)],
+    width: Px<Parley>,
+    indents: &[(ByteSpan, Px<Parley>)],
 ) {
     let width = width.get();
     if !indents.iter().any(|(_, indent)| indent.get() > 0.0) {
@@ -273,24 +221,30 @@ pub(crate) fn push_shape(
 
 /// A length a text is laid out in: a font size or a wrap width.
 ///
-/// Parley lays out in the units of its caller, so a screen text passes
-/// [`ViewPx`] and a board text passes [`DocPx`]. Both lengths of one layout
-/// share the space, so a font size in one space never meets a width in the
-/// other. The length enters the layout as a [`LayoutPx`].
-pub trait TextLength: Copy {
-    /// The length in the units parley lays out in.
-    fn layout_units(self) -> LayoutPx;
+/// An indent in the units of the width a layout breaks to: one whole unit
+/// is one layout unit.
+fn indent_units(indent: Px<WholeParley>) -> Px<Parley> {
+    Px::new(f32::from(indent.get()))
 }
 
-impl TextLength for ViewPx {
-    fn layout_units(self) -> LayoutPx {
-        LayoutPx(self.get())
+/// Parley lays out in the units of its caller, so a screen text passes
+/// [`Px<View>`] and a board text passes [`Px<Doc>`]. Both lengths of one layout
+/// share the space, so a font size in one space never meets a width in the
+/// other. The length enters the layout as a [`Px<Parley>`].
+pub trait TextLength: Copy {
+    /// The length in the units parley lays out in.
+    fn layout_units(self) -> Px<Parley>;
+}
+
+impl TextLength for Px<View> {
+    fn layout_units(self) -> Px<Parley> {
+        Px::new(self.get())
     }
 }
 
-impl TextLength for DocPx {
-    fn layout_units(self) -> LayoutPx {
-        LayoutPx(self.get())
+impl TextLength for Px<Doc> {
+    fn layout_units(self) -> Px<Parley> {
+        Px::new(self.get())
     }
 }
 
@@ -609,8 +563,8 @@ impl TextCache {
         builder.push_default(StyleProperty::Brush(Brush::Solid(Color::BLACK)));
         let mut indents = Vec::new();
         for shape in spans {
-            if push_shape(&mut builder, text, shape) && shape.indent > IndentPx::ZERO {
-                indents.push((shape.range, shape.indent.layout_units()));
+            if push_shape(&mut builder, text, shape) && shape.indent > Px::<WholeParley>::ZERO {
+                indents.push((shape.range, indent_units(shape.indent)));
             }
         }
         let mut layout = builder.build(text);
@@ -624,7 +578,7 @@ impl TextCache {
 mod tests {
     use super::{Slant, SpanShape, TextCache, Weight, registered_family_name};
     use ambre_bus::ByteSpan;
-    use ambre_core::ViewPx;
+    use ambre_core::{Px, View};
     use parley::{Alignment, FontContext};
 
     /// The face the family `label` names resolves to.
@@ -647,8 +601,8 @@ mod tests {
         let layout = cache.get_or_build(
             cx,
             text,
-            ViewPx::new(14.0),
-            ViewPx::new(400.0),
+            Px::<View>::new(14.0),
+            Px::<View>::new(400.0),
             Alignment::Start,
             Weight::Regular,
             Slant::Upright,
@@ -694,8 +648,8 @@ mod tests {
         let plain = cache.get_or_build_spans(
             &mut cx,
             "wide text",
-            ViewPx::new(14.0),
-            ViewPx::new(400.0),
+            Px::<View>::new(14.0),
+            Px::<View>::new(400.0),
             &[],
         );
         let plain_width = plain.width();
@@ -703,8 +657,8 @@ mod tests {
         let spanned = cache.get_or_build_spans(
             &mut cx,
             "wide text",
-            ViewPx::new(14.0),
-            ViewPx::new(400.0),
+            Px::<View>::new(14.0),
+            Px::<View>::new(400.0),
             std::slice::from_ref(&bold),
         );
         assert_eq!(faces_of(spanned), 2, "the span shaped no face of its own");
@@ -716,8 +670,8 @@ mod tests {
         let off = cache.get_or_build_spans(
             &mut cx,
             "wide text",
-            ViewPx::new(14.0),
-            ViewPx::new(400.0),
+            Px::<View>::new(14.0),
+            Px::<View>::new(400.0),
             &[off],
         );
         assert_eq!(faces_of(off), 1, "a range past the text shapes nothing");
@@ -726,8 +680,8 @@ mod tests {
         cache.get_or_build_spans(
             &mut cx,
             "wide text",
-            ViewPx::new(14.0),
-            ViewPx::new(400.0),
+            Px::<View>::new(14.0),
+            Px::<View>::new(400.0),
             &[bold],
         );
         assert_eq!((cache.frame_hits, cache.frame_misses), (1, 0));
@@ -745,14 +699,14 @@ mod tests {
         let text = format!("top\r\n{long}\r\nend");
         let indent = SpanShape {
             range: ByteSpan::from_usize_range(5..5 + long.len() + 2),
-            indent: super::IndentPx::new(12),
+            indent: ambre_core::Px::<ambre_core::WholeParley>::new(12),
             ..SpanShape::default()
         };
         let layout = cache.get_or_build_spans(
             &mut cx,
             &text,
-            ViewPx::new(14.0),
-            ViewPx::new(200.0),
+            Px::<View>::new(14.0),
+            Px::<View>::new(200.0),
             &[indent],
         );
         let lines: Vec<(f32, f32)> = layout
@@ -869,8 +823,8 @@ mod tests {
             cache.get_or_build(
                 &mut cx,
                 &text,
-                ViewPx::new(14.0),
-                ViewPx::new(120.0),
+                Px::<View>::new(14.0),
+                Px::<View>::new(120.0),
                 align,
                 Weight::Regular,
                 Slant::Upright,
@@ -900,8 +854,8 @@ mod tests {
         let start = last_x(cache.get_or_build(
             &mut cx,
             &text,
-            ViewPx::new(14.0),
-            ViewPx::new(120.0),
+            Px::<View>::new(14.0),
+            Px::<View>::new(120.0),
             Alignment::Start,
             Weight::Regular,
             Slant::Upright,
@@ -909,8 +863,8 @@ mod tests {
         let justified = last_x(cache.get_or_build(
             &mut cx,
             &text,
-            ViewPx::new(14.0),
-            ViewPx::new(120.0),
+            Px::<View>::new(14.0),
+            Px::<View>::new(120.0),
             Alignment::Justify,
             Weight::Regular,
             Slant::Upright,

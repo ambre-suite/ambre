@@ -10,7 +10,8 @@
 // send to the Logic thread whenever the visible range changes.
 // ============================================================================
 
-use ambre_core::{DocPx, Rgb, SurfacePx, ViewPx};
+use ambre_core::Rgb;
+use ambre_core::{Doc, Px, Surface, View};
 use std::collections::{HashMap, HashSet};
 
 use ambre_canvas::{TextEditor, TextEditorStyle};
@@ -32,10 +33,10 @@ mod geometry;
 mod state;
 
 /// Height of the column-letter strip at zoom 1.
-pub const HEADER_HEIGHT: SurfacePx = SurfacePx::new(24.0);
+pub const HEADER_HEIGHT: Px<Surface> = Px::<Surface>::new(24.0);
 
 /// Width of the row-number strip at zoom 1.
-pub const HEADER_WIDTH: SurfacePx = SurfacePx::new(50.0);
+pub const HEADER_WIDTH: Px<Surface> = Px::<Surface>::new(50.0);
 
 pub use crate::{
     COL_WIDTH, MAX_COL_WIDTH, MAX_ROW_HEIGHT, MIN_COL_WIDTH, MIN_ROW_HEIGHT, ROW_HEIGHT,
@@ -44,7 +45,7 @@ pub use crate::{
 /// Half-width (logical px) of the grab band straddling a header boundary that
 /// arms a resize drag (`trame-resize`). A press within +/- this of a column's right
 /// edge (resp. a row's bottom edge) resizes instead of selecting.
-pub const RESIZE_BAND: SurfacePx = SurfacePx::new(4.0);
+pub const RESIZE_BAND: Px<Surface> = Px::<Surface>::new(4.0);
 
 const PADDING_ROWS: RowCount = RowCount::new(20);
 
@@ -313,8 +314,8 @@ pub enum HeaderHit {
 /// for a row resize.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ResizePreview {
-    Col(SurfacePx),
-    Row(SurfacePx),
+    Col(Px<Surface>),
+    Row(Px<Surface>),
 }
 
 impl Default for Selection {
@@ -480,15 +481,15 @@ pub struct TrameUiState {
     pub viewport_cols: ColCount,
 
     /// Canvas logical size in CSS pixels, set by ResizeObserver (`CANVAS-044`).
-    pub canvas_width: SurfacePx,
-    pub canvas_height: SurfacePx,
+    pub canvas_width: Px<Surface>,
+    pub canvas_height: Px<Surface>,
 
     /// Application zoom factor for the grid (1.0 = 100%). Scales cells, the
     /// row/col header strips and the cell font together (`trame-status-bar`).
     /// Pure local view state -- never persisted, never synced (like the scroll
     /// position). The browser's own page zoom (Ctrl+wheel / Ctrl+/-) is left
     /// untouched and zooms the whole page incl. chrome; this scales the grid only.
-    pub zoom: ambre_core::ZoomFactor,
+    pub zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
 
     /// Cache of received cells: cell -> display data (text + formatting).
     ///
@@ -538,10 +539,10 @@ pub struct TrameUiState {
     /// with no entry uses the uniform [`COL_WIDTH`]. Drives every pixel mapping
     /// (the renderer's `GridLayout` and the hit-testing helpers below). UI-only
     /// derived state, mirrors the CRDT `col_widths_{sheet}` map.
-    pub col_widths: HashMap<Col, DocPx>,
+    pub col_widths: HashMap<Col, Px<Doc>>,
     /// Per-row heights (logical px) keyed by absolute grid row. Row analogue of
     /// [`col_widths`](Self::col_widths); absence uses [`ROW_HEIGHT`].
-    pub row_heights: HashMap<Row, DocPx>,
+    pub row_heights: HashMap<Row, Px<Doc>>,
 
     /// The range last copied/cut, drawn with animated marching-ants until the
     /// next copy or an Escape (`trame-clipboard`). `None` when nothing is on the
@@ -588,23 +589,23 @@ pub struct TrameUiState {
 
 /// Side of the square autofill handle drawn at the selection's bottom-right
 /// corner, in device pixels (`trame-autofill`).
-pub const FILL_HANDLE_SIZE: SurfacePx = SurfacePx::new(7.0);
+pub const FILL_HANDLE_SIZE: Px<Surface> = Px::<Surface>::new(7.0);
 
 /// Side of the square Excel-style autofilter button drawn at the right edge of
 /// each current-region header cell, in device pixels at 100% zoom
 /// (`trame-shared-filter`). Scaled by the grid zoom in [`filter_button_rect`].
-pub const FILTER_BUTTON_SIZE: SurfacePx = SurfacePx::new(13.0);
+pub const FILTER_BUTTON_SIZE: Px<Surface> = Px::<Surface>::new(13.0);
 
 #[cfg(test)]
 mod tests;
 
 /// The grid surface's pixel under view coordinate `v`. The surface's top-left
 /// corner is the canvas's, so the two spaces differ only in precision.
-pub(crate) fn on_grid(v: ViewPx) -> SurfacePx {
-    v.on_surface(SurfacePx::ZERO)
+pub(crate) fn on_grid(v: Px<View>) -> Px<Surface> {
+    v.on_surface(Px::<Surface>::ZERO)
 }
 
 /// The view coordinate of grid surface pixel `s`: the inverse of [`on_grid`].
-pub(crate) fn in_view(s: SurfacePx) -> ViewPx {
-    s.in_view(SurfacePx::ZERO)
+pub(crate) fn in_view(s: Px<Surface>) -> Px<View> {
+    s.in_view(Px::<Surface>::ZERO)
 }

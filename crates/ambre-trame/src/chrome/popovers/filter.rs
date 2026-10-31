@@ -12,7 +12,7 @@ pub struct FilterPopoverState {
     /// Grid column (0-based) the filter targets.
     pub col: Col,
     /// The popover's top-left on the page.
-    pub at: ambre_core::CssPoint,
+    pub at: ambre_core::Point<ambre_core::Px<ambre_core::Css>>,
 }
 
 pub use crate::ui::commands::SheetFilter;

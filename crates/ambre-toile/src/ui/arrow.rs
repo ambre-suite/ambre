@@ -13,7 +13,7 @@ use ambre_bus::app::toile::{
     ConnectorId, DisplayNode, DisplayViewport, ElementId, End, NodeId, ToileCommand, ZTarget,
 };
 use ambre_commands::CommandId;
-use ambre_core::ViewPx;
+use ambre_core::{Px, View};
 use ambre_draw::{BezPath, Point};
 use kurbo::ParamCurve;
 
@@ -22,7 +22,7 @@ use super::viewport::BoardLength;
 /// Endpoint handle radius in screen pixels. The grab tolerance is this radius
 /// taken back into world units, so a handle stays equally easy to hit at every
 /// zoom.
-pub const HANDLE_R: ViewPx = ViewPx::new(5.0);
+pub const HANDLE_R: Px<View> = Px::<View>::new(5.0);
 
 /// The two ends of a routed arrow in world space: where it starts, where it
 /// ends. `None` for an empty path.

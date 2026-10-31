@@ -74,7 +74,8 @@ pub struct Decoration {
 }
 
 use ambre_bus::CellValueKind;
-use ambre_core::{Slant, SurfacePx, Weight, WordBreak};
+use ambre_core::{Px, Surface};
+use ambre_core::{Slant, Weight, WordBreak};
 pub use ambre_core::{Strikethrough, Underline};
 
 impl Decoration {
@@ -113,20 +114,20 @@ pub(super) fn cell_alignment(h: ambre_bus::HAlign, numeric: CellValueKind) -> Al
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct TextFit {
     /// The height of the box the text sits in.
-    pub(super) box_height: SurfacePx,
+    pub(super) box_height: Px<Surface>,
     /// The height of the laid-out text block.
-    pub(super) text_height: SurfacePx,
+    pub(super) text_height: Px<Surface>,
 }
 
 /// Vertical text offset of a text block inside its box, honouring the cell's
 /// [`VAlign`](ambre_bus::VAlign). Clamped to `>= 0` so oversized text never
 /// lifts above the box top.
-pub(super) fn cell_v_offset(v: ambre_bus::VAlign, fit: TextFit) -> SurfacePx {
+pub(super) fn cell_v_offset(v: ambre_bus::VAlign, fit: TextFit) -> Px<Surface> {
     let room = fit.box_height - fit.text_height;
     match v {
-        ambre_bus::VAlign::Top => SurfacePx::ZERO,
-        ambre_bus::VAlign::Middle => (room / 2.0).max(SurfacePx::ZERO),
-        ambre_bus::VAlign::Bottom => room.max(SurfacePx::ZERO),
+        ambre_bus::VAlign::Top => Px::<Surface>::ZERO,
+        ambre_bus::VAlign::Middle => (room / 2.0).max(Px::<Surface>::ZERO),
+        ambre_bus::VAlign::Bottom => room.max(Px::<Surface>::ZERO),
     }
 }
 
@@ -134,9 +135,9 @@ pub(super) fn cell_v_offset(v: ambre_bus::VAlign, fit: TextFit) -> SurfacePx {
 /// caller (two passes).
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct BorderStroke {
-    width: SurfacePx,
+    width: Px<Surface>,
     /// The length of one dash and its gap; zero draws a solid stroke.
-    dash_period: SurfacePx,
+    dash_period: Px<Surface>,
 }
 
 /// Resolve a [`BorderStyle`] into the stroke it draws with.
@@ -150,8 +151,8 @@ fn border_stroke(style: ambre_bus::BorderStyle) -> BorderStroke {
         Bs::Thick => (3.0, 0.0),
     };
     BorderStroke {
-        width: SurfacePx::new(width),
-        dash_period: SurfacePx::new(dash_period),
+        width: Px::<Surface>::new(width),
+        dash_period: Px::<Surface>::new(dash_period),
     }
 }
 
@@ -180,12 +181,12 @@ fn styled_segment<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((x0 - dx, y0 - dy), (x1 - dx, y1 - dy)),
             color,
-            ambre_core::SurfacePx::new(1.0),
+            ambre_core::Px::<ambre_core::Surface>::new(1.0),
         );
         surface.stroke_line(
             ambre_draw::Line::new((x0 + dx, y0 + dy), (x1 + dx, y1 + dy)),
             color,
-            ambre_core::SurfacePx::new(1.0),
+            ambre_core::Px::<ambre_core::Surface>::new(1.0),
         );
         return;
     }

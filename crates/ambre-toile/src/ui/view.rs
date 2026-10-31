@@ -42,7 +42,7 @@ use ambre_canvas::{
     PerfPublisher, PerfSnapshot, PointerButton, RepaintPlan, TextCache, TextInput, Theme,
     ThemeControl, WHEEL_LINE, WheelDelta,
 };
-use ambre_core::{CssPx, CssVector, ViewPx};
+use ambre_core::{Css, Px, Vector, View};
 use ambre_draw::kinetic::{Release, ScrollStep};
 use ambre_draw::{Consumed, FontContext, Point, Rect, Vec2};
 
@@ -122,7 +122,7 @@ struct WheelZoomRate(f64);
 impl WheelZoomRate {
     /// The relative zoom factor a wheel step of `dy` applies. A step down
     /// zooms out, a step up zooms in, and no step keeps the zoom.
-    fn factor(self, dy: CssPx) -> f64 {
+    fn factor(self, dy: Px<Css>) -> f64 {
         (-f64::from(dy.get()) * self.0).exp()
     }
 }
@@ -133,26 +133,26 @@ const WHEEL_ZOOM_RATE: WheelZoomRate = WheelZoomRate(0.0018);
 /// A wheel `|dy|` at or above this (logical px, a pixel-mode delta) reads as
 /// a discrete mouse notch rather than a fine trackpad glide. This is the auto
 /// heuristic's mouse threshold (`toile-tools`).
-const WHEEL_MOUSE_NOTCH: CssPx = CssPx::new(40.0);
+const WHEEL_MOUSE_NOTCH: Px<Css> = Px::<Css>::new(40.0);
 
 /// A point of the canvas, as the shared kinetic model reads it.
-fn view_point(screen: Point) -> ambre_core::ViewPoint {
-    ambre_core::ViewPoint::new(
-        ambre_core::ViewPx::new(screen.x as f32),
-        ambre_core::ViewPx::new(screen.y as f32),
+fn view_point(screen: Point) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::View>::new(screen.x as f32),
+        ambre_core::Px::<ambre_core::View>::new(screen.y as f32),
     )
 }
 
 /// A point of the open editor's layout, from the `f64` the camera mapped it to.
-fn doc_point(local: Point) -> ambre_core::DocPoint {
-    ambre_core::DocPoint::new(
-        ambre_core::DocPx::new(local.x as f32),
-        ambre_core::DocPx::new(local.y as f32),
+fn doc_point(local: Point) -> ambre_core::Point<ambre_core::Px<ambre_core::Doc>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::Doc>::new(local.x as f32),
+        ambre_core::Px::<ambre_core::Doc>::new(local.y as f32),
     )
 }
 
 /// The screen point a pointer event names, in the `f64` the camera maps.
-fn on_screen(at: ambre_core::ViewPoint) -> Point {
+fn on_screen(at: ambre_core::Point<ambre_core::Px<ambre_core::View>>) -> Point {
     Point::new(f64::from(at.x.get()), f64::from(at.y.get()))
 }
 
@@ -172,10 +172,10 @@ enum WheelDevice {
 /// large `|dy|` with no `dx` is a discrete mouse notch.
 ///
 /// The deltas are pixels, read from the event's own unit first.
-fn wheel_device(delta: WheelDelta, px: CssVector) -> Option<WheelDevice> {
+fn wheel_device(delta: WheelDelta, px: Vector<Px<Css>>) -> Option<WheelDevice> {
     if delta.is_step() {
         Some(WheelDevice::Mouse)
-    } else if px.dx != CssPx::ZERO {
+    } else if px.dx != Px::<Css>::ZERO {
         Some(WheelDevice::Trackpad)
     } else if px.dy.abs() >= WHEEL_MOUSE_NOTCH {
         Some(WheelDevice::Mouse)
@@ -475,11 +475,11 @@ pub struct ToileView {
     /// the camera's zoom, and a preset the chip writes moves the camera.
     /// Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    zoom: RwSignal<ambre_chrome::ZoomFactor>,
+    zoom: RwSignal<ambre_core::Scale<ambre_core::Doc, ambre_core::View>>,
     /// The zoom this view last published. A signal reading anything else was
     /// written by the chip, so the camera follows it. Wasm-only.
     #[cfg(target_arch = "wasm32")]
-    zoom_published: ambre_core::ZoomFactor,
+    zoom_published: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
     /// Status-bar selection aggregates (`toile-status-bar`), shared with the
     /// DOM band. The view clears it to `None` on an empty selection: an
     /// empty-ids stats request would mean "whole board" to Logic. It must not
@@ -676,7 +676,10 @@ pub struct ToileView {
 impl ambre_draw::HitTest for ToileView {
     type Target = ElementId;
 
-    fn hit_test(&self, at: ambre_core::ViewPoint) -> Option<ElementId> {
+    fn hit_test(
+        &self,
+        at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
+    ) -> Option<ElementId> {
         let at = Point::new(f64::from(at.x.get()), f64::from(at.y.get()));
         self.element_at(self.cam.screen_to_world() * at)
     }
@@ -688,8 +691,8 @@ impl ToileView {
         document_id: DocumentId,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
-        canvas_width: ambre_core::SurfacePx,
-        canvas_height: ambre_core::SurfacePx,
+        canvas_width: ambre_core::Px<ambre_core::Surface>,
+        canvas_height: ambre_core::Px<ambre_core::Surface>,
         text_input: TextInput,
         // When embedded as a `doc_embed` child (`toile-embeds`), the child view
         // must not grab the shared text pipe on construction. The top-level
@@ -704,7 +707,9 @@ impl ToileView {
         #[cfg(target_arch = "wasm32")] menu_cmd: RwSignal<Option<CommandId>>,
         #[cfg(target_arch = "wasm32")] active_tool: RwSignal<Tool>,
         #[cfg(target_arch = "wasm32")] cursor: RwSignal<Option<super::palette::CanvasCursor>>,
-        #[cfg(target_arch = "wasm32")] zoom: RwSignal<ambre_chrome::ZoomFactor>,
+        #[cfg(target_arch = "wasm32")] zoom: RwSignal<
+            ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+        >,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<super::status::SelStats>>,
         #[cfg(target_arch = "wasm32")] style_model: RwSignal<Option<super::style::StyleModel>>,
         #[cfg(target_arch = "wasm32")] restyle: RwSignal<
@@ -808,7 +813,7 @@ impl ToileView {
             #[cfg(target_arch = "wasm32")]
             zoom,
             #[cfg(target_arch = "wasm32")]
-            zoom_published: ambre_core::ZoomFactor::ONE,
+            zoom_published: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
             #[cfg(target_arch = "wasm32")]
             sel_stats,
             #[cfg(target_arch = "wasm32")]
@@ -1330,10 +1335,10 @@ impl ToileView {
         let ctrl_key = mods.primary();
         // A line or page delta moves the board by the pixels it is worth, as
         // in every other view (`KINETIC-015`).
-        let line = CssVector::new(WHEEL_LINE, WHEEL_LINE);
-        let page = CssVector::new(
-            CssPx::new(self.cam.size.width as f32),
-            CssPx::new(self.cam.size.height as f32),
+        let line = Vector::new(WHEEL_LINE, WHEEL_LINE);
+        let page = Vector::new(
+            Px::<Css>::new(self.cam.size.width as f32),
+            Px::<Css>::new(self.cam.size.height as f32),
         );
         let px = delta.to_px(line, page);
         // The pointer mode decides zoom against pan (`toile-viewport`). Ctrl
@@ -1370,7 +1375,7 @@ impl ToileView {
     /// first. A line or page step is a classic wheel, so a mouse. A non-zero `dx` is a two-axis trackpad glide. A large `|dy|` with
     /// no `dx` is a discrete mouse notch. An ambiguous fine glide leaves the
     /// latch unchanged (`toile-viewport`).
-    fn classify_wheel(&mut self, delta: WheelDelta, px: CssVector) {
+    fn classify_wheel(&mut self, delta: WheelDelta, px: Vector<Px<Css>>) {
         if let Some(device) = wheel_device(delta, px) {
             self.detected_mouse = device == WheelDevice::Mouse;
         }
@@ -1648,7 +1653,11 @@ impl ToileView {
     /// A finger went down. It stops any motion left. On the empty board with
     /// the select tool, or with the hand, it pans (`TOILE-UI-378`);
     /// otherwise it acts as the mouse.
-    pub fn touch_down(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> Consumed {
+    pub fn touch_down(
+        &mut self,
+        at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
+        now: ambre_core::PageTime,
+    ) -> Consumed {
         self.kinetic.stop();
         let screen = on_screen(at);
         let world = self.cam.screen_to_world() * screen;
@@ -1675,7 +1684,11 @@ impl ToileView {
 
     /// A finger moved: a panning finger drags the board past the tap slop,
     /// any other acts as the mouse.
-    pub fn touch_move(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> Consumed {
+    pub fn touch_move(
+        &mut self,
+        at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
+        now: ambre_core::PageTime,
+    ) -> Consumed {
         match self.finger {
             Some(FingerRole::Pans) => {
                 self.last_pointer = on_screen(at);
@@ -1692,7 +1705,11 @@ impl ToileView {
 
     /// A finger lifted. A pan released with speed keeps the board moving; a
     /// finger that never left the tap slop is a click where it went down.
-    pub fn touch_up(&mut self, at: ambre_core::ViewPoint, now: ambre_core::PageTime) -> Consumed {
+    pub fn touch_up(
+        &mut self,
+        at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
+        now: ambre_core::PageTime,
+    ) -> Consumed {
         match self.finger.take() {
             Some(FingerRole::Pans) => {
                 // The panning finger is the board's, so the click a tap
@@ -2172,7 +2189,7 @@ impl ToileView {
     )]
     fn float_bar_at(
         &self,
-        canvas_origin: ambre_core::CssPoint,
+        canvas_origin: ambre_core::Point<ambre_core::Px<ambre_core::Css>>,
     ) -> Option<super::floatbar::FloatBar> {
         if self.selection.is_empty()
             || self.machine.is_active()
@@ -3166,16 +3183,16 @@ impl ToileView {
 
     /// The text origin (top-left screen corner + padding) and wrap width in
     /// screen pixels of a world box. Also its full screen rect, for hit tests.
-    fn edit_geometry_of(&self, world: Rect) -> (Point, ViewPx, Rect) {
+    fn edit_geometry_of(&self, world: Rect) -> (Point, Px<View>, Rect) {
         let sb = world_rect_to_screen(world, &self.cam);
         let pad = InlineEditor::pad(self.cam.zoom).get();
         let origin = Point::new(sb.x0 + pad, sb.y0 + pad);
-        let wrap_w = ViewPx::new((sb.width() - 2.0 * pad).max(1.0) as f32);
+        let wrap_w = Px::<View>::new((sb.width() - 2.0 * pad).max(1.0) as f32);
         (origin, wrap_w, sb)
     }
 
     /// The edited element's text origin, wrap width and screen rect.
-    fn edit_geometry(&self, e: &DisplayElement) -> (Point, ViewPx, Rect) {
+    fn edit_geometry(&self, e: &DisplayElement) -> (Point, Px<View>, Rect) {
         self.edit_geometry_of(e.bounds)
     }
 
@@ -3192,7 +3209,7 @@ impl ToileView {
     /// overlay rides. An element's box carries the element's angle; a connector
     /// caption's box is the arrow's mid-arc box and never rotates
     /// (`toile-connectors`). `None` when the target has left the culled set.
-    fn edit_target_geometry(&self) -> Option<(Point, ViewPx, Rect, ambre_core::Radians)> {
+    fn edit_target_geometry(&self) -> Option<(Point, Px<View>, Rect, ambre_core::Radians)> {
         match self.editor.as_ref()?.target() {
             EditTarget::Element(id) => {
                 let e = self.find_element(id)?;
@@ -3658,7 +3675,8 @@ impl ToileView {
                         origin.x + caret.x1,
                         origin.y + caret.y1,
                     );
-                    let height = ambre_core::ViewPx::new(spot.height().max(1.0) as f32);
+                    let height =
+                        ambre_core::Px::<ambre_core::View>::new(spot.height().max(1.0) as f32);
                     self.text_input.set_caret(view_point(spot.origin()), height);
                     self.caret_drawn = Some(spot);
                 }
@@ -4059,7 +4077,7 @@ impl ToileView {
     }
 
     /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
-    pub fn resize(&mut self, size: ambre_canvas::CssSize) {
+    pub fn resize(&mut self, size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>) {
         self.cam.set_size(ambre_draw::Size::new(
             f64::from(size.width.get()),
             f64::from(size.height.get()),
@@ -4414,14 +4432,17 @@ fn wall_clock() -> ambre_core::Timestamp {
 /// The canvas sits below the header / toolbar chrome, so this offset is non-zero.
 /// Off the web, or before the canvas mounts, it is `(0, 0)`.
 #[cfg(target_arch = "wasm32")]
-fn canvas_client_offset() -> ambre_core::CssPoint {
+fn canvas_client_offset() -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
     web_sys::window()
         .and_then(|w| w.document())
         .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
         .map(|el| {
             let r = el.get_bounding_client_rect();
             // The DOM measures in `f64`; a CSS pixel is an `f32`.
-            ambre_core::CssPoint::new(CssPx::new(r.left() as f32), CssPx::new(r.top() as f32))
+            ambre_core::Point::new(
+                Px::<Css>::new(r.left() as f32),
+                Px::<Css>::new(r.top() as f32),
+            )
         })
         .unwrap_or_default()
 }
@@ -4437,7 +4458,7 @@ mod view_tests;
 mod wheel_tests {
     use super::{WHEEL_MOUSE_NOTCH, WheelDevice, wheel_device};
     use ambre_canvas::{WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
-    use ambre_core::{CssPx, CssVector};
+    use ambre_core::{Css, Px, Vector};
 
     /// A notched step, in line units.
     const LINE: WheelDelta = WheelDelta::new(
@@ -4454,11 +4475,17 @@ mod wheel_tests {
     fn line_or_page_delta_mode_is_a_mouse() {
         // A classic wheel reports line (1) or page (2) units.
         assert_eq!(
-            wheel_device(LINE, CssVector::new(CssPx::new(0.0), CssPx::new(120.0))),
+            wheel_device(
+                LINE,
+                Vector::new(Px::<Css>::new(0.0), Px::<Css>::new(120.0))
+            ),
             Some(WheelDevice::Mouse)
         );
         assert_eq!(
-            wheel_device(LINE, CssVector::new(CssPx::new(0.0), CssPx::new(600.0))),
+            wheel_device(
+                LINE,
+                Vector::new(Px::<Css>::new(0.0), Px::<Css>::new(600.0))
+            ),
             Some(WheelDevice::Mouse)
         );
     }
@@ -4467,7 +4494,10 @@ mod wheel_tests {
     fn horizontal_component_is_a_trackpad() {
         // Mice have no horizontal wheel axis; a non-zero dx means two fingers.
         assert_eq!(
-            wheel_device(GLIDE, CssVector::new(CssPx::new(4.0), CssPx::new(12.0))),
+            wheel_device(
+                GLIDE,
+                Vector::new(Px::<Css>::new(4.0), Px::<Css>::new(12.0))
+            ),
             Some(WheelDevice::Trackpad)
         );
     }
@@ -4475,7 +4505,7 @@ mod wheel_tests {
     #[test]
     fn large_vertical_notch_is_a_mouse() {
         assert_eq!(
-            wheel_device(GLIDE, CssVector::new(CssPx::new(0.0), WHEEL_MOUSE_NOTCH)),
+            wheel_device(GLIDE, Vector::new(Px::<Css>::new(0.0), WHEEL_MOUSE_NOTCH)),
             Some(WheelDevice::Mouse)
         );
     }
@@ -4484,7 +4514,7 @@ mod wheel_tests {
     fn fine_vertical_glide_is_ambiguous() {
         // A small pixel-mode dy with no dx could be either; keep the latch.
         assert_eq!(
-            wheel_device(GLIDE, CssVector::new(CssPx::new(0.0), CssPx::new(6.0))),
+            wheel_device(GLIDE, Vector::new(Px::<Css>::new(0.0), Px::<Css>::new(6.0))),
             None
         );
     }

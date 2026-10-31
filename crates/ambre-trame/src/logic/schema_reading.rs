@@ -474,7 +474,7 @@ fn a_stored_value_moving_moves_the_reading() {
         version: ambre_core::Generation::ZERO,
         sheet_id: super::schema::default_sheet(),
         col: Col::new(0),
-        width: ambre_core::DocPx::new(90.0),
+        width: ambre_core::Px::<ambre_core::Doc>::new(90.0),
     });
     let after = readings_of(&moved, &reopened(&moved)).lines;
     assert_ne!(render(&before), render(&after));

@@ -13,16 +13,16 @@ use crate::{CellPos, CellRect, Col, ColCount, ColDelta, MergeSpan, Row, RowCount
 use crate::{DisplayCell, TrameEvent};
 
 /// A pointer at logical `(x, y)`, as the canvas hands it over.
-fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
-    ambre_core::ViewPoint::new(
-        ambre_core::ViewPx::new(x as f32),
-        ambre_core::ViewPx::new(y as f32),
+fn pointer(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::View>::new(x as f32),
+        ambre_core::Px::<ambre_core::View>::new(y as f32),
     )
 }
 
 /// A logical length along one axis, as the canvas hands it over.
-fn view_px(v: f64) -> ambre_core::ViewPx {
-    ambre_core::ViewPx::new(v as f32)
+fn view_px(v: f64) -> ambre_core::Px<ambre_core::View> {
+    ambre_core::Px::<ambre_core::View>::new(v as f32)
 }
 
 /// Seed a non-empty cell in the viewport cache (the rest of `CellData`

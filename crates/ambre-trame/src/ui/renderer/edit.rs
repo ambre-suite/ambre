@@ -51,8 +51,8 @@ pub fn draw_edit<S: DrawSurface>(
     let pad = CELL_PAD_X.zoomed_on_surface(state.zoom).get();
     // A length on the surface is the same length on the view: only the origin
     // of a coordinate differs.
-    let wrap_w =
-        ambre_core::SurfacePx::new((cw - 2.0 * pad).max(1.0)).in_view(ambre_core::SurfacePx::ZERO);
+    let wrap_w = ambre_core::Px::<ambre_core::Surface>::new((cw - 2.0 * pad).max(1.0))
+        .in_view(ambre_core::Px::<ambre_core::Surface>::ZERO);
     editor.core.flush(font_cx, wrap_w, state.zoom);
 
     // The field grows downward to fit every line, overflowing the cell like a
@@ -62,8 +62,8 @@ pub fn draw_edit<S: DrawSurface>(
     let text_h = editor
         .core
         .layout_height()
-        .unwrap_or(ambre_core::ViewPx::ZERO)
-        .on_surface(ambre_core::SurfacePx::ZERO)
+        .unwrap_or(ambre_core::Px::<ambre_core::View>::ZERO)
+        .on_surface(ambre_core::Px::<ambre_core::Surface>::ZERO)
         .get();
     let (y_off, box_h) = if text_h + 2.0 * pad <= ch {
         (((ch - text_h) / 2.0).max(0.0), ch)

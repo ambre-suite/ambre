@@ -32,8 +32,8 @@
 //! `LoroText` reads as `text` and a register as `string`, so a body demoted
 //! from a text container moves a line.
 
+use ambre_core::Px;
 use ambre_core::Rgba;
-use ambre_core::WholePx;
 use ambre_core::{CharCount, CharOffset};
 use std::collections::BTreeSet;
 
@@ -665,7 +665,7 @@ pub(super) fn board_of_every_key() -> ToileState {
         media: crate::logic::command::MediaRef::Stored(sample_hash()),
         plaintext: ambre_core::MediaBytes::new(vec![1]),
         mime: ambre_core::MediaType::from("image/png"),
-        size: ambre_core::ImageSize::new(WholePx::new(1), WholePx::new(2)),
+        size: ambre_core::Size::new(Px::new(1), Px::new(2)),
         thumb: ambre_core::ThumbnailPng::new(thumb),
     }]);
     st.doc.commit();

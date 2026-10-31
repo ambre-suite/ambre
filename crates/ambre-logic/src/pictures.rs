@@ -6,25 +6,25 @@
 //! (`ambre-spec-murmure-attachments.md`). The view gets frames at the size of the preview, never
 //! the file, so a frame costs it a texture and no decode.
 
-use ambre_core::WholePx;
+use ambre_core::{Image, Px, Size};
 use std::io::Cursor;
 
 use super::*;
 use ambre_bus::{
     ChannelId, ContentHash, Millis, MurmureEvent, Picture, PictureFrame, RestCommand, RestEvent,
 };
-use ambre_core::{ByteSize, ImageSize, MediaBytes};
+use ambre_core::{ByteSize, MediaBytes};
 use image::codecs::gif::GifDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
 
 /// The largest preview, in pixels: twice the box the list draws it in, so a
 /// dense screen shows it sharp.
-const PREVIEW_EDGE: ImageSize = ImageSize::new(WholePx::new(480), WholePx::new(320));
+const PREVIEW_EDGE: Size<Px<Image>> = Size::new(Px::new(480), Px::new(320));
 /// The largest size a file may declare, each edge apart. A decode expands it
 /// to four bytes a pixel before it is scaled down, so the header is held to
 /// this first.
-const MAX_SIZE: ImageSize = ImageSize::new(WholePx::new(4096), WholePx::new(4096));
+const MAX_SIZE: Size<Px<Image>> = Size::new(Px::new(4096), Px::new(4096));
 /// The most a decoder may allocate for one image.
 const MAX_ALLOC: ByteSize = ByteSize(128 * 1024 * 1024);
 /// The bytes the frames of one preview may hold. An animation past it plays
@@ -111,7 +111,7 @@ pub(crate) fn decode(media: &MediaBytes) -> Option<Picture> {
             let mut decoder = GifDecoder::new(Cursor::new(bytes)).ok()?;
             decoder.set_limits(limits).ok()?;
             let (width, height) = decoder.dimensions();
-            let size = fit(ImageSize::new(WholePx::new(width), WholePx::new(height)));
+            let size = fit(Size::new(Px::new(width), Px::new(height)));
             let mut frames = Vec::new();
             let mut held = ByteSize(0);
             for frame in decoder.into_frames() {
@@ -136,7 +136,7 @@ pub(crate) fn decode(media: &MediaBytes) -> Option<Picture> {
             reader.limits(limits);
             let image = reader.decode().ok()?.into_rgba8();
             let (width, height) = image.dimensions();
-            let size = fit(ImageSize::new(WholePx::new(width), WholePx::new(height)));
+            let size = fit(Size::new(Px::new(width), Px::new(height)));
             Some(Picture {
                 size,
                 frames: vec![PictureFrame {
@@ -151,19 +151,19 @@ pub(crate) fn decode(media: &MediaBytes) -> Option<Picture> {
 
 /// The size `size` takes inside [`PREVIEW_EDGE`], its aspect kept. An image
 /// already inside it keeps its size.
-fn fit(size: ImageSize) -> ImageSize {
+fn fit(size: Size<Px<Image>>) -> Size<Px<Image>> {
     let (width, height) = (size.width.get(), size.height.get());
     let (max_w, max_h) = (PREVIEW_EDGE.width.get(), PREVIEW_EDGE.height.get());
     let scale = (f64::from(max_w) / f64::from(width.max(1)))
         .min(f64::from(max_h) / f64::from(height.max(1)))
         .min(1.0);
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let to = |edge: u32| WholePx::new(((f64::from(edge) * scale).round() as u32).max(1));
-    ImageSize::new(to(width), to(height))
+    let to = |edge: u32| Px::new(((f64::from(edge) * scale).round() as u32).max(1));
+    Size::new(to(width), to(height))
 }
 
 /// The pixels of `image` at `size`.
-fn scale(image: RgbaImage, size: ImageSize) -> ambre_core::RgbaPixels {
+fn scale(image: RgbaImage, size: Size<Px<Image>>) -> ambre_core::RgbaPixels {
     if image.dimensions() == (size.width.get(), size.height.get()) {
         return image.into_raw().into();
     }
@@ -218,10 +218,7 @@ mod tests {
     #[test]
     fn an_animated_gif_decodes_into_its_frames_at_the_preview_size() {
         let picture = decode(&MediaBytes::new(gif(3, (960, 320), 70))).expect("a GIF");
-        assert_eq!(
-            picture.size,
-            ImageSize::new(WholePx::new(480), WholePx::new(160))
-        );
+        assert_eq!(picture.size, Size::new(Px::new(480), Px::new(160)));
         assert_eq!(picture.frames.len(), 3);
         assert!(
             picture
@@ -245,10 +242,7 @@ mod tests {
     #[test]
     fn a_still_image_is_one_frame_and_a_stranger_none() {
         let picture = decode(&MediaBytes::new(png((40, 30)))).expect("a PNG");
-        assert_eq!(
-            picture.size,
-            ImageSize::new(WholePx::new(40), WholePx::new(30))
-        );
+        assert_eq!(picture.size, Size::new(Px::new(40), Px::new(30)));
         assert_eq!(picture.frames.len(), 1);
         assert!(decode(&MediaBytes::new(b"%PDF-1.7".to_vec())).is_none());
         assert!(decode(&MediaBytes::new(png((40, 30))[..20].to_vec())).is_none());

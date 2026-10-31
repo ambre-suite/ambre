@@ -15,7 +15,8 @@
 // ============================================================================
 
 use ambre_commands::{Key, Modifiers};
-use ambre_core::{PageMillis, ViewPoint};
+use ambre_core::PageMillis;
+use ambre_core::{Point, Px, View};
 use ambre_draw::{Color, Rect};
 
 use crate::{ContentRepaint, LayerRepaint, WheelDelta};
@@ -74,7 +75,7 @@ pub enum HudTick {
 /// `overlay` is the transient swapchain layer. The driver translates this into
 /// the `QuadRenderer::flush_dirty_rect` call. The scroll shift is in the pixel
 /// space `P`: view pixels from a view, device pixels for the renderer.
-pub struct RepaintPlan<P = ambre_core::ViewPx> {
+pub struct RepaintPlan<P = ambre_core::Px<ambre_core::View>> {
     pub content: ContentRepaint<P>,
     pub content_strip: Option<Rect>,
     pub overlay: LayerRepaint,
@@ -131,15 +132,15 @@ pub enum InputEvent {
     /// folded into `primary` by the host so the same disjoint-select gesture
     /// works.
     PointerDown {
-        at: ViewPoint,
+        at: Point<Px<View>>,
         button: PointerButton,
         mods: Modifiers,
     },
     PointerMove {
-        at: ViewPoint,
+        at: Point<Px<View>>,
     },
     PointerUp {
-        at: ViewPoint,
+        at: Point<Px<View>>,
         button: PointerButton,
         /// Modifier state at *release* time (Cmd folded into `primary`).
         /// Autofill reads Ctrl here, not at grab time, so toggling it mid-drag
@@ -149,7 +150,7 @@ pub enum InputEvent {
     /// Native double-click (respects the platform's double-click speed). Used to
     /// enter cell edit mode.
     DoubleClick {
-        at: ViewPoint,
+        at: Point<Px<View>>,
     },
     /// Wheel / two-finger touchpad scroll. The delta keeps the unit the
     /// browser gave it: CSS pixels (`CANVAS-032`), lines or pages. The view

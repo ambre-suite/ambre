@@ -6,7 +6,7 @@
 // ============================================================================
 
 use super::*;
-use crate::density::DevicePixelRatio;
+use ambre_core::{Css, Device, Px, Scale, View};
 use ambre_draw::{
     Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush, Point, Rect,
     Stroke,
@@ -53,24 +53,24 @@ fn split_linear(t: Affine) -> Option<(f64, Affine)> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct GlyphBox {
     /// From the pen to the bitmap's left edge.
-    left_bearing: ViewPx,
+    left_bearing: Px<View>,
     /// From the baseline up to the bitmap's top edge.
-    top_bearing: ViewPx,
-    width: ViewPx,
-    height: ViewPx,
+    top_bearing: Px<View>,
+    width: Px<View>,
+    height: Px<View>,
 }
 
 /// A glyph bitmap's logical box. A texel covers `texel_scale` device pixels,
 /// one below the raster cap (`CANVAS-087`). So each length is scaled by it and
 /// divided by the density, and the glyph covers the same logical area on
 /// every screen.
-fn glyph_box(slot: &AtlasSlot, density: DevicePixelRatio) -> GlyphBox {
+fn glyph_box(slot: &AtlasSlot, density: Scale<Css, Device>) -> GlyphBox {
     let per_texel = slot.texel_scale / density.get() as f32;
     GlyphBox {
-        left_bearing: ViewPx::new(slot.bearing_left as f32 * per_texel),
-        top_bearing: ViewPx::new(slot.bearing_top as f32 * per_texel),
-        width: ViewPx::new(slot.pixel_width as f32 * per_texel),
-        height: ViewPx::new(slot.pixel_height as f32 * per_texel),
+        left_bearing: Px::<View>::new(slot.bearing_left as f32 * per_texel),
+        top_bearing: Px::<View>::new(slot.bearing_top as f32 * per_texel),
+        width: Px::<View>::new(slot.pixel_width as f32 * per_texel),
+        height: Px::<View>::new(slot.pixel_height as f32 * per_texel),
     }
 }
 
@@ -85,7 +85,7 @@ pub(super) trait GlyphSink {
     /// of `slot`.
     fn glyph_corners(
         &mut self,
-        corners: [ambre_core::ViewPoint; 4],
+        corners: [ambre_core::Point<ambre_core::Px<ambre_core::View>>; 4],
         slot: &AtlasSlot,
         tint: Option<Color>,
     );
@@ -101,7 +101,7 @@ impl GlyphSink for QuadRenderer {
 
     fn glyph_corners(
         &mut self,
-        corners: [ambre_core::ViewPoint; 4],
+        corners: [ambre_core::Point<ambre_core::Px<ambre_core::View>>; 4],
         slot: &AtlasSlot,
         tint: Option<Color>,
     ) {
@@ -120,7 +120,7 @@ struct GlyphPlacement {
     /// The run's linear part when it is rotated; `None` draws axis-aligned.
     linear: Option<Affine>,
     /// Device pixels per logical pixel.
-    density: DevicePixelRatio,
+    density: Scale<Css, Device>,
     /// The active clip, which trims an axis-aligned glyph.
     clip: Option<Rect>,
     /// The run's colour, which tints a mask glyph.
@@ -157,9 +157,9 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
         let local = [(bl, -bt), (bl + w, -bt), (bl + w, -bt + h), (bl, -bt + h)];
         let corners = local.map(|(ox, oy)| {
             let v = linear * Point::new(ox, oy);
-            ambre_core::ViewPoint::new(
-                ViewPx::new((origin.x + v.x) as f32),
-                ViewPx::new((origin.y + v.y) as f32),
+            ambre_core::Point::new(
+                Px::<View>::new((origin.x + v.x) as f32),
+                Px::<View>::new((origin.y + v.y) as f32),
             )
         });
         sink.glyph_corners(corners, slot, tint);
@@ -168,8 +168,8 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
 
     // Bitmap top-left in screen space. The top bearing points up, so subtract.
     let (x0, y0) = (
-        ViewPx::new(origin.x as f32) + bl,
-        ViewPx::new(origin.y as f32) - bt,
+        Px::<View>::new(origin.x as f32) + bl,
+        Px::<View>::new(origin.y as f32) - bt,
     );
     let (x1, y1) = (x0 + sw, y0 + sh);
     let Some(clip) = at.clip else {
@@ -187,10 +187,10 @@ fn emit_glyph(sink: &mut impl GlyphSink, slot: &AtlasSlot, at: &GlyphPlacement) 
     // A glyph straddling the clip is trimmed and its UVs remapped. Drawn whole,
     // an overflowing cell's last glyph spills into its neighbour.
     let (cx0, cy0, cx1, cy1) = (
-        ViewPx::new(clip.x0 as f32),
-        ViewPx::new(clip.y0 as f32),
-        ViewPx::new(clip.x1 as f32),
-        ViewPx::new(clip.y1 as f32),
+        Px::<View>::new(clip.x0 as f32),
+        Px::<View>::new(clip.y0 as f32),
+        Px::<View>::new(clip.x1 as f32),
+        Px::<View>::new(clip.y1 as f32),
     );
     if x1 <= cx0 || x0 >= cx1 || y1 <= cy0 || y0 >= cy1 {
         return;
@@ -311,7 +311,12 @@ impl DrawSurface for WgpuSurface<'_> {
         self.renderer.push_quad(r, color);
     }
 
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: ambre_core::SurfacePx) {
+    fn stroke_rect(
+        &mut self,
+        rect: Rect,
+        color: Color,
+        width: ambre_core::Px<ambre_core::Surface>,
+    ) {
         let width = width.get();
         let hw = width * 0.5;
         // Picture-frame decomposition: two full-width horizontal bars (which own
@@ -342,7 +347,12 @@ impl DrawSurface for WgpuSurface<'_> {
         }
     }
 
-    fn stroke_line(&mut self, line: Line, color: Color, width: ambre_core::SurfacePx) {
+    fn stroke_line(
+        &mut self,
+        line: Line,
+        color: Color,
+        width: ambre_core::Px<ambre_core::Surface>,
+    ) {
         let width = width.get();
         let t = self.transform();
         let p0 = t * line.p0;
@@ -384,7 +394,7 @@ impl DrawSurface for WgpuSurface<'_> {
 
         let parley_run = run.run();
         let font_data = parley_run.font();
-        let font_size = crate::text_cache::LayoutPx::new(parley_run.font_size());
+        let font_size = ambre_core::Px::<ambre_core::Parley>::new(parley_run.font_size());
         // swash reads the raw bits. A static face has no coordinate, and an
         // empty Vec does not allocate.
         let coords: Vec<i16> = parley_run
@@ -410,7 +420,7 @@ impl DrawSurface for WgpuSurface<'_> {
         // is rasterized at the transform's scale and the density, then drawn
         // back over the screen box that scale gives it (`CANVAS-074`).
         let density = self.renderer.density();
-        let raster = RasterSize::of_layout(font_size, scale, density);
+        let raster = raster_of_layout(font_size, scale, density);
 
         let mut pen_x = 0.0f32;
         for glyph in run.glyphs() {
@@ -670,9 +680,10 @@ fn line_join(join: kurbo::Join) -> LineJoin {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::GlyphRaster;
 
-    fn ratio(r: f64) -> DevicePixelRatio {
-        DevicePixelRatio::new(r).expect("a positive density")
+    fn ratio(r: f64) -> Scale<Css, Device> {
+        Scale::<Css, Device>::new(r).expect("a positive density")
     }
 
     /// The area a mesh covers, summed over its triangles, after checking
@@ -703,7 +714,7 @@ mod tests {
         }
         fn glyph_corners(
             &mut self,
-            _: [ambre_core::ViewPoint; 4],
+            _: [ambre_core::Point<ambre_core::Px<ambre_core::View>>; 4],
             _: &AtlasSlot,
             tint: Option<Color>,
         ) {
@@ -730,7 +741,7 @@ mod tests {
         let at = |linear| GlyphPlacement {
             origin: Point::new(0.0, 10.0),
             linear,
-            density: DevicePixelRatio::ONE,
+            density: Scale::<Css, Device>::ONE,
             clip: None,
             color: red,
         };
@@ -753,7 +764,7 @@ mod tests {
         let at = |x| GlyphPlacement {
             origin: Point::new(x, 10.0),
             linear: None,
-            density: DevicePixelRatio::ONE,
+            density: Scale::<Css, Device>::ONE,
             clip: Some(Rect::new(0.0, 0.0, 15.0, 20.0)),
             color: Color::BLACK,
         };
@@ -763,7 +774,7 @@ mod tests {
         assert_eq!(batches.quads.len(), 1, "the glyph past the clip is dropped");
         let quad = batches.quads[0].0;
         assert_eq!(
-            [quad.x, quad.y, quad.width, quad.height].map(ViewPx::get),
+            [quad.x, quad.y, quad.width, quad.height].map(Px::<View>::get),
             [10.0, 0.0, 5.0, 10.0]
         );
     }
@@ -821,26 +832,30 @@ mod tests {
     #[test]
     fn a_glyph_is_rasterized_at_the_physical_size() {
         assert_eq!(
-            RasterSize::of_layout(crate::text_cache::LayoutPx::new(14.0), 1.0, ratio(2.0)),
-            RasterSize::new(28.0)
+            raster_of_layout(
+                ambre_core::Px::<ambre_core::Parley>::new(14.0),
+                1.0,
+                ratio(2.0)
+            ),
+            Px::<GlyphRaster>::new(28.0)
         );
         // A bitmap of 20 x 30 device pixels at density 2.
         assert_eq!(
             glyph_box(&slot(2, 24, 20, 30), ratio(2.0)),
             GlyphBox {
-                left_bearing: ViewPx::new(1.0),
-                top_bearing: ViewPx::new(12.0),
-                width: ViewPx::new(10.0),
-                height: ViewPx::new(15.0),
+                left_bearing: Px::<View>::new(1.0),
+                top_bearing: Px::<View>::new(12.0),
+                width: Px::<View>::new(10.0),
+                height: Px::<View>::new(15.0),
             }
         );
         assert_eq!(
-            glyph_box(&slot(2, 24, 20, 30), DevicePixelRatio::ONE),
+            glyph_box(&slot(2, 24, 20, 30), Scale::<Css, Device>::ONE),
             GlyphBox {
-                left_bearing: ViewPx::new(2.0),
-                top_bearing: ViewPx::new(24.0),
-                width: ViewPx::new(20.0),
-                height: ViewPx::new(30.0),
+                left_bearing: Px::<View>::new(2.0),
+                top_bearing: Px::<View>::new(24.0),
+                width: Px::<View>::new(20.0),
+                height: Px::<View>::new(30.0),
             }
         );
     }
@@ -856,10 +871,10 @@ mod tests {
         assert_eq!(
             glyph_box(&capped, ratio(2.0)),
             GlyphBox {
-                left_bearing: ViewPx::new(3.0),
-                top_bearing: ViewPx::new(36.0),
-                width: ViewPx::new(30.0),
-                height: ViewPx::new(45.0),
+                left_bearing: Px::<View>::new(3.0),
+                top_bearing: Px::<View>::new(36.0),
+                width: Px::<View>::new(30.0),
+                height: Px::<View>::new(45.0),
             }
         );
     }
@@ -871,8 +886,11 @@ mod tests {
     fn a_density_change_asks_for_a_new_raster() {
         use super::super::atlas::{FontId, GlyphKey};
         let key = |density| {
-            let size =
-                RasterSize::of_layout(crate::text_cache::LayoutPx::new(14.0), 1.0, ratio(density));
+            let size = raster_of_layout(
+                ambre_core::Px::<ambre_core::Parley>::new(14.0),
+                1.0,
+                ratio(density),
+            );
             GlyphKey::new(FontId::of_blob(7), GlyphId::new(42), size)
         };
         assert_ne!(key(1.0), key(2.0));
@@ -886,16 +904,20 @@ mod tests {
     #[test]
     fn a_zoomed_glyph_is_rasterized_at_its_screen_size() {
         assert_eq!(
-            RasterSize::of_layout(
-                crate::text_cache::LayoutPx::new(14.0),
+            raster_of_layout(
+                ambre_core::Px::<ambre_core::Parley>::new(14.0),
                 2.0,
-                DevicePixelRatio::ONE
+                Scale::<Css, Device>::ONE
             ),
-            RasterSize::new(28.0)
+            Px::<GlyphRaster>::new(28.0)
         );
         assert_eq!(
-            RasterSize::of_layout(crate::text_cache::LayoutPx::new(14.0), 2.0, ratio(2.0)),
-            RasterSize::new(56.0)
+            raster_of_layout(
+                ambre_core::Px::<ambre_core::Parley>::new(14.0),
+                2.0,
+                ratio(2.0)
+            ),
+            Px::<GlyphRaster>::new(56.0)
         );
 
         let (scale, unit) =

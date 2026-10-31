@@ -5,7 +5,7 @@
 //! no break position and no measured height is stored, so no reader can find a
 //! stale one (`PROSE-033`, `PROSE-065`).
 
-use ambre_core::DocPx;
+use ambre_core::{Doc, Px};
 use loro::LoroDoc;
 
 use crate::doc;
@@ -19,13 +19,13 @@ pub(crate) const BAND_SHARE: f32 = 0.25;
 /// it and never against the sheet.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PageBox {
-    pub page_width: DocPx,
-    pub page_height: DocPx,
-    pub content_width: DocPx,
-    pub content_height: DocPx,
+    pub page_width: Px<Doc>,
+    pub page_height: Px<Doc>,
+    pub content_width: Px<Doc>,
+    pub content_height: Px<Doc>,
     /// Where the content box starts on the sheet.
-    pub margin_left: DocPx,
-    pub margin_top: DocPx,
+    pub margin_left: Px<Doc>,
+    pub margin_top: Px<Doc>,
 }
 
 impl Default for PageBox {
@@ -58,8 +58,8 @@ impl PageBox {
         Self {
             page_width,
             page_height,
-            content_width: (page_width - horizontal).max(DocPx::ZERO),
-            content_height: (page_height - vertical).max(DocPx::ZERO),
+            content_width: (page_width - horizontal).max(Px::<Doc>::ZERO),
+            content_height: (page_height - vertical).max(Px::<Doc>::ZERO),
             margin_left: format.margin_left.to_doc_px(),
             margin_top: format.margin_top.to_doc_px(),
         }
@@ -72,7 +72,7 @@ impl PageBox {
     /// a band as tall as the page leaves placement no height to put a line in,
     /// which is the loop `PROSE-017` forbids.
     #[must_use]
-    pub fn band_cap(&self) -> DocPx {
+    pub fn band_cap(&self) -> Px<Doc> {
         self.content_height * BAND_SHARE
     }
 
@@ -81,9 +81,9 @@ impl PageBox {
     /// Each band is capped first, so the answer is at least half the content
     /// height whatever the bands measured.
     #[must_use]
-    pub fn body_height(&self, header_height: DocPx, footer_height: DocPx) -> DocPx {
+    pub fn body_height(&self, header_height: Px<Doc>, footer_height: Px<Doc>) -> Px<Doc> {
         let cap = self.band_cap();
-        (self.content_height - header_height.min(cap) - footer_height.min(cap)).max(DocPx::ZERO)
+        (self.content_height - header_height.min(cap) - footer_height.min(cap)).max(Px::<Doc>::ZERO)
     }
 }
 
@@ -131,8 +131,11 @@ mod tests {
             margin_top: ambre_core::Mm::new(500.0),
             ..doc::PageFormat::default()
         });
-        assert_eq!(page.content_width, DocPx::ZERO);
-        assert_eq!(page.content_height, DocPx::ZERO);
-        assert_eq!(page.body_height(DocPx::ZERO, DocPx::ZERO), DocPx::ZERO);
+        assert_eq!(page.content_width, Px::<Doc>::ZERO);
+        assert_eq!(page.content_height, Px::<Doc>::ZERO);
+        assert_eq!(
+            page.body_height(Px::<Doc>::ZERO, Px::<Doc>::ZERO),
+            Px::<Doc>::ZERO
+        );
     }
 }

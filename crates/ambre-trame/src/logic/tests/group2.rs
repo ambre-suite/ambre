@@ -434,14 +434,14 @@ fn a_spent_uid_counter_answers_each_line_write_with_its_notice() {
         version: ambre_core::Generation::nth(1),
         sheet_id: sheet_id.clone(),
         col: Col::new(3),
-        width: ambre_core::DocPx::new(150.0),
+        width: ambre_core::Px::<ambre_core::Doc>::new(150.0),
     });
     assert!(says_ids_exhausted(&col), "resize column");
     let row = state.handle_command(TrameCommand::ResizeRow {
         version: ambre_core::Generation::nth(1),
         sheet_id,
         row: Row::new(3),
-        height: ambre_core::DocPx::new(40.0),
+        height: ambre_core::Px::<ambre_core::Doc>::new(40.0),
     });
     assert!(says_ids_exhausted(&row), "resize row");
     let merge = state.handle_command(TrameCommand::MergeCells {
@@ -910,13 +910,13 @@ fn deleted_line_leaves_no_formatting() {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
         row: Row::new(1),
-        height: ambre_core::DocPx::new(40.0),
+        height: ambre_core::Px::<ambre_core::Doc>::new(40.0),
     });
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::nth(2),
         sheet_id: default_sheet(),
         col: Col::new(0),
-        width: ambre_core::DocPx::new(150.0),
+        width: ambre_core::Px::<ambre_core::Doc>::new(150.0),
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: default_sheet(),

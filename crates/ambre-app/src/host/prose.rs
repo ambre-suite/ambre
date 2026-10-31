@@ -27,11 +27,11 @@ use ambre_bus::app::prose::WordCount;
 use ambre_bus::{AppEvent, DocumentId, LogicCommand, Outbox, PasteSource, SendOutcome, UiEvent};
 use ambre_canvas::theme::{Theme, ThemeControl};
 use ambre_canvas::{
-    BusyPublisher, ContentKind, ContentRepaint, CssSize, FrameStats, InputEvent, LayerRepaint,
+    BusyPublisher, ContentKind, ContentRepaint, FrameStats, InputEvent, LayerRepaint,
     NoticePublisher, RepaintPlan, TextCache, TextInput, WgpuSurface,
 };
 use ambre_chrome::commands::{ClipboardWrite, Modifiers};
-use ambre_core::{CssPoint, CssPx, ViewPoint, ViewPx};
+use ambre_core::{Css, Point, Px, Size, View, WholeCss};
 use ambre_draw::{Consumed, DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
@@ -62,13 +62,16 @@ pub(crate) fn page_palette(theme: Theme) -> PagePalette {
 /// Where the canvas's top-left corner sits on the page. The chrome moves the
 /// view's positions onto the page by it. A canvas pixel is a CSS pixel
 /// (`CANVAS-032`), so the offset is the whole conversion.
-fn canvas_origin() -> CssPoint {
+fn canvas_origin() -> Point<Px<Css>> {
     web_sys::window()
         .and_then(|w| w.document())
         .and_then(|d| d.query_selector(".ambre-canvas").ok().flatten())
-        .map_or_else(CssPoint::default, |el| {
+        .map_or_else(Point::default, |el| {
             let r = el.get_bounding_client_rect();
-            CssPoint::new(CssPx::new(r.left() as f32), CssPx::new(r.top() as f32))
+            Point::new(
+                Px::<Css>::new(r.left() as f32),
+                Px::<Css>::new(r.top() as f32),
+            )
         })
 }
 
@@ -86,7 +89,7 @@ pub struct ProseView {
     state: ProseUiState,
     theme_ctl: ThemeControl,
     theme: Theme,
-    size: (ViewPx, ViewPx),
+    size: (Px<View>, Px<View>),
     /// Something visible changed since the last content paint.
     dirty: bool,
     /// The shared pipe, whose live region carries the announcements.
@@ -109,10 +112,10 @@ pub struct ProseView {
 
 /// The width and the height of a canvas box, as the view pixels the page
 /// lays out against. A view pixel is a CSS pixel in size (`CANVAS-032`).
-fn view_size(size: CssSize) -> (ViewPx, ViewPx) {
+fn view_size(size: Size<Px<WholeCss>>) -> (Px<View>, Px<View>) {
     (
-        ViewPx::new(size.width.get() as f32),
-        ViewPx::new(size.height.get() as f32),
+        Px::<View>::new(size.width.get() as f32),
+        Px::<View>::new(size.height.get() as f32),
     )
 }
 
@@ -122,7 +125,7 @@ impl ProseView {
         document_id: DocumentId,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
-        size: CssSize,
+        size: Size<Px<WholeCss>>,
         text_input: TextInput,
         theme_ctl: ThemeControl,
         figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
@@ -503,8 +506,11 @@ impl ProseView {
         // The input pipe follows the caret the paint just drew, so the IME
         // popup opens beside it (`CHROME-007`).
         if let Some(bar) = self.state.caret_drawn {
-            let at = ViewPoint::new(ViewPx::new(bar.x0 as f32), ViewPx::new(bar.y0 as f32));
-            let height = ViewPx::new(bar.height().max(1.0) as f32);
+            let at = Point::new(
+                Px::<View>::new(bar.x0 as f32),
+                Px::<View>::new(bar.y0 as f32),
+            );
+            let height = Px::<View>::new(bar.height().max(1.0) as f32);
             self.text_input.set_caret(at, height);
         }
         let painted = self.probe.painted(super::probe::now());
@@ -521,7 +527,7 @@ impl ProseView {
     }
 
     /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
-    pub fn resize(&mut self, size: CssSize) {
+    pub fn resize(&mut self, size: Size<Px<WholeCss>>) {
         self.size = view_size(size);
         self.state.resize(self.size.0, self.size.1);
         self.dirty = true;
@@ -686,7 +692,7 @@ impl ProseView {
     pub fn touch(
         &mut self,
         phase: super::TouchPhase,
-        at: ViewPoint,
+        at: Point<Px<View>>,
         now: ambre_core::PageTime,
     ) -> Consumed {
         if self.fatal {
@@ -721,7 +727,7 @@ impl ProseView {
 
     /// Text dropped on the canvas: one insertion at the drop point
     /// (`PROSE-UI-204`).
-    pub fn drop_text(&mut self, at: ViewPoint, text: String) -> Consumed {
+    pub fn drop_text(&mut self, at: Point<Px<View>>, text: String) -> Consumed {
         self.feed(&ProseInput::Drop { at, text })
     }
 
@@ -777,14 +783,14 @@ fn download(
 mod tests {
     use super::*;
     use ambre_bus::app::prose::{GraphemeCount, PageCount, ParagraphCount, WordTotal};
-    use ambre_core::WholePx;
+    use ambre_core::{Css, Point, Px, Size, View, WholeCss};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// A pointer at canvas `(x, y)`, as the host hands it over.
-    fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
-        ambre_core::ViewPoint::new(
-            ambre_core::ViewPx::new(x as f32),
-            ambre_core::ViewPx::new(y as f32),
+    fn pointer(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+        ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::View>::new(x as f32),
+            ambre_core::Px::<ambre_core::View>::new(y as f32),
         )
     }
 
@@ -810,7 +816,7 @@ mod tests {
             DocumentId::new(),
             to_logic,
             from_logic,
-            CssSize::new(WholePx::new(800), WholePx::new(600)),
+            Size::new(Px::new(800), Px::new(600)),
             pipe.clone(),
             ThemeControl::new(Theme::Dark),
             RwSignal::new(None),
@@ -856,7 +862,7 @@ mod tests {
             document_id,
             to_logic,
             from_logic,
-            CssSize::new(WholePx::new(800), WholePx::new(600)),
+            Size::new(Px::new(800), Px::new(600)),
             TextInput::create(&document, &cell),
             ThemeControl::new(Theme::Dark),
             RwSignal::new(None),
@@ -919,7 +925,7 @@ mod tests {
             DocumentId::new(),
             to_logic,
             from_logic,
-            CssSize::new(WholePx::new(800), WholePx::new(600)),
+            Size::new(Px::new(800), Px::new(600)),
             TextInput::create(&document, &cell),
             ThemeControl::new(Theme::Dark),
             figures,

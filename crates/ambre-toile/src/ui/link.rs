@@ -18,10 +18,11 @@ use ambre_draw::{Point, Rect};
 
 /// Side of the link badge, in screen pixels. Painted in screen space so it is
 /// the same size at every zoom, like the selection handles.
-pub const BADGE_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
+pub const BADGE_SIZE: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(14.0);
 
 /// Gap between the badge and the element's top-right corner, in screen pixels.
-const BADGE_GAP: ambre_core::ViewPx = ambre_core::ViewPx::new(3.0);
+const BADGE_GAP: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(3.0);
 
 /// What following a link does. None of the three writes to the document
 /// (`TOILE-063`) or enters the undo history (`TOILE-115`).

@@ -877,11 +877,11 @@ mod tests {
         let rig = Rig::new();
         load_pipe_rules(&rig.document);
         rig.pipe.set_caret(
-            ambre_core::ViewPoint::new(
-                ambre_core::ViewPx::new(40.0),
-                ambre_core::ViewPx::new(25.0),
+            ambre_core::Point::new(
+                ambre_core::Px::<ambre_core::View>::new(40.0),
+                ambre_core::Px::<ambre_core::View>::new(25.0),
             ),
-            ambre_core::ViewPx::new(18.0),
+            ambre_core::Px::<ambre_core::View>::new(18.0),
         );
         let style = rig.ta().style();
         assert_eq!(

@@ -265,6 +265,7 @@ dependencies = [
 name = "ambre-pdf"
 version = "0.1.0"
 dependencies = [
+ "ambre-core",
  "ambre-draw",
  "krilla",
  "kurbo",

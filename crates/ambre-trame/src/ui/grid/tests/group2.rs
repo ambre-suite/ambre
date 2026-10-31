@@ -3,7 +3,7 @@
 
 use super::*;
 use ambre_commands::SelectionMode;
-use ambre_core::SurfacePx;
+use ambre_core::{Px, Surface};
 
 /// After a merge, the active cell may sit on the block's bottom-right
 /// (covered) sub-cell -- the drag-end corner. `snap_active_to_master`
@@ -12,7 +12,7 @@ use ambre_core::SurfacePx;
 /// merge conflict.
 #[test]
 fn snap_active_to_master_rehomes_after_merge() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     seed_merge_2x2(&mut state);
     // Simulate the post-merge selection: active on the bottom-right covered
     // sub-cell (2,2), as left by a drag that ended there.
@@ -38,7 +38,7 @@ fn snap_active_to_master_rehomes_after_merge() {
 /// its block master), not collapse it down to the last block.
 #[test]
 fn snap_keeps_multi_block_fill_selection() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     let cell = |row, col, span| DisplayCell {
         row,
         col,
@@ -97,7 +97,7 @@ fn snap_keeps_multi_block_fill_selection() {
 /// hidden set, vertical offsets, hit-testing and navigation all skip them.
 #[test]
 fn filtered_rows_collapse_geometry_and_nav() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     let cell = |row: u32, filtered: ambre_bus::RowFilter| DisplayCell {
         row: Row::new(row),
         col: Col::new(0),
@@ -181,7 +181,7 @@ fn filtered_rows_collapse_geometry_and_nav() {
 /// last cell carrying content (the UI thread's only view of data).
 #[test]
 fn move_to_and_content_scans() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
 
     // No change -> None.
     assert!(
@@ -266,7 +266,7 @@ fn move_to_and_content_scans() {
 /// formula.
 #[test]
 fn viewport_data_preserves_formula_raw_for_editing() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_core::Generation::nth(1),
         row_start: Row::new(0),
@@ -302,7 +302,7 @@ fn viewport_data_preserves_formula_raw_for_editing() {
 /// immediately.
 #[test]
 fn optimistic_commit_does_not_echo_formula_as_result() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
 
     state.set_cell_text(CellPos::new(Row::new(0), Col::new(0)), "5".to_owned());
     let plain = state.cell_cache.get(&at(0, 0)).unwrap();
@@ -327,7 +327,7 @@ fn optimistic_commit_does_not_echo_formula_as_result() {
 /// is itself cleared once a valid value arrives.
 #[test]
 fn dirty_and_error_lifecycle() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
 
     state.set_cell_text(CellPos::new(Row::new(0), Col::new(0)), "=A2".to_owned());
     assert!(state.dirty_cells.contains(&at(0, 0)), "edit marks dirty");
@@ -369,7 +369,7 @@ fn dirty_and_error_lifecycle() {
 /// is pushed below it. A point inside the header strip is not a cell.
 #[test]
 fn header_strip_starts_at_top_of_canvas() {
-    let state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
 
     // A point inside the header strip is not a cell.
     assert_eq!(
@@ -396,7 +396,7 @@ fn header_strip_starts_at_top_of_canvas() {
 /// at the top header height.
 #[test]
 fn grid_bottom_floors_at_header_on_tiny_canvas() {
-    let state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(10.0));
+    let state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(10.0));
     assert_eq!(state.grid_bottom().get(), super::super::HEADER_HEIGHT.get());
 }
 
@@ -405,16 +405,16 @@ fn grid_bottom_floors_at_header_on_tiny_canvas() {
 /// the uniform one.
 #[test]
 fn scroll_requests_every_narrow_column_on_screen() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     for col in 0..200 {
         state
             .col_widths
-            .insert(Col::new(col), ambre_core::DocPx::new(24.0));
+            .insert(Col::new(col), ambre_core::Px::<ambre_core::Doc>::new(24.0));
     }
     for row in 0..200 {
         state
             .row_heights
-            .insert(Row::new(row), ambre_core::DocPx::new(8.0));
+            .insert(Row::new(row), ambre_core::Px::<ambre_core::Doc>::new(8.0));
     }
     let last_col_on_screen = state
         .col_at_x(view_px(799.0))
@@ -443,7 +443,7 @@ fn scroll_requests_every_narrow_column_on_screen() {
 /// cell keeps the text of the newer answer.
 #[test]
 fn a_stale_viewport_answer_is_dropped_by_its_version() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     let answer = |version, text: &str| TrameEvent::ViewportData {
         version,
         row_start: Row::new(0),

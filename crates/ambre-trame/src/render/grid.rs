@@ -43,7 +43,7 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
                 surface.stroke_line(
                     ambre_draw::Line::new((x, line_y0), (x, line_y1)),
                     color,
-                    ambre_core::SurfacePx::new(1.0),
+                    ambre_core::Px::<ambre_core::Surface>::new(1.0),
                 );
             }
             x += layout.col_w(col).get();
@@ -66,7 +66,7 @@ pub fn draw_grid_lines_on<S: DrawSurface>(
                 surface.stroke_line(
                     ambre_draw::Line::new((line_x0, y), (line_x1, y)),
                     color,
-                    ambre_core::SurfacePx::new(1.0),
+                    ambre_core::Px::<ambre_core::Surface>::new(1.0),
                 );
             }
             if !layout.is_hidden(row) {

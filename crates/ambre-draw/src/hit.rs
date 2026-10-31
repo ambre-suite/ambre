@@ -11,5 +11,8 @@ pub trait HitTest {
     type Target;
 
     /// The content under `at`, a point of the canvas. `None` over no content.
-    fn hit_test(&self, at: ambre_core::ViewPoint) -> Option<Self::Target>;
+    fn hit_test(
+        &self,
+        at: ambre_core::Point<ambre_core::Px<ambre_core::View>>,
+    ) -> Option<Self::Target>;
 }

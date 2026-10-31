@@ -38,7 +38,7 @@ fn style() -> TextEditorStyle {
         weight: ambre_core::FontWeight::REGULAR,
         italic: ambre_bus::Slant::Upright,
         family: ambre_core::FontFamily::Sans,
-        base_size: ambre_core::DocPx::new(16.0),
+        base_size: ambre_core::Px::<ambre_core::Doc>::new(16.0),
         color: Color::from_rgba8(0, 0, 0, 255),
         underline: ambre_bus::Underline::Plain,
         strikethrough: ambre_bus::Strikethrough::Plain,
@@ -116,13 +116,13 @@ fn assert_parity(seed: &str, ops: &[Op]) {
     // First flush seeds both carets at text end.
     cell.core.flush(
         &mut fcx,
-        ambre_core::ViewPx::new(1000.0),
-        ambre_core::ZoomFactor::ONE,
+        ambre_core::Px::<ambre_core::View>::new(1000.0),
+        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
     );
     core.flush(
         &mut fcx,
-        ambre_core::ViewPx::new(1000.0),
-        ambre_core::ZoomFactor::ONE,
+        ambre_core::Px::<ambre_core::View>::new(1000.0),
+        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
     );
 
     for (i, op) in ops.iter().enumerate() {
@@ -130,13 +130,13 @@ fn assert_parity(seed: &str, ops: &[Op]) {
         core.push(intent(op));
         cell.core.flush(
             &mut fcx,
-            ambre_core::ViewPx::new(1000.0),
-            ambre_core::ZoomFactor::ONE,
+            ambre_core::Px::<ambre_core::View>::new(1000.0),
+            ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
         );
         core.flush(
             &mut fcx,
-            ambre_core::ViewPx::new(1000.0),
-            ambre_core::ZoomFactor::ONE,
+            ambre_core::Px::<ambre_core::View>::new(1000.0),
+            ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
         );
 
         assert_eq!(

@@ -17,3 +17,8 @@ krilla = { workspace = true, features = ["raster-images"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# A test builds the `Size<Px<Image>>` of an image source, and `ambre-draw`
+# re-exports no `Size` of its own: its `Size` is kurbo's.
+ambre-core = { path = "../ambre-core" }

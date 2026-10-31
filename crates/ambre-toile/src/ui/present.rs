@@ -29,7 +29,7 @@ pub struct Transition {
     dur: std::time::Duration,
     cam_from: ViewportTransform,
     cam_to_center: Point,
-    cam_to_zoom: ambre_core::ZoomFactor,
+    cam_to_zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
     from: FrameSnapshot,
     to: FrameSnapshot,
 }
@@ -61,7 +61,7 @@ impl Transition {
     pub fn new(
         cam_from: ViewportTransform,
         cam_to_center: Point,
-        cam_to_zoom: ambre_core::ZoomFactor,
+        cam_to_zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
         from: FrameSnapshot,
         to: FrameSnapshot,
         dur: std::time::Duration,
@@ -134,7 +134,7 @@ mod tests {
     fn cam(cx: f64, cy: f64, zoom: f64) -> ViewportTransform {
         ViewportTransform {
             center: Point::new(cx, cy),
-            zoom: ambre_core::ZoomFactor::positive(zoom),
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom),
             size: Size::new(1000.0, 800.0),
         }
     }
@@ -152,7 +152,7 @@ mod tests {
         Transition::new(
             cam(0.0, 0.0, 1.0),
             Point::new(105.0, 105.0),
-            ambre_core::ZoomFactor::positive(2.0),
+            ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0),
             from,
             to,
             std::time::Duration::from_millis(300),
@@ -239,7 +239,7 @@ mod tests {
         let mut t = Transition::new(
             cam(0.0, 0.0, 1.0),
             Point::new(10.0, 10.0),
-            ambre_core::ZoomFactor::positive(3.0),
+            ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(3.0),
             from,
             to,
             std::time::Duration::ZERO,
@@ -263,7 +263,7 @@ mod tests {
         let t = Transition::new(
             from,
             Point::new(4000.0, 0.0),
-            ambre_core::ZoomFactor::positive(1.0),
+            ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
             FrameSnapshot::default(),
             FrameSnapshot::default(),
             std::time::Duration::from_millis(300),

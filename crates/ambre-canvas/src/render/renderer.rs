@@ -9,9 +9,8 @@
 
 use super::*;
 use crate::SurfaceSize;
-use crate::density::{CssSize, DevicePixelRatio, DevicePx, DeviceSize};
-use ambre_core::WholePx;
-use ambre_core::{ByteSize, ImageSize, ViewPx};
+use ambre_core::ByteSize;
+use ambre_core::{Css, Device, Image, Px, Scale, Size, Texel, View};
 use ambre_draw::{Color, ImageSource, Line, Rect};
 use std::collections::HashMap;
 
@@ -28,14 +27,14 @@ impl OffscreenTarget {
     fn new(
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
-        size: DeviceSize,
+        size: Size<Px<Texel>>,
         label: &str,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
             size: wgpu::Extent3d {
-                width: (size.width.max(WholePx::new(1))).get(),
-                height: (size.height.max(WholePx::new(1))).get(),
+                width: (size.width.max(Px::new(1))).get(),
+                height: (size.height.max(Px::new(1))).get(),
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
@@ -68,7 +67,7 @@ impl OffscreenTarget {
 /// The shift is in the pixel space `P`. A view plans it in view pixels, and
 /// [`SurfaceSize::on_device`] scales it to the device pixels of the buffer.
 #[derive(Clone, Copy, Debug)]
-pub enum ContentRepaint<P = ViewPx> {
+pub enum ContentRepaint<P = Px<View>> {
     Full,
     Scroll { dx: P, dy: P },
     Reuse,
@@ -141,9 +140,9 @@ pub struct QuadRenderer {
     width: f32,
     height: f32,
     /// The buffer in device pixels, which an offscreen copy counts in.
-    physical: DeviceSize,
+    physical: Size<Px<Texel>>,
     /// Device pixels per logical pixel, which a glyph is rasterized at.
-    density: DevicePixelRatio,
+    density: Scale<Css, Device>,
 }
 
 /// How much VRAM the uploaded pictures may hold together, mip chains included.
@@ -162,7 +161,7 @@ struct CacheEntry<T> {
     /// The size of the upload. A key reused at a different size is content that
     /// changed behind its identity, so the cache replaces the entry rather than
     /// stretching it (`ImageSource::key`).
-    size: ImageSize,
+    size: Size<Px<Image>>,
     /// Frame ordinal of the last draw that bound it, for eviction.
     last_used: u64,
 }
@@ -199,7 +198,7 @@ impl<T> ImageCache<T> {
 
     /// The payload for `key`, if these exact pixels are already resident. Stamps
     /// the entry so eviction sees it as recently used.
-    fn get(&mut self, key: ImageKey, size: ImageSize) -> Option<&T> {
+    fn get(&mut self, key: ImageKey, size: Size<Px<Image>>) -> Option<&T> {
         let clock = self.clock;
         let entry = self.map.get_mut(&key)?;
         if entry.size != size {
@@ -620,13 +619,13 @@ impl QuadRenderer {
             OffscreenTarget::new(
                 device,
                 offscreen_format,
-                DeviceSize::new(WholePx::new(1), WholePx::new(1)),
+                Size::new(Px::new(1), Px::new(1)),
                 "cells_offscreen_a",
             ),
             OffscreenTarget::new(
                 device,
                 offscreen_format,
-                DeviceSize::new(WholePx::new(1), WholePx::new(1)),
+                Size::new(Px::new(1), Px::new(1)),
                 "cells_offscreen_b",
             ),
         ];
@@ -676,8 +675,8 @@ impl QuadRenderer {
             current_offscreen_idx: 0,
             width: 1.0,
             height: 1.0,
-            physical: DeviceSize::new(WholePx::new(1), WholePx::new(1)),
-            density: DevicePixelRatio::ONE,
+            physical: Size::new(Px::new(1), Px::new(1)),
+            density: Scale::<Css, Device>::ONE,
         }
     }
 
@@ -728,7 +727,7 @@ impl QuadRenderer {
         // count and not an arbitrary order. An image the walk stops drawing is
         // the first to go when the VRAM budget binds.
         self.images.clock = self.images.clock.wrapping_add(1);
-        let CssSize { width, height, .. } = size.logical();
+        let Size { width, height, .. } = size.logical();
         self.width = width.get() as f32;
         self.height = height.get() as f32;
         self.physical = size.physical();
@@ -736,7 +735,7 @@ impl QuadRenderer {
     }
 
     /// Device pixels per logical pixel for the frame being built.
-    pub(crate) fn density(&self) -> DevicePixelRatio {
+    pub(crate) fn density(&self) -> Scale<Css, Device> {
         self.density
     }
 
@@ -871,7 +870,7 @@ impl QuadRenderer {
         image: &ImageSource<'_>,
         corners: [[f32; 2]; 4],
     ) {
-        if image.size.width == WholePx::ZERO || image.size.height == WholePx::ZERO {
+        if image.size.width == Px::ZERO || image.size.height == Px::ZERO {
             return;
         }
         if self.images.get(image.key, image.size).is_none() {
@@ -995,7 +994,7 @@ impl QuadRenderer {
             uv_min,
             uv_max,
         } = quad;
-        if w <= ViewPx::ZERO || h <= ViewPx::ZERO {
+        if w <= Px::<View>::ZERO || h <= Px::<View>::ZERO {
             return;
         }
         // The vertex buffer takes the bare `f32`: the sums are made in view
@@ -1043,7 +1042,7 @@ impl QuadRenderer {
             uv_min,
             uv_max,
         } = quad;
-        if w <= ViewPx::ZERO || h <= ViewPx::ZERO {
+        if w <= Px::<View>::ZERO || h <= Px::<View>::ZERO {
             return;
         }
         // The vertex buffer takes the bare `f32`: the sums are made in view
@@ -1172,7 +1171,7 @@ impl QuadRenderer {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         swapchain_view: &wgpu::TextureView,
-        plan: &crate::view::RepaintPlan<DevicePx>,
+        plan: &crate::view::RepaintPlan<Px<Device>>,
     ) {
         let (cells, overlay) = (plan.content, plan.overlay);
         let backdrop = clear_color(plan.backdrop);
@@ -1382,7 +1381,7 @@ mod image_cache_tests {
         CacheEntry {
             payload: w,
             bytes: ByteSize(bytes),
-            size: ImageSize::new(WholePx::new(w), WholePx::new(h)),
+            size: Size::new(Px::new(w), Px::new(h)),
             last_used,
         }
     }
@@ -1396,10 +1395,7 @@ mod image_cache_tests {
         c.insert(ImageKey(1), entry(16, 2, 2, 0));
         c.clock = 7;
         assert_eq!(
-            c.get(
-                ImageKey(1),
-                ImageSize::new(WholePx::new(2), WholePx::new(2))
-            ),
+            c.get(ImageKey(1), Size::new(Px::new(2), Px::new(2))),
             Some(&2)
         );
         assert_eq!(c.map[&ImageKey(1)].last_used, 7);
@@ -1412,19 +1408,10 @@ mod image_cache_tests {
     fn a_key_at_another_size_is_a_miss() {
         let mut c: ImageCache<u32> = ImageCache::new(ByteSize(1024));
         c.insert(ImageKey(1), entry(16, 2, 2, 0));
-        assert_eq!(
-            c.get(
-                ImageKey(1),
-                ImageSize::new(WholePx::new(4), WholePx::new(4))
-            ),
-            None
-        );
+        assert_eq!(c.get(ImageKey(1), Size::new(Px::new(4), Px::new(4))), None);
         assert!(
-            c.get(
-                ImageKey(1),
-                ImageSize::new(WholePx::new(2), WholePx::new(2))
-            )
-            .is_some()
+            c.get(ImageKey(1), Size::new(Px::new(2), Px::new(2)))
+                .is_some()
         );
     }
 

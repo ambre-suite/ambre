@@ -68,7 +68,8 @@ pub fn missing_media(
 
 /// Stroke width, in screen pixels, of the line traced over a selected arrow.
 /// Heavier than the arrow itself so the selection reads at any zoom.
-const ARROW_SELECT_W: ambre_core::ViewPx = ambre_core::ViewPx::new(3.0);
+const ARROW_SELECT_W: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(3.0);
 
 /// Paint the persistent content layer: board background + adaptive grid, then
 /// the board walk under the camera transform, then the frame titles.
@@ -249,7 +250,11 @@ pub fn paint_overlay<S: DrawSurface>(
     // `stroke_line` edges between the rotated corners (stroke_rect would degrade to
     // an upright AABB on the WgpuSurface, see above).
     if theta == ambre_core::Radians::ZERO {
-        surface.stroke_rect(b, palette.selection, ambre_core::SurfacePx::new(1.5));
+        surface.stroke_rect(
+            b,
+            palette.selection,
+            ambre_core::Px::<ambre_core::Surface>::new(1.5),
+        );
     } else {
         let c = [
             place(Point::new(b.x0, b.y0)),
@@ -261,7 +266,7 @@ pub fn paint_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((a.x, a.y), (d.x, d.y)),
                 palette.selection,
-                ambre_core::SurfacePx::new(1.5),
+                ambre_core::Px::<ambre_core::Surface>::new(1.5),
             );
         }
     }
@@ -272,7 +277,7 @@ pub fn paint_overlay<S: DrawSurface>(
     surface.stroke_line(
         ambre_draw::Line::new((stem_base.x, stem_base.y), (knob.x, knob.y)),
         palette.selection,
-        ambre_core::SurfacePx::new(1.0),
+        ambre_core::Px::<ambre_core::Surface>::new(1.0),
     );
     draw_handle(surface, knob, palette);
 
@@ -298,7 +303,11 @@ fn paint_preview<S: DrawSurface>(
 ) {
     if let Preview::Marquee(m) = preview {
         let s = world_rect_to_screen(*m, cam);
-        surface.stroke_rect(s, palette.selection, ambre_core::SurfacePx::new(1.0));
+        surface.stroke_rect(
+            s,
+            palette.selection,
+            ambre_core::Px::<ambre_core::Surface>::new(1.0),
+        );
         return;
     }
 
@@ -392,7 +401,7 @@ fn paint_find_highlights<S: DrawSurface>(
         } else {
             (palette.header_active, 1.5)
         };
-        surface.stroke_rect(sb, color, ambre_core::SurfacePx::new(width));
+        surface.stroke_rect(sb, color, ambre_core::Px::<ambre_core::Surface>::new(width));
     }
 }
 
@@ -445,12 +454,12 @@ fn paint_link_badges<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((cx - r * 1.6, cy + r), (cx + r * 0.4, cy - r)),
             palette.content_bg,
-            ambre_core::SurfacePx::new(1.5),
+            ambre_core::Px::<ambre_core::Surface>::new(1.5),
         );
         surface.stroke_line(
             ambre_draw::Line::new((cx - r * 0.4, cy + r), (cx + r * 1.6, cy - r)),
             palette.content_bg,
-            ambre_core::SurfacePx::new(1.5),
+            ambre_core::Px::<ambre_core::Surface>::new(1.5),
         );
     }
 }
@@ -458,10 +467,12 @@ fn paint_link_badges<S: DrawSurface>(
 /// Height of a frame's title band in screen pixels, and the font size inside
 /// it (`TOILE-253`). Screen space, so a title reads the same at every zoom,
 /// like the link badges and the comment pins.
-pub const FRAME_TITLE_HEIGHT: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
+pub const FRAME_TITLE_HEIGHT: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(14.0);
 
 /// Gap between the title's baseline band and the frame's own top edge.
-const FRAME_TITLE_GAP: ambre_core::ViewPx = ambre_core::ViewPx::new(4.0);
+const FRAME_TITLE_GAP: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(4.0);
 
 /// What a frame's band shows, and whether it is the frame's own title
 /// (`TOILE-253`).
@@ -579,7 +590,7 @@ fn paint_frame_titles<S: DrawSurface>(
             font_cx,
             shown.label(),
             FRAME_TITLE_HEIGHT,
-            ambre_core::ViewPx::new(f32::MAX),
+            ambre_core::Px::<ambre_core::View>::new(f32::MAX),
             Alignment::Start,
             ambre_canvas::Weight::Regular,
             ambre_canvas::Slant::Upright,
@@ -629,8 +640,8 @@ mod tests {
     use ambre_bus::app::toile::{
         DisplayConnector, DisplayElement, ElementId, ElementKind, ElementStyle, ShapeKind,
     };
+    use ambre_core::Px;
     use ambre_core::Rgba;
-    use ambre_core::WholePx;
     use ambre_draw::Color;
     use ambre_draw::testing::{DrawOp, RecordingSurface};
 
@@ -1023,13 +1034,13 @@ mod tests {
         // The style holds points: 30 points lay out at 40 px.
         assert_eq!(
             sticky_or_style_font_size(TextHost::Sticky, &manual, bounds),
-            ambre_core::DocPx::new(40.0)
+            ambre_core::Px::<ambre_core::Doc>::new(40.0)
         );
         // A text element has no card to track. Auto draws it at the default
         // size: 12 points lay out at 16 px, never at zero.
         assert_eq!(
             sticky_or_style_font_size(TextHost::Text, &auto, bounds),
-            ambre_core::DocPx::new(16.0)
+            ambre_core::Px::<ambre_core::Doc>::new(16.0)
         );
     }
 
@@ -1074,15 +1085,19 @@ mod tests {
         // Clamped to a legible range at the extremes.
         assert_eq!(
             sticky_font_size(Rect::new(0.0, 0.0, 4.0, 4.0)),
-            ambre_core::DocPx::new(8.0)
+            ambre_core::Px::<ambre_core::Doc>::new(8.0)
         );
         assert_eq!(
             sticky_font_size(Rect::new(0.0, 0.0, 4000.0, 4000.0)),
-            ambre_core::DocPx::new(48.0)
+            ambre_core::Px::<ambre_core::Doc>::new(48.0)
         );
         // A square 120x120 (the default) sits in-range.
         let default = sticky_font_size(Rect::new(0.0, 0.0, 120.0, 120.0));
-        assert!((ambre_core::DocPx::new(8.0)..=ambre_core::DocPx::new(48.0)).contains(&default));
+        assert!(
+            (ambre_core::Px::<ambre_core::Doc>::new(8.0)
+                ..=ambre_core::Px::<ambre_core::Doc>::new(48.0))
+                .contains(&default)
+        );
     }
 
     // A free `Text` element has no card. The geometry pass paints nothing for it,
@@ -1131,7 +1146,7 @@ mod tests {
             hh('1'),
             DecodedImage {
                 pixels: vec![0u8; 4].into(),
-                size: ambre_core::ImageSize::new(WholePx::new(1), WholePx::new(1)),
+                size: ambre_core::Size::new(Px::new(1), Px::new(1)),
             },
         );
         let asked = missing_media(&nodes, &images, &std::collections::HashSet::new());
@@ -1182,7 +1197,7 @@ mod tests {
             hh('1'),
             DecodedImage {
                 pixels: vec![255u8; 2 * 2 * 4].into(),
-                size: ambre_core::ImageSize::new(WholePx::new(2), WholePx::new(2)),
+                size: ambre_core::Size::new(Px::new(2), Px::new(2)),
             },
         );
         let mut surface = RecordingSurface::new();
@@ -2067,7 +2082,7 @@ mod tests {
         )]);
         let origin = |zoom: f64| {
             let mut cam = cam();
-            cam.zoom = ambre_core::ZoomFactor::positive(zoom);
+            cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
             let painted = runs(&paint_pass(&vp, &cam, &Pass::default()));
             let (_, first, depth) = *painted.first().expect("the body is shaped");
             assert_eq!(depth, 1, "zoom {zoom}: a run under the camera transform");
@@ -2149,7 +2164,7 @@ mod tests {
             hh('f'),
             DecodedImage {
                 pixels: vec![255u8; 2 * 2 * 4].into(),
-                size: ambre_core::ImageSize::new(WholePx::new(2), WholePx::new(2)),
+                size: ambre_core::Size::new(Px::new(2), Px::new(2)),
             },
         );
         pass.anim.insert(tween.id.clone(), tween.clone());
@@ -2354,7 +2369,7 @@ mod tests {
     #[test]
     fn every_preview_tracks_the_geometry_it_will_commit() {
         let mut cam = cam();
-        cam.zoom = ambre_core::ZoomFactor::positive(2.0);
+        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
         let r = Rect::new(10.0, 20.0, 110.0, 70.0);
         let mut pen = BezPath::new();
         pen.move_to((0.0, 0.0));
@@ -2405,7 +2420,7 @@ mod tests {
             vec![DrawOp::StrokeRect {
                 rect: world_rect_to_screen(r, &cam),
                 color: LIGHT_PALETTE.selection,
-                width: ambre_core::SurfacePx::new(1.0)
+                width: ambre_core::Px::<ambre_core::Surface>::new(1.0)
             }]
         );
         for kind in [

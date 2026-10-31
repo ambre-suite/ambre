@@ -28,15 +28,16 @@ use kurbo::{RoundedRect, Shape, Vec2};
 use super::viewport::ViewportTransform;
 
 /// Chip label font size, in logical pixels.
-const CHIP_FONT_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(13.0);
+const CHIP_FONT_SIZE: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(13.0);
 /// The text padding inside a chip: across, then down.
 const CHIP_PAD: Vec2 = Vec2::new(6.0, 3.0);
 /// Gap between adjacent chips, in logical pixels.
-const CHIP_GAP: ambre_core::ViewPx = ambre_core::ViewPx::new(4.0);
+const CHIP_GAP: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(4.0);
 /// Gap between the element's bottom edge and its chip row, in logical pixels.
-const ROW_MARGIN: ambre_core::ViewPx = ambre_core::ViewPx::new(6.0);
+const ROW_MARGIN: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(6.0);
 /// Corner radius of a chip pill, in logical pixels.
-const CHIP_RADIUS: ambre_core::ViewPx = ambre_core::ViewPx::new(8.0);
+const CHIP_RADIUS: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(8.0);
 
 /// Paint the reaction badge row for every element with a tally. Pure over
 /// `DrawSurface`: host-testable. Called from the overlay pass, unconditionally
@@ -124,12 +125,12 @@ fn paint_chip<S: DrawSurface>(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     palette: &Palette,
-) -> ambre_core::ViewPx {
+) -> ambre_core::Px<ambre_core::View> {
     let layout = text_cache.get_or_build(
         font_cx,
         label,
         CHIP_FONT_SIZE,
-        ambre_core::ViewPx::new(1000.0),
+        ambre_core::Px::<ambre_core::View>::new(1000.0),
         Alignment::Start,
         ambre_canvas::Weight::Regular,
         ambre_canvas::Slant::Upright,
@@ -165,7 +166,7 @@ fn paint_chip<S: DrawSurface>(
             surface.draw_glyphs(&run, &brush, Affine::translate((tx, ty)));
         }
     }
-    ambre_core::ViewPx::new((at.x + chip_w) as f32)
+    ambre_core::Px::<ambre_core::View>::new((at.x + chip_w) as f32)
 }
 
 /// The non-emoji label colour (vote badges, counts). Emoji ignore it (they carry
@@ -282,7 +283,7 @@ mod tests {
         let vp = vp_with(vec![elem("a", Rect::new(0.0, 0.0, 40.0, 40.0))], reactions);
         let near = ViewportTransform::new(ambre_draw::Size::new(800.0, 800.0));
         let far = ViewportTransform {
-            zoom: ambre_core::ZoomFactor::positive(4.0),
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(4.0),
             ..near
         };
 

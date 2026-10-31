@@ -167,7 +167,7 @@ def scratch(tmp: str) -> Path:
     for rel, holder in cb.SIGNAL_HOLDERS.items():
         path = root / rel
         held = path.read_text() if path.exists() else ""
-        body = f"struct {holder} {{\n    pub sel_stats: RwSignal<Option<chrome::SelStats>>,\n    pub zoom: RwSignal<ZoomFactor>,\n}}\n"
+        body = f"struct {holder} {{\n    pub sel_stats: RwSignal<Option<chrome::SelStats>>,\n    pub zoom: RwSignal<Scale<Doc, View>>,\n}}\n"
         write(root, rel, held + body)
     write(root, cb.EVENT_RELAYS["Trame"], read_back(root, cb.EVENT_RELAYS["Trame"]) + TRAME_ABSORB)
     write(root, cb.EVENT_RELAYS["Toile"], read_back(root, cb.EVENT_RELAYS["Toile"]) + TOILE_ABSORB)
@@ -894,7 +894,7 @@ class CrateBoundaries(unittest.TestCase):
             "    fn draw_glyphs(\n        &mut self,\n        run: &GlyphRun<'_, ParleyBrush>,\n"
             "        brush: &Brush,\n        transform: Affine,\n    );\n"
             "    fn draw_image(&mut self, image: &ImageSource<'_>, dest: Rect) {}\n"
-            "    fn stroke_line(&mut self, line: Line, color: Color, width: SurfacePx);\n"
+            "    fn stroke_line(&mut self, line: Line, color: Color, width: Px<Surface>);\n"
             "}\n\nfn density(scale: f32) {}\n"
         )
         self.assertEqual(self.breach(cb.DRAW_TRAIT, text), [])

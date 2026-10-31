@@ -37,9 +37,10 @@ use ambre_bus::{AppCommand, AppEvent, DocumentId, UiEvent};
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_chrome::ContextMenu;
-use ambre_chrome::{ToastHost, Toasts, ZoomFactor};
+use ambre_chrome::{ToastHost, Toasts};
 use ambre_commands::CommandId;
 use ambre_core::{CharCount, CharOffset};
+use ambre_core::{Doc, Scale, View};
 use ambre_draw::Rect;
 use ambre_toile::chrome::{
     CommentComposer, CommentDraft, CommentIntent, CommentsPanel, DeckIntent, DeckMove, DeckPanel,
@@ -56,8 +57,11 @@ use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
 /// The page point at `(x, y)`, in CSS px.
-fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
-    ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::Css>::new(x),
+        ambre_core::Px::<ambre_core::Css>::new(y),
+    )
 }
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -86,9 +90,9 @@ fn mount_bar(
     stats: Option<SelStats>,
     zoom: f64,
     fps: ambre_core::FrameRate,
-) -> (web_sys::Element, RwSignal<ZoomFactor>) {
+) -> (web_sys::Element, RwSignal<Scale<Doc, View>>) {
     let stats = RwSignal::new(stats);
-    let zoom = RwSignal::new(ZoomFactor::within(zoom, 0.1, 10.0));
+    let zoom = RwSignal::new(Scale::<Doc, View>::within(zoom, 0.1, 10.0));
     let perf = RwSignal::new(PerfSnapshot {
         fps,
         ..PerfSnapshot::default()
@@ -371,7 +375,7 @@ fn tool_palette_click_switches_active_tool() {
 fn top_menu_bar_zoom_in_fires_command() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(ZoomFactor::ONE);
+    let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let fired = RwSignal::new(None::<CommandId>);
     let on_command = Callback::new(move |id: CommandId| fired.set(Some(id)));
     let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
@@ -504,7 +508,7 @@ fn the_button_bars_announce_the_registry_labels() {
     let store = CommandStates::new(ambre_toile::chrome::COMMANDS.iter().map(|c| c.id));
     ambre_toile::chrome::init_command_states(&store);
     let toggles = Toggles::from_store(&store);
-    let zoom = RwSignal::new(ZoomFactor::ONE);
+    let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let on_command = Callback::new(|_: CommandId| {});
     let menu_bar = mount_in_container(move || {
         view! { <TopMenuBar zoom=zoom on_command=on_command toggles=toggles /> }

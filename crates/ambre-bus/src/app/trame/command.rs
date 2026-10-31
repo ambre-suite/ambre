@@ -456,7 +456,7 @@ pub enum TrameCommand {
         version: ambre_core::Generation<crate::ViewportVersion>,
         sheet_id: SheetId,
         col: Col,
-        width: ambre_core::DocPx,
+        width: ambre_core::Px<ambre_core::Doc>,
     },
     /// Set the height (document px, before the zoom) of row `row` on `sheet_id`. Row analogue of
     /// [`ResizeCol`](TrameCommand::ResizeCol): writes `row_heights_{sheet}`.
@@ -464,7 +464,7 @@ pub enum TrameCommand {
         version: ambre_core::Generation<crate::ViewportVersion>,
         sheet_id: SheetId,
         row: Row,
-        height: ambre_core::DocPx,
+        height: ambre_core::Px<ambre_core::Doc>,
     },
 
     // -- Parameterless structural intents (grid context menu,

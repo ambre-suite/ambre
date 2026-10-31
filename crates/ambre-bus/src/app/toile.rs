@@ -852,9 +852,11 @@ pub struct EndCaps {
 // =============================================================================
 
 /// The smallest zoom the camera allows, and the floor every reader clamps to.
-pub const MIN_ZOOM: ambre_core::ZoomFactor = ambre_core::ZoomFactor::positive(0.1);
+pub const MIN_ZOOM: ambre_core::Scale<ambre_core::Doc, ambre_core::View> =
+    ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.1);
 /// The largest zoom the camera allows, and the ceiling every reader clamps to.
-pub const MAX_ZOOM: ambre_core::ZoomFactor = ambre_core::ZoomFactor::positive(10.0);
+pub const MAX_ZOOM: ambre_core::Scale<ambre_core::Doc, ambre_core::View> =
+    ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(10.0);
 
 /// The camera: a world-space center, a zoom factor, and the physical screen
 /// size. Drives culling via [`to_world_rect`](Viewport::to_world_rect).
@@ -862,7 +864,7 @@ pub const MAX_ZOOM: ambre_core::ZoomFactor = ambre_core::ZoomFactor::positive(10
 pub struct Viewport {
     pub center: Point,
     /// Read through [`clamped_zoom`](Viewport::clamped_zoom), never raw.
-    pub zoom: ambre_core::ZoomFactor,
+    pub zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
     pub size: Size, // screen size in physical pixels
 }
 
@@ -870,7 +872,7 @@ impl Default for Viewport {
     fn default() -> Self {
         Self {
             center: Point::ZERO,
-            zoom: ambre_core::ZoomFactor::ONE,
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
             size: Size::new(1280.0, 800.0),
         }
     }
@@ -879,7 +881,7 @@ impl Default for Viewport {
 impl Viewport {
     /// The zoom inside `MIN_ZOOM ..= MAX_ZOOM`, so a reader can divide by it
     /// (`TOILE-UI-281`). The fields are public, so the clamp sits on the read.
-    pub fn clamped_zoom(&self) -> ambre_core::ZoomFactor {
+    pub fn clamped_zoom(&self) -> ambre_core::Scale<ambre_core::Doc, ambre_core::View> {
         self.zoom.clamped(MIN_ZOOM, MAX_ZOOM)
     }
 
@@ -2759,7 +2761,7 @@ pub enum ToileEvent {
     /// printable (`TOILE-IO-100`).
     MediaDecoded {
         hash: ambre_core::ContentHash,
-        size: ambre_core::ImageSize,
+        size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
         pixels: ambre_core::RgbaPixels,
     },
     /// A freshly-created element, with the `correlate` token its `CreateElement`
@@ -3470,7 +3472,7 @@ mod tests {
             1e-300,
         ] {
             let r = Viewport {
-                zoom: ambre_core::ZoomFactor::positive(zoom),
+                zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom),
                 ..Viewport::default()
             }
             .to_world_rect();

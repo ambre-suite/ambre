@@ -786,10 +786,7 @@ mod tests {
             media: MediaRef::Stored(hash_of(hash)),
             plaintext: ambre_core::MediaBytes::new(vec![0u8; 4]),
             mime: ambre_core::MediaType::from(mime),
-            size: ambre_core::ImageSize::new(
-                ambre_core::WholePx::new(w),
-                ambre_core::WholePx::new(h),
-            ),
+            size: ambre_core::Size::new(ambre_core::Px::new(w), ambre_core::Px::new(h)),
             thumb: ambre_core::ThumbnailPng::new(vec![1, 2, 3]),
         }
     }
@@ -1246,7 +1243,7 @@ mod tests {
         st.handle_command(large_import());
         let out = st.handle_command(ToileCommand::SetViewport(crate::logic::index::Viewport {
             center: Point::ZERO,
-            zoom: ambre_core::ZoomFactor::positive(0.5),
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.5),
             size: Size::new(800.0, 600.0),
         }));
         assert!(out.update.is_none());

@@ -18,7 +18,8 @@
 
 use ambre_bus::app::trame::CellNumber;
 use ambre_canvas::PerfSnapshot;
-use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip, ZoomFactor};
+use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
+use ambre_core::{Doc, Scale, View};
 use leptos::prelude::*;
 
 use crate::chrome::commands::status_label;
@@ -56,7 +57,7 @@ fn fmt_num(v: Option<CellNumber>) -> String {
 pub fn StatusBar(
     stats: RwSignal<Option<SelStats>>,
     perf: RwSignal<PerfSnapshot>,
-    zoom: RwSignal<ZoomFactor>,
+    zoom: RwSignal<Scale<Doc, View>>,
 ) -> impl IntoView {
     // The aggregates line, recomputed whenever the selection stats change.
     let aggregates = move || {

@@ -14,10 +14,10 @@ use ambre_bus::conduit::Receiver;
 use ambre_draw::testing::RecordingSurface;
 
 /// A pointer at logical `(x, y)`, as the canvas hands it over.
-fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
-    ambre_core::ViewPoint::new(
-        ambre_core::ViewPx::new(x as f32),
-        ambre_core::ViewPx::new(y as f32),
+fn pointer(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::View>::new(x as f32),
+        ambre_core::Px::<ambre_core::View>::new(y as f32),
     )
 }
 
@@ -73,8 +73,8 @@ impl Rig {
             DocumentId::new(),
             tx,
             rx,
-            ambre_core::SurfacePx::new(1200.0),
-            ambre_core::SurfacePx::new(800.0),
+            ambre_core::Px::<ambre_core::Surface>::new(1200.0),
+            ambre_core::Px::<ambre_core::Surface>::new(800.0),
             TextInput::detached(),
             ambre_canvas::Embedding::Standalone,
             AnchorPublisher::new(),
@@ -985,7 +985,11 @@ fn a_drag_past_the_largest_size_holds_the_guide_there() {
     use crate::ui::grid::{HeaderHit, MAX_COL_WIDTH, MAX_ROW_HEIGHT, ResizePreview};
     for zoom in [1.0, 2.0] {
         let mut rig = Rig::new();
-        assert!(rig.view.set_zoom(ambre_core::ZoomFactor::positive(zoom)) || zoom == 1.0);
+        assert!(
+            rig.view
+                .set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom))
+                || zoom == 1.0
+        );
         rig.frame();
         rig.sent();
         let row_1 = Row::new(1);
@@ -1005,9 +1009,9 @@ fn a_drag_past_the_largest_size_holds_the_guide_there() {
                 mods: Modifiers::NONE,
             });
             let far = 10_000.0 * zoom as f32;
-            let to = ambre_core::ViewPoint::new(
-                start.x + ambre_core::ViewPx::new(far),
-                start.y + ambre_core::ViewPx::new(far),
+            let to = ambre_core::Point::new(
+                start.x + ambre_core::Px::<ambre_core::View>::new(far),
+                start.y + ambre_core::Px::<ambre_core::View>::new(far),
             );
             let _ = rig.view.handle_input(&InputEvent::PointerMove { at: to });
             let held = match hit {
@@ -1025,7 +1029,7 @@ fn a_drag_past_the_largest_size_holds_the_guide_there() {
                 mods: Modifiers::NONE,
             });
         }
-        let sent: Vec<ambre_core::DocPx> = rig
+        let sent: Vec<ambre_core::Px<ambre_core::Doc>> = rig
             .sent()
             .iter()
             .filter_map(|cmd| match cmd {
@@ -1046,7 +1050,11 @@ fn a_drag_past_the_largest_size_holds_the_guide_there() {
 fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
     for zoom in [1.0, 2.0] {
         let mut rig = Rig::new();
-        assert!(rig.view.set_zoom(ambre_core::ZoomFactor::positive(zoom)) || zoom == 1.0);
+        assert!(
+            rig.view
+                .set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom))
+                || zoom == 1.0
+        );
         rig.frame();
         rig.sent();
         let edge = rig.col_edge(1);
@@ -1072,7 +1080,7 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
             mods: Modifiers::NONE,
         });
         let sent = rig.sent();
-        let widths: Vec<ambre_core::DocPx> = sent
+        let widths: Vec<ambre_core::Px<ambre_core::Doc>> = sent
             .iter()
             .filter_map(|cmd| match cmd {
                 TrameCommand::ResizeCol {
@@ -1083,13 +1091,13 @@ fn a_resize_stores_an_unzoomed_width_and_reflows_at_once() {
             .collect();
         assert_eq!(
             widths,
-            [ambre_core::DocPx::new(200.0)],
+            [ambre_core::Px::<ambre_core::Doc>::new(200.0)],
             "zoom {zoom}: sent {sent:?}"
         );
         // No answer came back, and the grid already reflowed.
         assert_eq!(
             rig.view.state.col_widths.get(&COL_1),
-            Some(&ambre_core::DocPx::new(200.0))
+            Some(&ambre_core::Px::<ambre_core::Doc>::new(200.0))
         );
         assert_eq!(
             rig.view.state.col_x(Col::new(2)).get(),

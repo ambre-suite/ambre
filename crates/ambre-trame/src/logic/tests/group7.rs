@@ -278,7 +278,7 @@ fn resize_col_round_trips_through_viewport() {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
         col: Col::new(1),
-        width: ambre_core::DocPx::new(150.0),
+        width: ambre_core::Px::<ambre_core::Doc>::new(150.0),
     });
     assert!(
         matches!(evts.display.first(), Some(TrameEvent::DataReset)),
@@ -302,7 +302,7 @@ fn resize_row_round_trips_and_clamps_to_minimum() {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
         row: Row::new(2),
-        height: ambre_core::DocPx::new(1.0),
+        height: ambre_core::Px::<ambre_core::Doc>::new(1.0),
     });
     let (_, heights) = viewport_metrics(&mut state, 0, 3, 0, 0);
     assert_eq!(heights, vec![20.0, 20.0, 12.0, 20.0]);
@@ -315,7 +315,7 @@ fn resize_survives_snapshot_roundtrip() {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
         col: Col::new(0),
-        width: ambre_core::DocPx::new(200.0),
+        width: ambre_core::Px::<ambre_core::Doc>::new(200.0),
     });
     let snapshot = state.export_snapshot();
     let mut restored = TrameState::new();
@@ -336,13 +336,13 @@ fn concurrent_resize_of_same_col_converges_lww() {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
         col: Col::new(0),
-        width: ambre_core::DocPx::new(120.0),
+        width: ambre_core::Px::<ambre_core::Doc>::new(120.0),
     });
     b.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
         col: Col::new(0),
-        width: ambre_core::DocPx::new(300.0),
+        width: ambre_core::Px::<ambre_core::Doc>::new(300.0),
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
     a.import_snapshot(&sb)

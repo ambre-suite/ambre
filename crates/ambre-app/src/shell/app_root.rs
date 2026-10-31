@@ -353,7 +353,7 @@ pub(crate) fn AppRoot() -> impl IntoView {
 
     // Canvas right-click -> context menu (the launcher owns the listener since
     // the canvas is created by the AppShell).
-    let ctx_menu = RwSignal::new(None::<ambre_core::CssPoint>);
+    let ctx_menu = RwSignal::new(None::<ambre_core::Point<ambre_core::Px<ambre_core::Css>>>);
     // A Murmure right-click off any message opens nothing. Its menu holds
     // the actions of the message under the pointer (the Murmure message list
     // spec). The view names it before the browser's menu event.
@@ -384,9 +384,9 @@ pub(crate) fn AppRoot() -> impl IntoView {
             };
             if let Some(canvas) = leptos::prelude::document().get_element_by_id(target.as_str()) {
                 let rect = canvas.get_bounding_client_rect();
-                let origin = ambre_core::CssPoint::new(
-                    ambre_core::CssPx::new(rect.left() as f32),
-                    ambre_core::CssPx::new(rect.top() as f32),
+                let origin = ambre_core::Point::new(
+                    ambre_core::Px::<ambre_core::Css>::new(rect.left() as f32),
+                    ambre_core::Px::<ambre_core::Css>::new(rect.top() as f32),
                 );
                 ctx_menu.set(Some(pressed.on_page(origin)));
             }

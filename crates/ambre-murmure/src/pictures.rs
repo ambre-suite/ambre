@@ -247,7 +247,7 @@ pub fn frame_key(media_ref: &ContentHash, index: FrameIndex) -> ImageKey {
 mod tests {
     use super::*;
     use ambre_bus::PictureFrame;
-    use ambre_core::WholePx;
+    use ambre_core::Px;
 
     fn file(c: char) -> ContentHash {
         ContentHash::parse(&format!("{c}{}", "0".repeat(63))).expect("a content hash")
@@ -255,7 +255,7 @@ mod tests {
 
     fn picture(delays: &[u32], bytes: usize) -> Picture {
         Picture {
-            size: ambre_core::ImageSize::new(WholePx::new(1), WholePx::new(1)),
+            size: ambre_core::Size::new(Px::new(1), Px::new(1)),
             frames: delays
                 .iter()
                 .map(|&delay| PictureFrame {

@@ -8,7 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::unit::DocPx;
+use crate::{Doc, Px};
 
 /// CSS pixels per typographic point: a point is 1/72 inch, a CSS pixel is
 /// 1/96 inch.
@@ -69,8 +69,8 @@ impl FontSize {
 
     /// The size in document pixels, the unit the layout engine reads.
     #[must_use]
-    pub fn to_px(self) -> DocPx {
-        DocPx::new(self.0 * PX_PER_PT)
+    pub fn to_px(self) -> Px<Doc> {
+        Px::<Doc>::new(self.0 * PX_PER_PT)
     }
 
     /// The size rounded to whole points, as a picker of whole points lists it.
@@ -333,7 +333,8 @@ impl From<FontFamily> for String {
 
 #[cfg(test)]
 mod tests {
-    use super::{DocPx, FontFamily, FontSize, FontWeight, Weight};
+    use super::{FontFamily, FontSize, FontWeight, Weight};
+    use crate::{Doc, Px};
 
     /// A weight lies on the CSS scale, and bold starts at 700.
     #[test]
@@ -350,8 +351,11 @@ mod tests {
 
     #[test]
     fn twelve_points_are_sixteen_pixels() {
-        assert_eq!(FontSize::from_whole_points(12).to_px(), DocPx::new(16.0));
-        assert_eq!(FontSize::from_whole_points(9).to_px(), DocPx::new(12.0));
+        assert_eq!(
+            FontSize::from_whole_points(12).to_px(),
+            Px::<Doc>::new(16.0)
+        );
+        assert_eq!(FontSize::from_whole_points(9).to_px(), Px::<Doc>::new(12.0));
     }
 
     #[test]

@@ -14,7 +14,7 @@
 // ============================================================================
 
 use ambre_commands::{Command, CommandId, KeyBinding, Locale};
-use ambre_core::{CssPoint, CssPx, CssVector};
+use ambre_core::{Css, Point, Px, Vector};
 use leptos::html;
 use leptos::prelude::*;
 use leptos_icons::Icon;
@@ -122,7 +122,7 @@ impl MenuEntry {
 /// and click-outside.
 #[component]
 pub fn ContextMenu(
-    pos: RwSignal<Option<CssPoint>>,
+    pos: RwSignal<Option<Point<Px<Css>>>>,
     /// The menu rows, reactive so the launcher can swap a cell-scoped layout for
     /// a header-scoped one between right-clicks (`trame-context-menu`).
     #[prop(into)]
@@ -131,7 +131,7 @@ pub fn ContextMenu(
 ) -> impl IntoView {
     let menu_ref = NodeRef::<html::Ul>::new();
     let focused = RwSignal::new(0usize);
-    let menu_at = RwSignal::new(CssPoint::default());
+    let menu_at = RwSignal::new(Point::default());
 
     // The menu takes the focus, so it gives it back to what held it before it
     // opened (`CHROME-027`). Created before the effect that moves the focus in,
@@ -194,9 +194,9 @@ pub fn ContextMenu(
                 .and_then(|v| v.as_f64())
                 .unwrap_or(rect.height());
             // The DOM measures in f64 CSS px; a menu is placed in f32 ones.
-            let css = |v: f64| CssPx::new(v as f32);
-            let size = CssVector::new(css(rect.width()), css(rect.height()));
-            placed = place_menu(at, size, CssPoint::new(css(vw), css(vh)));
+            let css = |v: f64| Px::<Css>::new(v as f32);
+            let size = Vector::new(css(rect.width()), css(rect.height()));
+            placed = place_menu(at, size, Point::new(css(vw), css(vh)));
         }
         menu_at.set(placed);
     });
@@ -379,17 +379,21 @@ pub fn ContextMenu(
 /// `cfg(wasm32)` boundary stays at the DOM read. On the flipped axis the menu is
 /// anchored at `point - size`, clamped to `0`. A menu taller/wider than the
 /// viewport pins to the top/left edge rather than going off-screen.
-pub(crate) fn place_menu(at: CssPoint, size: CssVector, viewport: CssPoint) -> CssPoint {
+pub(crate) fn place_menu(
+    at: Point<Px<Css>>,
+    size: Vector<Px<Css>>,
+    viewport: Point<Px<Css>>,
+) -> Point<Px<Css>> {
     let far = at + size;
     let back = at - size;
-    CssPoint::new(
+    Point::new(
         if far.x > viewport.x {
-            back.x.max(CssPx::ZERO)
+            back.x.max(Px::<Css>::ZERO)
         } else {
             at.x
         },
         if far.y > viewport.y {
-            back.y.max(CssPx::ZERO)
+            back.y.max(Px::<Css>::ZERO)
         } else {
             at.y
         },
@@ -399,18 +403,18 @@ pub(crate) fn place_menu(at: CssPoint, size: CssVector, viewport: CssPoint) -> C
 #[cfg(test)]
 mod tests {
     use super::place_menu;
-    use ambre_core::{CssPoint, CssPx, CssVector};
+    use ambre_core::{Css, Point, Px, Vector};
 
     /// The point at `(x, y)`, in CSS px.
-    fn pt(x: f32, y: f32) -> CssPoint {
-        CssPoint::new(CssPx::new(x), CssPx::new(y))
+    fn pt(x: f32, y: f32) -> Point<Px<Css>> {
+        Point::new(Px::<Css>::new(x), Px::<Css>::new(y))
     }
 
     /// Place a `w` x `h` menu at `(x, y)` in a `vw` x `vh` viewport.
-    fn place(x: f32, y: f32, w: f32, h: f32, vw: f32, vh: f32) -> CssPoint {
+    fn place(x: f32, y: f32, w: f32, h: f32, vw: f32, vh: f32) -> Point<Px<Css>> {
         place_menu(
             pt(x, y),
-            CssVector::new(CssPx::new(w), CssPx::new(h)),
+            Vector::new(Px::<Css>::new(w), Px::<Css>::new(h)),
             pt(vw, vh),
         )
     }

@@ -16,10 +16,7 @@
 
 use rustc_hash::FxHashMap;
 
-use ambre_core::{PixelSize, WholePx};
-
-use crate::density::DevicePixelRatio;
-use crate::text_cache::LayoutPx;
+use ambre_core::{Css, Device, GlyphRaster, Parley, Px, Scale, Size, Texel};
 
 // ============================================================================
 // GlyphAtlas
@@ -29,7 +26,7 @@ const ATLAS_SIZE: u32 = 2048;
 /// The largest em a glyph is rasterized at, in device pixels: half the atlas
 /// side. A glyph box up to twice its em then still packs. A larger size is
 /// rasterized at this one and drawn scaled up (`CANVAS-087`).
-const RASTER_CAP: RasterSize = RasterSize::new((ATLAS_SIZE / 2) as f32);
+const RASTER_CAP: Px<GlyphRaster> = Px::<GlyphRaster>::new((ATLAS_SIZE / 2) as f32);
 // 1-pixel padding between glyphs prevents bilinear bleed at atlas boundaries.
 const ATLAS_PAD: u32 = 1;
 
@@ -68,37 +65,27 @@ impl GlyphId {
 /// a bitmap of the size they cover on the screen, never a stretched one
 /// (`CANVAS-074`). The atlas keys a raster by this size, so a density change
 /// never draws a raster made for the previous screen (`CANVAS-034`).
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
-pub struct RasterSize(f32);
+/// The raster of a glyph run whose layout gives it `font_size`, in the units
+/// of that layout. The run is drawn under a transform of `scale`, on a screen
+/// of `density`.
+#[allow(clippy::cast_possible_truncation)]
+pub(crate) fn raster_of_layout(
+    font_size: Px<Parley>,
+    scale: f64,
+    density: Scale<Css, Device>,
+) -> Px<GlyphRaster> {
+    Px::new((f64::from(font_size.get()) * scale) as f32 * density.get() as f32)
+}
 
-impl RasterSize {
-    /// The raster of a glyph run whose layout gives it `font_size`, in the
-    /// units of that layout. The run is drawn under a transform of `scale`, on
-    /// a screen of `density`.
-    pub(crate) fn of_layout(font_size: LayoutPx, scale: f64, density: DevicePixelRatio) -> Self {
-        Self((f64::from(font_size.get()) * scale) as f32 * density.get() as f32)
-    }
+/// The size the bitmap is made at: `size`, or [`RASTER_CAP`] past it.
+fn capped(size: Px<GlyphRaster>) -> Px<GlyphRaster> {
+    size.min(RASTER_CAP)
+}
 
-    /// A raster `device_px` device pixels high.
-    pub const fn new(device_px: f32) -> Self {
-        Self(device_px)
-    }
-
-    /// The size Swash renders, in device pixels.
-    const fn get(self) -> f32 {
-        self.0
-    }
-
-    /// The size the bitmap is made at: this one, or [`RASTER_CAP`] past it.
-    fn capped(self) -> Self {
-        Self(self.0.min(RASTER_CAP.0))
-    }
-
-    /// The device pixels one texel of the bitmap covers: one up to
-    /// [`RASTER_CAP`], and the ratio of this size to the cap past it.
-    fn texel_scale(self) -> f32 {
-        (self.0 / RASTER_CAP.0).max(1.0)
-    }
+/// The device pixels one texel of the bitmap covers: one up to
+/// [`RASTER_CAP`], and the ratio of `size` to the cap past it.
+fn texel_scale(size: Px<GlyphRaster>) -> f32 {
+    (size / RASTER_CAP).max(1.0)
 }
 
 /// A raster size quantized to a hundredth of a device pixel, so it can be
@@ -108,7 +95,7 @@ struct RasterSizeKey(u32);
 
 impl RasterSizeKey {
     /// The key of a raster `size` device pixels high.
-    fn of(size: RasterSize) -> Self {
+    fn of(size: Px<GlyphRaster>) -> Self {
         Self((size.get() * 100.0) as u32)
     }
 }
@@ -123,7 +110,7 @@ pub(super) struct GlyphKey {
 impl GlyphKey {
     /// The key of a raster at `raster_size`, the size in device pixels. A
     /// raster made for one density is never found for another (`CANVAS-034`).
-    pub(super) fn new(font: FontId, glyph: GlyphId, raster_size: RasterSize) -> Self {
+    pub(super) fn new(font: FontId, glyph: GlyphId, raster_size: Px<GlyphRaster>) -> Self {
         Self {
             font,
             glyph,
@@ -243,17 +230,12 @@ pub struct GlyphAtlas {
     scale_cx: swash::scale::ScaleContext,
 }
 
-/// The texel space of an atlas texture: a glyph's place in it is never a
-/// CSS, device or image pixel.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Texel {}
-
 /// A rectangle of texels in an atlas: its top-left corner and its size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct TexelRect {
-    x: WholePx<Texel>,
-    y: WholePx<Texel>,
-    size: PixelSize<Texel>,
+    x: Px<Texel>,
+    y: Px<Texel>,
+    size: Size<Px<Texel>>,
 }
 
 /// One queued texture upload: the bytes and the texels they fill.
@@ -392,9 +374,9 @@ impl GlyphCache {
                     cached.slot.uv_max = [(ax + bmp.w) as f32 * inv, (ay + bmp.h) as f32 * inv];
                     pending.push(Upload {
                         rect: TexelRect {
-                            x: WholePx::new(ax),
-                            y: WholePx::new(ay),
-                            size: PixelSize::new(WholePx::new(bmp.w), WholePx::new(bmp.h)),
+                            x: Px::new(ax),
+                            y: Px::new(ay),
+                            size: Size::new(Px::new(bmp.w), Px::new(bmp.h)),
                         },
                         bytes: bmp.data.clone(),
                     });
@@ -483,9 +465,9 @@ impl GlyphCache {
 
         pending.push(Upload {
             rect: TexelRect {
-                x: WholePx::new(ax),
-                y: WholePx::new(ay),
-                size: PixelSize::new(WholePx::new(w), WholePx::new(h)),
+                x: Px::new(ax),
+                y: Px::new(ay),
+                size: Size::new(Px::new(w), Px::new(h)),
             },
             bytes: data.clone(),
         });
@@ -591,7 +573,7 @@ impl GlyphAtlas {
     pub fn get_or_rasterize(
         &mut self,
         font_data: &parley::FontData,
-        font_size: RasterSize,
+        font_size: Px<GlyphRaster>,
         normalized_coords: &[swash::NormalizedCoord],
         glyph: GlyphId,
     ) -> Option<AtlasSlot> {
@@ -631,14 +613,14 @@ fn glyph_slot<'a>(
     scale_cx: &mut swash::scale::ScaleContext,
     font_id: FontId,
     font: impl FnOnce() -> Option<swash::FontRef<'a>>,
-    size: RasterSize,
+    size: Px<GlyphRaster>,
     normalized_coords: &[swash::NormalizedCoord],
     glyph: GlyphId,
 ) -> Option<AtlasSlot> {
     if !size.get().is_finite() {
         return None;
     }
-    let drawn = size.capped();
+    let drawn = capped(size);
     let key = GlyphKey::new(font_id, glyph, drawn);
     let slot = match glyphs.lookup(&key) {
         Some(slot) => slot,
@@ -648,7 +630,7 @@ fn glyph_slot<'a>(
         }
     };
     Some(AtlasSlot {
-        texel_scale: size.texel_scale(),
+        texel_scale: texel_scale(size),
         ..slot
     })
 }
@@ -665,7 +647,7 @@ fn glyph_slot<'a>(
 pub(super) fn rasterize(
     scale_cx: &mut swash::scale::ScaleContext,
     font: swash::FontRef<'_>,
-    size: RasterSize,
+    size: Px<GlyphRaster>,
     normalized_coords: &[swash::NormalizedCoord],
     glyph: GlyphId,
 ) -> Option<Raster> {
@@ -756,9 +738,9 @@ mod tests {
     fn upload(x: u32, y: u32, w: u32, h: u32, bytes: Vec<u8>) -> Upload {
         Upload {
             rect: TexelRect {
-                x: WholePx::new(x),
-                y: WholePx::new(y),
-                size: PixelSize::new(WholePx::new(w), WholePx::new(h)),
+                x: Px::new(x),
+                y: Px::new(y),
+                size: Size::new(Px::new(w), Px::new(h)),
             },
             bytes,
         }
@@ -780,7 +762,7 @@ mod tests {
         GlyphKey::new(
             FontId::of_blob(7),
             GlyphId::new(glyph),
-            RasterSize::new(16.0),
+            Px::<GlyphRaster>::new(16.0),
         )
     }
 
@@ -797,7 +779,14 @@ mod tests {
         let font = swash::FontRef::from_index(&bytes, 0).expect("a parsable face");
         let glyph = GlyphId::new(font.charmap().map(ch));
         let mut scale_cx = swash::scale::ScaleContext::new();
-        rasterize(&mut scale_cx, font, RasterSize::new(size), &[], glyph).expect("a raster")
+        rasterize(
+            &mut scale_cx,
+            font,
+            Px::<GlyphRaster>::new(size),
+            &[],
+            glyph,
+        )
+        .expect("a raster")
     }
 
     /// A glyph rasterized for a density of 2 has twice the texels of the
@@ -842,7 +831,7 @@ mod tests {
                 &mut scale_cx,
                 FontId::of_blob(7),
                 || Some(font),
-                RasterSize::new(size),
+                Px::<GlyphRaster>::new(size),
                 &[],
                 glyph,
             )
@@ -857,7 +846,7 @@ mod tests {
         }
         assert!(slot_at(f32::INFINITY).is_none());
         assert!(slot_at(f32::NAN).is_none());
-        let past = RasterSize::new(RASTER_CAP.get() + 1.0);
+        let past = Px::<GlyphRaster>::new(RASTER_CAP.get() + 1.0);
         assert!(rasterize(&mut scale_cx, font, past, &[], glyph).is_none());
     }
 

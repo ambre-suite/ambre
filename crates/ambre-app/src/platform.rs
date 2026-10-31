@@ -434,7 +434,7 @@ pub(crate) const MENU_CANVASES: [ambre_core::CanvasId; 2] =
 /// menu shut, since its point is not the page's. A key's event lands on
 /// whatever holds the focus, the text pipe or the body as well as a canvas.
 pub(crate) fn install_canvas_context_menu(
-    ctx_menu: RwSignal<Option<ambre_core::CssPoint>>,
+    ctx_menu: RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::Css>>>>,
     silent: Signal<bool>,
     placed: Signal<bool>,
 ) {
@@ -459,9 +459,9 @@ pub(crate) fn install_canvas_context_menu(
         if silent || placed {
             return;
         }
-        ctx_menu.set(Some(ambre_core::CssPoint::new(
-            ambre_core::CssPx::new(e.client_x() as f32),
-            ambre_core::CssPx::new(e.client_y() as f32),
+        ctx_menu.set(Some(ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::Css>::new(e.client_x() as f32),
+            ambre_core::Px::<ambre_core::Css>::new(e.client_y() as f32),
         )));
     });
     let _ = leptos::prelude::document()
@@ -814,8 +814,11 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// The page point at `(x, y)`, in CSS px.
-    fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
-        ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+    fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
+        ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::Css>::new(x),
+            ambre_core::Px::<ambre_core::Css>::new(y),
+        )
     }
 
     /// The document's `data-theme`, as the stylesheet reads it.

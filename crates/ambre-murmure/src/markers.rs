@@ -8,9 +8,8 @@
 
 use ambre_bus::{StyleMark, TextStyle};
 use ambre_commands::{Key, KeyChar};
-use ambre_core::{
-    ByteCount, ByteOffset, ByteSpan, CharOffset, CharSpan, ViewPoint, byte_to_char, char_len,
-};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharSpan, byte_to_char, char_len};
+use ambre_core::{Point, Px, View};
 
 use crate::Region;
 use crate::style::linkable;
@@ -45,7 +44,7 @@ pub enum Cover {
 pub struct MarkBar {
     pub controls: Vec<(TextStyle, Cover)>,
     /// The top-left of the caret, in pixels of the region's canvas.
-    pub at: ViewPoint,
+    pub at: Point<Px<View>>,
     /// The region the bar hangs over.
     pub region: Region,
 }

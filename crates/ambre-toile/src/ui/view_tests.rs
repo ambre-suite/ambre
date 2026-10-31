@@ -9,15 +9,15 @@ use ambre_bus::UserId;
 use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use ambre_bus::conduit::Receiver;
 use ambre_commands::KeyChar;
+use ambre_core::Px;
 use ambre_core::Rgba;
-use ambre_core::WholePx;
 use kurbo::Rect;
 
 /// A pointer at screen `(x, y)`, as the canvas hands it over.
-fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
-    ambre_core::ViewPoint::new(
-        ambre_core::ViewPx::new(x as f32),
-        ambre_core::ViewPx::new(y as f32),
+fn pointer(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::View>::new(x as f32),
+        ambre_core::Px::<ambre_core::View>::new(y as f32),
     )
 }
 
@@ -47,8 +47,8 @@ impl Rig {
             DocumentId::new(),
             tx,
             rx,
-            ambre_core::SurfacePx::new(1200.0),
-            ambre_core::SurfacePx::new(800.0),
+            ambre_core::Px::<ambre_core::Surface>::new(1200.0),
+            ambre_core::Px::<ambre_core::Surface>::new(800.0),
             TextInput::detached(),
             ambre_canvas::Embedding::Standalone,
             PerfPublisher::new(),
@@ -1003,8 +1003,8 @@ fn the_board_editor_drives_the_shared_core() {
     let mut font_cx = FontContext::new();
     core.flush(
         &mut font_cx,
-        ambre_core::ViewPx::new(1000.0),
-        ambre_core::ZoomFactor::ONE,
+        ambre_core::Px::<ambre_core::View>::new(1000.0),
+        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
     );
 
     for (step, (event, intent)) in corpus.into_iter().enumerate() {
@@ -1013,8 +1013,8 @@ fn the_board_editor_drives_the_shared_core() {
         core.push(intent);
         core.flush(
             &mut font_cx,
-            ambre_core::ViewPx::new(1000.0),
-            ambre_core::ZoomFactor::ONE,
+            ambre_core::Px::<ambre_core::View>::new(1000.0),
+            ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
         );
         let ed = rig.view.editor.as_ref().expect("still open");
         let board_text = ed
@@ -1880,7 +1880,7 @@ fn a_finger_pans_only_the_empty_board() {
 fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
     let screen_step = |zoom: f64| {
         let mut rig = Rig::with_stickies(&[("a", A)]);
-        rig.view.cam.zoom = ambre_core::ZoomFactor::positive(zoom);
+        rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
         rig.press(rig.screen(50.0, 50.0));
         rig.input(InputEvent::PointerMove {
             at: pointer(1195.0, 400.0),
@@ -1907,13 +1907,11 @@ fn a_drag_held_at_an_edge_pans_the_board_each_frame() {
 fn a_resize_keeps_the_camera_and_asks_for_the_new_canvas() {
     let mut rig = Rig::with_stickies(&[("a", A)]);
     rig.view.cam.center = kurbo::Point::new(40.0, -25.0);
-    rig.view.cam.zoom = ambre_core::ZoomFactor::positive(1.5);
+    rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.5);
     rig.view.update();
     rig.sent();
-    rig.view.resize(ambre_canvas::CssSize::new(
-        WholePx::new(1600),
-        WholePx::new(900),
-    ));
+    rig.view
+        .resize(ambre_core::Size::new(Px::new(1600), Px::new(900)));
     assert_eq!(rig.view.cam.center, kurbo::Point::new(40.0, -25.0));
     assert_eq!(rig.view.cam.zoom.get(), 1.5);
     rig.view.update();
@@ -1921,8 +1919,7 @@ fn a_resize_keeps_the_camera_and_asks_for_the_new_canvas() {
     assert_eq!(asked.len(), 1);
     assert_eq!(asked[0].size, kurbo::Size::new(1600.0, 900.0));
 
-    rig.view
-        .resize(ambre_canvas::CssSize::new(WholePx::ZERO, WholePx::ZERO));
+    rig.view.resize(ambre_core::Size::new(Px::ZERO, Px::ZERO));
     assert_eq!(rig.view.cam.size, kurbo::Size::new(1.0, 1.0));
     let back = rig.view.cam.screen_to_world() * kurbo::Point::new(0.5, 0.5);
     assert!(back.x.is_finite() && back.y.is_finite());
@@ -2326,7 +2323,7 @@ fn a_shown_shortcut_does_what_its_entry_does() {
 fn a_zoom_entry_moves_the_camera_and_queues_a_cull() {
     use crate::ui::menu_bar::{ZOOM_IN, ZOOM_OUT, ZOOM_RESET};
     let mut rig = Rig::with_stickies(&[("a", A)]);
-    rig.view.cam.zoom = ambre_core::ZoomFactor::positive(2.0);
+    rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
     for id in [ZOOM_IN, ZOOM_OUT, ZOOM_RESET] {
         let before = rig.view.cam.zoom;
         rig.view.apply_menu_command(id);
@@ -2455,7 +2452,7 @@ fn the_bar_hides_during_a_move() {
     });
     assert!(
         rig.view
-            .float_bar_at(ambre_core::CssPoint::default())
+            .float_bar_at(ambre_core::Point::default())
             .is_some(),
         "the bar shows"
     );
@@ -2466,14 +2463,14 @@ fn the_bar_hides_during_a_move() {
     });
     assert!(
         rig.view
-            .float_bar_at(ambre_core::CssPoint::default())
+            .float_bar_at(ambre_core::Point::default())
             .is_none(),
         "the bar follows the drag"
     );
     rig.release(to);
     assert!(
         rig.view
-            .float_bar_at(ambre_core::CssPoint::default())
+            .float_bar_at(ambre_core::Point::default())
             .is_some(),
         "the bar is back"
     );
@@ -3020,21 +3017,21 @@ fn a_canvas_point_reaches_its_element_through_the_shared_hit_test() {
     use ambre_draw::HitTest;
     let mut rig = Rig::with_stickies(&[("a", A)]);
     for zoom in [0.5, 1.0, 2.0] {
-        rig.view.cam.zoom = ambre_core::ZoomFactor::positive(zoom);
+        rig.view.cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
         let (x, y) = rig.screen(50.0, 50.0);
         assert_eq!(
-            rig.view.hit_test(ambre_core::ViewPoint::new(
-                ambre_core::ViewPx::new(x as f32),
-                ambre_core::ViewPx::new(y as f32)
+            rig.view.hit_test(ambre_core::Point::new(
+                ambre_core::Px::<ambre_core::View>::new(x as f32),
+                ambre_core::Px::<ambre_core::View>::new(y as f32)
             )),
             Some(eid("a")),
             "zoom {zoom}"
         );
         let (x, y) = rig.screen(900.0, 600.0);
         assert_eq!(
-            rig.view.hit_test(ambre_core::ViewPoint::new(
-                ambre_core::ViewPx::new(x as f32),
-                ambre_core::ViewPx::new(y as f32)
+            rig.view.hit_test(ambre_core::Point::new(
+                ambre_core::Px::<ambre_core::View>::new(x as f32),
+                ambre_core::Px::<ambre_core::View>::new(y as f32)
             )),
             None,
             "zoom {zoom}"

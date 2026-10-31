@@ -11,7 +11,7 @@
 use ambre_bus::{AppCommand, StylePatch, TrameCommand};
 use ambre_chrome::commands::{ClipboardWrite, CommandId, PasteForm};
 use ambre_chrome::{CommandHandler, FileAccept, FilePick, KeyRoute, ShellAction};
-use ambre_core::{CssPoint, CssPx, ViewPoint};
+use ambre_core::{Css, Point, Px, View};
 use leptos::prelude::*;
 
 use super::commands::{
@@ -35,7 +35,7 @@ pub struct TrameHandler {
     /// The active cell's style, which the bold and italic toggles flip.
     pub style: StyleState,
     /// Where the view last drew the active cell, on the canvas.
-    pub anchor: RwSignal<Option<ViewPoint>>,
+    pub anchor: RwSignal<Option<Point<Px<View>>>>,
 }
 
 impl TrameHandler {
@@ -164,13 +164,16 @@ impl CommandHandler for TrameHandler {
 
 /// Convert a canvas-relative anchor into client space, by adding the canvas's
 /// offset in the viewport. With no anchor, the canvas's top-left.
-fn client_anchor(anchor: Option<ViewPoint>) -> CssPoint {
+fn client_anchor(anchor: Option<Point<Px<View>>>) -> Point<Px<Css>> {
     let origin = document()
         .get_element_by_id("ambre-canvas")
         .map(|c| {
             let r = c.get_bounding_client_rect();
             // The DOM measures in `f64`; a CSS pixel is an `f32`.
-            CssPoint::new(CssPx::new(r.left() as f32), CssPx::new(r.top() as f32))
+            Point::new(
+                Px::<Css>::new(r.left() as f32),
+                Px::<Css>::new(r.top() as f32),
+            )
         })
         .unwrap_or_default();
     anchor.unwrap_or_default().on_page(origin)

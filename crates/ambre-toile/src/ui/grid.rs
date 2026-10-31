@@ -54,15 +54,18 @@ impl GridUnit {
 /// Comfortable on-screen spacing band (logical pixels): the adaptive step keeps
 /// the line spacing at or above `MIN_SPACING`, doubling the world step until
 /// it does.
-const MIN_SPACING: ambre_core::ViewPx = ambre_core::ViewPx::new(24.0);
-const MAX_SPACING: ambre_core::ViewPx = ambre_core::ViewPx::new(96.0);
+const MIN_SPACING: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(24.0);
+const MAX_SPACING: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(96.0);
 
 /// Choose the grid step (world units) for `zoom`: the smallest power-of-two
 /// multiple of `base` whose screen spacing (`step * zoom`) is at least
 /// `MIN_SPACING`. That step is then halved back down while it stays above
 /// `MAX_SPACING`, never below `base`, so the grid stays magnetic to the board
 /// unit.
-pub fn grid_step(zoom: ambre_core::ZoomFactor, base: GridUnit) -> BoardLength {
+pub fn grid_step(
+    zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+    base: GridUnit,
+) -> BoardLength {
     let zoom = zoom.get();
     // The band, in the f64 of the board's screen geometry.
     let (min, max) = (f64::from(MIN_SPACING.get()), f64::from(MAX_SPACING.get()));
@@ -129,7 +132,7 @@ pub fn paint_grid<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((sx, 0.0), (sx, cam.size.height)),
             color,
-            ambre_core::SurfacePx::new(1.0),
+            ambre_core::Px::<ambre_core::Surface>::new(1.0),
         );
         x += step;
     }
@@ -140,7 +143,7 @@ pub fn paint_grid<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((0.0, sy), (cam.size.width, sy)),
             color,
-            ambre_core::SurfacePx::new(1.0),
+            ambre_core::Px::<ambre_core::Surface>::new(1.0),
         );
         y += step;
     }
@@ -158,7 +161,10 @@ mod tests {
         let min = f64::from(MIN_SPACING.get());
         let mut z = min / (BASE_GRID.get() * 64.0); // very zoomed out
         while z <= MAX_ZOOM_SWEEP {
-            let step = grid_step(ambre_core::ZoomFactor::positive(z), GridUnit::BASE);
+            let step = grid_step(
+                ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(z),
+                GridUnit::BASE,
+            );
             let spacing = step.get() * z;
             assert!(
                 spacing >= min - 1e-9,
@@ -175,7 +181,10 @@ mod tests {
     #[test]
     fn step_is_power_of_two_multiple_of_base() {
         for z in [0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0] {
-            let step = grid_step(ambre_core::ZoomFactor::positive(z), GridUnit::BASE);
+            let step = grid_step(
+                ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(z),
+                GridUnit::BASE,
+            );
             let ratio = step / BASE_GRID;
             assert!(ratio >= 1.0 - 1e-9, "step below base at zoom {z}");
             // ratio must be a power of two.
@@ -244,7 +253,7 @@ mod tests {
         }
         let tiny = GridUnit::new(BoardLength::new(f64::MIN_POSITIVE)).map(GridUnit::length);
         assert_eq!(tiny, Some(BoardLength::new(f64::MIN_POSITIVE)));
-        let zoom = ambre_core::ZoomFactor::positive(1.0);
+        let zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0);
         let step = grid_step(
             zoom,
             GridUnit::of_register(BoardLength::new(f64::MIN_POSITIVE)),
@@ -258,7 +267,7 @@ mod tests {
     fn a_grid_line_is_one_pixel_at_every_zoom() {
         for zoom in [0.1, 0.5, 1.0, 3.0, 10.0] {
             let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
-            cam.zoom = ambre_core::ZoomFactor::positive(zoom);
+            cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
             let ops = grid_ops(&cam, BASE_GRID.get());
             let mut lines = 0;
             for op in &ops {

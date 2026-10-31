@@ -6,16 +6,16 @@ use ambre_commands::SelectionMode;
 
 impl TrameUiState {
     /// Discrete zoom levels cycled by the status-bar zoom control.
-    pub const ZOOM_PRESETS: [ambre_core::ZoomFactor; 6] = [
-        ambre_core::ZoomFactor::positive(0.5),
-        ambre_core::ZoomFactor::positive(0.75),
-        ambre_core::ZoomFactor::ONE,
-        ambre_core::ZoomFactor::positive(1.25),
-        ambre_core::ZoomFactor::positive(1.5),
-        ambre_core::ZoomFactor::positive(2.0),
+    pub const ZOOM_PRESETS: [ambre_core::Scale<ambre_core::Doc, ambre_core::View>; 6] = [
+        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.5),
+        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.75),
+        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
+        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.25),
+        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.5),
+        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0),
     ];
 
-    pub fn new(canvas_width: SurfacePx, canvas_height: SurfacePx) -> Self {
+    pub fn new(canvas_width: Px<Surface>, canvas_height: Px<Surface>) -> Self {
         let mut s = Self {
             top_row: Row::ZERO,
             left_col: Col::ZERO,
@@ -24,7 +24,7 @@ impl TrameUiState {
             viewport_cols: ColCount::ZERO,
             canvas_width,
             canvas_height,
-            zoom: ambre_core::ZoomFactor::ONE,
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
             cell_cache: HashMap::new(),
             dirty_cells: HashSet::new(),
             formula_errors: HashSet::new(),
@@ -49,7 +49,7 @@ impl TrameUiState {
 
     /// Update canvas dimensions and recompute the visible range.
     #[allow(dead_code)]
-    pub fn resize(&mut self, width: SurfacePx, height: SurfacePx) {
+    pub fn resize(&mut self, width: Px<Surface>, height: Px<Surface>) {
         self.canvas_width = width;
         self.canvas_height = height;
         self.recompute_viewport_dims();
@@ -58,13 +58,13 @@ impl TrameUiState {
     /// Bottom edge (logical px) of the scrollable grid area. The sheet-tab strip
     /// moved to DOM chrome (`SheetTabs`), so the grid now fills the full canvas
     /// height. The DOM strip occupies its own shell row outside this surface.
-    pub fn grid_bottom(&self) -> SurfacePx {
+    pub fn grid_bottom(&self) -> Px<Surface> {
         self.canvas_height.max(self.header_h())
     }
 
     fn recompute_viewport_dims(&mut self) {
-        let grid_h = (self.grid_bottom() - self.header_h()).max(SurfacePx::ZERO);
-        let grid_w = (self.canvas_width - self.header_w()).max(SurfacePx::ZERO);
+        let grid_h = (self.grid_bottom() - self.header_h()).max(Px::<Surface>::ZERO);
+        let grid_w = (self.canvas_width - self.header_w()).max(Px::<Surface>::ZERO);
         let (row_h, col_w) = (self.scaled(ROW_HEIGHT), self.scaled(COL_WIDTH));
         // ceil() already accounts for the partially-visible row/col at the edge.
         // No +1 needed: viewport_rows is the count of rows that start within the
@@ -79,7 +79,7 @@ impl TrameUiState {
     /// top-left scroll origin pinned. Recomputes the visible range. Returns
     /// `true` when the zoom actually changed, so the caller can repaint and
     /// re-request the (now differently sized) viewport.
-    pub fn set_zoom(&mut self, zoom: ambre_core::ZoomFactor) -> bool {
+    pub fn set_zoom(&mut self, zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>) -> bool {
         let [lo, .., hi] = Self::ZOOM_PRESETS;
         let z = zoom.clamped(lo, hi);
         if (z.get() - self.zoom.get()).abs() < f64::EPSILON {

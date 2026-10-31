@@ -28,7 +28,10 @@ pub fn watchers(channel_id: ChannelId, watching: Vec<UserId>) -> UiEvent {
 
 /// A channel view of `size` whose messages read `texts`, each by "Ada" at
 /// "t", and the queue that fed it. The messages land on the next update.
-pub fn channel_of(texts: &[&str], size: ambre_canvas::CssSize) -> (MurmureView, Sender<UiEvent>) {
+pub fn channel_of(
+    texts: &[&str],
+    size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>,
+) -> (MurmureView, Sender<UiEvent>) {
     let channel_id = ChannelId::new();
     let reads = PageReads {
         pane: Rc::new(move || MurmurePane::Channel {

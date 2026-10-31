@@ -1195,13 +1195,13 @@ fn deleted_sheet_leaves_no_data() {
         version: ambre_core::Generation::nth(1),
         sheet_id: gone.clone(),
         col: Col::new(0),
-        width: ambre_core::DocPx::new(120.0),
+        width: ambre_core::Px::<ambre_core::Doc>::new(120.0),
     });
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_core::Generation::nth(2),
         sheet_id: gone.clone(),
         row: Row::new(0),
-        height: ambre_core::DocPx::new(40.0),
+        height: ambre_core::Px::<ambre_core::Doc>::new(40.0),
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: gone.clone(),

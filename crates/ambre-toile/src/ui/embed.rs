@@ -347,7 +347,8 @@ pub fn visible_web_embeds(
 /// as a click. A click focuses a `doc_embed`, and a longer travel is a drag
 /// that moves it ("Input focus"). The view reads the same slop for
 /// click-to-edit (`toile-text-editing`).
-pub const CLICK_SLOP: ambre_core::ViewPx = ambre_core::ViewPx::new(4.0);
+pub const CLICK_SLOP: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(4.0);
 
 /// Which `doc_embed`, if any, holds input focus, and the press-to-release
 /// arbitration that decides it ("Input focus"). View-local state, never
@@ -659,7 +660,7 @@ mod tests {
     #[test]
     fn a_child_pixel_is_a_screen_pixel() {
         let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
-        cam.zoom = ambre_core::ZoomFactor::positive(2.5);
+        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.5);
         let e = doc_embed(
             "e1",
             DocumentId::new(),
@@ -690,7 +691,7 @@ mod tests {
     #[test]
     fn child_size_scales_with_zoom() {
         let mut cam = ViewportTransform::new(ambre_draw::Size::new(1000.0, 800.0));
-        cam.zoom = ambre_core::ZoomFactor::positive(0.5);
+        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.5);
         let e = doc_embed(
             "e1",
             DocumentId::new(),
@@ -730,7 +731,7 @@ mod tests {
             for zoom in [0.5, 1.0, 2.5] {
                 let e = doc_embed("e", DocumentId::new(), bounds, rot);
                 let cam = ViewportTransform {
-                    zoom: ambre_core::ZoomFactor::positive(zoom),
+                    zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom),
                     size: Size::new(800.0, 600.0),
                     ..Default::default()
                 };
@@ -1400,7 +1401,7 @@ mod web_embed_tests {
             "https://example.com",
         ))]);
         let mut zoomed = cam();
-        zoomed.zoom = ambre_core::ZoomFactor::positive(3.0);
+        zoomed.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(3.0);
         let one = visible_web_embeds(&dv, &cam(), None)[0].layout_size;
         let two = visible_web_embeds(&dv, &zoomed, None)[0].layout_size;
         assert_eq!(
@@ -1427,7 +1428,7 @@ mod web_embed_tests {
         ))]);
 
         let mut zoomed = cam();
-        zoomed.zoom = ambre_core::ZoomFactor::positive(2.0);
+        zoomed.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
         let one = visible_web_embeds(&dv, &cam(), None)[0].screen_rect;
         let two = visible_web_embeds(&dv, &zoomed, None)[0].screen_rect;
         assert!(
@@ -1514,7 +1515,10 @@ mod routing_tests {
     fn a_pointer_event_is_bound_by_its_own_position() {
         let far = Point::new(400.0, 400.0);
         let down = |x, y| InputEvent::PointerDown {
-            at: ambre_core::ViewPoint::new(ambre_core::ViewPx::new(x), ambre_core::ViewPx::new(y)),
+            at: ambre_core::Point::new(
+                ambre_core::Px::<ambre_core::View>::new(x),
+                ambre_core::Px::<ambre_core::View>::new(y),
+            ),
             button: ambre_canvas::PointerButton::Primary,
             mods: Modifiers::NONE,
         };

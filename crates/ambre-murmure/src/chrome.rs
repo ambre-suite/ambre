@@ -35,7 +35,8 @@ use ambre_chrome::{
     Pressed, ShellAction, ShellRegion, Toasts,
 };
 use ambre_commands::{CommandId, Locale};
-use ambre_core::{ChannelId, CssPoint, CssPx, Name, SpaceId, StepDirection, UserId};
+use ambre_core::{ChannelId, Name, SpaceId, StepDirection, UserId};
+use ambre_core::{Css, Point, Px};
 use leptos::prelude::*;
 
 pub use crate::notices::{
@@ -1639,7 +1640,7 @@ pub fn ChannelMentionConfirm(
 
 /// The top-left of the canvas a region paints, in the viewport, `(0, 0)`
 /// with no such canvas in the page.
-fn canvas_origin(region: Region) -> CssPoint {
+fn canvas_origin(region: Region) -> Point<Px<Css>> {
     let id = match region {
         Region::Thread => crate::view::THREAD_CANVAS,
         Region::Channel => crate::view::CHANNEL_CANVAS,
@@ -1649,9 +1650,9 @@ fn canvas_origin(region: Region) -> CssPoint {
         .and_then(|d| d.get_element_by_id(id.as_str()))
         .map(|canvas| {
             let rect = canvas.get_bounding_client_rect();
-            CssPoint::new(
-                CssPx::new(rect.left() as f32),
-                CssPx::new(rect.top() as f32),
+            Point::new(
+                Px::<Css>::new(rect.left() as f32),
+                Px::<Css>::new(rect.top() as f32),
             )
         })
         .unwrap_or_default()

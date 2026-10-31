@@ -43,7 +43,7 @@ pub(crate) fn mount_shell(
     boot_doc: Option<DocumentId>,
     store_slot: Slot<CommandStates>,
     toile_store_slot: Slot<CommandStates>,
-    anchor_slot: Slot<RwSignal<Option<ambre_core::ViewPoint>>>,
+    anchor_slot: Slot<RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>>>,
     toasts_slot: Slot<Toasts>,
     user_slot: Slot<RwSignal<Option<ambre_core::DisplayName>>>,
     docs_slot: Slot<RwSignal<Vec<DocItem>>>,
@@ -76,7 +76,7 @@ pub(crate) fn mount_shell(
     following_toile: RwSignal<Option<ambre_bus::UserId>>,
     presenter_peer_toile: RwSignal<Option<ambre_bus::UserId>>,
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
-    zoom: RwSignal<ZoomFactor>,
+    zoom: RwSignal<Scale<Doc, View>>,
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
     filter_active: RwSignal<trame_chrome::SheetFilter>,
     toile_ctx_scope: RwSignal<ambre_toile::ui::menu::CtxScope>,
@@ -112,7 +112,7 @@ pub(crate) fn mount_shell(
         toile_chrome::init_command_states(&toile_store);
         let toile_toggles = toile_chrome::Toggles::from_store(&toile_store);
         *toile_store_slot.borrow_mut() = Some(toile_store);
-        let anchor_pos = RwSignal::new(None::<ambre_core::ViewPoint>);
+        let anchor_pos = RwSignal::new(None::<ambre_core::Point<ambre_core::Px<ambre_core::View>>>);
         *anchor_slot.borrow_mut() = Some(anchor_pos);
         let toasts = Toasts::new();
         *toasts_slot.borrow_mut() = Some(toasts);

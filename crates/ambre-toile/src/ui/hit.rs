@@ -14,13 +14,13 @@ use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, ElementId}
 use ambre_draw::{BezPath, Point, Rect};
 use kurbo::{ParamCurveNearest, Shape};
 
-use ambre_core::ViewPx;
+use ambre_core::{Px, View};
 
 use super::viewport::{BoardLength, MIN_ZOOM, ViewportTransform};
 
 /// The screen distance within which a pointer reaches a thin stroke's
 /// outline. Keeps hair-thin lines and open paths clickable (`TOILE-UI-225`).
-pub(crate) const PICK_REACH: ViewPx = ViewPx::new(4.0);
+pub(crate) const PICK_REACH: Px<View> = Px::<View>::new(4.0);
 
 /// [`PICK_REACH`] in world units under `cam`: the reach of a pointer at this
 /// zoom. Every pointer hit test takes it, so the reach holds on screen. A zoom
@@ -350,7 +350,7 @@ mod tests {
         let mut cam = ViewportTransform::default();
         use super::super::viewport::{MAX_ZOOM, MIN_ZOOM};
         for zoom in [MIN_ZOOM.get(), 0.5, 1.0, 4.0, MAX_ZOOM.get()] {
-            cam.zoom = ambre_core::ZoomFactor::positive(zoom);
+            cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
             let pick = pick_floor(&cam);
             // `px` screen pixels off the line, in world units at this zoom.
             let off = |px: f64| Point::new(500.0, px / zoom);

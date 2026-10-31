@@ -45,8 +45,9 @@ use ambre_bus::{
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
     AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
-    Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
+    Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar,
 };
+use ambre_core::{Doc, Scale, View};
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
 // for every Trame concern -- it names no command, button, or event variant itself.
@@ -381,7 +382,7 @@ struct Wiring {
     perf_snap: RwSignal<ambre_canvas::PerfSnapshot>,
     /// Grid zoom factor (`1.0` = 100%, `trame-status-bar`): the status-bar menu
     /// writes it, the canvas view polls it each frame. Local view state, not synced.
-    zoom: RwSignal<ZoomFactor>,
+    zoom: RwSignal<Scale<Doc, View>>,
     /// Right-click context-menu scope (`trame-context-menu`): the view sets it
     /// (cell vs header) before the DOM menu opens; the shell derives the layout.
     ctx_scope: RwSignal<trame_chrome::CtxScope>,
@@ -667,7 +668,7 @@ pub fn main() {
     let active_sheet = RwSignal::new(SheetId::default());
     // Grid zoom factor selected in the status-bar menu (`trame-status-bar`),
     // polled by the canvas view each frame. Defaults to 100%.
-    let zoom = RwSignal::new(ZoomFactor::ONE);
+    let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
 
     // Context-menu scope (`trame-context-menu`): the view sets it per right-click
     // (cell vs header) before the DOM `contextmenu` listener opens the menu. The
@@ -859,7 +860,8 @@ pub fn main() {
     let store_slot: Slot<CommandStates> = Rc::new(RefCell::new(None));
     let toile_store_slot: Slot<CommandStates> = Rc::new(RefCell::new(None));
     let commands_slot: Slot<shell::CommandPath> = Rc::new(RefCell::new(None));
-    let anchor_slot: Slot<RwSignal<Option<ambre_core::ViewPoint>>> = Rc::new(RefCell::new(None));
+    let anchor_slot: Slot<RwSignal<Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>>> =
+        Rc::new(RefCell::new(None));
     let toasts_slot: Slot<Toasts> = Rc::new(RefCell::new(None));
     let user_slot: Slot<RwSignal<Option<ambre_core::DisplayName>>> = Rc::new(RefCell::new(None));
     let docs_slot: Slot<RwSignal<Vec<DocItem>>> = Rc::new(RefCell::new(None));
@@ -1059,7 +1061,7 @@ pub fn main() {
     let vault_frame = vault.clone();
     let session_seen_frame = Rc::clone(&session_seen);
     let mut persist_waiting: Vec<(DocumentId, ambre_logic::PersistWrite)> = Vec::new();
-    let mut last_anchor: Option<ambre_core::ViewPoint> = None;
+    let mut last_anchor: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>> = None;
     let mut last_busy = false;
     let mut last_perf_push_ms: f64 = 0.0;
     let mut list_requested = false;
@@ -1732,7 +1734,7 @@ pub fn main() {
     let ch_toile_menu_cmd = RwSignal::new(None::<CommandId>);
     let ch_toile_active_tool = RwSignal::new(ambre_toile::ui::Tool::default());
     let ch_toile_cursor = RwSignal::new(None::<ambre_toile::ui::palette::CanvasCursor>);
-    let ch_toile_zoom = RwSignal::new(ZoomFactor::ONE);
+    let ch_toile_zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let ch_toile_sel_stats = RwSignal::new(None::<toile_chrome::SelStats>);
     let ch_toile_style_model = RwSignal::new(None::<toile_chrome::StyleModel>);
     let ch_toile_restyle = RwSignal::new(None::<ambre_bus::app::toile::ElementStyle>);
@@ -1759,7 +1761,7 @@ pub fn main() {
     let ch_formula_action = RwSignal::new(None::<FormulaAction>);
     let ch_tr_sel_stats = RwSignal::new(None::<trame_chrome::SelStats>);
     let ch_tr_ctx_scope = RwSignal::new(trame_chrome::CtxScope::Cell);
-    let ch_tr_zoom = RwSignal::new(ZoomFactor::ONE);
+    let ch_tr_zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let ch_tr_active_sheet = RwSignal::new(SheetId::default());
     let ch_tr_filter_active = RwSignal::new(trame_chrome::SheetFilter::Unfiltered);
     let ch_tr_find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
@@ -1783,8 +1785,8 @@ pub fn main() {
                 document_id,
                 child_to_logic.clone(),
                 child_rx,
-                ambre_core::SurfacePx::new(size.width),
-                ambre_core::SurfacePx::new(size.height),
+                ambre_core::Px::<ambre_core::Surface>::new(size.width),
+                ambre_core::Px::<ambre_core::Surface>::new(size.height),
                 text_input,
                 ambre_canvas::Embedding::Embedded,
                 ambre_canvas::PerfPublisher::new(),
@@ -1816,8 +1818,8 @@ pub fn main() {
                 document_id,
                 child_to_logic.clone(),
                 child_rx,
-                ambre_core::SurfacePx::new(size.width),
-                ambre_core::SurfacePx::new(size.height),
+                ambre_core::Px::<ambre_core::Surface>::new(size.width),
+                ambre_core::Px::<ambre_core::Surface>::new(size.height),
                 text_input,
                 ambre_canvas::Embedding::Embedded,
                 ambre_canvas::AnchorPublisher::new(),
@@ -1841,9 +1843,9 @@ pub fn main() {
 
     let switcher = host::run_with(
         ambre_core::CanvasId::CONTENT,
-        move |size: ambre_canvas::CssSize, text_input| {
-            let w = ambre_core::SurfacePx::new(f64::from(size.width.get()));
-            let h = ambre_core::SurfacePx::new(f64::from(size.height.get()));
+        move |size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>, text_input| {
+            let w = ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.width.get()));
+            let h = ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.height.get()));
             // Pick the view by the booted document's type. Cross-type in-session
             // navigation is out of Phase 0: the `DocSwitcher` only swaps the id
             // within one `AppView`, so a Trame<->Toile hop reloads via the route.

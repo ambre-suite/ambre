@@ -52,7 +52,11 @@ where
         // Re-stroke the span perimeter in the grid-line colour so the block reads
         // as one cell (the fill above paints over the perimeter separators). A
         // user-set border draws on top of this in the dedicated border pass.
-        surface.stroke_rect(rect, palette.grid_line, ambre_core::SurfacePx::new(1.0));
+        surface.stroke_rect(
+            rect,
+            palette.grid_line,
+            ambre_core::Px::<ambre_core::Surface>::new(1.0),
+        );
 
         if text_pass == TextPass::WithText && !content.text.is_empty() {
             // Honour the master's full style (size, font, colour, alignment,
@@ -74,7 +78,7 @@ where
                 font_cx,
                 content.text,
                 font_size,
-                ViewPx::new(max_w),
+                Px::<View>::new(max_w),
                 Alignment::Start,
                 content.bold,
                 content.italic,
@@ -84,8 +88,8 @@ where
             let text_h = layout_text.height() as f64;
             let text_w = layout_text.width() as f64;
             let fit = TextFit {
-                box_height: ambre_core::SurfacePx::new(rect.height()),
-                text_height: ambre_core::SurfacePx::new(text_h),
+                box_height: ambre_core::Px::<ambre_core::Surface>::new(rect.height()),
+                text_height: ambre_core::Px::<ambre_core::Surface>::new(text_h),
             };
             let y_off = cell_v_offset(content.v_align, fit).get();
             let x_off = match cell_alignment(content.h_align, content.numeric) {

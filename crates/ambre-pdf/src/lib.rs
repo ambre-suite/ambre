@@ -18,9 +18,9 @@
 // bottom-left Y-up flip internally, so no coordinate mapping is needed here.
 // ============================================================================
 
+use ambre_draw::Px;
 use ambre_draw::{
     Affine, Brush, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush, Rect, Stroke,
-    SurfacePx,
 };
 use kurbo::{BezPath, PathEl};
 
@@ -68,7 +68,12 @@ impl<'a, 'b> KrillaSurface<'a, 'b> {
     /// Stroke the given krilla path with a solid color and width. `cap`/`join`
     /// default to the krilla defaults (butt/miter); callers needing round joins
     /// go through `stroke_path`.
-    fn stroke_solid(&mut self, path: &krilla::geom::Path, color: Color, width: SurfacePx) {
+    fn stroke_solid(
+        &mut self,
+        path: &krilla::geom::Path,
+        color: Color,
+        width: Px<ambre_draw::Surface>,
+    ) {
         let (paint, opacity) = paint_and_opacity(color);
         self.surface.set_stroke(Some(KStroke {
             paint,
@@ -87,13 +92,13 @@ impl DrawSurface for KrillaSurface<'_, '_> {
         }
     }
 
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: SurfacePx) {
+    fn stroke_rect(&mut self, rect: Rect, color: Color, width: Px<ambre_draw::Surface>) {
         if let Some(path) = rect_path(rect) {
             self.stroke_solid(&path, color, width);
         }
     }
 
-    fn stroke_line(&mut self, line: Line, color: Color, width: SurfacePx) {
+    fn stroke_line(&mut self, line: Line, color: Color, width: Px<ambre_draw::Surface>) {
         let mut pb = PathBuilder::new();
         pb.move_to(line.p0.x as f32, line.p0.y as f32);
         pb.line_to(line.p1.x as f32, line.p1.y as f32);
@@ -388,12 +393,12 @@ mod tests {
             s.stroke_rect(
                 Rect::new(100.0, 10.0, 190.0, 90.0),
                 palette::css::BLUE,
-                SurfacePx::new(2.0),
+                Px::<ambre_draw::Surface>::new(2.0),
             );
             s.stroke_line(
                 ambre_draw::Line::new((10.0, 100.0), (190.0, 100.0)),
                 palette::css::BLACK,
-                SurfacePx::new(1.0),
+                Px::<ambre_draw::Surface>::new(1.0),
             );
 
             // Clip + transform stacks, balanced.
@@ -440,10 +445,7 @@ mod tests {
             let src = ImageSource {
                 key: ImageKey(1),
                 pixels: &pixels,
-                size: ambre_draw::ImageSize::new(
-                    ambre_draw::WholePx::new(2),
-                    ambre_draw::WholePx::new(2),
-                ),
+                size: ambre_core::Size::new(ambre_draw::Px::new(2), ambre_draw::Px::new(2)),
             };
             s.draw_image(&src, Rect::new(10.0, 10.0, 90.0, 90.0));
             // Degenerate destination: no-op, no panic.
@@ -452,10 +454,7 @@ mod tests {
             let bad = ImageSource {
                 key: ImageKey(2),
                 pixels: &ambre_draw::RgbaPixels::new(vec![0, 1, 2]),
-                size: ambre_draw::ImageSize::new(
-                    ambre_draw::WholePx::new(2),
-                    ambre_draw::WholePx::new(2),
-                ),
+                size: ambre_core::Size::new(ambre_draw::Px::new(2), ambre_draw::Px::new(2)),
             };
             s.draw_image(&bad, Rect::new(0.0, 0.0, 10.0, 10.0));
         }

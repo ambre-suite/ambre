@@ -14,21 +14,20 @@
 // the app styles, so Trame and Toile status bars are visually identical.
 // ============================================================================
 
+use ambre_core::{Doc, Scale, View};
 use leptos::prelude::*;
 
 /// Zoom presets offered by [`ZoomChip`] when the app supplies none. The canvas
 /// apps (Trame grid zoom, Toile board zoom) share the same ladder so the menu
 /// reads identically.
-pub const ZOOM_PRESETS: [ZoomFactor; 6] = [
-    ZoomFactor::positive(0.5),
-    ZoomFactor::positive(0.75),
-    ZoomFactor::ONE,
-    ZoomFactor::positive(1.25),
-    ZoomFactor::positive(1.5),
-    ZoomFactor::positive(2.0),
+pub const ZOOM_PRESETS: [Scale<Doc, View>; 6] = [
+    Scale::<Doc, View>::positive(0.5),
+    Scale::<Doc, View>::positive(0.75),
+    Scale::<Doc, View>::ONE,
+    Scale::<Doc, View>::positive(1.25),
+    Scale::<Doc, View>::positive(1.5),
+    Scale::<Doc, View>::positive(2.0),
 ];
-
-pub use ambre_core::ZoomFactor;
 
 /// The app-name caption pinned to the left of a status bar (for example "Trame",
 /// "Toile"): a dim, small label, styled by the shared `statusbar-label` class.
@@ -45,11 +44,11 @@ pub fn StatusLabel(#[prop(into)] label: String) -> impl IntoView {
 #[component]
 pub fn ZoomChip(
     /// The live zoom factor (`1.0` = 100%). The menu sets it; the view mirrors it.
-    zoom: RwSignal<ZoomFactor>,
+    zoom: RwSignal<Scale<Doc, View>>,
     /// Preset factors offered by the menu, low-to-high. Defaults to [`ZOOM_PRESETS`].
     /// The first and the last bound what the menu writes.
     #[prop(optional, into)]
-    presets: Option<Vec<ZoomFactor>>,
+    presets: Option<Vec<Scale<Doc, View>>>,
     /// Tooltip for the button (app-specific wording). Defaults to `"Zoom"`.
     #[prop(optional, into)]
     title: Option<String>,
@@ -63,12 +62,12 @@ pub fn ZoomChip(
         .iter()
         .copied()
         .reduce(|a, b| if b < a { b } else { a })
-        .unwrap_or(ZoomFactor::ONE);
+        .unwrap_or(Scale::<Doc, View>::ONE);
     let hi = presets
         .iter()
         .copied()
         .reduce(|a, b| if b > a { b } else { a })
-        .unwrap_or(ZoomFactor::ONE);
+        .unwrap_or(Scale::<Doc, View>::ONE);
     let presets = StoredValue::new(presets);
     let title = title.unwrap_or_else(|| "Zoom".to_owned());
     let menu_ref = NodeRef::<leptos::html::Ul>::new();
@@ -192,10 +191,13 @@ mod tests {
     /// (`UI-THREAD-060`).
     #[test]
     fn a_zoom_factor_is_clamped_where_it_is_built() {
-        assert_eq!(ZoomFactor::within(5.0, 0.5, 2.0).get(), 2.0);
-        assert_eq!(ZoomFactor::within(0.1, 0.5, 2.0).get(), 0.5);
-        assert_eq!(ZoomFactor::within(f64::NAN, 0.5, 2.0).get(), 1.0);
-        assert_eq!(ZoomFactor::within(f64::INFINITY, 0.5, 2.0).get(), 2.0);
-        assert!(ZoomFactor::within(0.0, -1.0, f64::INFINITY).get() > 0.0);
+        assert_eq!(Scale::<Doc, View>::within(5.0, 0.5, 2.0).get(), 2.0);
+        assert_eq!(Scale::<Doc, View>::within(0.1, 0.5, 2.0).get(), 0.5);
+        assert_eq!(Scale::<Doc, View>::within(f64::NAN, 0.5, 2.0).get(), 1.0);
+        assert_eq!(
+            Scale::<Doc, View>::within(f64::INFINITY, 0.5, 2.0).get(),
+            2.0
+        );
+        assert!(Scale::<Doc, View>::within(0.0, -1.0, f64::INFINITY).get() > 0.0);
     }
 }

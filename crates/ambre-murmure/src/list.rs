@@ -12,7 +12,8 @@ use ambre_bus::{
     MurmureCommand, MurmureEvent, Notice, Reaction, Revision, SegmentId, TextStyle, Timestamp,
     UiEvent, Unreadable, UserId,
 };
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec, ViewPx};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharVec};
+use ambre_core::{Px, View};
 
 use crate::MessageCount;
 
@@ -550,16 +551,16 @@ fn body_marks(message: &MessageView, bytes: &CharVec<ByteOffset>) -> Vec<BodyMar
 /// reaches: a row above the viewport is never laid out (`MURMURE-187`).
 pub fn from_bottom(
     count: ListRowCount,
-    height: ViewPx,
-    mut measure: impl FnMut(ListRow) -> ViewPx,
-) -> Vec<(ListRow, ViewPx)> {
+    height: Px<View>,
+    mut measure: impl FnMut(ListRow) -> Px<View>,
+) -> Vec<(ListRow, Px<View>)> {
     let mut shown = Vec::new();
     let mut bottom = height;
     for i in ListRowSpan::from_count(ListRow::ZERO, count)
         .into_iter()
         .rev()
     {
-        if bottom <= ViewPx::ZERO {
+        if bottom <= Px::<View>::ZERO {
             break;
         }
         let top = bottom - measure(i);
@@ -571,7 +572,7 @@ pub fn from_bottom(
 
 /// How close to the bottom of the viewport the last row may end and still
 /// rest the list on its latest message.
-const FLUSH: ViewPx = ViewPx::new(0.5);
+const FLUSH: Px<View> = Px::<View>::new(0.5);
 
 ambre_core::define_flag! {
     /// Whether a row of the list is on screen.
@@ -587,14 +588,14 @@ ambre_core::define_flag! {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Window {
     /// Each row shown, top first: its index, its top and its height.
-    pub rows: Vec<(ListRow, ViewPx, ViewPx)>,
+    pub rows: Vec<(ListRow, Px<View>, Px<View>)>,
     /// Whether the oldest row is on screen.
     pub oldest: OnScreen,
     /// Whether the latest row is on screen.
     pub latest: OnScreen,
     /// The row the list rests on, and its top: the first row on screen.
     /// `None` when the list rests on its latest message.
-    pub anchor: Option<(ListRow, ViewPx)>,
+    pub anchor: Option<(ListRow, Px<View>)>,
 }
 
 /// The rows a viewport `height` tall shows with the row `anchor` names at
@@ -606,11 +607,11 @@ pub struct Window {
 /// measured once, and only the rows the walk reaches (`MURMURE-187`).
 pub fn window(
     count: ListRowCount,
-    height: ViewPx,
-    anchor: Option<(ListRow, ViewPx)>,
-    mut measure: impl FnMut(ListRow) -> ViewPx,
+    height: Px<View>,
+    anchor: Option<(ListRow, Px<View>)>,
+    mut measure: impl FnMut(ListRow) -> Px<View>,
 ) -> Window {
-    let mut known: HashMap<ListRow, ViewPx> = HashMap::new();
+    let mut known: HashMap<ListRow, Px<View>> = HashMap::new();
     let mut tall = |i: ListRow| *known.entry(i).or_insert_with(|| measure(i));
     let Some((at, top)) = anchor.filter(|&(at, _)| at < count.as_end()) else {
         return at_bottom(count, height, &mut tall);
@@ -621,7 +622,7 @@ pub fn window(
         return at_bottom(count, height, &mut tall);
     }
     let (mut first, mut above) = (at, top);
-    while above > ViewPx::ZERO
+    while above > Px::<View>::ZERO
         && let Some(previous) = first.prev()
     {
         first = previous;
@@ -629,7 +630,7 @@ pub fn window(
         above -= h;
         rows.push_front((first, above, h));
     }
-    if above > ViewPx::ZERO {
+    if above > Px::<View>::ZERO {
         // The oldest row came down past the top: it rests there instead.
         for row in &mut rows {
             row.1 -= above;
@@ -639,7 +640,7 @@ pub fn window(
             return at_bottom(count, height, &mut tall);
         }
     }
-    rows.retain(|&(_, top, h)| top + h > ViewPx::ZERO && top < height);
+    rows.retain(|&(_, top, h)| top + h > Px::<View>::ZERO && top < height);
     Window {
         oldest: OnScreen::from_bool(rows.front().is_some_and(|r| r.0 == ListRow::ZERO)),
         latest: OnScreen::from_bool(rows.back().is_some_and(|r| r.0.next() == count.as_end())),
@@ -652,10 +653,10 @@ pub fn window(
 /// viewport. Answers whether the last row ends inside it, which rests the
 /// list on its latest row.
 fn fill_down(
-    rows: &mut VecDeque<(ListRow, ViewPx, ViewPx)>,
-    (next, y): (&mut ListRow, &mut ViewPx),
-    (count, height): (ListRowCount, ViewPx),
-    tall: &mut impl FnMut(ListRow) -> ViewPx,
+    rows: &mut VecDeque<(ListRow, Px<View>, Px<View>)>,
+    (next, y): (&mut ListRow, &mut Px<View>),
+    (count, height): (ListRowCount, Px<View>),
+    tall: &mut impl FnMut(ListRow) -> Px<View>,
 ) -> bool {
     while *next < count.as_end() && *y < height {
         let h = tall(*next);
@@ -669,12 +670,12 @@ fn fill_down(
 /// The window of a list resting on its latest row.
 fn at_bottom(
     count: ListRowCount,
-    height: ViewPx,
-    tall: &mut impl FnMut(ListRow) -> ViewPx,
+    height: Px<View>,
+    tall: &mut impl FnMut(ListRow) -> Px<View>,
 ) -> Window {
     let mut shown = from_bottom(count, height, &mut *tall);
     shown.reverse();
-    let rows: Vec<(ListRow, ViewPx, ViewPx)> =
+    let rows: Vec<(ListRow, Px<View>, Px<View>)> =
         shown.iter().map(|&(i, top)| (i, top, tall(i))).collect();
     Window {
         oldest: OnScreen::from_bool(rows.first().is_some_and(|r| r.0 == ListRow::ZERO)),
@@ -1279,8 +1280,8 @@ pub(crate) mod tests {
     }
 
     /// A length of the view.
-    fn px(value: f32) -> ViewPx {
-        ViewPx::new(value)
+    fn px(value: f32) -> Px<View> {
+        Px::<View>::new(value)
     }
 
     /// A list resting on a row keeps that row where it is, and rows added

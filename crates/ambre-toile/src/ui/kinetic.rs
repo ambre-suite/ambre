@@ -5,7 +5,7 @@
 //! screen pixels. The board moves its camera by it, the content going the
 //! other way, so the zoom never changes how far a flick travels.
 
-use ambre_core::{CssVector, ViewPx};
+use ambre_core::{Css, Px, Vector, View};
 use ambre_draw::kinetic::{EdgeSpeed, Kinetic, ScrollStep};
 use ambre_draw::wheel::WheelDeltaMode;
 use kurbo::Point;
@@ -59,7 +59,7 @@ pub fn finger_role(tool: Tool, under: Under) -> FingerRole {
 pub fn pan_by_wheel(
     cam: &mut ViewportTransform,
     kinetic: &mut Kinetic,
-    delta: CssVector,
+    delta: Vector<Px<Css>>,
     mode: WheelDeltaMode,
     now: ambre_core::PageTime,
 ) {
@@ -91,7 +91,7 @@ pub fn move_view(cam: &mut ViewportTransform, step: ScrollStep) {
 pub fn edge_pan_speed(cam: &ViewportTransform, at: Point) -> (EdgeSpeed, EdgeSpeed) {
     // A screen point of the board is a view pixel, in the `f64` kurbo takes.
     #[allow(clippy::cast_possible_truncation)]
-    let screen_px = |at: f64| ViewPx::new(at as f32);
+    let screen_px = |at: f64| Px::<View>::new(at as f32);
     (
         EdgeSpeed::at(screen_px(at.x), screen_px(cam.size.width)),
         EdgeSpeed::at(screen_px(at.y), screen_px(cam.size.height)),
@@ -101,7 +101,7 @@ pub fn edge_pan_speed(cam: &ViewportTransform, at: Point) -> (EdgeSpeed, EdgeSpe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::CssPx;
+    use ambre_core::{Css, Px, Vector};
 
     /// `TOILE-UI-378`, `TOILE-UI-379`: a finger pans the empty board with the select tool,
     /// and always with the hand. It grabs what it lands on, and draws with
@@ -129,14 +129,14 @@ mod tests {
     #[test]
     fn the_wheel_moves_the_content_as_a_page_scrolls() {
         let mut cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
-        cam.zoom = ambre_core::ZoomFactor::positive(2.0);
+        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
         let mut kinetic = Kinetic::default();
         let world = Point::new(10.0, 10.0);
         let before = cam.world_to_screen() * world;
         pan_by_wheel(
             &mut cam,
             &mut kinetic,
-            CssVector::new(CssPx::new(6.0), CssPx::new(12.0)),
+            Vector::new(Px::<Css>::new(6.0), Px::<Css>::new(12.0)),
             WheelDeltaMode::Pixel,
             ambre_bus::PageTime(0.0),
         );
@@ -163,7 +163,7 @@ mod tests {
             pan_by_wheel(
                 &mut cam,
                 &mut kinetic,
-                CssVector::new(CssPx::new(0.0), CssPx::new(16.0)),
+                Vector::new(Px::<Css>::new(0.0), Px::<Css>::new(16.0)),
                 WheelDeltaMode::Pixel,
                 ambre_bus::PageTime(16.0 * f64::from(step)),
             );
@@ -195,7 +195,7 @@ mod tests {
             pan_by_wheel(
                 &mut cam,
                 &mut kinetic,
-                CssVector::new(CssPx::new(0.0), CssPx::new(16.0)),
+                Vector::new(Px::<Css>::new(0.0), Px::<Css>::new(16.0)),
                 WheelDeltaMode::Line,
                 ambre_bus::PageTime(16.0 * f64::from(step)),
             );
@@ -215,13 +215,13 @@ mod tests {
     fn a_step_moves_the_same_screen_distance_at_any_zoom() {
         // A notch is a step one for one: 30 px down.
         let step = Kinetic::default().wheel(
-            CssVector::new(CssPx::ZERO, CssPx::new(30.0)),
+            Vector::new(Px::<Css>::ZERO, Px::<Css>::new(30.0)),
             WheelDeltaMode::Line,
             ambre_bus::PageTime(0.0),
         );
         for zoom in [0.25, 1.0, 4.0] {
             let mut cam = ViewportTransform::new(ambre_draw::Size::new(800.0, 600.0));
-            cam.zoom = ambre_core::ZoomFactor::positive(zoom);
+            cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
             let world = Point::new(10.0, 10.0);
             let before = cam.world_to_screen() * world;
             move_view(&mut cam, step);

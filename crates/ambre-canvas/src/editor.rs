@@ -26,7 +26,7 @@
 // ============================================================================
 
 use ambre_bus::{ByteOffset, ByteSpan};
-use ambre_core::{DocPoint, DocPx, ViewPx, ZoomFactor};
+use ambre_core::{Doc, Px, Scale, View};
 use ambre_draw::{
     Affine, Alignment, BezPath, BoundingBox, Brush, Color, DrawSurface, FontContext, FontFamily,
     FontFamilyName, FontStyle, FontWeight, LayoutContext, PlainEditor, Point, PositionedLayoutItem,
@@ -38,7 +38,7 @@ use crate::registered_family_name;
 use crate::text_cache::{SpanShape, TextLength, break_indented, push_shape};
 
 /// Caret bar width in screen pixels.
-pub const CARET_WIDTH: ViewPx = ViewPx::new(1.5);
+pub const CARET_WIDTH: Px<View> = Px::<View>::new(1.5);
 
 /// What a caret motion does to the selection: the caret moves alone, or the
 /// selection extends with it (Shift).
@@ -108,11 +108,11 @@ pub enum EditIntent {
     },
     SelectAll,
     /// Place the caret at a local-space point (single click / drag start).
-    PointerDown(DocPoint),
+    PointerDown(ambre_core::Point<Px<Doc>>),
     /// Extend the selection to a local-space point (drag / shift-click).
-    PointerDrag(DocPoint),
+    PointerDrag(ambre_core::Point<Px<Doc>>),
     /// Select the word under a local-space point (double click).
-    WordAt(DocPoint),
+    WordAt(ambre_core::Point<Px<Doc>>),
     /// Live IME composition preview for this pass (replaces the previous).
     Compose(String),
     /// IME composition committed: finalize the preedit as real text.
@@ -135,7 +135,7 @@ pub struct TextEditorStyle {
     pub weight: ambre_core::FontWeight,
     pub italic: ambre_core::Slant,
     pub family: ambre_core::FontFamily,
-    pub base_size: ambre_core::DocPx,
+    pub base_size: ambre_core::Px<ambre_core::Doc>,
     pub color: Color,
     /// Draw a 1px underline under the body (`TOILE-UI-187`). Pinned from the
     /// host element's style so the in-edit body matches the committed look.
@@ -182,7 +182,7 @@ pub struct TextSpan {
     pub background: Option<Color>,
     /// How far right each paragraph holding bytes of the range starts,
     /// before the zoom (`CANVAS-085`).
-    pub indent: DocPx,
+    pub indent: Px<Doc>,
 }
 
 /// The buffer laid out with the spans, and the text it was laid out from.
@@ -195,7 +195,7 @@ struct Styled {
 /// aims at, and the text and geometry it was read from.
 struct LineGoal {
     text: String,
-    geometry: (ViewPx, ZoomFactor),
+    geometry: (Px<View>, Scale<Doc, View>),
     selection: Selection,
 }
 
@@ -222,8 +222,8 @@ pub struct TextEditor {
     /// The layout of the spans, `None` with no span.
     styled: Option<Styled>,
     /// The geometry of the last flush, which the layout of the spans reuses.
-    wrap_w: ViewPx,
-    zoom: ZoomFactor,
+    wrap_w: Px<View>,
+    zoom: Scale<Doc, View>,
     align: Alignment,
     /// The column a run of line moves over the spans keeps (`CANVAS-080`).
     line_goal: Option<LineGoal>,
@@ -245,8 +245,8 @@ impl TextEditor {
             style,
             spans: Vec::new(),
             styled: None,
-            wrap_w: ViewPx::new(1.0),
-            zoom: ZoomFactor::ONE,
+            wrap_w: Px::<View>::new(1.0),
+            zoom: Scale::<Doc, View>::ONE,
             align: Alignment::Start,
             line_goal: None,
         }
@@ -404,15 +404,15 @@ impl TextEditor {
         self.push(EditIntent::ComposeEnd(text.to_owned()));
     }
     /// Place the caret at a local-space (text-relative) point (click / drag start).
-    pub fn point_down(&mut self, at: DocPoint) {
+    pub fn point_down(&mut self, at: ambre_core::Point<Px<Doc>>) {
         self.push(EditIntent::PointerDown(at));
     }
     /// Extend the selection to a local-space point (drag / shift-click).
-    pub fn point_drag(&mut self, at: DocPoint) {
+    pub fn point_drag(&mut self, at: ambre_core::Point<Px<Doc>>) {
         self.push(EditIntent::PointerDrag(at));
     }
     /// Select the word at a local-space point (double click).
-    pub fn word_at(&mut self, at: DocPoint) {
+    pub fn word_at(&mut self, at: ambre_core::Point<Px<Doc>>) {
         self.push(EditIntent::WordAt(at));
     }
 
@@ -482,7 +482,7 @@ impl TextEditor {
     /// every queued intent through the driver. Must run before rendering so the
     /// layout reflects the latest edits. `wrap_w` is the wrap width in screen
     /// pixels; `zoom` bakes into the font size.
-    pub fn flush(&mut self, font_cx: &mut FontContext, wrap_w: ViewPx, zoom: ZoomFactor) {
+    pub fn flush(&mut self, font_cx: &mut FontContext, wrap_w: Px<View>, zoom: Scale<Doc, View>) {
         // Re-apply style + geometry each frame: zoom (hence font size + wrap
         // width) can change mid-edit, and PlainEditor holds no camera.
         let base = self.base_styles(zoom);
@@ -490,7 +490,7 @@ impl TextEditor {
         for property in base {
             styles.insert(property);
         }
-        let wrap_w = wrap_w.max(ViewPx::new(1.0));
+        let wrap_w = wrap_w.max(Px::<View>::new(1.0));
         self.editor.set_width(Some(wrap_w.get()));
         (self.wrap_w, self.zoom) = (wrap_w, zoom);
         // The geometry may have moved, so the layout of the spans waits for
@@ -605,7 +605,7 @@ impl TextEditor {
     /// The pinned style as layout properties, with the zoom baked into the
     /// size. The family resolves to the registered face the static render
     /// uses, so the in-edit body matches its committed look.
-    fn base_styles(&self, zoom: ZoomFactor) -> [StyleProperty<'static, Brush>; 5] {
+    fn base_styles(&self, zoom: Scale<Doc, View>) -> [StyleProperty<'static, Brush>; 5] {
         let face = registered_family_name(Some(&self.style.family));
         [
             StyleProperty::FontSize(self.style.base_size.get() * zoom.get() as f32),
@@ -642,10 +642,10 @@ impl TextEditor {
                 italic: span.italic,
                 family: span.family.clone(),
                 underline: span.underline,
-                indent: crate::text_cache::IndentPx::ZERO,
+                indent: ambre_core::Px::<ambre_core::WholeParley>::ZERO,
             };
             let placed = push_shape(&mut builder, &text, &shape);
-            if placed && span.indent > DocPx::ZERO {
+            if placed && span.indent > Px::<Doc>::ZERO {
                 indents.push((shape.range, span.indent.zoomed(self.zoom).layout_units()));
             }
             if let Some(color) = span.color.filter(|_| placed) {
@@ -751,12 +751,12 @@ impl TextEditor {
     /// The total laid-out text height in local (screen) pixels, or `None` before
     /// the first layout. Lets a host grow its box to fit wrapped lines. Call after
     /// [`flush`](Self::flush).
-    pub fn layout_height(&self) -> Option<ViewPx> {
+    pub fn layout_height(&self) -> Option<Px<View>> {
         let height = match &self.styled {
             Some(styled) => styled.layout.height(),
             None => self.editor.try_layout()?.height(),
         };
-        Some(ViewPx::new(height))
+        Some(Px::<View>::new(height))
     }
 
     /// The layout the editor draws: the spans' own while it holds spans, the
@@ -944,8 +944,11 @@ fn rect_path(r: Rect) -> BezPath {
 mod tests {
     use super::*;
 
-    fn doc_point(x: f32, y: f32) -> DocPoint {
-        DocPoint::new(ambre_core::DocPx::new(x), ambre_core::DocPx::new(y))
+    fn doc_point(x: f32, y: f32) -> ambre_core::Point<Px<Doc>> {
+        ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::Doc>::new(x),
+            ambre_core::Px::<ambre_core::Doc>::new(y),
+        )
     }
 
     fn style() -> TextEditorStyle {
@@ -953,7 +956,7 @@ mod tests {
             weight: ambre_core::FontWeight::REGULAR,
             italic: ambre_core::Slant::Upright,
             family: ambre_core::FontFamily::Sans,
-            base_size: ambre_core::DocPx::new(16.0),
+            base_size: ambre_core::Px::<ambre_core::Doc>::new(16.0),
             color: Color::from_rgba8(0, 0, 0, 255),
             underline: ambre_core::Underline::Plain,
             strikethrough: ambre_core::Strikethrough::Plain,
@@ -974,11 +977,11 @@ mod tests {
     fn char_motion_then_insert_lands_at_caret() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("hello world", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE); // seeds caret at end
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE); // seeds caret at end
         ed.push(left());
         ed.push(left());
         ed.push(EditIntent::Insert("X".to_owned()));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "hello worXld");
     }
 
@@ -986,13 +989,13 @@ mod tests {
     fn backspace_and_delete_selection() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("abc", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.push(EditIntent::Backspace);
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "ab");
         ed.push(EditIntent::SelectAll);
         ed.push(EditIntent::DeleteSelection);
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "");
     }
 
@@ -1003,12 +1006,12 @@ mod tests {
     fn an_unchanged_buffer_commits_nothing() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("cost", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.push(left());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.committed_text(), None, "a caret move is not an edit");
         ed.push(EditIntent::Insert("!".to_owned()));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.committed_text().as_deref(), Some("cos!t"));
     }
 
@@ -1016,9 +1019,9 @@ mod tests {
     fn select_all_reports_whole_buffer() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("hello world", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.push(EditIntent::SelectAll);
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.selected_text().as_deref(), Some("hello world"));
     }
 
@@ -1026,10 +1029,10 @@ mod tests {
     fn newline_makes_multi_line_text() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("a", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.push(EditIntent::Newline);
         ed.push(EditIntent::Insert("b".to_owned()));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "a\nb");
     }
 
@@ -1041,9 +1044,9 @@ mod tests {
     fn ime_preedit_run_is_underlined() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.push(EditIntent::Compose("abc".to_owned()));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
 
         let underlined = ed
             .editor
@@ -1058,7 +1061,7 @@ mod tests {
         assert!(underlined, "composing preedit run should be underlined");
 
         ed.push(EditIntent::ComposeEnd("abc".to_owned()));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "abc");
         let still_underlined = ed
             .editor
@@ -1082,7 +1085,7 @@ mod tests {
     fn recording_an_action_leaves_the_buffer_alone() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("abc", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.push(EditIntent::Insert("X".to_owned()));
         ed.push(EditIntent::Backspace);
         ed.push(EditIntent::SelectAll);
@@ -1098,12 +1101,12 @@ mod tests {
     fn every_recorded_action_applies_at_the_flush() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("ab", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.push(EditIntent::Insert("1".to_owned()));
         ed.push(left());
         ed.push(left());
         ed.push(EditIntent::Insert("2".to_owned()));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "a2b1");
     }
 
@@ -1114,7 +1117,7 @@ mod tests {
     fn a_replace_swaps_its_range_and_puts_the_caret_after_it() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("hé @bo x", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.caret().map(ByteOffset::get), Some("hé @bo x".len()));
         let replace = |start, end, text: &str| EditIntent::Replace {
             start: ByteOffset::new(start),
@@ -1122,7 +1125,7 @@ mod tests {
             text: text.to_owned(),
         };
         ed.push(replace(4, 7, "@Bob"));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "hé @Bob x");
         assert_eq!(
             ed.caret().map(ByteOffset::get),
@@ -1131,10 +1134,10 @@ mod tests {
         );
         ed.push(replace(2, 3, "!"));
         ed.push(replace(0, 99, "!"));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "hé @Bob x", "a broken range replaced text");
         ed.push(EditIntent::SelectAll);
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.caret(), None, "a selection is no caret");
     }
 
@@ -1144,12 +1147,12 @@ mod tests {
     fn a_flush_leaves_the_queue_empty() {
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("ab", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.push(EditIntent::Insert("X".to_owned()));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert!(ed.intents.is_empty(), "an action stayed in the queue");
         assert_eq!(ed.text(), "abX");
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "abX", "a second flush typed the key again");
     }
 
@@ -1161,12 +1164,12 @@ mod tests {
         use ambre_draw::testing::{DrawOp, RecordingSurface};
         let mut fcx = FontContext::default();
         let mut ed = TextEditor::new("abc", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.push(EditIntent::Left {
             select: Extend::Select,
             word: Stride::Char,
         });
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.selected_text().as_deref(), Some("c"));
 
         let selection = Color::from_rgba8(0, 0, 255, 255);
@@ -1234,7 +1237,7 @@ mod tests {
     fn a_click_lands_on_the_char_a_span_draws_under_it() {
         let mut fcx = shipped();
         let mut ed = TextEditor::new(&"w".repeat(20), style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         let plain = caret_x(&mut ed);
         let bold = TextSpan {
             weight: Some(ambre_core::FontWeight::BOLD),
@@ -1246,11 +1249,11 @@ mod tests {
         for _ in 0..4 {
             ed.move_left();
         }
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.caret().map(ByteOffset::get), Some(16));
         let sixteenth = ed.caret_local().expect("a caret");
         ed.move_end();
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.caret().map(ByteOffset::get), Some(20));
         assert!(
             (caret_x(&mut ed) - wide).abs() < 0.5,
@@ -1258,7 +1261,7 @@ mod tests {
         );
         let y = (sixteenth.y0 + sixteenth.y1) / 2.0;
         ed.point_down(doc_point(sixteenth.x0 as f32, y as f32));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(
             ed.caret().map(ByteOffset::get),
             Some(16),
@@ -1278,10 +1281,14 @@ mod tests {
     fn an_indented_paragraph_draws_and_puts_its_caret_past_the_indent() {
         let mut fcx = shipped();
         let mut ed = TextEditor::new("top\nheld", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::positive(2.0));
+        ed.flush(
+            &mut fcx,
+            Px::<View>::new(1000.0),
+            Scale::<Doc, View>::positive(2.0),
+        );
         let flat = ed.caret_local().expect("a caret");
         let indent = TextSpan {
-            indent: DocPx::new(12.0),
+            indent: Px::<Doc>::new(12.0),
             ..span(4..8)
         };
         ed.set_spans(&mut fcx, vec![indent]);
@@ -1292,7 +1299,11 @@ mod tests {
         );
         let y = (end.y0 + end.y1) / 2.0;
         ed.point_down(doc_point(25.0, y as f32));
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::positive(2.0));
+        ed.flush(
+            &mut fcx,
+            Px::<View>::new(1000.0),
+            Scale::<Doc, View>::positive(2.0),
+        );
         assert_eq!(
             ed.caret(),
             Some(ByteOffset::new(4)),
@@ -1325,7 +1336,7 @@ mod tests {
         let mut fcx = shipped();
         let mut ed = TextEditor::new(&"w".repeat(20), style());
         assert!(ed.layout().is_none(), "no layout before the first flush");
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         let plain = ed.layout().expect("a layout").full_width();
         let bold = TextSpan {
             weight: Some(ambre_core::FontWeight::BOLD),
@@ -1347,11 +1358,15 @@ mod tests {
         let mut fcx = shipped();
         let mut ed = TextEditor::new("wwww", style());
         assert_eq!(ed.caret_line(), None, "no line before the first flush");
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         let word = ed.layout().expect("a layout").full_width();
         ed.set_text("wwww wwww wwww");
         // Room for one word and its space, never two.
-        ed.flush(&mut fcx, ViewPx::new(word * 1.5), ZoomFactor::ONE);
+        ed.flush(
+            &mut fcx,
+            Px::<View>::new(word * 1.5),
+            Scale::<Doc, View>::ONE,
+        );
         assert_eq!(ed.layout().expect("a layout").len(), 3, "three lines drawn");
         assert_eq!(ed.caret().map(ByteOffset::get), Some(14));
         assert_eq!(
@@ -1360,21 +1375,33 @@ mod tests {
             "the last line drawn"
         );
         ed.move_up();
-        ed.flush(&mut fcx, ViewPx::new(word * 1.5), ZoomFactor::ONE);
+        ed.flush(
+            &mut fcx,
+            Px::<View>::new(word * 1.5),
+            Scale::<Doc, View>::ONE,
+        );
         assert_eq!(
             ed.caret_line().map(ByteSpan::to_usize_range),
             Some(5..10),
             "the middle line"
         );
         ed.move_end();
-        ed.flush(&mut fcx, ViewPx::new(word * 1.5), ZoomFactor::ONE);
+        ed.flush(
+            &mut fcx,
+            Px::<View>::new(word * 1.5),
+            Scale::<Doc, View>::ONE,
+        );
         assert_eq!(
             ed.caret_line().map(ByteSpan::to_usize_range),
             Some(5..10),
             "End stays on its line"
         );
         ed.push(EditIntent::SelectAll);
-        ed.flush(&mut fcx, ViewPx::new(word * 1.5), ZoomFactor::ONE);
+        ed.flush(
+            &mut fcx,
+            Px::<View>::new(word * 1.5),
+            Scale::<Doc, View>::ONE,
+        );
         assert_eq!(ed.caret_line(), None, "a selection reads no line");
     }
 
@@ -1386,18 +1413,18 @@ mod tests {
         let mut fcx = shipped();
         let ten = "w".repeat(10);
         let mut ed = TextEditor::new(&format!("{ten}\nw\n{ten}"), style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.set_spans(&mut fcx, vec![span(0..23)]);
         assert_eq!(ed.caret().map(ByteOffset::get), Some(23));
         ed.move_up();
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(
             ed.caret().map(ByteOffset::get),
             Some(12),
             "the short line holds the caret"
         );
         ed.move_up();
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(
             ed.caret().map(ByteOffset::get),
             Some(10),
@@ -1405,7 +1432,7 @@ mod tests {
         );
         ed.move_down();
         ed.move_down();
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(
             ed.caret().map(ByteOffset::get),
             Some(23),
@@ -1417,7 +1444,7 @@ mod tests {
         }
         ed.move_up();
         ed.move_up();
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.caret().map(ByteOffset::get), Some(1));
     }
 
@@ -1430,7 +1457,7 @@ mod tests {
         let mut fcx = shipped();
         let faces = |spans: Vec<TextSpan>, fcx: &mut FontContext| {
             let mut ed = TextEditor::new("ab cd", style());
-            ed.flush(fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+            ed.flush(fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
             ed.set_spans(fcx, spans);
             let layout = &ed.styled.as_ref().expect("a layout of the spans").layout;
             let mut ids: Vec<u64> = Vec::new();
@@ -1471,7 +1498,7 @@ mod tests {
             ..span(3..5)
         };
         let mut ed = TextEditor::new("ab cd", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         ed.set_spans(&mut fcx, vec![link]);
         let mut surface = RecordingSurface::new();
         ed.render(
@@ -1502,7 +1529,7 @@ mod tests {
     fn an_edit_moves_no_span() {
         let mut fcx = shipped();
         let mut ed = TextEditor::new("abcd", style());
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         let pinned = vec![TextSpan {
             weight: Some(ambre_core::FontWeight::BOLD),
             ..span(2..4)
@@ -1510,7 +1537,7 @@ mod tests {
         ed.set_spans(&mut fcx, pinned.clone());
         ed.push(EditIntent::Backspace);
         ed.push(EditIntent::Backspace);
-        ed.flush(&mut fcx, ViewPx::new(1000.0), ZoomFactor::ONE);
+        ed.flush(&mut fcx, Px::<View>::new(1000.0), Scale::<Doc, View>::ONE);
         assert_eq!(ed.text(), "ab");
         assert_eq!(ed.spans(), pinned, "the core moved a span");
         let mut surface = ambre_draw::testing::RecordingSurface::new();

@@ -14,7 +14,7 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use ambre_core::ViewPx;
+use ambre_core::{Px, View};
 use ambre_draw::{Affine, Alignment, Brush, Color, DrawSurface, Point, PositionedLayoutItem, Rect};
 use parley::FontContext;
 
@@ -207,7 +207,7 @@ pub fn paint_fatal(
     surface: &mut impl DrawSurface,
     font_cx: &mut FontContext,
     cache: &mut TextCache,
-    size: ambre_core::ViewSize,
+    size: ambre_core::Size<ambre_core::Px<ambre_core::View>>,
     message: &str,
 ) {
     const TITLE: Color = Color::from_rgba8(0xe0, 0x5a, 0x5a, 255);
@@ -220,7 +220,7 @@ pub fn paint_fatal(
         FATAL_BACKDROP,
     );
     // A centered column at most 640 logical pixels wide, the stack centered.
-    let column = ViewPx::new((width * 0.8).min(640.0));
+    let column = Px::<View>::new((width * 0.8).min(640.0));
     let x = (f64::from(width) - f64::from(column.get())) / 2.0;
     let heading = FONT_HEADING;
     let body = FONT_BODY;
@@ -251,8 +251,8 @@ fn text_height(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     text: &str,
-    size: ViewPx,
-    width: ViewPx,
+    size: Px<View>,
+    width: Px<View>,
 ) -> f64 {
     let layout = cache.get_or_build(
         font_cx,
@@ -273,8 +273,8 @@ fn draw_centered(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     text: &str,
-    size: ViewPx,
-    width: ViewPx,
+    size: Px<View>,
+    width: Px<View>,
     origin: Point,
     color: Color,
 ) {
@@ -430,7 +430,7 @@ mod tests {
             &mut surface,
             &mut font_cx,
             &mut cache,
-            ambre_core::ViewSize::new(ViewPx::new(800.0), ViewPx::new(600.0)),
+            ambre_core::Size::new(Px::<View>::new(800.0), Px::<View>::new(600.0)),
             "Logic panicked",
         );
 
@@ -450,8 +450,8 @@ mod tests {
         let contents = [
             ContentRepaint::Full,
             ContentRepaint::Scroll {
-                dx: ambre_core::ViewPx::ZERO,
-                dy: ambre_core::ViewPx::new(4.0),
+                dx: ambre_core::Px::<ambre_core::View>::ZERO,
+                dy: ambre_core::Px::<ambre_core::View>::new(4.0),
             },
             ContentRepaint::Reuse,
         ];
@@ -469,7 +469,7 @@ mod tests {
             }
         }
         let idle = Phases::of(
-            ContentRepaint::<ambre_core::ViewPx>::Reuse,
+            ContentRepaint::<ambre_core::Px<ambre_core::View>>::Reuse,
             LayerRepaint::Reuse,
         );
         assert!(!idle.any_build(), "an idle frame builds no batch");

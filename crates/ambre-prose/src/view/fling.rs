@@ -5,7 +5,7 @@
 //! (`1-Foundations/ambre-spec-kinetic-scroll.md`): the column takes its
 //! vertical distance, and meeting an end of the column stops it.
 
-use ambre_core::{CssPx, CssVector, ViewPoint};
+use ambre_core::{Css, Point, Px, Vector, View};
 use ambre_draw::kinetic::Release;
 use ambre_draw::{WHEEL_LINE, WheelDelta};
 
@@ -13,13 +13,13 @@ use crate::ui::ProseUiState;
 
 impl ProseUiState {
     /// A finger went down. It stops any motion left (`PROSE-UI-218`).
-    pub fn touch_start(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
+    pub fn touch_start(&mut self, at: Point<Px<View>>, now: ambre_core::PageTime) {
         self.kinetic.press(at, now);
     }
 
     /// A finger moved: past the tap slop the column follows it. Answers
     /// whether the view moved.
-    pub fn touch_move(&mut self, at: ViewPoint, now: ambre_core::PageTime) -> bool {
+    pub fn touch_move(&mut self, at: Point<Px<View>>, now: ambre_core::PageTime) -> bool {
         let Some(step) = self.kinetic.sample(at, now) else {
             return false;
         };
@@ -30,7 +30,7 @@ impl ProseUiState {
     /// A finger lifted. A pan released with speed leaves a flick
     /// (`PROSE-UI-217`). A finger that never left the slop is a tap: its
     /// point comes back for the host to press there.
-    pub fn touch_end(&mut self, now: ambre_core::PageTime) -> Option<ViewPoint> {
+    pub fn touch_end(&mut self, now: ambre_core::PageTime) -> Option<Point<Px<View>>> {
         match self.kinetic.release(now) {
             Release::Tap { at } => Some(at),
             Release::Fling | Release::Rest => None,
@@ -49,11 +49,11 @@ impl ProseUiState {
     pub fn wheel(&mut self, delta: WheelDelta, now: ambre_core::PageTime) {
         let page = self.viewport.height.css_length();
 
-        let line = CssVector::new(WHEEL_LINE, WHEEL_LINE);
-        let dy = delta.to_px(line, CssVector::new(page, page)).dy;
+        let line = Vector::new(WHEEL_LINE, WHEEL_LINE);
+        let dy = delta.to_px(line, Vector::new(page, page)).dy;
         let step = self
             .kinetic
-            .wheel(CssVector::new(CssPx::ZERO, dy), delta.mode(), now);
+            .wheel(Vector::new(Px::<Css>::ZERO, dy), delta.mode(), now);
         self.scroll_by(step);
     }
 
@@ -73,7 +73,7 @@ impl ProseUiState {
         let before = self.viewport.scroll_y;
         self.scroll_by(step);
         let moved = self.viewport.scroll_y != before;
-        if !moved && dy != ambre_core::ViewPx::ZERO {
+        if !moved && dy != ambre_core::Px::<ambre_core::View>::ZERO {
             self.kinetic.stop();
         }
         moved

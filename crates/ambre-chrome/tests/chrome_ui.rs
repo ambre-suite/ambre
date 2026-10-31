@@ -25,18 +25,22 @@
 use ambre_chrome::{
     AppShell, CommandStates, ContextMenu, FONT_SIZES, FontSizeSelect, FormatBar, FormatControl,
     FormatToggle, Header, MenuEntry, Openness, PerfChip, PerfDetail, Pressed, StatusBar, ToastHost,
-    ToastKind, Toasts, Toolbar, ZoomChip, ZoomFactor,
+    ToastKind, Toasts, Toolbar, ZoomChip,
 };
 use ambre_commands::CommandId;
 use ambre_core::FontSize;
+use ambre_core::{Doc, Scale, View};
 use leptos::mount::mount_to;
 use leptos::prelude::*;
 use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
 /// The page point at `(x, y)`, in CSS px.
-fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
-    ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::Css>::new(x),
+        ambre_core::Px::<ambre_core::Css>::new(y),
+    )
 }
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -190,12 +194,12 @@ fn app_shell_owns_the_named_canvas_cell() {
 async fn the_zoom_readout_follows_its_signal() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(ZoomFactor::within(1.25, 0.5, 2.0));
+    let zoom = RwSignal::new(Scale::<Doc, View>::within(1.25, 0.5, 2.0));
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
     let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
     assert_eq!(btn.text_content().as_deref(), Some("125 %"));
 
-    zoom.set(ZoomFactor::within(2.0, 0.5, 2.0));
+    zoom.set(Scale::<Doc, View>::within(2.0, 0.5, 2.0));
     leptos::task::tick().await;
     assert_eq!(btn.text_content().as_deref(), Some("200 %"));
 
@@ -227,7 +231,7 @@ fn zoom_chip_renders_readout_from_signal_and_starts_collapsed() {
     owner.set();
     // The readout mirrors the live factor (1.25 -> "125 %") and the preset menu
     // is collapsed on mount (only the button shows).
-    let zoom = RwSignal::new(ZoomFactor::within(1.25, 0.5, 2.0));
+    let zoom = RwSignal::new(Scale::<Doc, View>::within(1.25, 0.5, 2.0));
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
 
     let btn = root.query_selector(".statusbar-zoom-btn").unwrap().unwrap();
@@ -464,7 +468,7 @@ fn press(target: &web_sys::Element, key: &str) {
 async fn a_menu_trigger_reports_open_and_closed() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(ZoomFactor::ONE);
+    let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
@@ -490,7 +494,7 @@ async fn a_menu_trigger_reports_open_and_closed() {
 async fn a_menu_is_operable_by_keyboard_alone() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(ZoomFactor::ONE);
+    let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
@@ -565,7 +569,7 @@ async fn a_menu_is_operable_by_keyboard_alone() {
 async fn a_key_that_closes_a_trigger_menu_returns_the_focus_to_its_trigger() {
     let owner = Owner::new();
     owner.set();
-    let zoom = RwSignal::new(ZoomFactor::ONE);
+    let zoom = RwSignal::new(Scale::<Doc, View>::ONE);
     let root = mount_in_container(move || view! { <ZoomChip zoom=zoom /> });
     let btn: web_sys::HtmlElement = root
         .query_selector(".statusbar-zoom-btn")
@@ -602,7 +606,7 @@ async fn a_key_that_closes_a_trigger_menu_returns_the_focus_to_its_trigger() {
 async fn closing_the_floating_menu_returns_the_focus_to_its_opener() {
     let owner = Owner::new();
     owner.set();
-    let pos = RwSignal::new(None::<ambre_core::CssPoint>);
+    let pos = RwSignal::new(None::<ambre_core::Point<ambre_core::Px<ambre_core::Css>>>);
     let item = ambre_commands::Command {
         id: CommandId("test.item"),
         title: |_| "Item".to_owned(),

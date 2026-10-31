@@ -7,7 +7,7 @@
 //! hashes: the blob is named by its **import slot** until Phase 1 rewrites it
 //! to the real blake2b once Sync returns `MediaUploaded { content_hash }`.
 
-use ambre_core::WholePx;
+use ambre_core::{Image, Px};
 use std::io::Cursor;
 
 use image::{GenericImageView, ImageFormat};
@@ -19,7 +19,7 @@ use crate::logic::model::ElementKind;
 
 /// Largest edge (px) of the placeholder thumbnail stored inline in the media
 /// entry. Small enough to paint instantly, large enough to preview.
-const THUMB_MAX_EDGE: WholePx<ambre_core::ImagePx> = WholePx::new(256);
+const THUMB_MAX_EDGE: Px<Image> = Px::new(256);
 
 /// Import a single raster file: decode, bound, thumbnail, and place one
 /// `image` element at the origin sized to the native (clamped) resolution. The
@@ -72,10 +72,7 @@ pub(super) fn decode_media(
     let (width, height) = reader
         .into_dimensions()
         .map_err(|e| ImportError::Decode(e.to_string()))?;
-    limits.check_image_dims(ambre_core::ImageSize::new(
-        WholePx::new(width),
-        WholePx::new(height),
-    ))?;
+    limits.check_image_dims(ambre_core::Size::new(Px::new(width), Px::new(height)))?;
 
     // A header that lies about its size is the second way in, so the decoder
     // carries the same bound and refuses to allocate past it.
@@ -90,7 +87,7 @@ pub(super) fn decode_media(
         .decode()
         .map_err(|e| ImportError::Decode(e.to_string()))?;
     let (width, height) = decoded.dimensions();
-    let size = ambre_core::ImageSize::new(WholePx::new(width), WholePx::new(height));
+    let size = ambre_core::Size::new(Px::new(width), Px::new(height));
     limits.check_image_dims(size)?;
 
     // Downscale to a placeholder thumbnail (preserves aspect ratio). PNG-encoded
@@ -154,10 +151,7 @@ mod tests {
         assert_eq!(batch.report.imported.get(), 1);
 
         let blob = &batch.media[0];
-        assert_eq!(
-            blob.size,
-            ambre_core::ImageSize::new(WholePx::new(64), WholePx::new(48))
-        );
+        assert_eq!(blob.size, ambre_core::Size::new(Px::new(64), Px::new(48)));
         assert_eq!(blob.mime.as_str(), "image/png");
         assert!(
             !blob.thumb.is_empty(),
@@ -187,13 +181,13 @@ mod tests {
     fn oversized_image_aborts_atomically() {
         let png = solid_png(300, 20);
         let limits = Limits {
-            max_image: ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256)),
+            max_image: ambre_core::Size::new(Px::new(256), Px::new(256)),
             ..Limits::default()
         };
         let err = import_raster(&FileBytes::new(png), &limits).unwrap_err();
         assert!(matches!(
             err,
-            ImportError::ImageTooLarge { limit, .. } if limit == ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256))
+            ImportError::ImageTooLarge { limit, .. } if limit == ambre_core::Size::new(Px::new(256), Px::new(256))
         ));
     }
 
@@ -212,14 +206,14 @@ mod tests {
             .expect("a PNG data chunk");
         let header_only = png[..idat + 4].to_vec();
         let limits = Limits {
-            max_image: ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256)),
+            max_image: ambre_core::Size::new(Px::new(256), Px::new(256)),
             ..Limits::default()
         };
         assert_eq!(
             import_raster(&FileBytes::new(header_only), &limits).unwrap_err(),
             ImportError::ImageTooLarge {
-                size: ambre_core::ImageSize::new(WholePx::new(300), WholePx::new(20)),
-                limit: ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256)),
+                size: ambre_core::Size::new(Px::new(300), Px::new(20)),
+                limit: ambre_core::Size::new(Px::new(256), Px::new(256)),
             },
             "the picture was expanded before it was measured"
         );

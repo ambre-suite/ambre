@@ -2101,7 +2101,7 @@ mod tests {
         SegmentId, Timestamp,
     };
     use ambre_core::CharSpan;
-    use ambre_core::WholePx;
+    use ambre_core::Px;
     use ambre_murmure::ChannelType;
 
     const NOW: Timestamp = Timestamp(1_700_000_000_000);
@@ -3993,10 +3993,7 @@ mod tests {
             panic!("one decoded picture, got {} events", got.len());
         };
         assert_eq!((*to, media_ref), (channel_id, &file));
-        assert_eq!(
-            picture.size,
-            ambre_core::ImageSize::new(WholePx::new(4), WholePx::new(2))
-        );
+        assert_eq!(picture.size, ambre_core::Size::new(Px::new(4), Px::new(2)));
         assert_eq!(picture.frames[0].pixels.as_bytes()[..4], [9, 8, 7, 255]);
 
         let media_ref = file.clone();

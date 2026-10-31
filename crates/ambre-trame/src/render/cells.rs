@@ -6,7 +6,7 @@
 
 use super::content::{TextFit, cell_alignment, cell_v_offset, rgb};
 use super::*;
-use ambre_core::SurfacePx;
+use ambre_core::{Px, Surface, View};
 
 // -----------------------------------------------------------------------------
 // draw_cells_on -- cell backgrounds + body text
@@ -22,10 +22,10 @@ pub(super) fn spill_width<E: Fn(CellPos) -> bool>(
     layout: &GridLayout<'_>,
     at: CellPos,
     step: ColDelta,
-    need: SurfacePx,
+    need: Px<Surface>,
     is_empty: &E,
-) -> SurfacePx {
-    let mut acc = SurfacePx::ZERO;
+) -> Px<Surface> {
+    let mut acc = Px::<Surface>::ZERO;
     let mut next = at.col.checked_offset(step);
     while let Some(c) = next
         && acc < need
@@ -109,7 +109,7 @@ where
             font_cx,
             content.text,
             font_size,
-            ViewPx::new(max_w),
+            Px::<View>::new(max_w),
             Alignment::Start,
             content.bold,
             content.italic,
@@ -120,7 +120,7 @@ where
         let text_w = layout_text.width() as f64;
         let fit = TextFit {
             box_height: row_h,
-            text_height: SurfacePx::new(text_h),
+            text_height: Px::<Surface>::new(text_h),
         };
         let y_off = cell_v_offset(content.v_align, fit).get();
         let avail = cell_max_width as f64;
@@ -134,7 +134,7 @@ where
         let (x_off, clip_rect, needs_clip) = if overflow {
             // Extend the clip rect into the empty neighbours in the spill
             // direction(s); the text is shifted so its anchored edge stays put.
-            let need = SurfacePx::new(text_w - avail);
+            let need = Px::<Surface>::new(text_w - avail);
             match align {
                 Alignment::Center => {
                     let half = need / 2.0;

@@ -17,9 +17,9 @@ use super::*;
 /// The size range of one axis, and the size of a line never resized.
 #[derive(Clone, Copy)]
 struct AxisSizes {
-    default: DocPx,
-    min: DocPx,
-    max: DocPx,
+    default: Px<Doc>,
+    min: Px<Doc>,
+    max: Px<Doc>,
 }
 
 const COL_SIZES: AxisSizes = AxisSizes {
@@ -37,7 +37,7 @@ const ROW_SIZES: AxisSizes = AxisSizes {
 impl AxisSizes {
     /// Clamp a requested size into the range. A non-finite request takes the
     /// default size.
-    fn clamp(self, size: DocPx) -> DocPx {
+    fn clamp(self, size: Px<Doc>) -> Px<Doc> {
         if size.is_finite() {
             size.clamp(self.min, self.max)
         } else {
@@ -49,7 +49,7 @@ impl AxisSizes {
     /// clamped, and a non-finite one reads as the default (`TRAME-UI-181`). The
     /// layout walks lines until their sizes cover the screen. `None` when the
     /// value is no number.
-    fn read(self, value: &LoroValue) -> Option<DocPx> {
+    fn read(self, value: &LoroValue) -> Option<Px<Doc>> {
         let LoroValue::Double(size) = value else {
             return None;
         };
@@ -59,7 +59,7 @@ impl AxisSizes {
             return Some(self.default);
         }
         let size = size.clamp(f64::from(self.min.get()), f64::from(self.max.get()));
-        Some(DocPx::new(size as f32))
+        Some(Px::<Doc>::new(size as f32))
     }
 }
 
@@ -76,7 +76,7 @@ impl TrameState {
         &mut self,
         sheet_id: &SheetId,
         col: Col,
-        width: DocPx,
+        width: Px<Doc>,
     ) -> TrameOutcome {
         if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
@@ -109,7 +109,7 @@ impl TrameState {
         &mut self,
         sheet_id: &SheetId,
         row: Row,
-        height: DocPx,
+        height: Px<Doc>,
     ) -> TrameOutcome {
         if *sheet_id != self.active_sheet {
             return TrameOutcome::display_only(vec![]);
@@ -184,12 +184,12 @@ impl TrameState {
 
     /// Width (logical px) of column `col` on the active sheet: its resized value
     /// or the uniform [`COL_WIDTH`]. Used to pack the viewport slice.
-    pub(super) fn col_width(&self, col: Col) -> DocPx {
+    pub(super) fn col_width(&self, col: Col) -> Px<Doc> {
         self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH)
     }
     /// Height (logical px) of row `row`: its resized value or the uniform
     /// [`ROW_HEIGHT`].
-    pub(super) fn row_height(&self, row: Row) -> DocPx {
+    pub(super) fn row_height(&self, row: Row) -> Px<Doc> {
         self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT)
     }
 }

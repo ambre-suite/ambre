@@ -7,12 +7,13 @@
 //! cells, a board under a zoom. A trackpad glide that stops keeps its
 //! momentum; a wheel notch never does (`KINETIC-002`, `KINETIC-009`).
 
-use ambre_core::{CssPx, CssVector, PageMillis, ViewPoint, ViewPx, ViewSpeed, ViewSpeedVector};
+use ambre_core::{Css, Point, Px, Vector, View};
+use ambre_core::{PageMillis, ViewSpeed, ViewSpeedVector};
 
 use crate::wheel::WheelDeltaMode;
 
 /// How far a pointer may move, in screen pixels, and still be a tap.
-pub const TAP_SLOP: ViewPx = ViewPx::new(8.0);
+pub const TAP_SLOP: Px<View> = Px::<View>::new(8.0);
 /// How long a press held inside the slop lasts before it is a long press
 /// (`KINETIC-014`).
 pub const LONG_PRESS: PageMillis = PageMillis::new(500.0);
@@ -30,7 +31,7 @@ const MAX_STEP: PageMillis = PageMillis::new(50.0);
 
 /// A pixel wheel step at or past this, in screen pixels, is a notch.
 /// Trackpad glides stay well under it; a notch sits well over it.
-pub const WHEEL_NOTCH: CssPx = CssPx::new(40.0);
+pub const WHEEL_NOTCH: Px<Css> = Px::<Css>::new(40.0);
 /// A pause between wheel events this long ends a glide.
 pub const WHEEL_GAP: PageMillis = PageMillis::new(60.0);
 /// A glide slower than this at its end, in screen pixels per millisecond,
@@ -40,9 +41,9 @@ pub const WHEEL_START_SPEED: ViewSpeed = ViewSpeed::new(0.05);
 pub const WHEEL_BLEND: f32 = 0.8;
 
 /// How far from an edge a drag starts to scroll, in screen pixels.
-pub const EDGE_BAND: ViewPx = ViewPx::new(32.0);
+pub const EDGE_BAND: Px<View> = Px::<View>::new(32.0);
 /// How deep past the band the edge speed still grows, in screen pixels.
-pub const EDGE_DEPTH: ViewPx = ViewPx::new(160.0);
+pub const EDGE_DEPTH: Px<View> = Px::<View>::new(160.0);
 /// The span the edge speed covers its depth in: 1/80 px/ms for each pixel
 /// of depth, so 2 px/ms at most.
 pub const EDGE_SPAN: PageMillis = PageMillis::new(80.0);
@@ -56,16 +57,16 @@ pub const EDGE_SPAN: PageMillis = PageMillis::new(80.0);
 /// ```
 /// use ambre_draw::kinetic::Kinetic;
 /// use ambre_draw::wheel::WheelDeltaMode;
-/// use ambre_core::{CssPx, CssVector};
-/// let delta = CssVector::new(CssPx::ZERO, CssPx::new(30.0));
+/// use ambre_core::{Css, Px, Vector};
+/// let delta = Vector::new(Px::<Css>::ZERO, Px::<Css>::new(30.0));
 /// let step = Kinetic::default().wheel(delta, WheelDeltaMode::Line, ambre_core::PageTime(0.0));
-/// assert_eq!(step.y(), ambre_core::ViewPx::new(30.0));
+/// assert_eq!(step.y(), ambre_core::Px::<ambre_core::View>::new(30.0));
 /// ```
 ///
 /// Each block below fails on the step it builds outside the model alone:
 ///
 /// ```compile_fail
-/// let (x, y) = (ambre_core::ViewPx::ZERO, ambre_core::ViewPx::new(30.0));
+/// let (x, y) = (ambre_core::Px::<ambre_core::View>::ZERO, ambre_core::Px::<ambre_core::View>::new(30.0));
 /// let step = ambre_draw::kinetic::ScrollStep { x, y };
 /// ```
 ///
@@ -78,30 +79,30 @@ pub const EDGE_SPAN: PageMillis = PageMillis::new(80.0);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ScrollStep {
-    x: ViewPx,
-    y: ViewPx,
+    x: Px<View>,
+    y: Px<View>,
 }
 
 impl ScrollStep {
     const ZERO: Self = Self {
-        x: ViewPx::ZERO,
-        y: ViewPx::ZERO,
+        x: Px::<View>::ZERO,
+        y: Px::<View>::ZERO,
     };
 
     /// The step along the horizontal axis.
-    pub fn x(self) -> ViewPx {
+    pub fn x(self) -> Px<View> {
         self.x
     }
 
     /// The step along the vertical axis.
-    pub fn y(self) -> ViewPx {
+    pub fn y(self) -> Px<View> {
         self.y
     }
 
     /// The step of a pointer dragged from `from` to `to`, one for one, the
     /// content going with the pointer. It has no slop and leaves no motion,
     /// which is what a mouse held on the board asks for (`KINETIC-001`).
-    pub fn dragged(from: ViewPoint, to: ViewPoint) -> Self {
+    pub fn dragged(from: Point<Px<View>>, to: Point<Px<View>>) -> Self {
         let by = from - to;
         Self { x: by.dx, y: by.dy }
     }
@@ -119,7 +120,7 @@ impl EdgeSpeed {
 
     /// The speed of a pointer at `at` along one axis, in a view of `extent`.
     /// Zero away from both edges.
-    pub fn at(at: ViewPx, extent: ViewPx) -> Self {
+    pub fn at(at: Px<View>, extent: Px<View>) -> Self {
         Self(edge_speed(at, extent))
     }
 
@@ -168,7 +169,7 @@ impl EdgeScroll {
 pub enum Release {
     /// The pointer never left the slop: a tap at its press point
     /// (`KINETIC-003`).
-    Tap { at: ViewPoint },
+    Tap { at: Point<Px<View>> },
     /// A pan released with speed: the view keeps moving (`KINETIC-004`).
     Fling,
     /// A pan released at rest, a long press, or nothing pressed.
@@ -192,15 +193,15 @@ struct Glide {
 
 #[derive(Clone, Debug)]
 struct Pan {
-    start: ViewPoint,
-    last: ViewPoint,
+    start: Point<Px<View>>,
+    last: Point<Px<View>>,
     panned: bool,
     /// When the pointer went down.
     pressed_at: ambre_core::PageTime,
     /// The press became a long press: it pans nothing and taps nothing.
     held: bool,
     /// Recent positions and their times, for the release speed.
-    samples: Vec<(ambre_core::PageTime, ViewPoint)>,
+    samples: Vec<(ambre_core::PageTime, Point<Px<View>>)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -212,7 +213,7 @@ struct Motion {
 
 impl Kinetic {
     /// A pointer went down. It stops any motion left (`KINETIC-006`).
-    pub fn press(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
+    pub fn press(&mut self, at: Point<Px<View>>, now: ambre_core::PageTime) {
         self.motion = None;
         self.glide = None;
         self.pressed = Some(Pan {
@@ -228,7 +229,7 @@ impl Kinetic {
     /// Whether the press became a long press by `now`: held inside the
     /// slop past the delay. The answer is its press point, once. The press
     /// then pans nothing, and its release is no tap (`KINETIC-014`).
-    pub fn held(&mut self, now: ambre_core::PageTime) -> Option<ViewPoint> {
+    pub fn held(&mut self, now: ambre_core::PageTime) -> Option<Point<Px<View>>> {
         let pan = self.pressed.as_mut()?;
         if pan.panned || pan.held || now - pan.pressed_at < LONG_PRESS {
             return None;
@@ -241,7 +242,7 @@ impl Kinetic {
     /// Past it, the answer is how far the view follows, in screen pixels.
     /// The content moves with the pointer, so it is the pointer's step
     /// reversed.
-    pub fn sample(&mut self, at: ViewPoint, now: ambre_core::PageTime) -> Option<ScrollStep> {
+    pub fn sample(&mut self, at: Point<Px<View>>, now: ambre_core::PageTime) -> Option<ScrollStep> {
         let pan = self.pressed.as_mut()?;
         if pan.held {
             return None;
@@ -310,14 +311,14 @@ impl Kinetic {
     /// in: a line or a page is a notch.
     pub fn wheel(
         &mut self,
-        delta: CssVector,
+        delta: Vector<Px<Css>>,
         mode: WheelDeltaMode,
         now: ambre_core::PageTime,
     ) -> ScrollStep {
         self.motion = None;
         // The wheel delta is already in screen pixels, a length and no
         // coordinate, so the step takes it one for one.
-        let moved = ambre_core::ViewVector::new(delta.dx.view_length(), delta.dy.view_length());
+        let moved = ambre_core::Vector::new(delta.dx.view_length(), delta.dy.view_length());
         let step = ScrollStep {
             x: moved.dx,
             y: moved.dy,
@@ -417,14 +418,14 @@ fn step_span(elapsed: PageMillis) -> PageMillis {
 /// `at` is the pointer along one axis, and `extent` the length of the view
 /// on it. The speed is zero away from both edges. It grows with how deep
 /// the pointer sits in the band or past it, and stops growing further out.
-fn edge_speed(at: ViewPx, extent: ViewPx) -> ViewSpeed {
+fn edge_speed(at: Px<View>, extent: Px<View>) -> ViewSpeed {
     let far = extent - EDGE_BAND;
     let depth = if at < EDGE_BAND {
         at - EDGE_BAND
     } else if at > far {
         at - far
     } else {
-        ViewPx::ZERO
+        Px::<View>::ZERO
     };
     depth.clamp(-EDGE_DEPTH, EDGE_DEPTH).per(EDGE_SPAN)
 }
@@ -434,13 +435,16 @@ mod tests {
     use super::*;
 
     /// The canvas point at `(x, y)`.
-    fn pt(x: f32, y: f32) -> ViewPoint {
-        ViewPoint::new(ViewPx::new(x), ViewPx::new(y))
+    fn pt(x: f32, y: f32) -> Point<Px<View>> {
+        Point::new(Px::<View>::new(x), Px::<View>::new(y))
     }
 
     /// A wheel delta of `(dx, dy)` CSS pixels.
-    fn px(dx: f32, dy: f32) -> CssVector {
-        CssVector::new(ambre_core::CssPx::new(dx), ambre_core::CssPx::new(dy))
+    fn px(dx: f32, dy: f32) -> Vector<Px<Css>> {
+        Vector::new(
+            ambre_core::Px::<ambre_core::Css>::new(dx),
+            ambre_core::Px::<ambre_core::Css>::new(dy),
+        )
     }
 
     /// Pan up at 2 px/ms on y, 1 px/ms on x, and lift.
@@ -552,8 +556,8 @@ mod tests {
         let mut kinetic = Kinetic::default();
         kinetic.press(pt(0.0, 0.0), ambre_core::PageTime(0.0));
         let step = ScrollStep {
-            x: ViewPx::new(0.0),
-            y: ViewPx::new(20.0),
+            x: Px::<View>::new(0.0),
+            y: Px::<View>::new(20.0),
         };
         assert_eq!(
             kinetic.sample(pt(0.0, -20.0), ambre_core::PageTime(16.0)),
@@ -615,8 +619,8 @@ mod tests {
         for step in 0..6 {
             let t = 8.0 * f64::from(step);
             let step = ScrollStep {
-                x: ViewPx::new(0.0),
-                y: ViewPx::new(12.0),
+                x: Px::<View>::new(0.0),
+                y: Px::<View>::new(12.0),
             };
             assert_eq!(
                 kinetic.wheel(
@@ -644,8 +648,8 @@ mod tests {
         assert!(dy > 0.0, "{dy}");
         // A notch stops it, moves one for one, and leaves nothing behind.
         let notch = ScrollStep {
-            x: ViewPx::new(0.0),
-            y: ViewPx::new(100.0),
+            x: Px::<View>::new(0.0),
+            y: Px::<View>::new(100.0),
         };
         assert_eq!(
             kinetic.wheel(
@@ -699,7 +703,7 @@ mod tests {
     /// depth, and is capped.
     #[test]
     fn the_edge_speed_grows_with_depth_and_is_capped() {
-        let px = ViewPx::new;
+        let px = Px::<View>::new;
         let extent = px(900.0);
         assert_eq!(edge_speed(px(400.0), extent), ViewSpeed::ZERO);
         assert_eq!(edge_speed(EDGE_BAND, extent), ViewSpeed::ZERO);

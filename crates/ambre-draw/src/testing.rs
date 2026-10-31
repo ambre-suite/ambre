@@ -21,9 +21,10 @@
 )]
 
 use crate::{
-    Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSize, ImageSource, Line,
-    ParleyBrush, Rect, Stroke, SurfacePx,
+    Affine, BezPath, Brush, Clock, Color, DrawSurface, GlyphRun, ImageSource, Line, ParleyBrush,
+    Rect, Stroke,
 };
+use ambre_core::{Image, Px, Size, Surface};
 
 ambre_core::define_tally! {
     /// How many glyphs one recorded run holds.
@@ -66,12 +67,12 @@ pub enum DrawOp {
     StrokeRect {
         rect: Rect,
         color: Color,
-        width: SurfacePx,
+        width: Px<Surface>,
     },
     StrokeLine {
         line: Line,
         color: Color,
-        width: SurfacePx,
+        width: Px<Surface>,
     },
     /// A pre-shaped glyph run: how many glyphs, the solid brush colour (if any),
     /// and the run origin transform.
@@ -87,7 +88,7 @@ pub enum DrawOp {
     /// it was scaled into. The pixels themselves are not captured -- tests
     /// assert on placement and that a real image (not a placeholder) was drawn.
     DrawImage {
-        size: ImageSize,
+        size: Size<Px<Image>>,
         dest: Rect,
     },
     /// A stroked path: its colour, the box of its control points in the
@@ -95,7 +96,7 @@ pub enum DrawOp {
     StrokePath {
         color: Option<Color>,
         bounds: Rect,
-        width: SurfacePx,
+        width: Px<Surface>,
     },
     PushClip {
         rect: Rect,
@@ -197,11 +198,11 @@ impl DrawSurface for RecordingSurface {
         self.ops.push(DrawOp::FillRect { rect, color });
     }
 
-    fn stroke_rect(&mut self, rect: Rect, color: Color, width: SurfacePx) {
+    fn stroke_rect(&mut self, rect: Rect, color: Color, width: Px<Surface>) {
         self.ops.push(DrawOp::StrokeRect { rect, color, width });
     }
 
-    fn stroke_line(&mut self, line: Line, color: Color, width: SurfacePx) {
+    fn stroke_line(&mut self, line: Line, color: Color, width: Px<Surface>) {
         self.ops.push(DrawOp::StrokeLine { line, color, width });
     }
 
@@ -236,7 +237,7 @@ impl DrawSurface for RecordingSurface {
         self.ops.push(DrawOp::StrokePath {
             color: brush_color(brush),
             bounds: path.control_box(),
-            width: SurfacePx::new(stroke.width),
+            width: Px::<Surface>::new(stroke.width),
         });
     }
 

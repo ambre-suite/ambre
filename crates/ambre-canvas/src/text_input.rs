@@ -26,7 +26,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use ambre_core::{ViewPoint, ViewPx};
+use ambre_core::{Point, Px, View};
 
 use wasm_bindgen::JsCast;
 use web_sys::{Document, Element, HtmlTextAreaElement};
@@ -245,7 +245,7 @@ impl TextInput {
     /// Place the pipe at a caret position, in CSS pixels relative to its
     /// container, and size it to one text line. `transform` (never `top/left`)
     /// keeps it off the layout/paint path and is where the IME popup anchors.
-    pub fn set_caret(&self, at: ViewPoint, line_height: ViewPx) {
+    pub fn set_caret(&self, at: Point<Px<View>>, line_height: Px<View>) {
         let Some(dom) = &self.dom else { return };
         let style = dom.textarea.style();
         let (x, y, tall) = (at.x.get(), at.y.get(), line_height.get());

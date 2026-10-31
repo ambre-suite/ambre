@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{DocPx, SurfacePx};
+use ambre_core::{Doc, Px, Surface};
 use ambre_draw::DocumentWalk;
 
 use super::*;
@@ -40,13 +40,13 @@ pub trait SheetCells {
 #[derive(Clone, Copy)]
 pub struct SheetAxes<'v> {
     /// Width of a column with no entry in `col_widths`.
-    pub col_width: DocPx,
+    pub col_width: Px<Doc>,
     /// Height of a row with no entry in `row_heights`.
-    pub row_height: DocPx,
+    pub row_height: Px<Doc>,
     /// Explicit column widths, keyed by column.
-    pub col_widths: &'v HashMap<Col, DocPx>,
+    pub col_widths: &'v HashMap<Col, Px<Doc>>,
     /// Explicit row heights, keyed by row.
-    pub row_heights: &'v HashMap<Row, DocPx>,
+    pub row_heights: &'v HashMap<Row, Px<Doc>>,
     /// Rows hidden by the shared filter, sorted ascending.
     pub hidden_rows: &'v [Row],
 }
@@ -58,18 +58,18 @@ impl SheetAxes<'_> {
     }
 
     /// X of column `col`'s left edge.
-    pub fn col_x(&self, col: Col) -> SurfacePx {
+    pub fn col_x(&self, col: Col) -> Px<Surface> {
         let resized: f64 = self
             .col_widths
             .iter()
             .filter(|&(&c, _)| c < col)
             .map(|(_, &w)| f64::from(w.get()) - f64::from(self.col_width.get()))
             .sum();
-        SurfacePx::new(f64::from(col.get()) * f64::from(self.col_width.get()) + resized)
+        Px::<Surface>::new(f64::from(col.get()) * f64::from(self.col_width.get()) + resized)
     }
 
     /// Y of row `row`'s top edge. The hidden rows above it take no height.
-    pub fn row_y(&self, row: Row) -> SurfacePx {
+    pub fn row_y(&self, row: Row) -> Px<Surface> {
         let hidden = self.hidden_rows.partition_point(|&r| r < row) as f64;
         let resized: f64 = self
             .row_heights
@@ -77,18 +77,20 @@ impl SheetAxes<'_> {
             .filter(|&(&r, _)| r < row && !self.is_hidden(r))
             .map(|(_, &h)| f64::from(h.get()) - f64::from(self.row_height.get()))
             .sum();
-        SurfacePx::new((f64::from(row.get()) - hidden) * f64::from(self.row_height.get()) + resized)
+        Px::<Surface>::new(
+            (f64::from(row.get()) - hidden) * f64::from(self.row_height.get()) + resized,
+        )
     }
 
     /// The column whose band holds `x`, clamped to the grid.
-    pub fn col_at(&self, x: SurfacePx) -> Col {
+    pub fn col_at(&self, x: Px<Surface>) -> Col {
         ColSpan::from_count(Col::ZERO, TOTAL_COLS)
             .first_where(|c| self.col_x(c.next()) > x)
             .min(LAST_COL)
     }
 
     /// The row whose band holds `y`, clamped to the grid.
-    pub fn row_at(&self, y: SurfacePx) -> Row {
+    pub fn row_at(&self, y: Px<Surface>) -> Row {
         RowSpan::from_count(Row::ZERO, TOTAL_ROWS)
             .first_where(|r| self.row_y(r.next()) > y)
             .min(LAST_ROW)
@@ -135,15 +137,15 @@ impl DocumentWalk for SheetWalk<'_> {
         let axes = &view.axes;
         let palette = view.palette;
         let (c0, r0) = (
-            axes.col_at(SurfacePx::new(region.x0)),
-            axes.row_at(SurfacePx::new(region.y0)),
+            axes.col_at(Px::<Surface>::new(region.x0)),
+            axes.row_at(Px::<Surface>::new(region.y0)),
         );
         let c1 = axes
-            .col_at(SurfacePx::new(region.x1))
+            .col_at(Px::<Surface>::new(region.x1))
             .next()
             .min(TOTAL_COLS.as_end());
         let r1 = axes
-            .row_at(SurfacePx::new(region.y1))
+            .row_at(Px::<Surface>::new(region.y1))
             .next()
             .min(TOTAL_ROWS.as_end());
         let (cols, rows) = (ColSpan::new(c0, c1), RowSpan::new(r0, r1));
@@ -153,18 +155,18 @@ impl DocumentWalk for SheetWalk<'_> {
             hidden_rows: axes.hidden_rows,
             header_width: axes.col_x(c0),
             header_height: axes.row_y(r0),
-            top: SurfacePx::ZERO,
+            top: Px::<Surface>::ZERO,
             col_width: axes.col_width,
             row_height: axes.row_height,
             col_widths: axes.col_widths,
             row_heights: axes.row_heights,
             origin_col: c0,
             origin_row: r0,
-            width: SurfacePx::new(region.x1),
-            height: SurfacePx::new(region.y1),
+            width: Px::<Surface>::new(region.x1),
+            height: Px::<Surface>::new(region.y1),
             total_cols: TOTAL_COLS,
             total_rows: TOTAL_ROWS,
-            zoom: ambre_core::ZoomFactor::positive(1.0),
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
         };
         let hits = |rect: Rect| {
             let hit = rect.intersect(region);

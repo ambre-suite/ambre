@@ -13,7 +13,8 @@
 
 use ambre_bus::app::toile::{ConnectorId, DisplayElement, ElementId, ElementStyle};
 use ambre_canvas::{Palette, TextEditor, TextEditorStyle};
-use ambre_core::{Rgba, ViewPx};
+use ambre_core::Rgba;
+use ambre_core::{Px, View};
 use ambre_draw::{Alignment, BoundingBox, Color, DrawSurface, FontContext, Point};
 
 // Re-export the shared intent type so the view keeps its `super::edit::EditIntent`
@@ -134,7 +135,7 @@ impl InlineEditor {
     pub fn open_frame_title(
         id: ElementId,
         title: &str,
-        base_size: ambre_core::DocPx,
+        base_size: ambre_core::Px<ambre_core::Doc>,
         palette: &Palette,
     ) -> Self {
         let font = ElementStyle::default().font;
@@ -167,7 +168,9 @@ impl InlineEditor {
     /// inset (`TEXT_PAD`) under the camera. The editor lays out in screen
     /// pixels, so its caret keeps one width at every zoom, and lands where the
     /// walk's body does.
-    pub fn pad(zoom: ambre_core::ZoomFactor) -> ambre_core::SurfacePx {
+    pub fn pad(
+        zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+    ) -> ambre_core::Px<ambre_core::Surface> {
         super::viewport::ViewportTransform::to_surface(TEXT_PAD, zoom)
     }
 
@@ -201,8 +204,8 @@ impl InlineEditor {
     pub fn flush(
         &mut self,
         font_cx: &mut FontContext,
-        wrap_w: ViewPx,
-        zoom: ambre_core::ZoomFactor,
+        wrap_w: Px<View>,
+        zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
     ) {
         self.core.flush(font_cx, wrap_w, zoom);
     }
@@ -268,7 +271,7 @@ mod tests {
         let editor = InlineEditor::open_frame_title(
             id.clone(),
             "Agenda",
-            ambre_core::DocPx::new(14.0),
+            ambre_core::Px::<ambre_core::Doc>::new(14.0),
             palette(),
         );
         assert_eq!(editor.target().frame_title(), Some(&id));
@@ -288,7 +291,7 @@ mod tests {
         let editor = InlineEditor::open_frame_title(
             ElementId("f".to_owned()),
             "",
-            ambre_core::DocPx::new(14.0),
+            ambre_core::Px::<ambre_core::Doc>::new(14.0),
             palette(),
         );
         assert_eq!(editor.committed_text(), None);
@@ -333,6 +336,6 @@ mod tests {
             super::super::walk::sticky_or_style_font_size(TextHost::Text, &e.style, e.bounds);
         let editor = InlineEditor::open(&e, "hi", palette(), TextHost::Text);
         assert_eq!(editor.style().base_size, drawn);
-        assert_eq!(drawn, ambre_core::DocPx::new(16.0));
+        assert_eq!(drawn, ambre_core::Px::<ambre_core::Doc>::new(16.0));
     }
 }

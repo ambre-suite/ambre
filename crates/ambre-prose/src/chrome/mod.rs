@@ -11,7 +11,8 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{CommentId, CssPoint, CssPx, ViewPx};
+use ambre_core::CommentId;
+use ambre_core::{Css, Point, Px, View};
 use leptos::prelude::*;
 
 mod handler;
@@ -50,7 +51,7 @@ ambre_core::define_flag! {
 #[derive(Clone, Copy)]
 pub struct ProseSignals {
     /// The canvas's top-left corner on the page.
-    pub canvas_origin: RwSignal<CssPoint>,
+    pub canvas_origin: RwSignal<Point<Px<Css>>>,
     /// The threads the panel lists, each at its anchor's height.
     pub threads: RwSignal<Vec<PanelThread>>,
     /// The reply being typed in each thread's field, by thread. It outlives
@@ -102,7 +103,7 @@ impl ProseSignals {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            canvas_origin: RwSignal::new(CssPoint::default()),
+            canvas_origin: RwSignal::new(Point::default()),
             threads: RwSignal::new(Vec::new()),
             drafts: RwSignal::new(HashMap::new()),
             hovered: RwSignal::new(None),
@@ -155,9 +156,9 @@ impl ProseSignals {
 }
 
 /// The width of the panel, in CSS pixels.
-const PANEL_WIDTH: CssPx = CssPx::new(260.0);
+const PANEL_WIDTH: Px<Css> = Px::<Css>::new(260.0);
 /// How far above the suggestion the popover sits, in CSS pixels.
-const POPOVER_LIFT: CssPx = CssPx::new(30.0);
+const POPOVER_LIFT: Px<Css> = Px::<Css>::new(30.0);
 
 /// The comment panel, right of the page: each open thread at the height of
 /// its anchor. A click on a thread's text brings the anchor into view.
@@ -290,7 +291,7 @@ pub fn ProseSuggestionPopover(signals: ProseSignals) -> impl IntoView {
                 "position: fixed; left: {}px; top: {}px; z-index: 61;",
                 hovered.rect.x0.on_page(origin.x).get(),
                 (hovered.rect.y0.on_page(origin.y) - POPOVER_LIFT)
-                    .max(CssPx::ZERO)
+                    .max(Px::<Css>::ZERO)
                     .get()
             );
             view! {
@@ -358,7 +359,7 @@ fn control(signals: ProseSignals, id: CommandId, pressed: Pressed) -> FormatCont
 }
 
 /// How far below the slash's line the menu sits, in CSS pixels.
-const MENU_DROP: CssPx = CssPx::new(4.0);
+const MENU_DROP: Px<Css> = Px::<Css>::new(4.0);
 
 /// The slash menu under the caret
 /// (`features/ambre-spec-prose-slash-command.md section 4`).
@@ -403,11 +404,11 @@ pub fn ProseSlashMenu(signals: ProseSignals) -> impl IntoView {
 }
 
 /// The height of the ruler, in CSS pixels.
-const RULER_HEIGHT: CssPx = CssPx::new(22.0);
+const RULER_HEIGHT: Px<Css> = Px::<Css>::new(22.0);
 
 /// Where a pointer event falls on the canvas whose corner sits at `origin`.
-fn pointer_x(ev: &web_sys::PointerEvent, origin: CssPoint) -> ViewPx {
-    CssPx::new(ev.client_x() as f32).in_canvas(origin.x)
+fn pointer_x(ev: &web_sys::PointerEvent, origin: Point<Px<Css>>) -> Px<View> {
+    Px::<Css>::new(ev.client_x() as f32).in_canvas(origin.x)
 }
 
 /// The ruler above the page (`features/ambre-spec-prose-ruler.md section 4`).
@@ -429,7 +430,7 @@ pub fn ProseRuler(signals: ProseSignals) -> impl IntoView {
     };
     move || {
         let ruler = signals.ruler.get();
-        if ruler.content_width <= ViewPx::ZERO {
+        if ruler.content_width <= Px::<View>::ZERO {
             return None;
         }
         let origin = signals.canvas_origin.get();

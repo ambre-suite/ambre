@@ -412,8 +412,8 @@ impl TrameView {
                     };
                     (
                         ContentRepaint::Scroll {
-                            dx: ambre_core::ViewPx::new(dx_px as f32),
-                            dy: ambre_core::ViewPx::new(dy_px as f32),
+                            dx: ambre_core::Px::<ambre_core::View>::new(dx_px as f32),
+                            dy: ambre_core::Px::<ambre_core::View>::new(dy_px as f32),
                         },
                         Some(strip),
                     )
@@ -538,7 +538,8 @@ impl TrameView {
             // The pipe leaves the cell's corner for the caret inside it, so
             // the IME popup follows the text being typed (`CHROME-007`).
             if let Some(caret) = caret {
-                let height = ambre_core::ViewPx::new(caret.height().max(1.0) as f32);
+                let height =
+                    ambre_core::Px::<ambre_core::View>::new(caret.height().max(1.0) as f32);
                 self.text_input
                     .set_caret(view_point(caret.origin()), height);
             }
@@ -570,10 +571,10 @@ impl TrameView {
     }
 
     /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
-    pub fn resize(&mut self, size: ambre_canvas::CssSize) {
+    pub fn resize(&mut self, size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>) {
         self.state.resize(
-            ambre_core::SurfacePx::new(f64::from(size.width.get())),
-            ambre_core::SurfacePx::new(f64::from(size.height.get())),
+            ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.width.get())),
+            ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.height.get())),
         );
         self.needs_full = true;
     }
@@ -582,7 +583,7 @@ impl TrameView {
     /// the cell font together (`trame-status-bar`). A no-op when unchanged. On a
     /// real change the visible range shifts, so we request the new viewport and
     /// force a full repaint. Pure local view state -- never synced.
-    pub fn set_zoom(&mut self, zoom: ambre_core::ZoomFactor) -> bool {
+    pub fn set_zoom(&mut self, zoom: ambre_core::Scale<ambre_core::Doc, ambre_core::View>) -> bool {
         if !self.state.set_zoom(zoom) {
             return false;
         }
@@ -594,7 +595,7 @@ impl TrameView {
     }
 
     /// The current grid zoom factor (`1.0` = 100%), for the status-bar readout.
-    pub fn zoom(&self) -> ambre_core::ZoomFactor {
+    pub fn zoom(&self) -> ambre_core::Scale<ambre_core::Doc, ambre_core::View> {
         self.state.zoom
     }
 

@@ -21,7 +21,7 @@
 //   - Overlay-only diff: draw_overlay
 // ============================================================================
 
-use ambre_core::SurfacePx;
+use ambre_core::{Px, Surface};
 use ambre_draw::{Clock, Color, DrawSurface, FontContext, Rect};
 
 use ambre_canvas::{Palette, TextCache};
@@ -55,7 +55,7 @@ fn screen_layout(state: &TrameUiState) -> GridLayout<'_> {
         // layout multiplies only the content-area metrics by `zoom`).
         header_width: state.header_w(),
         header_height: state.header_h(),
-        top: ambre_core::SurfacePx::ZERO,
+        top: ambre_core::Px::<ambre_core::Surface>::ZERO,
         col_width: COL_WIDTH,
         row_height: ROW_HEIGHT,
         col_widths: &state.col_widths,
@@ -100,7 +100,7 @@ const DIRTY_VEIL_ALPHA: f32 = 0.5;
 
 /// Leg length, in logical pixels, of the right-triangle error marker drawn in
 /// a cell's top-right corner.
-const ERROR_MARK_SIZE: SurfacePx = SurfacePx::new(7.0);
+const ERROR_MARK_SIZE: Px<Surface> = Px::<Surface>::new(7.0);
 
 /// The half-open rows and columns covering a repaint strip. Bundling both
 /// spans keeps the per-cell helpers' argument lists short.
@@ -119,8 +119,8 @@ impl CellSpan {
 
 /// Compute the cell-coordinate range that intersects `strip` in the cell area.
 fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
-    let (x0, x1) = (SurfacePx::new(strip.x0), SurfacePx::new(strip.x1));
-    let (y0, y1) = (SurfacePx::new(strip.y0), SurfacePx::new(strip.y1));
+    let (x0, x1) = (Px::<Surface>::new(strip.x0), Px::<Surface>::new(strip.x1));
+    let (y0, y1) = (Px::<Surface>::new(strip.y0), Px::<Surface>::new(strip.y1));
     let cells_top = state.header_h();
     // Walk the variable column widths from the scroll origin: skip columns wholly
     // left of the strip, then extend until the strip's right edge is covered.
@@ -174,10 +174,10 @@ fn rows_cols_in_strip(state: &TrameUiState, strip: Rect) -> CellSpan {
 mod tests {
     use super::*;
 
-    fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
-        ambre_core::ViewPoint::new(
-            ambre_core::ViewPx::new(x as f32),
-            ambre_core::ViewPx::new(y as f32),
+    fn pointer(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+        ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::View>::new(x as f32),
+            ambre_core::Px::<ambre_core::View>::new(y as f32),
         )
     }
     // Header strip metrics: only the tests still reference the raw constants
@@ -194,7 +194,7 @@ mod tests {
     /// A view state large enough to expose several rows/cols, with the given
     /// cells pre-populated in the cache.
     fn fixture(cells: &[(u32, u32, &str)]) -> TrameUiState {
-        let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+        let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
         for &(row, col, text) in cells {
             state.cell_cache.insert(
                 CellPos::new(Row::new(row), Col::new(col)),
@@ -214,16 +214,18 @@ mod tests {
     #[test]
     fn the_drawn_cell_is_the_hit_tested_cell() {
         let mut state = fixture(&[]);
-        assert!(state.set_zoom(ambre_core::ZoomFactor::positive(1.25)));
+        assert!(
+            state.set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.25))
+        );
         state
             .col_widths
-            .insert(Col::new(4), ambre_core::DocPx::new(150.0));
+            .insert(Col::new(4), ambre_core::Px::<ambre_core::Doc>::new(150.0));
         state
             .col_widths
-            .insert(Col::new(6), ambre_core::DocPx::new(30.0));
+            .insert(Col::new(6), ambre_core::Px::<ambre_core::Doc>::new(30.0));
         state
             .row_heights
-            .insert(Row::new(13), ambre_core::DocPx::new(44.0));
+            .insert(Row::new(13), ambre_core::Px::<ambre_core::Doc>::new(44.0));
         state.hidden_rows = vec![Row::new(12), Row::new(15)];
         assert!(state.scroll_by(RowDelta::new(10), ColDelta::new(3)));
         let layout = screen_layout(&state);
@@ -309,12 +311,12 @@ mod tests {
                 (9, 1, "hidden"),
             ]);
             state.cell_cache.get_mut(&at(4, 3)).unwrap().merge_span = Some(span(2, 2));
-            state.col_widths.insert(Col::new(3), ambre_core::DocPx::new(150.0));
-            state.row_heights.insert(Row::new(5), ambre_core::DocPx::new(44.0));
+            state.col_widths.insert(Col::new(3), ambre_core::Px::<ambre_core::Doc>::new(150.0));
+            state.row_heights.insert(Row::new(5), ambre_core::Px::<ambre_core::Doc>::new(44.0));
             state.hidden_rows = vec![Row::new(9)];
             state.dirty_cells.insert(CellPos::new(Row::new(2), Col::new(2)));
-            state.resize(SurfacePx::new(width), SurfacePx::new(height));
-            state.set_zoom(ambre_core::ZoomFactor::positive(zoom));
+            state.resize(Px::<Surface>::new(width), Px::<Surface>::new(height));
+            state.set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom));
             state.left_col = Col::new(left_col);
             state.top_row = Row::new(top_row);
             let palette = Theme::Light.palette();
@@ -679,7 +681,7 @@ mod tests {
             surface
                 .count(|op| matches!(
                     op, DrawOp::StrokeRect { color, width, .. }
-                        if *color == palette.selection && *width == ambre_core::SurfacePx::new(2.0)
+                        if *color == palette.selection && *width == ambre_core::Px::<ambre_core::Surface>::new(2.0)
                 ))
                 .get(),
             1,
@@ -717,7 +719,7 @@ mod tests {
             surface
                 .count(|op| matches!(
                     op, DrawOp::StrokeRect { color, width, .. }
-                        if *color == palette.selection && *width == ambre_core::SurfacePx::new(2.0)
+                        if *color == palette.selection && *width == ambre_core::Px::<ambre_core::Surface>::new(2.0)
                 ))
                 .get(),
             1,
@@ -843,7 +845,7 @@ mod tests {
             surface
                 .count(|op| matches!(
                     op, DrawOp::StrokeRect { color, width, .. }
-                        if *color == palette.selection && *width == ambre_core::SurfacePx::new(2.0)
+                        if *color == palette.selection && *width == ambre_core::Px::<ambre_core::Surface>::new(2.0)
                 ))
                 .get(),
             0,

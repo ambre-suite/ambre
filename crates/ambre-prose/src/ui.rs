@@ -482,7 +482,7 @@ pub struct ProseUiState {
     /// drawn on it to `caret_drawn`.
     pub(crate) page_frame: ambre_draw::Affine,
     /// The column a run of vertical moves keeps (`PROSE-UI-034`).
-    pub(crate) x_goal: Option<ambre_core::DocPx>,
+    pub(crate) x_goal: Option<ambre_core::Px<ambre_core::Doc>>,
     /// The page whose header or footer holds the caret. A band is drawn on
     /// every page, and the caret shows on the one it was placed on
     /// (`PROSE-UI-033`).
@@ -491,7 +491,7 @@ pub struct ProseUiState {
     pub(crate) dragging: Option<(BlockId, DocOffset)>,
     /// The last pointer of the drag in flight, and its autoscroll
     /// (`PROSE-UI-038`). Both go with the drag.
-    pub(crate) drag_pointer: Option<ambre_core::ViewPoint>,
+    pub(crate) drag_pointer: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
     pub(crate) autoscroll: ambre_draw::kinetic::EdgeScroll,
     /// A finger on the canvas, and the motion a flick left
     /// (`PROSE-UI-217`).

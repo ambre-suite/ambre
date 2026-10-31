@@ -38,13 +38,14 @@ use web_sys::HtmlCanvasElement;
 use ambre_bus::app::toile::ElementId;
 use ambre_bus::{DocType, DocumentId, LogicCommand, PasteSource};
 use ambre_canvas::{
-    ContentRepaint, CssSize, DensityWatch, DevicePx, FATAL_BACKDROP, FrameStats, GpuState,
-    InputEvent, Layer, LayerRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache,
-    TextInput, Tick, WgpuSurface, bootstrap_gpu, drive_frame, fatal_message, paint_fatal,
-    size_backing_store, start_raf_loop,
+    ContentRepaint, DensityWatch, FATAL_BACKDROP, FrameStats, GpuState, InputEvent, Layer,
+    LayerRepaint, Phases, RafControl, RepaintPlan, SurfaceSize, TextCache, TextInput, Tick,
+    WgpuSurface, bootstrap_gpu, drive_frame, fatal_message, paint_fatal, size_backing_store,
+    start_raf_loop,
 };
 use ambre_chrome::commands::ClipboardWrite;
-use ambre_core::{CanvasId, ViewPoint, ViewPx};
+use ambre_core::CanvasId;
+use ambre_core::{Device, Px, View, WholeCss};
 use ambre_draw::{Consumed, DrawSurface, Point, Rect, Size};
 use ambre_toile::ui::ToileView;
 use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
@@ -158,10 +159,10 @@ const HIDDEN_RELAY_PERIOD: ambre_bus::Millis = ambre_bus::Millis(1000);
 /// Where a mouse, pointer or drag event landed on its canvas. The DOM
 /// reports the offset in whole CSS px, which a view lays out in
 /// (`CANVAS-032`).
-pub(crate) fn offset_of(event: &web_sys::MouseEvent) -> ViewPoint {
-    ViewPoint::new(
-        ViewPx::new(event.offset_x() as f32),
-        ViewPx::new(event.offset_y() as f32),
+pub(crate) fn offset_of(event: &web_sys::MouseEvent) -> ambre_core::Point<Px<View>> {
+    ambre_core::Point::new(
+        Px::<View>::new(event.offset_x() as f32),
+        Px::<View>::new(event.offset_y() as f32),
     )
 }
 
@@ -387,7 +388,7 @@ impl AppView {
     }
 
     /// Canvas resized to `size` logical pixels (`CANVAS-044`).
-    fn resize(&mut self, size: CssSize) {
+    fn resize(&mut self, size: ambre_core::Size<Px<WholeCss>>) {
         match self {
             AppView::Trame(v) => v.resize(size),
             AppView::Toile(v) => v.resize(size),
@@ -457,7 +458,7 @@ impl AppView {
     }
 
     /// Text dropped at a canvas point. Only Prose takes it.
-    fn drop_text(&mut self, at: ViewPoint, text: String) -> Consumed {
+    fn drop_text(&mut self, at: ambre_core::Point<Px<View>>, text: String) -> Consumed {
         match self {
             AppView::Trame(_) | AppView::Toile(_) | AppView::Murmure(_) => Consumed::No,
             AppView::Prose(v) => v.drop_text(at, text),
@@ -466,7 +467,12 @@ impl AppView {
 
     /// A finger on the canvas. Every application takes it apart from the
     /// mouse.
-    fn touch(&mut self, phase: TouchPhase, at: ViewPoint, now: ambre_core::PageTime) -> Consumed {
+    fn touch(
+        &mut self,
+        phase: TouchPhase,
+        at: ambre_core::Point<Px<View>>,
+        now: ambre_core::PageTime,
+    ) -> Consumed {
         match self {
             AppView::Toile(v) => match phase {
                 TouchPhase::Down => v.touch_down(at, now),
@@ -586,7 +592,7 @@ impl AppView {
 
     /// The view of the cell named `id`, at `size` logical pixels. `None` for
     /// an id this view does not show.
-    fn cell_view(&self, id: CanvasId, size: CssSize) -> Option<AppView> {
+    fn cell_view(&self, id: CanvasId, size: ambre_core::Size<Px<WholeCss>>) -> Option<AppView> {
         match self {
             AppView::Murmure(v) if id == THREAD_CANVAS => Some(AppView::Murmure(v.region(size))),
             _ => None,

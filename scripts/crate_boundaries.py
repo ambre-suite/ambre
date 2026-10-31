@@ -452,12 +452,13 @@ KINETIC_TERM = re.compile(r"\b\w*(?:friction|decay|velocit|half_?life|inertia|da
 
 # The drawing trait, and the closed list a primitive's parameters are held to.
 # A bare number is geometry only under a width name, so a
-# `density: f64` is refused although its type is listed.
+# `density: f64` is refused although its type is listed. A length is
+# `Px<Surface>`: the two words are listed, so a `Px<View>` is refused.
 DRAW_TRAIT = "crates/ambre-draw/src/lib.rs"
 DRAW_TRAIT_OPEN = re.compile(r"^pub trait DrawSurface\b")
 PRIMITIVE = re.compile(r"\bfn\s+(\w+)\s*\(([^)]*)\)", re.S)
 PRIMITIVE_TYPES = {
-    "Rect", "Line", "Color", "f64", "SurfacePx", "Affine", "BezPath", "Stroke", "Brush", "ParleyBrush", "GlyphRun",
+    "Rect", "Line", "Color", "f64", "Px", "Surface", "Affine", "BezPath", "Stroke", "Brush", "ParleyBrush", "GlyphRun",
     "ImageSource",
 }
 NUMBER_NAMES = {"width"}

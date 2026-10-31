@@ -314,7 +314,7 @@ impl std::fmt::Debug for Attachment {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Picture {
     /// The size of every frame.
-    pub size: ambre_core::ImageSize,
+    pub size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
     /// Each frame in play order, never empty.
     pub frames: Vec<PictureFrame>,
 }

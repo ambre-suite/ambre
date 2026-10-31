@@ -11,8 +11,11 @@ use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::wasm_bindgen_test;
 
 /// The page point at `(x, y)`, in CSS px.
-fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
-    ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::Css>::new(x),
+        ambre_core::Px::<ambre_core::Css>::new(y),
+    )
 }
 
 /// The shell stylesheet, as the page loads it.

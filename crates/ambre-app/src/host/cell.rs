@@ -340,7 +340,7 @@ impl Bound {
     /// Plan, paint and present this cell. Nothing runs before its GPU is up,
     /// so a plan is never spent on a canvas that cannot show it. Answers the
     /// plan it presented.
-    fn render(&mut self, now: ambre_core::PageTime) -> Option<RepaintPlan<DevicePx>> {
+    fn render(&mut self, now: ambre_core::PageTime) -> Option<RepaintPlan<Px<Device>>> {
         let mut view = self.view.borrow_mut();
         view.update();
         let mut slot = self.gpu.borrow_mut();
@@ -437,7 +437,7 @@ fn plan_frame(
     size: SurfaceSize,
     relayout: Relayout,
     now: ambre_core::PageTime,
-) -> RepaintPlan<DevicePx> {
+) -> RepaintPlan<Px<Device>> {
     if relayout == Relayout::Again {
         view.resize(size.logical());
     }
@@ -446,7 +446,7 @@ fn plan_frame(
 
 /// The phase and the point of a finger on a cell, in its own pixels. `None`
 /// for a mouse, a pen or a wheel.
-fn touch_of(event: &web_sys::Event) -> Option<(TouchPhase, ViewPoint)> {
+fn touch_of(event: &web_sys::Event) -> Option<(TouchPhase, ambre_core::Point<Px<View>>)> {
     let pointer = event.dyn_ref::<web_sys::PointerEvent>()?;
     if pointer.pointer_type() != "touch" {
         return None;
@@ -537,7 +537,7 @@ fn lose_context(canvas: &HtmlCanvasElement) {
 /// Encode the layers of `plan` onto the swapchain of `gpu` and present them.
 /// A lost or outdated swapchain is fitted again and the frame skipped; the
 /// next one draws fresh. Answers whether the frame reached the screen.
-pub(super) fn present(gpu: &mut GpuState, plan: &RepaintPlan<DevicePx>) -> bool {
+pub(super) fn present(gpu: &mut GpuState, plan: &RepaintPlan<Px<Device>>) -> bool {
     let surface_tex = match gpu.surface.get_current_texture() {
         Ok(t) => t,
         // A lost/outdated surface is recoverable: the GL context was reset
@@ -572,14 +572,14 @@ mod tests {
     use crate::host::{MurmureView, THREAD_CANVAS};
     use ambre_canvas::ThemeControl;
     use ambre_chrome::commands::KeyChar;
-    use ambre_core::WholePx;
+    use ambre_core::{Device, Point, Px, Size, View};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// The size of a region, in its view pixels.
-    fn view_size(width: f32, height: f32) -> ambre_core::ViewSize {
-        ambre_core::ViewSize::new(
-            ambre_core::ViewPx::new(width),
-            ambre_core::ViewPx::new(height),
+    fn view_size(width: f32, height: f32) -> ambre_core::Size<ambre_core::Px<ambre_core::View>> {
+        ambre_core::Size::new(
+            ambre_core::Px::<ambre_core::View>::new(width),
+            ambre_core::Px::<ambre_core::View>::new(height),
         )
     }
 
@@ -628,7 +628,7 @@ mod tests {
                 TextInput::detached(),
                 std::rc::Rc::new(|_| {}),
             ),
-            CssSize::new(WholePx::new(300), WholePx::new(200)),
+            ambre_core::Size::new(Px::new(300), Px::new(200)),
             ThemeControl::default(),
         ))
     }
@@ -650,10 +650,10 @@ mod tests {
     }
 
     /// A pointer at canvas `(x, y)`, as the host hands it over.
-    fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
-        ambre_core::ViewPoint::new(
-            ambre_core::ViewPx::new(x as f32),
-            ambre_core::ViewPx::new(y as f32),
+    fn pointer(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+        ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::View>::new(x as f32),
+            ambre_core::Px::<ambre_core::View>::new(y as f32),
         )
     }
 
@@ -793,7 +793,7 @@ mod tests {
         let (_cell, canvas) = thread_cell(300, 200);
         let (mut view, _events) = ambre_murmure::testing::channel_of(
             &["hello", "world"],
-            CssSize::new(WholePx::new(300), WholePx::new(200)),
+            ambre_core::Size::new(Px::new(300), Px::new(200)),
         );
         paint(&mut view);
         let size = size_backing_store(&canvas).unwrap();
@@ -880,13 +880,13 @@ mod tests {
         let (_cell, canvas) = thread_cell(300, 200);
         let (mut thread, _thread_events) = ambre_murmure::testing::channel_of(
             &["hello"],
-            CssSize::new(WholePx::new(300), WholePx::new(200)),
+            ambre_core::Size::new(Px::new(300), Px::new(200)),
         );
         paint(&mut thread);
         let (x, y) = field_of(&thread, 200.0);
         let (mut channel, _channel_events) = ambre_murmure::testing::channel_of(
             &["hi"],
-            CssSize::new(WholePx::new(300), WholePx::new(200)),
+            ambre_core::Size::new(Px::new(300), Px::new(200)),
         );
         paint(&mut channel);
         let mut content = AppView::Murmure(channel);
@@ -1015,7 +1015,7 @@ mod tests {
         ));
         assert_eq!(
             bound.size.get().logical(),
-            CssSize::new(WholePx::new(140), WholePx::new(80))
+            ambre_core::Size::new(Px::new(140), Px::new(80))
         );
     }
 

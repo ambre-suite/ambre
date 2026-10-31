@@ -6,7 +6,8 @@
 //! is applied (invariant). Coordinates are clamped rather than rejected so a
 //! merely large (not malicious) drawing still imports, just bounded to the world.
 
-use ambre_core::{BoardLength, ElementCount, WholePx};
+use ambre_core::Px;
+use ambre_core::{BoardLength, ElementCount};
 use kurbo::{Point, Rect};
 
 use super::ImportError;
@@ -50,7 +51,7 @@ pub struct Limits {
     pub coord_clamp: CoordBound,
     /// Maximum decoded image size, each edge apart. An image past it on either
     /// edge aborts the import (memory-exhaustion vector).
-    pub max_image: ambre_core::ImageSize,
+    pub max_image: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
 }
 
 impl Default for Limits {
@@ -63,7 +64,7 @@ impl Default for Limits {
             // for the CRDT geometry fields.
             coord_clamp: CoordBound(BoardLength::new(1_000_000.0)),
             // 8192 px: a 8K texture edge; above this the decode cost is abusive.
-            max_image: ambre_core::ImageSize::new(WholePx::new(8_192), WholePx::new(8_192)),
+            max_image: ambre_core::Size::new(Px::new(8_192), Px::new(8_192)),
         }
     }
 }
@@ -130,7 +131,10 @@ impl Limits {
     /// # Errors
     ///
     /// [`ImportError::ImageTooLarge`], carrying both dimensions and the limit.
-    pub fn check_image_dims(&self, size: ambre_core::ImageSize) -> Result<(), ImportError> {
+    pub fn check_image_dims(
+        &self,
+        size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
+    ) -> Result<(), ImportError> {
         if size.width > self.max_image.width || size.height > self.max_image.height {
             Err(ImportError::ImageTooLarge {
                 size,
@@ -213,19 +217,16 @@ mod tests {
     #[test]
     fn image_dim_guard() {
         let l = Limits {
-            max_image: ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256)),
+            max_image: ambre_core::Size::new(Px::new(256), Px::new(256)),
             ..Limits::default()
         };
         assert!(
-            l.check_image_dims(ambre_core::ImageSize::new(
-                WholePx::new(256),
-                WholePx::new(128)
-            ))
-            .is_ok()
+            l.check_image_dims(ambre_core::Size::new(Px::new(256), Px::new(128)))
+                .is_ok()
         );
         assert!(matches!(
-            l.check_image_dims(ambre_core::ImageSize::new(WholePx::new(257), WholePx::new(10))),
-            Err(ImportError::ImageTooLarge { limit, .. }) if limit == ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256))
+            l.check_image_dims(ambre_core::Size::new(Px::new(257), Px::new(10))),
+            Err(ImportError::ImageTooLarge { limit, .. }) if limit == ambre_core::Size::new(Px::new(256), Px::new(256))
         ));
     }
 }

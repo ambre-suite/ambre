@@ -28,12 +28,13 @@ use kurbo::{Circle, Shape};
 
 /// Pin radius in logical pixels. Constant in screen space: the marker keeps one
 /// size whatever the zoom (`TOILE-UI-022`).
-const PIN_RADIUS: ambre_core::ViewPx = ambre_core::ViewPx::new(11.0);
+const PIN_RADIUS: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(11.0);
 /// Badge font size, in logical pixels.
-const PIN_FONT_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(11.0);
+const PIN_FONT_SIZE: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(11.0);
 /// The pin's tail: the marker sits this far above and right of its anchor point,
 /// so it flags the anchor instead of covering it.
-const PIN_OFFSET: ambre_core::ViewPx = ambre_core::ViewPx::new(10.0);
+const PIN_OFFSET: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(10.0);
 
 /// What the badge of a pin reads (`TOILE-UI-024`): the message count, or a check
 /// mark once a reader resolves the thread. Readable from the board alone,
@@ -157,7 +158,7 @@ fn paint_pin<S: DrawSurface>(
         font_cx,
         &label,
         PIN_FONT_SIZE,
-        ambre_core::ViewPx::new(1000.0),
+        ambre_core::Px::<ambre_core::View>::new(1000.0),
         Alignment::Start,
         ambre_canvas::Weight::Regular,
         ambre_canvas::Slant::Upright,

@@ -3,7 +3,7 @@
 // scroll, folded into whole-cell pans of the viewport.
 
 use ambre_canvas::WheelDelta;
-use ambre_core::{CssVector, SurfacePx, ViewPoint};
+use ambre_core::{Point, Px, Surface, Vector, View};
 use ambre_draw::kinetic::{EdgeScroll, EdgeSpeed, Kinetic, Release, ScrollStep};
 
 use super::ScrollOutcome;
@@ -19,8 +19,8 @@ use crate::{ColDelta, RowDelta};
 pub(crate) struct GridScroll {
     /// Sub-cell residue (logical px) carried between events, so slow touchpad
     /// scrolls still accumulate into whole rows and columns.
-    accum_x: SurfacePx,
-    accum_y: SurfacePx,
+    accum_x: Px<Surface>,
+    accum_y: Px<Surface>,
     /// The shared kinetic scroll (`1-Foundations/ambre-spec-kinetic-scroll.md`).
     kinetic: Kinetic,
     /// The edge scroll of a held drag (`KINETIC-007`).
@@ -37,9 +37,9 @@ impl GridScroll {
         now: ambre_core::PageTime,
     ) -> ScrollOutcome {
         // A line step is one zoomed cell, so it scales with the grid zoom.
-        let px = |v: SurfacePx| v.view_length().css_length();
-        let line = CssVector::new(px(grid.scaled(COL_WIDTH)), px(grid.scaled(ROW_HEIGHT)));
-        let page = CssVector::new(px(grid.canvas_width), px(grid.canvas_height));
+        let px = |v: Px<Surface>| v.view_length().css_length();
+        let line = Vector::new(px(grid.scaled(COL_WIDTH)), px(grid.scaled(ROW_HEIGHT)));
+        let page = Vector::new(px(grid.canvas_width), px(grid.canvas_height));
         // The shared model applies the step one for one, and lets a trackpad
         // glide coast once it pauses; a notch never coasts (`KINETIC-002`,
         // `KINETIC-009`).
@@ -56,15 +56,15 @@ impl GridScroll {
 
     /// Add a step of the model to the sub-cell residue.
     fn accumulate(&mut self, step: ScrollStep) {
-        self.accum_x += SurfacePx::new(f64::from(step.x().get()));
-        self.accum_y += SurfacePx::new(f64::from(step.y().get()));
+        self.accum_x += Px::<Surface>::new(f64::from(step.x().get()));
+        self.accum_y += Px::<Surface>::new(f64::from(step.y().get()));
     }
 
     /// Peel whole rows and columns out of the accumulator and pan the grid,
     /// keeping the sub-cell remainder.
     fn apply(&mut self, grid: &mut TrameUiState) -> ScrollOutcome {
-        let step_x = SurfacePx::new(f64::from(COL_WIDTH.get())) * grid.zoom.get();
-        let step_y = SurfacePx::new(f64::from(ROW_HEIGHT.get())) * grid.zoom.get();
+        let step_x = Px::<Surface>::new(f64::from(COL_WIDTH.get())) * grid.zoom.get();
+        let step_y = Px::<Surface>::new(f64::from(ROW_HEIGHT.get())) * grid.zoom.get();
         let dc = (self.accum_x / step_x) as i32;
         let dr = (self.accum_y / step_y) as i32;
         if dr == 0 && dc == 0 {
@@ -114,7 +114,7 @@ impl GridScroll {
     }
 
     /// A finger went down: it stops any motion left (`KINETIC-006`).
-    pub(crate) fn press(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
+    pub(crate) fn press(&mut self, at: Point<Px<View>>, now: ambre_core::PageTime) {
         self.stop();
         self.kinetic.press(at, now);
     }
@@ -123,7 +123,7 @@ impl GridScroll {
     pub(crate) fn pan(
         &mut self,
         grid: &mut TrameUiState,
-        at: ViewPoint,
+        at: Point<Px<View>>,
         now: ambre_core::PageTime,
     ) -> ScrollOutcome {
         let Some(step) = self.kinetic.sample(at, now) else {
@@ -146,8 +146,8 @@ impl GridScroll {
     /// Halt any kinetic motion and clear its residue.
     pub(crate) fn stop(&mut self) {
         self.kinetic.stop();
-        self.accum_x = SurfacePx::ZERO;
-        self.accum_y = SurfacePx::ZERO;
+        self.accum_x = Px::<Surface>::ZERO;
+        self.accum_y = Px::<Surface>::ZERO;
     }
 
     /// The speed of the motion in flight, px per ms, or `None` at rest.
@@ -162,7 +162,7 @@ mod tests {
     use super::*;
 
     fn grid() -> TrameUiState {
-        TrameUiState::new(SurfacePx::new(1200.0), SurfacePx::new(800.0))
+        TrameUiState::new(Px::<Surface>::new(1200.0), Px::<Surface>::new(800.0))
     }
 
     /// `KINETIC-002`, `KINETIC-009`: a trackpad glide that pauses keeps the

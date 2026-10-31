@@ -181,7 +181,7 @@ mod tests {
         );
         let vp = Viewport {
             center: Point::new(5.0, 5.0),
-            zoom: ambre_core::ZoomFactor::positive(1.0),
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
             size: Size::new(100.0, 100.0),
         };
         let visible: Vec<_> = idx.query_visible(&vp).collect();
@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(idx.len(), ambre_core::ElementCount::new(4_900));
         let moved = Viewport {
             center: Point::new(8.0, 5.0),
-            zoom: ambre_core::ZoomFactor::positive(1.0),
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
             size: Size::new(2.0, 2.0),
         };
         let hit: Vec<_> = idx.query_visible(&moved).collect();
@@ -296,7 +296,7 @@ mod prop {
         )
             .prop_map(|(x, y, zoom, w, h)| Viewport {
                 center: Point::new(x, y),
-                zoom: ambre_core::ZoomFactor::positive(zoom),
+                zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom),
                 size: Size::new(w, h),
             })
     }
@@ -379,7 +379,7 @@ mod prop {
             // Same visible set on a probe viewport that covers the populated area.
             let vp = Viewport {
                 center: Point::ZERO,
-                zoom: ambre_core::ZoomFactor::positive(1.0),
+                zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
                 size: Size::new(2000.0, 2000.0),
             };
             let mut va: Vec<_> = incremental.query_visible(&vp).collect();

@@ -8,7 +8,8 @@
 //! [`RulerRelease`] and leaves as one command (`PROSE-UI-063`,
 //! `PROSE-UI-076`).
 
-use ambre_core::{DocPx, Pt, ViewPx};
+use ambre_core::Pt;
+use ambre_core::{Doc, Px, View};
 
 use crate::events::{ParagraphStyle, ProseCommand, tree_id};
 use crate::ui::ProseUiState;
@@ -45,11 +46,11 @@ pub struct RulerState {
     /// does not measure.
     pub visible: RulerHandles,
     /// Where the page's content column starts on the canvas.
-    pub page_left: ViewPx,
+    pub page_left: Px<View>,
     /// How wide the content column is on the canvas.
-    pub content_width: ViewPx,
+    pub content_width: Px<View>,
     /// How wide one point is on the canvas, at the zoom the column is drawn at.
-    pub point_width: ViewPx,
+    pub point_width: Px<View>,
     /// The caret block's indents as the page lays it out (`PROSE-UI-075`).
     pub indent_first: Pt,
     pub indent_left: Pt,
@@ -58,18 +59,18 @@ pub struct RulerState {
 
 impl RulerState {
     /// A length in points, on the canvas.
-    fn on_canvas(&self, length: Pt) -> ViewPx {
+    fn on_canvas(&self, length: Pt) -> Px<View> {
         self.point_width * length.get()
     }
 
     /// A length on the canvas, in points.
-    fn in_points(&self, length: ViewPx) -> Pt {
+    fn in_points(&self, length: Px<View>) -> Pt {
         Pt::new(length / self.point_width)
     }
 
     /// Where a handle sits on the canvas.
     #[must_use]
-    pub fn handle_x(&self, handle: RulerHandle) -> ViewPx {
+    pub fn handle_x(&self, handle: RulerHandle) -> Px<View> {
         match handle {
             RulerHandle::IndentFirst => {
                 self.page_left + self.on_canvas(self.indent_left + self.indent_first)
@@ -86,7 +87,7 @@ impl RulerState {
     /// no drag leaves a paragraph without room for its text (`PROSE-UI-228`,
     /// `PROSE-UI-229`).
     #[must_use]
-    pub fn points_at(&self, handle: RulerHandle, x: ViewPx) -> Pt {
+    pub fn points_at(&self, handle: RulerHandle, x: Px<View>) -> Pt {
         let held = match handle {
             RulerHandle::IndentFirst => self.indent_first,
             RulerHandle::IndentLeft => self.indent_left,
@@ -125,18 +126,18 @@ const MIN_TEXT: Pt = Pt::new(36.0);
 pub struct RulerDrag {
     pub handle: RulerHandle,
     /// Where the handle is painted, on the canvas.
-    pub at: ViewPx,
+    pub at: Px<View>,
 }
 
 impl RulerDrag {
     /// A press on a handle.
     #[must_use]
-    pub fn press(handle: RulerHandle, x: ViewPx) -> Self {
+    pub fn press(handle: RulerHandle, x: Px<View>) -> Self {
         Self { handle, at: x }
     }
 
     /// The pointer moved: the handle follows it, and nothing else happens.
-    pub fn move_to(&mut self, x: ViewPx) {
+    pub fn move_to(&mut self, x: Px<View>) {
         self.at = x;
     }
 
@@ -185,7 +186,7 @@ impl ProseUiState {
         if let Some(style) = style {
             ruler.visible = RulerHandles::Visible;
             // A hanging indent is laid out as none (`PROSE-FEAT-310`).
-            ruler.indent_first = style.indent_first.max(DocPx::ZERO).to_pt();
+            ruler.indent_first = style.indent_first.max(Px::<Doc>::ZERO).to_pt();
             ruler.indent_left = style.indent_left.to_pt();
             ruler.indent_right = style.indent_right.to_pt();
         }
@@ -229,10 +230,11 @@ mod tests {
     use crate::ui::ProseUiState;
     use crate::view::tests::{append, laid_out};
     use ambre_bus::app::prose::DocOffset;
-    use ambre_core::{Pt, ViewPx};
+    use ambre_core::Pt;
+    use ambre_core::{Px, View};
 
     /// A length in points, on the canvas.
-    fn on_canvas(ruler: &RulerState, points: f32) -> ViewPx {
+    fn on_canvas(ruler: &RulerState, points: f32) -> Px<View> {
         ruler.point_width * points
     }
 
@@ -251,7 +253,7 @@ mod tests {
             },
         });
         let mut ui = ProseUiState::default();
-        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
         ui.apply_layout(state.shaped_layout());
         (state, ui, [plain, quoted])
     }
@@ -293,7 +295,8 @@ mod tests {
         let (_, mut ui, [_, quoted]) = indented();
         caret_in(&mut ui, quoted);
         for zoom in [0.5, 1.0, 1.75] {
-            ui.viewport.zoom = ambre_core::ZoomFactor::positive(f64::from(zoom));
+            ui.viewport.zoom =
+                ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(f64::from(zoom));
             let ruler = ui.ruler();
             let layout = &ui.shaped.layout;
             let left = ui.column.left(&ui.viewport).get() + layout.margin_left.get() * zoom;
@@ -332,7 +335,7 @@ mod tests {
             ruler.handle_x(RulerHandle::IndentLeft),
         );
         for step in 0..500 {
-            drag.move_to(ruler.page_left + ViewPx::new(step as f32));
+            drag.move_to(ruler.page_left + Px::<View>::new(step as f32));
         }
         drag.move_to(ruler.page_left + on_canvas(&ruler, 72.0));
         // The motion touched nothing.

@@ -16,7 +16,8 @@
 //   stays on screen. So the CPU pays once and no frame pays.
 // ============================================================================
 
-use ambre_core::{ByteSize, ImageSize, RgbaPixels};
+use ambre_core::{ByteSize, RgbaPixels};
+use ambre_core::{Image, Px, Size};
 
 /// One level of a mip chain: RGBA8 samples and the dimensions they describe.
 pub struct MipLevel {
@@ -26,7 +27,7 @@ pub struct MipLevel {
 }
 
 /// The bytes level 0 of an image of `size` holds: four per pixel, RGBA8.
-pub fn level0_size(size: ImageSize) -> ByteSize {
+pub fn level0_size(size: Size<Px<Image>>) -> ByteSize {
     // In `u64` and saturating: a `usize` product wraps on wasm32 for a large
     // declared size, and a wrapped size would admit a short buffer.
     ByteSize(
@@ -46,7 +47,7 @@ pub fn level0_size(size: ImageSize) -> ByteSize {
 ///
 /// `pixels` shorter than `width * height * 4` yields no levels at all: a
 /// malformed source is a caller bug the upload path already declines to guess at.
-pub fn build_chain(pixels: &RgbaPixels, size: ImageSize) -> Vec<MipLevel> {
+pub fn build_chain(pixels: &RgbaPixels, size: Size<Px<Image>>) -> Vec<MipLevel> {
     let mut out = Vec::new();
     let (width, height) = (size.width.get(), size.height.get());
     if width == 0 || height == 0 {
@@ -73,7 +74,7 @@ pub fn build_chain(pixels: &RgbaPixels, size: ImageSize) -> Vec<MipLevel> {
 
 /// The number of mip levels wgpu expects for an image of this size, level 0
 /// included -- `floor(log2(max(w, h))) + 1`, and 1 for a degenerate size.
-pub fn level_count(size: ImageSize) -> u32 {
+pub fn level_count(size: Size<Px<Image>>) -> u32 {
     let longest = size.width.get().max(size.height.get());
     if longest <= 1 {
         return 1;
@@ -137,10 +138,10 @@ fn reduce(src: &RgbaPixels, w: u32, h: u32, nw: u32, nh: u32) -> RgbaPixels {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::WholePx;
+    use ambre_core::{Image, Px, Size};
 
-    fn size(width: u32, height: u32) -> ImageSize {
-        ImageSize::new(WholePx::new(width), WholePx::new(height))
+    fn size(width: u32, height: u32) -> Size<Px<Image>> {
+        Size::new(Px::new(width), Px::new(height))
     }
 
     fn chain_of(px: Vec<u8>, width: u32, height: u32) -> Vec<MipLevel> {

@@ -879,9 +879,11 @@ fn font_size(value: &str) -> Option<ambre_core::FontSize> {
     let points = if let Some(pt) = value.strip_suffix("pt") {
         pt.trim().parse::<f32>().ok()?
     } else {
-        ambre_core::DocPx::new(value.strip_suffix("px")?.trim().parse::<f32>().ok()?)
-            .to_pt()
-            .get()
+        ambre_core::Px::<ambre_core::Doc>::new(
+            value.strip_suffix("px")?.trim().parse::<f32>().ok()?,
+        )
+        .to_pt()
+        .get()
     };
     ambre_core::FontSize::new((points * 2.0).round() / 2.0)
 }

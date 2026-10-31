@@ -14,7 +14,8 @@
 // ============================================================================
 
 use ambre_canvas::PerfSnapshot;
-use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip, ZoomFactor};
+use ambre_chrome::{PerfChip, PerfDetail, StatusLabel, ZoomChip};
+use ambre_core::{Doc, Scale, View};
 use leptos::prelude::*;
 
 use crate::ui::status::{SelStats, bounds_label, count_label};
@@ -27,7 +28,7 @@ use crate::ui::status::{SelStats, bounds_label, count_label};
 pub fn StatusBar(
     stats: RwSignal<Option<SelStats>>,
     perf: RwSignal<PerfSnapshot>,
-    zoom: RwSignal<ZoomFactor>,
+    zoom: RwSignal<Scale<Doc, View>>,
 ) -> impl IntoView {
     // The aggregates line, recomputed whenever the selection stats change. An
     // absent/empty selection collapses to nothing (only the zoom chip shows).

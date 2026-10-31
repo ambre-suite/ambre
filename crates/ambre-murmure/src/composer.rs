@@ -35,9 +35,10 @@ use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{EditIntent, Palette, TextCache, TextEditor, TextEditorStyle, TextSpan};
 use ambre_commands::{Key, KeyBinding, KeyChar, Modifiers};
 use ambre_core::{
-    ByteCount, ByteOffset, CharSpan, DocPoint, HistoryStep, ViewPoint, ViewPx, ViewSize,
-    ZoomFactor, byte_span_to_chars, byte_to_char, char_len, char_span_to_bytes,
+    ByteCount, ByteOffset, CharSpan, HistoryStep, byte_span_to_chars, byte_to_char, char_len,
+    char_span_to_bytes,
 };
+use ambre_core::{Doc, Px, Scale, Size, View};
 use ambre_draw::{Color, Consumed, DrawSurface, FontContext, Point, Rect};
 
 use crate::Region;
@@ -58,13 +59,13 @@ pub const EDITING_LINE: &str = "Editing a message. Escape cancels.";
 pub const COMPOSER_HINT: &str = "Write a message";
 
 /// The height of the field when it holds no line yet.
-const MIN_LINE_HEIGHT: ViewPx = ViewPx::new(FONT_BODY.get() + SPACE_4.get());
+const MIN_LINE_HEIGHT: Px<View> = Px::<View>::new(FONT_BODY.get() + SPACE_4.get());
 
 /// The family of the composer's text, the one of the message bodies.
 const FAMILY: ambre_core::FontFamily = ambre_core::FontFamily::Sans;
 
 /// The height of the strip that names who types, above the field.
-const TYPING_HEIGHT: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_4.get());
+const TYPING_HEIGHT: Px<View> = Px::<View>::new(FONT_UI.get() + SPACE_4.get());
 
 /// The words beside the box under a thread's field (`MURMURE-531`).
 pub const ALSO_IN_CHANNEL: &str = "Also send to the channel";
@@ -74,10 +75,10 @@ pub const ALSO_IN_CHANNEL: &str = "Also send to the channel";
 pub const ALSO_CHORD: KeyBinding = KeyBinding::new(Modifiers::ALT, Key::Enter);
 
 /// The height of the row of that box, under the field.
-pub(crate) const ALSO_HEIGHT: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_8.get());
+pub(crate) const ALSO_HEIGHT: Px<View> = Px::<View>::new(FONT_UI.get() + SPACE_8.get());
 
 /// The height of the row of files over the field, while the draft has one.
-pub(crate) const FILES_HEIGHT: ViewPx = ViewPx::new(FONT_UI.get() + SPACE_8.get());
+pub(crate) const FILES_HEIGHT: Px<View> = Px::<View>::new(FONT_UI.get() + SPACE_8.get());
 
 /// What ends the chip of a file a press takes off the draft.
 const REMOVE_MARK: &str = "\u{d7}";
@@ -86,13 +87,13 @@ const REMOVE_MARK: &str = "\u{d7}";
 pub const UPLOADING: &str = "uploading";
 
 /// The side of the box.
-const BOX_SIZE: ViewPx = FONT_UI;
+const BOX_SIZE: Px<View> = FONT_UI;
 
 /// The caret the composer drew: its top-left and its height.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CaretBox {
-    pub at: ViewPoint,
-    pub tall: ViewPx,
+    pub at: ambre_core::Point<Px<View>>,
+    pub tall: Px<View>,
 }
 
 /// How far an input method has come with its word.
@@ -139,7 +140,7 @@ fn body_style(color: Color) -> TextEditorStyle {
         weight: ambre_core::FontWeight::REGULAR,
         italic: ambre_core::Slant::Upright,
         family: FAMILY,
-        base_size: FONT_BODY.unzoomed(ZoomFactor::ONE),
+        base_size: FONT_BODY.unzoomed(Scale::<Doc, View>::ONE),
         color,
         underline: ambre_core::Underline::Plain,
         strikethrough: ambre_core::Strikethrough::Plain,
@@ -158,7 +159,7 @@ fn span_of(text: &str, mark: &StyleMark, palette: &Palette) -> TextSpan {
         color: look::ink(&mark.style, palette),
         underline: shape.underline,
         background: look::tint(&mark.style, palette),
-        indent: ambre_core::DocPx::new(f32::from(shape.indent.get())),
+        indent: ambre_core::Px::<ambre_core::Doc>::new(f32::from(shape.indent.get())),
     }
 }
 
@@ -509,9 +510,9 @@ pub struct Composer {
     /// Whether a press in the field holds a drag.
     drag: Drag,
     /// The height of the band at the last paint, `0` with no channel.
-    band: ViewPx,
+    band: Px<View>,
     /// Where the text of the field started at the last paint.
-    origin: ViewPoint,
+    origin: ambre_core::Point<Px<View>>,
     /// The threads whose box asks for the reply in the channel too.
     also: HashSet<DraftOf>,
     /// The row of that box at the last paint, as its top and bottom.
@@ -566,13 +567,13 @@ impl Composer {
     }
 
     /// The height of the band at the last paint, `0` when no channel showed.
-    pub fn band(&self) -> ViewPx {
+    pub fn band(&self) -> Px<View> {
         self.band
     }
 
     /// The file whose chip the last paint drew under `(x, y)`, by its place
     /// in the files of the draft shown.
-    pub fn file_at(&self, at: ViewPoint) -> Option<FileIndex> {
+    pub fn file_at(&self, at: ambre_core::Point<Px<View>>) -> Option<FileIndex> {
         let at = Point::new(at.x.get().into(), at.y.get().into());
         self.file_chips
             .iter()
@@ -647,7 +648,7 @@ impl Composer {
     }
 
     /// Whether the height `y` falls on the row of the box at the last paint.
-    pub fn on_also(&self, y: ViewPx) -> bool {
+    pub fn on_also(&self, y: Px<View>) -> bool {
         self.also_row.is_some_and(|row| row.holds(y))
     }
 
@@ -1059,7 +1060,11 @@ impl Composer {
     /// What the page draws of the `@` list, from the caret `at` of the last
     /// paint. `None` while no list is open or no entry matches
     /// (`MURMURE-555`).
-    pub fn mention_list(&self, at: ViewPoint, region: Region) -> Option<MentionList> {
+    pub fn mention_list(
+        &self,
+        at: ambre_core::Point<Px<View>>,
+        region: Region,
+    ) -> Option<MentionList> {
         let asking = self.asking.as_ref().filter(|a| !a.offers.is_empty())?;
         Some(MentionList {
             entries: asking.offers.iter().map(Offer::written).collect(),
@@ -1081,7 +1086,12 @@ impl Composer {
     /// What the page draws of the format bar of the draft `of`, from the
     /// caret `at` of the last paint. `None` while nothing is selected
     /// (`MURMURE-432`).
-    pub fn mark_bar(&self, of: DraftOf, at: ViewPoint, region: Region) -> Option<MarkBar> {
+    pub fn mark_bar(
+        &self,
+        of: DraftOf,
+        at: ambre_core::Point<Px<View>>,
+        region: Region,
+    ) -> Option<MarkBar> {
         let editor = self.drafts.get(&of)?;
         let bytes = editor.selection()?;
         let text = editor.text();
@@ -1121,7 +1131,7 @@ impl Composer {
     /// Write the entry picked over its query, with a space after it, and
     /// mark the name (`MURMURE-552`). Runs once the edits before it landed,
     /// so the query is read where it now stands.
-    fn write_pick(&mut self, editor: &mut TextEditor, font_cx: &mut FontContext, wrap: ViewPx) {
+    fn write_pick(&mut self, editor: &mut TextEditor, font_cx: &mut FontContext, wrap: Px<View>) {
         let Some((of, index)) = self.picked.take() else {
             return;
         };
@@ -1141,7 +1151,11 @@ impl Composer {
             end: at + ByteCount::from_len(1 + query.len()),
             text: format!("{written} "),
         });
-        editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
+        editor.flush(
+            font_cx,
+            wrap,
+            ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
+        );
         let start = byte_to_char(&text, at);
         let marks = self.marks.entry(of).or_insert_with(|| Marks {
             text: text.clone(),
@@ -1166,7 +1180,7 @@ impl Composer {
         of: DraftOf,
         editor: &mut TextEditor,
         font_cx: &mut FontContext,
-        wrap: ViewPx,
+        wrap: Px<View>,
     ) {
         let closing = self.closing.take() == Some(of);
         let breaking = self.breaking.take() == Some(of);
@@ -1195,7 +1209,7 @@ impl Composer {
         of: DraftOf,
         editor: &mut TextEditor,
         font_cx: &mut FontContext,
-        wrap: ViewPx,
+        wrap: Px<View>,
         found: impl FnOnce(&str, &[CharSpan]) -> Option<markers::Closed>,
     ) {
         let text = editor.text();
@@ -1230,7 +1244,11 @@ impl Composer {
                 text: String::new(),
             });
         }
-        editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
+        editor.flush(
+            font_cx,
+            wrap,
+            ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
+        );
         if editor.text() != after {
             return;
         }
@@ -1327,7 +1345,7 @@ impl Composer {
 
     /// A press at `(x, y)` in the band: the caret goes there, and a drag
     /// from it selects.
-    pub fn press(&mut self, of: DraftOf, at: ViewPoint) {
+    pub fn press(&mut self, of: DraftOf, at: ambre_core::Point<Px<View>>) {
         let at = self.in_field(at);
         // The field that takes the focus says its draft (`MURMURE-574`).
         if !self.focused() {
@@ -1340,7 +1358,7 @@ impl Composer {
 
     /// A pointer moved: a drag from the field extends the selection.
     /// Answers whether the composer held a drag.
-    pub fn drag_to(&mut self, of: DraftOf, at: ViewPoint) -> Consumed {
+    pub fn drag_to(&mut self, of: DraftOf, at: ambre_core::Point<Px<View>>) -> Consumed {
         if self.drag == Drag::Idle {
             return Consumed::No;
         }
@@ -1355,7 +1373,7 @@ impl Composer {
     }
 
     /// A double click in the field selects the word under it.
-    pub fn word_at(&mut self, of: DraftOf, at: ViewPoint) {
+    pub fn word_at(&mut self, of: DraftOf, at: ambre_core::Point<Px<View>>) {
         let at = self.in_field(at);
         self.history(of).seal();
         self.editor(of).word_at(at);
@@ -1363,11 +1381,11 @@ impl Composer {
 
     /// The point `at` of the view in the field's own layout, which the list
     /// draws at no zoom.
-    fn in_field(&self, at: ViewPoint) -> DocPoint {
+    fn in_field(&self, at: ambre_core::Point<Px<View>>) -> ambre_core::Point<Px<Doc>> {
         let from = at - self.origin;
-        DocPoint::new(
-            from.dx.unzoomed(ZoomFactor::ONE),
-            from.dy.unzoomed(ZoomFactor::ONE),
+        ambre_core::Point::new(
+            from.dx.unzoomed(Scale::<Doc, View>::ONE),
+            from.dy.unzoomed(Scale::<Doc, View>::ONE),
         )
     }
 
@@ -1381,17 +1399,21 @@ impl Composer {
         &mut self,
         font_cx: &mut FontContext,
         shown: Option<DraftOf>,
-        size: ViewSize,
+        size: Size<Px<View>>,
         palette: &Palette,
     ) -> Option<Sent> {
-        let wrap = (size.width - SPACE_8 * 2.0).max(ViewPx::new(1.0));
+        let wrap = (size.width - SPACE_8 * 2.0).max(Px::<View>::new(1.0));
         let style = body_style(palette.cell_text);
         let mut sent = None;
         if let Some(asked) = self.send.take()
             && let Some(mut editor) = self.drafts.remove(&asked)
         {
             editor.set_style(style.clone());
-            editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
+            editor.flush(
+                font_cx,
+                wrap,
+                ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
+            );
             // A marker or a chord typed before Enter lands before the draft
             // leaves, never on the draft that comes back.
             self.close_marker(asked, &mut editor, font_cx, wrap);
@@ -1441,7 +1463,7 @@ impl Composer {
             }
         }
         let Some(shown) = shown else {
-            self.band = ViewPx::ZERO;
+            self.band = Px::<View>::ZERO;
             self.asking = None;
             return sent;
         };
@@ -1449,7 +1471,11 @@ impl Composer {
             Some(mut editor) => {
                 let before = editor.text();
                 editor.set_style(style);
-                editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
+                editor.flush(
+                    font_cx,
+                    wrap,
+                    ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
+                );
                 // A pick lands once the keys before it did.
                 self.write_pick(&mut editor, font_cx, wrap);
                 // Record the edits that landed, then walk the steps asked
@@ -1464,7 +1490,11 @@ impl Composer {
                     }
                 }
                 if walked {
-                    editor.flush(font_cx, wrap, ambre_core::ZoomFactor::ONE);
+                    editor.flush(
+                        font_cx,
+                        wrap,
+                        ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE,
+                    );
                 }
                 if let Some(marks) = self.marks.get_mut(&shown) {
                     marks.follow(&editor.text());
@@ -1499,13 +1529,13 @@ impl Composer {
                     };
                     self.said = read_aloud::said(say, edit, at);
                 }
-                let tall = editor.layout_height().unwrap_or(ViewPx::ZERO);
+                let tall = editor.layout_height().unwrap_or(Px::<View>::ZERO);
                 self.drafts.insert(shown, editor);
                 tall
             }
             None => {
                 self.asking = None;
-                ViewPx::ZERO
+                Px::<View>::ZERO
             }
         };
         let most = (size.height / 2.0 - SPACE_4 * 2.0).max(MIN_LINE_HEIGHT);
@@ -1531,14 +1561,17 @@ impl Composer {
         cache: &mut TextCache,
         shown: Option<DraftOf>,
         typing: Option<&str>,
-        size: ViewSize,
+        size: Size<Px<View>>,
         palette: &Palette,
     ) -> Option<CaretBox> {
         let shown = shown?;
         let (width, height) = (size.width, size.height);
         let rect = view_rect;
         let strip = height - self.band;
-        surface.fill_rect(rect(ViewPx::ZERO, strip, width, height), palette.content_bg);
+        surface.fill_rect(
+            rect(Px::<View>::ZERO, strip, width, height),
+            palette.content_bg,
+        );
         if let Some(line) = typing {
             let shaped = shape(
                 font_cx,
@@ -1548,7 +1581,7 @@ impl Composer {
                 width - SPACE_8 * 2.0,
                 ambre_canvas::Weight::Regular,
             );
-            let at = ViewPoint::new(SPACE_8, strip + SPACE_2);
+            let at = ambre_core::Point::new(SPACE_8, strip + SPACE_2);
             draw(surface, shaped, at, palette.header_text);
         }
         let mut top = strip + TYPING_HEIGHT;
@@ -1576,7 +1609,11 @@ impl Composer {
                 if self.also.contains(&shown) {
                     surface.fill_rect(square, palette.selection);
                 }
-                surface.stroke_rect(square, palette.cell_border, ambre_core::SurfacePx::new(1.0));
+                surface.stroke_rect(
+                    square,
+                    palette.cell_border,
+                    ambre_core::Px::<ambre_core::Surface>::new(1.0),
+                );
                 let words = shape(
                     font_cx,
                     cache,
@@ -1591,7 +1628,7 @@ impl Composer {
                 draw(
                     surface,
                     words,
-                    ViewPoint::new(label_x, label_y),
+                    ambre_core::Point::new(label_x, label_y),
                     palette.header_text,
                 );
                 // Below the desktop width, no chord shows (`CHROME-057`).
@@ -1607,7 +1644,7 @@ impl Composer {
                     draw(
                         surface,
                         chord,
-                        ViewPoint::new(chord_x, label_y),
+                        ambre_core::Point::new(chord_x, label_y),
                         palette.cell_border,
                     );
                 }
@@ -1622,12 +1659,12 @@ impl Composer {
         } else {
             palette.cell_border
         };
-        surface.stroke_rect(field, edge, ambre_core::SurfacePx::new(1.0));
+        surface.stroke_rect(field, edge, ambre_core::Px::<ambre_core::Surface>::new(1.0));
         let inner = RowBounds {
             top: top + SPACE_4,
             bottom: height - SPACE_4,
         };
-        self.origin = ViewPoint::new(SPACE_8, inner.top);
+        self.origin = ambre_core::Point::new(SPACE_8, inner.top);
         let editor = self.drafts.get_mut(&shown);
         let empty = editor.as_ref().is_none_or(|e| e.text().is_empty())
             && self.composing == Composing::Idle;
@@ -1643,15 +1680,15 @@ impl Composer {
             draw(
                 surface,
                 hint,
-                ViewPoint::new(SPACE_8, inner.top),
+                ambre_core::Point::new(SPACE_8, inner.top),
                 palette.header_text,
             );
         }
         let editor = editor?;
         // A draft taller than the field shows its last lines.
-        let tall = editor.layout_height().unwrap_or(ViewPx::ZERO);
-        let shift = (inner.bottom - inner.top - tall).min(ViewPx::ZERO);
-        self.origin = ViewPoint::new(SPACE_8, inner.top + shift);
+        let tall = editor.layout_height().unwrap_or(Px::<View>::ZERO);
+        let shift = (inner.bottom - inner.top - tall).min(Px::<View>::ZERO);
+        self.origin = ambre_core::Point::new(SPACE_8, inner.top + shift);
         let origin = Point::new(
             surface_px(SPACE_8).get(),
             surface_px(inner.top + shift).get(),
@@ -1690,8 +1727,8 @@ impl Composer {
             caret.height() as f32,
         );
         Some(CaretBox {
-            at: ViewPoint::new(ViewPx::new(x), ViewPx::new(y)),
-            tall: ViewPx::new(tall),
+            at: ambre_core::Point::new(Px::<View>::new(x), Px::<View>::new(y)),
+            tall: Px::<View>::new(tall),
         })
     }
 
@@ -1705,8 +1742,8 @@ impl Composer {
         font_cx: &mut FontContext,
         cache: &mut TextCache,
         shown: DraftOf,
-        top: ViewPx,
-        width: ViewPx,
+        top: Px<View>,
+        width: Px<View>,
         palette: &Palette,
     ) {
         let ready = self.uploads.ready(shown).iter().map(|file| {
@@ -1736,14 +1773,23 @@ impl Composer {
             let (y0, y1) = (top + SPACE_2, top + FILES_HEIGHT - SPACE_2);
             let chip = view_rect(x, y0, x + chip_w, y1);
             surface.fill_rect(chip, palette.header_bg);
-            surface.stroke_rect(chip, palette.cell_border, ambre_core::SurfacePx::new(1.0));
+            surface.stroke_rect(
+                chip,
+                palette.cell_border,
+                ambre_core::Px::<ambre_core::Surface>::new(1.0),
+            );
             let ink = if removable {
                 palette.cell_text
             } else {
                 palette.header_text
             };
             let label_y = y0 + (y1 - y0 - text_height(words)) / 2.0;
-            draw(surface, words, ViewPoint::new(x + SPACE_4, label_y), ink);
+            draw(
+                surface,
+                words,
+                ambre_core::Point::new(x + SPACE_4, label_y),
+                ink,
+            );
             if removable {
                 self.file_chips.push((chip, FileIndex::from_usize(index)));
             }

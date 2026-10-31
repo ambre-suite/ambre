@@ -377,13 +377,13 @@ fn a_line_keeps_its_size_and_its_hidden_mark_when_it_moves() {
         version: ambre_core::Generation::nth(1),
         sheet_id: sheet_id.clone(),
         row: Row::new(1),
-        height: ambre_core::DocPx::new(40.0),
+        height: ambre_core::Px::<ambre_core::Doc>::new(40.0),
     });
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::nth(1),
         sheet_id: sheet_id.clone(),
         col: Col::new(2),
-        width: ambre_core::DocPx::new(150.0),
+        width: ambre_core::Px::<ambre_core::Doc>::new(150.0),
     });
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id,
@@ -432,7 +432,7 @@ fn a_column_is_never_narrower_than_its_minimum() {
             version: ambre_core::Generation::nth(1),
             sheet_id: sheet_id.clone(),
             col: Col::new(col),
-            width: ambre_core::DocPx::new(width),
+            width: ambre_core::Px::<ambre_core::Doc>::new(width),
         });
     }
     let (widths, _) = metrics(&mut state, 3);
@@ -450,13 +450,13 @@ fn a_peer_size_out_of_range_reads_clamped_or_default() {
             version: ambre_core::Generation::nth(1),
             sheet_id: sheet_id.clone(),
             col: Col::new(line),
-            width: ambre_core::DocPx::new(100.0),
+            width: ambre_core::Px::<ambre_core::Doc>::new(100.0),
         });
         peer.handle_command(TrameCommand::ResizeRow {
             version: ambre_core::Generation::nth(1),
             sheet_id: sheet_id.clone(),
             row: Row::new(line),
-            height: ambre_core::DocPx::new(30.0),
+            height: ambre_core::Px::<ambre_core::Doc>::new(30.0),
         });
     }
     let mut local = TrameState::new();

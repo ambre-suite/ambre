@@ -9,7 +9,8 @@
 use ambre_bus::PasteSource;
 use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset, DocSpan};
 use ambre_commands::{ClipboardWrite, Key, KeyChar, Modifiers, SelectionMode};
-use ambre_core::{StepDirection, ViewPoint, ViewPx};
+use ambre_core::StepDirection;
+use ambre_core::{Point, Px, View};
 use ambre_draw::Consumed;
 
 use crate::events::{BlockInit, CursorPosition, ProseCommand, TextEdit};
@@ -21,7 +22,7 @@ use crate::view::caret::{Direction, SelectUnit, Spot};
 pub const MULTI_PRESS_WINDOW: ambre_core::PageMillis = ambre_core::PageMillis::new(500.0);
 
 /// How far a second press may land from the first and still be in place.
-const MULTI_PRESS: ViewPx = ViewPx::new(4.0);
+const MULTI_PRESS: Px<View> = Px::<View>::new(4.0);
 
 /// How many inputs the view holds while it waits on a structural command. A
 /// wait lasts one round trip, so the bound is never reached by a hand. Text
@@ -91,20 +92,20 @@ pub enum ProseInput {
     /// Committed text: typing, dictation, a plain paste.
     Text(String),
     Press {
-        at: ViewPoint,
+        at: Point<Px<View>>,
         /// The modifiers held. A press with the primary one on a link follows
         /// the link (`PROSE-UI-071`); one with Shift extends the selection.
         mods: Modifiers,
         now: ambre_core::PageTime,
     },
     Drag {
-        at: ViewPoint,
+        at: Point<Px<View>>,
     },
     Release,
     /// Text dropped into the page at a point: one insertion there
     /// (`PROSE-UI-204`).
     Drop {
-        at: ViewPoint,
+        at: Point<Px<View>>,
         text: String,
     },
     /// An item of the slash menu picked with the pointer, by its place in
@@ -214,7 +215,7 @@ impl Sent {
 /// The last press, to count a second and a third one in place.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Press {
-    at: ViewPoint,
+    at: Point<Px<View>>,
     pressed_at: ambre_core::PageTime,
     clicks: Clicks,
 }
@@ -531,7 +532,7 @@ impl ProseUiState {
     /// text changes nothing.
     fn drop_text(
         &mut self,
-        at: ViewPoint,
+        at: Point<Px<View>>,
         text: &str,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Consumed {
@@ -885,7 +886,7 @@ impl ProseUiState {
     /// the caret stays (`PROSE-UI-156`).
     fn press(
         &mut self,
-        at: ViewPoint,
+        at: Point<Px<View>>,
         mode: SelectionMode,
         now: ambre_core::PageTime,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,

@@ -4,21 +4,24 @@
 use super::*;
 use crate::test_support::at;
 use ambre_canvas::{TextCache, Theme};
-use ambre_core::{Rgb, SurfacePx};
+use ambre_core::Rgb;
+use ambre_core::{Doc, Px, Surface};
 use ambre_draw::FontContext;
 use ambre_draw::testing::{DrawOp, RecordingSurface};
 
 /// A shared empty column-width map for uniform-layout fixtures.
-fn empty_widths() -> &'static std::collections::HashMap<Col, ambre_core::DocPx> {
+fn empty_widths() -> &'static std::collections::HashMap<Col, ambre_core::Px<ambre_core::Doc>> {
     use std::sync::OnceLock;
-    static EMPTY: OnceLock<std::collections::HashMap<Col, ambre_core::DocPx>> = OnceLock::new();
+    static EMPTY: OnceLock<std::collections::HashMap<Col, ambre_core::Px<ambre_core::Doc>>> =
+        OnceLock::new();
     EMPTY.get_or_init(std::collections::HashMap::new)
 }
 
 /// A shared empty row-height map for uniform-layout fixtures.
-fn empty_heights() -> &'static std::collections::HashMap<Row, ambre_core::DocPx> {
+fn empty_heights() -> &'static std::collections::HashMap<Row, ambre_core::Px<ambre_core::Doc>> {
     use std::sync::OnceLock;
-    static EMPTY: OnceLock<std::collections::HashMap<Row, ambre_core::DocPx>> = OnceLock::new();
+    static EMPTY: OnceLock<std::collections::HashMap<Row, ambre_core::Px<ambre_core::Doc>>> =
+        OnceLock::new();
     EMPTY.get_or_init(std::collections::HashMap::new)
 }
 
@@ -26,20 +29,20 @@ fn empty_heights() -> &'static std::collections::HashMap<Row, ambre_core::DocPx>
 fn layout() -> GridLayout<'static> {
     GridLayout {
         hidden_rows: &[],
-        header_width: SurfacePx::new(50.0),
-        header_height: SurfacePx::new(24.0),
-        top: SurfacePx::ZERO,
-        col_width: ambre_core::DocPx::new(80.0),
-        row_height: ambre_core::DocPx::new(20.0),
+        header_width: Px::<Surface>::new(50.0),
+        header_height: Px::<Surface>::new(24.0),
+        top: Px::<Surface>::ZERO,
+        col_width: ambre_core::Px::<ambre_core::Doc>::new(80.0),
+        row_height: ambre_core::Px::<ambre_core::Doc>::new(20.0),
         col_widths: empty_widths(),
         row_heights: empty_heights(),
         origin_col: Col::new(0),
         origin_row: Row::new(0),
-        width: SurfacePx::new(800.0),
-        height: SurfacePx::new(600.0),
+        width: Px::<Surface>::new(800.0),
+        height: Px::<Surface>::new(600.0),
         total_cols: ColCount::new(1000),
         total_rows: RowCount::new(100_000),
-        zoom: ambre_core::ZoomFactor::positive(1.0),
+        zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
     }
 }
 
@@ -64,16 +67,22 @@ fn cell_rect_maps_index_to_pixels() {
 fn variable_metrics_shift_cells_and_hit_test() {
     let mut l = layout();
     // Column 1 widened to 200, row 0 heightened to 50 (absolute keys).
-    let cols = std::collections::HashMap::from([(Col::new(1), ambre_core::DocPx::new(200.0))]);
-    let rows = std::collections::HashMap::from([(Row::new(0), ambre_core::DocPx::new(50.0))]);
+    let cols = std::collections::HashMap::from([(
+        Col::new(1),
+        ambre_core::Px::<ambre_core::Doc>::new(200.0),
+    )]);
+    let rows = std::collections::HashMap::from([(
+        Row::new(0),
+        ambre_core::Px::<ambre_core::Doc>::new(50.0),
+    )]);
     l.col_widths = &cols;
     l.row_heights = &rows;
 
     // col_w / row_h report the per-axis values, default elsewhere.
-    assert_eq!(l.col_w(Col::new(1)), SurfacePx::new(200.0));
-    assert_eq!(l.col_w(Col::new(2)), SurfacePx::new(80.0));
-    assert_eq!(l.row_h(Row::new(0)), SurfacePx::new(50.0));
-    assert_eq!(l.row_h(Row::new(1)), SurfacePx::new(20.0));
+    assert_eq!(l.col_w(Col::new(1)), Px::<Surface>::new(200.0));
+    assert_eq!(l.col_w(Col::new(2)), Px::<Surface>::new(80.0));
+    assert_eq!(l.row_h(Row::new(0)), Px::<Surface>::new(50.0));
+    assert_eq!(l.row_h(Row::new(1)), Px::<Surface>::new(20.0));
 
     // cell_rect: col 2 starts after the widened col 1; row 1 starts below the
     // tall row 0.
@@ -84,7 +93,7 @@ fn variable_metrics_shift_cells_and_hit_test() {
     assert_eq!(r.y1 - r.y0, 20.0);
 
     // col_at / row_at invert the mapping through the variable bands.
-    let px = SurfacePx::new;
+    let px = Px::<Surface>::new;
     assert_eq!(l.col_at(px(50.0 + 80.0 + 10.0)), Some(Col::new(1))); // inside the wide col 1
     assert_eq!(l.col_at(px(50.0 + 80.0 + 200.0 + 5.0)), Some(Col::new(2)));
     assert_eq!(l.row_at(px(24.0 + 25.0)), Some(Row::new(0))); // inside the tall row 0
@@ -97,8 +106,8 @@ fn variable_metrics_shift_cells_and_hit_test() {
 fn a_coordinate_that_is_not_finite_hits_no_line() {
     let l = layout();
     for bad in [f64::NAN, f64::INFINITY] {
-        assert_eq!(l.col_at(SurfacePx::new(bad)), None);
-        assert_eq!(l.row_at(SurfacePx::new(bad)), None);
+        assert_eq!(l.col_at(Px::<Surface>::new(bad)), None);
+        assert_eq!(l.row_at(Px::<Surface>::new(bad)), None);
     }
 }
 
@@ -165,7 +174,7 @@ fn spill_width_stops_at_first_non_empty_neighbour() {
     let l = layout(); // col_width 80, 1000 cols
 
     // All neighbours empty: capped at `need`, not at the column boundary.
-    let px = SurfacePx::new;
+    let px = Px::<Surface>::new;
     let all_empty = |_: CellPos| true;
     assert_eq!(
         spill_width(
@@ -207,7 +216,7 @@ fn spill_width_stops_at_first_non_empty_neighbour() {
     // An immediately non-empty neighbour yields no spill (text clips to cell).
     assert_eq!(
         spill_width(&l, at(0, 0), ColDelta::new(1), px(1000.0), &|_| false),
-        SurfacePx::ZERO
+        Px::<Surface>::ZERO
     );
 
     // The grid edge bounds the leftward walk at column 0.
@@ -604,19 +613,23 @@ fn a_vertical_alignment_never_lifts_text_above_the_top() {
     use super::content::{TextFit, cell_v_offset};
     use ambre_bus::VAlign;
     let fit = |box_h: f64, text_h: f64| TextFit {
-        box_height: SurfacePx::new(box_h),
-        text_height: SurfacePx::new(text_h),
+        box_height: Px::<Surface>::new(box_h),
+        text_height: Px::<Surface>::new(text_h),
     };
     for v in [VAlign::Top, VAlign::Middle, VAlign::Bottom] {
-        assert_eq!(cell_v_offset(v, fit(20.0, 50.0)), SurfacePx::ZERO, "{v:?}");
+        assert_eq!(
+            cell_v_offset(v, fit(20.0, 50.0)),
+            Px::<Surface>::ZERO,
+            "{v:?}"
+        );
         assert!(
-            cell_v_offset(v, fit(20.0, 10.0)) >= SurfacePx::ZERO,
+            cell_v_offset(v, fit(20.0, 10.0)) >= Px::<Surface>::ZERO,
             "{v:?}"
         );
     }
     assert_eq!(
         cell_v_offset(VAlign::Bottom, fit(20.0, 10.0)),
-        SurfacePx::new(10.0)
+        Px::<Surface>::new(10.0)
     );
 }
 
@@ -626,7 +639,7 @@ fn glyphs_scale_with_the_zoom() {
     // it is four times larger at a zoom of four.
     let drop = |zoom: f64| {
         let mut l = layout();
-        l.zoom = ambre_core::ZoomFactor::positive(zoom);
+        l.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(zoom);
         let top = l.cell_rect(CellPos::new(Row::new(0), Col::new(0))).y0;
         let mut c = CellContent::plain("Ag");
         c.v_align = ambre_bus::VAlign::Top;
@@ -700,7 +713,7 @@ fn a_cell_size_in_points_lays_out_as_prose_lays_it_out() {
     // through `FontSize::to_px`, and a cell must not lay out twelve pixels.
     let twelve = ambre_core::FontSize::from_whole_points(12);
     assert_eq!(cell_font_size(Some(twelve)), twelve.to_px());
-    assert_eq!(cell_font_size(Some(twelve)), DocPx::new(16.0));
+    assert_eq!(cell_font_size(Some(twelve)), Px::<Doc>::new(16.0));
     // A cell with no size keeps the body default, which is its points laid out.
     assert_eq!(cell_font_size(None), BODY_SIZE);
     assert_eq!(BODY_FONT.to_px(), BODY_SIZE);

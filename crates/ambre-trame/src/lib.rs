@@ -48,7 +48,7 @@ pub use ambre_bus::{
     RowDelta, RowSpan, RowVec, SelectionKind, SheetTabPos, SortKey, SortOrder, StylePatch,
     TrameCommand, TrameEvent, VAlign, ValidationKind, ValidationOnInvalid,
 };
-use ambre_core::DocPx;
+use ambre_core::{Doc, Px};
 pub use logic::docfile::{export_ambre_plaintext, import_ambre_plaintext};
 pub use logic::{
     CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope, TrameOutcome, TrameState,
@@ -56,19 +56,19 @@ pub use logic::{
 
 /// The width of a column never resized, before the zoom. The Logic thread fills
 /// the viewport slice with it, and the UI lays out the columns past the slice.
-pub const COL_WIDTH: DocPx = DocPx::new(80.0);
+pub const COL_WIDTH: Px<Doc> = Px::<Doc>::new(80.0);
 /// The height of a row never resized, before the zoom.
-pub const ROW_HEIGHT: DocPx = DocPx::new(20.0);
+pub const ROW_HEIGHT: Px<Doc> = Px::<Doc>::new(20.0);
 /// The narrowest a resize leaves a column. The UI preview and the stored width
 /// clamp to the same value.
-pub const MIN_COL_WIDTH: DocPx = DocPx::new(24.0);
+pub const MIN_COL_WIDTH: Px<Doc> = Px::<Doc>::new(24.0);
 /// The shortest a resize leaves a row.
-pub const MIN_ROW_HEIGHT: DocPx = DocPx::new(12.0);
+pub const MIN_ROW_HEIGHT: Px<Doc> = Px::<Doc>::new(12.0);
 /// The widest a column gets, from a local resize or from a peer. The bound
 /// keeps the sum of every width finite.
-pub const MAX_COL_WIDTH: DocPx = DocPx::new(4096.0);
+pub const MAX_COL_WIDTH: Px<Doc> = Px::<Doc>::new(4096.0);
 /// The tallest a row gets, from a local resize or from a peer.
-pub const MAX_ROW_HEIGHT: DocPx = DocPx::new(2048.0);
+pub const MAX_ROW_HEIGHT: Px<Doc> = Px::<Doc>::new(2048.0);
 
 /// Total number of rows in a Trame grid (0-based indices `0..TOTAL_ROWS`).
 pub const TOTAL_ROWS: RowCount = RowCount::new(100_000);

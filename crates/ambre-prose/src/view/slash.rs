@@ -14,7 +14,7 @@ use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
 use ambre_bus::app::grid::{ColCount, RowCount};
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
-use ambre_core::{DocPoint, DocPx, ViewPoint};
+use ambre_core::{Doc, Point, Px, View};
 
 ambre_core::define_index! {
     /// The place of an item in the menu as a query filters it.
@@ -194,7 +194,7 @@ impl SlashMenu {
 #[derive(Clone, Default, PartialEq)]
 pub struct SlashMenuState {
     /// Under the slash, on the canvas. `None` hides the menu.
-    pub anchor: Option<ViewPoint>,
+    pub anchor: Option<Point<Px<View>>>,
     pub query: String,
     pub items: SlashChoiceVec<&'static str>,
     pub selected: SlashChoice,
@@ -267,12 +267,12 @@ impl ProseUiState {
     }
 
     /// The bottom of the line holding a place, on the canvas.
-    fn under(&self, (block, offset): Spot) -> Option<ViewPoint> {
+    fn under(&self, (block, offset): Spot) -> Option<Point<Px<View>>> {
         let run = self.run_of(block)?;
         let caret = run.caret_box_at(self.to_laid(block, offset), Affinity::Downstream);
         let (x, y0, y1) = (caret.x0 as f32, caret.y0 as f32, caret.y1 as f32);
-        let (page, piece) = self.fragment_at(block, DocPx::new(y0))?;
-        let bottom = DocPoint::new(DocPx::new(x), DocPx::new(y1));
+        let (page, piece) = self.fragment_at(block, Px::<Doc>::new(y0))?;
+        let bottom = Point::new(Px::<Doc>::new(x), Px::<Doc>::new(y1));
         Some(self.to_screen(block, page, piece, bottom))
     }
 }

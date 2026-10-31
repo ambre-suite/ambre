@@ -8,7 +8,7 @@
 //! (`PROSE-UI-097`).
 
 use ambre_commands::CommandId;
-use ambre_core::{DocPoint, DocPx, ViewPoint};
+use ambre_core::{Doc, Point, Px, View};
 
 use crate::events::{ActiveMarks, MarkAction, ProseCommand, TriState};
 use crate::layout::run::RunSpan;
@@ -21,7 +21,7 @@ use crate::view::caret::Spot;
 pub struct ToolbarState {
     /// The top-centre of the selection's first line, on the canvas. `None`
     /// hides the bar (`PROSE-UI-053`).
-    pub anchor: Option<ViewPoint>,
+    pub anchor: Option<Point<Px<View>>>,
     /// What each control reports. `None` until the Logic thread answered for
     /// this very selection.
     pub active: Option<ActiveMarks>,
@@ -131,7 +131,7 @@ impl ProseUiState {
     fn selection_top(
         &self,
         ((start, start_off), (end, end_off)): (Spot, Spot),
-    ) -> Option<ViewPoint> {
+    ) -> Option<Point<Px<View>>> {
         let run = self.run_of(start)?;
         let from = self.to_laid(start, start_off);
         let to = if start == end {
@@ -151,9 +151,9 @@ impl ProseUiState {
                 (caret.x0 as f32, caret.x0 as f32, caret.y0 as f32)
             }
         };
-        let top = DocPx::new(y0);
+        let top = Px::<Doc>::new(y0);
         let (page, piece) = self.fragment_at(start, top)?;
-        let centre = DocPoint::new(DocPx::new((x0 + x1) / 2.0), top);
+        let centre = Point::new(Px::<Doc>::new((x0 + x1) / 2.0), top);
         Some(self.to_screen(start, page, piece, centre))
     }
 }

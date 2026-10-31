@@ -283,7 +283,7 @@ fn bench_prose_paragraph_shape(c: &mut Criterion) {
         &ambre_bus::app::prose::ParagraphStyle::default(),
         ambre_core::Weight::Regular,
     );
-    let width = style.text_width(ambre_core::DocPx::new(600.0));
+    let width = style.text_width(ambre_core::Px::<ambre_core::Doc>::new(600.0));
     let mut group = c.benchmark_group("prose_paragraph_shape");
     for chars in [1_000_usize, 5_000, 20_000] {
         let text: String = "lorem ipsum dolor sit amet "

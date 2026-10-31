@@ -21,6 +21,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use ambre_core::{Px, WholeCss};
 use ambre_draw::Color;
 use peniko::color::Rgba8;
 use serde::Deserialize;
@@ -83,25 +84,13 @@ struct Tokens {
     effects: ThemePair<Effects>,
     photo: Photo,
     canvas: ThemePair<CanvasColors>,
-    scale: Vec<(ScaleName, Px)>,
+    scale: Vec<(ScaleName, Px<WholeCss>)>,
 }
 
 #[derive(Deserialize)]
 struct ThemePair<T> {
     light: T,
     dark: T,
-}
-
-/// A length in CSS pixels, as the source writes it: a whole number. The
-/// stylesheet writes it with `px`, and the Rust module as a `ViewPx`.
-#[derive(Deserialize, Clone, Copy)]
-#[serde(transparent)]
-struct Px(u32);
-
-impl fmt::Display for Px {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
 }
 
 /// A colour of the source, `#rrggbb` or `#rrggbbaa`. The source text is
@@ -256,8 +245,8 @@ impl ChromeColors {
 /// A drop shadow: a vertical offset and a blur, and a colour.
 #[derive(Deserialize)]
 struct Shadow {
-    y: Px,
-    blur: Px,
+    y: Px<WholeCss>,
+    blur: Px<WholeCss>,
     colour: TokenColour,
 }
 
@@ -369,7 +358,7 @@ impl fmt::Display for RustColour {
 }
 
 /// Refuse a scale name declared twice. Each name is snake_case by its type.
-fn check_scale(scale: &[(ScaleName, Px)]) -> Result<(), String> {
+fn check_scale(scale: &[(ScaleName, Px<WholeCss>)]) -> Result<(), String> {
     let mut seen = BTreeSet::new();
     scale.iter().try_for_each(|(name, _)| {
         if seen.insert(name) {
@@ -460,7 +449,7 @@ fn rust_module(tokens: &Tokens) -> String {
         // A scale step is a length on the canvas's view (`CANVAS-032`): a
         // spacing, a radius or a font size the canvas draws at.
         rs.push_str(&format!(
-            "pub const {rust_name}: ambre_core::ViewPx = ambre_core::ViewPx::new({value}.0);\n"
+            "pub const {rust_name}: ambre_core::Px<ambre_core::View> = ambre_core::Px::new({value}.0);\n"
         ));
     }
     rs

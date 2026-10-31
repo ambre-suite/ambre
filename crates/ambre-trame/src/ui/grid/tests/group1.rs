@@ -3,13 +3,13 @@
 
 use super::*;
 use ambre_commands::SelectionMode;
-use ambre_core::SurfacePx;
+use ambre_core::{Px, Surface};
 
 /// `current_region` returns `None` on an isolated empty active cell and the
 /// bounding rectangle of an L-shaped contiguous block otherwise (`trame-shared-filter`).
 #[test]
 fn current_region_bounds_the_contiguous_block() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     // Isolated empty active cell -> no block to filter.
     assert_eq!(state.current_region(), None);
 
@@ -29,7 +29,7 @@ fn current_region_bounds_the_contiguous_block() {
 /// of each current-region header cell, returning `(band_row, col)` (`trame-shared-filter`).
 #[test]
 fn filter_button_hit_test_matches_drawn_rect() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     put(&mut state, 0, 0, "a");
     put(&mut state, 0, 1, "b");
     // (r1, c1, r2, c2): a one-row, two-column block.
@@ -56,14 +56,14 @@ fn filter_button_hit_test_matches_drawn_rect() {
 /// device size, shrinking visually as the zoomed cells grew around it).
 #[test]
 fn filter_button_scales_with_zoom() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     put(&mut state, 0, 0, "a");
     let w100 = state
         .filter_button_rect(CellPos::new(Row::new(0), Col::new(0)))
         .expect("button visible")
         .width();
 
-    state.set_zoom(ambre_core::ZoomFactor::positive(2.0));
+    state.set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0));
     let w200 = state
         .filter_button_rect(CellPos::new(Row::new(0), Col::new(0)))
         .expect("button visible")
@@ -78,7 +78,7 @@ fn filter_button_scales_with_zoom() {
 /// leaves a stale anchor behind.
 #[test]
 fn single_cell_selection_tracks_active() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     assert_eq!(
         state.selection,
         Selection::single(CellPos::new(Row::new(0), Col::new(0)))
@@ -109,10 +109,10 @@ fn single_cell_selection_tracks_active() {
 /// variable metrics (drives a whole-axis header drag, `trame-selection`).
 #[test]
 fn axis_pointer_resolution_follows_variable_metrics() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     state
         .col_widths
-        .insert(Col::new(0), ambre_core::DocPx::new(160.0)); // col 0 widened
+        .insert(Col::new(0), ambre_core::Px::<ambre_core::Doc>::new(160.0)); // col 0 widened
     // x just past the wide col 0 lands in col 1.
     assert_eq!(
         state.col_at_x(view_px(super::super::HEADER_WIDTH.get() + 160.0 + 5.0)),
@@ -126,7 +126,7 @@ fn axis_pointer_resolution_follows_variable_metrics() {
 
     state
         .row_heights
-        .insert(Row::new(0), ambre_core::DocPx::new(50.0));
+        .insert(Row::new(0), ambre_core::Px::<ambre_core::Doc>::new(50.0));
     assert_eq!(
         state.row_at_y(view_px(super::super::HEADER_HEIGHT.get() + 50.0 + 5.0)),
         Some(Row::new(1))
@@ -142,7 +142,7 @@ fn axis_pointer_resolution_follows_variable_metrics() {
 /// resize grip in the rest (`trame-resize`, `trame-headers`).
 #[test]
 fn header_boundary_splits_insert_and_resize() {
-    let state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     let boundary = super::super::HEADER_WIDTH.get() + f64::from(super::super::COL_WIDTH.get()); // col 0's right edge
     // Lower half -> resize col 0.
     assert_eq!(
@@ -160,7 +160,7 @@ fn header_boundary_splits_insert_and_resize() {
 /// corner, with the resize band winning over the body (`trame-headers`).
 #[test]
 fn header_hit_resolves_zones() {
-    let state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     // Top-left corner.
     assert_eq!(
         state.header_hit(pointer(10.0, 10.0)),
@@ -307,14 +307,14 @@ fn extending_a_header_band_makes_the_selection_multi() {
 /// `cell_pixel_rect` must agree on the variable geometry (`trame-resize`).
 #[test]
 fn variable_metrics_round_trip_pixel_and_hit_test() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     // Col 0 widened to 160, row 0 heightened to 40.
     state
         .col_widths
-        .insert(Col::new(0), ambre_core::DocPx::new(160.0));
+        .insert(Col::new(0), ambre_core::Px::<ambre_core::Doc>::new(160.0));
     state
         .row_heights
-        .insert(Row::new(0), ambre_core::DocPx::new(40.0));
+        .insert(Row::new(0), ambre_core::Px::<ambre_core::Doc>::new(40.0));
 
     assert_eq!(state.col_width_of(Col::new(0)).get(), 160.0);
     assert_eq!(
@@ -356,8 +356,8 @@ fn variable_metrics_round_trip_pixel_and_hit_test() {
 /// pixel mapping and hit-testing stay self-consistent (`trame-status-bar`).
 #[test]
 fn zoom_scales_metrics_and_round_trips_hit_test() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
-    assert!(state.set_zoom(ambre_core::ZoomFactor::positive(2.0)));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
+    assert!(state.set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0)));
     assert_eq!(state.zoom.get(), 2.0);
 
     // Header strips and the default cell metrics double.
@@ -390,7 +390,7 @@ fn zoom_scales_metrics_and_round_trips_hit_test() {
     assert_eq!(state.cell_at(pointer(x, y)), Some(at(2, 2)));
 
     // The preset clamp rejects out-of-range factors.
-    state.set_zoom(ambre_core::ZoomFactor::positive(99.0));
+    state.set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(99.0));
     assert_eq!(state.zoom, *TrameUiState::ZOOM_PRESETS.last().unwrap());
 }
 
@@ -399,7 +399,7 @@ fn zoom_scales_metrics_and_round_trips_hit_test() {
 /// across the whole block rather than landing inside it.
 #[test]
 fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     let cell = |row, col, span| DisplayCell {
         row,
         col,
@@ -456,7 +456,7 @@ fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
 /// moves); a plain move collapses it; Ctrl+click commits a disjoint range.
 #[test]
 fn selection_extend_disjoint_and_membership() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     state.select(CellPos::new(Row::new(2), Col::new(2)));
     assert!(!state.selection.is_multi(), "lone single cell is not multi");
     assert_eq!(state.selection.bounds(), rect(2, 2, 2, 2));
@@ -515,7 +515,7 @@ fn selection_extend_disjoint_and_membership() {
 /// deduplicates overlaps (Ctrl+Enter fill target).
 #[test]
 fn selected_cells_enumerates_and_dedups() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     // A 2x2 block (0,0)..=(1,1).
     state.select(CellPos::new(Row::new(0), Col::new(0)));
     state.select_extend(CellPos::new(Row::new(1), Col::new(1)));
@@ -534,7 +534,7 @@ fn selected_cells_enumerates_and_dedups() {
 /// anchor put (Shift+arrows, Shift+End).
 #[test]
 fn move_with_extend_keeps_anchor() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     state.select(CellPos::new(Row::new(0), Col::new(0)));
     state
         .move_cursor(RowDelta::new(2), ColDelta::new(0), SelectionMode::Extend)
@@ -560,7 +560,7 @@ fn move_with_extend_keeps_anchor() {
 /// cells then stay selected once the re-fetch clears the merge spans.
 #[test]
 fn select_rect_keeps_unmerged_cells_selected() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     let cell = |row, col, span: Option<MergeSpan>| DisplayCell {
         row,
         col,
@@ -624,7 +624,7 @@ fn select_rect_keeps_unmerged_cells_selected() {
 /// extent corner (2,2).
 #[test]
 fn fill_handle_sits_on_merge_extent_corner() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     seed_merge_2x2(&mut state);
     state.select(CellPos::new(Row::new(2), Col::new(2))); // snaps to master (1,1)
     assert_eq!(state.selection.bounds(), rect(1, 1, 1, 1));
@@ -642,7 +642,7 @@ fn fill_handle_sits_on_merge_extent_corner() {
 /// block at once. The drawn/operative rectangles snap out to full merges.
 #[test]
 fn drag_selection_expands_to_whole_merge() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     seed_merge_2x2(&mut state);
     // Drag from (0,0) to (1,1): the raw live rect (0,0)..=(1,1) cuts the
     // merge in half; the expanded rect must cover the whole (1,1)..=(2,2).

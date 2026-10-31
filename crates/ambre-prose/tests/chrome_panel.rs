@@ -26,8 +26,11 @@ use leptos::wasm_bindgen::JsCast;
 use wasm_bindgen_test::*;
 
 /// The page point at `(x, y)`, in CSS px.
-fn css_point(x: f32, y: f32) -> ambre_core::CssPoint {
-    ambre_core::CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+fn css_point(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::Css>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::Css>::new(x),
+        ambre_core::Px::<ambre_core::Css>::new(y),
+    )
 }
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -83,11 +86,11 @@ async fn a_reply_being_typed_survives_its_thread_moving() {
     signals.threads.set(vec![
         PanelThread {
             thread: thread(first, &["Is this right?"]),
-            y: ambre_core::ViewPx::new(100.0),
+            y: ambre_core::Px::<ambre_core::View>::new(100.0),
         },
         PanelThread {
             thread: thread(second, &["Typo"]),
-            y: ambre_core::ViewPx::new(300.0),
+            y: ambre_core::Px::<ambre_core::View>::new(300.0),
         },
     ]);
     let root = mount_in_container(move || view! { <ProseCommentsPanel signals=signals /> });
@@ -103,11 +106,11 @@ async fn a_reply_being_typed_survives_its_thread_moving() {
     signals.threads.set(vec![
         PanelThread {
             thread: thread(first, &["Is this right?", "Yes"]),
-            y: ambre_core::ViewPx::new(40.0),
+            y: ambre_core::Px::<ambre_core::View>::new(40.0),
         },
         PanelThread {
             thread: thread(second, &["Typo"]),
-            y: ambre_core::ViewPx::new(240.0),
+            y: ambre_core::Px::<ambre_core::View>::new(240.0),
         },
     ]);
     // The effects that redraw the cards run on the next tick.
@@ -212,16 +215,17 @@ fn a_reply_refused_for_its_thread_reaches_the_user() {
 /// zoom.
 #[wasm_bindgen_test]
 async fn the_ruler_element_sits_on_the_column_it_was_given() {
-    use ambre_core::{CssPoint, CssPx, Pt, ViewPx};
+    use ambre_core::Pt;
+    use ambre_core::{Css, Point, Px, View};
     use ambre_prose::view::ruler::{RulerHandle, RulerHandles, RulerState};
-    let origin = CssPoint::new(CssPx::new(40.0), CssPx::new(30.0));
+    let origin = Point::new(Px::<Css>::new(40.0), Px::<Css>::new(30.0));
     for zoom in [0.5_f32, 1.0, 2.0] {
         let signals = ProseSignals::new();
         let ruler = RulerState {
             visible: RulerHandles::Visible,
-            page_left: ViewPx::new(80.0),
-            content_width: ViewPx::new(451.0 * zoom),
-            point_width: ViewPx::new(4.0 / 3.0 * zoom),
+            page_left: Px::<View>::new(80.0),
+            content_width: Px::<View>::new(451.0 * zoom),
+            point_width: Px::<View>::new(4.0 / 3.0 * zoom),
             indent_first: Pt::new(18.0),
             indent_left: Pt::new(36.0),
             indent_right: Pt::new(12.0),
@@ -274,9 +278,9 @@ async fn the_format_bar_announces_the_registry_labels() {
     signals
         .toolbar
         .set(ambre_prose::view::toolbar::ToolbarState {
-            anchor: Some(ambre_core::ViewPoint::new(
-                ambre_core::ViewPx::new(200.0),
-                ambre_core::ViewPx::new(100.0),
+            anchor: Some(ambre_core::Point::new(
+                ambre_core::Px::<ambre_core::View>::new(200.0),
+                ambre_core::Px::<ambre_core::View>::new(100.0),
             )),
             active: None,
         });

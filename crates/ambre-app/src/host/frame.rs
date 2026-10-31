@@ -7,7 +7,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_core::WholePx;
+use ambre_core::{Px, View, WholeCss};
 
 /// The container the shell mounts over the canvas for a board's web embeds
 /// (`TOILE-088`). `None` before the shell renders, and for a host page that does
@@ -57,9 +57,10 @@ pub(crate) fn send_faces(
 /// [`remap_for_child`] with the board's mapping supplied, so the rewrite is
 /// tested without a live view.
 fn remap_with(ev: &InputEvent, to_child: impl Fn(Point) -> Option<Point>) -> Option<InputEvent> {
-    let map = |at: &ViewPoint| {
-        to_child(Point::new(f64::from(at.x.get()), f64::from(at.y.get())))
-            .map(|p| ViewPoint::new(ViewPx::new(p.x as f32), ViewPx::new(p.y as f32)))
+    let map = |at: &ambre_core::Point<Px<View>>| {
+        to_child(Point::new(f64::from(at.x.get()), f64::from(at.y.get()))).map(|p| {
+            ambre_core::Point::new(Px::<View>::new(p.x as f32), Px::<View>::new(p.y as f32))
+        })
     };
     Some(match ev {
         InputEvent::PointerDown { at, button, mods } => InputEvent::PointerDown {
@@ -87,10 +88,10 @@ fn remap_with(ev: &InputEvent, to_child: impl Fn(Point) -> Option<Point>) -> Opt
 /// board must recomposite: a new child, a resize, or a pumped change.
 fn reconcile_children<C>(
     children: &mut HashMap<ElementId, C>,
-    sizes: &mut HashMap<ElementId, CssSize>,
+    sizes: &mut HashMap<ElementId, ambre_core::Size<Px<WholeCss>>>,
     embeds: &[VisibleEmbed],
     mut make: impl FnMut(&VisibleEmbed) -> C,
-    mut resize: impl FnMut(&mut C, CssSize),
+    mut resize: impl FnMut(&mut C, ambre_core::Size<Px<WholeCss>>),
     mut pump: impl FnMut(&mut C) -> bool,
 ) -> bool {
     let live: HashSet<ElementId> = embeds.iter().map(|e| e.element.clone()).collect();
@@ -99,11 +100,11 @@ fn reconcile_children<C>(
 
     let mut dirty = false;
     for e in embeds {
-        let size = CssSize::new(
-            WholePx::new(e.child_size.width.round().max(0.0) as u32),
-            WholePx::new(e.child_size.height.round().max(0.0) as u32),
+        let size = ambre_core::Size::new(
+            Px::new(e.child_size.width.round().max(0.0) as u32),
+            Px::new(e.child_size.height.round().max(0.0) as u32),
         );
-        if size.width == WholePx::ZERO || size.height == WholePx::ZERO {
+        if size.width == Px::ZERO || size.height == Px::ZERO {
             continue;
         }
         if sizes.get(&e.element) == Some(&size) && children.contains_key(&e.element) {
@@ -189,7 +190,7 @@ pub struct FrameHost {
     children: HashMap<ElementId, AppView>,
     /// The last logical canvas size each child was resized to. A moved or zoomed
     /// embed only triggers a child `resize` when its box actually changes.
-    child_sizes: HashMap<ElementId, CssSize>,
+    child_sizes: HashMap<ElementId, ambre_core::Size<Px<WholeCss>>>,
     /// The launcher's child-view factory (see [`MakeChild`]). `None` for a host
     /// that never embeds (or before the launcher installs it).
     make_child: Option<MakeChild>,
@@ -372,7 +373,7 @@ impl FrameHost {
 
     /// Text dropped on the canvas at a point, in canvas pixels. Only Prose
     /// takes it (`PROSE-UI-204`); answers whether it did.
-    pub fn drop_text(&mut self, at: ViewPoint, text: String) -> Consumed {
+    pub fn drop_text(&mut self, at: ambre_core::Point<Px<View>>, text: String) -> Consumed {
         self.view.drop_text(at, text)
     }
 
@@ -381,7 +382,7 @@ impl FrameHost {
     pub fn touch(
         &mut self,
         phase: TouchPhase,
-        at: ViewPoint,
+        at: ambre_core::Point<Px<View>>,
         now: ambre_core::PageTime,
     ) -> Consumed {
         self.view.touch(phase, at, now)
@@ -408,7 +409,7 @@ impl FrameHost {
     /// The view hears the logical size alone (`CANVAS-044`). A density change
     /// keeps it, and still reaches the view so every layer repaints.
     pub fn resize(&mut self, size: SurfaceSize) {
-        let CssSize { width, height, .. } = size.logical();
+        let ambre_core::Size { width, height, .. } = size.logical();
         self.view.resize(size.logical());
         // The density watch lands here, and moves no cell box either.
         self.cells.remeasure();
@@ -430,7 +431,7 @@ impl FrameHost {
     /// dimensions early-returns and would leave a blank canvas.
     pub fn notify_context_restored(&mut self, size: SurfaceSize) {
         let Some(gpu) = self.gpu.as_mut() else { return };
-        let CssSize { width, height, .. } = size.logical();
+        let ambre_core::Size { width, height, .. } = size.logical();
         tracing::info!("GPU context restored, reconfiguring {width}x{height}");
         gpu.configure(size);
         // Force the view to invalidate every cached layer for a clean repaint.
@@ -752,10 +753,10 @@ mod tests {
     }
 
     /// A pointer at canvas `(x, y)`, as the host hands it over.
-    fn pointer(x: f64, y: f64) -> ambre_core::ViewPoint {
-        ambre_core::ViewPoint::new(
-            ambre_core::ViewPx::new(x as f32),
-            ambre_core::ViewPx::new(y as f32),
+    fn pointer(x: f64, y: f64) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+        ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::View>::new(x as f32),
+            ambre_core::Px::<ambre_core::View>::new(y as f32),
         )
     }
 

@@ -45,10 +45,11 @@ use super::viewport::ViewportTransform;
 const LASER_TRAIL_MAX: usize = 24;
 
 /// Screen size of a remote cursor arrow, in logical pixels.
-const CURSOR_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(14.0);
+const CURSOR_SIZE: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(14.0);
 
 /// Name-label font size, in logical pixels.
-const LABEL_FONT_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(12.0);
+const LABEL_FONT_SIZE: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(12.0);
 
 /// How long a laser sample stays visible. Long enough to read a
 /// gesture across the board, short enough that a highlighter held still leaves
@@ -210,7 +211,7 @@ fn paint_peer<S: DrawSurface>(
             surface.stroke_rect(
                 rect_to_screen(wb, w2s),
                 *color,
-                ambre_core::SurfacePx::new(1.5),
+                ambre_core::Px::<ambre_core::Surface>::new(1.5),
             );
         }
     }
@@ -266,7 +267,7 @@ fn paint_laser<S: DrawSurface>(
         surface.stroke_line(
             ambre_draw::Line::new((a.x, a.y), (b.x, b.y)),
             color.with_alpha(alpha.get()),
-            ambre_core::SurfacePx::new(3.0),
+            ambre_core::Px::<ambre_core::Surface>::new(3.0),
         );
     }
 }
@@ -320,7 +321,7 @@ fn paint_cursor<S: DrawSurface>(
         font_cx,
         label.as_str(),
         LABEL_FONT_SIZE,
-        ambre_core::ViewPx::new(200.0),
+        ambre_core::Px::<ambre_core::View>::new(200.0),
         Alignment::Start,
         ambre_canvas::Weight::Bold,
         ambre_canvas::Slant::Upright,

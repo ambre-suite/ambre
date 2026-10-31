@@ -282,7 +282,7 @@ fn status_bar_renders_label_and_aggregates() {
             numbers: totals(&[1.0, 2.0, 3.0]),
         }));
         let perf = RwSignal::new(PerfSnapshot::default());
-        let zoom = RwSignal::new(ambre_chrome::ZoomFactor::ONE);
+        let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
         view! { <StatusBar stats=stats perf=perf zoom=zoom /> }
     });
 
@@ -759,7 +759,7 @@ fn status_text(stats: Option<SelStats>) -> String {
     let container = mount_in_container(move || {
         let stats = RwSignal::new(stats);
         let perf = RwSignal::new(PerfSnapshot::default());
-        let zoom = RwSignal::new(ambre_chrome::ZoomFactor::ONE);
+        let zoom = RwSignal::new(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::ONE);
         view! { <StatusBar stats=stats perf=perf zoom=zoom /> }
     });
     let text = container

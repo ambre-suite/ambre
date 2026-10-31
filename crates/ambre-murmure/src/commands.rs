@@ -240,7 +240,7 @@ pub struct MessageTarget {
     pub deleted: ambre_bus::Deletion,
     /// Where a long press held, in the pixels of the region's canvas. `None`
     /// for a right-click, whose event places the menu itself.
-    pub pressed: Option<ambre_core::ViewPoint>,
+    pub pressed: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
     /// The id of the canvas the region paints.
     pub canvas: ambre_core::CanvasId,
     /// The thread a reply also sent to the channel came from, `None` on any

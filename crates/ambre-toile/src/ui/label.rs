@@ -29,7 +29,8 @@ pub const LABEL_H: BoardLength = BoardLength::new(24.0);
 
 /// Caption font size in world units, scaled by the camera at paint time like
 /// every other body on the board.
-pub const LABEL_FONT_SIZE: ambre_core::DocPx = ambre_core::DocPx::new(14.0);
+pub const LABEL_FONT_SIZE: ambre_core::Px<ambre_core::Doc> =
+    ambre_core::Px::<ambre_core::Doc>::new(14.0);
 
 /// The point half-way along `path` by arc length: the caption's anchor. `None`
 /// for an empty path. A straight arrow puts it at the midpoint; an elbow or a

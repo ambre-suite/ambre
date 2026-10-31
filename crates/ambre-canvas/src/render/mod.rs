@@ -26,8 +26,7 @@
 //   WgpuSurface   -- frame-scoped DrawSurface. Holds the clip stack.
 //                    Routes pushes to the renderer's currently active layer.
 // ============================================================================
-use crate::density::{DevicePx, DeviceSize};
-use ambre_core::ViewPx;
+use ambre_core::{Device, Px, Size, Texel, View};
 use ambre_draw::{Color, ImageKey};
 use bytemuck::{Pod, Zeroable};
 
@@ -39,7 +38,8 @@ mod mipmap;
 mod renderer;
 mod surface;
 
-pub use atlas::{AtlasKind, AtlasSlot, GlyphAtlas, GlyphId, RasterSize};
+pub(crate) use atlas::raster_of_layout;
+pub use atlas::{AtlasKind, AtlasSlot, GlyphAtlas, GlyphId};
 pub use renderer::{ContentRepaint, LayerRepaint, QuadRenderer};
 pub use surface::WgpuSurface;
 // ============================================================================
@@ -73,11 +73,11 @@ struct GlyphVertex {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct GlyphQuad {
     /// The left edge.
-    x: ViewPx,
+    x: Px<View>,
     /// The top edge.
-    y: ViewPx,
-    width: ViewPx,
-    height: ViewPx,
+    y: Px<View>,
+    width: Px<View>,
+    height: Px<View>,
     /// The texture coordinate of the top-left corner.
     uv_min: [f32; 2],
     /// The texture coordinate of the bottom-right corner.
@@ -470,9 +470,9 @@ fn copy_offscreen_with_offset(
     encoder: &mut wgpu::CommandEncoder,
     src: &wgpu::Texture,
     dst: &wgpu::Texture,
-    size: DeviceSize,
-    dx: DevicePx,
-    dy: DevicePx,
+    size: Size<Px<Texel>>,
+    dx: Px<Device>,
+    dy: Px<Device>,
 ) {
     // wgpu takes the bare edges.
     let (width, height) = (size.width.get(), size.height.get());
@@ -486,14 +486,14 @@ fn copy_offscreen_with_offset(
     let copy_w = width - dx_abs;
     let copy_h = height - dy_abs;
 
-    let (src_x, dst_x) = if dx >= DevicePx::ZERO {
+    let (src_x, dst_x) = if dx >= Px::<Device>::ZERO {
         // Content shifts right: take src starting at x=0, place at dst x=dx.
         (0u32, dx_abs)
     } else {
         // Content shifts left: take src starting at x=dx_abs, place at dst x=0.
         (dx_abs, 0u32)
     };
-    let (src_y, dst_y) = if dy >= DevicePx::ZERO {
+    let (src_y, dst_y) = if dy >= Px::<Device>::ZERO {
         (0u32, dy_abs)
     } else {
         (dy_abs, 0u32)

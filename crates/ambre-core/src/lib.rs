@@ -75,6 +75,7 @@ pub mod public_key;
 /// (`ambre-spec-residency.md`).
 pub mod residency;
 pub mod role;
+pub mod scale;
 /// The persisted schema version: the register, the read rule and the migration
 /// walk every application shares (`ambre-spec-schema-version.md`).
 pub mod schema;
@@ -85,6 +86,7 @@ pub mod seq;
 pub mod serde_enums;
 /// Serde adapters for identifier serialization as hyphenated UUID strings.
 pub mod serde_id;
+pub mod space;
 pub mod span;
 pub mod status;
 pub mod tally;
@@ -93,7 +95,6 @@ pub mod text_offset;
 pub mod unit;
 pub mod uuid;
 pub mod version;
-pub mod zoom;
 
 // Re-export the main types for convenient use.
 pub use authorship::{
@@ -161,6 +162,7 @@ pub use payload::{
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};
 pub use role::{DocumentRank, OrganizationRank, Role};
+pub use scale::Scale;
 pub use schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, scaffold_peer, verdict,
@@ -171,6 +173,10 @@ pub use secret::{
     SecretString,
 };
 pub use seq::{DeltaCount, Seq};
+pub use space::{
+    Css, Device, Doc, GlyphRaster, Image, Parley, Space, Surface, Texel, View, WholeCss,
+    WholeParley,
+};
 pub use span::{
     FailureCount, FrameRate, LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds,
     Timestamp, UnixMillis, UnixSeconds,
@@ -187,10 +193,8 @@ pub use text_offset::{
     utf16_to_char,
 };
 pub use unit::{
-    BoardLength, CssPoint, CssPx, CssVector, DocPoint, DocPx, ImagePx, ImageSize, Mm, PX_PER_MM,
-    PixelSize, Point, Pt, Radians, Size, StoredBoardLength, SurfacePx, Vector, ViewPoint, ViewPx,
-    ViewSize, ViewSpeed, ViewSpeedVector, ViewVector, WholePx,
+    BoardLength, Mm, PX_PER_MM, Point, Pt, Px, Radians, Size, StoredBoardLength, Vector, ViewSpeed,
+    ViewSpeedVector,
 };
 pub use uuid::Uuid;
 pub use version::Version;
-pub use zoom::ZoomFactor;

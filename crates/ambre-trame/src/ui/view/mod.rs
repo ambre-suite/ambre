@@ -37,10 +37,10 @@ use crate::{CellPos, CellRect, Col, ColCount, ColDelta, MergeSpan, Row, RowCount
 
 /// The grid's logical `point` as a canvas point. The grid walks its
 /// geometry in f64; the canvas reads the pointer in f32.
-fn view_point(point: ambre_draw::Point) -> ambre_core::ViewPoint {
-    ambre_core::ViewPoint::new(
-        ambre_core::ViewPx::new(point.x as f32),
-        ambre_core::ViewPx::new(point.y as f32),
+fn view_point(point: ambre_draw::Point) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+    ambre_core::Point::new(
+        ambre_core::Px::<ambre_core::View>::new(point.x as f32),
+        ambre_core::Px::<ambre_core::View>::new(point.y as f32),
     )
 }
 
@@ -372,7 +372,7 @@ pub struct TrameView {
     /// and applies it via [`set_zoom`](Self::set_zoom). Browser-only, like the
     /// formula signals; pure local view state, never synced.
     #[cfg(target_arch = "wasm32")]
-    zoom_sig: RwSignal<ambre_chrome::ZoomFactor>,
+    zoom_sig: RwSignal<ambre_core::Scale<ambre_core::Doc, ambre_core::View>>,
     /// The active sheet, the filter flag and the find counter, published for
     /// the chrome. The view keeps each of them, so it alone writes these
     /// signals (`UI-THREAD-003`). Browser-only, like the formula signals.
@@ -488,7 +488,7 @@ pub struct TrameView {
     /// it (`scroll.rs`).
     scroll: scroll::GridScroll,
     /// Where a held selection or fill drag last pointed.
-    drag_point: Option<ambre_core::ViewPoint>,
+    drag_point: Option<ambre_core::Point<ambre_core::Px<ambre_core::View>>>,
 
     /// The last grid copy/cut was a cut: the source range
     /// ([`TrameUiState::clipboard_anchor`]) is cleared after the next paste

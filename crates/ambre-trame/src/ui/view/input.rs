@@ -4,7 +4,7 @@
 use super::*;
 use ambre_canvas::PointerButton;
 use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers, SelectionMode};
-use ambre_core::{ViewPoint, ViewPx};
+use ambre_core::{Point, Px, View};
 use ambre_draw::Consumed;
 use ambre_draw::kinetic::Release;
 
@@ -533,12 +533,12 @@ impl TrameView {
 
     /// A finger went down on the grid. It stops any motion left
     /// (`KINETIC-006`).
-    pub fn touch_down(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
+    pub fn touch_down(&mut self, at: Point<Px<View>>, now: ambre_core::PageTime) {
         self.scroll.press(at, now);
     }
 
     /// A finger moved: past the tap slop the grid follows it, cell by cell.
-    pub fn touch_move(&mut self, at: ViewPoint, now: ambre_core::PageTime) {
+    pub fn touch_move(&mut self, at: Point<Px<View>>, now: ambre_core::PageTime) {
         let outcome = self.scroll.pan(&mut self.state, at, now);
         self.note_scroll(outcome);
     }
@@ -692,7 +692,7 @@ impl TrameView {
 
     /// Arm a column resize from a press on column `c`'s right border. Shows the
     /// live vertical guide at the pointer x.
-    pub(crate) fn arm_col_resize(&mut self, c: Col, x: ViewPx) {
+    pub(crate) fn arm_col_resize(&mut self, c: Col, x: Px<View>) {
         self.resize_drag = Some(HeaderHit::ColBorder(c));
         self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(
             crate::ui::grid::on_grid(x),
@@ -702,7 +702,7 @@ impl TrameView {
     }
 
     /// Arm a row resize from a press on row `r`'s bottom border.
-    pub(crate) fn arm_row_resize(&mut self, r: Row, y: ViewPx) {
+    pub(crate) fn arm_row_resize(&mut self, r: Row, y: Px<View>) {
         self.resize_drag = Some(HeaderHit::RowBorder(r));
         self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(
             crate::ui::grid::on_grid(y),
@@ -714,7 +714,7 @@ impl TrameView {
     /// Move the live resize guide to the pointer, clamped so the dragged
     /// column/row stays inside the size range the Logic thread stores
     /// (`TRAME-UI-181`). The guide then never jumps at the confirmation.
-    pub(crate) fn update_resize_preview(&mut self, at: ViewPoint) {
+    pub(crate) fn update_resize_preview(&mut self, at: Point<Px<View>>) {
         let (x, y) = (
             crate::ui::grid::on_grid(at.x),
             crate::ui::grid::on_grid(at.y),

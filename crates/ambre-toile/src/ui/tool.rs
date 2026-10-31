@@ -53,15 +53,17 @@ pub enum Tool {
 }
 
 /// Screen-space pick radius (logical px) around a corner / rotate handle.
-const HANDLE_PICK: ambre_core::ViewPx = ambre_core::ViewPx::new(9.0);
+const HANDLE_PICK: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(9.0);
 /// Screen-space grab band (logical px) around a selection edge. The whole side
 /// resizes (with a directional cursor), even though only the corners draw a
 /// visual square (toile-tools).
-const EDGE_GRAB: ambre_core::ViewPx = ambre_core::ViewPx::new(6.0);
+const EDGE_GRAB: ambre_core::Px<ambre_core::View> = ambre_core::Px::<ambre_core::View>::new(6.0);
 /// Rotate handle offset above the selection's top edge (logical px).
-pub const ROTATE_OFFSET: ambre_core::ViewPx = ambre_core::ViewPx::new(26.0);
+pub const ROTATE_OFFSET: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(26.0);
 /// Drawn size of a square resize handle (logical px), used by the overlay.
-pub const HANDLE_SIZE: ambre_core::ViewPx = ambre_core::ViewPx::new(8.0);
+pub const HANDLE_SIZE: ambre_core::Px<ambre_core::View> =
+    ambre_core::Px::<ambre_core::View>::new(8.0);
 
 /// The cursor an in-flight Select gesture calls for: a directional
 /// resize / grab on a transform `Handle`, or a closed-hand move. Mapped to a CSS
@@ -1525,7 +1527,7 @@ mod tests {
     fn cam() -> ViewportTransform {
         ViewportTransform {
             center: Point::ZERO,
-            zoom: ambre_core::ZoomFactor::positive(1.0),
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
             size: ambre_draw::Size::new(1000.0, 1000.0),
         }
     }
@@ -2034,7 +2036,7 @@ mod tests {
         e.style.stroke_w = StoredBoardLength::new(0.5);
         let disp = viewport(vec![DisplayNode::Element(e)]);
         let mut cam = cam();
-        cam.zoom = ambre_core::ZoomFactor::positive(4.0);
+        cam.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(4.0);
         let mut m = ToolMachine::new();
         for (off, on_line) in [(0.5, true), (2.0, false)] {
             let at = Point::new(500.0, off);

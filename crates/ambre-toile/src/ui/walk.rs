@@ -23,7 +23,8 @@ use ambre_bus::app::toile::{
     ElementId, ElementStyle,
 };
 use ambre_canvas::{Palette, TextCache};
-use ambre_core::{DocPx, Rgba};
+use ambre_core::Rgba;
+use ambre_core::{Doc, Px};
 use ambre_draw::{
     Affine, Alignment, BezPath, Brush, Color, DocumentWalk, DrawSurface, FontContext, ImageKey,
     ImageSource, Point, PositionedLayoutItem, Rect, Size, Stroke,
@@ -48,7 +49,7 @@ use super::label::{LABEL_FONT_SIZE, label_rect};
 /// (`ambre-roadmap.md` E6).
 pub struct DecodedImage {
     pub pixels: ambre_core::RgbaPixels,
-    pub size: ambre_core::ImageSize,
+    pub size: ambre_core::Size<ambre_core::Px<ambre_core::Image>>,
 }
 
 /// Resolved image pixels for this frame, keyed by media hash. Empty when no
@@ -197,9 +198,9 @@ const STICKY_SHADOW_OFFSET: ambre_core::BoardLength = ambre_core::BoardLength::n
 /// with the note so the text "adapts to the size of the note" (feedback). A
 /// fraction of the shorter side, clamped to a legible range. Shared with the
 /// inline editor so the in-edit size matches the committed one (`edit.rs`).
-pub(crate) fn sticky_font_size(bounds: Rect) -> DocPx {
+pub(crate) fn sticky_font_size(bounds: Rect) -> Px<Doc> {
     let shorter = bounds.width().min(bounds.height()) as f32;
-    DocPx::new((shorter * 0.16).clamp(8.0, 48.0))
+    Px::<Doc>::new((shorter * 0.16).clamp(8.0, 48.0))
 }
 
 /// The element a body of text belongs to.
@@ -221,7 +222,7 @@ pub(crate) fn sticky_or_style_font_size(
     host: TextHost,
     style: &ElementStyle,
     bounds: Rect,
-) -> DocPx {
+) -> Px<Doc> {
     match (host, style.font.size.as_fixed()) {
         (TextHost::Sticky, None) => sticky_font_size(bounds),
         (TextHost::Text, _) | (TextHost::Sticky, Some(_)) => style.font.size.or_default().to_px(),
@@ -395,7 +396,7 @@ fn paint_label<S: DrawSurface>(
         return;
     };
     let pad = TEXT_PAD.get();
-    let wrap_w = DocPx::new((world.width() - 2.0 * pad).max(1.0) as f32);
+    let wrap_w = Px::<Doc>::new((world.width() - 2.0 * pad).max(1.0) as f32);
     let style = ElementStyle::default();
     let layout = walk.text_cache.get_or_build_font(
         walk.font_cx,
@@ -598,7 +599,7 @@ fn paint_text<S: DrawSurface>(
     // and the in-edit text share one origin + wrap width. The body does not jump
     // / re-wrap when entering or leaving edit.
     let pad = TEXT_PAD.get();
-    let wrap_w = DocPx::new((bounds.width() - 2.0 * pad).max(1.0) as f32);
+    let wrap_w = Px::<Doc>::new((bounds.width() - 2.0 * pad).max(1.0) as f32);
     // Text (foreground) colour, (see `resolved_text_ink`): `None` means "use
     // the theme text colour" (only a text element with neither text_color nor fill).
     let color = resolved_text_ink(host, e.style.text_color, fill)
@@ -651,7 +652,7 @@ fn paint_text<S: DrawSurface>(
                     surface.stroke_line(
                         ambre_draw::Line::new((a.x, a.y), (b.x, b.y)),
                         color,
-                        ambre_core::SurfacePx::new(1.0),
+                        ambre_core::Px::<ambre_core::Surface>::new(1.0),
                     );
                 };
                 if underline {

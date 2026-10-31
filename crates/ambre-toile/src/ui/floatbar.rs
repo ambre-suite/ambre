@@ -22,7 +22,8 @@
 use ambre_bus::app::toile::{
     DisplayElement, ElementCount, ElementId, ElementKind, ElementStyle, FontFamily, FontSizeChoice,
 };
-use ambre_core::{CssPoint, Rgba, ViewPoint, ViewPx};
+use ambre_core::Rgba;
+use ambre_core::{Css, Px, View};
 use ambre_draw::{Point, Rect};
 
 use super::menu::{GroupHeld, LockMix};
@@ -40,7 +41,7 @@ use super::viewport::ViewportTransform;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct FloatBar {
     /// The selection's top-edge midpoint on the page.
-    pub at: CssPoint,
+    pub at: ambre_core::Point<Px<Css>>,
     /// Number of selected elements. Two or more -> Group applies.
     pub count: ElementCount,
     /// A selected element is a group node -> Ungroup applies.
@@ -136,12 +137,15 @@ impl StyleEdit {
 pub fn top_center_anchor(
     world_bounds: Rect,
     cam: &ViewportTransform,
-    canvas_origin: CssPoint,
-) -> CssPoint {
+    canvas_origin: ambre_core::Point<Px<Css>>,
+) -> ambre_core::Point<Px<Css>> {
     let mid_top = Point::new((world_bounds.x0 + world_bounds.x1) / 2.0, world_bounds.y0);
     let screen = cam.world_to_screen() * mid_top;
-    ViewPoint::new(ViewPx::new(screen.x as f32), ViewPx::new(screen.y as f32))
-        .on_page(canvas_origin)
+    ambre_core::Point::new(
+        Px::<View>::new(screen.x as f32),
+        Px::<View>::new(screen.y as f32),
+    )
+    .on_page(canvas_origin)
 }
 
 /// Build the floating-bar model from the UI selection and the culled viewport, or
@@ -154,7 +158,7 @@ pub fn build_floatbar(
     selection: &[ElementId],
     selected: &[DisplayElement],
     cam: &ViewportTransform,
-    canvas_origin: CssPoint,
+    canvas_origin: ambre_core::Point<Px<Css>>,
 ) -> Option<FloatBar> {
     if selection.is_empty() {
         return None;
@@ -227,8 +231,11 @@ mod tests {
     use ambre_draw::Size;
     use kurbo::Affine;
 
-    fn page(x: f32, y: f32) -> CssPoint {
-        CssPoint::new(ambre_core::CssPx::new(x), ambre_core::CssPx::new(y))
+    fn page(x: f32, y: f32) -> ambre_core::Point<Px<Css>> {
+        ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::Css>::new(x),
+            ambre_core::Px::<ambre_core::Css>::new(y),
+        )
     }
 
     fn eid(s: &str) -> ElementId {
@@ -303,7 +310,7 @@ mod tests {
     fn cam() -> ViewportTransform {
         ViewportTransform {
             center: Point::ZERO,
-            zoom: ambre_core::ZoomFactor::positive(1.0),
+            zoom: ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.0),
             size: Size::new(1000.0, 800.0),
         }
     }
@@ -318,7 +325,7 @@ mod tests {
             None,
         )]);
         assert_eq!(
-            build_floatbar(&[], &els(&dv), &cam(), CssPoint::default()),
+            build_floatbar(&[], &els(&dv), &cam(), ambre_core::Point::default()),
             None
         );
     }
@@ -333,7 +340,12 @@ mod tests {
             None,
         )]);
         assert_eq!(
-            build_floatbar(&[eid("ghost")], &els(&dv), &cam(), CssPoint::default()),
+            build_floatbar(
+                &[eid("ghost")],
+                &els(&dv),
+                &cam(),
+                ambre_core::Point::default()
+            ),
             None
         );
     }
@@ -350,7 +362,8 @@ mod tests {
             ambre_bus::app::toile::LockState::Unlocked,
             Some(Rgba::from_bits(0x00ff_00ff)),
         )]);
-        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), CssPoint::default()).expect("bar");
+        let bar = build_floatbar(&[eid("a")], &els(&dv), &cam(), ambre_core::Point::default())
+            .expect("bar");
         assert_eq!(bar.at, page(520.0, 420.0));
         assert!(!bar.multi());
         assert_eq!(bar.fill, Some(Rgba::from_bits(0x00ff_00ff)));
@@ -395,7 +408,7 @@ mod tests {
             &[eid("a"), eid("b")],
             &els(&dv),
             &cam(),
-            CssPoint::default(),
+            ambre_core::Point::default(),
         )
         .expect("bar");
         assert_eq!(bar.at, page(540.0, 410.0));
@@ -424,7 +437,7 @@ mod tests {
             &[eid("g"), eid("l")],
             &els(&dv),
             &cam(),
-            CssPoint::default(),
+            ambre_core::Point::default(),
         )
         .expect("bar");
         assert_eq!(bar.groups, GroupHeld::Group);
@@ -454,7 +467,7 @@ mod tests {
             &[eid("a"), eid("b")],
             &els(&dv),
             &cam(),
-            CssPoint::default(),
+            ambre_core::Point::default(),
         )
         .expect("bar");
         assert_eq!(bar.fill, None);
@@ -482,7 +495,7 @@ mod tests {
             &[eid("a"), eid("b")],
             &els(&dv),
             &cam(),
-            CssPoint::default(),
+            ambre_core::Point::default(),
         )
         .expect("bar");
         assert_eq!(bar.fill, Some(Rgba::from_bits(0x1122_33ff)));
@@ -669,7 +682,7 @@ mod tests {
             &[eid("a"), eid("b")],
             &els(&dv),
             &cam(),
-            CssPoint::default(),
+            ambre_core::Point::default(),
         )
         .expect("bar");
         assert!(bar.mixed.text_color.is_mixed());

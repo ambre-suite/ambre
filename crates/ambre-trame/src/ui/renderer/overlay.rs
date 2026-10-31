@@ -6,14 +6,14 @@ use crate::CellPos;
 
 /// Marching-ants dash geometry (logical px): 6px dash + 4px gap. The animation
 /// crawls the dashes by advancing a phase across this period each frame.
-const MARCHING_DASH: SurfacePx = SurfacePx::new(6.0);
+const MARCHING_DASH: Px<Surface> = Px::<Surface>::new(6.0);
 
-const MARCHING_GAP: SurfacePx = SurfacePx::new(4.0);
+const MARCHING_GAP: Px<Surface> = Px::<Surface>::new(4.0);
 
-const MARCHING_PERIOD: SurfacePx = SurfacePx::new(MARCHING_DASH.get() + MARCHING_GAP.get());
+const MARCHING_PERIOD: Px<Surface> = Px::<Surface>::new(MARCHING_DASH.get() + MARCHING_GAP.get());
 
 /// Radius of the inline insert pill (`trame-headers`).
-const BADGE_RADIUS: SurfacePx = SurfacePx::new(7.5);
+const BADGE_RADIUS: Px<Surface> = Px::<Surface>::new(7.5);
 
 /// Fill a disc of radius `radius` centred on `center` with solid `color`. It
 /// is painted as 1px-tall horizontal `fill_rect` spans, since the GPU surface
@@ -23,7 +23,7 @@ const BADGE_RADIUS: SurfacePx = SurfacePx::new(7.5);
 pub(crate) fn fill_disc<S: DrawSurface>(
     s: &mut S,
     center: kurbo::Point,
-    radius: SurfacePx,
+    radius: Px<Surface>,
     color: Color,
 ) {
     // The surface draws in bare f64: the lengths unwrap once, here.
@@ -57,7 +57,7 @@ pub(crate) fn draw_insert_badge<S: DrawSurface>(
     // Halo: a slightly larger disc in the glyph colour gives the pill a crisp
     // outline against the header. The pill then floats rather than smearing
     // into it.
-    fill_disc(s, center, r + SurfacePx::new(1.0), glyph);
+    fill_disc(s, center, r + Px::<Surface>::new(1.0), glyph);
     fill_disc(s, center, r, fill);
     // The "+" sign, in the contrasting glyph colour.
     let (cx, cy) = (center.x, center.y);
@@ -177,12 +177,12 @@ pub(crate) fn draw_chevron<S: DrawSurface>(s: &mut S, bounds: Rect, c: Color) {
     s.stroke_line(
         ambre_draw::Line::new((bx, by), (cx, by + h)),
         c,
-        ambre_core::SurfacePx::new(1.0),
+        ambre_core::Px::<ambre_core::Surface>::new(1.0),
     );
     s.stroke_line(
         ambre_draw::Line::new((bx + w, by), (cx, by + h)),
         c,
-        ambre_core::SurfacePx::new(1.0),
+        ambre_core::Px::<ambre_core::Surface>::new(1.0),
     );
 }
 
@@ -192,7 +192,7 @@ pub(crate) fn dashed_h<S: DrawSurface>(
     s: &mut S,
     line: ambre_draw::Line,
     c: Color,
-    phase: SurfacePx,
+    phase: Px<Surface>,
 ) {
     let (x0, x1, y) = (line.p0.x, line.p1.x, line.p0.y);
     let mut t = x0 - phase.get();
@@ -203,7 +203,7 @@ pub(crate) fn dashed_h<S: DrawSurface>(
             s.stroke_line(
                 ambre_draw::Line::new((a, y), (b, y)),
                 c,
-                ambre_core::SurfacePx::new(1.0),
+                ambre_core::Px::<ambre_core::Surface>::new(1.0),
             );
         }
         t += MARCHING_PERIOD.get();
@@ -215,7 +215,7 @@ pub(crate) fn dashed_v<S: DrawSurface>(
     s: &mut S,
     line: ambre_draw::Line,
     c: Color,
-    phase: SurfacePx,
+    phase: Px<Surface>,
 ) {
     let (y0, y1, x) = (line.p0.y, line.p1.y, line.p0.x);
     let mut t = y0 - phase.get();
@@ -226,7 +226,7 @@ pub(crate) fn dashed_v<S: DrawSurface>(
             s.stroke_line(
                 ambre_draw::Line::new((x, a), (x, b)),
                 c,
-                ambre_core::SurfacePx::new(1.0),
+                ambre_core::Px::<ambre_core::Surface>::new(1.0),
             );
         }
         t += MARCHING_PERIOD.get();
@@ -322,7 +322,11 @@ pub fn draw_overlay<S: DrawSurface>(
             };
             let (bx, by, bw, bh) = (r.x0, r.y0, r.width(), r.height());
             surface.fill_rect(r, palette.header_bg);
-            surface.stroke_rect(r, palette.grid_line, ambre_core::SurfacePx::new(1.0));
+            surface.stroke_rect(
+                r,
+                palette.grid_line,
+                ambre_core::Px::<ambre_core::Surface>::new(1.0),
+            );
             // Glyph inset so it reads inside the button, scaled with the zoom
             // (the button itself is zoom-scaled) so the inset stays proportional.
             let pad = 3.0 * state.zoom.get();
@@ -419,7 +423,11 @@ pub fn draw_overlay<S: DrawSurface>(
         for rect in state.selection_rects() {
             if let Some(rect) = state.range_pixel_rect(rect) {
                 surface.fill_rect(rect, palette.selection.with_alpha(0.16));
-                surface.stroke_rect(rect, palette.selection, ambre_core::SurfacePx::new(1.0));
+                surface.stroke_rect(
+                    rect,
+                    palette.selection,
+                    ambre_core::Px::<ambre_core::Surface>::new(1.0),
+                );
             }
         }
     }
@@ -435,7 +443,11 @@ pub fn draw_overlay<S: DrawSurface>(
             .active_merge_rect()
             .or_else(|| state.cell_pixel_rect(state.active_cell()))
     {
-        surface.stroke_rect(cell, palette.selection, ambre_core::SurfacePx::new(2.0));
+        surface.stroke_rect(
+            cell,
+            palette.selection,
+            ambre_core::Px::<ambre_core::Surface>::new(2.0),
+        );
     }
 
     // -- 2b. Clipboard marching-ants marquee (`trame-clipboard`). A dashed rectangle around
@@ -444,7 +456,7 @@ pub fn draw_overlay<S: DrawSurface>(
         && let Some(range) = state.range_pixel_rect(rect)
     {
         let (x, y, w, ht) = (range.x0, range.y0, range.width(), range.height());
-        let phase = SurfacePx::new((clock.now().0 / 40.0) % MARCHING_PERIOD.get());
+        let phase = Px::<Surface>::new((clock.now().0 / 40.0) % MARCHING_PERIOD.get());
         let c = palette.selection;
         dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, phase);
         dashed_h(
@@ -475,7 +487,7 @@ pub fn draw_overlay<S: DrawSurface>(
     {
         let (x, y, w, ht) = (range.x0, range.y0, range.width(), range.height());
         let c = palette.selection;
-        let still = SurfacePx::ZERO;
+        let still = Px::<Surface>::ZERO;
         dashed_h(surface, ambre_draw::Line::new((x, y), (x + w, y)), c, still);
         dashed_h(
             surface,
@@ -498,7 +510,11 @@ pub fn draw_overlay<S: DrawSurface>(
     }
     if let Some(r) = state.fill_handle_rect() {
         surface.fill_rect(r, palette.selection);
-        surface.stroke_rect(r, palette.content_bg, ambre_core::SurfacePx::new(1.0));
+        surface.stroke_rect(
+            r,
+            palette.content_bg,
+            ambre_core::Px::<ambre_core::Surface>::new(1.0),
+        );
     }
 
     // -- 2d. Header resize guide (`trame-resize`): a full-height/width line at the
@@ -509,7 +525,7 @@ pub fn draw_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((x, layout.top.get()), (x, bottom)),
                 palette.selection,
-                ambre_core::SurfacePx::new(1.0),
+                ambre_core::Px::<ambre_core::Surface>::new(1.0),
             );
         }
         Some(grid::ResizePreview::Row(y)) => {
@@ -517,7 +533,7 @@ pub fn draw_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((0.0, y), (right, y)),
                 palette.selection,
-                ambre_core::SurfacePx::new(1.0),
+                ambre_core::Px::<ambre_core::Surface>::new(1.0),
             );
         }
         None => {}
@@ -532,7 +548,7 @@ pub fn draw_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((x, layout.top.get()), (x, bottom)),
                 palette.selection,
-                ambre_core::SurfacePx::new(2.5),
+                ambre_core::Px::<ambre_core::Surface>::new(2.5),
             );
         }
         Some(grid::AxisPos::Row(i)) => {
@@ -540,7 +556,7 @@ pub fn draw_overlay<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((0.0, y), (right, y)),
                 palette.selection,
-                ambre_core::SurfacePx::new(2.5),
+                ambre_core::Px::<ambre_core::Surface>::new(2.5),
             );
         }
         None => {}

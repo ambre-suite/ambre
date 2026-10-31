@@ -188,7 +188,7 @@ pub(crate) fn draw_ui_cell_layers<S: DrawSurface>(
             surface.stroke_line(
                 ambre_draw::Line::new((x0, y), (rect.x1, y)),
                 err,
-                ambre_core::SurfacePx::new(1.0),
+                ambre_core::Px::<ambre_core::Surface>::new(1.0),
             );
             dy += 1.0;
         }

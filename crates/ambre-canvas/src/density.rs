@@ -8,88 +8,10 @@
 // logical size alone (`CANVAS-044`), so it has nothing to scale by.
 // ============================================================================
 
-pub use ambre_core::PixelSize;
-use ambre_core::WholePx;
-use ambre_core::{CssPx, ViewPx};
+use ambre_core::{Css, Device, Px, Scale, Size, Texel, View, WholeCss};
 
 use crate::render::ContentRepaint;
 use crate::view::RepaintPlan;
-
-/// A whole number of device pixels: a texel of the drawing buffer.
-///
-/// A shift of the buffer is signed, so the type is too. Nothing turns a CSS or
-/// a view pixel into one but the density of [`SurfaceSize`].
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DevicePx(i32);
-
-impl DevicePx {
-    /// No shift.
-    pub const ZERO: Self = Self(0);
-
-    /// The length of `value` device pixels.
-    #[must_use]
-    pub const fn new(value: i32) -> Self {
-        Self(value)
-    }
-
-    /// The number of device pixels, for a foreign API that takes the integer.
-    #[must_use]
-    pub const fn get(self) -> i32 {
-        self.0
-    }
-
-    /// The length without its sign, in the unsigned integer a texture
-    /// coordinate takes.
-    #[must_use]
-    pub const fn unsigned_abs(self) -> u32 {
-        self.0.unsigned_abs()
-    }
-}
-
-impl std::ops::Neg for DevicePx {
-    type Output = Self;
-    fn neg(self) -> Self {
-        Self(-self.0)
-    }
-}
-
-/// Device pixels per CSS pixel: the display density.
-///
-/// A density is a positive, finite number. A value the browser gives that is
-/// not one reads as 1, so no buffer is sized by a zero or a NaN.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub(crate) struct DevicePixelRatio(f64);
-
-impl DevicePixelRatio {
-    /// One device pixel per CSS pixel.
-    pub(crate) const ONE: Self = Self(1.0);
-
-    /// The density `ratio`, or `None` when it is not a positive finite number.
-    #[must_use]
-    pub(crate) fn new(ratio: f64) -> Option<Self> {
-        (ratio.is_finite() && ratio > 0.0).then_some(Self(ratio))
-    }
-
-    /// The density a browser reports. A value that is not a positive finite
-    /// number reads as 1, so no buffer is sized by a zero or a NaN.
-    #[must_use]
-    #[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
-    pub(crate) fn reported(ratio: f64) -> Self {
-        Self::new(ratio).unwrap_or(Self::ONE)
-    }
-
-    /// The ratio, for the arithmetic that scales a length by it.
-    #[must_use]
-    pub(crate) const fn get(self) -> f64 {
-        self.0
-    }
-}
-
-/// The CSS box of a canvas, the size a view lays out against.
-pub type CssSize = PixelSize<CssPx>;
-
-/// The drawing buffer, in device pixels.
-pub type DeviceSize = PixelSize<DevicePx>;
 
 /// The drawing buffer, in the two units of `ambre-spec-high-density.md`.
 ///
@@ -97,29 +19,28 @@ pub type DeviceSize = PixelSize<DevicePx>;
 /// read by the renderer and the GPU bootstrap of this crate.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SurfaceSize {
-    logical: CssSize,
-    physical: DeviceSize,
-    density: DevicePixelRatio,
+    logical: Size<Px<WholeCss>>,
+    physical: Size<Px<Texel>>,
+    density: Scale<Css, Device>,
 }
 
 impl SurfaceSize {
     /// The backing store a browser gives a canvas nobody sized: 300 x 150.
     /// It stands in for a canvas that has no box yet.
     pub const UNSIZED: SurfaceSize = SurfaceSize {
-        logical: CssSize::new(WholePx::new(300), WholePx::new(150)),
-        physical: DeviceSize::new(WholePx::new(300), WholePx::new(150)),
-        density: DevicePixelRatio::ONE,
+        logical: Size::new(Px::new(300), Px::new(150)),
+        physical: Size::new(Px::new(300), Px::new(150)),
+        density: Scale::<Css, Device>::ONE,
     };
 
     /// The CSS box `logical` at `density`, or `None` when the drawing buffer
     /// has no area.
     #[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
-    pub(crate) fn new(logical: CssSize, density: DevicePixelRatio) -> Option<Self> {
-        let scale = |side: WholePx<CssPx>| {
-            WholePx::new((f64::from(side.get()) * density.get()).round() as u32)
-        };
-        let physical = DeviceSize::new(scale(logical.width), scale(logical.height));
-        if physical.width == WholePx::ZERO || physical.height == WholePx::ZERO {
+    pub(crate) fn new(logical: Size<Px<WholeCss>>, density: Scale<Css, Device>) -> Option<Self> {
+        let scale =
+            |side: Px<WholeCss>| Px::new((f64::from(side.get()) * density.get()).round() as u32);
+        let physical = Size::new(scale(logical.width), scale(logical.height));
+        if physical.width == Px::ZERO || physical.height == Px::ZERO {
             return None;
         }
         Some(Self {
@@ -130,28 +51,28 @@ impl SurfaceSize {
     }
 
     /// The size a view lays out against, in CSS pixels.
-    pub fn logical(&self) -> CssSize {
+    pub fn logical(&self) -> Size<Px<WholeCss>> {
         self.logical
     }
 
     /// The same size in view pixels, which a surface paints in. A view pixel
     /// is a CSS pixel in size (`CANVAS-032`).
-    pub fn view(&self) -> ambre_core::ViewSize {
+    pub fn view(&self) -> ambre_core::Size<ambre_core::Px<ambre_core::View>> {
         #[allow(clippy::cast_precision_loss)]
         let (width, height) = (
             self.logical.width.get() as f32,
             self.logical.height.get() as f32,
         );
-        ambre_core::ViewSize::new(ViewPx::new(width), ViewPx::new(height))
+        ambre_core::Size::new(Px::<View>::new(width), Px::<View>::new(height))
     }
 
     /// The size of the drawing buffer, in device pixels.
-    pub(crate) fn physical(&self) -> DeviceSize {
+    pub(crate) fn physical(&self) -> Size<Px<Texel>> {
         self.physical
     }
 
     /// Device pixels per CSS pixel.
-    pub(crate) fn density(&self) -> DevicePixelRatio {
+    pub(crate) fn density(&self) -> Scale<Css, Device> {
         self.density
     }
 
@@ -161,11 +82,11 @@ impl SurfaceSize {
     /// A view shifts its content by a whole number of view pixels. At a
     /// fractional density that shift can land between two device pixels, and
     /// the copy cannot. The plan then repaints in full rather than tear.
-    pub fn on_device(&self, plan: RepaintPlan) -> RepaintPlan<DevicePx> {
-        let whole = |v: ViewPx| {
+    pub fn on_device(&self, plan: RepaintPlan) -> RepaintPlan<Px<Device>> {
+        let whole = |v: Px<View>| {
             let p = f64::from(v.get()) * self.density.get();
             let r = p.round();
-            ((p - r).abs() < 1e-6).then_some(DevicePx::new(r as i32))
+            ((p - r).abs() < 1e-6).then_some(Px::<Device>::new(r as i32))
         };
         let (content, content_strip) = match plan.content {
             ContentRepaint::Full => (ContentRepaint::Full, plan.content_strip),
@@ -188,8 +109,8 @@ impl SurfaceSize {
 /// both sizes. `None` when the box has no area, detached or `display: none`.
 #[cfg(target_arch = "wasm32")]
 pub fn size_backing_store(canvas: &web_sys::HtmlCanvasElement) -> Option<SurfaceSize> {
-    let side = |client: i32| WholePx::new(client.max(0) as u32);
-    let logical = CssSize::new(side(canvas.client_width()), side(canvas.client_height()));
+    let side = |client: i32| Px::new(client.max(0) as u32);
+    let logical = Size::new(side(canvas.client_width()), side(canvas.client_height()));
     let size = SurfaceSize::new(logical, read())?;
     canvas.set_width(size.physical.width.get());
     canvas.set_height(size.physical.height.get());
@@ -265,11 +186,13 @@ impl DensityWatch {
 }
 
 /// The browser's density. The one read of it in the workspace (`CANVAS-031`).
+/// A value that is not a positive finite number reads as 1, so no buffer is
+/// sized by a zero or a NaN.
 #[cfg(target_arch = "wasm32")]
-fn read() -> DevicePixelRatio {
-    web_sys::window().map_or(DevicePixelRatio::ONE, |w| {
-        DevicePixelRatio::reported(w.device_pixel_ratio())
-    })
+fn read() -> Scale<Css, Device> {
+    web_sys::window()
+        .and_then(|w| Scale::new(w.device_pixel_ratio()))
+        .unwrap_or(Scale::ONE)
 }
 
 #[cfg(test)]
@@ -280,8 +203,8 @@ mod tests {
     fn scroll(dx: f32, dy: f32) -> RepaintPlan {
         RepaintPlan {
             content: ContentRepaint::Scroll {
-                dx: ViewPx::new(dx),
-                dy: ViewPx::new(dy),
+                dx: Px::<View>::new(dx),
+                dy: Px::<View>::new(dy),
             },
             content_strip: Some(ambre_draw::Rect::new(0.0, 0.0, 10.0, 10.0)),
             overlay: LayerRepaint::Reuse,
@@ -289,11 +212,17 @@ mod tests {
         }
     }
 
+    /// The density a browser reports, read as `read` reads it: 1 when it is
+    /// not a positive finite number.
+    fn reported(ratio: f64) -> Scale<Css, Device> {
+        Scale::new(ratio).unwrap_or(Scale::ONE)
+    }
+
     /// A CSS box of `width` x `height` at the reported `density`.
     fn surface(width: u32, height: u32, density: f64) -> Option<SurfaceSize> {
         SurfaceSize::new(
-            CssSize::new(WholePx::new(width), WholePx::new(height)),
-            DevicePixelRatio::reported(density),
+            Size::new(Px::new(width), Px::new(height)),
+            reported(density),
         )
     }
 
@@ -304,10 +233,7 @@ mod tests {
         let one = surface(800, 600, 1.0).unwrap();
         let two = surface(800, 600, 2.0).unwrap();
         assert_eq!(one.logical(), two.logical());
-        assert_eq!(
-            two.physical(),
-            DeviceSize::new(WholePx::new(1600), WholePx::new(1200))
-        );
+        assert_eq!(two.physical(), Size::new(Px::new(1600), Px::new(1200)));
     }
 
     /// A density the browser could not report reads as 1, never as a buffer
@@ -315,14 +241,11 @@ mod tests {
     #[test]
     fn an_unusable_density_reads_as_one() {
         for density in [0.0, -2.0, f64::NAN, f64::INFINITY] {
-            assert_eq!(DevicePixelRatio::new(density), None);
-            assert_eq!(DevicePixelRatio::reported(density), DevicePixelRatio::ONE);
+            assert_eq!(Scale::<Css, Device>::new(density), None);
+            assert_eq!(reported(density), Scale::<Css, Device>::ONE);
             let size = surface(300, 150, density).unwrap();
-            assert_eq!(size.density(), DevicePixelRatio::ONE);
-            assert_eq!(
-                size.physical(),
-                DeviceSize::new(WholePx::new(300), WholePx::new(150))
-            );
+            assert_eq!(size.density(), Scale::<Css, Device>::ONE);
+            assert_eq!(size.physical(), Size::new(Px::new(300), Px::new(150)));
         }
         assert!(surface(0, 150, 2.0).is_none());
     }
@@ -341,7 +264,7 @@ mod tests {
         let two = surface(800, 600, 2.0).unwrap();
         assert_eq!(
             two.view(),
-            ambre_core::ViewSize::new(ViewPx::new(800.0), ViewPx::new(600.0))
+            ambre_core::Size::new(Px::<View>::new(800.0), Px::<View>::new(600.0))
         );
         assert_eq!(surface(800, 600, 1.0).unwrap().view(), two.view());
     }
@@ -354,7 +277,7 @@ mod tests {
             .on_device(scroll(0.0, -24.0));
         assert!(matches!(
             plan.content,
-            ContentRepaint::Scroll { dx, dy } if dx == DevicePx::ZERO && dy == DevicePx::new(-48)
+            ContentRepaint::Scroll { dx, dy } if dx == Px::<Device>::ZERO && dy == Px::<Device>::new(-48)
         ));
         assert!(plan.content_strip.is_some());
     }

@@ -26,7 +26,8 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
-use crate::{DeviceSize, QuadRenderer, SurfaceSize, TextCache};
+use crate::{QuadRenderer, SurfaceSize, TextCache};
+use ambre_core::{Px, Size, Texel};
 
 // -----------------------------------------------------------------------------
 // GpuState
@@ -68,7 +69,10 @@ impl GpuState {
 }
 
 /// The swapchain configuration for a buffer of `size` device pixels.
-fn surface_config(format: wgpu::TextureFormat, size: DeviceSize) -> wgpu::SurfaceConfiguration {
+fn surface_config(
+    format: wgpu::TextureFormat,
+    size: Size<Px<Texel>>,
+) -> wgpu::SurfaceConfiguration {
     wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         format,
@@ -207,7 +211,7 @@ async fn create_gpu_state(
     size: SurfaceSize,
     backends: wgpu::Backends,
 ) -> Option<GpuState> {
-    let DeviceSize { width, height, .. } = size.physical();
+    let Size { width, height, .. } = size.physical();
 
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
         backends,

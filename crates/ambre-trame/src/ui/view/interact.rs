@@ -6,7 +6,7 @@ use crate::model::Line;
 use crate::{LAST_COL, LAST_ROW};
 use ambre_canvas::PointerButton;
 use ambre_commands::{Key, KeyChar};
-use ambre_core::{DocPoint, DocPx, ViewPoint};
+use ambre_core::{Doc, Point, Px, View};
 use ambre_draw::Consumed;
 
 /// Where a line grabbed at `from` lands when dropped before `slot`, or `None`
@@ -64,7 +64,7 @@ impl TrameView {
     /// holds it (`BUS-011`). The local map takes the width only once the outbox
     /// carries the command: a width the document never took hides the loss
     /// (`TRAME-UI-127`).
-    pub(crate) fn send_resize_col(&mut self, col: Col, width: DocPx) {
+    pub(crate) fn send_resize_col(&mut self, col: Col, width: Px<Doc>) {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeCol {
             version,
@@ -82,7 +82,7 @@ impl TrameView {
     }
 
     /// Emit a `ResizeRow` (row analogue of [`send_resize_col`]).
-    pub(crate) fn send_resize_row(&mut self, row: Row, height: DocPx) {
+    pub(crate) fn send_resize_row(&mut self, row: Row, height: Px<Doc>) {
         let version = self.state.bump_version();
         let cmd = TrameCommand::ResizeRow {
             version,
@@ -144,7 +144,7 @@ impl TrameView {
                         font_cx,
                         &data.text,
                         size,
-                        DocPx::new(f32::MAX),
+                        Px::<Doc>::new(f32::MAX),
                         Alignment::Start,
                         data.bold,
                         data.italic,
@@ -154,7 +154,7 @@ impl TrameView {
                     max_h = max_h.max(lyt.height());
                 }
                 let height = if max_h > 0.0 {
-                    DocPx::new(max_h + 4.0).max(crate::ui::grid::MIN_ROW_HEIGHT)
+                    Px::<Doc>::new(max_h + 4.0).max(crate::ui::grid::MIN_ROW_HEIGHT)
                 } else {
                     crate::ui::grid::ROW_HEIGHT
                 };
@@ -615,19 +615,19 @@ impl TrameView {
     /// Map a logical pointer position into the open editor's local (text-relative)
     /// frame, for a pointer intent the shared core resolves against its layout.
     /// Single-line: the local y is 0 (line 0), so only x carries information.
-    fn editor_local_point(&self, at: ViewPoint) -> Option<DocPoint> {
+    fn editor_local_point(&self, at: Point<Px<View>>) -> Option<Point<Px<Doc>>> {
         let ed = self.editor.as_ref()?;
         let cx = self.state.cell_pixel_rect(ed.at)?.x0;
         let pad = crate::render::CELL_PAD_X
             .zoomed_on_surface(self.state.zoom)
             .get();
         let x = (f64::from(at.x.get()) - (cx + pad)).max(0.0) as f32;
-        Some(DocPoint::new(DocPx::new(x), DocPx::ZERO))
+        Some(Point::new(Px::<Doc>::new(x), Px::<Doc>::ZERO))
     }
 
     /// True when logical pixel `at` falls on the cell currently being
     /// edited -- the gate for in-cell mouse text selection vs. committing.
-    pub(crate) fn pointer_in_editor(&self, at: ViewPoint) -> bool {
+    pub(crate) fn pointer_in_editor(&self, at: Point<Px<View>>) -> bool {
         let Some(ed) = self.editor.as_ref() else {
             return false;
         };
@@ -882,7 +882,7 @@ pub(crate) fn fit_column_width(
     cells: &[crate::DisplayCell],
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
-) -> DocPx {
+) -> Px<Doc> {
     let pad = (crate::render::CELL_PAD_X * 2.0).get();
     let widest = cells
         .iter()
@@ -894,7 +894,7 @@ pub(crate) fn fit_column_width(
                     font_cx,
                     &cell.text,
                     size,
-                    DocPx::new(f32::MAX),
+                    Px::<Doc>::new(f32::MAX),
                     ambre_draw::Alignment::Start,
                     cell.bold,
                     cell.italic,
@@ -905,7 +905,7 @@ pub(crate) fn fit_column_width(
         })
         .fold(0.0f32, f32::max);
     if cells.iter().any(|cell| !cell.text.is_empty()) {
-        DocPx::new(widest + pad).max(crate::ui::grid::MIN_COL_WIDTH)
+        Px::<Doc>::new(widest + pad).max(crate::ui::grid::MIN_COL_WIDTH)
     } else {
         crate::ui::grid::COL_WIDTH
     }

@@ -393,10 +393,6 @@ ambre-bus | src/ui.rs | crate::ui | UiEvent::FatalError.message | field | String
 ambre-bus | src/ui.rs | crate::ui | UiEvent::SyncWarning.message | field | String	free-text	user-facing or log message
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::is_busy() | ret | bool	generic	predicate result
 ambre-canvas | src/busy.rs | crate::busy | BusyPublisher::publish() | ret | bool	generic	predicate result
-ambre-canvas | src/density.rs | crate::density | DevicePixelRatio.0 | field | f64	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/density.rs | crate::density | DevicePixelRatio::get() | ret | f64	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/density.rs | crate::density | DevicePixelRatio::new(ratio) | param | f64	newtype-inner	newtype inner, accessor or constructor
-ambre-canvas | src/density.rs | crate::density | DevicePixelRatio::reported(ratio) | param | f64	newtype-inner	the density the browser reports, read as 1 when it is not a positive finite number
 ambre-canvas | src/density.rs | crate::density | density_query() | ret | String	free-text	text, label or message
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::Compose.0 | field | String	free-text	user text or error message
 ambre-canvas | src/editor.rs | crate::editor | EditIntent::ComposeEnd.0 | field | String	free-text	user text or error message
@@ -605,7 +601,6 @@ ambre-canvas | src/tokens.rs | crate::tokens | Effects::vars() | ret | [(&'stati
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.css | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Generated.rust | field | String	free-text	a whole generated file: the stylesheet or the Rust module
 ambre-canvas | src/tokens.rs | crate::tokens | Photo::vars() | ret | [(&'static str,TokenColour);7]	generic	the codec of a struct that is no newtype: the CSS variable name of each typed colour, written into the generated stylesheet
-ambre-canvas | src/tokens.rs | crate::tokens | Px.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source
 ambre-canvas | src/tokens.rs | crate::tokens | ScaleName.0 | field | String	newtype-inner	newtype inner, a scale name its constructor checked
 ambre-canvas | src/tokens.rs | crate::tokens | TokenError::Refused.0 | field | String	generic	the refusal message of the source
 ambre-canvas | src/tokens.rs | crate::tokens | check_scale() | ret | Result<(),String>	generic	an error that echoes the refused scale name
@@ -996,12 +991,6 @@ ambre-core | src/version.rs | crate::version | Version.0 | field | u8	newtype-in
 ambre-core | src/version.rs | crate::version | Version::as_u8() | ret | u8	newtype-inner	Seq/Version newtype accessor
 ambre-core | src/version.rs | crate::version | Version::compatible_with() | ret | bool	generic	predicate
 ambre-core | src/version.rs | crate::version | Version::new(value) | param | u8	newtype-inner	Seq/Version newtype accessor
-ambre-core | src/zoom.rs | crate::zoom | ZoomFactor.0 | field | f64	newtype-inner	newtype inner
-ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::get() | ret | f64	newtype-inner	enum/newtype own accessor or constructor
-ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::positive(z) | param | f64	newtype-inner	enum/newtype own accessor or constructor
-ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(hi) | param | f64	newtype-inner	enum/newtype own accessor or constructor
-ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(lo) | param | f64	newtype-inner	enum/newtype own accessor or constructor
-ambre-core | src/zoom.rs | crate::zoom | ZoomFactor::within(z) | param | f64	newtype-inner	enum/newtype own accessor or constructor
 ambre-crypto | src/aead.rs | crate::aead | NONCE_LEN | const | usize	generic	crate-internal length of the [u8;N] nonce array, for the layouts ambre-crypto writes and reads itself; other crates frame a nonce with Nonce::SIZE, and a const assert holds the two equal
 ambre-crypto | src/aead.rs | crate::aead | open_under() | ret | Result<Vec<u8>,CryptoError>	generic	generic byte/text API or codec
 ambre-crypto | src/aead.rs | crate::aead | open_under(ciphertext) | param | &[u8]	generic	generic byte/text API or codec
@@ -3003,18 +2992,6 @@ ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate.0 | field | f64	n
 ambre-toile | src/ui/view.rs | crate::ui::view | WheelZoomRate::factor() | ret | f64	math	relative zoom factor, not an absolute zoom: the argument of ViewportTransform::zoom_about
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::from_stored(value) | param | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
 ambre-bus | src/app/prose.rs | crate::app::prose | LineHeight::stored_value() | ret | f32	generic	the stored number of the line height codec, a ratio or points by the mode beside it
-ambre-canvas | src/density.rs | crate::density | DevicePx.0 | field | i32	newtype-inner	the inside of the device pixel newtype, signed because a buffer shift is
-ambre-canvas | src/density.rs | crate::density | DevicePx::get() | ret | i32	newtype-inner	the device pixel unwrapped for wgpu, which takes the integer
-ambre-canvas | src/density.rs | crate::density | DevicePx::new(value) | param | i32	newtype-inner	the constructor of the device pixel newtype
-ambre-canvas | src/density.rs | crate::density | DevicePx::unsigned_abs() | ret | u32	newtype-inner	the magnitude of a shift, in the unsigned texel coordinate wgpu takes
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize.0 | field | f32	newtype-inner	the inside of the glyph raster size, in device pixels
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::get() | ret | f32	newtype-inner	the raster size unwrapped for Swash, which takes the float, and for the atlas key
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::texel_scale() | ret | f32	math	device pixels per atlas texel, a bare ratio of the size to the raster cap
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::new(device_px) | param | f32	newtype-inner	the constructor of the glyph raster size, in device pixels
-ambre-canvas | src/render/atlas.rs | crate::render::atlas | RasterSize::of_layout(scale) | param | f64	newtype-inner	the constructor of the glyph raster size: the scale of the drawing transform, a bare ratio
-ambre-canvas | src/text_cache.rs | crate::text_cache | LayoutPx.0 | field | f32	newtype-inner	the inside of the layout length newtype, in the f32 units parley lays out in
-ambre-canvas | src/text_cache.rs | crate::text_cache | LayoutPx::get() | ret | f32	newtype-inner	the layout length unwrapped for the parley call, the cache key or the raster size
-ambre-canvas | src/text_cache.rs | crate::text_cache | LayoutPx::new(units) | param | f32	newtype-inner	the constructor of the layout length, from the f32 parley hands back
 ambre-bus | src/app/prose.rs | crate::app::prose | <HeadingLevel as TryFrom<u8>>::try_from(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::clamp(level) | param | u8	newtype-inner	HeadingLevel field, constructor or accessor
 ambre-bus | src/app/prose.rs | crate::app::prose | HeadingLevel::get() | ret | u8	newtype-inner	HeadingLevel field, constructor or accessor
@@ -3449,9 +3426,6 @@ ambre-core | src/payload.rs | crate::payload | FormatMagic.0 | field | [u8;4]	ne
 ambre-core | src/payload.rs | crate::payload | FormatMagic::new(bytes) | param | [u8;4]	newtype-inner	FormatMagic constructor
 ambre-logic | src/data.rs | crate::data | export_pdf_of() | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
 ambre-logic | src/data.rs | crate::data | export_pdf_of()#2 | ret | Result<ambre_core::FileBytes,String>	free-text	the reason an export failed, shown to the user as ToileEvent::ExportFailed carries it
-ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx.0 | field | u16	newtype-inner	the inside of the indent newtype, in whole units of the width its text breaks to
-ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::get() | ret | u16	newtype-inner	the indent unwrapped, for a view that lays out in f64
-ambre-canvas | src/text_cache.rs | crate::text_cache | IndentPx::new(units) | param | u16	newtype-inner	the constructor of the indent newtype
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount.0 | field | f64	newtype-inner	the inside of the wheel amount, a count of the delta's unit
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::new(units) | param | f64	newtype-inner	the constructor of the wheel amount, from the DOM delta
 ambre-draw | src/wheel.rs | crate::wheel | WheelAmount::scaled(unit) | param | f64	math	the CSS length of one unit, the factor the amount scales by
@@ -3471,9 +3445,6 @@ ambre-core | src/tally.rs | crate::tally | CellCount::as_f64() | ret | f64	newty
 ambre-core | src/tally.rs | crate::tally | CellCount::get() | ret | u64	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-core | src/tally.rs | crate::tally | CellCount::is_zero() | ret | bool	newtype-inner	a predicate on the newtype's own inside
 ambre-core | src/tally.rs | crate::tally | CellCount::new(n) | param | u64	newtype-inner	the newtype's own inside, accessor or constructor
-ambre-core | src/unit.rs | crate::unit | WholePx.0 | field | u32	newtype-inner	the inside of a pixel edge typed by its space; the u32 is what wgpu, the canvas element and the image decoders take
-ambre-core | src/unit.rs | crate::unit | WholePx<P>::get() | ret | u32	newtype-inner	the one way out of a pixel edge, to wgpu, the canvas element and the image decoders
-ambre-core | src/unit.rs | crate::unit | WholePx<P>::new(n) | param | u32	newtype-inner	the constructor of a pixel edge typed by its space
 ambre-core | src/color.rs | crate::color | Alpha.0 | field | u8	newtype-inner	the inside of the alpha channel of a packed colour, as a renderer takes it
 ambre-core | src/color.rs | crate::color | Alpha::get() | ret | u8	newtype-inner	the one way out of an alpha, to a renderer that takes the channel byte
 ambre-core | src/color.rs | crate::color | Alpha::new(byte) | param | u8	newtype-inner	the constructor of an alpha; every byte is one
@@ -3644,3 +3615,61 @@ ambre-primitives | src/unwrap.rs | crate::unwrap | shape_name() | ret | Option<S
 ambre-primitives | src/unwrap.rs | crate::unwrap | type_name() | ret | Option<String>	generic	Rust source text the scanner parses or prints: a path, a type or an item name
 ambre-primitives | src/unwrap.rs | crate::unwrap | writes_newtypes() | ret | bool	generic	a predicate or a file read of the scanner
 ambre-primitives | src/unwrap.rs | crate::unwrap | writes_newtypes(name) | param | &str	generic	Rust source text the scanner parses or prints: a path, a type or an item name
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | raster_of_layout(scale) | param | f64	math	the scale of the drawing transform, a bare ratio
+ambre-canvas | src/render/atlas.rs | crate::render::atlas | texel_scale() | ret | f32	math	device pixels per atlas texel, a bare ratio of the size to the raster cap
+ambre-core | src/scale.rs | crate::scale | <Scale<A,B> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/scale.rs | crate::scale | Scale.0 | field | f64	newtype-inner	the inside of the scale between two pixel spaces, its accessor or constructor
+ambre-core | src/scale.rs | crate::scale | Scale<A,B>::get() | ret | f64	newtype-inner	the inside of the scale between two pixel spaces, its accessor or constructor
+ambre-core | src/scale.rs | crate::scale | Scale<A,B>::new(z) | param | f64	newtype-inner	the inside of the scale between two pixel spaces, its accessor or constructor
+ambre-core | src/scale.rs | crate::scale | Scale<A,B>::positive(z) | param | f64	newtype-inner	the inside of the scale between two pixel spaces, its accessor or constructor
+ambre-core | src/scale.rs | crate::scale | Scale<A,B>::within(hi) | param | f64	newtype-inner	the inside of the scale between two pixel spaces, its accessor or constructor
+ambre-core | src/scale.rs | crate::scale | Scale<A,B>::within(lo) | param | f64	newtype-inner	the inside of the scale between two pixel spaces, its accessor or constructor
+ambre-core | src/scale.rs | crate::scale | Scale<A,B>::within(z) | param | f64	newtype-inner	the inside of the scale between two pixel spaces, its accessor or constructor
+ambre-core | src/space.rs | crate::space | <Css as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <Css as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <Device as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <Device as Space>::Repr | assoc | i32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <Doc as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <Doc as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <GlyphRaster as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <GlyphRaster as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <Image as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <Image as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <Parley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <Surface as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <Surface as Space>::Repr | assoc | f64	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <Texel as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <Texel as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <View as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <View as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <WholeCss as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <WholeCss as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <WholeParley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f32 as Rescale<f64>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f32>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f64>>::scaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f64>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f64>>::unscaled() | ret | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | <f64 as Rescale<f64>>::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | Float::finite() | ret | bool	generic	predicate
+ambre-core | src/space.rs | crate::space | Rescale::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/space.rs | crate::space | Rescale::unscaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the trait is sealed to the scalar list
+ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f32>>::div(divisor) | param | f32	math	a bare factor a float length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <Px<S> as Div<f64>>::div(divisor) | param | f64	math	a bare factor a float length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <Px<S> as Mul<f32>>::mul(factor) | param | f32	math	a bare factor a float length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <Px<S> as Mul<f64>>::mul(factor) | param | f64	math	a bare factor a float length is scaled or divided by
+ambre-core | src/unit.rs | crate::unit | <Px<S> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-core | src/unit.rs | crate::unit | Px<S>::is_finite() | ret | bool	generic	predicate
+ambre-core | src/unit.rs | crate::unit | Px<S>::unsigned_abs() | ret | u32	newtype-inner	the magnitude of a signed length, in the unsigned texel coordinate wgpu takes

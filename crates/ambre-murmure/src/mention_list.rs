@@ -6,7 +6,8 @@
 //! mention over it rides with the message (`MURMURE-552`).
 
 use ambre_bus::{MentionTarget, UserId};
-use ambre_core::{ByteCount, ByteOffset, ViewPoint};
+use ambre_core::{ByteCount, ByteOffset};
+use ambre_core::{Point, Px, View};
 
 use crate::Region;
 
@@ -88,7 +89,7 @@ pub struct MentionList {
     /// The entry Enter or Tab picks.
     pub chosen: OfferIndex,
     /// The top-left of the caret, in pixels of the region's canvas.
-    pub at: ViewPoint,
+    pub at: Point<Px<View>>,
     /// The region the list hangs from.
     pub region: Region,
 }
@@ -177,7 +178,7 @@ mod tests {
         let list = MentionList {
             entries: found.iter().map(Offer::written).collect(),
             chosen: OfferIndex::ZERO,
-            at: ViewPoint::default(),
+            at: Point::default(),
             region: Region::Channel,
         };
         let shown = format!("{list:?}");

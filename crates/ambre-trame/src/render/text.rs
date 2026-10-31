@@ -17,8 +17,8 @@ pub fn draw_text<S: DrawSurface>(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     text: &str,
-    font_size: ViewPx,
-    max_width: ViewPx,
+    font_size: Px<View>,
+    max_width: Px<View>,
     align: Alignment,
     origin: Point,
     color: Color,
@@ -75,7 +75,7 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
     origin: Point,
     brush: &Brush,
     deco_color: Color,
-    font_size: ViewPx,
+    font_size: Px<View>,
     decoration: Decoration,
 ) {
     for line in layout.lines() {
@@ -95,7 +95,7 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
                 surface.stroke_line(
                     ambre_draw::Line::new((tx, ty + 2.0), (tx + adv, ty + 2.0)),
                     deco_color,
-                    ambre_core::SurfacePx::new(1.0),
+                    ambre_core::Px::<ambre_core::Surface>::new(1.0),
                 );
             }
             // Strikethrough run: a 1px line through the x-height.
@@ -104,7 +104,7 @@ pub fn draw_layout_runs_decorated<S: DrawSurface>(
                 surface.stroke_line(
                     ambre_draw::Line::new((tx, sy), (tx + adv, sy)),
                     deco_color,
-                    ambre_core::SurfacePx::new(1.0),
+                    ambre_core::Px::<ambre_core::Surface>::new(1.0),
                 );
             }
         }

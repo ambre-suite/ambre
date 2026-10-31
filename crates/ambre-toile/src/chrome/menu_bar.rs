@@ -20,7 +20,8 @@
 // ============================================================================
 
 use ambre_chrome::commands::{CommandId, Locale};
-use ambre_chrome::{Availability, ContextMenu, MenuEntry, ZoomFactor};
+use ambre_chrome::{Availability, ContextMenu, MenuEntry};
+use ambre_core::{Doc, Scale, View};
 use leptos::prelude::*;
 use leptos_icons::Icon;
 use wasm_bindgen::JsCast;
@@ -87,7 +88,7 @@ fn zoom_button(on_command: Callback<CommandId>, command: CommandId) -> impl Into
 /// authoritative Undo/Redo availability the menu rows read (`UNDO-006`).
 #[component]
 pub fn TopMenuBar(
-    zoom: RwSignal<ZoomFactor>,
+    zoom: RwSignal<Scale<Doc, View>>,
     on_command: Callback<CommandId>,
     toggles: Toggles,
 ) -> impl IntoView {
@@ -95,7 +96,7 @@ pub fn TopMenuBar(
     // `ContextMenu` clears `pos` on select / Escape / click-outside; an effect
     // then clears `open_menu` so the title un-presses.
     let open_menu = RwSignal::new(None::<MenuId>);
-    let pos = RwSignal::new(None::<ambre_core::CssPoint>);
+    let pos = RwSignal::new(None::<ambre_core::Point<ambre_core::Px<ambre_core::Css>>>);
     Effect::new(move |_| {
         if pos.get().is_none() {
             open_menu.set(None);
@@ -139,9 +140,9 @@ pub fn TopMenuBar(
                             y = r.bottom() as f32;
                         }
                         open_menu.set(Some(id));
-                        pos.set(Some(ambre_core::CssPoint::new(
-                            ambre_core::CssPx::new(x),
-                            ambre_core::CssPx::new(y),
+                        pos.set(Some(ambre_core::Point::new(
+                            ambre_core::Px::<ambre_core::Css>::new(x),
+                            ambre_core::Px::<ambre_core::Css>::new(y),
                         )));
                     }
                 >

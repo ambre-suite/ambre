@@ -4,7 +4,7 @@
 use super::super::{COL_WIDTH, PADDING_COLS, PADDING_ROWS, ROW_HEIGHT};
 use super::*;
 use crate::TrameCommand;
-use ambre_core::SurfacePx;
+use ambre_core::{Px, Surface};
 
 /// A cell at `(row, col)`, hidden by the filter when `filtered`.
 fn cell(row: u32, col: u32, filtered: ambre_bus::RowFilter) -> DisplayCell {
@@ -52,7 +52,7 @@ fn window(cmd: TrameCommand) -> (u32, u32, u32, u32) {
 /// hidden row far above the screen stretches nothing.
 #[test]
 fn a_scroll_requests_the_screen_and_a_bounded_padding() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     state.on_viewport_data(answer(
         0,
         (0..300)
@@ -82,7 +82,7 @@ fn a_scroll_requests_the_screen_and_a_bounded_padding() {
 /// `TRAME-UI-024`: after a request the cache holds no cell outside its window.
 #[test]
 fn a_scroll_evicts_every_cell_outside_the_window() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     state.on_viewport_data(answer(
         0,
         vec![
@@ -109,7 +109,7 @@ fn a_scroll_evicts_every_cell_outside_the_window() {
 /// `TRAME-UI-145`: a scroll moves the origin and nothing the user selected.
 #[test]
 fn a_scroll_keeps_the_active_cell_and_the_selection() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     state.selection = Selection {
         anchor: CellPos::new(Row::new(2), Col::new(1)),
         active: CellPos::new(Row::new(4), Col::new(3)),
@@ -131,13 +131,13 @@ fn a_scroll_keeps_the_active_cell_and_the_selection() {
 /// default, not as the size the axis held before.
 #[test]
 fn a_default_size_in_an_answer_clears_the_stored_one() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     let sized = |version, width: f64, height: f64| TrameEvent::ViewportData {
         version,
         row_start: Row::new(3),
         col_start: Col::new(2),
-        col_widths: vec![ambre_core::DocPx::new(width as f32)],
-        row_heights: vec![ambre_core::DocPx::new(height as f32)],
+        col_widths: vec![ambre_core::Px::<ambre_core::Doc>::new(width as f32)],
+        row_heights: vec![ambre_core::Px::<ambre_core::Doc>::new(height as f32)],
         cells: vec![],
     };
     state.on_viewport_data(sized(ambre_core::Generation::ZERO, 200.0, 45.0));
@@ -157,7 +157,7 @@ fn a_default_size_in_an_answer_clears_the_stored_one() {
 /// the user put it.
 #[test]
 fn an_answer_does_not_move_the_scroll_origin() {
-    let mut state = TrameUiState::new(SurfacePx::new(800.0), SurfacePx::new(600.0));
+    let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     assert!(state.scroll_by(RowDelta::new(120), ColDelta::new(7)));
     let origin = (state.top_row, state.left_col);
     state.on_viewport_data(answer(

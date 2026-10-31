@@ -2,7 +2,7 @@
 // TrameUiState: pixel/axis geometry, hit-testing, merge and fill-handle rectangles.
 
 use super::*;
-use ambre_core::{SurfacePx, ViewPoint, ViewPx};
+use ambre_core::{Doc, Point, Px, Surface, View};
 
 use super::{in_view, on_grid};
 use ambre_draw::HitTest;
@@ -13,7 +13,7 @@ use ambre_draw::kinetic::EdgeSpeed;
 impl HitTest for TrameUiState {
     type Target = CellPos;
 
-    fn hit_test(&self, at: ViewPoint) -> Option<CellPos> {
+    fn hit_test(&self, at: Point<Px<View>>) -> Option<CellPos> {
         self.cell_at(at)
     }
 }
@@ -60,42 +60,42 @@ impl TrameUiState {
 
     /// The document length `len` on the grid surface, scaled by the current
     /// [`zoom`](Self::zoom).
-    pub fn scaled(&self, len: DocPx) -> SurfacePx {
-        SurfacePx::new(f64::from(len.get()) * self.zoom.get())
+    pub fn scaled(&self, len: Px<Doc>) -> Px<Surface> {
+        Px::<Surface>::new(f64::from(len.get()) * self.zoom.get())
     }
 
     /// The document length that `len` on the grid surface shows at the
     /// current [`zoom`](Self::zoom): the inverse of [`scaled`](Self::scaled).
-    pub fn unscaled(&self, len: SurfacePx) -> DocPx {
-        DocPx::new((len.get() / self.zoom.get()) as f32)
+    pub fn unscaled(&self, len: Px<Surface>) -> Px<Doc> {
+        Px::<Doc>::new((len.get() / self.zoom.get()) as f32)
     }
 
     /// Width (logical px) of column `col`: its resized entry, else [`COL_WIDTH`].
-    pub fn col_width_of(&self, col: Col) -> SurfacePx {
+    pub fn col_width_of(&self, col: Col) -> Px<Surface> {
         self.scaled(self.col_widths.get(&col).copied().unwrap_or(COL_WIDTH))
     }
 
     /// Height (logical px) of row `row`: its resized entry, else [`ROW_HEIGHT`].
-    pub fn row_height_of(&self, row: Row) -> SurfacePx {
+    pub fn row_height_of(&self, row: Row) -> Px<Surface> {
         self.scaled(self.row_heights.get(&row).copied().unwrap_or(ROW_HEIGHT))
     }
 
     /// Width (logical px) of the fixed row-number strip on the left, scaled by
     /// the current [`zoom`](Self::zoom). The header strips zoom with the grid.
-    pub fn header_w(&self) -> SurfacePx {
+    pub fn header_w(&self) -> Px<Surface> {
         HEADER_WIDTH * self.zoom.get()
     }
 
     /// Height (logical px) of the fixed column-letter strip on top, scaled by
     /// the current [`zoom`](Self::zoom).
-    pub fn header_h(&self) -> SurfacePx {
+    pub fn header_h(&self) -> Px<Surface> {
         HEADER_HEIGHT * self.zoom.get()
     }
 
     /// X of column `col`'s left edge relative to the canvas, summing the variable
     /// widths from [`left_col`](Self::left_col). Columns left of the scroll origin
     /// yield a value smaller than [`HEADER_WIDTH`] (callers clip).
-    pub fn col_x(&self, col: Col) -> SurfacePx {
+    pub fn col_x(&self, col: Col) -> Px<Surface> {
         let mut x = self.header_w();
         if col >= self.left_col {
             for c in ColSpan::new(self.left_col, col) {
@@ -112,7 +112,7 @@ impl TrameUiState {
     /// Y of row `row`'s top edge relative to the canvas, summing the *visible*
     /// rows' variable heights from [`top_row`](Self::top_row) (collapsing hidden
     /// rows, `trame-shared-filter`). Mirrors `GridLayout::row_top`.
-    pub fn row_y(&self, row: Row) -> SurfacePx {
+    pub fn row_y(&self, row: Row) -> Px<Surface> {
         let cells_top = self.header_h();
         let mut y = cells_top;
         if row >= self.top_row {
@@ -134,7 +134,7 @@ impl TrameUiState {
     /// Absolute grid column whose band contains logical `x` (>= the row
     /// header strip), walking the variable widths. Used by a whole-axis drag,
     /// where the pointer may be below the header strip. `None` left of the grid.
-    pub fn col_at_x(&self, x: ViewPx) -> Option<Col> {
+    pub fn col_at_x(&self, x: Px<View>) -> Option<Col> {
         let px = on_grid(x);
         if px < self.header_w() {
             return None;
@@ -156,7 +156,7 @@ impl TrameUiState {
     /// next one past its midpoint. That last option keeps the final position
     /// reachable. `None` left of the grid. The returned index may equal the
     /// column count (drop at the end).
-    pub fn col_drop_slot(&self, x: ViewPx) -> Option<Col> {
+    pub fn col_drop_slot(&self, x: Px<View>) -> Option<Col> {
         let col = self.col_at_x(x)?;
         let px = on_grid(x);
         let mid = self.col_x(col) + self.col_width_of(col) / 2.0;
@@ -166,7 +166,7 @@ impl TrameUiState {
     /// Insertion slot for a row reorder drop at logical `y`: the row index
     /// the grabbed row would land *above*. It snaps to the nearer horizontal
     /// boundary. Row analogue of [`col_drop_slot`](Self::col_drop_slot).
-    pub fn row_drop_slot(&self, y: ViewPx) -> Option<Row> {
+    pub fn row_drop_slot(&self, y: Px<View>) -> Option<Row> {
         let row = self.row_at_y(y)?;
         let py = on_grid(y);
         let mid = self.row_y(row) + self.row_height_of(row) / 2.0;
@@ -176,7 +176,7 @@ impl TrameUiState {
     /// Absolute *visible* grid row whose band contains logical `y` (>= the
     /// column header strip), walking the variable heights and skipping hidden
     /// rows. `None` above the grid.
-    pub fn row_at_y(&self, y: ViewPx) -> Option<Row> {
+    pub fn row_at_y(&self, y: Px<View>) -> Option<Row> {
         let py = on_grid(y);
         if py < self.header_h() {
             return None;
@@ -197,8 +197,8 @@ impl TrameUiState {
     /// The cell a held drag points at: the cell under `at`, or the
     /// nearest edge cell when the pointer has left the cell area. A drag past
     /// an edge keeps reaching the cells the scroll brings in.
-    pub fn drag_cell_at(&self, at: ViewPoint) -> Option<CellPos> {
-        let last_pixel = SurfacePx::new(1.0);
+    pub fn drag_cell_at(&self, at: Point<Px<View>>) -> Option<CellPos> {
+        let last_pixel = Px::<Surface>::new(1.0);
         let x = on_grid(at.x).clamp(
             self.header_w(),
             (self.canvas_width - last_pixel).max(self.header_w()),
@@ -207,20 +207,20 @@ impl TrameUiState {
             self.header_h(),
             (self.grid_bottom() - last_pixel).max(self.header_h()),
         );
-        self.cell_at(ViewPoint::new(in_view(x), in_view(y)))
+        self.cell_at(Point::new(in_view(x), in_view(y)))
     }
 
     /// The speed a drag held at `at` scrolls the grid at, in logical
     /// pixels per millisecond on each axis (`KINETIC-007`). Each edge is the
     /// cell area's, past the header strips; zero away from them.
-    pub fn edge_scroll_speed(&self, at: ViewPoint) -> (EdgeSpeed, EdgeSpeed) {
+    pub fn edge_scroll_speed(&self, at: Point<Px<View>>) -> (EdgeSpeed, EdgeSpeed) {
         let (x, y) = (on_grid(at.x), on_grid(at.y));
         let (left, top) = (self.header_w(), self.header_h());
         // Both are measured from the cell area's corner, inside one view.
-        let at = |offset: SurfacePx, extent: SurfacePx| {
+        let at = |offset: Px<Surface>, extent: Px<Surface>| {
             EdgeSpeed::at(
-                offset.in_view(SurfacePx::ZERO),
-                extent.in_view(SurfacePx::ZERO),
+                offset.in_view(Px::<Surface>::ZERO),
+                extent.in_view(Px::<Surface>::ZERO),
             )
         };
         (
@@ -231,7 +231,7 @@ impl TrameUiState {
 
     /// The cell at logical pixel `at`, or `None` if the point is in a
     /// header strip or past the grid bounds. Inverse of `cell_pixel_rect`.
-    pub fn cell_at(&self, at: ViewPoint) -> Option<CellPos> {
+    pub fn cell_at(&self, at: Point<Px<View>>) -> Option<CellPos> {
         let (x, y) = (on_grid(at.x), on_grid(at.y));
         let cells_top = self.header_h();
         if x < self.header_w() || y < cells_top {
@@ -278,10 +278,10 @@ impl TrameUiState {
     /// header strip). The resize bands (a +/- [`RESIZE_BAND`] zone around a
     /// boundary) take priority over the body so a grab on the edge resizes rather
     /// than selects. Variable-metric aware (walks the per-axis widths/heights).
-    pub fn header_hit(&self, at: ViewPoint) -> Option<HeaderHit> {
+    pub fn header_hit(&self, at: Point<Px<View>>) -> Option<HeaderHit> {
         let (x, y) = (on_grid(at.x), on_grid(at.y));
-        let in_col_strip = (SurfacePx::ZERO..self.header_h()).contains(&y);
-        let in_row_strip = (SurfacePx::ZERO..self.header_w()).contains(&x);
+        let in_col_strip = (Px::<Surface>::ZERO..self.header_h()).contains(&y);
+        let in_row_strip = (Px::<Surface>::ZERO..self.header_w()).contains(&x);
         // Top-left corner -> select-all.
         if in_col_strip && in_row_strip {
             return Some(HeaderHit::Corner);
@@ -402,7 +402,7 @@ impl TrameUiState {
         // top (its successors have already collapsed up onto it).
         let y_bot = self.row_y(last.row)
             + if self.is_row_hidden(last.row) {
-                SurfacePx::ZERO
+                Px::<Surface>::ZERO
             } else {
                 self.row_height_of(last.row)
             };
@@ -515,7 +515,7 @@ impl TrameUiState {
 
     /// True if `at` (logical px) hits the fill handle, with a small tolerance
     /// margin so the ~7px square is easy to grab.
-    pub fn fill_handle_at(&self, at: ViewPoint) -> bool {
+    pub fn fill_handle_at(&self, at: Point<Px<View>>) -> bool {
         let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
         self.fill_handle_rect().is_some_and(|handle| {
             let m = 2.0;
@@ -602,7 +602,7 @@ impl TrameUiState {
     /// Hit-test the autofilter button row: returns the header cell of the
     /// button under `at` (logical px), with a small tolerance margin. `None`
     /// when no button is hit (or no current region exists).
-    pub fn filter_button_at(&self, at: ViewPoint) -> Option<CellPos> {
+    pub fn filter_button_at(&self, at: Point<Px<View>>) -> Option<CellPos> {
         let (x, y) = (f64::from(at.x.get()), f64::from(at.y.get()));
         let region = self.current_region()?;
         let band_row = region.top_left.row;

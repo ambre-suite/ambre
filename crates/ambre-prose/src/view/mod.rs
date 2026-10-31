@@ -27,7 +27,7 @@ use std::sync::Arc;
 use loro::TreeID;
 
 use ambre_bus::app::prose::{DocOffset, ProseCommand};
-use ambre_core::{DocPx, ViewPx};
+use ambre_core::{Doc, Px, View};
 
 use ambre_draw::kinetic::ScrollStep;
 
@@ -145,15 +145,15 @@ impl ProseUiState {
     /// (`PROSE-UI-127`). Only the model builds a step, so a distance the view
     /// computed itself does not reach the column (`KINETIC-001`).
     pub fn scroll_by(&mut self, step: ScrollStep) {
-        let moved = self.viewport.scroll_y + DocPx::new(step.y().get() / self.viewport.scale());
+        let moved = self.viewport.scroll_y + Px::<Doc>::new(step.y().get() / self.viewport.scale());
         self.viewport.scroll_y = self.column.clamp_scroll(&self.viewport, moved);
     }
 
     /// The canvas took a new size. The offset and the zoom stay
     /// (`PROSE-UI-130`): what was at the top of the canvas still is.
-    pub fn resize(&mut self, width: ViewPx, height: ViewPx) {
-        self.viewport.width = width.max(ViewPx::ZERO);
-        self.viewport.height = height.max(ViewPx::ZERO);
+    pub fn resize(&mut self, width: Px<View>, height: Px<View>) {
+        self.viewport.width = width.max(Px::<View>::ZERO);
+        self.viewport.height = height.max(Px::<View>::ZERO);
     }
 
     /// Bring the heading a table-of-contents entry reads to the top of the
@@ -259,8 +259,11 @@ pub(crate) mod tests {
     /// The step of a finger dragged up by `dy` screen pixels, which scrolls
     /// the column down by as much.
     /// A point of the view, from the canvas's corner.
-    pub(crate) fn view_at(x: f32, y: f32) -> ambre_core::ViewPoint {
-        ambre_core::ViewPoint::new(ambre_core::ViewPx::new(x), ambre_core::ViewPx::new(y))
+    pub(crate) fn view_at(x: f32, y: f32) -> ambre_core::Point<ambre_core::Px<ambre_core::View>> {
+        ambre_core::Point::new(
+            ambre_core::Px::<ambre_core::View>::new(x),
+            ambre_core::Px::<ambre_core::View>::new(y),
+        )
     }
 
     pub(crate) fn down(dy: f32) -> ScrollStep {
@@ -354,7 +357,7 @@ pub(crate) mod tests {
     fn a_scroll_asks_for_the_pages_around_the_canvas() {
         let (mut state, _) = laid_out(400, 60);
         let mut ui = ProseUiState::default();
-        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
         ui.apply_event(&state.layout_event().expect("a layout"));
         assert_eq!(ui.window_request(), None, "the first pages are carried");
         ui.scroll_by(down(
@@ -381,7 +384,7 @@ pub(crate) mod tests {
     fn revealing_a_block_not_carried_asks_for_it_then_shows_it() {
         let (mut state, _) = laid_out(400, 60);
         let mut ui = ProseUiState::default();
-        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
         ui.apply_event(&state.layout_event().expect("a layout"));
         let far = state
             .full_layout()
@@ -392,7 +395,7 @@ pub(crate) mod tests {
         ui.reveal_block(block);
         assert_eq!(
             ui.viewport.scroll_y,
-            DocPx::new(0.0),
+            Px::<Doc>::new(0.0),
             "nothing moves before the block comes"
         );
         let Some(command) = ui.window_request() else {
@@ -424,7 +427,7 @@ pub(crate) mod tests {
         }
         append(&mut state, BlockInit::Paragraph, "needle at the end");
         let mut ui = ProseUiState::default();
-        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
         ui.apply_event(&state.layout_event().expect("a layout"));
         let in_view = |ui: &ProseUiState| {
             let hit = ui.find_matches[ui.find_current.expect("a current match").to_usize()];
@@ -455,11 +458,11 @@ pub(crate) mod tests {
         );
         assert_eq!(
             ui.viewport.scroll_y,
-            DocPx::new(0.0),
+            Px::<Doc>::new(0.0),
             "the first match is in view"
         );
         step(&mut ui, ProseCommand::FindNext);
-        assert!(ui.viewport.scroll_y > DocPx::new(0.0));
+        assert!(ui.viewport.scroll_y > Px::<Doc>::new(0.0));
         assert!(in_view(&ui), "the last match is brought into view");
         step(&mut ui, ProseCommand::FindNext);
         assert!(in_view(&ui), "the wrap brings the first one back");
@@ -531,8 +534,8 @@ pub(crate) mod tests {
         ShapedLayout::new(
             ambre_core::Generation::nth(version),
             Arc::new(PageLayout {
-                page_width: DocPx::new(800.0),
-                page_height: DocPx::new(1000.0),
+                page_width: Px::<Doc>::new(800.0),
+                page_height: Px::<Doc>::new(1000.0),
                 page_count: PageCount::new(pages),
                 ..PageLayout::default()
             }),
@@ -544,7 +547,7 @@ pub(crate) mod tests {
 
     fn a_view() -> ProseUiState {
         let mut ui = ProseUiState::default();
-        ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
+        ui.resize(Px::<View>::new(1200.0), Px::<View>::new(900.0));
         ui
     }
 
@@ -581,7 +584,7 @@ pub(crate) mod tests {
         let before = logic.export_snapshot();
         let shaped_before = logic.shaped_count();
         let mut ui = a_view();
-        ui.viewport.zoom = ambre_core::ZoomFactor::positive(1.5);
+        ui.viewport.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(1.5);
         assert!(ui.apply_layout(shaped));
         assert_eq!(ui.viewport.zoom.get(), 1.5);
         assert_eq!(logic.shaped_count(), shaped_before);
@@ -599,21 +602,21 @@ pub(crate) mod tests {
         ui.apply_layout(a_layout(2, 2));
         assert_eq!(ui.viewport.scroll_y, ui.column.max_scroll(&ui.viewport));
         ui.apply_layout(a_layout(3, 0));
-        assert_eq!(ui.viewport.scroll_y, DocPx::new(0.0));
+        assert_eq!(ui.viewport.scroll_y, Px::<Doc>::new(0.0));
     }
 
     #[test]
     fn a_scroll_moves_by_the_gesture_up_to_the_ends_and_nothing_else() {
         let mut ui = a_view();
         ui.apply_layout(a_layout(1, 10));
-        ui.viewport.zoom = ambre_core::ZoomFactor::positive(2.0);
+        ui.viewport.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0);
         let (column, version) = (ui.column, ui.layout_version);
         ui.scroll_by(down(300.0));
-        assert_eq!(ui.viewport.scroll_y, DocPx::new(150.0));
+        assert_eq!(ui.viewport.scroll_y, Px::<Doc>::new(150.0));
         ui.scroll_by(down(-100.0));
-        assert_eq!(ui.viewport.scroll_y, DocPx::new(100.0));
+        assert_eq!(ui.viewport.scroll_y, Px::<Doc>::new(100.0));
         ui.scroll_by(down(-1.0e6));
-        assert_eq!(ui.viewport.scroll_y, DocPx::new(0.0));
+        assert_eq!(ui.viewport.scroll_y, Px::<Doc>::new(0.0));
         assert_eq!(ui.viewport.zoom.get(), 2.0);
         assert_eq!(ui.column, column);
         assert_eq!(ui.layout_version, version);
@@ -623,10 +626,10 @@ pub(crate) mod tests {
     fn a_resize_keeps_the_offset_and_the_zoom() {
         let mut ui = a_view();
         ui.apply_layout(a_layout(1, 10));
-        ui.viewport.zoom = ambre_core::ZoomFactor::positive(0.8);
+        ui.viewport.zoom = ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(0.8);
         ui.scroll_by(down(2000.0));
         let scroll_y = ui.viewport.scroll_y;
-        ui.resize(ViewPx::new(300.0), ViewPx::new(4000.0));
+        ui.resize(Px::<View>::new(300.0), Px::<View>::new(4000.0));
         assert_eq!(ui.viewport.scroll_y, scroll_y);
         assert_eq!(ui.viewport.zoom.get(), 0.8);
     }

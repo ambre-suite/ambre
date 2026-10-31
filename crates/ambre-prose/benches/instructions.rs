@@ -16,7 +16,7 @@
 use std::hint::black_box;
 
 use ambre_bus::app::prose::ParagraphStyle;
-use ambre_core::DocPx;
+use ambre_core::{Doc, Px};
 use ambre_draw::ParleyBrush;
 use ambre_prose::doc::DocDefaults;
 use ambre_prose::layout::fonts::register_faces;
@@ -82,7 +82,7 @@ fn ambre_budget_prose_paragraph_shape(
         laid,
         (text, &[]),
         style,
-        DocPx::new(COLUMN_PX),
+        Px::<Doc>::new(COLUMN_PX),
     )
 }
 
@@ -112,7 +112,7 @@ fn paragraph_shape() {
     'search: for word in WORDS {
         let text = paragraph(word);
         let (_, _, laid) =
-            measurer.measure_with_lines((&text, &[]), &style, DocPx::new(COLUMN_PX), &[], None);
+            measurer.measure_with_lines((&text, &[]), &style, Px::<Doc>::new(COLUMN_PX), &[], None);
         for key in ['i', 'x', 'm', 'W'] {
             let mut typed = text.clone();
             typed.insert(1, key);
@@ -122,7 +122,7 @@ fn paragraph_shape() {
                 laid.data(),
                 (&typed, &[]),
                 &style,
-                DocPx::new(COLUMN_PX),
+                Px::<Doc>::new(COLUMN_PX),
             );
             if run.data().segment_count() == ambre_prose::layout::run::RunSegmentCount::ONE {
                 found = Some((laid, typed));

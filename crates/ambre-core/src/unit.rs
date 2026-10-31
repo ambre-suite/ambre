@@ -8,29 +8,29 @@
 //!
 //! | Type | Unit | Example |
 //! | :--- | :--- | :--- |
-//! | [`DocPx`] | a document pixel, before the zoom | a column width, a run offset |
-//! | [`ViewPx`] | a pixel of the zoomed view, from the canvas corner | a pointer, a caret |
-//! | [`CssPx`] | a CSS pixel of the page, outside any canvas | a wheel delta, a fixed element |
-//! | [`SurfacePx`] | a drawing-surface pixel, as an `f64` | an absolute sheet position |
+//! | [`Px`] | a pixel of the space its parameter names (`crate::space`) | a column width, a pointer, an image edge |
 //! | [`Pt`] | a typographic point, 1/72 inch | an indent, a table column |
 //! | [`Mm`] | a millimetre | a page size, a margin |
 //! | [`Radians`] | an angle | a rotated element |
-//! | [`ImageSize`] | the whole pixels of a decoded image | a picture preview |
 //! | [`ViewSpeed`] | view pixels per millisecond | a flick, a glide |
 //! | [`BoardLength`] | a board world unit, before the zoom | a frame's padding, a hit reach |
 //! | [`StoredBoardLength`] | a board world unit, as the `f32` an element stores | a freehand sample, a stroke width |
 //!
 //! No type converts into another through `From`. Each conversion is a named
-//! method that takes the factor it needs. [`DocPx::zoomed`] takes the zoom,
-//! and [`Pt::to_doc_px`] applies the fixed ratio of the two units. A
-//! device pixel is the drawing surface's concern, so `ambre-canvas` holds that
-//! type and the density (`CANVAS-031`).
+//! method, or a [`Scale`] between two pixel spaces. [`Px::zoomed`] takes the
+//! zoom, and [`Pt::to_doc_px`] applies the fixed ratio of the two units. The
+//! density is the drawing surface's concern, so `ambre-canvas` reads and
+//! keeps it (`CANVAS-031`).
 
-use serde::{Deserialize, Serialize};
+use std::marker::PhantomData;
+use std::ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign};
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::font::PX_PER_PT;
+use crate::scale::Scale;
+use crate::space::{Css, Doc, Float, Rescale, Scalar, Space, Surface, View};
 use crate::span::PageMillis;
-use crate::zoom::ZoomFactor;
 
 /// CSS pixels per millimetre: a CSS pixel is 1/96 inch, an inch is 25.4 mm.
 pub const PX_PER_MM: f32 = 96.0 / 25.4;
@@ -179,37 +179,278 @@ macro_rules! define_length {
 
 pub(crate) use define_length;
 
-define_length! {
-    /// A length in pixels of the document, before the zoom: what a layout
-    /// measures a page, a column or a run in.
-    DocPx(f32)
+/// A length, or a coordinate, in the pixel space `S` names.
+///
+/// The space fixes the number the length holds (`Space::Repr`), so a space
+/// never holds two kinds of number. Two lengths of one space add, subtract,
+/// and, for a float space, divide into a bare ratio. A float length scales
+/// by a bare number of its own float. A product of two lengths does not
+/// compile. A length of one space meets a length of another only through a
+/// [`Scale`] or a named method.
+///
+/// `new` wraps the number, and `get` unwraps it for a foreign API. No rule
+/// bounds a length, so the type has no fallible constructor. The serde form
+/// is the bare number, as `#[serde(transparent)]` writes it.
+pub struct Px<S: Space>(S::Repr, PhantomData<fn() -> S>);
+
+impl<S: Space> Px<S> {
+    /// The length of zero.
+    pub const ZERO: Self = Self(<S::Repr as Scalar>::ZERO, PhantomData);
+
+    /// The length of `value` pixels.
+    #[must_use]
+    pub const fn new(value: S::Repr) -> Self {
+        Self(value, PhantomData)
+    }
+
+    /// The number of pixels, for a foreign API that takes the number.
+    #[must_use]
+    pub const fn get(self) -> S::Repr {
+        self.0
+    }
+
+    /// The smaller of the two lengths.
+    #[must_use]
+    pub fn min(self, other: Self) -> Self {
+        Self::new(self.0.lesser(other.0))
+    }
+
+    /// The larger of the two lengths.
+    #[must_use]
+    pub fn max(self, other: Self) -> Self {
+        Self::new(self.0.greater(other.0))
+    }
+
+    /// The length clamped into `lo ..= hi`, never a panic: a NaN reads as
+    /// `lo`, and `hi` wins when the bounds cross.
+    #[must_use]
+    pub fn clamp(self, lo: Self, hi: Self) -> Self {
+        Self::new(self.0.greater(lo.0).lesser(hi.0))
+    }
 }
 
-define_length! {
-    /// A length in pixels of the zoomed view, and a coordinate measured from
-    /// the top-left corner of the canvas.
-    ///
-    /// A view pixel is a CSS pixel in size (`CANVAS-032`). Only the origin
-    /// differs from [`CssPx`]: the canvas's corner, not the page's.
-    ViewPx(f32)
+impl<S: Space> Px<S>
+where
+    S::Repr: Float,
+{
+    /// The length without its sign.
+    #[must_use]
+    pub fn abs(self) -> Self {
+        Self::new(self.0.magnitude())
+    }
+
+    /// The length rounded to a whole number of pixels.
+    #[must_use]
+    pub fn round(self) -> Self {
+        Self::new(self.0.nearest())
+    }
+
+    /// The length rounded down to a whole number of pixels.
+    #[must_use]
+    pub fn floor(self) -> Self {
+        Self::new(self.0.rounded_down())
+    }
+
+    /// Whether the length is a finite number.
+    #[must_use]
+    pub fn is_finite(self) -> bool {
+        self.0.finite()
+    }
 }
 
-define_length! {
-    /// A length in CSS pixels of the page, outside any canvas: a wheel delta,
-    /// or the place of an element fixed on the page.
-    CssPx(f32)
+impl<S: Space<Repr = i32>> Px<S> {
+    /// The length without its sign, in the unsigned integer a texture
+    /// coordinate takes.
+    #[must_use]
+    pub const fn unsigned_abs(self) -> u32 {
+        self.0.unsigned_abs()
+    }
 }
 
-define_length! {
-    /// A coordinate or a length on a drawing surface, in the `f64` the
-    /// surface takes.
-    ///
-    /// A sheet walks its cells at absolute positions, at zoom 1: a hundred
-    /// thousand rows of twenty pixels reach two million pixels. An `f32`
-    /// steps by a quarter pixel there, so the three `f32` spaces above cannot
-    /// hold such a position. [`SurfacePx::in_view`] turns one into a
-    /// [`ViewPx`] once it is measured from the corner of the view.
-    SurfacePx(f64)
+// Every impl below is written by hand. A derive would bound the marker by
+// a trait the marker has no use for.
+impl<S: Space> Clone for Px<S> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<S: Space> Copy for Px<S> {}
+
+impl<S: Space> Default for Px<S> {
+    fn default() -> Self {
+        Self::ZERO
+    }
+}
+
+impl<S: Space> PartialEq for Px<S> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<S: Space> Eq for Px<S> where S::Repr: Eq {}
+
+impl<S: Space> PartialOrd for Px<S> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+impl<S: Space> Ord for Px<S>
+where
+    S::Repr: Ord,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl<S: Space> std::hash::Hash for Px<S>
+where
+    S::Repr: std::hash::Hash,
+{
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+/// The space and the number, as `Px<Doc>(12.0)`.
+impl<S: Space> std::fmt::Debug for Px<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Px<{}>({:?})", S::NAME, self.0)
+    }
+}
+
+/// The bare number, as an error message prints a dimension.
+impl<S: Space> std::fmt::Display for Px<S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+/// The bare number, as `#[serde(transparent)]` writes it.
+impl<S: Space> Serialize for Px<S> {
+    fn serialize<W: Serializer>(&self, serializer: W) -> Result<W::Ok, W::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+/// The bare number, as `#[serde(transparent)]` reads it.
+impl<'de, S: Space> Deserialize<'de> for Px<S> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        S::Repr::deserialize(deserializer).map(Self::new)
+    }
+}
+
+impl<S: Space> Add for Px<S> {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self::new(self.0 + other.0)
+    }
+}
+
+impl<S: Space> Sub for Px<S> {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Self::new(self.0 - other.0)
+    }
+}
+
+impl<S: Space> AddAssign for Px<S> {
+    fn add_assign(&mut self, other: Self) {
+        self.0 += other.0;
+    }
+}
+
+impl<S: Space> SubAssign for Px<S> {
+    fn sub_assign(&mut self, other: Self) {
+        self.0 -= other.0;
+    }
+}
+
+impl<S: Space> Neg for Px<S>
+where
+    S::Repr: Neg<Output = S::Repr>,
+{
+    type Output = Self;
+    fn neg(self) -> Self {
+        Self::new(-self.0)
+    }
+}
+
+// rustc refuses a `Mul<S::Repr>` beside `Mul<Scale<..>>` (E0119), so the
+// bare factor is written once per float.
+
+/// The length scaled by a bare number.
+impl<S: Space<Repr = f32>> Mul<f32> for Px<S> {
+    type Output = Self;
+    fn mul(self, factor: f32) -> Self {
+        Self::new(self.0 * factor)
+    }
+}
+
+/// The length divided by a bare number.
+impl<S: Space<Repr = f32>> Div<f32> for Px<S> {
+    type Output = Self;
+    fn div(self, divisor: f32) -> Self {
+        Self::new(self.0 / divisor)
+    }
+}
+
+/// The length scaled by a bare number.
+impl<S: Space<Repr = f64>> Mul<f64> for Px<S> {
+    type Output = Self;
+    fn mul(self, factor: f64) -> Self {
+        Self::new(self.0 * factor)
+    }
+}
+
+/// The length divided by a bare number.
+impl<S: Space<Repr = f64>> Div<f64> for Px<S> {
+    type Output = Self;
+    fn div(self, divisor: f64) -> Self {
+        Self::new(self.0 / divisor)
+    }
+}
+
+/// The ratio of two lengths, a bare number.
+impl<S: Space> Div for Px<S>
+where
+    S::Repr: Float,
+{
+    type Output = S::Repr;
+    fn div(self, other: Self) -> S::Repr {
+        self.0 / other.0
+    }
+}
+
+/// The length carried into the space `B` by `scale`.
+impl<A: Space, B: Space> Mul<Scale<A, B>> for Px<A>
+where
+    A::Repr: Rescale<B::Repr>,
+{
+    type Output = Px<B>;
+    fn mul(self, scale: Scale<A, B>) -> Px<B> {
+        Px::new(self.0.scaled(scale.get()))
+    }
+}
+
+/// The length carried back into the space `A`, before `scale`.
+impl<A: Space, B: Space> Div<Scale<A, B>> for Px<B>
+where
+    B::Repr: Rescale<A::Repr>,
+{
+    type Output = Px<A>;
+    fn div(self, scale: Scale<A, B>) -> Px<A> {
+        Px::new(self.0.unscaled(scale.get()))
+    }
+}
+
+impl<S: Space> std::iter::Sum for Px<S> {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        Self::new(iter.map(|length| length.0).sum())
+    }
 }
 
 define_length! {
@@ -264,18 +505,18 @@ impl StoredBoardLength {
     }
 }
 
-impl DocPx {
+impl Px<Doc> {
     /// The length on the view at `zoom`.
     #[must_use]
-    pub fn zoomed(self, zoom: ZoomFactor) -> ViewPx {
-        ViewPx(self.0 * zoom.get() as f32)
+    pub fn zoomed(self, zoom: Scale<Doc, View>) -> Px<View> {
+        self * zoom
     }
 
     /// The length on a drawing surface at `zoom`, scaled in the surface's
     /// `f64` so a sheet far down keeps its precision.
     #[must_use]
-    pub fn zoomed_on_surface(self, zoom: ZoomFactor) -> SurfacePx {
-        SurfacePx(f64::from(self.0) * zoom.get())
+    pub fn zoomed_on_surface(self, zoom: Scale<Doc, View>) -> Px<Surface> {
+        Px::new(self.0.scaled(zoom.get()))
     }
 
     /// The length in points.
@@ -285,74 +526,36 @@ impl DocPx {
     }
 }
 
-impl ViewPx {
+impl Px<View> {
     /// The length in the document, before `zoom`.
     #[must_use]
-    pub fn unzoomed(self, zoom: ZoomFactor) -> DocPx {
-        DocPx(self.0 / zoom.get() as f32)
+    pub fn unzoomed(self, zoom: Scale<Doc, View>) -> Px<Doc> {
+        self / zoom
     }
 
     /// The coordinate on the page, for a canvas whose corner sits at
     /// `canvas_origin`. A view pixel is a CSS pixel in size, so only the
     /// origin moves.
     #[must_use]
-    pub fn on_page(self, canvas_origin: CssPx) -> CssPx {
-        CssPx(canvas_origin.0 + self.0)
+    pub fn on_page(self, canvas_origin: Px<Css>) -> Px<Css> {
+        Px::new(canvas_origin.0 + self.0)
     }
 
     /// The same length in CSS pixels. A view pixel is a CSS pixel in size, so
     /// a length carries over as it is. A coordinate goes through
     /// [`Self::on_page`] instead.
     #[must_use]
-    pub const fn css_length(self) -> CssPx {
-        CssPx(self.0)
-    }
-}
-
-impl CssPx {
-    /// The coordinate on a canvas whose corner sits at `canvas_origin`: the
-    /// inverse of [`ViewPx::on_page`].
-    #[must_use]
-    pub fn in_canvas(self, canvas_origin: CssPx) -> ViewPx {
-        ViewPx(self.0 - canvas_origin.0)
+    pub const fn css_length(self) -> Px<Css> {
+        Px::new(self.0)
     }
 
-    /// The same length on the view, such as a wheel delta. A view pixel is a
-    /// CSS pixel in size (`CANVAS-032`), so a length crosses one for one. A
-    /// coordinate takes [`CssPx::in_canvas`] instead.
-    #[must_use]
-    pub const fn view_length(self) -> ViewPx {
-        ViewPx(self.0)
-    }
-}
-
-impl SurfacePx {
-    /// The coordinate on the view, for a view whose top-left corner sits at
-    /// `view_origin` on the surface.
-    #[must_use]
-    pub fn in_view(self, view_origin: SurfacePx) -> ViewPx {
-        ViewPx((self.0 - view_origin.0) as f32)
-    }
-
-    /// The same length in view pixels. A surface pixel is a view pixel in size,
-    /// so a length carries over as it is. A coordinate goes through
-    /// [`Self::in_view`] instead.
-    #[must_use]
-    pub const fn view_length(self) -> ViewPx {
-        ViewPx(self.0 as f32)
-    }
-}
-
-impl ViewPx {
     /// The coordinate on the surface, for a view whose top-left corner sits at
-    /// `view_origin` on it: the inverse of [`SurfacePx::in_view`].
+    /// `view_origin` on it: the inverse of [`Px::in_view`].
     #[must_use]
-    pub fn on_surface(self, view_origin: SurfacePx) -> SurfacePx {
-        SurfacePx(view_origin.0 + f64::from(self.0))
+    pub fn on_surface(self, view_origin: Px<Surface>) -> Px<Surface> {
+        Px::new(view_origin.0 + f64::from(self.0))
     }
-}
 
-impl ViewPx {
     /// The speed of a move of this length over `span`.
     #[must_use]
     pub fn per(self, span: PageMillis) -> ViewSpeed {
@@ -360,11 +563,45 @@ impl ViewPx {
     }
 }
 
+impl Px<Css> {
+    /// The coordinate on a canvas whose corner sits at `canvas_origin`: the
+    /// inverse of [`Px::on_page`].
+    #[must_use]
+    pub fn in_canvas(self, canvas_origin: Px<Css>) -> Px<View> {
+        Px::new(self.0 - canvas_origin.0)
+    }
+
+    /// The same length on the view, such as a wheel delta. A view pixel is a
+    /// CSS pixel in size (`CANVAS-032`), so a length crosses one for one. A
+    /// coordinate takes [`Px::in_canvas`] instead.
+    #[must_use]
+    pub const fn view_length(self) -> Px<View> {
+        Px::new(self.0)
+    }
+}
+
+impl Px<Surface> {
+    /// The coordinate on the view, for a view whose top-left corner sits at
+    /// `view_origin` on the surface.
+    #[must_use]
+    pub fn in_view(self, view_origin: Px<Surface>) -> Px<View> {
+        Px::new((self.0 - view_origin.0) as f32)
+    }
+
+    /// The same length in view pixels. A surface pixel is a view pixel in size,
+    /// so a length carries over as it is. A coordinate goes through
+    /// [`Self::in_view`] instead.
+    #[must_use]
+    pub const fn view_length(self) -> Px<View> {
+        Px::new(self.0 as f32)
+    }
+}
+
 impl ViewSpeed {
     /// The length a move at this speed covers over `span`.
     #[must_use]
-    pub fn over(self, span: PageMillis) -> ViewPx {
-        ViewPx(self.0 * span.get() as f32)
+    pub fn over(self, span: PageMillis) -> Px<View> {
+        Px::new(self.0 * span.get() as f32)
     }
 }
 
@@ -379,20 +616,21 @@ impl Radians {
 impl Pt {
     /// The length in document pixels.
     #[must_use]
-    pub fn to_doc_px(self) -> DocPx {
-        DocPx(self.0 * PX_PER_PT)
+    pub fn to_doc_px(self) -> Px<Doc> {
+        Px::new(self.0 * PX_PER_PT)
     }
 }
 
 impl Mm {
     /// The length in document pixels.
     #[must_use]
-    pub fn to_doc_px(self) -> DocPx {
-        DocPx(self.0 * PX_PER_MM)
+    pub fn to_doc_px(self) -> Px<Doc> {
+        Px::new(self.0 * PX_PER_MM)
     }
 }
 
-/// A point of one pixel space: [`DocPoint`], [`ViewPoint`] or [`CssPoint`].
+/// A point of one pixel space, over the length type `P` of that space, as
+/// `Point<Px<View>>`.
 ///
 /// Two points of one space subtract into the [`Vector`] between them, and a
 /// point moves by a vector. Two points never add: the sum names no place.
@@ -410,7 +648,8 @@ impl<P> Point<P> {
     }
 }
 
-/// A displacement in one pixel space: a wheel delta, a drag, a scroll step.
+/// A displacement in one space: a wheel delta, a drag, a scroll step. It
+/// holds the length type of its space, or a speed, as `Vector<ViewSpeed>`.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Vector<P> {
     pub dx: P,
@@ -426,8 +665,13 @@ impl<P> Vector<P> {
 }
 
 /// A size of one length space: a width and a height, kept apart by name so
-/// the two never swap.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+/// the two never swap. A size of whole pixels keeps its space as a type, as
+/// `Size<Px<Image>>` does. The size of an image then never reaches a place
+/// that sizes a buffer or a box.
+///
+/// Its serde form is the two edges, width first. An edge of `Px` is the bare
+/// number, so a size of whole pixels writes the bytes two `u32` fields wrote.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Size<P> {
     pub width: P,
     pub height: P,
@@ -441,83 +685,8 @@ impl<P> Size<P> {
     }
 }
 
-/// A size of whole pixels, in the pixel space `P` names: an [`ImageSize`],
-/// or the CSS and device sizes of `ambre-canvas`. The space is a type, so
-/// the size of an image never reaches a place that sizes a buffer or a box.
-///
-/// Its serde form is the two edges, width first, as two `u32` fields were:
-/// each edge is a [`WholePx`], transparent to serde.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(bound = "")]
-pub struct PixelSize<P> {
-    pub width: WholePx<P>,
-    pub height: WholePx<P>,
-}
-
-impl<P> PixelSize<P> {
-    /// The size of `width` x `height` pixels.
-    #[must_use]
-    pub const fn new(width: WholePx<P>, height: WholePx<P>) -> Self {
-        Self { width, height }
-    }
-}
-
-/// One edge of a [`PixelSize`]: a whole number of pixels in the space `P`
-/// names. The `u32` is what wgpu, the canvas element and the image decoders
-/// take, so [`WholePx::get`] is the one way out to them.
-///
-/// Transparent to serde: it carries the bare `u32`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent, bound = "")]
-pub struct WholePx<P>(u32, #[serde(skip)] std::marker::PhantomData<P>);
-
-impl<P> WholePx<P> {
-    /// No pixel.
-    pub const ZERO: Self = Self::new(0);
-
-    /// An edge of `n` pixels.
-    #[must_use]
-    pub const fn new(n: u32) -> Self {
-        Self(n, std::marker::PhantomData)
-    }
-
-    /// The bare count, for the call into a foreign API.
-    #[must_use]
-    pub const fn get(self) -> u32 {
-        self.0
-    }
-}
-
-/// The bare count, as an error message prints a dimension.
-impl<P> std::fmt::Display for WholePx<P> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-// By hand: a derive would ask the space marker for an order it has no use for.
-impl<P: Eq> PartialOrd for WholePx<P> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<P: Eq> Ord for WholePx<P> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.0.cmp(&other.0)
-    }
-}
-
-/// A pixel of a decoded image: one sample of its bitmap, never a length on a
-/// screen. It names the space of [`ImageSize`] and holds no value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ImagePx {}
-
-/// The size of a decoded image, in its own pixels.
-pub type ImageSize = PixelSize<ImagePx>;
-
 /// The vector from `other` to `self`.
-impl<P: std::ops::Sub<Output = P>> std::ops::Sub for Point<P> {
+impl<P: Sub<Output = P>> Sub for Point<P> {
     type Output = Vector<P>;
     fn sub(self, other: Self) -> Vector<P> {
         Vector::new(self.x - other.x, self.y - other.y)
@@ -525,7 +694,7 @@ impl<P: std::ops::Sub<Output = P>> std::ops::Sub for Point<P> {
 }
 
 /// The point moved by `by`.
-impl<P: std::ops::Add<Output = P>> std::ops::Add<Vector<P>> for Point<P> {
+impl<P: Add<Output = P>> Add<Vector<P>> for Point<P> {
     type Output = Self;
     fn add(self, by: Vector<P>) -> Self {
         Point::new(self.x + by.dx, self.y + by.dy)
@@ -533,7 +702,7 @@ impl<P: std::ops::Add<Output = P>> std::ops::Add<Vector<P>> for Point<P> {
 }
 
 /// The point moved back by `by`.
-impl<P: std::ops::Sub<Output = P>> std::ops::Sub<Vector<P>> for Point<P> {
+impl<P: Sub<Output = P>> Sub<Vector<P>> for Point<P> {
     type Output = Self;
     fn sub(self, by: Vector<P>) -> Self {
         Point::new(self.x - by.dx, self.y - by.dy)
@@ -541,31 +710,12 @@ impl<P: std::ops::Sub<Output = P>> std::ops::Sub<Vector<P>> for Point<P> {
 }
 
 /// The two displacements one after the other.
-impl<P: std::ops::Add<Output = P>> std::ops::Add for Vector<P> {
+impl<P: Add<Output = P>> Add for Vector<P> {
     type Output = Self;
     fn add(self, other: Self) -> Self {
         Vector::new(self.dx + other.dx, self.dy + other.dy)
     }
 }
-
-/// A point of the document, before the zoom, from the origin of the layout
-/// that measures it: a page, or a run.
-pub type DocPoint = Point<DocPx>;
-
-/// A point of the zoomed view, from the canvas's top-left corner.
-pub type ViewPoint = Point<ViewPx>;
-
-/// A point of the page, in CSS pixels.
-pub type CssPoint = Point<CssPx>;
-
-/// A displacement of the page, in CSS pixels: a wheel delta.
-pub type CssVector = Vector<CssPx>;
-
-/// A displacement of the zoomed view.
-pub type ViewVector = Vector<ViewPx>;
-
-/// A size on the zoomed view: a canvas, a list, a box.
-pub type ViewSize = Size<ViewPx>;
 
 /// A velocity on the zoomed view, in view pixels per millisecond on each
 /// axis: what a flick leaves.
@@ -585,11 +735,11 @@ impl ViewSpeedVector {
     }
 }
 
-impl ViewVector {
+impl Vector<Px<View>> {
     /// The length of the displacement.
     #[must_use]
-    pub fn length(self) -> ViewPx {
-        ViewPx(self.dx.0.hypot(self.dy.0))
+    pub fn length(self) -> Px<View> {
+        Px::new(self.dx.0.hypot(self.dy.0))
     }
 
     /// The velocity of this displacement made over `span`.
@@ -599,11 +749,11 @@ impl ViewVector {
     }
 }
 
-impl ViewPoint {
+impl Point<Px<View>> {
     /// The point on the page, for a canvas whose corner sits at
     /// `canvas_origin`.
     #[must_use]
-    pub fn on_page(self, canvas_origin: CssPoint) -> CssPoint {
+    pub fn on_page(self, canvas_origin: Point<Px<Css>>) -> Point<Px<Css>> {
         Point::new(
             self.x.on_page(canvas_origin.x),
             self.y.on_page(canvas_origin.y),
@@ -611,10 +761,10 @@ impl ViewPoint {
     }
 }
 
-impl CssPoint {
+impl Point<Px<Css>> {
     /// The point on a canvas whose corner sits at `canvas_origin`.
     #[must_use]
-    pub fn in_canvas(self, canvas_origin: CssPoint) -> ViewPoint {
+    pub fn in_canvas(self, canvas_origin: Point<Px<Css>>) -> Point<Px<View>> {
         Point::new(
             self.x.in_canvas(canvas_origin.x),
             self.y.in_canvas(canvas_origin.y),
@@ -624,62 +774,63 @@ impl CssPoint {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        CssPoint, CssPx, DocPx, ImageSize, Mm, Pt, SurfacePx, ViewPoint, ViewPx, ViewSpeed,
-        ViewVector, WholePx,
-    };
-    use crate::{PageMillis, ZoomFactor};
+    use super::{Mm, Pt, ViewSpeed};
+    use crate::PageMillis;
+    use crate::{Css, Doc, Image, Point, Px, Scale, Size, Surface, Vector, View};
 
     #[test]
     fn a_document_length_scales_by_the_zoom_and_back() {
-        let zoom = ZoomFactor::positive(2.0);
-        assert_eq!(DocPx::new(12.0).zoomed(zoom), ViewPx::new(24.0));
-        assert_eq!(ViewPx::new(24.0).unzoomed(zoom), DocPx::new(12.0));
+        let zoom = Scale::<Doc, View>::positive(2.0);
+        assert_eq!(Px::<Doc>::new(12.0).zoomed(zoom), Px::<View>::new(24.0));
+        assert_eq!(Px::<View>::new(24.0).unzoomed(zoom), Px::<Doc>::new(12.0));
         assert_eq!(
-            DocPx::new(12.0).zoomed_on_surface(zoom),
-            SurfacePx::new(24.0)
+            Px::<Doc>::new(12.0).zoomed_on_surface(zoom),
+            Px::<Surface>::new(24.0)
         );
     }
 
     #[test]
     fn a_point_is_four_thirds_of_a_pixel_and_a_millimetre_is_a_ninety_sixth_of_an_inch() {
-        assert_eq!(Pt::new(12.0).to_doc_px(), DocPx::new(16.0));
-        assert_eq!(DocPx::new(16.0).to_pt(), Pt::new(12.0));
+        assert_eq!(Pt::new(12.0).to_doc_px(), Px::<Doc>::new(16.0));
+        assert_eq!(Px::<Doc>::new(16.0).to_pt(), Pt::new(12.0));
         assert!((Mm::new(25.4).to_doc_px().get() - 96.0).abs() < 1e-4);
     }
 
     #[test]
     fn a_length_adds_scales_and_divides_into_a_ratio() {
-        let a = ViewPx::new(3.0);
-        assert_eq!(a + a - ViewPx::new(1.0), ViewPx::new(5.0));
-        assert_eq!(a * 2.0, ViewPx::new(6.0));
-        assert_eq!(ViewPx::new(6.0) / a, 2.0);
-        assert_eq!(-a, ViewPx::new(-3.0));
-        assert_eq!([a, a].into_iter().sum::<ViewPx>(), ViewPx::new(6.0));
+        let a = Px::<View>::new(3.0);
+        assert_eq!(a + a - Px::<View>::new(1.0), Px::<View>::new(5.0));
+        assert_eq!(a * 2.0, Px::<View>::new(6.0));
+        assert_eq!(Px::<View>::new(6.0) / a, 2.0);
+        assert_eq!(-a, Px::<View>::new(-3.0));
+        assert_eq!([a, a].into_iter().sum::<Px<View>>(), Px::<View>::new(6.0));
     }
 
     #[test]
     fn a_view_point_moves_onto_the_page_by_the_canvas_origin() {
-        let origin = CssPoint::new(CssPx::new(10.0), CssPx::new(20.0));
-        let on_page = ViewPoint::new(ViewPx::new(1.0), ViewPx::new(2.0)).on_page(origin);
-        assert_eq!(on_page, CssPoint::new(CssPx::new(11.0), CssPx::new(22.0)));
+        let origin = Point::new(Px::<Css>::new(10.0), Px::<Css>::new(20.0));
+        let on_page = Point::new(Px::<View>::new(1.0), Px::<View>::new(2.0)).on_page(origin);
+        assert_eq!(
+            on_page,
+            Point::new(Px::<Css>::new(11.0), Px::<Css>::new(22.0))
+        );
         assert_eq!(
             on_page.in_canvas(origin),
-            ViewPoint::new(ViewPx::new(1.0), ViewPx::new(2.0))
+            Point::new(Px::<View>::new(1.0), Px::<View>::new(2.0))
         );
     }
 
     #[test]
     fn two_points_subtract_into_a_vector_that_moves_one_onto_the_other() {
-        let from = ViewPoint::new(ViewPx::new(1.0), ViewPx::new(2.0));
-        let to = ViewPoint::new(ViewPx::new(4.0), ViewPx::new(-2.0));
+        let from = Point::new(Px::<View>::new(1.0), Px::<View>::new(2.0));
+        let to = Point::new(Px::<View>::new(4.0), Px::<View>::new(-2.0));
         let by = to - from;
-        assert_eq!(by, ViewVector::new(ViewPx::new(3.0), ViewPx::new(-4.0)));
+        assert_eq!(by, Vector::new(Px::<View>::new(3.0), Px::<View>::new(-4.0)));
         assert_eq!(from + by, to);
         assert_eq!(to - by, from);
         assert_eq!(
             by + by,
-            ViewVector::new(ViewPx::new(6.0), ViewPx::new(-8.0))
+            Vector::new(Px::<View>::new(6.0), Px::<View>::new(-8.0))
         );
     }
 
@@ -687,21 +838,21 @@ mod tests {
     /// is measured from the view's corner.
     #[test]
     fn a_surface_position_keeps_its_precision_until_it_reaches_the_view() {
-        let origin = SurfacePx::new(2_000_000.0);
-        let at = SurfacePx::new(2_000_010.25);
-        assert_eq!(at.in_view(origin), ViewPx::new(10.25));
-        assert_eq!(ViewPx::new(10.25).on_surface(origin), at);
+        let origin = Px::<Surface>::new(2_000_000.0);
+        let at = Px::<Surface>::new(2_000_010.25);
+        assert_eq!(at.in_view(origin), Px::<View>::new(10.25));
+        assert_eq!(Px::<View>::new(10.25).on_surface(origin), at);
     }
 
     #[test]
     fn a_move_over_a_span_is_a_speed_that_covers_the_move_again() {
         let span = PageMillis::new(4.0);
-        let by = ViewVector::new(ViewPx::new(3.0), ViewPx::new(4.0));
+        let by = Vector::new(Px::<View>::new(3.0), Px::<View>::new(4.0));
         let velocity = by.per(span);
         assert_eq!(velocity.dy, ViewSpeed::new(1.0));
         assert_eq!(velocity.magnitude(), ViewSpeed::new(1.25));
-        assert_eq!(velocity.dx.over(span), ViewPx::new(3.0));
-        assert_eq!(by.length(), ViewPx::new(5.0));
+        assert_eq!(velocity.dx.over(span), Px::<View>::new(3.0));
+        assert_eq!(by.length(), Px::<View>::new(5.0));
         assert_eq!(velocity.scaled(2.0).dy, ViewSpeed::new(2.0));
     }
 
@@ -712,14 +863,17 @@ mod tests {
 
     #[test]
     fn a_pixel_size_keeps_the_bytes_of_its_two_bare_edges() {
-        // The bytes two `u32` fields wrote, before each edge was a `WholePx`.
-        let size = ImageSize::new(WholePx::new(640), WholePx::new(480));
+        // The bytes two `u32` fields wrote, before each edge was a `Px`.
+        let size = Size::new(Px::new(640), Px::new(480));
         assert_eq!(
             serde_json::to_string(&size).unwrap(),
             r#"{"width":640,"height":480}"#
         );
         let bytes = postcard::to_allocvec(&size).unwrap();
         assert_eq!(bytes, [0x80, 0x05, 0xE0, 0x03]);
-        assert_eq!(postcard::from_bytes::<ImageSize>(&bytes).unwrap(), size);
+        assert_eq!(
+            postcard::from_bytes::<Size<Px<Image>>>(&bytes).unwrap(),
+            size
+        );
     }
 }

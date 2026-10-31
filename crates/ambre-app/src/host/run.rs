@@ -42,7 +42,7 @@ pub fn run_with<F, C, P>(
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> DocSwitcher
 where
-    F: FnOnce(CssSize, TextInput) -> AppView,
+    F: FnOnce(ambre_core::Size<Px<WholeCss>>, TextInput) -> AppView,
     C: Fn(DocumentId, DocType, Size, TextInput) -> AppView + 'static,
     P: FnMut() + 'static,
 {
@@ -216,7 +216,7 @@ where
 
         // Positions are CSS pixels, which is what a view lays out in
         // (`CANVAS-032`). A cancel carries no reliable position, so the last one stands in.
-        let mut last = ViewPoint::new(ViewPx::ZERO, ViewPx::ZERO);
+        let mut last = ambre_core::Point::new(Px::<View>::ZERO, Px::<View>::ZERO);
         let cb = Closure::<dyn FnMut(web_sys::PointerEvent)>::new(
             move |event: web_sys::PointerEvent| {
                 let cancelled = event.type_() == "pointercancel";

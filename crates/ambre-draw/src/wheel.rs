@@ -8,11 +8,12 @@
 //! number and its unit together, and [`WheelDelta::to_px`] is the one way to
 //! read it as a distance (`KINETIC-015`).
 
-use ambre_core::{CssPx, CssVector, Vector};
+use ambre_core::Vector;
+use ambre_core::{Css, Px};
 
 /// The pixels one wheel line is worth, in a view whose content has no line of
 /// its own. Trame steps by a zoomed cell instead.
-pub const WHEEL_LINE: CssPx = CssPx::new(40.0);
+pub const WHEEL_LINE: Px<Css> = Px::<Css>::new(40.0);
 
 /// The unit of a wheel delta, as the DOM's `WheelEvent.deltaMode` names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,8 +61,8 @@ impl WheelAmount {
 
     /// The amount as CSS pixels, one unit being worth `unit`.
     #[must_use]
-    fn scaled(self, unit: f64) -> CssPx {
-        CssPx::new((self.0 * unit) as f32)
+    fn scaled(self, unit: f64) -> Px<Css> {
+        Px::<Css>::new((self.0 * unit) as f32)
     }
 }
 
@@ -107,26 +108,26 @@ impl WheelDelta {
     /// The delta in CSS pixels, given what one line and one page are worth on
     /// each axis.
     #[must_use]
-    pub fn to_px(self, line: CssVector, page: CssVector) -> CssVector {
+    pub fn to_px(self, line: Vector<Px<Css>>, page: Vector<Px<Css>>) -> Vector<Px<Css>> {
         let (sx, sy) = match self.mode {
             WheelDeltaMode::Pixel => (1.0, 1.0),
             WheelDeltaMode::Line => (f64::from(line.dx.get()), f64::from(line.dy.get())),
             WheelDeltaMode::Page => (f64::from(page.dx.get()), f64::from(page.dy.get())),
         };
-        CssVector::new(self.amount.dx.scaled(sx), self.amount.dy.scaled(sy))
+        Vector::new(self.amount.dx.scaled(sx), self.amount.dy.scaled(sy))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{WHEEL_LINE, WheelAmount, WheelDelta, WheelDeltaMode, WheelVector};
-    use ambre_core::{CssPx, CssVector};
+    use ambre_core::{Css, Px, Vector};
 
-    const LINE: CssVector = CssVector::new(WHEEL_LINE, WHEEL_LINE);
-    const PAGE: CssVector = CssVector::new(CssPx::new(800.0), CssPx::new(600.0));
+    const LINE: Vector<Px<Css>> = Vector::new(WHEEL_LINE, WHEEL_LINE);
+    const PAGE: Vector<Px<Css>> = Vector::new(Px::<Css>::new(800.0), Px::<Css>::new(600.0));
 
-    fn px(dx: f32, dy: f32) -> CssVector {
-        CssVector::new(CssPx::new(dx), CssPx::new(dy))
+    fn px(dx: f32, dy: f32) -> Vector<Px<Css>> {
+        Vector::new(Px::<Css>::new(dx), Px::<Css>::new(dy))
     }
 
     fn units(dx: f64, dy: f64) -> WheelVector {

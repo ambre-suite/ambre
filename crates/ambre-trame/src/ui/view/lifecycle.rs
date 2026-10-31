@@ -11,8 +11,8 @@ impl TrameView {
         document_id: DocumentId,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
-        canvas_width: ambre_core::SurfacePx,
-        canvas_height: ambre_core::SurfacePx,
+        canvas_width: ambre_core::Px<ambre_core::Surface>,
+        canvas_height: ambre_core::Px<ambre_core::Surface>,
         text_input: TextInput,
         // When embedded as a `doc_embed` child (`toile-embeds`), the child view
         // must not grab the shared text pipe on construction. The top-level
@@ -30,7 +30,9 @@ impl TrameView {
         #[cfg(target_arch = "wasm32")] formula_action: RwSignal<Option<FormulaAction>>,
         #[cfg(target_arch = "wasm32")] sel_stats: RwSignal<Option<crate::chrome::SelStats>>,
         #[cfg(target_arch = "wasm32")] ctx_scope: RwSignal<crate::ui::grid::CtxScope>,
-        #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<ambre_chrome::ZoomFactor>,
+        #[cfg(target_arch = "wasm32")] zoom_sig: RwSignal<
+            ambre_core::Scale<ambre_core::Doc, ambre_core::View>,
+        >,
         #[cfg(target_arch = "wasm32")] active_sheet: RwSignal<ambre_bus::SheetId>,
         #[cfg(target_arch = "wasm32")] filter_active: RwSignal<crate::chrome::SheetFilter>,
         #[cfg(target_arch = "wasm32")] find_result: RwSignal<Option<crate::chrome::FindPosition>>,
@@ -316,7 +318,7 @@ impl TrameView {
     /// there. The grid lays out in CSS px too (`CANVAS-032`).
     pub(crate) fn park_input_on(&self, at: CellPos) {
         if let Some(cell) = self.state.cell_pixel_rect(at) {
-            let height = ambre_core::ViewPx::new(cell.height() as f32);
+            let height = ambre_core::Px::<ambre_core::View>::new(cell.height() as f32);
             self.text_input
                 .set_caret(view_point(ambre_draw::Point::new(cell.x0, cell.y0)), height);
         }
