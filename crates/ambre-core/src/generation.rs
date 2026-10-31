@@ -244,12 +244,6 @@ impl<K: GenerationKind> Issuer<K> {
     pub const fn latest(&self) -> Generation<K> {
         self.latest
     }
-
-    /// Draw every later number past `seen`, a number an earlier run of the
-    /// same family handed out and a store kept.
-    pub fn issue_past(&mut self, seen: Generation<K>) {
-        self.latest = self.latest.max(seen);
-    }
 }
 
 impl<K: GenerationKind<IssueRight = ()>> Default for Issuer<K> {
@@ -347,10 +341,7 @@ mod tests {
         let (one, two) = (issuer.issue(), issuer.issue());
         assert!(Generation::ZERO < one && one < two);
         assert_eq!(issuer.latest(), two);
-        issuer.issue_past(Generation::nth(9));
-        assert_eq!(issuer.issue(), Generation::nth(10));
-        issuer.issue_past(Generation::nth(3));
-        assert_eq!(issuer.issue(), Generation::nth(11));
+        assert_eq!(issuer.issue(), Generation::nth(3));
     }
 
     #[test]

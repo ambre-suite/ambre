@@ -115,6 +115,17 @@ fn offences(path: &mut Vec<String>, table: &toml::Table, out: &mut Vec<String>) 
 
 #[test]
 fn the_testing_feature_is_named_in_dev_dependencies_alone() {
+    // Resolver 1 unifies the features of a dev-dependency into the build
+    // that ships, so the dev table alone keeps nothing out.
+    let root = manifest(&workspace_root().join("Cargo.toml"));
+    let resolver = root
+        .get("workspace")
+        .and_then(|workspace| workspace.get("resolver"))
+        .and_then(toml::Value::as_str);
+    assert!(
+        matches!(resolver, Some(version) if version != "1"),
+        "the workspace must name resolver 2 or later, found {resolver:?}"
+    );
     let mut refused = Vec::new();
     let mut dev_uses = 0_usize;
     for (path, table) in manifests() {
