@@ -84,9 +84,19 @@ pub struct ImageSource<'a> {
 /// the cost this type exists to avoid. It carries no meaning of its own -- only
 /// equality -- so any stable derivation the caller already has will do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ImageKey(pub u64);
+pub struct ImageKey(u64);
 
 impl ImageKey {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// Fold the leading bytes of a content address, its hex digest, into a
     /// key. Two different addresses collide only if their first bytes do.
     pub fn from_address(address: &ambre_core::ContentHash) -> Self {

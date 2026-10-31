@@ -220,7 +220,7 @@ mod tests {
                 pub_key: ambre_core::FixedBytes::from_array([1u8; 32]),
                 key_id: ambre_core::FixedBytes::from_array([2u8; 16]),
                 snapshot_id: Id::<Snapshot>::mint(),
-                clock: Clock(1),
+                clock: Clock::new(1),
             },
             commitment_tag: ambre_core::FixedBytes::from_array([0u8; 32]),
             signature: ambre_core::FixedBytes::from_array([0u8; 64]),

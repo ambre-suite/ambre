@@ -52,7 +52,7 @@ fn filtered_column_edit_is_one_undo_item() {
     seed_col_a(&mut state, &["1", "2", "3"]);
     // Hide every row whose column-A value is < 3 -> rows 0 and 1 hidden.
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gte,

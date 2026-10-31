@@ -567,11 +567,11 @@ fn sheet_tabs_render_active_and_emit_intents() {
 
     let container = mount_in_container(move || {
         let tab = |id: &str, name: &str| SheetTab {
-            id: SheetId(id.to_owned()),
+            id: SheetId::new(id.to_owned()),
             name: SheetName::new(name).unwrap(),
         };
         let sheets = RwSignal::new(vec![tab("s0", "One"), tab("s1", "Two")]);
-        let active = RwSignal::new(SheetId("s1".to_owned()));
+        let active = RwSignal::new(SheetId::new("s1".to_owned()));
         view! {
             <SheetTabs
                 sheets=sheets
@@ -597,7 +597,10 @@ fn sheet_tabs_render_active_and_emit_intents() {
     // Clicking the first (inactive) tab emits `on_activate("s0")`.
     let first: web_sys::HtmlElement = tabs.item(0).unwrap().dyn_into().unwrap();
     first.click();
-    assert_eq!(activated.get_untracked(), Some(SheetId("s0".to_owned())));
+    assert_eq!(
+        activated.get_untracked(),
+        Some(SheetId::new("s0".to_owned()))
+    );
 
     // Clicking the trailing "+" emits `on_create`.
     let add: web_sys::HtmlElement = doc
@@ -619,13 +622,13 @@ async fn sheet_tabs_refuse_a_name_the_rule_refuses() {
     let renamed = RwSignal::new(None::<(SheetId, SheetName)>);
     let container = mount_in_container(move || {
         let sheets = RwSignal::new(vec![SheetTab {
-            id: SheetId("s0".to_owned()),
+            id: SheetId::new("s0".to_owned()),
             name: SheetName::new("One").unwrap(),
         }]);
         view! {
             <SheetTabs
                 sheets=sheets
-                active=RwSignal::new(SheetId("s0".to_owned()))
+                active=RwSignal::new(SheetId::new("s0".to_owned()))
                 on_activate=Callback::new(move |_: SheetId| {})
                 on_create=Callback::new(move |()| {})
                 on_rename=Callback::new(move |pair| renamed.set(Some(pair)))
@@ -674,7 +677,10 @@ async fn sheet_tabs_refuse_a_name_the_rule_refuses() {
     field().dispatch_event(&enter()).unwrap();
     assert_eq!(
         renamed.get_untracked(),
-        Some((SheetId("s0".to_owned()), SheetName::new("Data").unwrap()))
+        Some((
+            SheetId::new("s0".to_owned()),
+            SheetName::new("Data").unwrap()
+        ))
     );
     container.remove();
 }

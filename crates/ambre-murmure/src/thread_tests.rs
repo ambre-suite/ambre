@@ -842,15 +842,15 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
         .expect("echo");
     assert_eq!(
         state.thread_mentions(thread, Seq::new(3), alice),
-        Ok(MentionCount(1))
+        Ok(MentionCount::new(1))
     );
     assert_eq!(
         state.thread_mentions(thread, Seq::new(4), alice),
-        Ok(MentionCount(0))
+        Ok(MentionCount::new(0))
     );
     assert_eq!(
         state.thread_mentions(thread, Seq::new(3), bob),
-        Ok(MentionCount(0))
+        Ok(MentionCount::new(0))
     );
     assert_eq!(state.held_threads(), [thread]);
     let segment = state.active_id().document_id();

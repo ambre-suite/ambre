@@ -42,11 +42,11 @@ async fn menu_edges_at(width: u32) -> (f64, f64, f64) {
 
     let pos = RwSignal::new(Some(css_point(150.0, 60.0)));
     let copy = Command {
-        id: CommandId("clipboard.copy"),
+        id: CommandId::new("clipboard.copy"),
         title: |_| "Copy".to_owned(),
         icon: None,
         keybindings: &[],
-        category: CommandCategory("edit"),
+        category: CommandCategory::new("edit"),
     };
     let entries = Signal::stored(vec![MenuEntry::command(&copy, &Locale::En)]);
     let handle = mount_to(inner.body().unwrap(), move || {

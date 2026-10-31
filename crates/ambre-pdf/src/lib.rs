@@ -443,7 +443,7 @@ mod tests {
                 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
             ]);
             let src = ImageSource {
-                key: ImageKey(1),
+                key: ImageKey::new(1),
                 pixels: &pixels,
                 size: ambre_core::Size::new(ambre_draw::Px::new(2), ambre_draw::Px::new(2)),
             };
@@ -452,7 +452,7 @@ mod tests {
             s.draw_image(&src, Rect::new(50.0, 50.0, 50.0, 50.0));
             // Malformed source (wrong length): skipped.
             let bad = ImageSource {
-                key: ImageKey(2),
+                key: ImageKey::new(2),
                 pixels: &ambre_draw::Payload::new(vec![0, 1, 2]),
                 size: ambre_core::Size::new(ambre_draw::Px::new(2), ambre_draw::Px::new(2)),
             };

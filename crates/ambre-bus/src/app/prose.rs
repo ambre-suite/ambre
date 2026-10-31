@@ -91,9 +91,19 @@ impl ambre_core::generation::Wire for TextChangeSeq {}
     Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize,
 )]
 #[serde(transparent)]
-pub struct TextAck(pub u64);
+pub struct TextAck(u64);
 
 impl TextAck {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The count after one more command is taken.
     #[must_use]
     pub const fn next(self) -> Self {
@@ -222,7 +232,19 @@ impl fmt::Display for BlockId {
 /// newtype exists only to keep it apart from the other strings of a command.
 /// A user may have typed the name, so `Debug` prints its length alone.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct StyleId(pub String);
+pub struct StyleId(String);
+
+impl StyleId {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 impl fmt::Debug for StyleId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -390,7 +412,19 @@ impl OrderedStyle {
 /// The error of a decoded ordinal style outside the five codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("an ordinal style is a code of zero to four, not {0}")]
-pub struct InvalidOrderedStyle(pub u8);
+pub struct InvalidOrderedStyle(u8);
+
+impl InvalidOrderedStyle {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u8) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+}
 
 impl TryFrom<u8> for OrderedStyle {
     type Error = InvalidOrderedStyle;
@@ -467,7 +501,19 @@ impl HeadingLevel {
 /// The error of a decoded heading level outside one to six.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("a heading level is one to six, not {0}")]
-pub struct InvalidHeadingLevel(pub u8);
+pub struct InvalidHeadingLevel(u8);
+
+impl InvalidHeadingLevel {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u8) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+}
 
 impl TryFrom<u8> for HeadingLevel {
     type Error = InvalidHeadingLevel;
@@ -643,7 +689,19 @@ impl fmt::Display for LineSpacingMultiple {
 /// The error of a line-height multiple that is not finite and above zero.
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 #[error("a line-height multiple is finite and above zero, not {0}")]
-pub struct InvalidLineSpacingMultiple(pub f32);
+pub struct InvalidLineSpacingMultiple(f32);
+
+impl InvalidLineSpacingMultiple {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: f32) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+}
 
 impl TryFrom<f32> for LineSpacingMultiple {
     type Error = InvalidLineSpacingMultiple;

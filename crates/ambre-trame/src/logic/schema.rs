@@ -37,7 +37,7 @@ use crate::model::{Line, Uid};
 /// avoid a duplicate `push` on merge (see `trame-schema`).
 #[must_use]
 pub(crate) fn default_sheet() -> SheetId {
-    SheetId("s0".to_owned())
+    SheetId::new("s0".to_owned())
 }
 
 ambre_core::loro_fields!(pub(crate));

@@ -26,7 +26,19 @@ impl crate::token::TokenKind for EditSession {
 /// alone; `Display` quotes the text, for the author who typed it.
 #[derive(Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{0:?} is not a name: a letter or underscore, then letters, digits and underscores")]
-pub struct InvalidDefinedName(pub String);
+pub struct InvalidDefinedName(String);
+
+impl InvalidDefinedName {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 impl std::fmt::Debug for InvalidDefinedName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -228,7 +240,19 @@ impl std::fmt::Display for SheetName {
 /// byte outside ASCII.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("byte {0:#04x} cannot separate CSV fields")]
-pub struct InvalidCsvDelimiter(pub u8);
+pub struct InvalidCsvDelimiter(u8);
+
+impl InvalidCsvDelimiter {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u8) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+}
 
 /// The byte that separates the fields of a CSV record (`trame-import-export`).
 /// It is an ASCII byte other than the double quote, which opens a quoted

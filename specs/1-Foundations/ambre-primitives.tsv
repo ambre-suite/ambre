@@ -124,6 +124,10 @@ ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition.0 | field
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::new(rank) | param | u32	newtype-inner	the inside of the CatalogPosition newtype
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::from_stored(stored) | param | u64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
 ambre-bus | src/app/murmure.rs | crate::app::murmure | CatalogPosition::to_stored() | ret | i64	newtype-inner	the inside of the CatalogPosition newtype, as the Loro map stores it; the Loro call is at the caller
+ambre-bus | src/app/murmure.rs | crate::app::murmure | MentionCount::get() | ret | u32	newtype-inner	the MentionCount newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/murmure.rs | crate::app::murmure | MentionCount::new(value) | param | u32	newtype-inner	the constructor of the MentionCount newtype
+ambre-bus | src/app/murmure.rs | crate::app::murmure | UnreadCount::get() | ret | u32	newtype-inner	the UnreadCount newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/murmure.rs | crate::app::murmure | UnreadCount::new(value) | param | u32	newtype-inner	the constructor of the UnreadCount newtype
 ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as From<&str>>::from(text) | param | &str	newtype-inner	the &str the constructor of MarkKey copies into its text
 ambre-bus | src/app/prose.rs | crate::app::prose | <MarkKey as std::borrow::Borrow<str>>::borrow() | ret | &str	newtype-inner	the inner text of MarkKey, lent through Borrow
 ambre-bus | src/app/prose.rs | crate::app::prose | <SharedLayout as PartialEq>::eq() | ret | bool	generic	predicate
@@ -295,6 +299,14 @@ ambre-bus | src/app/trame/event.rs | crate::app::trame::event | TrameEvent::Vali
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority.0 | field | i64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::get() | ret | i64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatPriority::new(rank) | param | i64	newtype-inner	newtype inner, accessor or constructor
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatId::as_str() | ret | &str	newtype-inner	the CondFormatId newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | CondFormatId::new(value) | param | String	newtype-inner	the constructor of the CondFormatId newtype
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | FilterViewId::as_str() | ret | &str	newtype-inner	the FilterViewId newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | FilterViewId::new(value) | param | String	newtype-inner	the constructor of the FilterViewId newtype
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NotACellNumber::get() | ret | f64	newtype-inner	the NotACellNumber newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | NotACellNumber::new(value) | param | f64	newtype-inner	the constructor of the NotACellNumber newtype
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId::into_inner() | ret | String	newtype-inner	the SheetId newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/trame/event.rs | crate::app::trame::event | SheetId::new(value) | param | String	newtype-inner	the constructor of the SheetId newtype
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.high | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Between.low | field | String	free-text	user-entered rule operand, pattern or formula text
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | CondFormatKind::Contains.0 | field | String	free-text	user-entered rule operand, pattern or formula text
@@ -319,6 +331,8 @@ ambre-bus | src/app/trame/style.rs | crate::app::trame::style | Decimals::precis
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep.0 | field | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | DecimalsStep::new(places) | param | i8	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals.0 | field | u8	newtype-inner	the refused count an error reports
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals::get() | ret | u8	newtype-inner	the InvalidDecimals newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/trame/style.rs | crate::app::trame::style | InvalidDecimals::new(value) | param | u8	newtype-inner	the constructor of the InvalidDecimals newtype
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::is_empty() | ret | bool	generic	predicate or internal state flag
 ambre-bus | src/conduit.rs | crate::conduit | Backlog<T>::len() | ret | usize	math	channel capacity / queue length / watermark, local to the conduit
 ambre-bus | src/conduit.rs | crate::conduit | BacklogLength.0 | field | usize	newtype-inner	the number of values a backlog holds, as a mark names it
@@ -677,6 +691,12 @@ ambre-commands | src/lib.rs | crate | CommandId.0 | field | &'static str	newtype
 ambre-commands | src/lib.rs | crate | IconId.0 | field | &'static str	newtype-inner	newtype inner
 ambre-commands | src/lib.rs | crate | Keymap::is_empty() | ret | bool	generic	state flag/predicate
 ambre-commands | src/lib.rs | crate | Keymap::len() | ret | usize	math	local count/index/counter
+ambre-commands | src/lib.rs | crate | CommandCategory::as_str() | ret | &'static str	newtype-inner	the CommandCategory newtype unwrapped, for a caller outside its module
+ambre-commands | src/lib.rs | crate | CommandCategory::new(value) | param | &'static str	newtype-inner	the constructor of the CommandCategory newtype
+ambre-commands | src/lib.rs | crate | CommandId::as_str() | ret | &'static str	newtype-inner	the CommandId newtype unwrapped, for a caller outside its module
+ambre-commands | src/lib.rs | crate | CommandId::new(value) | param | &'static str	newtype-inner	the constructor of the CommandId newtype
+ambre-commands | src/lib.rs | crate | IconId::as_str() | ret | &'static str	newtype-inner	the IconId newtype unwrapped, for a caller outside its module
+ambre-commands | src/lib.rs | crate | IconId::new(value) | param | &'static str	newtype-inner	the constructor of the IconId newtype
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor.0 | field | Vec<u8>	newtype-inner	ActivityKind/ActivityAnchor codec
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor::as_bytes() | ret | &[u8]	newtype-inner	ActivityKind/ActivityAnchor codec
 ambre-core | src/activity.rs | crate::activity | ActivityAnchor::new(bytes) | param | Vec<u8>	newtype-inner	ActivityKind/ActivityAnchor codec
@@ -1129,6 +1149,8 @@ ambre-draw | src/kinetic.rs | crate::kinetic | Pan.held | field | bool	generic	l
 ambre-draw | src/kinetic.rs | crate::kinetic | Pan.panned | field | bool	generic	local state flag or value, not a mode selector
 ambre-draw | src/kinetic.rs | crate::kinetic | WHEEL_BLEND | const | f32	math	geometry, layout, count or size local to the algorithm
 ambre-draw | src/lib.rs | crate | ImageKey.0 | field | u64	newtype-inner	ImageKey inner
+ambre-draw | src/lib.rs | crate | ImageKey::get() | ret | u64	newtype-inner	the ImageKey newtype unwrapped, for a caller outside its module
+ambre-draw | src/lib.rs | crate | ImageKey::new(value) | param | u64	newtype-inner	the constructor of the ImageKey newtype
 ambre-draw | src/text.rs | crate::text | BundledFamily::face_name() | ret | &'static str	newtype-inner	the enum's own family name, the one the shaper's font database matches a face by
 ambre-draw | src/text.rs | crate::text | LazyFont::asset_url() | ret | &'static str	free-text	the same-origin font path the face fetch reads, a property of the script and no spelling of it, as BASE_FONTS holds the base ones
 ambre-draw | src/text.rs | crate::text | LazyFont::bit() | ret | u8	newtype-inner	ScriptSet bit
@@ -2132,6 +2154,10 @@ ambre-protocol | src/messages.rs | crate::messages | <Clock as TryFrom<i64>>::tr
 ambre-protocol | src/messages.rs | crate::messages | Clock.0 | field | u64	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Clock::to_i64_saturating() | ret | i64	newtype-inner	protocol newtype accessor
 ambre-protocol | src/messages.rs | crate::messages | Counter.0 | field | u64	newtype-inner	protocol newtype accessor
+ambre-protocol | src/messages.rs | crate::messages | Clock::get() | ret | u64	newtype-inner	the Clock newtype unwrapped, for a caller outside its module
+ambre-protocol | src/messages.rs | crate::messages | Clock::new(value) | param | u64	newtype-inner	the constructor of the Clock newtype
+ambre-protocol | src/messages.rs | crate::messages | Counter::get() | ret | u64	newtype-inner	the Counter newtype unwrapped, for a caller outside its module
+ambre-protocol | src/messages.rs | crate::messages | Counter::new(value) | param | u64	newtype-inner	the constructor of the Counter newtype
 ambre-protocol | src/snapshot_report.rs | crate::snapshot_report | REPORT_DOMAIN | const | &[u8]	generic	domain-separation tag or length constant
 ambre-protocol | src/ws.rs | crate::ws | <WireFrame as From<Vec<u8>>>::from(bytes) | param | Vec<u8>	newtype-inner	the bytes of one socket frame
 ambre-protocol | src/ws.rs | crate::ws | WireDecodeError::UnsupportedVersion.0 | field | u8	generic	raw unparsed wire version byte, may lie outside Version's range
@@ -2668,6 +2694,8 @@ ambre-toile | src/ui/palette.rs | crate::ui::palette | nearest_resize_keyword() 
 ambre-toile | src/ui/palette.rs | crate::ui::palette | resize_cursor() | ret | Cow<'static,str>	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor() | ret | String	generic	CSS cursor text
 ambre-toile | src/ui/palette.rs | crate::ui::palette | rotated_resize_cursor(fallback) | param | &str	generic	CSS cursor text
+ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor::as_str() | ret | &str	newtype-inner	the CanvasCursor newtype unwrapped, for a caller outside its module
+ambre-toile | src/ui/palette.rs | crate::ui::palette | CanvasCursor::new(value) | param | Cow<'static,str>	newtype-inner	the constructor of the CanvasCursor newtype
 ambre-toile | src/ui/presence.rs | crate::ui::presence | LASER_TRAIL_MAX | const | usize	local	the most samples a laser trail keeps, read once to bound it
 ambre-toile | src/ui/presence.rs | crate::ui::presence | PeerCursors::is_empty() | ret | bool	generic	predicate or handled-flag result
 ambre-toile | src/ui/presenter.rs | crate::ui::presenter | PresenterIntent::EditNotes.base | field | String	free-text	the speaker note a splice was measured against
@@ -3113,6 +3141,8 @@ ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidPer
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent.0 | field | f32	newtype-inner	the value of a validated percentage
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent::new(value) | param | f32	newtype-inner	the fallible constructor that checks the range
 ambre-bus | src/app/trame/features.rs | crate::app::trame::features | Percent::value() | ret | f32	newtype-inner	enum/newtype own accessor or constructor
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidPercent::get() | ret | f32	newtype-inner	the InvalidPercent newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/trame/features.rs | crate::app::trame::features | InvalidPercent::new(value) | param | f32	newtype-inner	the constructor of the InvalidPercent newtype
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DateSerial.0 | field | f64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DateSerial::get() | ret | f64	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/trame/calendar.rs | crate::app::trame::calendar | DateSerial::new(serial) | param | f64	newtype-inner	newtype inner, accessor or constructor
@@ -3149,6 +3179,10 @@ ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::o
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetName::stored(text) | param | String	newtype-inner	the read constructor for a name the document or a formula already holds; one the rule refuses is shown as its fallback (TRAME-235)
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameKey.0 | field | String	newtype-inner	the case-folded text of a sheet name key
 ambre-bus | src/app/trame/command.rs | crate::app::trame::command | SheetNameRefusal::Forbidden.0 | field | char	generic	the refused value the error echoes: the forbidden character of a sheet name
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidCsvDelimiter::get() | ret | u8	newtype-inner	the InvalidCsvDelimiter newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidCsvDelimiter::new(value) | param | u8	newtype-inner	the constructor of the InvalidCsvDelimiter newtype
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidDefinedName::as_str() | ret | &str	newtype-inner	the InvalidDefinedName newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/trame/command.rs | crate::app::trame::command | InvalidDefinedName::new(value) | param | String	newtype-inner	the constructor of the InvalidDefinedName newtype
 ambre-bus | src/app/find.rs | crate::app::find | MatchIndex::ordinal() | ret | u32	newtype-inner	MatchIndex accessor, the 1-based number a label prints
 ambre-bus | src/app/find.rs | crate::app::find | FindText.0 | field | String	newtype-inner	the find text the newtype wraps, never empty
 ambre-bus | src/app/find.rs | crate::app::find | FindText::new(text) | param | String	newtype-inner	the text the constructor validates
@@ -3211,6 +3245,16 @@ ambre-bus | src/app/prose.rs | crate::app::prose | TodoMark::is_done() | ret | b
 ambre-bus | src/app/prose.rs | crate::app::prose | UnsupportedFeature::label() | ret | &'static str	free-text	the closed set's display label
 ambre-bus | src/app/prose.rs | crate::app::prose | RefusedAction::label() | ret | &'static str	free-text	the words a refusal prints for what it refused
 ambre-bus | src/app/prose.rs | crate::app::prose | <EncodedCursor as ambre_core::PayloadKind>::NAME | const | &'static str	free-text	the role name a debug form prints for a person
+ambre-bus | src/app/prose.rs | crate::app::prose | InvalidHeadingLevel::get() | ret | u8	newtype-inner	the InvalidHeadingLevel newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/prose.rs | crate::app::prose | InvalidHeadingLevel::new(value) | param | u8	newtype-inner	the constructor of the InvalidHeadingLevel newtype
+ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple::get() | ret | f32	newtype-inner	the InvalidLineSpacingMultiple newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple::new(value) | param | f32	newtype-inner	the constructor of the InvalidLineSpacingMultiple newtype
+ambre-bus | src/app/prose.rs | crate::app::prose | InvalidOrderedStyle::get() | ret | u8	newtype-inner	the InvalidOrderedStyle newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/prose.rs | crate::app::prose | InvalidOrderedStyle::new(value) | param | u8	newtype-inner	the constructor of the InvalidOrderedStyle newtype
+ambre-bus | src/app/prose.rs | crate::app::prose | StyleId::as_str() | ret | &str	newtype-inner	the StyleId newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/prose.rs | crate::app::prose | StyleId::new(value) | param | String	newtype-inner	the constructor of the StyleId newtype
+ambre-bus | src/app/prose.rs | crate::app::prose | TextAck::get() | ret | u64	newtype-inner	the TextAck newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/prose.rs | crate::app::prose | TextAck::new(value) | param | u64	newtype-inner	the constructor of the TextAck newtype
 ambre-bus | src/app/toile.rs | crate::app::toile | LockState::is_locked() | ret | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/toile.rs | crate::app::toile | LockState::locked_if(locked) | param | bool	newtype-inner	the enum's own constructor from, or predicate to, the bool it replaces
 ambre-bus | src/app/toile.rs | crate::app::toile | VoteTotal.0 | field | i64	newtype-inner	the newtype's own inside, accessor or constructor
@@ -3235,6 +3279,8 @@ ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::as_str() | ret | &
 ambre-logic | src/fixtures.rs | crate::fixtures | CommitHash::new(text) | param | &str	newtype-inner	the newtype's own inside, accessor or constructor
 ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash.0 | field | String	free-text	the rejected text the error prints
 ambre-logic | src/fixtures.rs | crate::fixtures::unknown_commit | UNKNOWN | const | &str	free-text	the manifest's wire word for a build with no commit id
+ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash::as_str() | ret | &str	newtype-inner	the InvalidCommitHash newtype unwrapped, for a caller outside its module
+ambre-logic | src/fixtures.rs | crate::fixtures | InvalidCommitHash::new(value) | param | String	newtype-inner	the constructor of the InvalidCommitHash newtype
 ambre-prose | src/layout/place.rs | crate::layout::place | place_tail_until(stop) | param | impl Fn(BlockIndex,&Cursor)->bool	generic	the stop predicate over a block and the cursor
 ambre-prose | src/view/slash.rs | crate::view::slash | SlashMenuState.items | field | SlashChoiceVec<&'static str>	free-text	the labels of the slash menu entries
 ambre-server | src/middleware/rate_limit.rs | crate::middleware::rate_limit | InstanceId.0 | field | uuid::Uuid	newtype-inner	the newtype's own inside, accessor or constructor
@@ -3626,6 +3672,8 @@ ambre-commands | src/keybinding.rs | crate::keybinding | KeyChar::new(c) | param
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason.0 | field | String	newtype-inner	the inside of a skip reason: the line the user reads
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::as_str() | ret | &str	newtype-inner	the one way out of a skip reason, to a toast or a log line
 ambre-bus | src/app/toile.rs | crate::app::toile | SkipReason::new(reason) | param | impl Into<String>	newtype-inner	the constructor of a skip reason, from the line an importer writes
+ambre-bus | src/app/toile.rs | crate::app::toile | InvalidUnitFraction::get() | ret | f32	newtype-inner	the InvalidUnitFraction newtype unwrapped, for a caller outside its module
+ambre-bus | src/app/toile.rs | crate::app::toile | InvalidUnitFraction::new(value) | param | f32	newtype-inner	the constructor of the InvalidUnitFraction newtype
 ambre-prose | src/band.rs | crate::band | FieldMark::key() | ret | &'static str	newtype-inner	the mark key LoroText::mark stores for FieldMark's field; field_of is the one reader
 ambre-prose | src/band.rs | crate::band | FieldMark::value() | ret | &'static str	newtype-inner	the mark value LoroText::mark stores for FieldMark's field; field_of is the one reader
 ambre-prose | src/xref.rs | crate::xref | CrossRefMark.0 | field | String	newtype-inner	CrossRefMark's own hex text

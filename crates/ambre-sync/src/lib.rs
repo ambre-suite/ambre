@@ -81,7 +81,19 @@ pub struct LogicSink(std::rc::Rc<dyn Fn(LogicEvent)>);
 /// existing call sites are unchanged. The failed event is boxed so the `Err`
 /// variant stays small, the `LogicEvent` payload being large. `send` is in
 /// practice infallible, so this never allocates on the hot path.
-pub struct SendError(pub Box<LogicEvent>);
+pub struct SendError(Box<LogicEvent>);
+
+impl SendError {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: Box<LogicEvent>) -> Self {
+        Self(value)
+    }
+
+    /// Returns the wrapped value.
+    pub fn into_inner(self) -> Box<LogicEvent> {
+        self.0
+    }
+}
 
 impl LogicSink {
     /// Wrap an arbitrary emit closure.
@@ -809,8 +821,8 @@ impl SyncDocumentState {
             pending_updates: Vec::new(),
             pending_uploads: Vec::new(),
             current_snapshot_id,
-            local_clock: Clock(0),
-            ephemeral_counter: Counter(0),
+            local_clock: Clock::new(0),
+            ephemeral_counter: Counter::new(0),
             last_seq: Seq::new(0),
             ingested: BTreeSet::new(),
             known_snapshots: HashSet::from([current_snapshot_id]),
@@ -906,7 +918,7 @@ impl SyncDocumentState {
             .ephemeral_remote_counters
             .get(author_pk)
             .copied()
-            .unwrap_or(Counter(0));
+            .unwrap_or(Counter::new(0));
         if counter <= last {
             return false;
         }
@@ -1925,13 +1937,13 @@ mod ephemeral_tests {
     fn monotonic_counter_accepted_replay_dropped() {
         let mut d = doc_state();
         let author = FixedBytes::from_array([1u8; 32]);
-        assert!(d.accept_ephemeral_counter(&author, Counter(1)));
-        assert!(d.accept_ephemeral_counter(&author, Counter(2)));
+        assert!(d.accept_ephemeral_counter(&author, Counter::new(1)));
+        assert!(d.accept_ephemeral_counter(&author, Counter::new(2)));
         // Replay / stale counters are dropped.
-        assert!(!d.accept_ephemeral_counter(&author, Counter(2)));
-        assert!(!d.accept_ephemeral_counter(&author, Counter(1)));
+        assert!(!d.accept_ephemeral_counter(&author, Counter::new(2)));
+        assert!(!d.accept_ephemeral_counter(&author, Counter::new(1)));
         // Forward progress resumes.
-        assert!(d.accept_ephemeral_counter(&author, Counter(3)));
+        assert!(d.accept_ephemeral_counter(&author, Counter::new(3)));
     }
 
     #[test]
@@ -1942,7 +1954,7 @@ mod ephemeral_tests {
             let mut author = [0u8; 32];
             author[..8].copy_from_slice(&i.to_le_bytes());
             let author = FixedBytes::from_array(author);
-            assert!(d.accept_ephemeral_counter(&author, Counter(1)));
+            assert!(d.accept_ephemeral_counter(&author, Counter::new(1)));
         }
         assert!(d.ephemeral_remote_counters.len() <= MAX_EPHEMERAL_REMOTE_AUTHORS);
     }
@@ -2082,7 +2094,7 @@ mod seal_tests {
                 pub_key,
                 key_id,
                 snapshot_id: Id::<Snapshot>::from_bytes([3u8; 16]),
-                clock: Clock(1),
+                clock: Clock::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2094,7 +2106,7 @@ mod seal_tests {
                 document_id: id,
                 pub_key,
                 key_id,
-                counter: Counter(1),
+                counter: Counter::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

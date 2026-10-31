@@ -22,7 +22,7 @@ use ambre_core::id::{Element, Id};
 /// Declared here rather than in the chrome, which is wasm-only: an identity the
 /// registry describes must be reachable from a host test
 /// (`ambre-spec-commands.md`).
-pub const FIND: CommandId = CommandId("toile.find.open");
+pub const FIND: CommandId = CommandId::new("toile.find.open");
 
 /// Index of `focus` within `hits`, or `None` when there is no focus or it is no
 /// longer a hit. A query change can drop the previously focused element. The

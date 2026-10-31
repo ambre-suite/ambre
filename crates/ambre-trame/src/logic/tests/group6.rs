@@ -288,7 +288,7 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
         text: "apple".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
@@ -444,7 +444,7 @@ fn replace_all_spans_sheets() {
         text: "foo".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
@@ -468,7 +468,7 @@ fn replace_all_spans_sheets() {
     state.handle_command(TrameCommand::Undo);
     assert_eq!(read_cell(&mut state, 0, 0), "foo");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "foo");
 }

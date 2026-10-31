@@ -33,13 +33,13 @@ impl MessageCount {
     /// The count as the bus names the messages past a reader's cursor.
     #[must_use]
     pub const fn unread(self) -> ambre_bus::UnreadCount {
-        ambre_bus::UnreadCount(self.get())
+        ambre_bus::UnreadCount::new(self.get())
     }
 
     /// The count as the bus names the messages that mention a reader.
     #[must_use]
     pub const fn mentions(self) -> ambre_bus::MentionCount {
-        ambre_bus::MentionCount(self.get())
+        ambre_bus::MentionCount::new(self.get())
     }
 }
 

@@ -599,7 +599,7 @@ mod handler_tests {
                 redis,
                 &doc,
                 &aa,
-                ambre_protocol::messages::Clock(4)
+                ambre_protocol::messages::Clock::new(4)
             )
             .await
         ));
@@ -639,7 +639,7 @@ mod handler_tests {
             redis,
             &doc,
             ambre_core::Seq::new(9),
-            &[(aa, ambre_protocol::messages::Clock(9))],
+            &[(aa, ambre_protocol::messages::Clock::new(9))],
         )
         .await
         .unwrap();
@@ -1466,7 +1466,7 @@ mod handler_tests {
                 &doc,
                 &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1u8; 32]),
                 &snapshot,
-                ambre_protocol::messages::Clock(seq),
+                ambre_protocol::messages::Clock::new(seq),
                 ambre_core::Seq::new(seq),
                 &ambre_core::ObjectKey::from("k"),
             )
@@ -3365,7 +3365,7 @@ mod handler_tests {
                 &document,
                 &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
                 &Id::<Snapshot>::mint(),
-                ambre_protocol::messages::Clock(seq.unsigned_abs()),
+                ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
                 ambre_core::Seq::new(seq.unsigned_abs()),
                 &ambre_core::ObjectKey::new(format!("k{seq}")),
             )

@@ -357,7 +357,7 @@ mod tests {
     fn canonicalize_name_to_id() {
         let ast = parse_formula("Sheet2!A1+1").unwrap();
         let name_to_id =
-            |n: &SheetName| (n.as_str() == "Sheet2").then(|| SheetId("s0_a1b2".to_owned()));
+            |n: &SheetName| (n.as_str() == "Sheet2").then(|| SheetId::new("s0_a1b2".to_owned()));
         let canon = canonicalize(ast, &name_to_id);
         assert_eq!(render(&canon), "#s0_a1b2!A1+1");
     }
@@ -390,7 +390,8 @@ mod tests {
         let shown = render(&to_display_form(ast, &id_to_name));
         assert_eq!(shown, "'Bob''s'!A1");
         let back = parse_formula(&shown).unwrap();
-        let name_to_id = |n: &SheetName| (n.as_str() == "Bob's").then(|| SheetId("s0".to_owned()));
+        let name_to_id =
+            |n: &SheetName| (n.as_str() == "Bob's").then(|| SheetId::new("s0".to_owned()));
         assert_eq!(render(&canonicalize(back, &name_to_id)), "#s0!A1");
     }
 

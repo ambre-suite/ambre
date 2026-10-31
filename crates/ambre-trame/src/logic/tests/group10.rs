@@ -277,7 +277,7 @@ fn a_workbook_replace_keeps_the_active_sheet() {
     });
     set(&mut state, 0, 0, "foo");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
 
     let out = state.handle_command(TrameCommand::ReplaceAll {
@@ -294,7 +294,7 @@ fn a_workbook_replace_keeps_the_active_sheet() {
     assert!(
         !out.display.iter().any(|e| matches!(
             e,
-            TrameEvent::SheetList { active, .. } if active.0 != "s0"
+            TrameEvent::SheetList { active, .. } if active.as_str() != "s0"
         )),
         "the replace moved the user to another sheet"
     );

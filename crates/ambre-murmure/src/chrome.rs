@@ -1979,11 +1979,11 @@ fn entry_view(
         }
         Activity::Count { messages, mentions } => Some(
             view! {
-                {(mentions.0 > 0).then(|| view! {
-                    <span class="murmure-mentions" aria-label="Mentions">{mentions.0}</span>
+                {(mentions.get() > 0).then(|| view! {
+                    <span class="murmure-mentions" aria-label="Mentions">{mentions.get()}</span>
                 })}
-                {(messages.0 > 0).then(|| view! {
-                    <span class="murmure-count" aria-label="Unread messages">{messages.0}</span>
+                {(messages.get() > 0).then(|| view! {
+                    <span class="murmure-count" aria-label="Unread messages">{messages.get()}</span>
                 })}
             }
             .into_any(),

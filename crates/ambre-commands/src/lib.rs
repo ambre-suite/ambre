@@ -20,12 +20,24 @@ pub use mode::{ClipboardWrite, PasteForm, SelectionMode};
 
 use std::collections::HashMap;
 
-/// Stable, namespaced identifier, for example `CommandId("prose.format.bold")`.
+/// Stable, namespaced identifier, for example `CommandId::new("prose.format.bold")`.
 ///
 /// The `&'static str` is the identity: two `CommandId`s are equal iff their
 /// strings are equal, which makes them cheap map keys and trivially `Copy`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct CommandId(pub &'static str);
+pub struct CommandId(&'static str);
+
+impl CommandId {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: &'static str) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub const fn as_str(self) -> &'static str {
+        self.0
+    }
+}
 
 /// Locale selector for command labels. Minimal today (the two shipping UI
 /// languages); extend as i18n grows.
@@ -39,12 +51,36 @@ pub enum Locale {
 /// Opaque icon handle. The concrete glyph/asset is resolved by the chrome's
 /// icon set; the registry only carries the reference.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct IconId(pub &'static str);
+pub struct IconId(&'static str);
+
+impl IconId {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: &'static str) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub const fn as_str(self) -> &'static str {
+        self.0
+    }
+}
 
 /// Grouping key for the command palette and for ribbon tabs (one category =
-/// one tab), for example `CommandCategory("format")`.
+/// one tab), for example `CommandCategory::new("format")`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct CommandCategory(pub &'static str);
+pub struct CommandCategory(&'static str);
+
+impl CommandCategory {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: &'static str) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub const fn as_str(self) -> &'static str {
+        self.0
+    }
+}
 
 /// Static description of a command. Apps build `const` tables of these and
 /// expose them through [`CommandSource`].

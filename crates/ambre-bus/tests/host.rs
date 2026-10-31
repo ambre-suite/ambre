@@ -988,7 +988,7 @@ fn read_only_and_local_commands_are_not_mutating() {
             kind: SelectionKind::Cells,
         }),
         AppCommand::Trame(TrameCommand::ActivateSheet {
-            sheet_id: ambre_bus::SheetId("s1".to_owned()),
+            sheet_id: ambre_bus::SheetId::new("s1".to_owned()),
         }),
         // Trame: read-only queries.
         AppCommand::Trame(TrameCommand::RequestSelectionStats),

@@ -15,7 +15,7 @@ fn update_roundtrip() {
             pub_key: FixedBytes::from_array([5u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Clock(42),
+            clock: Clock::new(42),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -52,8 +52,8 @@ fn snapshot_roundtrip() {
             snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: Some(FixedBytes::from_array([13u8; 32])),
             parent_snapshot_update_clocks: vec![
-                (FixedBytes::from_array([15u8; 32]), Clock(16)),
-                (FixedBytes::from_array([17u8; 32]), Clock(18)),
+                (FixedBytes::from_array([15u8; 32]), Clock::new(16)),
+                (FixedBytes::from_array([17u8; 32]), Clock::new(18)),
             ],
         },
         commitment_tag: FixedBytes::from_array([19u8; 32]),
@@ -95,7 +95,7 @@ fn ephemeral_roundtrip() {
             document_id: Id::<Document>::mint(),
             pub_key: FixedBytes::from_array([25u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
-            counter: Counter(26),
+            counter: Counter::new(26),
         },
         commitment_tag: FixedBytes::from_array([27u8; 32]),
         signature: FixedBytes::from_array([28u8; 64]),
@@ -126,7 +126,7 @@ fn ws_messages_roundtrip() {
             pub_key: FixedBytes::from_array([3u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Clock(4),
+            clock: Clock::new(4),
         },
         commitment_tag: FixedBytes::from_array([5u8; 32]),
         signature: FixedBytes::from_array([6u8; 64]),
@@ -255,7 +255,7 @@ fn sample_update(fill: u8) -> Update {
             pub_key: FixedBytes::from_array([fill + 2; 32]),
             key_id: FixedBytes::from_array([fill + 3; 16]),
             snapshot_id: Id::<id::Snapshot>::from_bytes([fill + 4; 16]),
-            clock: Clock(u64::from(fill) + 5),
+            clock: Clock::new(u64::from(fill) + 5),
         },
         commitment_tag: FixedBytes::from_array([fill + 6; 32]),
         signature: FixedBytes::from_array([fill + 7; 64]),
@@ -270,7 +270,7 @@ fn sample_ephemeral(fill: u8) -> Ephemeral {
             document_id: Id::<Document>::from_bytes([fill + 2; 16]),
             pub_key: FixedBytes::from_array([fill + 3; 32]),
             key_id: FixedBytes::from_array([fill + 4; 16]),
-            counter: Counter(u64::from(fill) + 5),
+            counter: Counter::new(u64::from(fill) + 5),
         },
         commitment_tag: FixedBytes::from_array([fill + 6; 32]),
         signature: FixedBytes::from_array([fill + 7; 64]),
@@ -341,12 +341,12 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::KeyRefused {
             document_id: doc,
             key_id: FixedBytes::from_array([10; 16]),
-            clock: Clock(11),
+            clock: Clock::new(11),
         },
         S::ClockRefused {
             document_id: doc,
-            clock: Clock(12),
-            expected: Clock(13),
+            clock: Clock::new(12),
+            expected: Clock::new(13),
             signature: FixedBytes::from_array([14; 64]),
         },
         S::MembersChanged { document_id: doc },
@@ -455,7 +455,7 @@ fn the_relay_reads_only_the_listed_fields() {
             pub_key: pk,
             key_id: kid,
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Clock(1),
+            clock: Clock::new(1),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -481,7 +481,7 @@ fn the_relay_reads_only_the_listed_fields() {
             document_id: doc,
             pub_key: pk,
             key_id: kid,
-            counter: Counter(1),
+            counter: Counter::new(1),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
         signature: FixedBytes::from_array([7u8; 64]),
@@ -533,7 +533,7 @@ fn the_relay_reads_only_the_listed_fields() {
     } = public_data;
     assert_eq!(
         (document_id, pub_key, key_id, counter),
-        (doc, pk, kid, Counter(1))
+        (doc, pk, kid, Counter::new(1))
     );
 }
 

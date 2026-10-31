@@ -27,9 +27,19 @@ pub use ambre_core::Seq;
 /// every one the author used for the document (`SYNC-024`). It is not a
 /// Lamport clock: no peer's clock moves it (`SYNC-025`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Clock(pub u64);
+pub struct Clock(u64);
 
 impl Clock {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
     /// The clock just after this one: the next update its author seals.
     #[must_use]
     pub const fn next(self) -> Self {
@@ -65,7 +75,19 @@ impl std::fmt::Display for Clock {
 
 /// Ephemeral counter (client-side).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Counter(pub u64);
+pub struct Counter(u64);
+
+impl Counter {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
 
 // -----------------------------------------------------------------------------
 

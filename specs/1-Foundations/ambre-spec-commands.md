@@ -83,7 +83,7 @@ and the document schema in one type.
 
 ```rust
 /// Stable namespaced identifier, for example "prose.format.bold".
-pub struct CommandId(pub &'static str);
+pub struct CommandId(&'static str);
 
 /// The description every view of a command derives from (`UI-THREAD-019`).
 pub struct Command {

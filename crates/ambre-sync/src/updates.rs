@@ -115,7 +115,7 @@ impl SyncState {
             tracing::info!(
                 "[Sync->Logic] decrypted update doc={document_id} seq={} clock={} size={}",
                 seq.get(),
-                update.public_data.clock.0,
+                update.public_data.clock.get(),
                 opened.as_ref().map_or(0, |d| d.payload.len().get()),
             );
             return Some(opened);
@@ -166,8 +166,8 @@ impl SyncState {
                     updates
                         .iter()
                         .enumerate()
-                        .min_by_key(|(_, (_, u))| u.public_data.clock.0)
-                        .map(|(idx, (_, u))| (*snap, idx, u.public_data.clock.0))
+                        .min_by_key(|(_, (_, u))| u.public_data.clock.get())
+                        .map(|(idx, (_, u))| (*snap, idx, u.public_data.clock.get()))
                 })
                 .min_by_key(|&(_, _, clock)| clock);
 
@@ -461,7 +461,7 @@ impl SyncState {
                 .remove(&snapshot_id)
                 .unwrap_or_default()
         };
-        pending.sort_by_key(|(_, u)| u.public_data.clock.0);
+        pending.sort_by_key(|(_, u)| u.public_data.clock.get());
         if let Some(doc_state) = self.documents.get_mut(&document_id)
             && doc_state.quarantine_len() < QUARANTINE_ALERT
         {
@@ -1570,11 +1570,11 @@ impl SyncState {
         };
         // A wrapped counter would read as a replay to every peer, so an
         // exhausted counter drops the ephemeral instead.
-        let Some(next) = doc_state.ephemeral_counter.0.checked_add(1) else {
+        let Some(next) = doc_state.ephemeral_counter.get().checked_add(1) else {
             tracing::warn!("Sync: ephemeral counter exhausted for {document_id:?}, dropping");
             return;
         };
-        doc_state.ephemeral_counter.0 = next;
+        doc_state.ephemeral_counter = ambre_protocol::messages::Counter::new(next);
         let public_data = EphemeralPublicData {
             document_id,
             pub_key,
@@ -2020,7 +2020,14 @@ mod tests {
         doc_state.rotate_key(new_key.clone());
 
         let under = |key: &DocumentKey| {
-            make_update(document_id, snapshot, Clock(1), b"d", key, &signing_key)
+            make_update(
+                document_id,
+                snapshot,
+                Clock::new(1),
+                b"d",
+                key,
+                &signing_key,
+            )
         };
         let opened = |key: &DocumentKey| {
             doc_state
@@ -2078,7 +2085,7 @@ mod tests {
         assert!(opened, "the snapshot opens under a key the chain recovers");
 
         let doc_state = &state.documents[&doc];
-        let old = make_update(doc, snapshot_id, Clock(1), b"d", &keys[1], &sk);
+        let old = make_update(doc, snapshot_id, Clock::new(1), b"d", &keys[1], &sk);
         assert_eq!(
             doc_state
                 .open_signed_update(&old, Seq::new(1))
@@ -2126,7 +2133,7 @@ mod tests {
     #[test]
     fn update_with_known_snapshot_delivered_immediately() {
         let (mut state, rx, doc, key, sk, snap) = setup();
-        let update = make_update(doc, snap, Clock(1), b"hello", &key, &sk);
+        let update = make_update(doc, snap, Clock::new(1), b"hello", &key, &sk);
 
         state.receive_update(Seq::new(1), update);
 
@@ -2159,7 +2166,7 @@ mod tests {
             pub_key: FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes()),
             key_id: key.id(),
             snapshot_id: snap,
-            clock: Clock(1),
+            clock: Clock::new(1),
         };
         let body = pipeline::update_body(&TEST_NONCE, Some(&summary), &b"liked".to_vec().into())
             .expect("bounds");
@@ -2167,7 +2174,7 @@ mod tests {
         state.receive_update(Seq::new(1), sealed);
         state.receive_update(
             Seq::new(2),
-            make_update(doc, snap, Clock(2), b"plain", &key, &sk),
+            make_update(doc, snap, Clock::new(2), b"plain", &key, &sk),
         );
         let handed: Vec<_> = drain(&rx)
             .into_iter()
@@ -2203,12 +2210,12 @@ mod tests {
             .set_signing_keys([(signer, alice)]);
         state.receive_update(
             Seq::new(1),
-            make_update(doc, snap, Clock(1), b"hello", &key, &sk),
+            make_update(doc, snap, Clock::new(1), b"hello", &key, &sk),
         );
         let stranger = MasterSeed::generate().derive_signing_key();
         state.receive_update(
             Seq::new(2),
-            make_update(doc, snap, Clock(1), b"hi", &key, &stranger),
+            make_update(doc, snap, Clock::new(1), b"hi", &key, &stranger),
         );
 
         let deltas: Vec<SignedDelta> = drain(&rx)
@@ -2272,7 +2279,7 @@ mod tests {
             pub_key: FixedBytes::<PublicKey>::from_array(sk.verifying_key().to_bytes()),
             key_id: key.id(),
             snapshot_id: snap,
-            clock: Clock(1),
+            clock: Clock::new(1),
         };
         let short = UpdateFrame::from_bytes(vec![6; 16]);
         let short = pipeline::seal_update(&short, public_data, &key, &sk).unwrap();
@@ -2291,7 +2298,7 @@ mod tests {
     fn update_with_unknown_snapshot_quarantined() {
         let (mut state, rx, doc, key, sk, _snap) = setup();
         let unknown = Id::<Snapshot>::mint();
-        let update = make_update(doc, unknown, Clock(1), b"later", &key, &sk);
+        let update = make_update(doc, unknown, Clock::new(1), b"later", &key, &sk);
 
         state.receive_update(Seq::new(1), update);
 
@@ -2306,11 +2313,11 @@ mod tests {
         // Arrive out of clock order: clock 5 then clock 2.
         state.receive_update(
             Seq::new(1),
-            make_update(doc, parent, Clock(5), b"five", &key, &sk),
+            make_update(doc, parent, Clock::new(5), b"five", &key, &sk),
         );
         state.receive_update(
             Seq::new(2),
-            make_update(doc, parent, Clock(2), b"two", &key, &sk),
+            make_update(doc, parent, Clock::new(2), b"two", &key, &sk),
         );
         assert!(drain(&rx).is_empty());
         assert_eq!(state.documents[&doc].quarantine_len(), 2);
@@ -2346,11 +2353,11 @@ mod tests {
         let parent = Id::<Snapshot>::mint();
         state.receive_update(
             Seq::new(1),
-            make_update(doc, parent, Clock(5), b"five", &key, &sk),
+            make_update(doc, parent, Clock::new(5), b"five", &key, &sk),
         );
         state.receive_update(
             Seq::new(2),
-            make_update(doc, parent, Clock(2), b"two", &key, &sk),
+            make_update(doc, parent, Clock::new(2), b"two", &key, &sk),
         );
         assert!(drain(&rx).is_empty(), "an unknown parent holds both");
         assert_eq!(state.documents[&doc].quarantine_len(), 2);
@@ -2374,7 +2381,7 @@ mod tests {
         for clock in 1..=(QUARANTINE_LIMIT as u64) {
             state.receive_update(
                 Seq::new(clock),
-                make_update(doc, parent, Clock(clock), b"x", &key, &sk),
+                make_update(doc, parent, Clock::new(clock), b"x", &key, &sk),
             );
         }
 
@@ -2400,14 +2407,14 @@ mod tests {
             let parent = parents[i % 2];
             state.receive_update(
                 Seq::new(i as u64 + 1),
-                make_update(doc, parent, Clock(clock), b"x", &key, &sk),
+                make_update(doc, parent, Clock::new(clock), b"x", &key, &sk),
             );
         }
         let held: std::collections::BTreeSet<u64> = state.documents[&doc]
             .quarantine
             .values()
             .flatten()
-            .map(|(_, u)| u.public_data.clock.0)
+            .map(|(_, u)| u.public_data.clock.get())
             .collect();
         assert_eq!(held.len(), QUARANTINE_LIMIT - 1);
         assert!(!held.contains(&1), "the lowest clock left");
@@ -3064,7 +3071,7 @@ mod tests {
         let announced = Id::<Snapshot>::mint();
         state.receive_update(
             Seq::new(1),
-            make_update(doc, announced, Clock(1), b"after", &key, &sk),
+            make_update(doc, announced, Clock::new(1), b"after", &key, &sk),
         );
         state.handle_ws_message(WsServerMsg::SnapshotAvailable {
             document_id: doc,
@@ -3346,7 +3353,7 @@ mod tests {
         for clock in 1..=(QUARANTINE_ALERT as u64 + 50) {
             state.receive_update(
                 Seq::new(clock),
-                make_update(doc, parent, Clock(clock), b"x", &key, &sk),
+                make_update(doc, parent, Clock::new(clock), b"x", &key, &sk),
             );
         }
         let asks = |rx: &ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>| {
@@ -3362,7 +3369,7 @@ mod tests {
         // The relay numbers every delta once, so the next gap takes new numbers.
         let first = QUARANTINE_ALERT as u64 + 50;
         for clock in 1..=(QUARANTINE_ALERT as u64) {
-            let update = make_update(doc, other, Clock(clock), b"x", &key, &sk);
+            let update = make_update(doc, other, Clock::new(clock), b"x", &key, &sk);
             state.receive_update(Seq::new(first + clock), update);
         }
         assert_eq!(asks(&ws_rx), 1, "one request for the next gap");
@@ -3389,7 +3396,7 @@ mod tests {
                     let body = pipeline::open_update(&u, key).expect("opens");
                     let delta = pipeline::split_update_body(body).expect("splits").delta;
                     Some((
-                        u.public_data.clock.0,
+                        u.public_data.clock.get(),
                         u.public_data.key_id,
                         delta.into_bytes(),
                     ))
@@ -3426,8 +3433,8 @@ mod tests {
 
         state.handle_ws_message(WsServerMsg::ClockRefused {
             document_id: doc,
-            clock: Clock(1),
-            expected: Clock(2),
+            clock: Clock::new(1),
+            expected: Clock::new(2),
             signature: first[0],
         });
         let mut msgs = drain_ws(&ws_rx);
@@ -3443,8 +3450,8 @@ mod tests {
 
         state.handle_ws_message(WsServerMsg::ClockRefused {
             document_id: doc,
-            clock: Clock(2),
-            expected: Clock(2),
+            clock: Clock::new(2),
+            expected: Clock::new(2),
             signature: first[1],
         });
         let late = drain_ws(&ws_rx);
@@ -3603,8 +3610,8 @@ mod tests {
         state.handle_send_update(doc, b"c".to_vec());
         state.handle_ws_message(WsServerMsg::ClockRefused {
             document_id: doc,
-            clock: Clock(2),
-            expected: Clock(1),
+            clock: Clock::new(2),
+            expected: Clock::new(1),
             signature: sent[1],
         });
         assert!(
@@ -3782,7 +3789,7 @@ mod tests {
         let ours = drain_ws(&ws_rx);
         assert_eq!(state.documents[&doc].rekey.sent_len(), 1);
 
-        let theirs = make_update(doc, snap, Clock(1), b"other session", &key, &sk);
+        let theirs = make_update(doc, snap, Clock::new(1), b"other session", &key, &sk);
         state.receive_update(Seq::new(1), theirs);
         assert_eq!(
             state.documents[&doc].rekey.sent_len(),
@@ -3817,7 +3824,7 @@ mod tests {
         state.handle_ws_message(WsServerMsg::KeyRefused {
             document_id: doc,
             key_id: k1.id(),
-            clock: Clock(1),
+            clock: Clock::new(1),
         });
         state.handle_send_update(doc, b"b".to_vec());
         assert!(drain_ws(&ws_rx).is_empty(), "nothing leaves before the key");
@@ -3837,7 +3844,7 @@ mod tests {
         state.handle_ws_message(WsServerMsg::KeyRefused {
             document_id: doc,
             key_id: k1.id(),
-            clock: Clock(1),
+            clock: Clock::new(1),
         });
         assert!(drain_ws(&ws_rx).is_empty(), "a late refusal is stale");
     }
@@ -3864,7 +3871,7 @@ mod tests {
         state.handle_ws_message(WsServerMsg::KeyRefused {
             document_id: doc,
             key_id: k1.id(),
-            clock: Clock(1),
+            clock: Clock::new(1),
         });
         assert_eq!(
             sent_updates(&ws_rx, &[&k1, &k2]),
@@ -3891,7 +3898,7 @@ mod tests {
         assert_eq!(doc_state.doc_key.id(), k2.id());
         let cached: Vec<_> = doc_state.old_keys.iter().map(DocumentKey::id).collect();
         assert_eq!(cached, vec![k1.id()]);
-        let late = make_update(doc, snap, Clock(1), b"late", &k1, &sk);
+        let late = make_update(doc, snap, Clock::new(1), b"late", &k1, &sk);
         assert_eq!(
             doc_state
                 .open_signed_update(&late, Seq::new(1))
@@ -3965,11 +3972,11 @@ mod tests {
     #[test]
     fn every_refused_frame_reaches_logic_as_a_warning() {
         let (mut state, rx, doc, key, sk, snap) = setup();
-        let mut unsigned = make_update(doc, snap, Clock(1), b"a", &key, &sk);
+        let mut unsigned = make_update(doc, snap, Clock::new(1), b"a", &key, &sk);
         unsigned.signature = FixedBytes::from_array([0; 64]);
         let stranger = DocumentKey::generate();
-        let under_stranger = make_update(doc, snap, Clock(2), b"b", &stranger, &sk);
-        let mut corrupt = make_update(doc, snap, Clock(3), b"c", &key, &sk);
+        let under_stranger = make_update(doc, snap, Clock::new(2), b"b", &stranger, &sk);
+        let mut corrupt = make_update(doc, snap, Clock::new(3), b"c", &key, &sk);
         corrupt.commitment_tag = FixedBytes::from_array([0; 32]);
 
         let mut messages = Vec::new();
@@ -4046,11 +4053,11 @@ mod tests {
         );
         state.receive_update(
             Seq::new(1),
-            make_update(doc, snap, Clock(1), b"a", &key, &sk),
+            make_update(doc, snap, Clock::new(1), b"a", &key, &sk),
         );
         state.receive_update(
             Seq::new(2),
-            make_update(doc, snap, Clock(2), b"b", &key, &sk),
+            make_update(doc, snap, Clock::new(2), b"b", &key, &sk),
         );
         state.handle_send_update(doc, b"c".to_vec());
         assert_eq!(
@@ -4111,7 +4118,7 @@ mod tests {
         let (mut state, rx, doc, key, sk, snap) = setup();
         let update = |seq: u64, parent| SeqUpdate {
             seq: Seq::new(seq),
-            update: make_update(doc, parent, Clock(seq), &[seq as u8], &key, &sk),
+            update: make_update(doc, parent, Clock::new(seq), &[seq as u8], &key, &sk),
         };
         state.handle_ws_message(WsServerMsg::Update {
             seq: Seq::new(3),
@@ -4147,7 +4154,7 @@ mod tests {
         let updates = (1..=5)
             .map(|seq| SeqUpdate {
                 seq: Seq::new(seq),
-                update: make_update(doc, snap, Clock(seq), &[seq as u8], &key, &sk),
+                update: make_update(doc, snap, Clock::new(seq), &[seq as u8], &key, &sk),
             })
             .collect();
         state.handle_ws_message(WsServerMsg::MissingUpdates {
@@ -4179,13 +4186,13 @@ mod tests {
         let peer = MasterSeed::generate().derive_signing_key();
         state.receive_update(
             Seq::new(1),
-            make_update(doc, snap, Clock(41), b"mine", &key, &sk),
+            make_update(doc, snap, Clock::new(41), b"mine", &key, &sk),
         );
         state.receive_update(
             Seq::new(2),
-            make_update(doc, snap, Clock(99), b"peer", &key, &peer),
+            make_update(doc, snap, Clock::new(99), b"peer", &key, &peer),
         );
-        assert_eq!(state.documents[&doc].local_clock, Clock(41));
+        assert_eq!(state.documents[&doc].local_clock, Clock::new(41));
 
         state.handle_command(SyncCommand::SendUpdate {
             document_id: doc,
@@ -4195,7 +4202,7 @@ mod tests {
         let clocks: Vec<u64> = drain_ws(&ws_rx)
             .into_iter()
             .filter_map(|m| match m {
-                WsClientMsg::Update(u) => Some(u.public_data.clock.0),
+                WsClientMsg::Update(u) => Some(u.public_data.clock.get()),
                 _ => None,
             })
             .collect();
@@ -4209,7 +4216,14 @@ mod tests {
     fn a_quarantined_update_is_not_opened_on_arrival() {
         let (mut state, rx, doc, _key, sk, _snap) = setup();
         let stranger = DocumentKey::generate();
-        let update = make_update(doc, Id::<Snapshot>::mint(), Clock(1), b"x", &stranger, &sk);
+        let update = make_update(
+            doc,
+            Id::<Snapshot>::mint(),
+            Clock::new(1),
+            b"x",
+            &stranger,
+            &sk,
+        );
         state.receive_update(Seq::new(1), update);
         assert_eq!(state.documents[&doc].quarantine_len(), 1);
         assert!(drain(&rx).is_empty(), "the arrival opened the update");
@@ -4224,7 +4238,7 @@ mod tests {
         state.signing_key = Some(sk.clone());
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let before = make_update(doc, snap, Clock(1), b"hello", &k1, &sk);
+        let before = make_update(doc, snap, Clock::new(1), b"hello", &k1, &sk);
         state.receive_update(Seq::new(1), before.clone());
         let _ = drain(&rx);
 
@@ -4386,7 +4400,7 @@ mod tests {
         state.handle_ws_message(WsServerMsg::KeyRefused {
             document_id: doc,
             key_id: k1.id(),
-            clock: Clock(1),
+            clock: Clock::new(1),
         });
         assert_eq!(
             sent_bodies(&ws_rx, &k2),
@@ -4425,17 +4439,17 @@ mod tests {
     #[test]
     fn a_refused_frame_is_applied_in_no_part() {
         let (mut state, rx, doc, key, sk, snap) = setup();
-        let mut forged = make_update(doc, snap, Clock(2), b"forged", &key, &sk);
+        let mut forged = make_update(doc, snap, Clock::new(2), b"forged", &key, &sk);
         let mut bytes = forged.ciphertext.as_bytes().to_vec();
         bytes[0] ^= 1;
         forged.ciphertext = ambre_core::Ciphertext::new(bytes);
-        let mut unsigned = make_update(doc, snap, Clock(3), b"unsigned", &key, &sk);
+        let mut unsigned = make_update(doc, snap, Clock::new(3), b"unsigned", &key, &sk);
         unsigned.signature = FixedBytes::from_array([0; 64]);
         let updates = [
-            (1, make_update(doc, snap, Clock(1), b"one", &key, &sk)),
+            (1, make_update(doc, snap, Clock::new(1), b"one", &key, &sk)),
             (2, forged),
             (3, unsigned),
-            (4, make_update(doc, snap, Clock(4), b"four", &key, &sk)),
+            (4, make_update(doc, snap, Clock::new(4), b"four", &key, &sk)),
         ]
         .into_iter()
         .map(|(seq, update)| SeqUpdate {
@@ -4499,11 +4513,18 @@ mod tests {
 
         state.receive_update(
             Seq::new(4),
-            make_update(doc, snap, Clock(1), b"shown", &key, &sk),
+            make_update(doc, snap, Clock::new(1), b"shown", &key, &sk),
         );
         assert_eq!(state.read_up_to(doc), Some(Seq::new(4)));
 
-        let held = make_update(doc, Id::<Snapshot>::mint(), Clock(2), b"held", &key, &sk);
+        let held = make_update(
+            doc,
+            Id::<Snapshot>::mint(),
+            Clock::new(2),
+            b"held",
+            &key,
+            &sk,
+        );
         state.receive_update(Seq::new(5), held);
         assert_eq!(state.read_up_to(doc), None, "a held update stays unread");
     }

@@ -245,8 +245,8 @@ fn activity(
         channels: vec![ChannelActivity {
             channel_id,
             active,
-            unread: counts.map(|(m, _)| UnreadCount(m)),
-            mentions: counts.map(|(_, n)| MentionCount(n)),
+            unread: counts.map(|(m, _)| UnreadCount::new(m)),
+            mentions: counts.map(|(_, n)| MentionCount::new(n)),
         }],
     }
 }

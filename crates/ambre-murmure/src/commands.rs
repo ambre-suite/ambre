@@ -22,44 +22,44 @@ use ambre_core::id::{Channel, Document, Id, Message, User};
 use crate::{MessageRef, MurmurePane, Region};
 
 /// Commands that belong to the application shell rather than a channel.
-const GENERAL: CommandCategory = CommandCategory("general");
+const GENERAL: CommandCategory = CommandCategory::new("general");
 /// Moving from one channel to another.
-const NAVIGATE: CommandCategory = CommandCategory("navigate");
+const NAVIGATE: CommandCategory = CommandCategory::new("navigate");
 /// The read state of the channels.
-const UNREAD: CommandCategory = CommandCategory("unread");
+const UNREAD: CommandCategory = CommandCategory::new("unread");
 /// Finding a message by its words.
-const SEARCH_CATEGORY: CommandCategory = CommandCategory("search");
+const SEARCH_CATEGORY: CommandCategory = CommandCategory::new("search");
 /// The actions of one message, offered in its floating menu.
-const MESSAGE: CommandCategory = CommandCategory("message");
+const MESSAGE: CommandCategory = CommandCategory::new("message");
 
 /// Open the command palette, channels first: a UI-only intent the shell
 /// intercepts (`CHROME-008`).
-pub const PALETTE: CommandId = CommandId("murmure.palette.open");
+pub const PALETTE: CommandId = CommandId::new("murmure.palette.open");
 /// Open the next channel with activity, in sidebar order.
-pub const NEXT_ACTIVITY: CommandId = CommandId("murmure.navigate.next_activity");
+pub const NEXT_ACTIVITY: CommandId = CommandId::new("murmure.navigate.next_activity");
 /// Open the previous channel with activity, in sidebar order.
-pub const PREVIOUS_ACTIVITY: CommandId = CommandId("murmure.navigate.previous_activity");
+pub const PREVIOUS_ACTIVITY: CommandId = CommandId::new("murmure.navigate.previous_activity");
 /// Mark every channel of the user read (the Murmure unread spec).
-pub const MARK_ALL_READ: CommandId = CommandId("murmure.unread.mark_all_read");
+pub const MARK_ALL_READ: CommandId = CommandId::new("murmure.unread.mark_all_read");
 /// Open the search over the loaded segments, on the find chord of every
 /// application (the Murmure search spec).
-pub const SEARCH: CommandId = CommandId("murmure.search.open");
+pub const SEARCH: CommandId = CommandId::new("murmure.search.open");
 /// Open the thread of the message the actions are open on.
-pub const REPLY: CommandId = CommandId("murmure.message.reply");
+pub const REPLY: CommandId = CommandId::new("murmure.message.reply");
 /// Show the channel unread from the message on (the Murmure unread spec).
-pub const MARK_UNREAD: CommandId = CommandId("murmure.message.mark_unread");
+pub const MARK_UNREAD: CommandId = CommandId::new("murmure.message.mark_unread");
 /// Put the text of the message on the clipboard.
-pub const COPY_TEXT: CommandId = CommandId("murmure.message.copy_text");
+pub const COPY_TEXT: CommandId = CommandId::new("murmure.message.copy_text");
 /// Load a message of the member into the composer, to send it edited
 /// (`MURMURE-203`).
-pub const EDIT: CommandId = CommandId("murmure.message.edit");
+pub const EDIT: CommandId = CommandId::new("murmure.message.edit");
 /// Delete a message of the member, once a dialog confirms it (`MURMURE-512`).
-pub const DELETE: CommandId = CommandId("murmure.message.delete");
+pub const DELETE: CommandId = CommandId::new("murmure.message.delete");
 /// Open the emoji picker on the message, to react with the emoji picked
 /// (`MURMURE-140`).
-pub const REACT: CommandId = CommandId("murmure.message.react");
+pub const REACT: CommandId = CommandId::new("murmure.message.react");
 /// Open the list of the keys Murmure takes (`MURMURE-540`).
-pub const KEYS: CommandId = CommandId("murmure.general.keys");
+pub const KEYS: CommandId = CommandId::new("murmure.general.keys");
 
 fn palette_title(_: &Locale) -> String {
     "Command palette".into()
@@ -838,7 +838,11 @@ mod tests {
         let ids = message_actions(&full, Some(full.author));
         assert_eq!(ids, [REPLY, REACT, MARK_UNREAD, COPY_TEXT, EDIT, DELETE]);
         for id in ids {
-            assert!(ambre_commands::find(COMMANDS, id).is_some(), "{}", id.0);
+            assert!(
+                ambre_commands::find(COMMANDS, id).is_some(),
+                "{}",
+                id.as_str()
+            );
         }
     }
 
@@ -1120,7 +1124,11 @@ mod tests {
         .concat();
         for command in COMMANDS {
             for chord in command.keybindings {
-                assert!(!serviced.contains(chord), "{} takes {chord}", command.id.0);
+                assert!(
+                    !serviced.contains(chord),
+                    "{} takes {chord}",
+                    command.id.as_str()
+                );
             }
         }
     }

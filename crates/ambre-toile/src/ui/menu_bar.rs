@@ -29,75 +29,75 @@ use super::menu;
 // and are re-used below; these are the ids the menu bar introduces.
 
 /// Undo the last board mutation (-> `ToileCommand::Undo`).
-pub const UNDO: CommandId = CommandId("toile.edit.undo");
+pub const UNDO: CommandId = CommandId::new("toile.edit.undo");
 /// Redo the last undone mutation (-> `ToileCommand::Redo`).
-pub const REDO: CommandId = CommandId("toile.edit.redo");
+pub const REDO: CommandId = CommandId::new("toile.edit.redo");
 /// Zoom in one notch about the viewport center (local transform, `toile-menus`).
-pub const ZOOM_IN: CommandId = CommandId("toile.view.zoom_in");
+pub const ZOOM_IN: CommandId = CommandId::new("toile.view.zoom_in");
 /// Zoom out one notch about the viewport center.
-pub const ZOOM_OUT: CommandId = CommandId("toile.view.zoom_out");
+pub const ZOOM_OUT: CommandId = CommandId::new("toile.view.zoom_out");
 /// Reset the zoom to 100% (the `%` readout click).
-pub const ZOOM_RESET: CommandId = CommandId("toile.view.zoom_reset");
+pub const ZOOM_RESET: CommandId = CommandId::new("toile.view.zoom_reset");
 /// Fit the whole board into the viewport (Fit).
-pub const ZOOM_FIT: CommandId = CommandId("toile.view.zoom_fit");
+pub const ZOOM_FIT: CommandId = CommandId::new("toile.view.zoom_fit");
 /// Fit the current selection into the viewport (Zoom-to-selection).
-pub const ZOOM_TO_SELECTION: CommandId = CommandId("toile.view.zoom_to_selection");
+pub const ZOOM_TO_SELECTION: CommandId = CommandId::new("toile.view.zoom_to_selection");
 /// Wheel navigation preference, all view-local: `Auto` detects the device
 /// per event, `Mouse` makes the wheel zoom, `Trackpad` makes it pan (Ctrl/pinch
 /// still zooms).
-pub const POINTER_AUTO: CommandId = CommandId("toile.view.pointer_auto");
-pub const POINTER_MOUSE: CommandId = CommandId("toile.view.pointer_mouse");
-pub const POINTER_TRACKPAD: CommandId = CommandId("toile.view.pointer_trackpad");
+pub const POINTER_AUTO: CommandId = CommandId::new("toile.view.pointer_auto");
+pub const POINTER_MOUSE: CommandId = CommandId::new("toile.view.pointer_mouse");
+pub const POINTER_TRACKPAD: CommandId = CommandId::new("toile.view.pointer_trackpad");
 /// Open the comments panel on the whole board (`toile-comments` section 4). A
 /// UI-only intent: the panel is chrome, and the board keeps no open flag.
-pub const COMMENTS: CommandId = CommandId("toile.view.comments");
+pub const COMMENTS: CommandId = CommandId::new("toile.view.comments");
 /// Enter presentation mode (the deck panel of `toile-presentation`). A stub
 /// here: the panel is owned by that feature, not this surface.
-pub const PRESENT: CommandId = CommandId("toile.present.start");
+pub const PRESENT: CommandId = CommandId::new("toile.present.start");
 /// Open the deck panel: the surface that adds a frame to the presentation,
 /// reorders it and removes it (`TOILE-FEAT-026`). A UI-only intent, like
 /// [`COMMENTS`]: the panel is chrome, and the board keeps no open flag.
-pub const DECK: CommandId = CommandId("toile.present.deck");
+pub const DECK: CommandId = CommandId::new("toile.present.deck");
 /// Bring a file onto the board through a picker (`TOILE-IO-020`). A UI-only
 /// intent: the launcher owns the file dialog, and the board learns of the file
 /// only once its bytes are read.
-pub const IMPORT_FILE: CommandId = CommandId("toile.file.import");
+pub const IMPORT_FILE: CommandId = CommandId::new("toile.file.import");
 /// Put a web page on the board (`TOILE-087`). A UI-only intent: the shell owns
 /// the dialog that takes the address, and the board learns of it only once the
 /// address has passed `WebAddress::parse`.
-pub const EMBED_WEB: CommandId = CommandId("toile.file.embed_web");
+pub const EMBED_WEB: CommandId = CommandId::new("toile.file.embed_web");
 /// Put another Ambre document on the board (`TOILE-086`). A UI-only intent for
 /// the same reason: only the launcher knows which documents this user may open,
 /// so only it can offer the list.
-pub const EMBED_DOC: CommandId = CommandId("toile.file.embed_doc");
+pub const EMBED_DOC: CommandId = CommandId::new("toile.file.embed_doc");
 /// Put a link on the selected element (`TOILE-066`). A UI-only intent: the
 /// shell owns the chooser, because two of the three targets are things only it
 /// can offer. Those are an address it validates like an embed's, and the
 /// documents this user may open.
-pub const LINK_SET: CommandId = CommandId("toile.object.link_set");
+pub const LINK_SET: CommandId = CommandId::new("toile.object.link_set");
 /// Take the link off the selected element (`TOILE-066`). Resolves through the
 /// same intent as the chooser, carrying no target.
-pub const LINK_CLEAR: CommandId = CommandId("toile.object.link_clear");
+pub const LINK_CLEAR: CommandId = CommandId::new("toile.object.link_clear");
 /// Take the board out as an SVG document (`TOILE-IO-021`). Resolves to a board
 /// command: the Logic thread holds the board and serializes it.
-pub const EXPORT_SVG: CommandId = CommandId("toile.file.export_svg");
+pub const EXPORT_SVG: CommandId = CommandId::new("toile.file.export_svg");
 /// Take the deck out as a PDF, one page per slide (`TOILE-IO-029`). Resolves to
 /// a board command, like [`EXPORT_SVG`], but the render walk runs on the Logic
 /// thread rather than in the board's own state. The pages are drawn, not
 /// serialized, and the base font faces live there.
-pub const EXPORT_PDF: CommandId = CommandId("toile.file.export_pdf");
+pub const EXPORT_PDF: CommandId = CommandId::new("toile.file.export_pdf");
 /// Write the whole board to a native `.ambre` file (`ambre-spec-docfile.md`).
 /// Unlike the two exports above it drops nothing: the payload **is** the
 /// document (`DOCFILE-001`). Unlike them it is also plaintext, which is why its
 /// own label says so (`DOCFILE-009`). Resolves to a board command the Logic
 /// thread serves, because the container's header carries the document's identity
 /// and the board does not know it.
-pub const SAVE_FILE: CommandId = CommandId("toile.file.save_file");
+pub const SAVE_FILE: CommandId = CommandId::new("toile.file.save_file");
 /// Write the whole board to a native `.ambre` file **sealed under a
 /// passphrase** (`ambre-spec-docfile.md section 5`). The same file as
 /// [`SAVE_FILE`], encrypted. A UI-only intent, because the user types the
 /// passphrase into a dialog the launcher owns and no `CommandId` carries it.
-pub const SAVE_SEALED_FILE: CommandId = CommandId("toile.file.save_sealed_file");
+pub const SAVE_SEALED_FILE: CommandId = CommandId::new("toile.file.save_sealed_file");
 
 /// Every id the menu bar introduces (not shared with `ui::menu`). Used by the
 /// view to recognise the ids it must resolve locally, and by tests.
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn menu_bar_ids_are_distinct() {
-        let mut ids: Vec<&str> = MENU_BAR_COMMANDS.iter().map(|c| c.0).collect();
+        let mut ids: Vec<&str> = MENU_BAR_COMMANDS.iter().map(|c| c.as_str()).collect();
         ids.sort_unstable();
         let len = ids.len();
         ids.dedup();
@@ -319,7 +319,7 @@ mod tests {
     fn no_bar_id_is_also_a_context_id() {
         for id in MENU_BAR_COMMANDS {
             assert!(
-                !menu::COMMANDS.iter().any(|c| c.0 == id.0),
+                !menu::COMMANDS.iter().any(|c| c.as_str() == id.as_str()),
                 "{id:?} is declared by both surfaces"
             );
         }

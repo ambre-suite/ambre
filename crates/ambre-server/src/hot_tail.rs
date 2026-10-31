@@ -310,7 +310,7 @@ mod db_tests {
             doc,
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([5u8; 32]),
             &snap,
-            ambre_protocol::messages::Clock(seq.unsigned_abs()),
+            ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
             ambre_core::Seq::new(seq.unsigned_abs()),
             &wire,
             cap,

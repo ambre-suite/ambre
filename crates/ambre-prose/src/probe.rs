@@ -307,7 +307,7 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         draft.push_str(
-            ambre_bus::app::prose::TextAck(7),
+            ambre_bus::app::prose::TextAck::new(7),
             "a",
             &block(),
             DocOffset::ZERO,
@@ -332,7 +332,7 @@ mod tests {
                 .is_empty(),
             "not yet confirmed"
         );
-        draft.confirm(ambre_bus::app::prose::TextAck(7));
+        draft.confirm(ambre_bus::app::prose::TextAck::new(7));
         let confirm = probe.answered(ambre_core::PageTime::new(20.0), &draft, Answer::Other);
         assert_eq!(confirm.len(), 1);
         assert_eq!(confirm[0].name, ProbeName::Confirm);
@@ -373,7 +373,7 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "a",
             &block(),
             DocOffset::ZERO,
@@ -384,7 +384,7 @@ mod tests {
             &draft,
             Dispatch::Sent,
         );
-        draft.confirm(ambre_bus::app::prose::TextAck(1));
+        draft.confirm(ambre_bus::app::prose::TextAck::new(1));
         assert_eq!(
             probe
                 .answered(ambre_core::PageTime::new(0.5), &draft, Answer::Other)
@@ -392,7 +392,7 @@ mod tests {
             1
         );
         draft.push_str(
-            ambre_bus::app::prose::TextAck(2),
+            ambre_bus::app::prose::TextAck::new(2),
             "b",
             &block(),
             DocOffset::new(1),
@@ -410,7 +410,7 @@ mod tests {
             0,
             "a confirmed entry is not new"
         );
-        draft.confirm(ambre_bus::app::prose::TextAck(2));
+        draft.confirm(ambre_bus::app::prose::TextAck::new(2));
         draft.laid();
         assert_eq!(
             probe
@@ -427,7 +427,7 @@ mod tests {
         let mut probe = KeyProbe::default();
         let mut draft = DraftBuffer::default();
         draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "a",
             &block(),
             DocOffset::ZERO,
@@ -439,7 +439,7 @@ mod tests {
             Dispatch::Sent,
         );
         draft.push_str(
-            ambre_bus::app::prose::TextAck(2),
+            ambre_bus::app::prose::TextAck::new(2),
             "b",
             &block(),
             DocOffset::new(1),
@@ -450,8 +450,8 @@ mod tests {
             &draft,
             Dispatch::Sent,
         );
-        draft.confirm(ambre_bus::app::prose::TextAck(1));
-        draft.confirm(ambre_bus::app::prose::TextAck(2));
+        draft.confirm(ambre_bus::app::prose::TextAck::new(1));
+        draft.confirm(ambre_bus::app::prose::TextAck::new(2));
         draft.laid();
         let confirm = probe.answered(ambre_core::PageTime::new(9.0), &draft, Answer::Layout);
         assert_eq!(confirm.len(), 2);
@@ -483,7 +483,7 @@ mod tests {
         let mut draft = DraftBuffer::default();
         probe.frame();
         draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "a",
             &block(),
             DocOffset::ZERO,
@@ -501,7 +501,7 @@ mod tests {
             "the echo frame has no answer"
         );
         probe.frame();
-        draft.confirm(ambre_bus::app::prose::TextAck(1));
+        draft.confirm(ambre_bus::app::prose::TextAck::new(1));
         probe.answered(ambre_core::PageTime::new(33.0), &draft, Answer::Other);
         assert_eq!(probe.take_counts(), [FrameCount::new(2)]);
         assert!(probe.take_counts().is_empty(), "a count is taken once");

@@ -518,7 +518,7 @@ impl BuiltInStyle {
     pub fn of(style_id: &StyleId) -> Option<Self> {
         Self::ALL
             .into_iter()
-            .find(|style| style.name() == style_id.0)
+            .find(|style| style.name() == style_id.as_str())
     }
 }
 
@@ -859,7 +859,7 @@ pub(crate) fn regions(tree: &LoroTree, table: &TreeID) -> Vec<Region> {
 #[must_use]
 pub fn style_of(tree: &LoroTree, id: &TreeID) -> Option<StyleId> {
     let node = node_of(tree, id)?;
-    read_string(&node, NodeKey::Style).map(StyleId)
+    read_string(&node, NodeKey::Style).map(StyleId::new)
 }
 
 /// The live children of a parent, or of the root when `parent` is `None`.
@@ -2034,7 +2034,7 @@ mod tests {
 
     #[test]
     fn the_nine_built_in_style_names_are_not_user_styles() {
-        let style = |name: &str| ambre_bus::app::prose::StyleId(name.to_owned());
+        let style = |name: &str| ambre_bus::app::prose::StyleId::new(name.to_owned());
         assert!(is_built_in_style(&style("quote")));
         assert!(is_built_in_style(&style("heading-6")));
         assert!(!is_built_in_style(&style("my-style")));

@@ -1023,8 +1023,8 @@ mod tests {
             |channel_id, active, unread: Option<u32>, mentions: Option<u32>| ChannelActivity {
                 channel_id,
                 active,
-                unread: unread.map(UnreadCount),
-                mentions: mentions.map(MentionCount),
+                unread: unread.map(UnreadCount::new),
+                mentions: mentions.map(MentionCount::new),
             };
         let of = |sidebar: &Sidebar, id| sidebar.entry(id).activity;
         assert_eq!(of(&sidebar, a), Activity::None);
@@ -1040,8 +1040,8 @@ mod tests {
         assert_eq!(
             of(&sidebar, a),
             Activity::Count {
-                messages: UnreadCount(3),
-                mentions: MentionCount(1)
+                messages: UnreadCount::new(3),
+                mentions: MentionCount::new(1)
             }
         );
         sidebar.set_activity(&[answer(b, ambre_bus::Activity::Active, None, None)]);

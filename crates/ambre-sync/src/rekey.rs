@@ -370,7 +370,7 @@ mod tests {
 
     fn frame(clock: u64, signature: u8) -> SentFrame {
         SentFrame {
-            clock: Clock(clock),
+            clock: Clock::new(clock),
             key_id: key(1),
             signature: sig(signature),
             payload: body(clock as u8),
@@ -393,17 +393,20 @@ mod tests {
     fn a_refusal_under_the_current_key_pays_once_then_resends_at_the_same_clocks() {
         let mut r = three_sent();
         r.confirm(&sig(1));
-        assert_eq!(r.refused(key(1), Clock(2), key(1)), Refusal::Settle);
-        assert_eq!(r.refused(key(1), Clock(3), key(1)), Refusal::Wait);
+        assert_eq!(r.refused(key(1), Clock::new(2), key(1)), Refusal::Settle);
+        assert_eq!(r.refused(key(1), Clock::new(3), key(1)), Refusal::Wait);
         assert!(r.owes());
         assert!(!r.hold(body(9)), "a payment already runs");
 
         let (resend, waiting) = r.key_installed(key(2));
-        assert_eq!(resend, vec![(Clock(2), body(2)), (Clock(3), body(3))]);
+        assert_eq!(
+            resend,
+            vec![(Clock::new(2), body(2)), (Clock::new(3), body(3))]
+        );
         assert_eq!(waiting, vec![body(9)]);
         assert!(!r.owes());
         // A late copy of a refusal names the key the frame no longer carries.
-        assert_eq!(r.refused(key(1), Clock(3), key(2)), Refusal::Stale);
+        assert_eq!(r.refused(key(1), Clock::new(3), key(2)), Refusal::Stale);
     }
 
     /// A refusal of a key older than the current one resends at once: someone
@@ -411,11 +414,11 @@ mod tests {
     #[test]
     fn a_refusal_of_an_older_key_resends_without_paying() {
         let mut r = three_sent();
-        assert_eq!(r.refused(key(1), Clock(2), key(2)), Refusal::Resend);
+        assert_eq!(r.refused(key(1), Clock::new(2), key(2)), Refusal::Resend);
         assert!(!r.owes());
         assert_eq!(
             r.take_refused(key(2)),
-            vec![(Clock(2), body(2)), (Clock(3), body(3))]
+            vec![(Clock::new(2), body(2)), (Clock::new(3), body(3))]
         );
         assert_eq!(r.take_refused(key(2)), Vec::new(), "sent again once");
     }
@@ -452,7 +455,7 @@ mod tests {
         let mut r = three_sent();
         r.confirm(&sig(2));
         assert_eq!(r.sent_len(), 1);
-        assert_eq!(r.refused(key(1), Clock(1), key(1)), Refusal::Stale);
+        assert_eq!(r.refused(key(1), Clock::new(1), key(1)), Refusal::Stale);
         let mut big = Rekey::default();
         let forgot = (0..=UNCONFIRMED_LIMIT as u64)
             .map(|c| big.record_sent(frame(c, 0)))

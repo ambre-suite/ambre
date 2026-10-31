@@ -134,7 +134,7 @@ fn clock_refusal(error: &str, got: Clock) -> AppError {
     });
     match current {
         Some(current) => AppError::ClockMismatch {
-            expected: Clock(current.saturating_add(1)),
+            expected: Clock::new(current.saturating_add(1)),
             got,
         },
         None => AppError::Redis(format!("clock validation failed: {error}")),
@@ -1245,18 +1245,18 @@ mod tests {
 
     #[test]
     fn the_script_refusal_becomes_the_typed_conflict() {
-        let err = clock_refusal("ERR Error running script: CLOCK_MISMATCH:4", Clock(7));
+        let err = clock_refusal("ERR Error running script: CLOCK_MISMATCH:4", Clock::new(7));
         assert!(
             matches!(
                 err,
                 AppError::ClockMismatch {
-                    expected: Clock(5),
-                    got: Clock(7)
-                }
+                    expected,
+                    got
+                } if expected.get() == 5 && got.get() == 7
             ),
             "{err:?}"
         );
-        let err = clock_refusal("connection reset by peer", Clock(7));
+        let err = clock_refusal("connection reset by peer", Clock::new(7));
         assert!(matches!(err, AppError::Redis(_)), "{err:?}");
     }
 }
@@ -1289,7 +1289,7 @@ mod lua_tests {
         mirror_rotation_owed(&redis, &doc_id, RotationDebt::Owed)
             .await
             .unwrap();
-        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1)).await;
+        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock::new(1)).await;
         assert!(
             matches!(refused, Err(AppError::RotationOwed)),
             "{refused:?}"
@@ -1312,7 +1312,7 @@ mod lua_tests {
         mirror_rotation_owed(&redis, &doc_id, RotationDebt::Settled)
             .await
             .unwrap();
-        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1))
+        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock::new(1))
             .await
             .expect("the same clock is accepted once the debt clears");
         assert_eq!(seq, ambre_core::Seq::new(1));
@@ -1335,7 +1335,7 @@ mod lua_tests {
         let pending = format!("doc:{doc_id}:pending");
 
         for clock in 1..=2 {
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(clock))
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock::new(clock))
                 .await
                 .expect("an open segment takes deltas");
         }
@@ -1349,7 +1349,7 @@ mod lua_tests {
             lock_segment(&redis, &doc_id).await.unwrap(),
             Some(ambre_core::Seq::new(2))
         );
-        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(3)).await;
+        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock::new(3)).await;
         assert!(
             matches!(refused, Err(AppError::SegmentLocked)),
             "{refused:?}"
@@ -1386,7 +1386,7 @@ mod lua_tests {
             .unwrap();
 
         for clock in 1..=2 {
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(clock))
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock::new(clock))
                 .await
                 .expect("an open segment takes deltas");
         }
@@ -1398,7 +1398,7 @@ mod lua_tests {
             lock_segment_now(&redis, &doc_id).await.unwrap(),
             ambre_core::Seq::new(2)
         );
-        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(3)).await;
+        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock::new(3)).await;
         assert!(
             matches!(refused, Err(AppError::SegmentLocked)),
             "{refused:?}"
@@ -1422,7 +1422,7 @@ mod lua_tests {
         let pending = format!("doc:{doc_id}:pending");
 
         for clock in 1..=2 {
-            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(clock))
+            verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock::new(clock))
                 .await
                 .expect("amendments take deltas");
         }
@@ -1448,7 +1448,7 @@ mod lua_tests {
                 .await
                 .unwrap()
         );
-        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(3)).await;
+        let refused = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock::new(3)).await;
         assert!(
             matches!(refused, Err(AppError::SegmentLocked)),
             "{refused:?}"
@@ -1467,7 +1467,7 @@ mod lua_tests {
         let doc_id = Id::<Document>::mint();
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xab; 32]);
 
-        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1))
+        let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock::new(1))
             .await
             .expect("first update should succeed");
         assert_eq!(seq, ambre_core::Seq::new(1));
@@ -1488,13 +1488,13 @@ mod lua_tests {
         let doc_id = Id::<Document>::mint();
         let pk = &FixedBytes::<PublicKey>::from_array([0xde; 32]);
 
-        let s1 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
+        let s1 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock::new(1))
             .await
             .unwrap();
-        let s2 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(2))
+        let s2 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock::new(2))
             .await
             .unwrap();
-        let s3 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(3))
+        let s3 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock::new(3))
             .await
             .unwrap();
         assert_eq!(s1, ambre_core::Seq::new(1));
@@ -1517,19 +1517,19 @@ mod lua_tests {
         let doc_id = Id::<Document>::mint();
         let pk = &FixedBytes::<PublicKey>::from_array([0x11; 32]);
 
-        verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
+        verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock::new(1))
             .await
             .unwrap();
-        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(3))
+        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock::new(3))
             .await
             .unwrap_err();
         assert!(
             matches!(
                 err,
                 AppError::ClockMismatch {
-                    expected: Clock(2),
-                    got: Clock(3)
-                }
+                    expected,
+                    got
+                } if expected.get() == 2 && got.get() == 3
             ),
             "{err:?}"
         );
@@ -1550,19 +1550,19 @@ mod lua_tests {
         let doc_id = Id::<Document>::mint();
         let pk = &FixedBytes::<PublicKey>::from_array([0x22; 32]);
 
-        verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
+        verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock::new(1))
             .await
             .unwrap();
-        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
+        let err = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock::new(1))
             .await
             .unwrap_err();
         assert!(
             matches!(
                 err,
                 AppError::ClockMismatch {
-                    expected: Clock(2),
-                    got: Clock(1)
-                }
+                    expected,
+                    got
+                } if expected.get() == 2 && got.get() == 1
             ),
             "{err:?}"
         );
@@ -1584,13 +1584,13 @@ mod lua_tests {
         let pk_a = &FixedBytes::<PublicKey>::from_array([0xaa; 32]);
         let pk_b = &FixedBytes::<PublicKey>::from_array([0xbb; 32]);
 
-        let s_a = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, Clock(1))
+        let s_a = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, Clock::new(1))
             .await
             .unwrap();
-        let s_b = verify_clock_and_assign_seq(&redis, &doc_id, pk_b, Clock(1))
+        let s_b = verify_clock_and_assign_seq(&redis, &doc_id, pk_b, Clock::new(1))
             .await
             .unwrap();
-        let s_a2 = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, Clock(2))
+        let s_a2 = verify_clock_and_assign_seq(&redis, &doc_id, pk_a, Clock::new(2))
             .await
             .unwrap();
 
@@ -1710,7 +1710,7 @@ mod redis_integration_tests {
         }
         let calls = clients
             .iter()
-            .map(|redis| verify_clock_and_assign_seq(redis, &doc, &ab, Clock(1)));
+            .map(|redis| verify_clock_and_assign_seq(redis, &doc, &ab, Clock::new(1)));
         let results = futures_util::future::join_all(calls).await;
 
         let numbered: Vec<ambre_core::Seq> = results
@@ -1725,9 +1725,9 @@ mod redis_integration_tests {
                 matches!(
                     r,
                     Err(AppError::ClockMismatch {
-                        expected: Clock(2),
-                        got: Clock(1)
-                    })
+                        expected,
+                        got
+                    }) if expected.get() == 2 && got.get() == 1
                 )
             })
             .count();
@@ -1736,7 +1736,7 @@ mod redis_integration_tests {
         let seq: u64 = redis.get(format!("doc:{doc}:seq")).await.unwrap();
         assert_eq!(seq, 1);
         assert_eq!(
-            verify_clock_and_assign_seq(&redis, &doc, &ab, Clock(2))
+            verify_clock_and_assign_seq(&redis, &doc, &ab, Clock::new(2))
                 .await
                 .unwrap(),
             ambre_core::Seq::new(2)
@@ -1964,14 +1964,14 @@ mod redis_integration_tests {
             &redis,
             &doc,
             ambre_core::Seq::new(5),
-            &[(*author, Clock(5))],
+            &[(*author, Clock::new(5))],
         )
         .await
         .expect("seed");
 
         // No longer cold, and the author's next update (clock 6) validates.
         assert!(!clock_state_is_cold(&redis, &doc).await.unwrap());
-        let seq = verify_clock_and_assign_seq(&redis, &doc, author, Clock(6))
+        let seq = verify_clock_and_assign_seq(&redis, &doc, author, Clock::new(6))
             .await
             .expect("clock 6 should validate against a rehydrated current=5");
         assert_eq!(
@@ -1982,7 +1982,7 @@ mod redis_integration_tests {
 
         // A stale clock (already consumed) is still rejected.
         assert!(
-            verify_clock_and_assign_seq(&redis, &doc, author, Clock(6))
+            verify_clock_and_assign_seq(&redis, &doc, author, Clock::new(6))
                 .await
                 .is_err()
         );

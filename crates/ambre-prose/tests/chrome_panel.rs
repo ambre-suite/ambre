@@ -343,7 +343,7 @@ async fn the_history_rows_follow_the_reported_state() {
     assert!(rows.iter().any(|row| row.contains("Redo")), "{rows:?}");
 
     report(ProseEvent::Synced {
-        acked: ambre_bus::app::prose::TextAck(1),
+        acked: ambre_bus::app::prose::TextAck::new(1),
     });
     leptos::task::tick().await;
     assert_eq!(disabled_rows(&root), rows);

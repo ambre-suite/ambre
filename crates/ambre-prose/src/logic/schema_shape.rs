@@ -344,7 +344,7 @@ pub(super) fn document_of_every_key() -> ProseState {
     });
     state.handle_command(ProseCommand::SetBlockStyle {
         block_id: root,
-        style_id: ambre_bus::app::prose::StyleId("Body".to_owned()),
+        style_id: ambre_bus::app::prose::StyleId::new("Body".to_owned()),
     });
     state.handle_command(ProseCommand::SetParagraphStyle {
         block_id: root,

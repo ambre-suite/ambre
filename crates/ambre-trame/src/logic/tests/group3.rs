@@ -454,7 +454,7 @@ fn cross_sheet_reference_converges_across_peers_on_rename() {
         text: "5".to_owned(),
     });
     a.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     a.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -503,7 +503,7 @@ fn a_spent_sheet_counter_refuses_the_next_sheet_and_overwrites_nothing() {
         name: crate::test_support::sheet("First"),
     });
     let first = state.all_sheet_ids();
-    assert!(first.iter().any(|id| id.0.ends_with("_00000000")));
+    assert!(first.iter().any(|id| id.as_str().ends_with("_00000000")));
     state.sheet_counter = Some(ambre_core::IdCounter::new(u32::MAX));
     state.handle_command(TrameCommand::CreateSheet {
         name: crate::test_support::sheet("Last"),
@@ -533,7 +533,7 @@ fn a_spent_sheet_counter_refuses_the_next_sheet_and_overwrites_nothing() {
     assert!(
         sheets
             .iter()
-            .any(|t| t.id.0.ends_with("_ffffffff") && t.name.as_str() == "Last"),
+            .any(|t| t.id.as_str().ends_with("_ffffffff") && t.name.as_str() == "Last"),
         "the last id keeps its sheet"
     );
 }
@@ -549,19 +549,19 @@ fn create_sheet_lists_and_isolates() {
     let TrameEvent::SheetList { sheets, active } = &evts.display[0] else {
         panic!("expected SheetList")
     };
-    assert_eq!(active.0, "s0", "active sheet unchanged by create");
+    assert_eq!(active.as_str(), "s0", "active sheet unchanged by create");
     assert_eq!(sheets.len(), 2);
     assert_eq!(
         sheets[0],
         SheetTab {
-            id: SheetId("s0".to_owned()),
+            id: SheetId::new("s0".to_owned()),
             name: crate::test_support::sheet("Sheet1")
         },
         "default tab first"
     );
     assert_eq!(sheets[1].name.as_str(), "Data");
 
-    let s1 = sheets[1].id.0.clone();
+    let s1 = sheets[1].id.as_str().to_owned();
     // Write on the default sheet, switch to the new one: it is blank.
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -569,7 +569,7 @@ fn create_sheet_lists_and_isolates() {
         text: "on_s0".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId(s1.clone()),
+        sheet_id: SheetId::new(s1.clone()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "", "new sheet starts empty");
     // Write here, switch back: each sheet keeps its own value.
@@ -580,7 +580,7 @@ fn create_sheet_lists_and_isolates() {
     });
     assert_eq!(read_cell(&mut state, 0, 0), "on_s1");
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "on_s0");
 }
@@ -611,11 +611,11 @@ fn first_scroll_viewport_hydrates_sheet_list_once() {
     let Some(TrameEvent::SheetList { sheets, active }) = sheet_list else {
         panic!("first ScrollViewport must emit a SheetList");
     };
-    assert_eq!(active.0, "s0");
+    assert_eq!(active.as_str(), "s0");
     assert_eq!(
         sheets,
         &vec![SheetTab {
-            id: SheetId("s0".to_owned()),
+            id: SheetId::new("s0".to_owned()),
             name: crate::test_support::sheet("Sheet1")
         }]
     );
@@ -651,7 +651,7 @@ fn cross_sheet_formula_evaluates_end_to_end() {
 
     // Back on Sheet1, B1 references it.
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -700,7 +700,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
     // Cross-sheet reader on Sheet1 (read while Sheet1 is the active tab, so the
     // masked cell lives on a *non-active* sheet).
     base.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     base.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),
@@ -753,7 +753,7 @@ fn masked_cell_excluded_across_sheets_regardless_of_active_tab() {
 
     // Switch to Sheet1: the cross-sheet reader now targets a *non-active* sheet.
     b.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     let target_inactive = read_cell(&mut b, 0, 1);
 
@@ -818,7 +818,7 @@ fn move_sheet_reorders_tabs() {
         panic!()
     };
     assert_eq!(sheets[0].id, b, "B moved to the front");
-    assert_eq!(sheets[1].id.0, "s0");
+    assert_eq!(sheets[1].id.as_str(), "s0");
 }
 
 /// Deleting the last remaining sheet is rejected; the workbook keeps >= 1.
@@ -826,7 +826,7 @@ fn move_sheet_reorders_tabs() {
 fn delete_last_sheet_rejected() {
     let mut state = TrameState::new();
     let evts = state.handle_command(TrameCommand::DeleteSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     assert!(matches!(evts.display[0], TrameEvent::Error { .. }));
     assert!(evts.update.is_none());
@@ -856,7 +856,11 @@ fn delete_active_sheet_falls_back() {
             _ => None,
         })
         .expect("SheetList emitted");
-    assert_eq!(list.1.0, "s0", "active fell back to the default sheet");
+    assert_eq!(
+        list.1.as_str(),
+        "s0",
+        "active fell back to the default sheet"
+    );
     assert!(!list.0.iter().any(|t| t.id == b), "deleted sheet gone");
 }
 
@@ -879,7 +883,7 @@ fn sort_range_ascending_moves_whole_rows() {
         });
     }
     let evts = state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(2), Col::new(1)),
@@ -914,7 +918,7 @@ fn sort_range_descending_keeps_header() {
         });
     }
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(3), Col::new(0)),
@@ -1003,7 +1007,7 @@ fn concurrent_duplicate_names_read_apart() {
         name: crate::test_support::sheet("Budget"),
     });
     b.handle_command(TrameCommand::RenameSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         name: crate::test_support::sheet("Budget"),
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
@@ -1074,7 +1078,7 @@ fn concurrent_names_differing_in_case_read_apart() {
         name: crate::test_support::sheet("Budget"),
     });
     b.handle_command(TrameCommand::RenameSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         name: crate::test_support::sheet("BUDGET"),
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());

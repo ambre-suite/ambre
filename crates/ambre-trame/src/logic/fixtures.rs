@@ -174,7 +174,7 @@ impl TrameState {
             LoroValue::List(items) => items
                 .iter()
                 .filter_map(|v| match v {
-                    LoroValue::String(s) => Some(SheetId(s.to_string())),
+                    LoroValue::String(s) => Some(SheetId::new(s.to_string())),
                     _ => None,
                 })
                 .collect(),
@@ -185,7 +185,7 @@ impl TrameState {
                 .keys()
                 .filter(|id| !listed.iter().any(|l| l.as_str() == id.as_str()))
                 .cloned()
-                .map(SheetId)
+                .map(SheetId::new)
                 .collect(),
             _ => Vec::new(),
         };

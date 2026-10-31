@@ -228,7 +228,7 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     deliver(&mut held, &state, author, &claimed, 2);
     assert_eq!(
         count(&held, bob),
-        MentionCount(0),
+        MentionCount::new(0),
         "the claim reads as nothing"
     );
 
@@ -242,7 +242,7 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     deliver(&mut held, &state, author, &to_bob, 3);
     assert_eq!(
         (count(&held, bob), count(&held, carol)),
-        (MentionCount(1), MentionCount(0))
+        (MentionCount::new(1), MentionCount::new(0))
     );
 
     let to_all = state
@@ -255,11 +255,11 @@ fn a_mention_counts_for_its_member_and_an_at_channel_for_all() {
     deliver(&mut held, &state, author, &to_all, 4);
     assert_eq!(
         (count(&held, bob), count(&held, carol)),
-        (MentionCount(2), MentionCount(1))
+        (MentionCount::new(2), MentionCount::new(1))
     );
     assert_eq!(
         count(&held, author),
-        MentionCount(0),
+        MentionCount::new(0),
         "her own messages never count"
     );
 }

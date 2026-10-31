@@ -916,7 +916,7 @@ mod postcard_tests {
                 pub_key: FixedBytes::<PublicKey>::from_array([6u8; 32]),
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([7u8; 16]),
-                clock: Clock(42),
+                clock: Clock::new(42),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([8u8; 32]),
             signature: FixedBytes::<Signature>::from_array([9u8; 64]),
@@ -931,7 +931,7 @@ mod postcard_tests {
                 document_id: Id::<Document>::from_bytes([13u8; 16]),
                 pub_key: FixedBytes::<PublicKey>::from_array([14u8; 32]),
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-                counter: Counter(15),
+                counter: Counter::new(15),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([16u8; 32]),
             signature: FixedBytes::<Signature>::from_array([17u8; 64]),
@@ -1174,7 +1174,7 @@ mod ephemeral_binding_tests {
                 document_id: doc_id,
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-                counter: Counter(1),
+                counter: Counter::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -1194,7 +1194,7 @@ mod ephemeral_binding_tests {
             document_id: doc_id,
             pub_key: *pub_key,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-            counter: Counter(1),
+            counter: Counter::new(1),
         };
         let nonce = FixedBytes::<Nonce>::from_array([5u8; 24]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([6u8; 32]);
@@ -1503,7 +1503,7 @@ mod delta_size_cap_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Clock(1),
+                clock: Clock::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -1769,7 +1769,7 @@ mod access_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Clock(1),
+                clock: Clock::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2034,7 +2034,7 @@ mod ed25519_tests {
             pub_key: pubkey,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([1u8; 16]),
-            clock: Clock(1),
+            clock: Clock::new(1),
         };
         let nonce = FixedBytes::<Nonce>::from_array([3u8; 24]);
         let ciphertext = Ciphertext::new(vec![4, 5, 6]);
@@ -2129,7 +2129,7 @@ mod ed25519_tests {
                 pub_key: pubkey,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Clock(0),
+                clock: Clock::new(0),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2153,7 +2153,7 @@ mod ed25519_tests {
             pub_key: pubkey,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-            clock: Clock(0),
+            clock: Clock::new(0),
         };
         let nonce = FixedBytes::<Nonce>::from_array([0u8; 24]);
         let ciphertext = Ciphertext::new(vec![1, 2, 3]);
@@ -2191,7 +2191,7 @@ mod ed25519_tests {
             document_id: doc_id,
             pub_key: *pubkey,
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-            counter: Counter(1),
+            counter: Counter::new(1),
         };
         let nonce = FixedBytes::<Nonce>::from_array([2u8; 24]);
         let commitment_tag = FixedBytes::<CommitmentTag>::from_array([3u8; 32]);
@@ -2242,7 +2242,7 @@ mod ed25519_tests {
                 document_id: Id::<Document>::from_bytes([0u8; 16]),
                 pub_key: pubkey,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
-                counter: ambre_protocol::messages::Counter(1),
+                counter: ambre_protocol::messages::Counter::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2267,7 +2267,7 @@ mod refusal_tests {
                     pub_key: ambre_core::FixedBytes::<PublicKey>::from_array([1u8; 32]),
                     key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                     snapshot_id: Id::<ambre_core::id::Snapshot>::from_bytes([0u8; 16]),
-                    clock: Clock(seq),
+                    clock: Clock::new(seq),
                 },
                 commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
                 signature: FixedBytes::<Signature>::from_array([0u8; 64]),
@@ -2303,8 +2303,8 @@ mod refusal_tests {
         let refusal = update_refusal(
             &update,
             &AppError::ClockMismatch {
-                expected: ambre_protocol::messages::Clock(5),
-                got: ambre_protocol::messages::Clock(9),
+                expected: ambre_protocol::messages::Clock::new(5),
+                got: ambre_protocol::messages::Clock::new(9),
             },
         );
         let WsServerMsg::ClockRefused {
@@ -2317,7 +2317,7 @@ mod refusal_tests {
             panic!("expected a clock refusal, got {refusal:?}");
         };
         assert_eq!(document_id, update.public_data.document_id);
-        assert_eq!((clock.0, expected.0), (9, 5));
+        assert_eq!((clock.get(), expected.get()), (9, 5));
         assert_eq!(signature, update.signature, "the refusal names the delta");
     }
 
@@ -2449,7 +2449,7 @@ mod refusal_tests {
         };
         assert_eq!(document_id, update.public_data.document_id);
         assert_eq!(key_id, update.public_data.key_id);
-        assert_eq!(clock.0, 4);
+        assert_eq!(clock.get(), 4);
     }
 }
 
@@ -2510,7 +2510,7 @@ mod hot_tail_tests {
             pub_key: FixedBytes::<PublicKey>::from_array(key.verifying_key().to_bytes()),
             key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
             snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-            clock: Clock(clock),
+            clock: Clock::new(clock),
         };
         let ciphertext = vec![u8::try_from(clock % 256).unwrap(); len];
         let nonce = FixedBytes::<Nonce>::from_array([5u8; 24]);
@@ -2655,7 +2655,7 @@ mod hot_tail_tests {
         else {
             panic!("expected a clock refusal, got {refusal:?}");
         };
-        assert_eq!((clock.0, expected.0), (1, 2));
+        assert_eq!((clock.get(), expected.get()), (1, 2));
         assert_eq!(signature, lost_signature);
 
         let behind = signed_update(&key, doc_id, 2, 20);
@@ -2810,7 +2810,7 @@ mod channel_gate_tests {
                 pub_key,
                 key_id: FixedBytes::<ambre_core::KeyId>::from_array([0u8; 16]),
                 snapshot_id: Id::<Snapshot>::from_bytes([0u8; 16]),
-                clock: Clock(1),
+                clock: Clock::new(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),
             signature: FixedBytes::<Signature>::from_array([0u8; 64]),

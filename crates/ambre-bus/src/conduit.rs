@@ -134,7 +134,19 @@ pub struct RecvError;
 /// A [`UnboundedSender::send`] that did not deliver, because the receiver is
 /// gone: the value comes back.
 #[derive(Debug, PartialEq, Eq)]
-pub struct Disconnected<T>(pub T);
+pub struct Disconnected<T>(T);
+
+impl<T> Disconnected<T> {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: T) -> Self {
+        Self(value)
+    }
+
+    /// Returns the wrapped value.
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
 
 /// The queue under one channel. Both take no lock.
 enum Queue<T> {

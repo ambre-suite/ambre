@@ -510,7 +510,7 @@ mod tests {
         let (mut state, ids) = document_of(&["one", "two"]);
         state.handle_command(ProseCommand::SetBlockStyle {
             block_id: ids[0],
-            style_id: ambre_bus::app::prose::StyleId("quote".to_owned()),
+            style_id: ambre_bus::app::prose::StyleId::new("quote".to_owned()),
         });
         state.handle_command(ProseCommand::DeleteRange {
             anchor: (ids[0], DocOffset::new(3)),
@@ -519,7 +519,7 @@ mod tests {
         assert_eq!(state.root_blocks(), vec![ids[0]]);
         assert_eq!(
             state.style_of(&ids[0]),
-            Some(ambre_bus::app::prose::StyleId("quote".to_owned()))
+            Some(ambre_bus::app::prose::StyleId::new("quote".to_owned()))
         );
     }
 

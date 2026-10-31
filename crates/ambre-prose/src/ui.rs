@@ -1024,7 +1024,7 @@ mod tests {
         ui.composing = "composed".into();
         let block = state.root_blocks()[0];
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "drafted",
             &block,
             ambre_bus::app::prose::DocOffset::ZERO,
@@ -1152,7 +1152,7 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "hel",
             &block,
             DocOffset::ZERO,
@@ -1184,7 +1184,7 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "hel",
             &block,
             DocOffset::ZERO,
@@ -1205,7 +1205,7 @@ mod tests {
         state.apply_event(&ProseEvent::TextChanged {
             origin: crate::events::ChangeOrigin::Local,
             seq: ambre_core::Generation::ZERO,
-            acked: ambre_bus::app::prose::TextAck(1),
+            acked: ambre_bus::app::prose::TextAck::new(1),
             edits: vec![typed],
             removed: Vec::new(),
         });
@@ -1220,7 +1220,7 @@ mod tests {
         let block = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(0));
         let mut state = ProseUiState::default();
         state.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "hel",
             &block,
             DocOffset::ZERO,
@@ -1249,19 +1249,19 @@ mod tests {
         let other = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(1));
         let mut draft = DraftBuffer::default();
         draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "he",
             &block,
             DocOffset::ZERO,
         );
         draft.push_str(
-            ambre_bus::app::prose::TextAck(2),
+            ambre_bus::app::prose::TextAck::new(2),
             "llo",
             &block,
             DocOffset::new(2),
         );
         draft.push_delete(
-            ambre_bus::app::prose::TextAck(3),
+            ambre_bus::app::prose::TextAck::new(3),
             &block,
             DocOffset::new(1),
             DocOffset::new(3),

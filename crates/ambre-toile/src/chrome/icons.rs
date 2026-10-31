@@ -17,7 +17,7 @@ use ambre_commands::IconId;
 /// A missing handle draws no icon rather than failing the menu: an entry with
 /// its label is still usable, an absent entry is not.
 pub fn resolve(id: IconId) -> Option<icondata::Icon> {
-    let icon = match id.0 {
+    let icon = match id.as_str() {
         "content-cut" => icondata::MdiContentCut,
         "content-copy" => icondata::MdiContentCopy,
         "content-paste" => icondata::MdiContentPaste,

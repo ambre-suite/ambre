@@ -253,7 +253,7 @@ fn reading(reader: &TrameState, stored: &Stored) -> Option<String> {
                 .sheet_order_ids()
                 .iter()
                 .position(|id| id.as_str() == key)?;
-            let name = reader.sheet_names().remove(&SheetId(key.to_owned()))?;
+            let name = reader.sheet_names().remove(&SheetId::new(key.to_owned()))?;
             Some(format!("tab {} named {:?}", tab + 1, name.as_str()))
         }
         Root::SheetOrder => {

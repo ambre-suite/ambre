@@ -283,25 +283,25 @@ mod tests {
 
     const TABLE: &[Command] = &[
         Command {
-            id: CommandId("t.format.bold"),
+            id: CommandId::new("t.format.bold"),
             title: bold,
-            icon: Some(IconId("format-bold")),
+            icon: Some(IconId::new("format-bold")),
             keybindings: &[KeyBinding::primary(KeyChar::B)],
-            category: CommandCategory("format"),
+            category: CommandCategory::new("format"),
         },
         Command {
-            id: CommandId("t.sort.asc"),
+            id: CommandId::new("t.sort.asc"),
             title: sort_asc,
             icon: None,
             keybindings: &[],
-            category: CommandCategory("sort"),
+            category: CommandCategory::new("sort"),
         },
         Command {
-            id: CommandId("t.interop.export"),
+            id: CommandId::new("t.interop.export"),
             title: export,
             icon: None,
             keybindings: &[],
-            category: CommandCategory("interop"),
+            category: CommandCategory::new("interop"),
         },
     ];
 
@@ -318,7 +318,7 @@ mod tests {
     fn a_query_matches_any_case_and_any_position() {
         let hits = filter(TABLE, "RANGE", &Locale::En);
         assert_eq!(hits.len(), 1);
-        assert_eq!(hits[0].id, CommandId("t.sort.asc"));
+        assert_eq!(hits[0].id, CommandId::new("t.sort.asc"));
         assert!(matches("Export CSV", "csv"));
         assert!(matches("Export CSV", "Export"));
     }
@@ -342,7 +342,7 @@ mod tests {
             .into_iter()
             .map(|row| match row {
                 PaletteRow::Entry(e) => e.label.clone(),
-                PaletteRow::Command(c) => c.id.0.to_owned(),
+                PaletteRow::Command(c) => c.id.as_str().to_owned(),
             })
             .collect()
     }
@@ -380,9 +380,9 @@ mod tests {
         assert_eq!(
             ids,
             vec![
-                CommandId("t.format.bold"),
-                CommandId("t.sort.asc"),
-                CommandId("t.interop.export"),
+                CommandId::new("t.format.bold"),
+                CommandId::new("t.sort.asc"),
+                CommandId::new("t.interop.export"),
             ]
         );
     }

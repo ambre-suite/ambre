@@ -1301,7 +1301,7 @@ impl SyncState {
                     "[Sync<-Server] WS Update seq={} doc={} clock={}",
                     seq.get(),
                     update.public_data.document_id,
-                    update.public_data.clock.0,
+                    update.public_data.clock.get(),
                 );
                 self.receive_update(seq, update);
             }
@@ -1320,7 +1320,7 @@ impl SyncState {
                     tracing::debug!(
                         "Sync: dropping replayed ephemeral from {:?} (counter {})",
                         author_pk,
-                        eph.public_data.counter.0
+                        eph.public_data.counter.get()
                     );
                     return;
                 }
@@ -1493,8 +1493,8 @@ impl SyncState {
             } => {
                 tracing::info!(
                     "Sync: clock {} refused doc={document_id}, expected {}",
-                    clock.0,
-                    expected.0
+                    clock.get(),
+                    expected.get()
                 );
                 self.handle_clock_refused(document_id, expected, signature);
             }

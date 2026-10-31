@@ -348,7 +348,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
                         "[Server<-Sync] WS Update doc={} author={} clock={}",
                         update.public_data.document_id,
                         update.public_data.pub_key.to_hex(),
-                        update.public_data.clock.0,
+                        update.public_data.clock.get(),
                     );
                     handle_update(&state, &mut conn, update, &outbound_tx).await;
                 }

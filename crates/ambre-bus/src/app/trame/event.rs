@@ -23,7 +23,19 @@ pub struct CellNumber(f64);
 /// A value refused as a [`CellNumber`]: NaN or an infinity.
 #[derive(Clone, Copy, Debug, PartialEq, thiserror::Error)]
 #[error("{0} is not a finite number")]
-pub struct NotACellNumber(pub f64);
+pub struct NotACellNumber(f64);
+
+impl NotACellNumber {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: f64) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
 
 impl CellNumber {
     /// The cell number `value`.
@@ -590,12 +602,22 @@ impl std::fmt::Debug for TrameEvent {
 /// (`{peer:016x}_{counter:08x}`). A rename leaves it unchanged
 /// (`trame-sheets`).
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
-pub struct SheetId(pub String);
+pub struct SheetId(String);
 
 impl SheetId {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
     /// The id as the CRDT container names spell it.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// The id as the CRDT container names spell it, by value.
+    pub fn into_inner(self) -> String {
+        self.0
     }
 
     /// The name of a sheet whose document holds none: its id, verbatim.
@@ -621,12 +643,36 @@ impl std::fmt::Display for SheetId {
 /// Stable local identity of a personal filter view, minted where the view is
 /// saved and never shared (`trame-shared-filter`).
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
-pub struct FilterViewId(pub String);
+pub struct FilterViewId(String);
+
+impl FilterViewId {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 /// Stable identity of one conditional-formatting rule on a sheet, which an
 /// update or a removal names (`trame-cell-styles`).
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
-pub struct CondFormatId(pub String);
+pub struct CondFormatId(String);
+
+impl CondFormatId {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 /// Where a conditional-formatting rule falls in evaluation order: the
 /// smaller is evaluated first, and the first rule that matches wins

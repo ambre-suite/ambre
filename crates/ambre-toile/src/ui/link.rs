@@ -76,7 +76,19 @@ pub enum ShellNav {
 /// register. The view attaches the element the DOM panel cannot name, exactly
 /// as it does for a style edit.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LinkEdit(pub Option<LinkTarget>);
+pub struct LinkEdit(Option<LinkTarget>);
+
+impl LinkEdit {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: Option<LinkTarget>) -> Self {
+        Self(value)
+    }
+
+    /// Returns the wrapped value.
+    pub fn into_inner(self) -> Option<LinkTarget> {
+        self.0
+    }
+}
 
 impl LinkAction {
     /// The half of a follow that leaves the board, or `None` for a jump the

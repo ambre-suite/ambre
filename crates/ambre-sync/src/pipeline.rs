@@ -1107,7 +1107,7 @@ mod tests {
             pub_key: author,
             key_id: key_id(),
             snapshot_id: Id::<id::Snapshot>::mint(),
-            clock: Clock(1),
+            clock: Clock::new(1),
         }
     }
 
@@ -1152,7 +1152,7 @@ mod tests {
             key_id: key_id(),
             snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: None,
-            parent_snapshot_update_clocks: vec![(author, Clock(1)), (author, Clock(2))],
+            parent_snapshot_update_clocks: vec![(author, Clock::new(1)), (author, Clock::new(2))],
         };
         assert!(matches!(
             seal_snapshot(&Payload::new(b"board".to_vec()), pd, &doc_key, &signing),
@@ -1363,7 +1363,7 @@ mod tests {
             document_id: Id::<Document>::mint(),
             pub_key: author,
             key_id: key_id(),
-            counter: Counter(7),
+            counter: Counter::new(7),
         };
         let eph = seal_ephemeral(&Payload::new(payload.to_vec()), pd, &doc_key, &signing).unwrap();
         assert_eq!(open_ephemeral(&eph, &doc_key).unwrap(), payload);

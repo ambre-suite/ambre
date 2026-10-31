@@ -242,7 +242,7 @@ fn sheet_name(input: &str) -> nom::IResult<&str, SheetName> {
 fn sheet_id_token(input: &str) -> nom::IResult<&str, SheetId> {
     let (input, _) = char('#').parse(input)?;
     let (input, id) = recognize(many1(alt((alphanumeric1, tag("_"))))).parse(input)?;
-    Ok((input, SheetId(id.to_owned())))
+    Ok((input, SheetId::new(id.to_owned())))
 }
 
 /// The qualifier preceding a `!`: a stable id (`#s0`) or a display name

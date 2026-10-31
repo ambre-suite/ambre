@@ -463,7 +463,7 @@ fn unqualified_name_resolves_the_same_for_every_reader() {
         }
     }
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     state.handle_command(TrameCommand::DefineName {
         name: crate::test_support::name("TOTAL"),
@@ -505,7 +505,7 @@ fn name_on_another_sheet_survives_its_rename() {
         text: "7".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     state.handle_command(TrameCommand::DefineName {
         name: crate::test_support::name("RATE"),
@@ -696,9 +696,9 @@ fn multi_sheet_isolation_and_name_lookup() {
         .doc
         .get_map(Root::Sheets.as_str())
         .insert("s1", "Sheet2");
-    let other = state
-        .doc
-        .get_movable_list(SheetContainer::of(SheetRoot::Rows, &SheetId("s1".to_owned())).as_str());
+    let other = state.doc.get_movable_list(
+        SheetContainer::of(SheetRoot::Rows, &SheetId::new("s1".to_owned())).as_str(),
+    );
     other
         .push(
             Uid {
@@ -717,12 +717,12 @@ fn multi_sheet_isolation_and_name_lookup() {
         loro::LoroValue::Map(ref m) if m.len() == 1
     ));
     assert!(matches!(
-        state.doc.get_map(SheetContainer::of(SheetRoot::Cells, &SheetId("s1".to_owned())).as_str()).get_value(),
+        state.doc.get_map(SheetContainer::of(SheetRoot::Cells, &SheetId::new("s1".to_owned())).as_str()).get_value(),
         loro::LoroValue::Map(ref m) if m.is_empty()
     ));
     assert_eq!(
         state.sheet_name_to_id(&ambre_bus::SheetName::stored("Sheet2".to_owned())),
-        Some(SheetId("s1".to_owned()))
+        Some(SheetId::new("s1".to_owned()))
     );
 }
 
@@ -750,7 +750,7 @@ fn cross_sheet_reference_survives_rename_and_breaks_on_delete() {
 
     // Sheet1!B1 = Sheet2!A1 * 2.
     state.handle_command(TrameCommand::ActivateSheet {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     state.handle_command(TrameCommand::SetCellText {
         row: Row::new(0),

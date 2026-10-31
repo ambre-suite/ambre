@@ -64,9 +64,19 @@ pub struct ChannelActivity {
 /// How many messages past the reader's cursor mention them, or the channel
 /// (`MURMURE-233`). A type of its own beside [`UnreadCount`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct MentionCount(pub u32);
+pub struct MentionCount(u32);
 
 impl MentionCount {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+
     /// No mention.
     pub const ZERO: Self = Self(0);
 
@@ -151,9 +161,19 @@ pub struct DirectPeers {
 /// How many messages of a channel are past the reader's cursor. A distinct
 /// type, so a count of mentions never takes its place.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct UnreadCount(pub u32);
+pub struct UnreadCount(u32);
 
 impl UnreadCount {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+
     /// Nothing unread.
     pub const ZERO: Self = Self(0);
 

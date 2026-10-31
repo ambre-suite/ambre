@@ -423,13 +423,12 @@ pub(crate) fn AppRoot() -> impl IntoView {
             // Otherwise the cursor is the pure function of the active tool.
             let cursor = toile_cursor
                 .get()
-                .unwrap_or_else(|| ambre_toile::ui::palette::cursor_css(toile_active_tool.get()))
-                .0;
+                .unwrap_or_else(|| ambre_toile::ui::palette::cursor_css(toile_active_tool.get()));
             if let Some(doc) = web_sys::window().and_then(|w| w.document())
                 && let Some(el) = doc.get_element_by_id(ambre_core::CanvasId::CONTENT.as_str())
                 && let Some(html) = el.dyn_ref::<web_sys::HtmlElement>()
             {
-                let _ = html.style().set_property("cursor", cursor.as_ref());
+                let _ = html.style().set_property("cursor", cursor.as_str());
             }
         });
     }

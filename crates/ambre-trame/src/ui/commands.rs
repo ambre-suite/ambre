@@ -60,16 +60,16 @@ macro_rules! commands {
     };
 }
 
-const FORMAT: CommandCategory = CommandCategory("format");
-const HISTORY: CommandCategory = CommandCategory("history");
-const STRUCTURE: CommandCategory = CommandCategory("structure");
-const SORT: CommandCategory = CommandCategory("sort");
-const FILTER: CommandCategory = CommandCategory("filter");
-const FIND_REPLACE: CommandCategory = CommandCategory("find");
-const CLIPBOARD: CommandCategory = CommandCategory("clipboard");
-const INTEROP: CommandCategory = CommandCategory("interop");
+const FORMAT: CommandCategory = CommandCategory::new("format");
+const HISTORY: CommandCategory = CommandCategory::new("history");
+const STRUCTURE: CommandCategory = CommandCategory::new("structure");
+const SORT: CommandCategory = CommandCategory::new("sort");
+const FILTER: CommandCategory = CommandCategory::new("filter");
+const FIND_REPLACE: CommandCategory = CommandCategory::new("find");
+const CLIPBOARD: CommandCategory = CommandCategory::new("clipboard");
+const INTEROP: CommandCategory = CommandCategory::new("interop");
 /// Commands that belong to the application shell rather than the document.
-const GENERAL: CommandCategory = CommandCategory("general");
+const GENERAL: CommandCategory = CommandCategory::new("general");
 
 // The labels are the ones the chrome shows today: the context-menu entries of
 // `chrome::commands` and the toolbar `aria-label`s of `chrome::bars`. Those
@@ -80,35 +80,35 @@ const GENERAL: CommandCategory = CommandCategory("general");
 // as well (`UI-THREAD-011`). Undo and Redo take the shared chord lists, which
 // is where Ctrl+Y is declared beside Ctrl+Shift+Z.
 commands! {
-    BOLD = CommandId("trame.format.bold"), "Bold", Some(IconId("format-bold")), &[KeyBinding::primary(KeyChar::B)], FORMAT;
-    ITALIC = CommandId("trame.format.italic"), "Italic", Some(IconId("format-italic")), &[KeyBinding::primary(KeyChar::I)], FORMAT;
-    UNDO = CommandId("trame.history.undo"), "Undo", Some(IconId("undo")), shared::UNDO_CHORDS, HISTORY;
-    REDO = CommandId("trame.history.redo"), "Redo", Some(IconId("redo")), shared::REDO_CHORDS, HISTORY;
-    INSERT_ROW_ABOVE = CommandId("trame.row.insert_above"), "Insert row above", Some(IconId("table-row-plus-before")), &[], STRUCTURE;
-    INSERT_ROW_BELOW = CommandId("trame.row.insert_below"), "Insert row below", Some(IconId("table-row-plus-after")), &[], STRUCTURE;
-    INSERT_COL_LEFT = CommandId("trame.col.insert_left"), "Insert column left", Some(IconId("table-column-plus-before")), &[], STRUCTURE;
-    INSERT_COL_RIGHT = CommandId("trame.col.insert_right"), "Insert column right", Some(IconId("table-column-plus-after")), &[], STRUCTURE;
-    DELETE_ROWS = CommandId("trame.row.delete"), "Delete rows", Some(IconId("table-row-remove")), &[], STRUCTURE;
-    DELETE_COLS = CommandId("trame.col.delete"), "Delete columns", Some(IconId("table-column-remove")), &[], STRUCTURE;
-    MERGE = CommandId("trame.merge"), "Merge cells", Some(IconId("table-merge-cells")), &[], STRUCTURE;
-    UNMERGE = CommandId("trame.unmerge"), "Unmerge cells", Some(IconId("table-split-cell")), &[], STRUCTURE;
-    SORT_RANGE_ASC = CommandId("trame.sort.range_asc"), "Sort range ascending", Some(IconId("sort-ascending")), &[], SORT;
-    SORT_RANGE_DESC = CommandId("trame.sort.range_desc"), "Sort range descending", Some(IconId("sort-descending")), &[], SORT;
-    SORT_SHEET_ASC = CommandId("trame.sort.sheet_asc"), "Sort sheet by column (asc)", Some(IconId("sort")), &[], SORT;
-    SORT_SHEET_DESC = CommandId("trame.sort.sheet_desc"), "Sort sheet by column (desc)", Some(IconId("sort")), &[], SORT;
-    SORT_RANGE_MULTI = CommandId("trame.sort.range_multi"), "Sort range...", Some(IconId("sort-variant")), &[], SORT;
-    FILTER_COLUMN = CommandId("trame.filter.column"), "Filter by column", Some(IconId("filter")), &[], FILTER;
-    CLEAR_FILTER = CommandId("trame.filter.clear"), "Remove filter", Some(IconId("filter-off")), &[], FILTER;
-    FIND = CommandId("trame.find.open"), "Find and replace", Some(IconId("search")), &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE;
-    REPLACE = CommandId("trame.find.replace"), "Replace", None, &[KeyBinding::primary(KeyChar::H)], FIND_REPLACE;
-    COPY = shared::COPY, "Copy", Some(IconId("content-copy")), shared::COPY_CHORDS, CLIPBOARD;
-    CUT = shared::CUT, "Cut", Some(IconId("content-cut")), shared::CUT_CHORDS, CLIPBOARD;
-    PASTE = shared::PASTE, "Paste", Some(IconId("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
-    IMPORT_CSV = CommandId("trame.interop.import_csv"), "Import CSV", Some(IconId("import")), &[], INTEROP;
-    EXPORT_CSV = CommandId("trame.interop.export_csv"), "Export CSV", Some(IconId("export")), &[], INTEROP;
-    SAVE_FILE = CommandId("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(IconId("content-save")), &[], INTEROP;
-    SAVE_SEALED_FILE = CommandId("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(IconId("lock-outline")), &[], INTEROP;
-    PALETTE = CommandId("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
+    BOLD = CommandId::new("trame.format.bold"), "Bold", Some(IconId::new("format-bold")), &[KeyBinding::primary(KeyChar::B)], FORMAT;
+    ITALIC = CommandId::new("trame.format.italic"), "Italic", Some(IconId::new("format-italic")), &[KeyBinding::primary(KeyChar::I)], FORMAT;
+    UNDO = CommandId::new("trame.history.undo"), "Undo", Some(IconId::new("undo")), shared::UNDO_CHORDS, HISTORY;
+    REDO = CommandId::new("trame.history.redo"), "Redo", Some(IconId::new("redo")), shared::REDO_CHORDS, HISTORY;
+    INSERT_ROW_ABOVE = CommandId::new("trame.row.insert_above"), "Insert row above", Some(IconId::new("table-row-plus-before")), &[], STRUCTURE;
+    INSERT_ROW_BELOW = CommandId::new("trame.row.insert_below"), "Insert row below", Some(IconId::new("table-row-plus-after")), &[], STRUCTURE;
+    INSERT_COL_LEFT = CommandId::new("trame.col.insert_left"), "Insert column left", Some(IconId::new("table-column-plus-before")), &[], STRUCTURE;
+    INSERT_COL_RIGHT = CommandId::new("trame.col.insert_right"), "Insert column right", Some(IconId::new("table-column-plus-after")), &[], STRUCTURE;
+    DELETE_ROWS = CommandId::new("trame.row.delete"), "Delete rows", Some(IconId::new("table-row-remove")), &[], STRUCTURE;
+    DELETE_COLS = CommandId::new("trame.col.delete"), "Delete columns", Some(IconId::new("table-column-remove")), &[], STRUCTURE;
+    MERGE = CommandId::new("trame.merge"), "Merge cells", Some(IconId::new("table-merge-cells")), &[], STRUCTURE;
+    UNMERGE = CommandId::new("trame.unmerge"), "Unmerge cells", Some(IconId::new("table-split-cell")), &[], STRUCTURE;
+    SORT_RANGE_ASC = CommandId::new("trame.sort.range_asc"), "Sort range ascending", Some(IconId::new("sort-ascending")), &[], SORT;
+    SORT_RANGE_DESC = CommandId::new("trame.sort.range_desc"), "Sort range descending", Some(IconId::new("sort-descending")), &[], SORT;
+    SORT_SHEET_ASC = CommandId::new("trame.sort.sheet_asc"), "Sort sheet by column (asc)", Some(IconId::new("sort")), &[], SORT;
+    SORT_SHEET_DESC = CommandId::new("trame.sort.sheet_desc"), "Sort sheet by column (desc)", Some(IconId::new("sort")), &[], SORT;
+    SORT_RANGE_MULTI = CommandId::new("trame.sort.range_multi"), "Sort range...", Some(IconId::new("sort-variant")), &[], SORT;
+    FILTER_COLUMN = CommandId::new("trame.filter.column"), "Filter by column", Some(IconId::new("filter")), &[], FILTER;
+    CLEAR_FILTER = CommandId::new("trame.filter.clear"), "Remove filter", Some(IconId::new("filter-off")), &[], FILTER;
+    FIND = CommandId::new("trame.find.open"), "Find and replace", Some(IconId::new("search")), &[KeyBinding::primary(KeyChar::F)], FIND_REPLACE;
+    REPLACE = CommandId::new("trame.find.replace"), "Replace", None, &[KeyBinding::primary(KeyChar::H)], FIND_REPLACE;
+    COPY = shared::COPY, "Copy", Some(IconId::new("content-copy")), shared::COPY_CHORDS, CLIPBOARD;
+    CUT = shared::CUT, "Cut", Some(IconId::new("content-cut")), shared::CUT_CHORDS, CLIPBOARD;
+    PASTE = shared::PASTE, "Paste", Some(IconId::new("content-paste")), shared::PASTE_CHORDS, CLIPBOARD;
+    IMPORT_CSV = CommandId::new("trame.interop.import_csv"), "Import CSV", Some(IconId::new("import")), &[], INTEROP;
+    EXPORT_CSV = CommandId::new("trame.interop.export_csv"), "Export CSV", Some(IconId::new("export")), &[], INTEROP;
+    SAVE_FILE = CommandId::new("trame.interop.save_file"), "Save to a file (.ambre, not encrypted)", Some(IconId::new("content-save")), &[], INTEROP;
+    SAVE_SEALED_FILE = CommandId::new("trame.interop.save_sealed_file"), "Save to an encrypted file (.ambre)...", Some(IconId::new("lock-outline")), &[], INTEROP;
+    PALETTE = CommandId::new("trame.palette.open"), "Command palette", None, &[KeyBinding::primary(KeyChar::K)], GENERAL;
 }
 
 /// The label a view shows for `id`, in `locale`. `None` for a command Trame
@@ -487,7 +487,7 @@ mod tests {
         ));
         // A UI-only intent the launcher intercepts: no bus payload.
         assert!(command_to_app(BOLD).is_none());
-        assert!(command_to_app(CommandId("trame.unknown")).is_none());
+        assert!(command_to_app(CommandId::new("trame.unknown")).is_none());
     }
 
     /// A row menu never offers to filter a row (`TRAME-UI-090`). With a filter

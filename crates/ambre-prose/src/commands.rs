@@ -13,33 +13,33 @@ use ambre_commands::{
 use crate::mark::MarkRoot;
 
 /// Taking the document out as a file.
-const FILE: CommandCategory = CommandCategory("file");
+const FILE: CommandCategory = CommandCategory::new("file");
 /// Inline formatting: the format bar and its chords.
-const FORMAT: CommandCategory = CommandCategory("format");
+const FORMAT: CommandCategory = CommandCategory::new("format");
 /// Moving text through the system clipboard.
-const CLIPBOARD: CommandCategory = CommandCategory("clipboard");
+const CLIPBOARD: CommandCategory = CommandCategory::new("clipboard");
 /// Commands that belong to the application shell rather than the document.
-const GENERAL: CommandCategory = CommandCategory("general");
+const GENERAL: CommandCategory = CommandCategory::new("general");
 /// Stepping through the local history.
-const HISTORY: CommandCategory = CommandCategory("history");
+const HISTORY: CommandCategory = CommandCategory::new("history");
 
 /// Undo this peer's last change (`UNDO-001`).
-pub const UNDO: CommandId = CommandId("prose.history.undo");
+pub const UNDO: CommandId = CommandId::new("prose.history.undo");
 /// Redo the last change undone.
-pub const REDO: CommandId = CommandId("prose.history.redo");
+pub const REDO: CommandId = CommandId::new("prose.history.redo");
 
 /// Open the command palette: a UI-only intent the shell intercepts
 /// (`CHROME-008`).
-pub const PALETTE: CommandId = CommandId("prose.palette.open");
+pub const PALETTE: CommandId = CommandId::new("prose.palette.open");
 
 /// Save the document to a native `.ambre` file (`PROSE-IO-028`).
-pub const SAVE_FILE: CommandId = CommandId("prose.file.save");
+pub const SAVE_FILE: CommandId = CommandId::new("prose.file.save");
 
 /// Bring a Markdown file in after the last block (`PROSE-IO-027`).
-pub const IMPORT_MARKDOWN: CommandId = CommandId("prose.file.import_markdown");
+pub const IMPORT_MARKDOWN: CommandId = CommandId::new("prose.file.import_markdown");
 
 /// Take the document out as GFM Markdown.
-pub const EXPORT_MARKDOWN: CommandId = CommandId("prose.file.export_markdown");
+pub const EXPORT_MARKDOWN: CommandId = CommandId::new("prose.file.export_markdown");
 
 /// The clipboard intents carry the shared identities: a cut is one command in
 /// every application (`UI-THREAD-011`).
@@ -55,11 +55,11 @@ pub const CONTEXT_MENU: [CommandId; 6] = [UNDO, REDO, CUT, COPY, PASTE, PASTE_PL
 
 /// The five controls of the format bar. A control and its chord invoke the
 /// same id, and the id resolves to one mark key (`PROSE-UI-056`).
-pub const BOLD: CommandId = CommandId("prose.format.bold");
-pub const ITALIC: CommandId = CommandId("prose.format.italic");
-pub const UNDERLINE: CommandId = CommandId("prose.format.underline");
-pub const STRIKETHROUGH: CommandId = CommandId("prose.format.strikethrough");
-pub const CODE: CommandId = CommandId("prose.format.code");
+pub const BOLD: CommandId = CommandId::new("prose.format.bold");
+pub const ITALIC: CommandId = CommandId::new("prose.format.italic");
+pub const UNDERLINE: CommandId = CommandId::new("prose.format.underline");
+pub const STRIKETHROUGH: CommandId = CommandId::new("prose.format.strikethrough");
+pub const CODE: CommandId = CommandId::new("prose.format.code");
 
 /// Each control of the format bar, in the order the bar shows them, with the
 /// mark key it applies or removes.
@@ -146,98 +146,98 @@ pub const COMMANDS: &[Command] = &[
     Command {
         id: BOLD,
         title: bold_title,
-        icon: Some(IconId("format-bold")),
+        icon: Some(IconId::new("format-bold")),
         keybindings: &[KeyBinding::primary(KeyChar::B)],
         category: FORMAT,
     },
     Command {
         id: ITALIC,
         title: italic_title,
-        icon: Some(IconId("format-italic")),
+        icon: Some(IconId::new("format-italic")),
         keybindings: &[KeyBinding::primary(KeyChar::I)],
         category: FORMAT,
     },
     Command {
         id: UNDERLINE,
         title: underline_title,
-        icon: Some(IconId("format-underline")),
+        icon: Some(IconId::new("format-underline")),
         keybindings: &[KeyBinding::primary(KeyChar::U)],
         category: FORMAT,
     },
     Command {
         id: STRIKETHROUGH,
         title: strikethrough_title,
-        icon: Some(IconId("format-strikethrough")),
+        icon: Some(IconId::new("format-strikethrough")),
         keybindings: &[KeyBinding::primary_shift(KeyChar::X)],
         category: FORMAT,
     },
     Command {
         id: CODE,
         title: code_title,
-        icon: Some(IconId("code-tags")),
+        icon: Some(IconId::new("code-tags")),
         keybindings: &[KeyBinding::primary(KeyChar::E)],
         category: FORMAT,
     },
     Command {
         id: SAVE_FILE,
         title: save_file_title,
-        icon: Some(IconId("content-save")),
+        icon: Some(IconId::new("content-save")),
         keybindings: &[],
         category: FILE,
     },
     Command {
         id: IMPORT_MARKDOWN,
         title: import_markdown_title,
-        icon: Some(IconId("file-import-outline")),
+        icon: Some(IconId::new("file-import-outline")),
         keybindings: &[],
         category: FILE,
     },
     Command {
         id: EXPORT_MARKDOWN,
         title: export_markdown_title,
-        icon: Some(IconId("file-export-outline")),
+        icon: Some(IconId::new("file-export-outline")),
         keybindings: &[],
         category: FILE,
     },
     Command {
         id: CUT,
         title: cut_title,
-        icon: Some(IconId("content-cut")),
+        icon: Some(IconId::new("content-cut")),
         keybindings: ambre_commands::shared::CUT_CHORDS,
         category: CLIPBOARD,
     },
     Command {
         id: COPY,
         title: copy_title,
-        icon: Some(IconId("content-copy")),
+        icon: Some(IconId::new("content-copy")),
         keybindings: ambre_commands::shared::COPY_CHORDS,
         category: CLIPBOARD,
     },
     Command {
         id: PASTE,
         title: paste_title,
-        icon: Some(IconId("content-paste")),
+        icon: Some(IconId::new("content-paste")),
         keybindings: ambre_commands::shared::PASTE_CHORDS,
         category: CLIPBOARD,
     },
     Command {
         id: PASTE_PLAIN,
         title: paste_plain_title,
-        icon: Some(IconId("content-paste")),
+        icon: Some(IconId::new("content-paste")),
         keybindings: ambre_commands::shared::PASTE_PLAIN_CHORDS,
         category: CLIPBOARD,
     },
     Command {
         id: UNDO,
         title: undo_title,
-        icon: Some(IconId("undo")),
+        icon: Some(IconId::new("undo")),
         keybindings: ambre_commands::shared::UNDO_CHORDS,
         category: HISTORY,
     },
     Command {
         id: REDO,
         title: redo_title,
-        icon: Some(IconId("redo")),
+        icon: Some(IconId::new("redo")),
         keybindings: ambre_commands::shared::REDO_CHORDS,
         category: HISTORY,
     },

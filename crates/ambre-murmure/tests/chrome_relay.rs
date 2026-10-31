@@ -414,7 +414,7 @@ fn the_palette_lists_the_channels_first_in_sidebar_order() {
             .into_iter()
             .map(|row| match row {
                 PaletteRow::Entry(e) => e.label.clone(),
-                PaletteRow::Command(c) => c.id.0.to_owned(),
+                PaletteRow::Command(c) => c.id.as_str().to_owned(),
             })
             .collect()
     };
@@ -556,7 +556,7 @@ fn the_palette_lists_the_other_members_of_the_space_after_the_channels() {
         .into_iter()
         .map(|row| match row {
             PaletteRow::Entry(e) => e.label.clone(),
-            PaletteRow::Command(c) => c.id.0.to_owned(),
+            PaletteRow::Command(c) => c.id.as_str().to_owned(),
         })
         .collect();
     assert_eq!(shown, ["Bob"]);

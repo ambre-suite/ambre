@@ -2991,7 +2991,7 @@ impl ToileView {
                 .hover_handle(&self.selection, &self.display, &self.cam, screen)?;
             super::palette::resize_cursor(h, theta)
         };
-        Some(super::palette::CanvasCursor(css))
+        Some(super::palette::CanvasCursor::new(css))
     }
 
     /// Release of a key the board held. `Space` is the only one: it arms the
@@ -4237,7 +4237,7 @@ impl ToileView {
         };
         self.send_edit(ToileCommand::SetLink {
             id: id.clone(),
-            link: edit.0,
+            link: edit.into_inner(),
         });
         self.needs_full = true;
     }

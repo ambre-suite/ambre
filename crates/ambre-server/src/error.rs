@@ -312,8 +312,8 @@ mod tests {
     #[tokio::test]
     async fn clock_mismatch_returns_409() {
         let r = AppError::ClockMismatch {
-            expected: ambre_protocol::messages::Clock(5),
-            got: ambre_protocol::messages::Clock(7),
+            expected: ambre_protocol::messages::Clock::new(5),
+            got: ambre_protocol::messages::Clock::new(7),
         }
         .into_response();
         assert_eq!(r.status(), StatusCode::CONFLICT);

@@ -30,27 +30,27 @@ use super::tool::{Handle, Tool};
 // `Command` table.
 
 /// Select / move / resize / rotate / marquee (`toile-tools`).
-pub const TOOL_SELECT: CommandId = CommandId("toile.tool.select");
+pub const TOOL_SELECT: CommandId = CommandId::new("toile.tool.select");
 /// Vector pen (Bezier path).
-pub const TOOL_PEN: CommandId = CommandId("toile.tool.pen");
+pub const TOOL_PEN: CommandId = CommandId::new("toile.tool.pen");
 /// Shape drag-rect (defaults to a rectangle; the kind sub-option is a local
 /// palette signal folded into `CreateElement`, `toile-tools`).
-pub const TOOL_SHAPE: CommandId = CommandId("toile.tool.shape");
+pub const TOOL_SHAPE: CommandId = CommandId::new("toile.tool.shape");
 /// Connector (anchor to anchor).
-pub const TOOL_CONNECTOR: CommandId = CommandId("toile.tool.connector");
+pub const TOOL_CONNECTOR: CommandId = CommandId::new("toile.tool.connector");
 /// Freehand draw.
-pub const TOOL_DRAW: CommandId = CommandId("toile.tool.draw");
+pub const TOOL_DRAW: CommandId = CommandId::new("toile.tool.draw");
 /// Sticky note.
-pub const TOOL_STICKY: CommandId = CommandId("toile.tool.sticky");
+pub const TOOL_STICKY: CommandId = CommandId::new("toile.tool.sticky");
 /// Text element.
-pub const TOOL_TEXT: CommandId = CommandId("toile.tool.text");
+pub const TOOL_TEXT: CommandId = CommandId::new("toile.tool.text");
 /// Drop a comment thread (`toile-comments`, `TOILE-UI-042`).
-pub const TOOL_COMMENT: CommandId = CommandId("toile.tool.comment");
+pub const TOOL_COMMENT: CommandId = CommandId::new("toile.tool.comment");
 /// The highlighter (`toile-presence`, `TOILE-UI-074`): a trail the other peers
 /// see and the board never keeps.
-pub const TOOL_LASER: CommandId = CommandId("toile.tool.laser");
+pub const TOOL_LASER: CommandId = CommandId::new("toile.tool.laser");
 /// Pan-only hand.
-pub const TOOL_HAND: CommandId = CommandId("toile.tool.hand");
+pub const TOOL_HAND: CommandId = CommandId::new("toile.tool.hand");
 
 /// Every tool `CommandId`, in palette order. The `chrome::ToolPalette` renders
 /// one button per entry; the launcher intercepts these ids (UI-only intents).
@@ -124,7 +124,19 @@ pub const STICKY_CURSOR: &str = "url(\"data:image/svg+xml;utf8,<svg xmlns='http:
 /// A CSS `cursor` value the board view asks of the canvas element over the
 /// tool's own (`toile-tools`): a keyword, or an inlined SVG cursor.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CanvasCursor(pub Cow<'static, str>);
+pub struct CanvasCursor(Cow<'static, str>);
+
+impl CanvasCursor {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: Cow<'static, str>) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 /// The CSS `cursor` value for the canvas while `tool` is active (`toile-tools`,
 /// "Cursor feedback"). A note-shaped cursor while the Sticky tool is armed, and a
@@ -326,8 +338,8 @@ mod tests {
     fn tool_for_command_rejects_non_tool_ids() {
         // A non-tool Toile command (the Find panel opener) and an unknown id both
         // resolve to `None`, so the launcher never switches tools for them.
-        assert_eq!(tool_for_command(CommandId("toile.find.open")), None);
-        assert_eq!(tool_for_command(CommandId("nonsense")), None);
+        assert_eq!(tool_for_command(CommandId::new("toile.find.open")), None);
+        assert_eq!(tool_for_command(CommandId::new("nonsense")), None);
     }
 
     #[test]
@@ -369,7 +381,7 @@ mod tests {
             })
             .collect();
         assert_eq!(ids.len(), TOOL_COMMANDS.len());
-        ids.sort_by_key(|id| id.0);
+        ids.sort_by_key(|id| id.as_str());
         ids.dedup();
         assert_eq!(ids.len(), TOOL_COMMANDS.len(), "tool chords collide");
     }

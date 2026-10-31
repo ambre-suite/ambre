@@ -1364,7 +1364,7 @@ mod tests {
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "abc",
             &id,
             DocOffset::new(14),
@@ -1395,7 +1395,7 @@ mod tests {
         let id = first_block(&ui);
         assert!(drawn_glyphs(&paint(&mut ui), 14));
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "abc",
             &id,
             DocOffset::new(4),
@@ -1419,7 +1419,7 @@ mod tests {
         let header = state.bands().header.expect("the header block");
         let mut ui = view_of(&mut state);
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "Head",
             &header,
             DocOffset::ZERO,
@@ -1444,7 +1444,7 @@ mod tests {
         let row = laid.row_tops.as_slice()[1] - laid.row_tops.as_slice()[0];
 
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "Cell",
             &block,
             DocOffset::ZERO,
@@ -1457,7 +1457,7 @@ mod tests {
         let long = "word ".repeat(60);
         ui.draft.clear();
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             &long,
             &block,
             DocOffset::ZERO,
@@ -1506,7 +1506,7 @@ mod tests {
         let id = first_block(&ui);
         let after = x_of(&ui, id, 4);
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "abc",
             &id,
             DocOffset::new(4),
@@ -1521,7 +1521,7 @@ mod tests {
     fn draft_width(ui: &mut ProseUiState, block: BlockId, text: &str) -> f64 {
         ui.draft.clear();
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             text,
             &block,
             DocOffset::ZERO,
@@ -1579,7 +1579,7 @@ mod tests {
         let bold_at = |ui: &mut ProseUiState, at: u32| {
             ui.draft.clear();
             ui.draft.push_str(
-                ambre_bus::app::prose::TextAck(1),
+                ambre_bus::app::prose::TextAck::new(1),
                 "abc",
                 &id,
                 DocOffset::new(at),
@@ -1667,7 +1667,7 @@ mod tests {
         };
         let word = lines(&mut ui);
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "abc",
             &id,
             DocOffset::new(4),
@@ -1694,7 +1694,7 @@ mod tests {
         let id = block;
         let typed = " more".repeat(40);
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             &typed,
             &id,
             DocOffset::new(14),
@@ -1734,7 +1734,7 @@ mod tests {
         ui.apply_layout(shaped);
         let id = first_block(&ui);
         ui.draft.push_delete(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             &id,
             DocOffset::ZERO,
             DocOffset::new(5),
@@ -1795,7 +1795,7 @@ mod tests {
         });
         ui.queued.clear();
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "xy",
             &minted,
             DocOffset::ZERO,
@@ -1826,7 +1826,7 @@ mod tests {
             new_block: minted,
         });
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "xy",
             &minted,
             DocOffset::ZERO,
@@ -1858,7 +1858,7 @@ mod tests {
         );
         // A keystroke replayed before the next frame shapes again.
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(2),
+            ambre_bus::app::prose::TextAck::new(2),
             "z",
             &minted,
             DocOffset::new(2),
@@ -1935,7 +1935,7 @@ mod tests {
         );
 
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             &"word ".repeat(60),
             &left,
             DocOffset::ZERO,
@@ -1965,7 +1965,7 @@ mod tests {
         let cell = block_id(first_block_of(&state, cell));
         let mut ui = view_of(&mut state);
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(1),
+            ambre_bus::app::prose::TextAck::new(1),
             "xy",
             &cell,
             DocOffset::ZERO,
@@ -1978,7 +1978,7 @@ mod tests {
         );
         // A keystroke replayed before the next frame, after the point.
         ui.draft.push_str(
-            ambre_bus::app::prose::TextAck(2),
+            ambre_bus::app::prose::TextAck::new(2),
             "z",
             &cell,
             DocOffset::new(2),

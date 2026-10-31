@@ -198,7 +198,19 @@ impl std::fmt::Display for Decimals {
 /// The error of a decoded decimal count past [`Decimals::MAX`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("a cell carries at most 15 decimal places, not {0}")]
-pub struct InvalidDecimals(pub u8);
+pub struct InvalidDecimals(u8);
+
+impl InvalidDecimals {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: u8) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> u8 {
+        self.0
+    }
+}
 
 impl TryFrom<u8> for Decimals {
     type Error = InvalidDecimals;

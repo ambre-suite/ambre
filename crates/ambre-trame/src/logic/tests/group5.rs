@@ -18,7 +18,7 @@ fn shared_filter_does_not_affect_sum() {
     });
 
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gt,
@@ -42,20 +42,20 @@ fn clear_filter_unhides_and_noops_when_absent() {
 
     // No filter yet -> clear is a pure no-op.
     let noop = state.handle_command(TrameCommand::ClearFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     assert!(noop.display.is_empty());
     assert!(noop.update.is_none());
 
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Values(vec!["a".to_owned()]),
     });
     assert!(is_filtered(&mut state, 1, 0), "b hidden");
 
     let cleared = state.handle_command(TrameCommand::ClearFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
     });
     assert!(matches!(cleared.display[0], TrameEvent::FilterCleared));
     assert!(cleared.update.is_some(), "clear broadcasts the removal");
@@ -71,7 +71,7 @@ fn shared_filter_hidden_follows_sort() {
     seed_col_a(&mut state, &["3", "1", "2"]);
     // Hide the row whose value is exactly 1 (the middle row).
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Ne,
@@ -83,7 +83,7 @@ fn shared_filter_hidden_follows_sort() {
     // Sort ascending: order becomes [1, 2, 3]; the hidden row (value 1) moves
     // to the top and its hidden flag must travel with it.
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(2), Col::new(0)),
@@ -108,7 +108,7 @@ fn shared_filter_recomputes_on_edit() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["5"]);
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gt,
@@ -136,7 +136,7 @@ fn shared_filter_applies_on_remote_import() {
     let mut author = TrameState::new();
     seed_col_a(&mut author, &["10", "20", "30"]);
     author.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gte,
@@ -179,7 +179,7 @@ fn concurrent_filters_converge_lww() {
         .expect("a snapshot this build wrote reads back at the current schema");
 
     a.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gt,
@@ -187,7 +187,7 @@ fn concurrent_filters_converge_lww() {
         },
     });
     b.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Lt,
@@ -230,12 +230,12 @@ fn concurrent_filters_elect_a_whole_definition() {
         value: "3".to_owned(),
     };
     a.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: gt.clone(),
     });
     b.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: lt.clone(),
     });
@@ -262,7 +262,7 @@ fn filter_by_values_survives_a_reload() {
     let mut author = TrameState::new();
     seed_col_a(&mut author, &["a", "b", "c"]);
     author.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Values(vec!["a".to_owned(), "c".to_owned()]),
     });
@@ -291,7 +291,7 @@ fn shared_filter_is_undoable() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["a", "b"]);
     state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Values(vec!["a".to_owned()]),
     });
@@ -310,20 +310,20 @@ fn shared_filter_noop_guards() {
 
     // Wrong sheet.
     let wrong = state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("nope".to_owned()),
+        sheet_id: SheetId::new("nope".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Values(vec!["x".to_owned()]),
     });
     assert!(matches!(&wrong.display[..], [TrameEvent::Error { .. }]));
     assert!(wrong.update.is_none());
     let wrong_clear = state.handle_command(TrameCommand::ClearFilter {
-        sheet_id: SheetId("nope".to_owned()),
+        sheet_id: SheetId::new("nope".to_owned()),
     });
     assert!(wrong_clear.display.is_empty() && wrong_clear.update.is_none());
 
     // Virtual column (never materialized): nothing to filter.
     let virtual_col = state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(50),
         kind: FilterKind::Values(vec!["x".to_owned()]),
     });

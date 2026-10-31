@@ -94,7 +94,19 @@ pub struct CommitHash(String);
 /// A text that is no commit id: too short, too long, or not lowercase hex.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{0:?} is not a commit id")]
-pub struct InvalidCommitHash(pub String);
+pub struct InvalidCommitHash(String);
+
+impl InvalidCommitHash {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 impl CommitHash {
     /// The id `text` spells.

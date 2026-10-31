@@ -388,7 +388,7 @@ mod tests {
                 &document_id,
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
-                ambre_protocol::messages::Clock(seq.unsigned_abs()),
+                ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
                 ambre_core::Seq::new(seq.unsigned_abs()),
                 &ambre_core::ObjectKey::new(format!("k{seq}")),
             )
@@ -468,7 +468,7 @@ mod tests {
                 &document_id,
                 &FixedBytes::<ambre_core::PublicKey>::from_array(author),
                 &snap,
-                ambre_protocol::messages::Clock(seq.unsigned_abs()),
+                ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
                 ambre_core::Seq::new(seq.unsigned_abs()),
                 &ambre_core::ObjectKey::new(format!("k{seq}")),
             )

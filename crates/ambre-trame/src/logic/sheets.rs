@@ -337,7 +337,7 @@ impl TrameState {
                             LoroValue::String(s) => s.to_string(),
                             _ => id.clone(),
                         };
-                        (SheetId(id.clone()), SheetName::stored(name))
+                        (SheetId::new(id.clone()), SheetName::stored(name))
                     })
                     .collect(),
                 _ => Vec::new(),
@@ -407,7 +407,7 @@ impl TrameState {
     /// Every sheet id the `sheets` CRDT map holds, unordered.
     fn stored_sheet_ids(&self) -> Vec<SheetId> {
         match self.doc.get_map(Root::Sheets.as_str()).get_value() {
-            LoroValue::Map(sheets) => sheets.keys().cloned().map(SheetId).collect(),
+            LoroValue::Map(sheets) => sheets.keys().cloned().map(SheetId::new).collect(),
             _ => Vec::new(),
         }
     }
@@ -421,7 +421,7 @@ impl TrameState {
             return None;
         };
         self.sheet_counter = counter.next();
-        Some(SheetId(format!(
+        Some(SheetId::new(format!(
             "{:016x}_{:08x}",
             self.doc.peer_id(),
             counter.get()
@@ -459,7 +459,7 @@ impl TrameState {
             LoroValue::List(items) => items
                 .iter()
                 .filter_map(|v| match v {
-                    LoroValue::String(s) => Some(SheetId(s.to_string())),
+                    LoroValue::String(s) => Some(SheetId::new(s.to_string())),
                     _ => None,
                 })
                 .collect(),
@@ -550,7 +550,7 @@ impl TrameState {
         let Some(id) = self.mint_sheet_id() else {
             return TrameOutcome::display_only(vec![sheet_ids_exhausted()]);
         };
-        let id = id.0;
+        let id = id.into_inner();
         self.hold_default_sheet();
         let name = self.free_sheet_name(name);
         let _ = self
@@ -634,7 +634,7 @@ impl TrameState {
             LoroValue::List(items) => items
                 .iter()
                 .map(|v| match v {
-                    LoroValue::String(s) => Some(SheetId(s.to_string())),
+                    LoroValue::String(s) => Some(SheetId::new(s.to_string())),
                     _ => None,
                 })
                 .collect(),

@@ -407,7 +407,7 @@ mod tests {
             pub_key: FixedBytes::from_array(signing_key.verifying_key().to_bytes()),
             key_id: doc_key.id(),
             snapshot_id,
-            clock: Clock(1),
+            clock: Clock::new(1),
         };
         let body = pipeline::update_body(&NONCE, summary, &b"delta".to_vec().into())
             .expect("within bounds");
@@ -538,7 +538,7 @@ mod tests {
         let echo = update(document_id, snapshot, &doc_key, None);
         if let Some(doc) = state.documents.get_mut(&document_id) {
             doc.rekey.record_sent(crate::rekey::SentFrame {
-                clock: ambre_protocol::messages::Clock(1),
+                clock: ambre_protocol::messages::Clock::new(1),
                 key_id: doc_key.id(),
                 signature: echo.signature,
                 payload: crate::pipeline::UpdateFrame::from_bytes(b"edit".to_vec()),

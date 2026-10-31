@@ -55,25 +55,25 @@ pub const COPY: CommandId = ambre_commands::shared::COPY;
 /// Paste the clipboard at the cursor / viewport center.
 pub const PASTE: CommandId = ambre_commands::shared::PASTE;
 /// Duplicate the selection in place with a small nudge.
-pub const DUPLICATE: CommandId = CommandId("toile.edit.duplicate");
+pub const DUPLICATE: CommandId = CommandId::new("toile.edit.duplicate");
 /// Delete the selection.
-pub const DELETE: CommandId = CommandId("toile.edit.delete");
+pub const DELETE: CommandId = CommandId::new("toile.edit.delete");
 /// Bind the selection into a group.
-pub const GROUP: CommandId = CommandId("toile.group.group");
+pub const GROUP: CommandId = CommandId::new("toile.group.group");
 /// Drop the selected group's binding.
-pub const UNGROUP: CommandId = CommandId("toile.group.ungroup");
+pub const UNGROUP: CommandId = CommandId::new("toile.group.ungroup");
 /// Raise the selection to the top of the z-order.
-pub const BRING_FRONT: CommandId = CommandId("toile.z.front");
+pub const BRING_FRONT: CommandId = CommandId::new("toile.z.front");
 /// Lower the selection to the bottom of the z-order.
-pub const SEND_BACK: CommandId = CommandId("toile.z.back");
+pub const SEND_BACK: CommandId = CommandId::new("toile.z.back");
 /// Raise the selection one step.
-pub const FORWARD: CommandId = CommandId("toile.z.forward");
+pub const FORWARD: CommandId = CommandId::new("toile.z.forward");
 /// Lower the selection one step.
-pub const BACKWARD: CommandId = CommandId("toile.z.backward");
+pub const BACKWARD: CommandId = CommandId::new("toile.z.backward");
 /// Lock the selection (skips hit-test / handles).
-pub const LOCK: CommandId = CommandId("toile.lock.lock");
+pub const LOCK: CommandId = CommandId::new("toile.lock.lock");
 /// Unlock the selection.
-pub const UNLOCK: CommandId = CommandId("toile.lock.unlock");
+pub const UNLOCK: CommandId = CommandId::new("toile.lock.unlock");
 
 // -- Align and distribute (`toile-elements section 1.7`) ----------------
 // Eight one-shot batches over the selection: six put every box on an edge or
@@ -82,39 +82,39 @@ pub const UNLOCK: CommandId = CommandId("toile.lock.unlock");
 // coordinates are what converges.
 
 /// Put every selected box on the left edge of the selection.
-pub const ALIGN_LEFT: CommandId = CommandId("toile.align.left");
+pub const ALIGN_LEFT: CommandId = CommandId::new("toile.align.left");
 /// Centre every selected box on the vertical mid-line of the selection.
-pub const ALIGN_HCENTER: CommandId = CommandId("toile.align.hcenter");
+pub const ALIGN_HCENTER: CommandId = CommandId::new("toile.align.hcenter");
 /// Put every selected box on the right edge of the selection.
-pub const ALIGN_RIGHT: CommandId = CommandId("toile.align.right");
+pub const ALIGN_RIGHT: CommandId = CommandId::new("toile.align.right");
 /// Put every selected box on the top edge of the selection.
-pub const ALIGN_TOP: CommandId = CommandId("toile.align.top");
+pub const ALIGN_TOP: CommandId = CommandId::new("toile.align.top");
 /// Centre every selected box on the horizontal mid-line of the selection.
-pub const ALIGN_VCENTER: CommandId = CommandId("toile.align.vcenter");
+pub const ALIGN_VCENTER: CommandId = CommandId::new("toile.align.vcenter");
 /// Put every selected box on the bottom edge of the selection.
-pub const ALIGN_BOTTOM: CommandId = CommandId("toile.align.bottom");
+pub const ALIGN_BOTTOM: CommandId = CommandId::new("toile.align.bottom");
 /// Equalize the horizontal gaps between three or more selected boxes.
-pub const DISTRIBUTE_H: CommandId = CommandId("toile.align.distribute_h");
+pub const DISTRIBUTE_H: CommandId = CommandId::new("toile.align.distribute_h");
 /// Equalize the vertical gaps between three or more selected boxes.
-pub const DISTRIBUTE_V: CommandId = CommandId("toile.align.distribute_v");
+pub const DISTRIBUTE_V: CommandId = CommandId::new("toile.align.distribute_v");
 /// Add the selection to the frame that contains it.
-pub const ADD_TO_FRAME: CommandId = CommandId("toile.frame.add");
+pub const ADD_TO_FRAME: CommandId = CommandId::new("toile.frame.add");
 /// Remove the selection from its containing frame.
-pub const REMOVE_FROM_FRAME: CommandId = CommandId("toile.frame.remove");
+pub const REMOVE_FROM_FRAME: CommandId = CommandId::new("toile.frame.remove");
 /// Select every element on the board (local, never synced).
-pub const SELECT_ALL: CommandId = CommandId("toile.selection.all");
+pub const SELECT_ALL: CommandId = CommandId::new("toile.selection.all");
 
 // -- Reactions ----------------------------------------------------------
 // A minimal, fixed emoji set for the reaction affordance: each id sets the local
 // user's reaction on every selected element (one `React` per target, LWW on the
 // user's own key). `REACT_CLEAR` removes it. The picker is intentionally small
 // and hardcoded for the MVP; a full emoji browser is a later concern.
-pub const REACT_THUMBSUP: CommandId = CommandId("toile.react.thumbsup");
-pub const REACT_HEART: CommandId = CommandId("toile.react.heart");
-pub const REACT_CHECK: CommandId = CommandId("toile.react.check");
-pub const REACT_PARTY: CommandId = CommandId("toile.react.party");
+pub const REACT_THUMBSUP: CommandId = CommandId::new("toile.react.thumbsup");
+pub const REACT_HEART: CommandId = CommandId::new("toile.react.heart");
+pub const REACT_CHECK: CommandId = CommandId::new("toile.react.check");
+pub const REACT_PARTY: CommandId = CommandId::new("toile.react.party");
 /// Remove the local user's own reaction from the selection.
-pub const REACT_CLEAR: CommandId = CommandId("toile.react.clear");
+pub const REACT_CLEAR: CommandId = CommandId::new("toile.react.clear");
 
 /// The fixed emoji entries of the reaction picker, id + glyph, in display order.
 pub const REACTION_EMOJI: &[(CommandId, ambre_bus::Emoji)] = &[
@@ -1230,7 +1230,8 @@ mod tests {
     fn an_unknown_id_is_refused_not_ui_only() {
         let dv = viewport(vec![]);
         assert!(
-            resolve_menu_command(CommandId("toile.unknown"), &[], None, &els(&dv), &dv).is_none()
+            resolve_menu_command(CommandId::new("toile.unknown"), &[], None, &els(&dv), &dv)
+                .is_none()
         );
     }
 

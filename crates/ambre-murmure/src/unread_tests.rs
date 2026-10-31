@@ -99,11 +99,11 @@ fn a_message_takes_the_number_of_the_update_that_created_it() {
     let me = Id::<User>::mint();
     assert_eq!(
         bob.unread(segment, Seq::new(4), me).expect("count"),
-        UnreadCount(2)
+        UnreadCount::new(2)
     );
     assert_eq!(
         bob.unread(segment, Seq::new(5), me).expect("count"),
-        UnreadCount(1)
+        UnreadCount::new(1)
     );
     assert_eq!(
         bob.unread(segment, Seq::new(6), me).expect("count"),
@@ -197,7 +197,7 @@ fn a_message_known_only_from_a_snapshot_lies_within_its_horizon() {
     );
     assert_eq!(
         bob.unread(segment, Seq::new(11), me).expect("count"),
-        UnreadCount(1)
+        UnreadCount::new(1)
     );
     assert_eq!(
         bob.unread(segment, Seq::new(12), me).expect("count"),

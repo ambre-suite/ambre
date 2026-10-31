@@ -61,7 +61,7 @@ pub fn open_authenticated(plaintext: &[u8]) -> Result<Vec<u8>, PipelineError> {
         pub_key: FixedBytes::<PublicKey>::from_array(signing.verifying_key().to_bytes()),
         key_id: key.id(),
         snapshot_id: Id::<id::Snapshot>::mint(),
-        clock: Clock(1),
+        clock: Clock::new(1),
     };
     let aad = postcard::to_allocvec(&public_data)
         .map(ambre_core::Aad::new)

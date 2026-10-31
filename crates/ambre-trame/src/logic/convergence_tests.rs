@@ -142,7 +142,7 @@ impl Op {
                 to: Col::new(to),
             },
             Op::Sort { ascending } => TrameCommand::SortRange {
-                sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
+                sheet_id: ambre_bus::SheetId::new(SHEET.to_owned()),
                 rect: crate::CellRect::spanning(
                     crate::CellPos::new(Row::new(0), Col::new(0)),
                     crate::CellPos::new(Row::new(ROWS - 1), Col::new(COLS - 1)),
@@ -171,7 +171,7 @@ impl Op {
                 col: Col::new(col),
             },
             Op::Filter { op, value } => TrameCommand::ApplyFilter {
-                sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
+                sheet_id: ambre_bus::SheetId::new(SHEET.to_owned()),
                 col: Col::new(0),
                 kind: FilterKind::Condition {
                     op,
@@ -179,10 +179,10 @@ impl Op {
                 },
             },
             Op::ClearFilter => TrameCommand::ClearFilter {
-                sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
+                sheet_id: ambre_bus::SheetId::new(SHEET.to_owned()),
             },
             Op::Fill => TrameCommand::FillRange {
-                sheet_id: ambre_bus::SheetId(SHEET.to_owned()),
+                sheet_id: ambre_bus::SheetId::new(SHEET.to_owned()),
                 src: crate::CellRect::spanning(
                     crate::CellPos::new(Row::new(0), Col::new(0)),
                     crate::CellPos::new(Row::new(0), Col::new(0)),
@@ -712,7 +712,9 @@ fn subset_style_edit_does_not_tear_a_whole_cell_rewrite() {
 /// The tab order the strip shows: the ids of the `SheetList` event.
 fn tab_order(state: &TrameState) -> Vec<String> {
     match state.sheet_list_event() {
-        TrameEvent::SheetList { sheets, .. } => sheets.into_iter().map(|t| t.id.0).collect(),
+        TrameEvent::SheetList { sheets, .. } => {
+            sheets.into_iter().map(|t| t.id.into_inner()).collect()
+        }
         other => panic!("expected SheetList, got {other:?}"),
     }
 }
@@ -737,11 +739,11 @@ fn concurrent_tab_moves_converge_on_one_order() {
     assert_eq!(ids.len(), 3);
 
     a.handle_command(TrameCommand::MoveSheet {
-        sheet_id: ambre_bus::SheetId(ids[2].clone()),
+        sheet_id: ambre_bus::SheetId::new(ids[2].clone()),
         to_index: crate::SheetTabPos::ZERO,
     });
     b.handle_command(TrameCommand::MoveSheet {
-        sheet_id: ambre_bus::SheetId(ids[0].clone()),
+        sheet_id: ambre_bus::SheetId::new(ids[0].clone()),
         to_index: crate::SheetTabPos::new(2),
     });
 

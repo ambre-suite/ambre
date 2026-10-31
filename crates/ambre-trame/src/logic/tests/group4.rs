@@ -35,7 +35,7 @@ fn sort_range_formulas_follow_data() {
         });
     }
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(1), Col::new(1)),
@@ -84,7 +84,7 @@ fn sort_range_sum_block_is_stable_under_internal_sort() {
     assert_eq!(read_col(&mut state, 0, 4, 1)[4], "4"); // 3 + 1
 
     state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(2), Col::new(0)),
@@ -115,7 +115,7 @@ fn sort_range_noops() {
     }
     // Wrong sheet: ignored.
     let other = state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId("s9".to_owned()),
+        sheet_id: SheetId::new("s9".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(1), Col::new(0)),
@@ -128,7 +128,7 @@ fn sort_range_noops() {
     assert!(other.display.is_empty());
     // Already ascending: acknowledged but no delta.
     let sorted = state.handle_command(TrameCommand::SortRange {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(1), Col::new(0)),
@@ -340,7 +340,7 @@ fn sort_range_multi_lexicographic_with_per_key_direction() {
         });
     }
     let evts = state.handle_command(TrameCommand::SortRangeMulti {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(3), Col::new(1)),
@@ -441,7 +441,7 @@ fn sort_range_multi_pins_header_row() {
         });
     }
     state.handle_command(TrameCommand::SortRangeMulti {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(3), Col::new(1)),
@@ -476,7 +476,7 @@ fn sort_range_multi_no_keys_is_noop() {
     }
     // No keys at all.
     let empty = state.handle_command(TrameCommand::SortRangeMulti {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(2), Col::new(0)),
@@ -494,7 +494,7 @@ fn sort_range_multi_no_keys_is_noop() {
     // A key whose column is outside [col_start..=col_end] is dropped, leaving no
     // usable key -- same no-op.
     let out = state.handle_command(TrameCommand::SortRangeMulti {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(2), Col::new(0)),
@@ -528,7 +528,7 @@ fn sort_range_multi_already_sorted_emits_no_delta() {
         });
     }
     let evts = state.handle_command(TrameCommand::SortRangeMulti {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
             crate::CellPos::new(Row::new(0), Col::new(0)),
             crate::CellPos::new(Row::new(2), Col::new(1)),
@@ -872,7 +872,7 @@ fn shared_filter_by_values_hides_nonmatching() {
     seed_col_a(&mut state, &["apple", "banana", "cherry", "apple"]);
 
     let evts = state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Values(vec!["apple".to_owned()]),
     });
@@ -903,7 +903,7 @@ fn shared_filter_condition_greater_than() {
     seed_col_a(&mut state, &["10", "20", "30"]);
 
     let evts = state.handle_command(TrameCommand::ApplyFilter {
-        sheet_id: SheetId("s0".to_owned()),
+        sheet_id: SheetId::new("s0".to_owned()),
         col: Col::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gt,

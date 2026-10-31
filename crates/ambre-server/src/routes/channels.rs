@@ -3758,7 +3758,7 @@ mod tests {
             &document,
             &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([1; 32]),
             &snapshot,
-            ambre_protocol::messages::Clock(seq.unsigned_abs()),
+            ambre_protocol::messages::Clock::new(seq.unsigned_abs()),
             ambre_core::Seq::new(seq.unsigned_abs()),
             &ambre_core::ObjectKey::from("k"),
         )

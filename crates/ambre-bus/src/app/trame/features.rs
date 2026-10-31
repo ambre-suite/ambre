@@ -62,7 +62,19 @@ pub enum HeaderRow {
 /// A number refused as a percentage: outside `0..=100`, or not a number.
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 #[error("{0} is not a percentage between 0 and 100")]
-pub struct InvalidPercent(pub f32);
+pub struct InvalidPercent(f32);
+
+impl InvalidPercent {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: f32) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+}
 
 /// A share of a whole, in percent, from 0 to 100 inclusive, kept as given
 /// with no rounding (`TRAME-239`, `TRAME-240`). A top-N rule ranks the cells it covers by

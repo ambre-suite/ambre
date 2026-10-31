@@ -176,7 +176,7 @@ pub fn ToileChoosers(
                             view! {
                                 <li>
                                     <button on:click=move |_| {
-                                        set_link.set(Some(LinkEdit(Some(LinkTarget::Frame(id.clone().into())))));
+                                        set_link.set(Some(LinkEdit::new(Some(LinkTarget::Frame(id.clone().into())))));
                                         link_open.set(Openness::Closed);
                                     }>{label}</button>
                                 </li>
@@ -193,7 +193,7 @@ pub fn ToileChoosers(
                                 <li>
                                     <button on:click=move |_| {
                                         let target = LinkTarget::Document { document_id, doc_type };
-                                        set_link.set(Some(LinkEdit(Some(target))));
+                                        set_link.set(Some(LinkEdit::new(Some(target))));
                                         link_open.set(Openness::Closed);
                                     }>{label(&doc)}</button>
                                 </li>
@@ -248,7 +248,7 @@ fn set_web_link(
 ) {
     match WebAddress::parse(&typed.get_untracked()) {
         Ok(url) => {
-            edit.set(Some(LinkEdit(Some(LinkTarget::Url(url.into())))));
+            edit.set(Some(LinkEdit::new(Some(LinkTarget::Url(url.into())))));
             open.set(Openness::Closed);
         }
         Err(e) => error.set(Some(e)),

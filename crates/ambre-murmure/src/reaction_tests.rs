@@ -361,8 +361,16 @@ fn a_reaction_never_counts_as_unread() {
             .unread(segment, Seq::new(1), bob.user)
             .expect("count")
     };
-    assert_eq!(count(&bob), UnreadCount(1), "Alice's message is unread");
+    assert_eq!(
+        count(&bob),
+        UnreadCount::new(1),
+        "Alice's message is unread"
+    );
     let sent = alice.react(message, THUMB);
     bob.receive(&alice, &sent, 2);
-    assert_eq!(count(&bob), UnreadCount(1), "her reaction adds nothing");
+    assert_eq!(
+        count(&bob),
+        UnreadCount::new(1),
+        "her reaction adds nothing"
+    );
 }

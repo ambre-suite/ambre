@@ -130,7 +130,7 @@ impl ProseState {
         let tree = doc::blocks(&self.doc);
         if let Some(style_id) = style_id
             && let Some(node) = doc::node_of(&tree, &id)
-            && let Err(e) = node.insert(doc::NodeKey::Style, style_id.0.as_str())
+            && let Err(e) = node.insert(doc::NodeKey::Style, style_id.as_str())
         {
             return Self::err_write(e);
         }
@@ -325,7 +325,7 @@ impl ProseState {
         let Some(node) = doc::node_of(&tree, id) else {
             return Self::err_no_block(id);
         };
-        if let Err(e) = node.insert(doc::NodeKey::Style, style_id.0.as_str()) {
+        if let Err(e) = node.insert(doc::NodeKey::Style, style_id.as_str()) {
             return Self::err_write(e);
         }
         self.commit_with(Vec::new())
@@ -469,7 +469,7 @@ impl ProseState {
             ));
         };
         if let Some(style_id) = doc::style_of(&tree, source) {
-            target_node.insert(doc::NodeKey::Style, style_id.0.as_str())?;
+            target_node.insert(doc::NodeKey::Style, style_id.as_str())?;
         }
         doc::write_paragraph_style(&target_node, &doc::read_paragraph_style(&tree, source))?;
         // The attributes the split must carry. Without them the second half

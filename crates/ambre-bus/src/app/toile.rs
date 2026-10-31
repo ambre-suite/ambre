@@ -745,7 +745,19 @@ impl fmt::Display for UnitFraction {
 /// The error of a fraction outside `0.0 ..= 1.0`.
 #[derive(Debug, Clone, Copy, PartialEq, thiserror::Error)]
 #[error("a fraction of a side lies in 0..=1, not {0}")]
-pub struct InvalidUnitFraction(pub f32);
+pub struct InvalidUnitFraction(f32);
+
+impl InvalidUnitFraction {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: f32) -> Self {
+        Self(value)
+    }
+
+    /// Returns the raw value.
+    pub const fn get(self) -> f32 {
+        self.0
+    }
+}
 
 impl TryFrom<f32> for UnitFraction {
     type Error = InvalidUnitFraction;

@@ -30,7 +30,19 @@ use super::types::{AxisId, CellId, EngineSheet, RangeId};
 /// Returned by [`DependencyGraph::update`] when adding a formula would create a
 /// cycle in the cell-to-cell dependency graph.
 #[derive(Debug, Clone)]
-pub struct CycleError(pub Vec<CellId>);
+pub struct CycleError(Vec<CellId>);
+
+impl CycleError {
+    /// Wraps a raw value. The constructor checks nothing.
+    pub const fn new(value: Vec<CellId>) -> Self {
+        Self(value)
+    }
+
+    /// Returns the wrapped value.
+    pub fn into_inner(self) -> Vec<CellId> {
+        self.0
+    }
+}
 
 // -----------------------------------------------------------------------------
 // DependencyGraph

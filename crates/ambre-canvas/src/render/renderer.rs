@@ -1392,13 +1392,13 @@ mod image_cache_tests {
     #[test]
     fn a_hit_stamps_the_entry_with_the_current_frame() {
         let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(1024));
-        c.insert(ImageKey(1), entry(16, 2, 2, 0));
+        c.insert(ImageKey::new(1), entry(16, 2, 2, 0));
         c.clock = 7;
         assert_eq!(
-            c.get(ImageKey(1), Size::new(Px::new(2), Px::new(2))),
+            c.get(ImageKey::new(1), Size::new(Px::new(2), Px::new(2))),
             Some(&2)
         );
-        assert_eq!(c.map[&ImageKey(1)].last_used, 7);
+        assert_eq!(c.map[&ImageKey::new(1)].last_used, 7);
     }
 
     /// A key that comes back at a different size is a miss. The caller
@@ -1407,10 +1407,13 @@ mod image_cache_tests {
     #[test]
     fn a_key_at_another_size_is_a_miss() {
         let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(1024));
-        c.insert(ImageKey(1), entry(16, 2, 2, 0));
-        assert_eq!(c.get(ImageKey(1), Size::new(Px::new(4), Px::new(4))), None);
+        c.insert(ImageKey::new(1), entry(16, 2, 2, 0));
+        assert_eq!(
+            c.get(ImageKey::new(1), Size::new(Px::new(4), Px::new(4))),
+            None
+        );
         assert!(
-            c.get(ImageKey(1), Size::new(Px::new(2), Px::new(2)))
+            c.get(ImageKey::new(1), Size::new(Px::new(2), Px::new(2)))
                 .is_some()
         );
     }
@@ -1421,13 +1424,16 @@ mod image_cache_tests {
     #[test]
     fn the_least_recently_drawn_entry_is_evicted_first() {
         let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(100));
-        c.insert(ImageKey(1), entry(40, 1, 1, 5)); // drawn recently
-        c.insert(ImageKey(2), entry(40, 2, 2, 1)); // drawn long ago
+        c.insert(ImageKey::new(1), entry(40, 1, 1, 5)); // drawn recently
+        c.insert(ImageKey::new(2), entry(40, 2, 2, 1)); // drawn long ago
         assert_eq!(c.bytes, ByteSize::new(80));
-        c.insert(ImageKey(3), entry(40, 3, 3, 9));
-        assert!(c.bound(ImageKey(2)).is_none(), "the stalest entry stays");
-        assert!(c.bound(ImageKey(1)).is_some());
-        assert!(c.bound(ImageKey(3)).is_some());
+        c.insert(ImageKey::new(3), entry(40, 3, 3, 9));
+        assert!(
+            c.bound(ImageKey::new(2)).is_none(),
+            "the stalest entry stays"
+        );
+        assert!(c.bound(ImageKey::new(1)).is_some());
+        assert!(c.bound(ImageKey::new(3)).is_some());
         assert_eq!(c.bytes, ByteSize::new(80));
     }
 
@@ -1436,8 +1442,8 @@ mod image_cache_tests {
     #[test]
     fn reinserting_a_key_replaces_its_cost() {
         let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(1024));
-        c.insert(ImageKey(1), entry(40, 1, 1, 0));
-        c.insert(ImageKey(1), entry(64, 1, 1, 0));
+        c.insert(ImageKey::new(1), entry(40, 1, 1, 0));
+        c.insert(ImageKey::new(1), entry(64, 1, 1, 0));
         assert_eq!(c.map.len(), 1);
         assert_eq!(c.bytes, ByteSize::new(64));
     }
@@ -1448,8 +1454,8 @@ mod image_cache_tests {
     #[test]
     fn a_lone_oversized_entry_survives() {
         let mut c: ImageCache<u32> = ImageCache::new(ByteSize::new(100));
-        c.insert(ImageKey(1), entry(4096, 1, 1, 0));
-        assert!(c.bound(ImageKey(1)).is_some());
+        c.insert(ImageKey::new(1), entry(4096, 1, 1, 0));
+        assert!(c.bound(ImageKey::new(1)).is_some());
         assert_eq!(c.map.len(), 1);
     }
 }
@@ -1461,9 +1467,9 @@ mod image_run_tests {
     fn runs_of(spec: &[(u64, u32, u32)]) -> Vec<(u64, u32, u32)> {
         let mut runs = Vec::new();
         for (k, s, e) in spec {
-            extend_runs(&mut runs, ImageKey(*k), *s, *e);
+            extend_runs(&mut runs, ImageKey::new(*k), *s, *e);
         }
-        runs.iter().map(|r| (r.key.0, r.start, r.end)).collect()
+        runs.iter().map(|r| (r.key.get(), r.start, r.end)).collect()
     }
 
     /// Consecutive quads of one picture collapse into a single draw

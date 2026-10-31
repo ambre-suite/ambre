@@ -2553,7 +2553,7 @@ mod tests {
             vec![ChannelActivity {
                 channel_id,
                 active: ambre_bus::Activity::Active,
-                unread: Some(UnreadCount(unread)),
+                unread: Some(UnreadCount::new(unread)),
                 mentions: Some(MentionCount::ZERO),
             }]
         };
@@ -2594,8 +2594,8 @@ mod tests {
             &[ChannelActivity {
                 channel_id,
                 active: ambre_bus::Activity::Active,
-                unread: Some(UnreadCount(2)),
-                mentions: Some(MentionCount(1)),
+                unread: Some(UnreadCount::new(2)),
+                mentions: Some(MentionCount::new(1)),
             }]
         );
     }
@@ -3310,7 +3310,7 @@ mod tests {
                 })
                 .flatten()
                 .filter(|c| c.channel_id == self.channel_id)
-                .map(|c| c.unread.map(|count| count.0))
+                .map(|c| c.unread.map(|count| count.get()))
                 .collect()
         }
 
@@ -5691,7 +5691,7 @@ mod tests {
         assert!(drain(&ui).iter().any(|event| matches!(
             event,
             UiEvent::ChannelActivity { channels }
-                if channels.first().is_some_and(|mark| mark.unread == Some(UnreadCount(2)))
+                if channels.first().is_some_and(|mark| mark.unread == Some(UnreadCount::new(2)))
         )));
     }
 
@@ -6190,8 +6190,8 @@ mod tests {
             Some(ChannelActivity {
                 channel_id: m.channel_id,
                 active: ambre_bus::Activity::Active,
-                unread: Some(UnreadCount(0)),
-                mentions: Some(MentionCount(1)),
+                unread: Some(UnreadCount::new(0)),
+                mentions: Some(MentionCount::new(1)),
             })
         );
     }
@@ -6234,7 +6234,7 @@ mod tests {
         else {
             panic!("expected the channel's mark and its first unread, got {shown:?}");
         };
-        assert_eq!(channels[0].mentions, Some(MentionCount(0)));
+        assert_eq!(channels[0].mentions, Some(MentionCount::new(0)));
         assert_eq!(channels[0].active, ambre_bus::Activity::Quiet);
     }
 
@@ -6474,8 +6474,8 @@ mod tests {
                 &[ChannelActivity {
                     channel_id,
                     active: ambre_bus::Activity::Active,
-                    unread: Some(UnreadCount(0)),
-                    mentions: Some(MentionCount(1)),
+                    unread: Some(UnreadCount::new(0)),
+                    mentions: Some(MentionCount::new(1)),
                 }]
             );
         }
