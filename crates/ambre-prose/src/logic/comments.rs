@@ -6,9 +6,10 @@
 //! the undo manager excludes: `Ctrl+Z` never retracts a message a collaborator
 //! may have read.
 
+use ambre_core::index::{self, Pos};
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::DocSpan;
+use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Comment, Id, Reply};
 use loro::{LoroList, LoroMap, LoroText, TreeID, UpdateOptions};
 
@@ -28,7 +29,7 @@ impl ProseState {
     pub(super) fn add_comment(
         &mut self,
         block: &TreeID,
-        range: DocSpan,
+        range: index::Span<DocChar>,
         text: &str,
         now: ambre_core::Timestamp,
     ) -> ProseOutcome {
@@ -138,7 +139,7 @@ impl ProseState {
             Ok(found) => found,
             Err(outcome) => return outcome,
         };
-        let removed = if index == ReplySlot::ZERO {
+        let removed = if index == Pos::<ReplySlot>::ZERO {
             self.remove_thread(id)
         } else {
             list.delete(index.to_usize(), 1)
@@ -301,7 +302,7 @@ impl ProseState {
         &self,
         id: &Id<Comment>,
         reply: &Id<Reply>,
-    ) -> Result<(LoroList, ReplySlot), ProseOutcome> {
+    ) -> Result<(LoroList, Pos<ReplySlot>), ProseOutcome> {
         let entry = comment::entry(&self.doc, id)
             .ok_or_else(|| ProseOutcome::refused(ProseRefusal::NoSuchComment(*id)))?;
         let list = comment::replies_of(&entry)
@@ -348,7 +349,7 @@ impl ProseState {
 mod tests {
     use super::*;
     use crate::events::{BlockId, CommentThread, ProseCommand};
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
     use ambre_core::id::User;
     use proptest::prelude::*;
 
@@ -370,7 +371,7 @@ mod tests {
         let id = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: id,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: text.to_owned(),
         });
         (state, id)
@@ -398,7 +399,10 @@ mod tests {
         let before: Vec<Id<Comment>> = state.comments().iter().map(|t| t.comment_id).collect();
         state.handle_command(ProseCommand::AddComment {
             block_id: block,
-            range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
+            range: index::Span::<DocChar>::new(
+                Pos::<DocChar>::new(range.0),
+                Pos::<DocChar>::new(range.1),
+            ),
             text: text.to_owned(),
             now: ambre_core::Timestamp::new(10),
         });
@@ -499,11 +503,19 @@ mod tests {
             }))
         };
         assert_eq!(
-            add(&mut state, block, DocSpan::from_usize_range(2..2)),
+            add(
+                &mut state,
+                block,
+                index::Span::<DocChar>::from_usize_range(2..2)
+            ),
             Some(ProseRefusal::BadRange)
         );
         assert_eq!(
-            add(&mut state, block, DocSpan::from_usize_range(2..9)),
+            add(
+                &mut state,
+                block,
+                index::Span::<DocChar>::from_usize_range(2..9)
+            ),
             Some(ProseRefusal::BadRange)
         );
         state.handle_command(ProseCommand::SetHeaderEnabled {
@@ -512,22 +524,30 @@ mod tests {
         let header = state.bands().header.expect("a header");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Title".to_owned(),
         });
         assert_eq!(
-            add(&mut state, header, DocSpan::from_usize_range(0..2)),
+            add(
+                &mut state,
+                header,
+                index::Span::<DocChar>::from_usize_range(0..2)
+            ),
             Some(ProseRefusal::CommentInBand)
         );
         let mut anonymous = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("a document");
         let root = anonymous.root_blocks()[0];
         anonymous.handle_command(ProseCommand::InsertText {
             block_id: root,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Hello".to_owned(),
         });
         assert_eq!(
-            add(&mut anonymous, root, DocSpan::from_usize_range(0..2)),
+            add(
+                &mut anonymous,
+                root,
+                index::Span::<DocChar>::from_usize_range(0..2)
+            ),
             Some(ProseRefusal::NoIdentity)
         );
         assert!(state.comments().is_empty() && anonymous.comments().is_empty());
@@ -604,7 +624,7 @@ mod tests {
         assert_eq!(texts(&state, id), vec!["One."]);
         assert_eq!(
             (t.anchor_start, t.anchor_end),
-            (DocOffset::ZERO, DocOffset::new(5))
+            (Pos::<DocChar>::ZERO, Pos::<DocChar>::new(5))
         );
         assert_eq!(thread(&state, other), before);
     }
@@ -653,7 +673,7 @@ mod tests {
         assert_eq!(t.resolved, ambre_core::ThreadState::Resolved);
         assert_eq!(
             (t.anchor_start, t.anchor_end),
-            (DocOffset::ZERO, DocOffset::new(5))
+            (Pos::<DocChar>::ZERO, Pos::<DocChar>::new(5))
         );
         assert_eq!(t.replies[1].user_id, ALICE);
         assert_eq!(t.replies[1].created_at, ambre_bus::Timestamp::new(11));
@@ -686,7 +706,7 @@ mod tests {
         assert_eq!(t.resolved, ambre_core::ThreadState::Resolved);
         assert_eq!(
             (t.anchor_start, t.anchor_end),
-            (DocOffset::ZERO, DocOffset::new(5))
+            (Pos::<DocChar>::ZERO, Pos::<DocChar>::new(5))
         );
     }
 
@@ -737,13 +757,13 @@ mod tests {
         let id = open(&mut state, block, (6, 11), "World.");
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Oh, ".to_owned(),
         });
         let moved = Span {
             block: crate::events::tree_id(block),
-            start: DocOffset::new(10),
-            end: DocOffset::new(15),
+            start: Pos::<DocChar>::new(10),
+            end: Pos::<DocChar>::new(15),
         };
         assert_eq!(cache(&state, id), Some(moved));
         assert_eq!(span(&state, id), (10, 15));
@@ -766,7 +786,7 @@ mod tests {
         let before = thread(&state, other);
         state.handle_command(ProseCommand::DeleteText {
             block_id: block,
-            range: DocSpan::from_usize_range(5..11),
+            range: index::Span::<DocChar>::from_usize_range(5..11),
         });
         let t = thread(&state, id);
         assert_eq!(t.orphaned, crate::events::AnchorState::Orphaned);
@@ -774,7 +794,7 @@ mod tests {
         assert_eq!(texts(&state, id), vec!["Brave?"]);
         assert_eq!(
             (t.anchor_start, t.anchor_end),
-            (DocOffset::new(6), DocOffset::new(11))
+            (Pos::<DocChar>::new(6), Pos::<DocChar>::new(11))
         );
         assert_eq!(span(&state, other), (6, 11));
         assert_eq!(thread(&state, other).replies, before.replies);
@@ -792,7 +812,7 @@ mod tests {
             &mut bob,
             ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: "Oh ".to_owned(),
             },
         );
@@ -821,13 +841,13 @@ mod tests {
         let mut bob = join(&alice, ambre_core::PeerId::new(2), BOB);
         let mine = alice.handle_command(ProseCommand::AddComment {
             block_id: block,
-            range: DocSpan::from_usize_range(0..11),
+            range: index::Span::<DocChar>::from_usize_range(0..11),
             text: "Alice.".to_owned(),
             now: ambre_core::Timestamp::new(1),
         });
         let theirs = bob.handle_command(ProseCommand::AddComment {
             block_id: block,
-            range: DocSpan::from_usize_range(6..17),
+            range: index::Span::<DocChar>::from_usize_range(6..17),
             text: "Bob.".to_owned(),
             now: ambre_core::Timestamp::new(1),
         });
@@ -847,7 +867,7 @@ mod tests {
         let alices = alice
             .comments()
             .into_iter()
-            .find(|t| t.anchor_start == DocOffset::ZERO)
+            .find(|t| t.anchor_start == Pos::<DocChar>::ZERO)
             .expect("Alice's thread")
             .comment_id;
         send(
@@ -912,14 +932,14 @@ mod tests {
                 let command = if insert || body == 0 {
                     ProseCommand::InsertText {
                         block_id: block,
-                        pos: DocOffset::new(at.min(body)),
+                        pos: Pos::<DocChar>::new(at.min(body)),
                         text: "x".repeat(len as usize),
                     }
                 } else {
                     let start = at.min(body - 1);
                     ProseCommand::DeleteText {
                         block_id: block,
-                        range: DocSpan::new(DocOffset::new(start), DocOffset::new((start + len).min(body))),
+                        range: index::Span::<DocChar>::new(Pos::<DocChar>::new(start), Pos::<DocChar>::new((start + len).min(body))),
                     }
                 };
                 if let Some(delta) = state.handle_command(command).update {

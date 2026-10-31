@@ -91,7 +91,7 @@ impl ToileState {
             && let Some(idx) = present_slide
         {
             let old = self.playback.active;
-            let clamped = self.slide_len().clamp(idx);
+            let clamped = idx.within(self.slide_len());
             if clamped != old {
                 self.playback.active = clamped;
                 events.push(ToileEvent::SlideChanged(

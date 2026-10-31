@@ -3,6 +3,7 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use ambre_core::index::Pos;
 
 /// Autofill of a merged-cell source fills block by block and re-merges every
 /// tile (`trame-autofill`). A 2x1 merge at A1:A2 holding "x", dragged to A6,
@@ -13,15 +14,15 @@ fn fill_merged_source_tiles_and_remerges_blocks() {
     use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "x".to_owned(),
     });
     // Merge A1:A2 (1 col x 2 rows), master = A1.
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
     });
 
@@ -29,12 +30,12 @@ fn fill_merged_source_tiles_and_remerges_blocks() {
     state.handle_command(TrameCommand::FillRange {
         sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
         dest: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(5), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(5), Pos::<Col>::new(0)),
         ),
         mode: FillMode::Auto,
     });
@@ -65,15 +66,15 @@ fn fill_merged_series_increments_per_block() {
     use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "1".to_owned(),
     });
     // Merge A1:A2 (1 col x 2 rows), master = A1 holding the number 1.
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
     });
 
@@ -81,12 +82,12 @@ fn fill_merged_series_increments_per_block() {
     state.handle_command(TrameCommand::FillRange {
         sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
         dest: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(5), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(5), Pos::<Col>::new(0)),
         ),
         mode: FillMode::Series,
     });
@@ -108,25 +109,25 @@ fn fill_multi_merged_source_continues_pattern() {
     let mut state = TrameState::new();
     // A1 = 1, A3 = 2; merge A1:A2 and A3:A4 into two 2x1 blocks.
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(2),
-        col: Col::new(0),
+        row: Pos::<Row>::new(2),
+        col: Pos::<Col>::new(0),
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
     });
     state.handle_command(TrameCommand::MergeCells {
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(2), Col::new(0)),
-            crate::CellPos::new(Row::new(3), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(0)),
         ),
     });
 
@@ -134,12 +135,12 @@ fn fill_multi_merged_source_continues_pattern() {
     state.handle_command(TrameCommand::FillRange {
         sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(3), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(0)),
         ),
         dest: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(7), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(7), Pos::<Col>::new(0)),
         ),
         mode: FillMode::Auto,
     });
@@ -167,10 +168,10 @@ fn find_next_matches_and_wraps() {
     // Active at A1 (0,0): the three "apple" cells (case-folded) match; the
     // focused one is the first strictly after the active cell -> A2.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(0),
-        col: Col::new(0),
-        anchor_row: Row::new(0),
-        anchor_col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(0),
+        anchor_col: Pos::<Col>::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -185,10 +186,10 @@ fn find_next_matches_and_wraps() {
 
     // Active at the last match A4 (3,0): the next wraps back to A1.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(3),
-        col: Col::new(0),
-        anchor_row: Row::new(3),
-        anchor_col: Col::new(0),
+        row: Pos::<Row>::new(3),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(3),
+        anchor_col: Pos::<Col>::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -204,10 +205,10 @@ fn find_next_honors_case_and_whole_cell() {
     let mut state = TrameState::new();
     seed_find(&mut state);
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(0),
-        col: Col::new(0),
-        anchor_row: Row::new(0),
-        anchor_col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(0),
+        anchor_col: Pos::<Col>::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -245,17 +246,17 @@ fn a_search_reads_past_the_requested_window() {
     let mut state = TrameState::new();
     for (row, col) in [(0, 0), (900, 60)] {
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(row),
-            col: Col::new(col),
+            row: Pos::<Row>::new(row),
+            col: Pos::<Col>::new(col),
             text: "needle".to_owned(),
         });
     }
     state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(1),
-        row_start: Row::new(0),
-        row_end: Row::new(30),
-        col_start: Col::new(0),
-        col_end: Col::new(10),
+        row_start: Pos::<Row>::new(0),
+        row_end: Pos::<Row>::new(30),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(10),
     });
     let out = state.handle_command(TrameCommand::FindNext {
         query: find_query("needle".to_owned(), crate::FindOptions::default()),
@@ -271,8 +272,8 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
     let mut state = TrameState::new();
     seed_find(&mut state); // A1 "apple", A2 "Apple pie", A3 "banana", A4 "APPLE"
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "grape".to_owned(),
     });
     state.handle_command(TrameCommand::CreateSheet {
@@ -283,8 +284,8 @@ fn a_replace_all_leaves_every_unmatched_text_alone() {
         sheet_id: s2.clone(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "apple".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
@@ -335,13 +336,13 @@ fn replace_all_gates_formula_cells() {
     let mut state = TrameState::new();
     // A1 = 2, A2 = "=A1" (displays "2"). Replace displayed "2" with "9".
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "=A1".to_owned(),
     });
 
@@ -383,10 +384,10 @@ fn replace_one_replaces_active_and_advances() {
 
     // Active on A1 (a match): replace just this cell, advance to A2.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(0),
-        col: Col::new(0),
-        anchor_row: Row::new(0),
-        anchor_col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(0),
+        anchor_col: Pos::<Col>::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -405,10 +406,10 @@ fn replace_one_replaces_active_and_advances() {
 
     // Active on a non-match (A3): nothing replaced, but it advances.
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(2),
-        col: Col::new(0),
-        anchor_row: Row::new(2),
-        anchor_col: Col::new(0),
+        row: Pos::<Row>::new(2),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(2),
+        anchor_col: Pos::<Col>::new(0),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -426,8 +427,8 @@ fn replace_all_spans_sheets() {
     let mut state = TrameState::new();
     // Sheet1!A1 = "foo".
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "foo".to_owned(),
     });
     // Sheet2!A1 = "foo".
@@ -439,8 +440,8 @@ fn replace_all_spans_sheets() {
         sheet_id: s2.clone(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "foo".to_owned(),
     });
     state.handle_command(TrameCommand::ActivateSheet {
@@ -484,8 +485,8 @@ fn csv_import_creates_sheet_and_cells() {
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
-        start_row: Row::new(0),
-        start_col: Col::new(0),
+        start_row: Pos::<Row>::new(0),
+        start_col: Pos::<Col>::new(0),
     });
     let (sheet_id, rows, cols) = import_result(&out);
     assert_eq!((rows, cols), (2, 3));
@@ -504,8 +505,8 @@ fn csv_import_skips_header() {
         delimiter: None,
         header: HeaderRow::Present,
         target_sheet_id: None,
-        start_row: Row::new(0),
-        start_col: Col::new(0),
+        start_row: Pos::<Row>::new(0),
+        start_col: Pos::<Col>::new(0),
     });
     let (_, rows, _) = import_result(&out);
     assert_eq!(rows, 1);
@@ -521,8 +522,8 @@ fn csv_delimiter_autodetect() {
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
-        start_row: Row::new(0),
-        start_col: Col::new(0),
+        start_row: Pos::<Row>::new(0),
+        start_col: Pos::<Col>::new(0),
     });
     assert_eq!(read_cell(&mut state, 0, 1), "y");
     assert_eq!(read_cell(&mut state, 1, 2), "3");
@@ -537,8 +538,8 @@ fn csv_import_export_roundtrip() {
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
-        start_row: Row::new(0),
-        start_col: Col::new(0),
+        start_row: Pos::<Row>::new(0),
+        start_col: Pos::<Col>::new(0),
     });
     let (sheet_id, _, _) = import_result(&out);
     let out = state.handle_command(TrameCommand::ExportCsv {
@@ -584,8 +585,8 @@ fn csv_import_malformed_never_panics() {
                     delimiter,
                     header,
                     target_sheet_id: None,
-                    start_row: Row::new(0),
-                    start_col: Col::new(0),
+                    start_row: Pos::<Row>::new(0),
+                    start_col: Pos::<Col>::new(0),
                 });
             }
         }
@@ -626,8 +627,8 @@ fn csv_import_random_bytes_never_panics() {
                 HeaderRow::Absent
             },
             target_sheet_id: None,
-            start_row: Row::new(0),
-            start_col: Col::new(0),
+            start_row: Pos::<Row>::new(0),
+            start_col: Pos::<Col>::new(0),
         });
     }
 }
@@ -640,29 +641,29 @@ fn csv_export_trims_empty_trailing_columns() {
     let mut state = TrameState::new();
     // Materialize out to column R (17) by writing then clearing a far cell.
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(17),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(17),
         text: "x".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(17),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(17),
         text: String::new(),
     });
     // Real content only in columns A..C.
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(2),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(2),
         text: "3".to_owned(),
     });
 
@@ -683,8 +684,8 @@ fn csv_import_then_export_drops_trailing_empties() {
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: None,
-        start_row: Row::new(0),
-        start_col: Col::new(0),
+        start_row: Pos::<Row>::new(0),
+        start_col: Pos::<Col>::new(0),
     });
     let _ = import_result(&out);
 

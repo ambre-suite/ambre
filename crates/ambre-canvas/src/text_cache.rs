@@ -11,7 +11,8 @@
 // shaping cost. Only new or changed strings trigger a shape call.
 // ============================================================================
 
-use ambre_bus::ByteSpan;
+use ambre_bus::Byte;
+use ambre_core::index::Span;
 use ambre_core::{Doc, Px, View};
 
 use ambre_draw::{Brush, BundledFamily, Color};
@@ -93,7 +94,7 @@ pub use ambre_core::{Slant, Weight, WordBreak};
 /// they stay out of the cache key (`CANVAS-081`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct SpanShape {
-    pub range: ByteSpan,
+    pub range: Span<Byte>,
     pub weight: Option<ambre_core::FontWeight>,
     pub italic: Slant,
     pub family: Option<ambre_core::FontFamily>,
@@ -112,7 +113,7 @@ pub(crate) fn break_indented<B: parley::Brush>(
     layout: &mut Layout<B>,
     text: &str,
     width: Px<Parley>,
-    indents: &[(ByteSpan, Px<Parley>)],
+    indents: &[(Span<Byte>, Px<Parley>)],
 ) {
     let width = width.get();
     if !indents.iter().any(|(_, indent)| indent.get() > 0.0) {
@@ -156,7 +157,7 @@ pub(crate) fn break_indented<B: parley::Brush>(
 /// The byte ranges of the paragraphs of `text`, each break left out. A break
 /// is a mandatory one of UAX #14, the set parley ends a paragraph on, and a
 /// CR LF is one break.
-fn paragraphs(text: &str) -> impl Iterator<Item = ByteSpan> + '_ {
+fn paragraphs(text: &str) -> impl Iterator<Item = Span<Byte>> + '_ {
     let mut start = 0;
     let mut chars = text.char_indices().peekable();
     std::iter::from_fn(move || {
@@ -173,12 +174,12 @@ fn paragraphs(text: &str) -> impl Iterator<Item = ByteSpan> + '_ {
                 if c == '\r' && chars.next_if(|(_, c)| *c == '\n').is_some() {
                     next += 1;
                 }
-                let held = ByteSpan::from_usize_range(start..at);
+                let held = Span::<Byte>::from_usize_range(start..at);
                 start = next;
                 return Some(held);
             }
         }
-        let held = ByteSpan::from_usize_range(start..text.len());
+        let held = Span::<Byte>::from_usize_range(start..text.len());
         start = text.len() + 1;
         Some(held)
     })
@@ -581,7 +582,8 @@ impl TextCache {
 #[cfg(test)]
 mod tests {
     use super::{Slant, SpanShape, TextCache, Weight, registered_family_name};
-    use ambre_bus::ByteSpan;
+    use ambre_bus::Byte;
+    use ambre_core::index::Span;
     use ambre_core::{Px, View};
     use parley::{Alignment, FontContext};
 
@@ -633,7 +635,7 @@ mod tests {
         let mut cx = crate::fonts::font_context_from_bytes(faces);
         let mut cache = TextCache::new();
         let bold = SpanShape {
-            range: ByteSpan::from_usize_range(0..4),
+            range: Span::<Byte>::from_usize_range(0..4),
             weight: Some(ambre_core::FontWeight::BOLD),
             ..SpanShape::default()
         };
@@ -668,7 +670,7 @@ mod tests {
         assert_eq!(faces_of(spanned), 2, "the span shaped no face of its own");
         assert!(spanned.width() > plain_width);
         let off = SpanShape {
-            range: ByteSpan::from_usize_range(0..40),
+            range: Span::<Byte>::from_usize_range(0..40),
             ..bold.clone()
         };
         let off = cache.get_or_build_spans(
@@ -702,7 +704,7 @@ mod tests {
         let long = "word ".repeat(20);
         let text = format!("top\r\n{long}\r\nend");
         let indent = SpanShape {
-            range: ByteSpan::from_usize_range(5..5 + long.len() + 2),
+            range: Span::<Byte>::from_usize_range(5..5 + long.len() + 2),
             indent: Px::<crate::space::WholeParley>::new(12),
             ..SpanShape::default()
         };
@@ -734,7 +736,7 @@ mod tests {
             "each of its lines starts past the indent, within the width: {held:?}"
         );
         let paragraphs: Vec<_> = super::paragraphs("a\r\nb\n\u{2029}")
-            .map(ByteSpan::to_usize_range)
+            .map(Span::<Byte>::to_usize_range)
             .collect();
         assert_eq!(paragraphs, [0..1, 3..4, 5..5, 8..8]);
     }

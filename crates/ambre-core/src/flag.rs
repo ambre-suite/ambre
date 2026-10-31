@@ -55,8 +55,8 @@ macro_rules! define_flag {
 
         // Serde through core's own paths, so a crate that expands the macro
         // needs no serde dependency of its own.
-        impl $crate::index::__private::Serialize for $name {
-            fn serialize<S: $crate::index::__private::Serializer>(
+        impl $crate::__serde::Serialize for $name {
+            fn serialize<S: $crate::__serde::Serializer>(
                 &self,
                 serializer: S,
             ) -> Result<S::Ok, S::Error> {
@@ -64,11 +64,11 @@ macro_rules! define_flag {
             }
         }
 
-        impl<'de> $crate::index::__private::Deserialize<'de> for $name {
-            fn deserialize<D: $crate::index::__private::Deserializer<'de>>(
+        impl<'de> $crate::__serde::Deserialize<'de> for $name {
+            fn deserialize<D: $crate::__serde::Deserializer<'de>>(
                 deserializer: D,
             ) -> Result<Self, D::Error> {
-                <bool as $crate::index::__private::Deserialize<'de>>::deserialize(deserializer)
+                <bool as $crate::__serde::Deserialize<'de>>::deserialize(deserializer)
                     .map(Self::from_bool)
             }
         }

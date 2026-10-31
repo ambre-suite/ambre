@@ -10,6 +10,7 @@
 //! The page hands it the pane, the name of a member and the time as closures.
 //! So the view holds no signal, and a host test drives it with plain values.
 
+use ambre_core::index::{Delta, IdxVec, Pos};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -37,12 +38,12 @@ use crate::commands::{
 use crate::composer::{Composer, Composition, DraftOf, EDITING_LINE, also_said, typing_line};
 use crate::drafts::DraftShelf;
 use crate::list::{
-    Conversations, JUMP_HINT, ListRow, ListRowDelta, ListRowVec, MessageList, OnScreen, ReadMarks,
-    Row, RowKey, UnreadLine, row_of,
+    Conversations, JUMP_HINT, ListRow, MessageList, OnScreen, ReadMarks, Row, RowKey, UnreadLine,
+    row_of,
 };
 use crate::markers::MarkBar;
+use crate::mention_list::MentionEntry;
 use crate::mention_list::MentionList;
-use crate::mention_list::OfferIndex;
 use crate::paint::{Painted, Pictured, RowBounds, Shown, paint_jump, paint_list};
 use crate::pictures::Pictures;
 use crate::select::Selecting;
@@ -104,7 +105,7 @@ pub struct PageReads {
     pub show_mentions: Rc<dyn Fn(Region, Option<MentionList>)>,
     /// Take the entry a click picked in the `@` list. Given `true`, it takes
     /// a pick in the thread's list alone (`MURMURE-555`).
-    pub take_pick: Rc<dyn Fn(Region) -> Option<OfferIndex>>,
+    pub take_pick: Rc<dyn Fn(Region) -> Option<Pos<MentionEntry>>>,
     /// Hand the page the format bar to draw over a selection, or `None` to
     /// close it. The flag names the thread's region (`MURMURE-432`).
     pub show_bar: Rc<dyn Fn(Region, Option<MarkBar>)>,
@@ -641,7 +642,7 @@ impl MurmureView {
 
     /// The message of the row `i` of the list on screen, as the target of
     /// its actions. `None` on a band.
-    fn target_of_row(&self, i: ListRow) -> Option<MessageTarget> {
+    fn target_of_row(&self, i: Pos<ListRow>) -> Option<MessageTarget> {
         let pane = (self.reads.pane)();
         let lists = self.lists.borrow();
         let list = self.shown(&lists.conversations, pane)?;
@@ -735,7 +736,7 @@ impl MurmureView {
         }
     }
 
-    fn press_chip(&self, i: ListRow, emoji: Emoji) {
+    fn press_chip(&self, i: Pos<ListRow>, emoji: Emoji) {
         let (Some(me), Some(target)) = ((self.reads.me)(), self.target_of_row(i)) else {
             return;
         };
@@ -914,7 +915,7 @@ impl MurmureView {
     /// Ask again for the row `pick` finds among the keys of the list shown,
     /// when it is a band whose cause may clear. Only the channel region shows
     /// bands.
-    fn retry_row(&self, pick: impl Fn(&ListRowVec<RowKey>) -> Option<ListRow>) -> bool {
+    fn retry_row(&self, pick: impl Fn(&IdxVec<ListRow, RowKey>) -> Option<Pos<ListRow>>) -> bool {
         let pane = (self.reads.pane)();
         let Some(channel_id) = pane
             .shown_channel()
@@ -966,7 +967,7 @@ impl MurmureView {
     /// focus off screen starts again from the last row on screen. No read
     /// cursor moves: only a paint that shows a message reads it
     /// (`MURMURE-206`).
-    fn move_focus(&mut self, by: ListRowDelta) {
+    fn move_focus(&mut self, by: Delta<ListRow>) {
         let lists = Rc::clone(&self.lists);
         let lists = lists.borrow();
         let Some(list) = self.shown(&lists.conversations, (self.reads.pane)()) else {
@@ -980,7 +981,7 @@ impl MurmureView {
                 .as_ref()
                 .is_some_and(|painted| painted.focus.is_some());
         let from = self.focus.and_then(|key| row_of(&keys, key));
-        let last = keys.len().as_end().prev();
+        let last = keys.len().last();
         let at = match from {
             Some(i) if on_screen => i
                 .checked_offset(by)
@@ -988,7 +989,7 @@ impl MurmureView {
                 .unwrap_or(i),
             _ => match (self.last.as_ref().and_then(|painted| painted.bottom), last) {
                 (Some(bottom), Some(last)) => bottom.min(last),
-                (Some(_), None) => ListRow::ZERO,
+                (Some(_), None) => Pos::<ListRow>::ZERO,
                 (None, _) => return,
             },
         };
@@ -1003,7 +1004,12 @@ impl MurmureView {
 
     /// Bring the focused row into view, once the paint placed it. A row off
     /// screen comes to rest at the top, and the next paint checks it again.
-    fn reveal_focus(&mut self, painted: &Painted, at: Option<ListRow>, keys: &ListRowVec<RowKey>) {
+    fn reveal_focus(
+        &mut self,
+        painted: &Painted,
+        at: Option<Pos<ListRow>>,
+        keys: &IdxVec<ListRow, RowKey>,
+    ) {
         let Some(key) = at.and_then(|i| keys.get(i).copied()) else {
             self.reveal = Reveal::Settled;
             return;
@@ -1578,9 +1584,10 @@ impl MurmureView {
 
     /// Keep where the paint left the list, and stop a motion that met an
     /// end of it.
-    fn settle(&mut self, painted: &Painted, keys: &ListRowVec<RowKey>) {
-        let key_of =
-            |(i, y): (ListRow, ambre_core::Px<ambre_core::View>)| keys.get(i).map(|&key| (key, y));
+    fn settle(&mut self, painted: &Painted, keys: &IdxVec<ListRow, RowKey>) {
+        let key_of = |(i, y): (Pos<ListRow>, ambre_core::Px<ambre_core::View>)| {
+            keys.get(i).map(|&key| (key, y))
+        };
         self.top_row = painted.top.and_then(key_of);
         if self.pending == RestRow::Listed {
             self.rest = painted
@@ -1590,7 +1597,7 @@ impl MurmureView {
         }
         let at_latest = painted.rest.is_none();
         let at_oldest = painted.rest.is_some_and(|(i, y)| {
-            i == ListRow::ZERO && y >= ambre_core::Px::<ambre_core::View>::ZERO
+            i == Pos::<ListRow>::ZERO && y >= ambre_core::Px::<ambre_core::View>::ZERO
         });
         let edge = if self.heading > Px::<View>::ZERO {
             at_latest
@@ -1749,8 +1756,8 @@ impl MurmureView {
                     Key::PageDown => self.page(PageStep::Down),
                     Key::PageUp => self.page(PageStep::Up),
                     Key::End => self.rest_at_latest(),
-                    Key::ArrowDown => self.move_focus(ListRowDelta::new(1)),
-                    Key::ArrowUp => self.move_focus(ListRowDelta::new(-1)),
+                    Key::ArrowDown => self.move_focus(Delta::<ListRow>::new(1)),
+                    Key::ArrowUp => self.move_focus(Delta::<ListRow>::new(-1)),
                     Key::Enter if self.retry_focus() => {}
                     Key::Escape if self.mark_shown_read() || self.close_thread() => {}
                     _ => return Consumed::No,
@@ -1895,7 +1902,8 @@ impl MurmureView {
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::{ByteSize, ByteSpan, CharSpan};
+    use ambre_bus::{Byte, ByteSize, Char};
+    use ambre_core::index::Span;
     use std::cell::Cell;
 
     use ambre_bus::conduit::local;
@@ -1976,7 +1984,11 @@ mod tests {
         /// Each `@` list the view handed the page, oldest first.
         lists: Rc<RefCell<Vec<Listed>>>,
         /// The entry a click picked, for the region it names.
-        picked: Rc<Cell<Option<(Region, OfferIndex)>>>,
+        #[expect(
+            clippy::type_complexity,
+            reason = "the axis argument of the index family lengthens a tuple shape that predates it"
+        )]
+        picked: Rc<Cell<Option<(Region, Pos<MentionEntry>)>>>,
         /// The send a cancelled `@channel` question gives back.
         returned: Rc<RefCell<Option<AskedAll>>>,
         /// Each address the view opened, oldest first.
@@ -2033,7 +2045,7 @@ mod tests {
         let listed = Rc::clone(&members);
         let lists = Rc::new(RefCell::new(Vec::new()));
         let shown_lists = Rc::clone(&lists);
-        let picked = Rc::new(Cell::new(None::<(Region, OfferIndex)>));
+        let picked = Rc::new(Cell::new(None::<(Region, Pos<MentionEntry>)>));
         let pick = Rc::clone(&picked);
         let returned = Rc::new(RefCell::new(None::<AskedAll>));
         let given = Rc::clone(&returned);
@@ -2427,12 +2439,12 @@ mod tests {
             link(
                 "bad x",
                 "javascript:alert(1)",
-                CharSpan::from_usize_range(0..3),
+                Span::<Char>::from_usize_range(0..3),
             ),
             link(
                 "see site now",
                 "https://ambre.dev",
-                CharSpan::from_usize_range(4..8),
+                Span::<Char>::from_usize_range(4..8),
             ),
         ];
         let segment = Id::<Segment>::mint();
@@ -4475,7 +4487,7 @@ mod tests {
         let at = MessageAt::Segment(Id::<Segment>::mint());
         let ada = ambre_bus::Mention {
             target: ambre_bus::MentionTarget::User(Id::<User>::mint()),
-            range: CharSpan::from_usize_range(3..7),
+            range: Span::<Char>::from_usize_range(3..7),
         };
         *page.editing.borrow_mut() = Some(PendingEdit {
             channel,
@@ -5816,7 +5828,7 @@ mod tests {
     fn styled(style: ambre_bus::TextStyle, range: std::ops::Range<usize>) -> ambre_bus::StyleMark {
         ambre_bus::StyleMark {
             style,
-            range: CharSpan::from_usize_range(range),
+            range: Span::<Char>::from_usize_range(range),
         }
     }
 
@@ -5939,7 +5951,7 @@ mod tests {
         let spans = page.view.composer().spans(channel);
         assert_eq!(spans.len(), 4);
         assert_eq!(spans[3].italic, ambre_core::Slant::Italic);
-        assert_eq!(spans[3].range, ByteSpan::from_usize_range(9..10));
+        assert_eq!(spans[3].range, Span::<Byte>::from_usize_range(9..10));
         // A draft with no mark draws none.
         for _ in 0.."é b c d e".chars().count() {
             key(
@@ -6532,11 +6544,13 @@ mod tests {
         let (mut page, ..) = mentioning(channel);
         type_text(&mut page, "@");
         frame_with_fonts(&mut page.view);
-        page.picked.set(Some((Region::Thread, OfferIndex::new(1))));
+        page.picked
+            .set(Some((Region::Thread, Pos::<MentionEntry>::new(1))));
         frame_with_fonts(&mut page.view);
         assert_eq!(page.view.composer().draft(channel).as_deref(), Some("@"));
         assert!(page.picked.get().is_some(), "the thread's pick waits");
-        page.picked.set(Some((Region::Channel, OfferIndex::new(1))));
+        page.picked
+            .set(Some((Region::Channel, Pos::<MentionEntry>::new(1))));
         frame_with_fonts(&mut page.view);
         frame_with_fonts(&mut page.view);
         assert_eq!(
@@ -6560,11 +6574,11 @@ mod tests {
             mentions: vec![
                 Mention {
                     target: MentionTarget::Channel,
-                    range: CharSpan::from_usize_range(0..8),
+                    range: Span::<Char>::from_usize_range(0..8),
                 },
                 Mention {
                     target: MentionTarget::User(bob),
-                    range: CharSpan::from_usize_range(9..13),
+                    range: Span::<Char>::from_usize_range(9..13),
                 },
             ],
         };

@@ -7,8 +7,9 @@
 //! never share a value. A span can carry an insertion and a deletion at once
 //! (`PROSE-FEAT-258`). Nothing in this module writes.
 
-use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
+use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{self, Id, User};
+use ambre_core::index::{Pos, Span};
 use loro::{Container, LoroDoc, LoroText, TreeID, ValueOrContainer};
 
 use crate::doc;
@@ -62,8 +63,8 @@ pub(crate) fn owner(entry: &doc::Fields<doc::AnnotKey>) -> Option<Id<User>> {
 /// One run of text under the marks it carries, in its block's own offsets.
 #[derive(Clone, Debug)]
 pub(crate) struct Run {
-    pub start: DocOffset,
-    pub end: DocOffset,
+    pub start: Pos<DocChar>,
+    pub end: Pos<DocChar>,
     /// Every suggestion mark on the run.
     pub marks: Vec<(SuggestionKind, Id<id::Suggestion>)>,
 }
@@ -74,16 +75,16 @@ pub(crate) struct Run {
 pub(crate) fn runs(
     document: &LoroDoc,
     block: &TreeID,
-    start: DocOffset,
-    end: DocOffset,
+    start: Pos<DocChar>,
+    end: Pos<DocChar>,
 ) -> Vec<Run> {
     let mut out = Vec::new();
-    let mut offset = DocOffset::ZERO;
+    let mut offset = Pos::<DocChar>::ZERO;
     for delta in doc::get_block_text(document, block).to_delta() {
         let loro::TextDelta::Insert { insert, attributes } = delta else {
             continue;
         };
-        let length = DocCount::of(&insert);
+        let length = ambre_core::char_len(&insert).as_axis::<DocChar>();
         let run_end = offset + length;
         let (from, to) = (offset.max(start), run_end.min(end));
         if from < to {
@@ -113,7 +114,7 @@ pub(crate) fn runs(
 /// its expansion. Typed text would then grow a suggestion its typist never
 /// made (`PROSE-FEAT-266`). Only the inserted range is read, so a keystroke
 /// pays for its own characters and not for the block.
-pub(crate) fn strip_inherited(body: &LoroText, span: DocSpan) -> Result<(), doc::WriteError> {
+pub(crate) fn strip_inherited(body: &LoroText, span: Span<DocChar>) -> Result<(), doc::WriteError> {
     let (start, end) = (span.start.to_usize(), span.end.to_usize());
     let delta = body.slice_delta(start, end, loro::cursor::PosType::Unicode)?;
     let mut keys: Vec<String> = delta
@@ -137,6 +138,10 @@ pub(crate) fn strip_inherited(body: &LoroText, span: DocSpan) -> Result<(), doc:
 /// Every span of every suggestion in `blocks`, in the order given, adjacent
 /// runs of one suggestion joined.
 #[must_use]
+#[expect(
+    clippy::type_complexity,
+    reason = "the axis argument of the index family lengthens a tuple shape that predates it"
+)]
 pub(crate) fn spans(
     document: &LoroDoc,
     blocks: &[TreeID],
@@ -144,18 +149,18 @@ pub(crate) fn spans(
     Id<id::Suggestion>,
     SuggestionKind,
     TreeID,
-    DocOffset,
-    DocOffset,
+    Pos<DocChar>,
+    Pos<DocChar>,
 )> {
     let mut out: Vec<(
         Id<id::Suggestion>,
         SuggestionKind,
         TreeID,
-        DocOffset,
-        DocOffset,
+        Pos<DocChar>,
+        Pos<DocChar>,
     )> = Vec::new();
     for block in blocks {
-        for run in runs(document, block, DocOffset::ZERO, DocOffset::MAX) {
+        for run in runs(document, block, Pos::<DocChar>::ZERO, Pos::<DocChar>::MAX) {
             for (kind, id) in run.marks {
                 let joined = out
                     .iter_mut()

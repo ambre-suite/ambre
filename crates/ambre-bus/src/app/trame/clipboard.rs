@@ -2,9 +2,8 @@
 //! of a copied/cut range, moved to the Logic thread inside
 //! [`TrameCommand::PasteRange`](super::TrameCommand).
 
-use super::{
-    CellStyle, Col, ColCount, ColSpan, ColVec, Row, RowCount, RowSpan, RowVec, Slant, Weight,
-};
+use super::{CellStyle, Col, Row, Slant, Weight};
+use ambre_core::index::{Count, IdxVec, Pos, Span};
 use serde::{Deserialize, Serialize};
 
 // -----------------------------------------------------------------------------
@@ -25,14 +24,14 @@ use serde::{Deserialize, Serialize};
 pub struct ClipboardPayload {
     /// Source range top-left absolute row (0-based). The paste reindex shift is
     /// `target_row - src_row`.
-    pub src_row: Row,
+    pub src_row: Pos<Row>,
     /// Source range top-left absolute column (0-based).
-    pub src_col: Col,
+    pub src_col: Pos<Col>,
     /// Source range height in rows (so a cut can clear the whole rectangle and
     /// the renderer can draw marching-ants over it).
-    pub rows: RowCount,
+    pub rows: Count<Row>,
     /// Source range width in columns.
-    pub cols: ColCount,
+    pub cols: Count<Col>,
     /// The range's non-empty cells. Blank cells are omitted; the paste leaves
     /// the corresponding destination cells untouched (Excel/Sheets behaviour).
     pub cells: Vec<ClipboardCell>,
@@ -45,17 +44,18 @@ impl ClipboardPayload {
     /// gaps (blank source cells, omitted from `cells`) render as empty fields. A
     /// formula cell contributes its raw text (for example `=A1*2`).
     pub fn to_tsv(&self) -> String {
-        let width = ColCount::new(self.cols.get().max(1));
-        let height = RowCount::new(self.rows.get().max(1));
-        let mut grid: RowVec<ColVec<String>> = RowSpan::from_count(Row::ZERO, height)
-            .into_iter()
-            .map(|_| {
-                ColSpan::from_count(Col::ZERO, width)
-                    .into_iter()
-                    .map(|_| String::new())
-                    .collect()
-            })
-            .collect();
+        let width = Count::<Col>::new(self.cols.get().max(1));
+        let height = Count::<Row>::new(self.rows.get().max(1));
+        let mut grid: IdxVec<Row, IdxVec<Col, String>> =
+            Span::<Row>::from_count(Pos::<Row>::ZERO, height)
+                .into_iter()
+                .map(|_| {
+                    Span::<Col>::from_count(Pos::<Col>::ZERO, width)
+                        .into_iter()
+                        .map(|_| String::new())
+                        .collect()
+                })
+                .collect();
         for cell in &self.cells {
             if let Some(slot) = grid
                 .get_mut(cell.dr.as_end())
@@ -77,9 +77,9 @@ impl ClipboardPayload {
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardCell {
     /// Row offset from [`ClipboardPayload::src_row`].
-    pub dr: RowCount,
+    pub dr: Count<Row>,
     /// Column offset from [`ClipboardPayload::src_col`].
-    pub dc: ColCount,
+    pub dc: Count<Col>,
     /// Raw cell text (for example `=SUM(A1:B1)` for a formula), in display form. A
     /// formula's relative references are reindexed by the Logic thread on paste.
     pub raw: String,

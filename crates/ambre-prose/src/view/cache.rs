@@ -7,6 +7,7 @@
 //! first time a run is painted (`PROSE-UI-119`) and reused after
 //! (`PROSE-UI-173`). The glyph atlas itself belongs to the drawing surface.
 
+use ambre_core::index::{Axis, Pos};
 use std::collections::HashMap;
 
 use ambre_core::id::{Footnote, Id};
@@ -23,17 +24,12 @@ ambre_core::define_tally! {
     pub struct BuildCount;
 }
 
-ambre_core::define_index! {
-    /// An item of one shaped line, in the order the shaper laid them out.
-    pub struct LineItem(usize);
-    /// A number of items of one shaped line.
-    pub struct LineItemCount;
-    /// The signed gap between two items of one shaped line.
-    pub struct LineItemDelta(isize);
-    /// A run of items of one shaped line.
-    pub struct LineItemSpan;
-    /// A list indexed by item of one shaped line.
-    pub struct LineItemVec;
+/// An item of one shaped line, in the order the shaper laid them out.
+#[derive(PartialEq, Eq)]
+pub enum LineItem {}
+
+impl Axis for LineItem {
+    const NAME: &'static str = "LineItem";
 }
 
 /// How many runs the cache keeps drawing state for, about fifty pages
@@ -53,9 +49,9 @@ impl GenerationKind for PaintTick {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GlyphRunAt {
     /// The line of the run that holds it.
-    pub line: RunLine,
+    pub line: Pos<RunLine>,
     /// Its place among the items of that line.
-    pub item: LineItem,
+    pub item: Pos<LineItem>,
     /// The top of its line.
     pub top: Px<Doc>,
 }
@@ -86,8 +82,8 @@ impl RunDrawState {
             for (item_index, item) in line.items().enumerate() {
                 if matches!(item, ambre_draw::PositionedLayoutItem::GlyphRun(_)) {
                     glyph_runs.push(GlyphRunAt {
-                        line: RunLine::from_usize(line_index),
-                        item: LineItem::from_usize(item_index),
+                        line: Pos::<RunLine>::from_usize(line_index),
+                        item: Pos::<LineItem>::from_usize(item_index),
                         top,
                     });
                 }

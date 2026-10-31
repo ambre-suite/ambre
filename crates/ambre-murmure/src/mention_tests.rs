@@ -2,10 +2,11 @@
 //! (`features/ambre-spec-murmure-mentions.md`).
 
 use crate::Receipt;
-use ambre_bus::CharSpan;
+use ambre_bus::Char;
 use ambre_bus::{Mention, MentionCount, MentionTarget, MessageDraft, MessageView, Timestamp};
 use ambre_core::Seq;
 use ambre_core::id::{Channel, Id, User};
+use ambre_core::index::Span;
 use loro::{Container, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{Mark, MessageKey, Root};
@@ -49,7 +50,7 @@ fn open_from(state: &ChannelState) -> ChannelState {
 fn at(target: MentionTarget, range: std::ops::Range<usize>) -> Mention {
     Mention {
         target,
-        range: CharSpan::from_usize_range(range),
+        range: Span::<Char>::from_usize_range(range),
     }
 }
 

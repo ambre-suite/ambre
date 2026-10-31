@@ -7,7 +7,9 @@
 //! recenter on. Matches are local view state, never synced and never an undo
 //! item.
 
+use ambre_bus::app::find::Match;
 use ambre_core::StepDirection;
+use ambre_core::index::{Count, Delta, Pos};
 
 use crate::logic::command::{FindOptions, FindQuery, FindResults, ToileEvent, ToileOutcome};
 use crate::logic::model::NodeId;
@@ -94,14 +96,13 @@ fn next_focus(
     let Some(from) = from else {
         return first;
     };
-    let len = hits.len();
-    match (hits.iter().position(|h| h == from), direction) {
-        // `+ len` before subtracting keeps the step unsigned and wraps correctly
-        // for the backward case at index 0.
-        (Some(idx), StepDirection::Backward) => hits.get((idx + len - 1) % len).cloned(),
-        (Some(idx), StepDirection::Forward) => hits.get((idx + 1) % len).cloned(),
-        (None, _) => first,
-    }
+    let Some(at) = hits.iter().position(|h| h == from) else {
+        return first;
+    };
+    Pos::<Match>::from_usize(at)
+        .wrapped(Delta::step(direction), Count::from_len(hits.len()))
+        .and_then(|next| hits.get(next.to_usize()))
+        .cloned()
 }
 
 /// Substring test of the query text, honoring its case and word options. Case

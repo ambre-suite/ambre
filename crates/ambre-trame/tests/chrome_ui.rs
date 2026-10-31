@@ -24,15 +24,16 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::app::find::{MatchCount, MatchIndex};
+use ambre_bus::app::find::Match;
 use ambre_bus::{
-    AppCommand, AppEvent, CellFormat, CellStyle, Col, HAlign, Row, RowCount, SheetId, SheetName,
-    SheetTab, TrameCommand, TrameEvent, UiEvent, VAlign,
+    AppCommand, AppEvent, CellFormat, CellStyle, Col, HAlign, Row, SheetId, SheetName, SheetTab,
+    TrameCommand, TrameEvent, UiEvent, VAlign,
 };
 use ambre_canvas::PerfSnapshot;
 use ambre_chrome::CommandStates;
 use ambre_commands::Locale;
 use ambre_core::id::{Document, Id};
+use ambre_core::index::{Count, Pos};
 use ambre_trame::chrome::{
     self, BOLD, COPY, CUT, EXPORT_CSV, FIND, FindMode, FindQuery, FindReplace, FindReplaceState,
     FormatBar, IMPORT_CSV, ITALIC, MERGE, PASTE, REDO, ReorderSheet, ReplaceRequest, SAVE_FILE,
@@ -300,19 +301,19 @@ fn status_bar_renders_label_and_aggregates() {
 #[wasm_bindgen_test]
 fn a_find_position_counts_from_one_and_never_past_the_matches() {
     assert_eq!(
-        chrome::FindPosition::new(Some(MatchIndex::new(0)), MatchCount::new(3)).label(),
+        chrome::FindPosition::new(Some(Pos::<Match>::new(0)), Count::<Match>::new(3)).label(),
         "1/3"
     );
     assert_eq!(
-        chrome::FindPosition::new(Some(MatchIndex::new(2)), MatchCount::new(3)).label(),
+        chrome::FindPosition::new(Some(Pos::<Match>::new(2)), Count::<Match>::new(3)).label(),
         "3/3"
     );
     assert_eq!(
-        chrome::FindPosition::new(Some(MatchIndex::new(3)), MatchCount::new(3)).label(),
+        chrome::FindPosition::new(Some(Pos::<Match>::new(3)), Count::<Match>::new(3)).label(),
         "0/3"
     );
     assert_eq!(
-        chrome::FindPosition::new(None, MatchCount::new(0)).label(),
+        chrome::FindPosition::new(None, Count::<Match>::new(0)).label(),
         "0/0"
     );
 }
@@ -373,10 +374,10 @@ fn sort_dialog_adds_levels_and_emits_on_apply() {
         });
         // Open over a three-column selection (A..C), so the picker offers 3 cols.
         state.set(Some(SortDialogState {
-            r1: Row::new(0),
-            c1: Col::new(0),
-            r2: Row::new(4),
-            c2: Col::new(2),
+            r1: Pos::<Row>::new(0),
+            c1: Pos::<Col>::new(0),
+            r2: Pos::<Row>::new(4),
+            c2: Pos::<Col>::new(2),
         }));
         view! { <SortDialog state=state on_apply=on_apply /> }
     });
@@ -916,8 +917,8 @@ fn the_filter_toast_says_how_many_rows_it_hid() {
         &UiEvent::Viewport {
             document_id: Id::<Document>::mint(),
             event: AppEvent::Trame(TrameEvent::FilterApplied {
-                hidden_row_count: RowCount::new(37),
-                col: Col::new(2),
+                hidden_row_count: Count::<Row>::new(37),
+                col: Pos::<Col>::new(2),
             }),
         },
     );
@@ -940,10 +941,10 @@ fn the_sort_reply_opens_the_dialog_over_its_columns() {
     relay.absorb(&UiEvent::Viewport {
         document_id: Id::<Document>::mint(),
         event: AppEvent::Trame(TrameEvent::SortRange {
-            r1: Row::new(2),
-            c1: Col::new(3),
-            r2: Row::new(9),
-            c2: Col::new(5),
+            r1: Pos::<Row>::new(2),
+            c1: Pos::<Col>::new(3),
+            r2: Pos::<Row>::new(9),
+            c2: Pos::<Col>::new(5),
         }),
     });
     let (root, _) = sort_dialog(relay.sort_dialog);
@@ -960,10 +961,10 @@ fn the_sort_reply_opens_the_dialog_over_its_columns() {
 #[wasm_bindgen_test]
 async fn the_dialog_holds_one_level_to_one_per_column() {
     let state = RwSignal::new(Some(SortDialogState {
-        r1: Row::new(0),
-        c1: Col::new(0),
-        r2: Row::new(4),
-        c2: Col::new(2),
+        r1: Pos::<Row>::new(0),
+        c1: Pos::<Col>::new(0),
+        r2: Pos::<Row>::new(4),
+        c2: Pos::<Col>::new(2),
     }));
     let (root, _) = sort_dialog(state);
     let levels = || {
@@ -990,10 +991,10 @@ async fn the_dialog_holds_one_level_to_one_per_column() {
     root.remove();
     // One column: the ceiling is the floor.
     let state = RwSignal::new(Some(SortDialogState {
-        r1: Row::new(0),
-        c1: Col::new(4),
-        r2: Row::new(9),
-        c2: Col::new(4),
+        r1: Pos::<Row>::new(0),
+        c1: Pos::<Col>::new(4),
+        r2: Pos::<Row>::new(9),
+        c2: Pos::<Col>::new(4),
     }));
     let (root, _) = sort_dialog(state);
     settle().await;
@@ -1006,10 +1007,10 @@ async fn the_dialog_holds_one_level_to_one_per_column() {
 #[wasm_bindgen_test]
 async fn the_open_sort_dialog_is_modal() {
     let state = RwSignal::new(Some(SortDialogState {
-        r1: Row::new(0),
-        c1: Col::new(0),
-        r2: Row::new(4),
-        c2: Col::new(1),
+        r1: Pos::<Row>::new(0),
+        c1: Pos::<Col>::new(0),
+        r2: Pos::<Row>::new(4),
+        c2: Pos::<Col>::new(1),
     }));
     let (root, _) = sort_dialog(state);
     settle().await;
@@ -1035,10 +1036,10 @@ async fn closing_the_sort_dialog_sorts_nothing() {
         "dialog.ambre-sort-modal",
     ] {
         let state = RwSignal::new(Some(SortDialogState {
-            r1: Row::new(0),
-            c1: Col::new(0),
-            r2: Row::new(4),
-            c2: Col::new(2),
+            r1: Pos::<Row>::new(0),
+            c1: Pos::<Col>::new(0),
+            r2: Pos::<Row>::new(4),
+            c2: Pos::<Col>::new(2),
         }));
         let (root, emitted) = sort_dialog(state);
         settle().await;

@@ -5,13 +5,14 @@
 //! composer says what its last key did, through the polite live region
 //! (`MURMURE-571` to `MURMURE-574`).
 
-use ambre_core::{ByteOffset, ByteSpan, CharCount};
+use ambre_core::index::{Count, Pos, Span};
+use ambre_core::{Byte, Char};
 
 use crate::markers::DraftEdit;
 
 /// The longest text one announcement carries. A long draft is said by its
 /// start, as a Prose block is.
-const TEXT_LIMIT: CharCount = CharCount::new(200);
+const TEXT_LIMIT: Count<Char> = Count::<Char>::new(200);
 
 /// What the last key of a frame asks the composer to say.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,11 +35,11 @@ pub enum Say {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct CaretAt {
     /// The caret, `None` with no caret.
-    pub caret: Option<ByteOffset>,
+    pub caret: Option<Pos<Byte>>,
     /// The selection, `None` with none.
-    pub selection: Option<ByteSpan>,
+    pub selection: Option<Span<Byte>>,
     /// The line the layout draws around the caret, `None` with no layout.
-    pub drawn: Option<ByteSpan>,
+    pub drawn: Option<Span<Byte>>,
 }
 
 /// What a screen reader hears of the draft once the key that asked for
@@ -55,7 +56,7 @@ pub fn said(say: Say, edit: DraftEdit<'_>, at: CaretAt) -> Option<String> {
     if moved && let Some(selected) = selection.and_then(|range| text.get(range.to_usize_range())) {
         return Some(format!("{}, selected", clipped(selected)));
     }
-    let after = caret.and_then(|at| text.get(at.get()..));
+    let after = caret.and_then(|at| text.get(at.to_usize()..));
     match say {
         Say::Char => after.map(|rest| char_name(rest.chars().next())),
         Say::Word => after.map(|rest| {
@@ -84,8 +85,8 @@ pub fn said(say: Say, edit: DraftEdit<'_>, at: CaretAt) -> Option<String> {
 }
 
 /// The logical line of `text` that holds the byte `at`.
-fn line_at(text: &str, at: ByteOffset) -> Option<&str> {
-    let at = at.get();
+fn line_at(text: &str, at: Pos<Byte>) -> Option<&str> {
+    let at = at.to_usize();
     let start = text.get(..at)?.rfind('\n').map_or(0, |n| n + 1);
     let end = text.get(at..)?.find('\n').map_or(text.len(), |n| at + n);
     text.get(start..end)
@@ -156,7 +157,7 @@ mod tests {
     /// The caret at the byte `at`, with no selection and no layout.
     fn caret(at: usize) -> CaretAt {
         CaretAt {
-            caret: Some(ByteOffset::new(at)),
+            caret: Some(Pos::<Byte>::from_usize(at)),
             ..CaretAt::default()
         }
     }
@@ -204,7 +205,7 @@ mod tests {
         let text = "one two three\nfour";
         let say = |drawn: Option<std::ops::Range<usize>>| {
             let at = CaretAt {
-                drawn: drawn.map(ByteSpan::from_usize_range),
+                drawn: drawn.map(Span::<Byte>::from_usize_range),
                 ..caret(5)
             };
             said(Say::Line, kept(text), at)
@@ -245,7 +246,7 @@ mod tests {
     fn a_selection_says_its_text() {
         let text = "one two";
         let at = CaretAt {
-            selection: Some(ByteSpan::from_usize_range(4..7)),
+            selection: Some(Span::<Byte>::from_usize_range(4..7)),
             ..CaretAt::default()
         };
         let said = said(Say::Char, kept(text), at);
@@ -264,7 +265,7 @@ mod tests {
         assert_eq!(draft(" ").as_deref(), Some("blank"));
         let long = "a".repeat(TEXT_LIMIT.to_usize() + 5);
         assert_eq!(
-            draft(&long).map(|s| CharCount::from_len(s.chars().count())),
+            draft(&long).map(|s| Count::<Char>::from_len(s.chars().count())),
             Some(TEXT_LIMIT)
         );
     }

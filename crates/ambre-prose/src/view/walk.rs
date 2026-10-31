@@ -9,6 +9,7 @@
 //! composition after it.
 
 use ambre_core::Rgba;
+use ambre_core::index::Pos;
 use ambre_core::{Px, Surface};
 use ambre_draw::{
     Affine, Brush, Color, DocumentWalk, DrawSurface, Point, PositionedLayoutItem, Rect,
@@ -72,7 +73,7 @@ pub(crate) fn to_rect(placed: &Placed, rect: &ambre_draw::BoundingBox) -> Rect {
 /// The glyphs after its point move right by its width.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Insertion {
-    pub line: RunLine,
+    pub line: Pos<RunLine>,
     /// Where the text goes in, from the start of the run.
     pub x: Px<Surface>,
     /// How far the glyphs after it move right.

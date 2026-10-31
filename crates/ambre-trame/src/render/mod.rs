@@ -22,9 +22,7 @@
 // signatures.
 // ============================================================================
 
-use ambre_bus::{
-    CellPos, Col, ColCount, ColDelta, ColSpan, MergeSpan, Row, RowCount, RowDelta, RowSpan,
-};
+use ambre_bus::{CellPos, Col, MergeSpan, Row};
 use ambre_canvas::{Palette, TextCache};
 use ambre_core::FontSize;
 use ambre_core::{Doc, Px, View};

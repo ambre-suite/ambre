@@ -4,6 +4,7 @@
 use super::*;
 use ambre_canvas::PointerButton;
 use ambre_commands::{FunctionKey, Key, KeyChar, Modifiers, SelectionMode};
+use ambre_core::index::{Count, Delta, Pos};
 use ambre_core::{Point, Px, View};
 use ambre_draw::Consumed;
 use ambre_draw::kinetic::Release;
@@ -352,19 +353,19 @@ impl TrameView {
                 };
                 match *key {
                     Key::ArrowUp => {
-                        self.nav_move(RowDelta::new(-1), ColDelta::ZERO, ext);
+                        self.nav_move(Delta::<Row>::new(-1), Delta::<Col>::ZERO, ext);
                         Consumed::Yes
                     }
                     Key::ArrowDown => {
-                        self.nav_move(RowDelta::new(1), ColDelta::ZERO, ext);
+                        self.nav_move(Delta::<Row>::new(1), Delta::<Col>::ZERO, ext);
                         Consumed::Yes
                     }
                     Key::ArrowLeft => {
-                        self.nav_move(RowDelta::ZERO, ColDelta::new(-1), ext);
+                        self.nav_move(Delta::<Row>::ZERO, Delta::<Col>::new(-1), ext);
                         Consumed::Yes
                     }
                     Key::ArrowRight => {
-                        self.nav_move(RowDelta::ZERO, ColDelta::new(1), ext);
+                        self.nav_move(Delta::<Row>::ZERO, Delta::<Col>::new(1), ext);
                         Consumed::Yes
                     }
                     // Tab / Shift+Tab walk columns; Enter / Shift+Enter walk rows
@@ -373,25 +374,26 @@ impl TrameView {
                     // a range extender. preventDefault keeps the browser from
                     // moving focus off the canvas.
                     Key::Tab if !mods.primary() => {
-                        let step = ColDelta::new(if mods.shift() { -1 } else { 1 });
-                        self.nav_move(RowDelta::ZERO, step, SelectionMode::Move);
+                        let step = Delta::<Col>::new(if mods.shift() { -1 } else { 1 });
+                        self.nav_move(Delta::<Row>::ZERO, step, SelectionMode::Move);
                         Consumed::Yes
                     }
                     Key::Enter if !mods.primary() => {
-                        let step = RowDelta::new(if mods.shift() { -1 } else { 1 });
-                        self.nav_move(step, ColDelta::ZERO, SelectionMode::Move);
+                        let step = Delta::<Row>::new(if mods.shift() { -1 } else { 1 });
+                        self.nav_move(step, Delta::<Col>::ZERO, SelectionMode::Move);
                         Consumed::Yes
                     }
                     // Page Down / Up move by a full viewport height.
                     Key::PageDown | Key::PageUp => {
-                        let page =
-                            RowDelta::from_count(self.state.viewport_rows.max(RowCount::ONE));
+                        let page = Delta::<Row>::from_count(
+                            self.state.viewport_rows.max(Count::<Row>::ONE),
+                        );
                         let step = if *key == Key::PageUp {
                             page.reversed()
                         } else {
                             page
                         };
-                        self.nav_move(step, ColDelta::ZERO, ext);
+                        self.nav_move(step, Delta::<Col>::ZERO, ext);
                         Consumed::Yes
                     }
                     // Home: column 0 of the row; Ctrl+Home: top-left of the grid.
@@ -400,7 +402,7 @@ impl TrameView {
                         Consumed::Yes
                     }
                     Key::Home => {
-                        self.nav_goto(CellPos::new(self.state.active_row(), Col::ZERO), ext);
+                        self.nav_goto(CellPos::new(self.state.active_row(), Pos::<Col>::ZERO), ext);
                         Consumed::Yes
                     }
                     // End: last cell with content in the row; Ctrl+End: bottom-right
@@ -574,7 +576,7 @@ impl TrameView {
 
     /// Move the active cell by `dr` rows and `dc` columns. With `extend`
     /// (Shift held) the selection range grows instead of collapsing.
-    pub(crate) fn nav_move(&mut self, dr: RowDelta, dc: ColDelta, extend: SelectionMode) {
+    pub(crate) fn nav_move(&mut self, dr: Delta<Row>, dc: Delta<Col>, extend: SelectionMode) {
         let mv = self.state.move_cursor(dr, dc, extend);
         self.apply_cursor_move(mv);
     }
@@ -692,7 +694,7 @@ impl TrameView {
 
     /// Arm a column resize from a press on column `c`'s right border. Shows the
     /// live vertical guide at the pointer x.
-    pub(crate) fn arm_col_resize(&mut self, c: Col, x: Px<View>) {
+    pub(crate) fn arm_col_resize(&mut self, c: Pos<Col>, x: Px<View>) {
         self.resize_drag = Some(HeaderHit::ColBorder(c));
         self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Col(
             crate::ui::grid::on_grid(x),
@@ -702,7 +704,7 @@ impl TrameView {
     }
 
     /// Arm a row resize from a press on row `r`'s bottom border.
-    pub(crate) fn arm_row_resize(&mut self, r: Row, y: Px<View>) {
+    pub(crate) fn arm_row_resize(&mut self, r: Pos<Row>, y: Px<View>) {
         self.resize_drag = Some(HeaderHit::RowBorder(r));
         self.state.resize_preview = Some(crate::ui::grid::ResizePreview::Row(
             crate::ui::grid::on_grid(y),

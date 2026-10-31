@@ -3,6 +3,7 @@
 
 use super::*;
 use ambre_commands::SelectionMode;
+use ambre_core::index::{Delta, Pos};
 use ambre_core::{Px, Surface};
 
 /// `current_region` returns `None` on an isolated empty active cell and the
@@ -38,7 +39,7 @@ fn filter_button_hit_test_matches_drawn_rect() {
     // The button for column 1 sits at the right edge of cell (0, 1). Hitting
     // its centre resolves to that column on the region's header row.
     let button = state
-        .filter_button_rect(CellPos::new(Row::new(0), Col::new(1)))
+        .filter_button_rect(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)))
         .expect("button visible");
     let centre = button.center();
     assert_eq!(
@@ -59,13 +60,13 @@ fn filter_button_scales_with_zoom() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     put(&mut state, 0, 0, "a");
     let w100 = state
-        .filter_button_rect(CellPos::new(Row::new(0), Col::new(0)))
+        .filter_button_rect(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
         .expect("button visible")
         .width();
 
     state.set_zoom(ambre_core::Scale::<ambre_core::Doc, ambre_core::View>::positive(2.0));
     let w200 = state
-        .filter_button_rect(CellPos::new(Row::new(0), Col::new(0)))
+        .filter_button_rect(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
         .expect("button visible")
         .width();
     // At 2x the cell is taller than the un-clamped button, so the side is the
@@ -81,26 +82,30 @@ fn single_cell_selection_tracks_active() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     assert_eq!(
         state.selection,
-        Selection::single(CellPos::new(Row::new(0), Col::new(0)))
+        Selection::single(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)))
     );
 
-    state.select(CellPos::new(Row::new(5), Col::new(3)));
+    state.select(CellPos::new(Pos::<Row>::new(5), Pos::<Col>::new(3)));
     assert_eq!(
         state.selection,
-        Selection::single(CellPos::new(Row::new(5), Col::new(3)))
+        Selection::single(CellPos::new(Pos::<Row>::new(5), Pos::<Col>::new(3)))
     );
     assert_eq!(
         (state.active_row(), state.active_col()),
-        (Row::new(5), Col::new(3))
+        (Pos::<Row>::new(5), Pos::<Col>::new(3))
     );
 
     // Arrow navigation keeps the selection single-cell on the new active cell.
     state
-        .move_cursor(RowDelta::new(1), ColDelta::new(0), SelectionMode::Move)
+        .move_cursor(
+            Delta::<Row>::new(1),
+            Delta::<Col>::new(0),
+            SelectionMode::Move,
+        )
         .expect("cursor moved");
     assert_eq!(
         state.selection,
-        Selection::single(CellPos::new(Row::new(6), Col::new(3)))
+        Selection::single(CellPos::new(Pos::<Row>::new(6), Pos::<Col>::new(3)))
     );
     assert_eq!(state.selection.anchor, state.selection.active);
 }
@@ -110,30 +115,32 @@ fn single_cell_selection_tracks_active() {
 #[test]
 fn axis_pointer_resolution_follows_variable_metrics() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
-    state
-        .col_widths
-        .insert(Col::new(0), ambre_core::Px::<ambre_core::Doc>::new(160.0)); // col 0 widened
+    state.col_widths.insert(
+        Pos::<Col>::new(0),
+        ambre_core::Px::<ambre_core::Doc>::new(160.0),
+    ); // col 0 widened
     // x just past the wide col 0 lands in col 1.
     assert_eq!(
         state.col_at_x(view_px(super::super::HEADER_WIDTH.get() + 160.0 + 5.0)),
-        Some(Col::new(1))
+        Some(Pos::<Col>::new(1))
     );
     assert_eq!(
         state.col_at_x(view_px(super::super::HEADER_WIDTH.get() + 10.0)),
-        Some(Col::new(0))
+        Some(Pos::<Col>::new(0))
     );
     assert_eq!(state.col_at_x(view_px(0.0)), None); // over the row-header strip
 
-    state
-        .row_heights
-        .insert(Row::new(0), ambre_core::Px::<ambre_core::Doc>::new(50.0));
+    state.row_heights.insert(
+        Pos::<Row>::new(0),
+        ambre_core::Px::<ambre_core::Doc>::new(50.0),
+    );
     assert_eq!(
         state.row_at_y(view_px(super::super::HEADER_HEIGHT.get() + 50.0 + 5.0)),
-        Some(Row::new(1))
+        Some(Pos::<Row>::new(1))
     );
     assert_eq!(
         state.row_at_y(view_px(super::super::HEADER_HEIGHT.get() + 10.0)),
-        Some(Row::new(0))
+        Some(Pos::<Row>::new(0))
     );
     assert_eq!(state.row_at_y(view_px(0.0)), None);
 }
@@ -147,12 +154,12 @@ fn header_boundary_splits_insert_and_resize() {
     // Lower half -> resize col 0.
     assert_eq!(
         state.header_hit(pointer(boundary, super::super::HEADER_HEIGHT.get() * 0.8)),
-        Some(HeaderHit::ColBorder(Col::new(0)))
+        Some(HeaderHit::ColBorder(Pos::<Col>::new(0)))
     );
     // Upper half -> insert left of col 1 (at this boundary).
     assert_eq!(
         state.header_hit(pointer(boundary, 2.0)),
-        Some(HeaderHit::ColInsert(Col::new(1)))
+        Some(HeaderHit::ColInsert(Pos::<Col>::new(1)))
     );
 }
 
@@ -169,7 +176,7 @@ fn header_hit_resolves_zones() {
     // Column 0 body: header strip, x mid-column 0 ([50, 130)).
     assert_eq!(
         state.header_hit(pointer(super::super::HEADER_WIDTH.get() + 30.0, 5.0)),
-        Some(HeaderHit::ColBody(Col::new(0)))
+        Some(HeaderHit::ColBody(Pos::<Col>::new(0)))
     );
     // Column 0 right border (~130), lower half of the band, arms a resize.
     assert_eq!(
@@ -177,7 +184,7 @@ fn header_hit_resolves_zones() {
             super::super::HEADER_WIDTH.get() + f64::from(super::super::COL_WIDTH.get()),
             super::super::HEADER_HEIGHT.get() * 0.8
         )),
-        Some(HeaderHit::ColBorder(Col::new(0)))
+        Some(HeaderHit::ColBorder(Pos::<Col>::new(0)))
     );
     // Row 1 body (rows start at HEADER_HEIGHT, each ROW_HEIGHT tall).
     assert_eq!(
@@ -185,7 +192,7 @@ fn header_hit_resolves_zones() {
             10.0,
             super::super::HEADER_HEIGHT.get() + f64::from(super::super::ROW_HEIGHT.get()) + 5.0
         )),
-        Some(HeaderHit::RowBody(Row::new(1)))
+        Some(HeaderHit::RowBody(Pos::<Row>::new(1)))
     );
     // Row 0 bottom border, right half of the band, resizes row 0.
     assert_eq!(
@@ -193,7 +200,7 @@ fn header_hit_resolves_zones() {
             super::super::HEADER_WIDTH.get() * 0.8,
             super::super::HEADER_HEIGHT.get() + f64::from(super::super::ROW_HEIGHT.get())
         )),
-        Some(HeaderHit::RowBorder(Row::new(0)))
+        Some(HeaderHit::RowBorder(Pos::<Row>::new(0)))
     );
     // A point in the grid body is not a header hit.
     assert_eq!(
@@ -209,20 +216,26 @@ fn header_hit_resolves_zones() {
 /// coordinate is irrelevant (`trame-selection`).
 #[test]
 fn axis_selection_spans_the_band() {
-    let cols = Selection::axis(AxisPos::Col(Col::new(2)), AxisPos::Col(Col::new(4)));
+    let cols = Selection::axis(
+        AxisPos::Col(Pos::<Col>::new(2)),
+        AxisPos::Col(Pos::<Col>::new(4)),
+    );
     assert_eq!(cols.kind, SelKind::Cols);
     let band = cols.bounds();
     assert_eq!(
         (band.top_left.col, band.bottom_right.col),
-        (Col::new(2), Col::new(4))
+        (Pos::<Col>::new(2), Pos::<Col>::new(4))
     );
 
-    let rows = Selection::axis(AxisPos::Row(Row::new(5)), AxisPos::Row(Row::new(3)));
+    let rows = Selection::axis(
+        AxisPos::Row(Pos::<Row>::new(5)),
+        AxisPos::Row(Pos::<Row>::new(3)),
+    );
     assert_eq!(rows.kind, SelKind::Rows);
     let band = rows.bounds();
     assert_eq!(
         (band.top_left.row, band.bottom_right.row),
-        (Row::new(3), Row::new(5))
+        (Pos::<Row>::new(3), Pos::<Row>::new(5))
     );
 }
 
@@ -231,7 +244,11 @@ fn axis_selection_spans_the_band() {
 /// range (`TRAME-UI-033`).
 #[test]
 fn axis_report_carries_the_band_not_the_cache() {
-    let cols = Selection::axis(AxisPos::Col(Col::new(2)), AxisPos::Col(Col::new(4))).report();
+    let cols = Selection::axis(
+        AxisPos::Col(Pos::<Col>::new(2)),
+        AxisPos::Col(Pos::<Col>::new(4)),
+    )
+    .report();
     match cols {
         crate::TrameCommand::SetActiveCell {
             row,
@@ -243,12 +260,12 @@ fn axis_report_carries_the_band_not_the_cache() {
         } => {
             assert_eq!(
                 (row, col),
-                (Row::new(0), Col::new(4)),
+                (Pos::<Row>::new(0), Pos::<Col>::new(4)),
                 "active is the clicked column"
             );
             assert_eq!(
                 (anchor_row, anchor_col),
-                (Row::new(0), Col::new(2)),
+                (Pos::<Row>::new(0), Pos::<Col>::new(2)),
                 "anchor is the band start"
             );
             assert!(extra.is_empty(), "a band commits no disjoint rectangles");
@@ -257,7 +274,11 @@ fn axis_report_carries_the_band_not_the_cache() {
         other => panic!("expected SetActiveCell, got {other:?}"),
     }
 
-    let rows = Selection::axis(AxisPos::Row(Row::new(5)), AxisPos::Row(Row::new(3))).report();
+    let rows = Selection::axis(
+        AxisPos::Row(Pos::<Row>::new(5)),
+        AxisPos::Row(Pos::<Row>::new(3)),
+    )
+    .report();
     match rows {
         crate::TrameCommand::SetActiveCell {
             row,
@@ -267,8 +288,11 @@ fn axis_report_carries_the_band_not_the_cache() {
             kind,
             ..
         } => {
-            assert_eq!((row, col), (Row::new(3), Col::new(0)));
-            assert_eq!((anchor_row, anchor_col), (Row::new(5), Col::new(0)));
+            assert_eq!((row, col), (Pos::<Row>::new(3), Pos::<Col>::new(0)));
+            assert_eq!(
+                (anchor_row, anchor_col),
+                (Pos::<Row>::new(5), Pos::<Col>::new(0))
+            );
             assert_eq!(kind, crate::SelectionKind::Rows);
         }
         other => panic!("expected SetActiveCell, got {other:?}"),
@@ -281,24 +305,30 @@ fn axis_report_carries_the_band_not_the_cache() {
 /// the aggregates refresh must not miss (`TRAME-UI-109`).
 #[test]
 fn extending_a_header_band_makes_the_selection_multi() {
-    let mut cols = Selection::axis(AxisPos::Col(Col::new(0)), AxisPos::Col(Col::new(0)));
+    let mut cols = Selection::axis(
+        AxisPos::Col(Pos::<Col>::new(0)),
+        AxisPos::Col(Pos::<Col>::new(0)),
+    );
     assert!(
         !cols.is_multi(),
         "a single column is not a multi-cell selection"
     );
-    cols.extend_axis(AxisPos::Col(Col::new(3)));
+    cols.extend_axis(AxisPos::Col(Pos::<Col>::new(3)));
     assert_eq!(cols.live_rect(), rect(0, 0, 0, 3));
     assert!(
         cols.is_multi(),
         "sweeping columns A to D is a multi-cell band"
     );
 
-    let mut rows = Selection::axis(AxisPos::Row(Row::new(5)), AxisPos::Row(Row::new(5)));
+    let mut rows = Selection::axis(
+        AxisPos::Row(Pos::<Row>::new(5)),
+        AxisPos::Row(Pos::<Row>::new(5)),
+    );
     assert!(
         !rows.is_multi(),
         "a single row is not a multi-cell selection"
     );
-    rows.extend_axis(AxisPos::Row(Row::new(2)));
+    rows.extend_axis(AxisPos::Row(Pos::<Row>::new(2)));
     assert_eq!(rows.live_rect(), rect(2, 0, 5, 0));
     assert!(rows.is_multi(), "sweeping rows is a multi-cell band");
 }
@@ -309,23 +339,25 @@ fn extending_a_header_band_makes_the_selection_multi() {
 fn variable_metrics_round_trip_pixel_and_hit_test() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     // Col 0 widened to 160, row 0 heightened to 40.
-    state
-        .col_widths
-        .insert(Col::new(0), ambre_core::Px::<ambre_core::Doc>::new(160.0));
-    state
-        .row_heights
-        .insert(Row::new(0), ambre_core::Px::<ambre_core::Doc>::new(40.0));
+    state.col_widths.insert(
+        Pos::<Col>::new(0),
+        ambre_core::Px::<ambre_core::Doc>::new(160.0),
+    );
+    state.row_heights.insert(
+        Pos::<Row>::new(0),
+        ambre_core::Px::<ambre_core::Doc>::new(40.0),
+    );
 
-    assert_eq!(state.col_width_of(Col::new(0)).get(), 160.0);
+    assert_eq!(state.col_width_of(Pos::<Col>::new(0)).get(), 160.0);
     assert_eq!(
-        state.col_width_of(Col::new(1)).get(),
+        state.col_width_of(Pos::<Col>::new(1)).get(),
         f64::from(super::super::COL_WIDTH.get())
     );
-    assert_eq!(state.row_height_of(Row::new(0)).get(), 40.0);
+    assert_eq!(state.row_height_of(Pos::<Row>::new(0)).get(), 40.0);
 
     // Cell (1,1) sits after the wide col 0 and below the tall row 0.
     let cell = state
-        .cell_pixel_rect(CellPos::new(Row::new(1), Col::new(1)))
+        .cell_pixel_rect(CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)))
         .expect("visible");
     assert_eq!(cell.x0, super::super::HEADER_WIDTH.get() + 160.0);
     assert_eq!(cell.y0, super::super::HEADER_HEIGHT.get() + 40.0);
@@ -370,17 +402,17 @@ fn zoom_scales_metrics_and_round_trips_hit_test() {
         super::super::HEADER_HEIGHT.get() * 2.0
     );
     assert_eq!(
-        state.col_width_of(Col::new(0)).get(),
+        state.col_width_of(Pos::<Col>::new(0)).get(),
         f64::from(super::super::COL_WIDTH.get()) * 2.0
     );
     assert_eq!(
-        state.row_height_of(Row::new(0)).get(),
+        state.row_height_of(Pos::<Row>::new(0)).get(),
         f64::from(super::super::ROW_HEIGHT.get()) * 2.0
     );
 
     // Column 1's left edge is the (doubled) header plus one (doubled) column.
     assert_eq!(
-        state.col_x(Col::new(1)).get(),
+        state.col_x(Pos::<Col>::new(1)).get(),
         super::super::HEADER_WIDTH.get() * 2.0 + f64::from(super::super::COL_WIDTH.get()) * 2.0
     );
 
@@ -414,41 +446,49 @@ fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
     };
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_core::Generation::ZERO,
-        row_start: Row::new(0),
-        col_start: Col::new(0),
+        row_start: Pos::<Row>::new(0),
+        col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![
-            cell(Row::new(1), Col::new(1), Some(span(2, 2))), // master
-            cell(Row::new(1), Col::new(2), None),
-            cell(Row::new(2), Col::new(1), None),
-            cell(Row::new(2), Col::new(2), None),
+            cell(Pos::<Row>::new(1), Pos::<Col>::new(1), Some(span(2, 2))), // master
+            cell(Pos::<Row>::new(1), Pos::<Col>::new(2), None),
+            cell(Pos::<Row>::new(2), Pos::<Col>::new(1), None),
+            cell(Pos::<Row>::new(2), Pos::<Col>::new(2), None),
         ],
     });
 
     // Clicking the bottom-right covered sub-cell selects the master.
-    state.select(CellPos::new(Row::new(2), Col::new(2)));
+    state.select(CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(2)));
     assert_eq!(
         state.selection,
-        Selection::single(CellPos::new(Row::new(1), Col::new(1)))
+        Selection::single(CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)))
     );
 
     // Arrow Right from the master clears the 2-wide span -> column 3.
     state
-        .move_cursor(RowDelta::new(0), ColDelta::new(1), SelectionMode::Move)
+        .move_cursor(
+            Delta::<Row>::new(0),
+            Delta::<Col>::new(1),
+            SelectionMode::Move,
+        )
         .expect("moved past merge");
     assert_eq!(
         (state.active_row(), state.active_col()),
-        (Row::new(1), Col::new(3))
+        (Pos::<Row>::new(1), Pos::<Col>::new(3))
     );
 
     // Arrow Left back into the block snaps onto the master, not a sub-cell.
     state
-        .move_cursor(RowDelta::new(0), ColDelta::new(-1), SelectionMode::Move)
+        .move_cursor(
+            Delta::<Row>::new(0),
+            Delta::<Col>::new(-1),
+            SelectionMode::Move,
+        )
         .expect("moved back");
     assert_eq!(
         (state.active_row(), state.active_col()),
-        (Row::new(1), Col::new(1))
+        (Pos::<Row>::new(1), Pos::<Col>::new(1))
     );
 }
 
@@ -457,56 +497,59 @@ fn merge_block_selects_as_a_whole_and_nav_steps_over_it() {
 #[test]
 fn selection_extend_disjoint_and_membership() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
-    state.select(CellPos::new(Row::new(2), Col::new(2)));
+    state.select(CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(2)));
     assert!(!state.selection.is_multi(), "lone single cell is not multi");
     assert_eq!(state.selection.bounds(), rect(2, 2, 2, 2));
 
     // Extend to (4, 5): the live rectangle spans (2,2)..=(4,5).
-    state.select_extend(CellPos::new(Row::new(4), Col::new(5)));
+    state.select_extend(CellPos::new(Pos::<Row>::new(4), Pos::<Col>::new(5)));
     assert!(state.selection.is_multi());
     assert_eq!(state.selection.bounds(), rect(2, 2, 4, 5));
     assert!(
         state
             .selection
-            .contains(CellPos::new(Row::new(3), Col::new(3)))
+            .contains(CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(3)))
     );
     assert!(
         !state
             .selection
-            .contains(CellPos::new(Row::new(5), Col::new(5)))
+            .contains(CellPos::new(Pos::<Row>::new(5), Pos::<Col>::new(5)))
     );
 
     // Extending backwards past the anchor renormalizes the bounds.
-    state.select_extend(CellPos::new(Row::new(0), Col::new(0)));
+    state.select_extend(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)));
     assert_eq!(state.selection.bounds(), rect(0, 0, 2, 2));
 
     // Ctrl+click starts a disjoint single-cell range; the old rect persists.
-    state.select_disjoint(CellPos::new(Row::new(10), Col::new(10)));
+    state.select_disjoint(CellPos::new(Pos::<Row>::new(10), Pos::<Col>::new(10)));
     assert_eq!(
         state.selection.active(),
-        CellPos::new(Row::new(10), Col::new(10))
+        CellPos::new(Pos::<Row>::new(10), Pos::<Col>::new(10))
     );
     assert!(
         state
             .selection
-            .contains(CellPos::new(Row::new(1), Col::new(1))),
+            .contains(CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1))),
         "first rect still selected"
     );
     assert!(
         state
             .selection
-            .contains(CellPos::new(Row::new(10), Col::new(10))),
+            .contains(CellPos::new(Pos::<Row>::new(10), Pos::<Col>::new(10))),
         "new cell selected"
     );
     assert_eq!(state.selection.rects().count(), 2);
 
     // A plain move collapses everything back to a single cell.
     state
-        .move_to(CellPos::new(Row::new(7), Col::new(7)), SelectionMode::Move)
+        .move_to(
+            CellPos::new(Pos::<Row>::new(7), Pos::<Col>::new(7)),
+            SelectionMode::Move,
+        )
         .expect("moved");
     assert_eq!(
         state.selection,
-        Selection::single(CellPos::new(Row::new(7), Col::new(7)))
+        Selection::single(CellPos::new(Pos::<Row>::new(7), Pos::<Col>::new(7)))
     );
     assert!(!state.selection.is_multi());
 }
@@ -517,11 +560,11 @@ fn selection_extend_disjoint_and_membership() {
 fn selected_cells_enumerates_and_dedups() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     // A 2x2 block (0,0)..=(1,1).
-    state.select(CellPos::new(Row::new(0), Col::new(0)));
-    state.select_extend(CellPos::new(Row::new(1), Col::new(1)));
+    state.select(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)));
+    state.select_extend(CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)));
     // A disjoint block (1,1)..=(1,2) that overlaps the first at (1,1).
-    state.select_disjoint(CellPos::new(Row::new(1), Col::new(1)));
-    state.select_extend(CellPos::new(Row::new(1), Col::new(2)));
+    state.select_disjoint(CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)));
+    state.select_extend(CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(2)));
 
     let cells = state.selection.selected_cells();
     assert_eq!(
@@ -535,20 +578,28 @@ fn selected_cells_enumerates_and_dedups() {
 #[test]
 fn move_with_extend_keeps_anchor() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
-    state.select(CellPos::new(Row::new(0), Col::new(0)));
+    state.select(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)));
     state
-        .move_cursor(RowDelta::new(2), ColDelta::new(0), SelectionMode::Extend)
+        .move_cursor(
+            Delta::<Row>::new(2),
+            Delta::<Col>::new(0),
+            SelectionMode::Extend,
+        )
         .expect("moved");
     state
-        .move_cursor(RowDelta::new(0), ColDelta::new(3), SelectionMode::Extend)
+        .move_cursor(
+            Delta::<Row>::new(0),
+            Delta::<Col>::new(3),
+            SelectionMode::Extend,
+        )
         .expect("moved");
     assert_eq!(
         state.selection.anchor,
-        CellPos::new(Row::new(0), Col::new(0))
+        CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0))
     );
     assert_eq!(
         state.selection.active(),
-        CellPos::new(Row::new(2), Col::new(3))
+        CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(3))
     );
     assert_eq!(state.selection.bounds(), rect(0, 0, 2, 3));
 }
@@ -573,22 +624,22 @@ fn select_rect_keeps_unmerged_cells_selected() {
     // A1:A2 (master (0,0), 1 col x 2 rows) and B1:B2 (master (0,1)).
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_core::Generation::ZERO,
-        row_start: Row::new(0),
-        col_start: Col::new(0),
+        row_start: Pos::<Row>::new(0),
+        col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![
-            cell(Row::new(0), Col::new(0), Some(span(2, 1))),
-            cell(Row::new(1), Col::new(0), None),
-            cell(Row::new(0), Col::new(1), Some(span(2, 1))),
-            cell(Row::new(1), Col::new(1), None),
+            cell(Pos::<Row>::new(0), Pos::<Col>::new(0), Some(span(2, 1))),
+            cell(Pos::<Row>::new(1), Pos::<Col>::new(0), None),
+            cell(Pos::<Row>::new(0), Pos::<Col>::new(1), Some(span(2, 1))),
+            cell(Pos::<Row>::new(1), Pos::<Col>::new(1), None),
         ],
     });
     // Selection spans the two masters only (A1:B1, row 0). With the merges in
     // the cache the rendered rect already covers all four cells.
     state.selection = Selection {
-        anchor: CellPos::new(Row::new(0), Col::new(0)),
-        active: CellPos::new(Row::new(0), Col::new(1)),
+        anchor: CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+        active: CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)),
         extra: Vec::new(),
         kind: SelKind::Cells,
     };
@@ -596,21 +647,21 @@ fn select_rect_keeps_unmerged_cells_selected() {
 
     // Logic's SelectRange after the unmerge: adopt the freed area.
     state.select_rect(CellRect::spanning(
-        CellPos::new(Row::new(0), Col::new(0)),
-        CellPos::new(Row::new(1), Col::new(1)),
+        CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+        CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)),
     ));
     // The re-fetch clears the merge spans (now plain cells).
     state.on_viewport_data(TrameEvent::ViewportData {
         version: ambre_core::Generation::nth(1),
-        row_start: Row::new(0),
-        col_start: Col::new(0),
+        row_start: Pos::<Row>::new(0),
+        col_start: Pos::<Col>::new(0),
         col_widths: vec![],
         row_heights: vec![],
         cells: vec![
-            cell(Row::new(0), Col::new(0), None),
-            cell(Row::new(1), Col::new(0), None),
-            cell(Row::new(0), Col::new(1), None),
-            cell(Row::new(1), Col::new(1), None),
+            cell(Pos::<Row>::new(0), Pos::<Col>::new(0), None),
+            cell(Pos::<Row>::new(1), Pos::<Col>::new(0), None),
+            cell(Pos::<Row>::new(0), Pos::<Col>::new(1), None),
+            cell(Pos::<Row>::new(1), Pos::<Col>::new(1), None),
         ],
     });
     // All four freed cells remain selected (the bug left only row 0).
@@ -626,12 +677,12 @@ fn select_rect_keeps_unmerged_cells_selected() {
 fn fill_handle_sits_on_merge_extent_corner() {
     let mut state = TrameUiState::new(Px::<Surface>::new(800.0), Px::<Surface>::new(600.0));
     seed_merge_2x2(&mut state);
-    state.select(CellPos::new(Row::new(2), Col::new(2))); // snaps to master (1,1)
+    state.select(CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(2))); // snaps to master (1,1)
     assert_eq!(state.selection.bounds(), rect(1, 1, 1, 1));
 
     let handle = state.fill_handle_rect().expect("handle visible");
     let extent = state
-        .cell_pixel_rect(CellPos::new(Row::new(2), Col::new(2)))
+        .cell_pixel_rect(CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(2)))
         .expect("extent corner visible");
     let s = super::super::FILL_HANDLE_SIZE.get();
     assert_eq!(handle.x0, extent.x1 - s / 2.0, "handle x on extent");
@@ -646,8 +697,8 @@ fn drag_selection_expands_to_whole_merge() {
     seed_merge_2x2(&mut state);
     // Drag from (0,0) to (1,1): the raw live rect (0,0)..=(1,1) cuts the
     // merge in half; the expanded rect must cover the whole (1,1)..=(2,2).
-    state.select(CellPos::new(Row::new(0), Col::new(0)));
-    state.select_extend(CellPos::new(Row::new(1), Col::new(1)));
+    state.select(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)));
+    state.select_extend(CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)));
     let rects = state.selection_rects();
     assert_eq!(
         rects,

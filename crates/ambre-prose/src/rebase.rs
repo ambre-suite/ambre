@@ -11,34 +11,35 @@
 //! deletion of `-delta` code points when it is negative. A list of edits is
 //! sequential: each one counts positions in the text the previous one left.
 
-use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset};
+use ambre_bus::app::prose::DocChar;
+use ambre_core::index::{Count, Delta, Pos};
 
 use crate::events::{BlockId, TextEdit};
 
 /// The code points an edit covers.
-fn len(edit: &TextEdit) -> DocCount {
+fn len(edit: &TextEdit) -> Count<DocChar> {
     edit.delta.magnitude()
 }
 
-fn insertion(block_id: BlockId, at: DocOffset, n: DocCount) -> TextEdit {
+fn insertion(block_id: BlockId, at: Pos<DocChar>, n: Count<DocChar>) -> TextEdit {
     TextEdit {
         block_id,
         at,
-        delta: DocDelta::from_count(n),
+        delta: Delta::<DocChar>::from_count(n),
     }
 }
 
 /// A deletion of `n` code points, or `None` when there is nothing to delete.
-fn deletion(block_id: BlockId, at: DocOffset, n: DocCount) -> Option<TextEdit> {
+fn deletion(block_id: BlockId, at: Pos<DocChar>, n: Count<DocChar>) -> Option<TextEdit> {
     (!n.is_zero()).then(|| TextEdit {
         block_id,
         at,
-        delta: DocDelta::from_count(n).reversed(),
+        delta: Delta::<DocChar>::from_count(n).reversed(),
     })
 }
 
 /// Where a position lands once a deletion of `[at, at + n)` applied.
-fn through_deletion(pos: DocOffset, at: DocOffset, n: DocCount) -> DocOffset {
+fn through_deletion(pos: Pos<DocChar>, at: Pos<DocChar>, n: Count<DocChar>) -> Pos<DocChar> {
     if pos <= at {
         pos
     } else if pos >= at + n {
@@ -51,7 +52,7 @@ fn through_deletion(pos: DocOffset, at: DocOffset, n: DocCount) -> DocOffset {
 /// Where a position of `block` lands once `edit` applied. An insertion at the
 /// position goes before it.
 #[must_use]
-pub(crate) fn through(pos: DocOffset, block: BlockId, edit: &TextEdit) -> DocOffset {
+pub(crate) fn through(pos: Pos<DocChar>, block: BlockId, edit: &TextEdit) -> Pos<DocChar> {
     if edit.block_id != block {
         return pos;
     }
@@ -66,7 +67,7 @@ pub(crate) fn through(pos: DocOffset, block: BlockId, edit: &TextEdit) -> DocOff
 
 /// Where a position lands once a run of edits applied, one after another.
 #[must_use]
-pub(crate) fn through_all(pos: DocOffset, block: BlockId, edits: &[TextEdit]) -> DocOffset {
+pub(crate) fn through_all(pos: Pos<DocChar>, block: BlockId, edits: &[TextEdit]) -> Pos<DocChar> {
     edits
         .iter()
         .fold(pos, |pos, edit| through(pos, block, edit))
@@ -75,7 +76,11 @@ pub(crate) fn through_all(pos: DocOffset, block: BlockId, edits: &[TextEdit]) ->
 /// Where the end of a range lands once `edits` applied. An insertion at the
 /// end stays outside the range.
 #[must_use]
-pub(crate) fn end_through_all(pos: DocOffset, block: BlockId, edits: &[TextEdit]) -> DocOffset {
+pub(crate) fn end_through_all(
+    pos: Pos<DocChar>,
+    block: BlockId,
+    edits: &[TextEdit],
+) -> Pos<DocChar> {
     edits.iter().fold(pos, |pos, edit| {
         if edit.block_id == block && !edit.delta.is_negative() && edit.at == pos {
             pos
@@ -203,14 +208,14 @@ mod tests {
     const B: BlockId = BlockId::new(ambre_core::PeerId::new(1), ambre_core::OpCounter::new(1));
 
     fn ins(at: u32, n: u32) -> TextEdit {
-        insertion(A, DocOffset::new(at), DocCount::new(n))
+        insertion(A, Pos::<DocChar>::new(at), Count::<DocChar>::new(n))
     }
 
     fn del(at: u32, n: u32) -> TextEdit {
         TextEdit {
             block_id: A,
-            at: DocOffset::new(at),
-            delta: DocDelta::new(-i64::from(n)),
+            at: Pos::<DocChar>::new(at),
+            delta: Delta::<DocChar>::new(-i64::from(n)),
         }
     }
 
@@ -269,17 +274,23 @@ mod tests {
         let (c_after, o_after) = transform(&ins(4, 2), &ins(4, 3));
         assert_eq!(c_after, Some(ins(7, 2)));
         assert_eq!(o_after, vec![ins(4, 3)]);
-        assert_eq!(through(DocOffset::new(4), A, &ins(4, 3)), DocOffset::new(7));
+        assert_eq!(
+            through(Pos::<DocChar>::new(4), A, &ins(4, 3)),
+            Pos::<DocChar>::new(7)
+        );
     }
 
     #[test]
     fn another_block_is_left_alone() {
-        let other = insertion(B, DocOffset::ZERO, DocCount::new(5));
+        let other = insertion(B, Pos::<DocChar>::ZERO, Count::<DocChar>::new(5));
         assert_eq!(
             transform(&ins(2, 1), &other),
             (Some(ins(2, 1)), vec![other])
         );
-        assert_eq!(through(DocOffset::new(2), A, &other), DocOffset::new(2));
+        assert_eq!(
+            through(Pos::<DocChar>::new(2), A, &other),
+            Pos::<DocChar>::new(2)
+        );
     }
 
     #[test]

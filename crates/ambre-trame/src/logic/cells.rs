@@ -5,6 +5,7 @@
 // Submodule of `logic`, so it reaches the private fields/helpers of the parent
 // module through the `use super::*` glob.
 
+use ambre_core::index::Count;
 use std::cell::OnceCell;
 
 use super::*;
@@ -221,13 +222,13 @@ impl TrameState {
                     break false;
                 };
                 row_uids.push(uid);
-                next_row += RowCount::ONE;
+                next_row += Count::<Row>::ONE;
             } else if next_col <= at.col {
                 let Some(uid) = self.mint_uid() else {
                     break false;
                 };
                 col_uids.push(uid);
-                next_col += ColCount::ONE;
+                next_col += Count::<Col>::ONE;
             } else {
                 break true;
             }

@@ -180,7 +180,8 @@ impl ProseState {
 #[cfg(test)]
 mod tests {
     use crate::events::{HeadingLevel, TocNumbering};
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::Pos;
     use loro::LoroValue;
 
     use super::ProseState;
@@ -212,7 +213,7 @@ mod tests {
         if !text.is_empty() {
             state.handle_command(ProseCommand::InsertText {
                 block_id: id,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: text.to_owned(),
             });
         }
@@ -537,7 +538,7 @@ mod tests {
         for (at, word) in ["one ", "two ", "three"].iter().enumerate() {
             let outcome = state.handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::from_usize(at * 4),
+                pos: Pos::<DocChar>::from_usize(at * 4),
                 text: (*word).to_owned(),
             });
             show(&mut view, &outcome.display);
@@ -582,7 +583,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "words".to_owned(),
         });
         let pages = state.paginate(&[]).page_count;
@@ -602,7 +603,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "two words".to_owned(),
         });
         state.handle_command(ProseCommand::CountWords);
@@ -623,7 +624,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Some words to count.".to_owned(),
         });
         let before = state.document().get_deep_value();

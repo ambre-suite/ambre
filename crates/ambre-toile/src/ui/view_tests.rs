@@ -11,6 +11,7 @@ use ambre_commands::KeyChar;
 use ambre_core::Px;
 use ambre_core::Rgba;
 use ambre_core::id::User;
+use ambre_core::index::Count;
 use kurbo::Rect;
 
 /// A pointer at screen `(x, y)`, as the canvas hands it over.
@@ -2620,7 +2621,7 @@ fn a_shared_board(peer: Id<User>) -> Rig {
         pins: vec![ambre_bus::app::toile::CommentPin {
             thread: Id::<Thread>::from_text("t".to_owned()),
             at: kurbo::Point::new(50.0, 50.0),
-            messages: ambre_bus::app::toile::ThreadMessageCount::new(1),
+            messages: Count::<ambre_bus::app::toile::ThreadMessage>::new(1),
             resolved: ambre_core::ThreadState::Open,
         }],
         reactions,

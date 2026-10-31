@@ -3,11 +3,12 @@
 // edit does to it (`TRAME-008`, `TRAME-171`, `TRAME-226` to `TRAME-230`).
 
 use super::*;
+use ambre_core::index::{Count, Pos};
 
 fn set(state: &mut TrameState, row: u32, col: u32, text: &str) {
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(row),
-        col: Col::new(col),
+        row: Pos::<Row>::new(row),
+        col: Pos::<Col>::new(col),
         text: text.to_owned(),
     });
 }
@@ -28,7 +29,7 @@ fn a_stored_formula_names_its_lines() {
     let mut state = column(&["1", "2"]);
     set(&mut state, 0, 1, "=A2+Z99");
     let stored = state
-        .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+        .cell_raw(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)))
         .into_string();
     assert!(
         !stored.contains("A2"),
@@ -54,7 +55,9 @@ fn an_insert_inside_a_range_widens_it() {
     let mut state = column(&["1", "2", "3"]);
     set(&mut state, 0, 1, "=SUM(A1:A3)");
     assert_eq!(read_cell(&mut state, 0, 1), "6");
-    state.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
+    state.handle_command(TrameCommand::InsertRow {
+        at: Pos::<Row>::new(1),
+    });
     set(&mut state, 1, 0, "10");
     assert_eq!(read_raw(&mut state, 0, 1), "=SUM(A1:A4)");
     assert_eq!(read_cell(&mut state, 0, 1), "16");
@@ -68,14 +71,20 @@ fn a_delete_shrinks_a_range_then_breaks_it() {
     set(&mut state, 0, 1, "=SUM(A2:A4)");
     assert_eq!(read_cell(&mut state, 0, 1), "9");
     // The range's last row goes: the end corner moves up.
-    state.handle_command(TrameCommand::DeleteRow { at: Row::new(3) });
+    state.handle_command(TrameCommand::DeleteRow {
+        at: Pos::<Row>::new(3),
+    });
     assert_eq!(read_raw(&mut state, 0, 1), "=SUM(A2:A3)");
     assert_eq!(read_cell(&mut state, 0, 1), "5");
     // Its first row goes: the start corner moves down.
-    state.handle_command(TrameCommand::DeleteRow { at: Row::new(1) });
+    state.handle_command(TrameCommand::DeleteRow {
+        at: Pos::<Row>::new(1),
+    });
     assert_eq!(read_raw(&mut state, 0, 1), "=SUM(A2:A2)");
     assert_eq!(read_cell(&mut state, 0, 1), "3");
-    state.handle_command(TrameCommand::DeleteRow { at: Row::new(1) });
+    state.handle_command(TrameCommand::DeleteRow {
+        at: Pos::<Row>::new(1),
+    });
     assert_eq!(read_cell(&mut state, 0, 1), "#REF!");
 }
 
@@ -90,10 +99,10 @@ fn a_sort_keeps_the_range_and_moves_the_cell() {
     state.handle_command(TrameCommand::SortRange {
         sheet_id: default_sheet(),
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(2), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(0)),
         ),
-        sort_col: ColCount::new(0),
+        sort_col: Count::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });
@@ -117,11 +126,13 @@ fn a_reference_typed_during_a_concurrent_insert_keeps_its_cell() {
         .expect("a snapshot this build wrote reads back");
 
     let typed = a.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=A2".to_owned(),
     });
-    let inserted = b.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
+    let inserted = b.handle_command(TrameCommand::InsertRow {
+        at: Pos::<Row>::new(1),
+    });
     a.apply_remote(&inserted.update.expect("the insert broadcasts"));
     b.apply_remote(&typed.update.expect("the formula broadcasts"));
 
@@ -141,11 +152,13 @@ fn a_reference_typed_during_a_concurrent_delete_keeps_its_cell() {
         .expect("a snapshot this build wrote reads back");
 
     let typed = a.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=A3".to_owned(),
     });
-    let deleted = b.handle_command(TrameCommand::DeleteRow { at: Row::new(1) });
+    let deleted = b.handle_command(TrameCommand::DeleteRow {
+        at: Pos::<Row>::new(1),
+    });
     a.apply_remote(&deleted.update.expect("the delete broadcasts"));
     b.apply_remote(&typed.update.expect("the formula broadcasts"));
 
@@ -162,12 +175,14 @@ fn a_delete_leaves_a_cell_reference_untouched() {
     let mut state = column(&["1", "2", "3", "4"]);
     set(&mut state, 0, 1, "=A4*2");
     let stored = state
-        .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+        .cell_raw(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)))
         .into_string();
-    state.handle_command(TrameCommand::DeleteRow { at: Row::new(1) });
+    state.handle_command(TrameCommand::DeleteRow {
+        at: Pos::<Row>::new(1),
+    });
     assert_eq!(
         state
-            .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+            .cell_raw(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)))
             .into_string(),
         stored,
         "the stored text is the same"
@@ -184,13 +199,15 @@ fn a_whole_column_range_reads_the_used_rows() {
     set(&mut state, 0, 1, "=SUM(A:A)");
     assert_eq!(read_cell(&mut state, 0, 1), "6");
     let stored = state
-        .cell_raw(CellPos::new(Row::new(0), Col::new(1)))
+        .cell_raw(CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)))
         .into_string();
     assert!(stored.contains("{*|"), "rows are stored whole: {stored}");
     assert_eq!(read_raw(&mut state, 0, 1), "=SUM(A:A)");
     set(&mut state, 99, 0, "10");
     assert_eq!(read_cell(&mut state, 0, 1), "16", "a row past the old end");
-    state.handle_command(TrameCommand::InsertRow { at: Row::new(0) });
+    state.handle_command(TrameCommand::InsertRow {
+        at: Pos::<Row>::new(0),
+    });
     set(&mut state, 0, 0, "100");
     assert_eq!(read_raw(&mut state, 1, 1), "=SUM(A:A)");
     assert_eq!(read_cell(&mut state, 1, 1), "116", "a row inserted above");
@@ -222,18 +239,26 @@ fn a_column_edit_carries_a_whole_column_range() {
     set(&mut state, 0, 1, "3");
     set(&mut state, 5, 3, "=SUM(A:B)");
     assert_eq!(read_cell(&mut state, 5, 3), "6");
-    state.handle_command(TrameCommand::InsertColumn { at: Col::new(1) });
+    state.handle_command(TrameCommand::InsertColumn {
+        at: Pos::<Col>::new(1),
+    });
     assert_eq!(
         read_raw(&mut state, 5, 4),
         "=SUM(A:C)",
         "an insert inside widens"
     );
     assert_eq!(read_cell(&mut state, 5, 4), "6");
-    state.handle_command(TrameCommand::DeleteColumn { at: Col::new(0) });
+    state.handle_command(TrameCommand::DeleteColumn {
+        at: Pos::<Col>::new(0),
+    });
     assert_eq!(read_raw(&mut state, 5, 3), "=SUM(A:B)");
     assert_eq!(read_cell(&mut state, 5, 3), "3");
-    state.handle_command(TrameCommand::DeleteColumn { at: Col::new(0) });
-    state.handle_command(TrameCommand::DeleteColumn { at: Col::new(0) });
+    state.handle_command(TrameCommand::DeleteColumn {
+        at: Pos::<Col>::new(0),
+    });
+    state.handle_command(TrameCommand::DeleteColumn {
+        at: Pos::<Col>::new(0),
+    });
     assert_eq!(read_cell(&mut state, 5, 1), "#REF!");
 }
 
@@ -254,20 +279,20 @@ fn a_whole_column_range_over_itself_is_a_cycle() {
 fn a_formula_typed_before_its_cell_reads_the_cell_once_written() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "=B5*2".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "0");
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(4),
-        col: Col::new(1),
+        row: Pos::<Row>::new(4),
+        col: Pos::<Col>::new(1),
         text: "7".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "14");
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(4),
-        col: Col::new(1),
+        row: Pos::<Row>::new(4),
+        col: Pos::<Col>::new(1),
         text: "8".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 0), "16");
@@ -287,7 +312,9 @@ fn a_reloaded_workbook_reads_each_reference_from_its_cell() {
     peer.import_snapshot(&snapshot).expect("reload");
     assert_eq!(read_cell(&mut peer, 0, 1), "10");
 
-    peer.handle_command(TrameCommand::InsertRow { at: Row::new(1) });
+    peer.handle_command(TrameCommand::InsertRow {
+        at: Pos::<Row>::new(1),
+    });
     assert_eq!(read_raw(&mut peer, 0, 1), "=A3*2");
     assert_eq!(read_cell(&mut peer, 0, 1), "10");
 }

@@ -1,176 +1,71 @@
-//! One axis of a sheet, named by its position type.
+//! One axis of a sheet, named by its axis marker.
 //!
 //! Much of the engine reads rows and columns the same way: find the line at a
-//! position, find a line's position, count the lines. [`Line`] writes that once
-//! per axis, so generic code takes a [`Row`] or a [`Col`] and never an axis
-//! flag beside a bare integer.
+//! position, find a line's position, count the lines. [`Line`] writes the part
+//! that reads the sheet once per axis. The index family owns the arithmetic
+//! of a position. Generic code takes a `Pos<L>` for `L: Line`, and never an
+//! axis flag beside a bare integer.
 
 use std::fmt::Debug;
-use std::hash::Hash;
-use std::ops::Add;
 
-use ambre_bus::{Col, ColCount, Row, RowCount};
+use ambre_bus::{Col, Row};
+use ambre_core::index::{Axis, Count, Pos};
 use loro::LoroMovableList;
 
 use super::{SheetIndex, Uid};
 
-/// A position on one axis of a sheet: a [`Row`] or a [`Col`].
-pub trait Line: Copy + Ord + Hash + Debug {
-    /// A number of lines on this axis.
-    type Count: Copy + Ord + Debug + Add<Output = Self::Count>;
-
-    /// The first position of the axis.
-    const FIRST: Self;
-
-    /// One line.
-    const ONE: Self::Count;
-
-    /// Insert the line `uid` at this position of `list`, the list that orders
-    /// the axis. `None` when the list refuses it, or the position lies past
-    /// the indices the list takes.
-    fn insert_into(self, list: &LoroMovableList, uid: &Uid) -> Option<()>;
-
-    /// Delete the line at this position of `list`. `None` as for
-    /// [`insert_into`](Self::insert_into).
-    fn delete_from(self, list: &LoroMovableList) -> Option<()>;
-
-    /// Move the line at this position of `list` to the position `to`. `None`
-    /// as for [`insert_into`](Self::insert_into).
-    fn move_in(self, list: &LoroMovableList, to: Self) -> Option<()>;
-
-    /// The number of lines in a slice of `len` items, saturating.
-    fn count_of(len: usize) -> Self::Count;
-
+/// One axis of a sheet: [`Row`] or [`Col`].
+///
+/// The marker is `Copy` and `Debug`. A type generic over the axis, such as a
+/// structural edit, then derives those traits with no bound of its own.
+pub trait Line: Axis + Copy + Debug {
     /// The line at `pos`, or `None` past the used range.
-    fn uid(index: &SheetIndex, pos: Self) -> Option<Uid>;
+    fn uid(index: &SheetIndex, pos: Pos<Self>) -> Option<Uid>;
 
     /// Where the line `uid` sits, or `None` once it is gone.
-    fn pos(index: &SheetIndex, uid: &Uid) -> Option<Self>;
+    fn pos(index: &SheetIndex, uid: &Uid) -> Option<Pos<Self>>;
 
     /// How many lines the axis holds.
-    fn len(index: &SheetIndex) -> Self::Count;
-
-    /// The first position past the used range.
-    fn end(index: &SheetIndex) -> Self;
-
-    /// The last line of the used range, or `None` when the axis is empty.
-    fn last(index: &SheetIndex) -> Option<Self>;
-
-    /// The position `n` lines further, saturating at the last position.
-    fn forward(self, n: Self::Count) -> Self;
-
-    /// The position `n` lines back, or `None` before the first one.
-    fn back(self, n: Self::Count) -> Option<Self>;
-
-    /// The position just before this one, or `None` at the first.
-    fn before(self) -> Option<Self>;
-
-    /// The lines from `start` up to this position, zero when `start` is not
-    /// before it.
-    fn count_from(self, start: Self) -> Self::Count;
-
-    /// The position halfway from this one to `end`, rounded towards this one.
-    fn midpoint(self, end: Self) -> Self;
+    fn len(index: &SheetIndex) -> Count<Self>;
 }
 
 impl Line for Row {
-    type Count = RowCount;
-    const FIRST: Self = Row::ZERO;
-    const ONE: RowCount = RowCount::ONE;
-
-    fn insert_into(self, list: &LoroMovableList, uid: &Uid) -> Option<()> {
-        list.insert(self.to_index()?, uid.to_key_part().as_str())
-            .ok()
-    }
-    fn delete_from(self, list: &LoroMovableList) -> Option<()> {
-        list.delete(self.to_index()?, 1).ok()
-    }
-    fn move_in(self, list: &LoroMovableList, to: Self) -> Option<()> {
-        list.mov(self.to_index()?, to.to_index()?).ok()
-    }
-    fn count_of(len: usize) -> RowCount {
-        RowCount::from_len(len)
-    }
-
-    fn uid(index: &SheetIndex, pos: Self) -> Option<Uid> {
+    fn uid(index: &SheetIndex, pos: Pos<Row>) -> Option<Uid> {
         index.row_id(pos)
     }
-    fn pos(index: &SheetIndex, uid: &Uid) -> Option<Self> {
+    fn pos(index: &SheetIndex, uid: &Uid) -> Option<Pos<Row>> {
         index.row_pos(uid)
     }
-    fn len(index: &SheetIndex) -> RowCount {
+    fn len(index: &SheetIndex) -> Count<Row> {
         index.row_len()
-    }
-    fn end(index: &SheetIndex) -> Self {
-        index.row_len().as_end()
-    }
-    fn last(index: &SheetIndex) -> Option<Self> {
-        index.row_len().as_end().prev()
-    }
-    fn forward(self, n: RowCount) -> Self {
-        self + n
-    }
-    fn back(self, n: RowCount) -> Option<Self> {
-        self.checked_sub(n)
-    }
-    fn before(self) -> Option<Self> {
-        self.prev()
-    }
-    fn count_from(self, start: Self) -> RowCount {
-        Row::count_from(self, start)
-    }
-    fn midpoint(self, end: Self) -> Self {
-        self + RowCount::new(end.count_from(self).get() / 2)
     }
 }
 
 impl Line for Col {
-    type Count = ColCount;
-    const FIRST: Self = Col::ZERO;
-    const ONE: ColCount = ColCount::ONE;
-
-    fn insert_into(self, list: &LoroMovableList, uid: &Uid) -> Option<()> {
-        list.insert(self.to_index()?, uid.to_key_part().as_str())
-            .ok()
-    }
-    fn delete_from(self, list: &LoroMovableList) -> Option<()> {
-        list.delete(self.to_index()?, 1).ok()
-    }
-    fn move_in(self, list: &LoroMovableList, to: Self) -> Option<()> {
-        list.mov(self.to_index()?, to.to_index()?).ok()
-    }
-    fn count_of(len: usize) -> ColCount {
-        ColCount::from_len(len)
-    }
-
-    fn uid(index: &SheetIndex, pos: Self) -> Option<Uid> {
+    fn uid(index: &SheetIndex, pos: Pos<Col>) -> Option<Uid> {
         index.col_id(pos)
     }
-    fn pos(index: &SheetIndex, uid: &Uid) -> Option<Self> {
+    fn pos(index: &SheetIndex, uid: &Uid) -> Option<Pos<Col>> {
         index.col_pos(uid)
     }
-    fn len(index: &SheetIndex) -> ColCount {
+    fn len(index: &SheetIndex) -> Count<Col> {
         index.col_len()
     }
-    fn end(index: &SheetIndex) -> Self {
-        index.col_len().as_end()
-    }
-    fn last(index: &SheetIndex) -> Option<Self> {
-        index.col_len().as_end().prev()
-    }
-    fn forward(self, n: ColCount) -> Self {
-        self + n
-    }
-    fn back(self, n: ColCount) -> Option<Self> {
-        self.checked_sub(n)
-    }
-    fn before(self) -> Option<Self> {
-        self.prev()
-    }
-    fn count_from(self, start: Self) -> ColCount {
-        Col::count_from(self, start)
-    }
-    fn midpoint(self, end: Self) -> Self {
-        self + ColCount::new(end.count_from(self).get() / 2)
-    }
+}
+
+/// Insert the line `uid` at `at` of `list`, the list that orders an axis.
+/// `None` when the list refuses it, or `at` lies past the indices the list
+/// takes.
+pub(crate) fn insert_line<A: Axis>(list: &LoroMovableList, at: Pos<A>, uid: &Uid) -> Option<()> {
+    list.insert(at.to_index()?, uid.to_key_part().as_str()).ok()
+}
+
+/// Delete the line at `at` of `list`. `None` as for [`insert_line`].
+pub(crate) fn delete_line<A: Axis>(list: &LoroMovableList, at: Pos<A>) -> Option<()> {
+    list.delete(at.to_index()?, 1).ok()
+}
+
+/// Move the line at `from` of `list` to `to`. `None` as for [`insert_line`].
+pub(crate) fn move_line<A: Axis>(list: &LoroMovableList, from: Pos<A>, to: Pos<A>) -> Option<()> {
+    list.mov(from.to_index()?, to.to_index()?).ok()
 }

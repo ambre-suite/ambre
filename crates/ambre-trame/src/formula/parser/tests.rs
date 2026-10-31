@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::{Col, Row};
+use ambre_core::index::Pos;
 
 fn parse(input: &str) -> Expr {
     parse_formula(input).unwrap_or_else(|e| panic!("parse failed: {e}"))
@@ -80,10 +81,10 @@ fn cell_reference() {
 fn cell_range() {
     match parse("A1:B10") {
         Expr::Range(r) => {
-            assert_eq!(r.row_start, Row::new(0));
-            assert_eq!(r.row_end, Row::new(9));
-            assert_eq!(r.col_start, Col::new(0));
-            assert_eq!(r.col_end, Col::new(1));
+            assert_eq!(r.row_start, Pos::<Row>::new(0));
+            assert_eq!(r.row_end, Pos::<Row>::new(9));
+            assert_eq!(r.col_start, Pos::<Col>::new(0));
+            assert_eq!(r.col_end, Pos::<Col>::new(1));
         }
         other => panic!("expected Range, got {other:?}"),
     }
@@ -202,15 +203,15 @@ fn function_single_arg() {
 
 use super::super::types::{EngineSheet, FormulaCtx, NameTarget, RangeDep};
 
-const COL_0: Col = Col::new(0);
-const COL_1: Col = Col::new(1);
-const COL_26: Col = Col::new(26);
-const ROW_0: Row = Row::new(0);
-const ROW_1: Row = Row::new(1);
-const ROW_2: Row = Row::new(2);
-const ROW_4: Row = Row::new(4);
-const ROW_9: Row = Row::new(9);
-const ROW_99: Row = Row::new(99);
+const COL_0: Pos<Col> = Pos::<Col>::new(0);
+const COL_1: Pos<Col> = Pos::<Col>::new(1);
+const COL_26: Pos<Col> = Pos::<Col>::new(26);
+const ROW_0: Pos<Row> = Pos::<Row>::new(0);
+const ROW_1: Pos<Row> = Pos::<Row>::new(1);
+const ROW_2: Pos<Row> = Pos::<Row>::new(2);
+const ROW_4: Pos<Row> = Pos::<Row>::new(4);
+const ROW_9: Pos<Row> = Pos::<Row>::new(9);
+const ROW_99: Pos<Row> = Pos::<Row>::new(99);
 
 const S0: EngineSheet = EngineSheet::ACTIVE;
 const S2: EngineSheet = EngineSheet::new(2);
@@ -239,15 +240,15 @@ impl FormulaCtx for TestCtx {
         match name.as_str() {
             "TOTAL" => Some(NameTarget::Range(RangeDep::with_sheet(
                 S2,
-                Row::new(0),
-                Row::new(2),
-                Col::new(1),
-                Col::new(1),
+                Pos::<Row>::new(0),
+                Pos::<Row>::new(2),
+                Pos::<Col>::new(1),
+                Pos::<Col>::new(1),
             ))),
             "PIVOT" => Some(NameTarget::Cell(CellRef::with_sheet(
                 S0,
-                Row::new(4),
-                Col::new(0),
+                Pos::<Row>::new(4),
+                Pos::<Col>::new(0),
             ))),
             _ => None,
         }
@@ -478,7 +479,7 @@ fn row_zero_is_not_a_reference() {
     // Rows are 1-based in A1 syntax, so `A0` names nothing. It must fall through
     // to the named-range parser rather than silently aliasing row 1.
     assert!(matches!(parse("A0"), Expr::Name(n) if n.as_str() == "A0"));
-    assert!(matches!(parse("A1"), Expr::CellRef(r) if r.row == Row::new(0)));
+    assert!(matches!(parse("A1"), Expr::CellRef(r) if r.row == Pos::<Row>::new(0)));
 }
 
 #[test]

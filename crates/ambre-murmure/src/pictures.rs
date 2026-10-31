@@ -7,6 +7,7 @@
 //! reduced motion picks the first, and nothing off screen is painted, so
 //! nothing off screen plays (`MURMURE-130`, `MURMURE-131`).
 
+use ambre_core::index::{Axis, Pos};
 use std::collections::HashMap;
 
 use ambre_bus::{ContentHash, MediaType, Picture};
@@ -41,17 +42,12 @@ impl GenerationKind for PaintNumber {
     const NAME: &'static str = "PaintNumber";
 }
 
-ambre_core::define_index! {
-    /// A frame of a decoded picture, counted from zero in play order.
-    pub struct FrameIndex(u32);
-    /// A number of frames of a picture.
-    pub struct FrameCount;
-    /// The signed gap between two frames of a picture.
-    pub struct FrameDelta(i64);
-    /// A run of frames of a picture.
-    pub struct FrameSpan;
-    /// A list indexed by the frames of a picture.
-    pub struct FrameVec;
+/// A frame of a decoded picture, counted from zero in play order.
+#[derive(PartialEq, Eq)]
+pub enum AnimationFrame {}
+
+impl Axis for AnimationFrame {
+    const NAME: &'static str = "Frame";
 }
 
 enum Held {
@@ -213,10 +209,10 @@ pub fn frame_at(
     picture: &Picture,
     now: ambre_core::PageTime,
     motion: Motion,
-) -> (FrameIndex, Option<ambre_core::PageTime>) {
+) -> (Pos<AnimationFrame>, Option<ambre_core::PageTime>) {
     let total: u64 = picture.frames.iter().map(|f| f.delay.get()).sum();
     if motion == Motion::Reduced || picture.frames.len() < 2 || total == 0 {
-        return (FrameIndex::ZERO, None);
+        return (Pos::<AnimationFrame>::ZERO, None);
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let at = now.get().max(0.0) as u64 % total;
@@ -225,20 +221,20 @@ pub fn frame_at(
         until += frame.delay.get();
         if at < until {
             let due = ambre_core::Millis::new(until - at).to_page_millis();
-            return (FrameIndex::from_usize(i), Some(now.after(due)));
+            return (Pos::<AnimationFrame>::from_usize(i), Some(now.after(due)));
         }
     }
-    (FrameIndex::ZERO, None)
+    (Pos::<AnimationFrame>::ZERO, None)
 }
 
 /// The frame `index` of `picture`, `None` past its last.
-pub fn frame(picture: &Picture, index: FrameIndex) -> Option<&ambre_bus::PictureFrame> {
+pub fn frame(picture: &Picture, index: Pos<AnimationFrame>) -> Option<&ambre_bus::PictureFrame> {
     picture.frames.get(index.to_index()?)
 }
 
 /// The key of frame `index` of `media_ref`: one texture per frame, so a
 /// frame played again is drawn from what the renderer already holds.
-pub fn frame_key(media_ref: &ContentHash, index: FrameIndex) -> ImageKey {
+pub fn frame_key(media_ref: &ContentHash, index: Pos<AnimationFrame>) -> ImageKey {
     let base = ImageKey::from_address(media_ref).get();
     ImageKey::new(base ^ u64::from(index.get()).rotate_right(16))
 }
@@ -273,19 +269,31 @@ mod tests {
         let gif = picture(&[100, 50, 50], 4);
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime::new(0.0), Motion::Full),
-            (FrameIndex::new(0), Some(ambre_bus::PageTime::new(100.0)))
+            (
+                Pos::<AnimationFrame>::new(0),
+                Some(ambre_bus::PageTime::new(100.0))
+            )
         );
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime::new(120.0), Motion::Full),
-            (FrameIndex::new(1), Some(ambre_bus::PageTime::new(150.0)))
+            (
+                Pos::<AnimationFrame>::new(1),
+                Some(ambre_bus::PageTime::new(150.0))
+            )
         );
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime::new(199.0), Motion::Full),
-            (FrameIndex::new(2), Some(ambre_bus::PageTime::new(200.0)))
+            (
+                Pos::<AnimationFrame>::new(2),
+                Some(ambre_bus::PageTime::new(200.0))
+            )
         );
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime::new(230.0), Motion::Full),
-            (FrameIndex::new(0), Some(ambre_bus::PageTime::new(300.0))),
+            (
+                Pos::<AnimationFrame>::new(0),
+                Some(ambre_bus::PageTime::new(300.0))
+            ),
             "it loops"
         );
     }
@@ -297,7 +305,7 @@ mod tests {
         let gif = picture(&[100, 50], 4);
         assert_eq!(
             frame_at(&gif, ambre_bus::PageTime::new(120.0), Motion::Reduced),
-            (FrameIndex::ZERO, None)
+            (Pos::<AnimationFrame>::ZERO, None)
         );
         assert_eq!(
             frame_at(
@@ -305,7 +313,7 @@ mod tests {
                 ambre_bus::PageTime::new(120.0),
                 Motion::Full
             ),
-            (FrameIndex::ZERO, None)
+            (Pos::<AnimationFrame>::ZERO, None)
         );
     }
 
@@ -313,7 +321,7 @@ mod tests {
     #[test]
     fn each_frame_has_its_own_key() {
         let (a, b) = (file('a'), file('b'));
-        let (first, second) = (FrameIndex::new(0), FrameIndex::new(1));
+        let (first, second) = (Pos::<AnimationFrame>::new(0), Pos::<AnimationFrame>::new(1));
         assert_ne!(frame_key(&a, first), frame_key(&a, second));
         assert_ne!(frame_key(&a, first), frame_key(&b, first));
         assert_eq!(frame_key(&a, second), frame_key(&a, second));

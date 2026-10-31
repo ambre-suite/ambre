@@ -2,6 +2,7 @@
 // TrameView: construction and inline-edit lifecycle (begin/commit/cancel).
 
 use super::*;
+use ambre_core::index::{Delta, Pos};
 
 impl TrameView {
     /// A view of `document_id`, reading time from `clock`: the page's on screen,
@@ -107,8 +108,8 @@ impl TrameView {
             needs_full: true,
             viewport_changed: false,
             data_dirty: false,
-            prev_top_row: Row::ZERO,
-            prev_left_col: Col::ZERO,
+            prev_top_row: Pos::<Row>::ZERO,
+            prev_left_col: Pos::<Col>::ZERO,
             scroll: Default::default(),
             drag_point: None,
             cut_pending: false,
@@ -581,15 +582,15 @@ impl TrameView {
                 match dir {
                     CommitDirection::Down => {
                         self.nav_move(
-                            RowDelta::new(1),
-                            ColDelta::ZERO,
+                            Delta::<Row>::new(1),
+                            Delta::<Col>::ZERO,
                             ambre_commands::SelectionMode::Move,
                         );
                     }
                     CommitDirection::Right => {
                         self.nav_move(
-                            RowDelta::ZERO,
-                            ColDelta::new(1),
+                            Delta::<Row>::ZERO,
+                            Delta::<Col>::new(1),
                             ambre_commands::SelectionMode::Move,
                         );
                     }

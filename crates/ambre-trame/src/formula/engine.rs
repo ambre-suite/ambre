@@ -206,6 +206,7 @@ mod tests {
     use crate::Row;
     use crate::formula::types::EngineSheet;
     use crate::model::Uid;
+    use ambre_core::index::Pos;
 
     /// Bound cell at grid `(row, col)` on sheet 0.
     fn cell(row: u32, col: u32) -> CellId {
@@ -485,7 +486,7 @@ mod tests {
         // value (10): it follows the data. It is NOT the positional 20 that a
         // re-parse against the new order would produce.
         let mut moved = index_with(10, 10);
-        moved.apply_move_row(Row::new(0), Row::new(1));
+        moved.apply_move_row(Pos::<Row>::new(0), Pos::<Row>::new(1));
         let mut indices = SheetIndices::new();
         indices.insert(EngineSheet::ACTIVE, moved);
         engine.mark_all_dirty();

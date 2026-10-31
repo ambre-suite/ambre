@@ -13,14 +13,14 @@
 //! as Trame.
 
 pub use ambre_bus::app::toile::{
-    BoolOp, Broadcast, ClipBytes, ClipConnector, ClipElement, ClipMembership, ClipSlot,
-    ClipSlotVec, ClipValue, ClipboardPayload, CommentAnchor, CommentMessage, CommentPin,
-    CommentSummary, CommentThread, DeckFrame, DeckView, DisplayConnector, DisplayElement,
-    DisplayGeom, DisplayNode, DisplayViewport, ElementCreation, End, FindOptions, FindQuery,
-    FindResults, ImportSlot, InitContent, MediaRef, PlaybackState, PresencePayload, PresenceUpdate,
-    PresentFocus, PresentMode, Reaction, ReactionKind, ReactionTally, SelectionStats, SlideChange,
-    SlideCount, SlideIndex, SlidePosition, Sources, StatsRequestKind, TextDelta,
-    ThreadMessageIndex, ToileCommand, ToileError, ToileEvent, Viewport, ZOrderIndex, ZTarget,
+    BoolOp, Broadcast, ClipBytes, ClipConnector, ClipElement, ClipMembership, ClipSlot, ClipValue,
+    ClipboardPayload, CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread,
+    DeckFrame, DeckView, DisplayConnector, DisplayElement, DisplayGeom, DisplayNode,
+    DisplayViewport, ElementCreation, End, FindOptions, FindQuery, FindResults, ImportSlot,
+    InitContent, MediaRef, PlaybackState, PresencePayload, PresenceUpdate, PresentFocus,
+    PresentMode, Reaction, ReactionKind, ReactionTally, SelectionStats, Slide, SlideChange,
+    SlidePosition, Sources, StatsRequestKind, TextDelta, ThreadMessage, ToileCommand, ToileError,
+    ToileEvent, Viewport, ZOrder, ZTarget,
 };
 pub use ambre_bus::rest::Request;
 use ambre_core::Generation;

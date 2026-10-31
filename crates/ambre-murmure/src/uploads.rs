@@ -6,26 +6,22 @@
 //! (`MURMURE-132`). A failed upload adds nothing, and the page tells the user
 //! (`MURMURE-133`). A draft never sends while one of its files still uploads.
 
+use ambre_core::index::{Axis, Count, Pos};
 use std::collections::HashMap;
 
 use ambre_bus::{Attachment, ByteSize, ContentHash, MediaType, Request};
 use ambre_core::Generation;
-use ambre_core::{ByteCount, ExportFilename, KnownMediaType};
+use ambre_core::{Byte, ExportFilename, KnownMediaType};
 
 use crate::composer::DraftOf;
 
-ambre_core::define_index! {
-    /// The place of a file among the uploaded files of one draft, counted
-    /// from zero in the order they landed.
-    pub struct FileIndex(u32);
-    /// A number of files of a draft.
-    pub struct FileCount;
-    /// The signed gap between two files of a draft.
-    pub struct FileDelta(i64);
-    /// A run of files of a draft.
-    pub struct FileSpan;
-    /// A list indexed by the files of a draft.
-    pub struct FileVec;
+/// The place of a file among the uploaded files of one draft, counted
+/// from zero in the order they landed.
+#[derive(PartialEq, Eq)]
+pub enum UploadFile {}
+
+impl Axis for UploadFile {
+    const NAME: &'static str = "File";
 }
 
 /// A file the member dropped or pasted on the composer, as the page read it.
@@ -43,7 +39,7 @@ pub struct PickedFile {
 impl std::fmt::Debug for PickedFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PickedFile")
-            .field("name", &ByteCount::from_len(self.name.len()))
+            .field("name", &Count::<Byte>::from_len(self.name.len()))
             .field("media_type", &self.media_type)
             .field("data", &self.data)
             .finish()
@@ -121,7 +117,7 @@ impl std::fmt::Debug for Pending {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pending")
             .field("of", &self.of)
-            .field("name", &ByteCount::from_len(self.name.len()))
+            .field("name", &Count::<Byte>::from_len(self.name.len()))
             .field("media_type", &self.media_type)
             .field("size", &self.size)
             .finish()
@@ -147,7 +143,7 @@ impl std::fmt::Debug for Uploaded {
             Self::Failed { of, name } => f
                 .debug_struct("Failed")
                 .field("of", of)
-                .field("name", &ByteCount::from_len(name.len()))
+                .field("name", &Count::<Byte>::from_len(name.len()))
                 .finish(),
         }
     }
@@ -259,7 +255,7 @@ impl Uploads {
 
     /// Take the file at `index` off the draft `of`. The relay keeps the blob
     /// until a delete of a message carrying it.
-    pub fn remove(&mut self, of: DraftOf, index: FileIndex) {
+    pub fn remove(&mut self, of: DraftOf, index: Pos<UploadFile>) {
         if let Some(files) = self.ready.get_mut(&of)
             && let Some(index) = index.to_index().filter(|&index| index < files.len())
         {

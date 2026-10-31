@@ -4,6 +4,7 @@
 
 use super::*;
 use crate::logic::schema::{SheetContainer, SheetRoot};
+use ambre_core::index::{Count, Pos};
 
 /// Hidden rows are excluded from the viewport but still counted by `=SUM`
 /// (`trame-shared-filter`): the filter is a display concern, not a data one.
@@ -12,14 +13,14 @@ fn shared_filter_does_not_affect_sum() {
     let mut state = TrameState::new();
     seed_col_a(&mut state, &["1", "2", "3"]);
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=SUM(A1:A3)".to_owned(),
     });
 
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gt,
             value: "1".to_owned(),
@@ -49,7 +50,7 @@ fn clear_filter_unhides_and_noops_when_absent() {
 
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Values(vec!["a".to_owned()]),
     });
     assert!(is_filtered(&mut state, 1, 0), "b hidden");
@@ -72,7 +73,7 @@ fn shared_filter_hidden_follows_sort() {
     // Hide the row whose value is exactly 1 (the middle row).
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Ne,
             value: "1".to_owned(),
@@ -85,10 +86,10 @@ fn shared_filter_hidden_follows_sort() {
     state.handle_command(TrameCommand::SortRange {
         sheet_id: SheetId::new("s0".to_owned()),
         rect: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(2), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(2), Pos::<Col>::new(0)),
         ),
-        sort_col: ColCount::new(0),
+        sort_col: Count::<Col>::new(0),
         order: SortOrder::Ascending,
         header: HeaderRow::Absent,
     });
@@ -109,7 +110,7 @@ fn shared_filter_recomputes_on_edit() {
     seed_col_a(&mut state, &["5"]);
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gt,
             value: "10".to_owned(),
@@ -119,8 +120,8 @@ fn shared_filter_recomputes_on_edit() {
 
     // Raise the value above the threshold: the row must reappear.
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "20".to_owned(),
     });
     assert!(
@@ -137,7 +138,7 @@ fn shared_filter_applies_on_remote_import() {
     seed_col_a(&mut author, &["10", "20", "30"]);
     author.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gte,
             value: "20".to_owned(),
@@ -152,8 +153,8 @@ fn shared_filter_applies_on_remote_import() {
     assert!(!is_filtered(&mut peer, 1, 0));
     // The stored condition survived: an edit on the peer recomputes it.
     peer.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "25".to_owned(),
     });
     assert!(
@@ -180,7 +181,7 @@ fn concurrent_filters_converge_lww() {
 
     a.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Gt,
             value: "1".to_owned(),
@@ -188,7 +189,7 @@ fn concurrent_filters_converge_lww() {
     });
     b.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Condition {
             op: FilterOp::Lt,
             value: "3".to_owned(),
@@ -231,12 +232,12 @@ fn concurrent_filters_elect_a_whole_definition() {
     };
     a.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: gt.clone(),
     });
     b.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: lt.clone(),
     });
 
@@ -263,7 +264,7 @@ fn filter_by_values_survives_a_reload() {
     seed_col_a(&mut author, &["a", "b", "c"]);
     author.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Values(vec!["a".to_owned(), "c".to_owned()]),
     });
     assert!(is_filtered(&mut author, 1, 0), "b hidden");
@@ -275,8 +276,8 @@ fn filter_by_values_survives_a_reload() {
 
     // An edit re-tests against the stored list, which reads back whole.
     peer.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "c".to_owned(),
     });
     assert!(
@@ -292,7 +293,7 @@ fn shared_filter_is_undoable() {
     seed_col_a(&mut state, &["a", "b"]);
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Values(vec!["a".to_owned()]),
     });
     assert!(is_filtered(&mut state, 1, 0), "b hidden by the filter");
@@ -311,7 +312,7 @@ fn shared_filter_noop_guards() {
     // Wrong sheet.
     let wrong = state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("nope".to_owned()),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Values(vec!["x".to_owned()]),
     });
     assert!(matches!(&wrong.display[..], [TrameEvent::Error { .. }]));
@@ -324,7 +325,7 @@ fn shared_filter_noop_guards() {
     // Virtual column (never materialized): nothing to filter.
     let virtual_col = state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: SheetId::new("s0".to_owned()),
-        col: Col::new(50),
+        col: Pos::<Col>::new(50),
         kind: FilterKind::Values(vec!["x".to_owned()]),
     });
     assert!(matches!(
@@ -341,14 +342,14 @@ fn filtered_sheet(values: &[&str], keep: &str) -> TrameState {
     seed_col_a(&mut state, values);
     for row in 0..values.len() as u32 {
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(row),
-            col: Col::new(1),
+            row: Pos::<Row>::new(row),
+            col: Pos::<Col>::new(1),
             text: format!("{row}"),
         });
     }
     state.handle_command(TrameCommand::ApplyFilter {
         sheet_id: default_sheet(),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         kind: FilterKind::Values(vec![keep.to_owned()]),
     });
     state
@@ -360,7 +361,9 @@ fn filtered_sheet(values: &[&str], keep: &str) -> TrameState {
 fn filter_goes_with_its_column() {
     let mut state = filtered_sheet(&["x", "y", "x"], "x");
     assert_eq!(state.hidden_rows.len(), 1);
-    let out = state.handle_command(TrameCommand::DeleteColumn { at: Col::new(0) });
+    let out = state.handle_command(TrameCommand::DeleteColumn {
+        at: Pos::<Col>::new(0),
+    });
     assert!(
         out.display
             .iter()
@@ -380,10 +383,10 @@ fn filter_goes_with_its_column() {
 fn status_bar_total_matches_sum_under_a_filter() {
     let mut state = filtered_sheet(&["x", "y", "x"], "x");
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(2),
-        col: Col::new(1),
-        anchor_row: Row::new(0),
-        anchor_col: Col::new(1),
+        row: Pos::<Row>::new(2),
+        col: Pos::<Col>::new(1),
+        anchor_row: Pos::<Row>::new(0),
+        anchor_col: Pos::<Col>::new(1),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -392,8 +395,8 @@ fn status_bar_total_matches_sum_under_a_filter() {
         panic!("expected SelectionStats")
     };
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(3),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(3),
         text: "=SUM(B1:B3)".to_owned(),
     });
     assert_eq!(read_cell(&mut state, 0, 3), "3");
@@ -413,14 +416,14 @@ fn edit_outside_the_filtered_column_leaves_the_hidden_set_alone() {
     let mut state = filtered_sheet(&["x", "y", "y", "y", "x"], "x");
     assert_eq!(state.hidden_rows.len(), 3);
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "first".to_owned(),
     });
     let before = state.doc.len_ops();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "second".to_owned(),
     });
     assert_eq!(state.doc.len_ops() - before, 1, "the cell write alone");
@@ -543,60 +546,60 @@ fn paste_reindexes_relative_formula() {
 
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "10".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=A1*2".to_owned(),
     });
 
     // Source range A1:B1, pasted with top-left at A3 (row 2): dr = +2.
     let payload = ClipboardPayload {
-        src_row: Row::new(0),
-        src_col: Col::new(0),
-        rows: RowCount::new(1),
-        cols: ColCount::new(2),
+        src_row: Pos::<Row>::new(0),
+        src_col: Pos::<Col>::new(0),
+        rows: Count::<Row>::new(1),
+        cols: Count::<Col>::new(2),
         cells: vec![
             ClipboardCell {
-                dr: RowCount::new(0),
-                dc: ColCount::new(0),
+                dr: Count::<Row>::new(0),
+                dc: Count::<Col>::new(0),
                 raw: "10".to_owned(),
                 ..Default::default()
             },
             ClipboardCell {
-                dr: RowCount::new(0),
-                dc: ColCount::new(1),
+                dr: Count::<Row>::new(0),
+                dc: Count::<Col>::new(1),
                 raw: "=A1*2".to_owned(),
                 ..Default::default()
             },
         ],
     };
     state.handle_command(TrameCommand::PasteRange {
-        target_row: Row::new(2),
-        target_col: Col::new(0),
+        target_row: Pos::<Row>::new(2),
+        target_col: Pos::<Col>::new(0),
         payload,
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(1),
-        row_start: Row::new(0),
-        row_end: Row::new(3),
-        col_start: Col::new(0),
-        col_end: Col::new(1),
+        row_start: Pos::<Row>::new(0),
+        row_end: Pos::<Row>::new(3),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(1),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!("expected ViewportData");
     };
     let a3 = cells
         .iter()
-        .find(|c| c.row == Row::new(2) && c.col == Col::new(0))
+        .find(|c| c.row == Pos::<Row>::new(2) && c.col == Pos::<Col>::new(0))
         .unwrap();
     let b3 = cells
         .iter()
-        .find(|c| c.row == Row::new(2) && c.col == Col::new(1))
+        .find(|c| c.row == Pos::<Row>::new(2) && c.col == Pos::<Col>::new(1))
         .unwrap();
     assert_eq!(a3.text, "10", "literal copied verbatim");
     assert_eq!(
@@ -616,35 +619,35 @@ fn fill_auto_extrapolates_numeric_series() {
     use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "2".to_owned(),
     });
 
     state.handle_command(TrameCommand::FillRange {
         sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
         dest: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(4), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(4), Pos::<Col>::new(0)),
         ),
         mode: FillMode::Auto,
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(1),
-        row_start: Row::new(0),
-        row_end: Row::new(4),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        row_start: Pos::<Row>::new(0),
+        row_end: Pos::<Row>::new(4),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(0),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -652,7 +655,7 @@ fn fill_auto_extrapolates_numeric_series() {
     let at = |r: u32| {
         cells
             .iter()
-            .find(|c| c.row == Row::new(r) && c.col == Col::new(0))
+            .find(|c| c.row == Pos::<Row>::new(r) && c.col == Pos::<Col>::new(0))
             .unwrap()
             .text
             .clone()
@@ -668,18 +671,18 @@ fn fill_auto_copies_text_and_reindexes_formula() {
     let mut state = TrameState::new();
     // B1 = A1*2; A column holds the multiplicands so the reindex is visible.
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "10".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "20".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=A1*2".to_owned(),
     });
 
@@ -687,29 +690,29 @@ fn fill_auto_copies_text_and_reindexes_formula() {
     state.handle_command(TrameCommand::FillRange {
         sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(1)),
-            crate::CellPos::new(Row::new(0), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)),
         ),
         dest: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(1)),
-            crate::CellPos::new(Row::new(1), Col::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(1)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(1)),
         ),
         mode: FillMode::Auto,
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(1),
-        row_start: Row::new(0),
-        row_end: Row::new(1),
-        col_start: Col::new(0),
-        col_end: Col::new(1),
+        row_start: Pos::<Row>::new(0),
+        row_end: Pos::<Row>::new(1),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(1),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
     };
     let b2 = cells
         .iter()
-        .find(|c| c.row == Row::new(1) && c.col == Col::new(1))
+        .find(|c| c.row == Pos::<Row>::new(1) && c.col == Pos::<Col>::new(1))
         .unwrap();
     assert_eq!(b2.raw, "=A2*2", "relative ref reindexed by the fill offset");
     assert_eq!(b2.text, "40", "reindexed formula recomputes against A2");
@@ -722,30 +725,30 @@ fn fill_series_single_cell_increments_by_one() {
     use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "5".to_owned(),
     });
 
     state.handle_command(TrameCommand::FillRange {
         sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(0), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
         ),
         dest: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(3), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(0)),
         ),
         mode: FillMode::Series,
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(1),
-        row_start: Row::new(0),
-        row_end: Row::new(3),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        row_start: Pos::<Row>::new(0),
+        row_end: Pos::<Row>::new(3),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(0),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -753,7 +756,7 @@ fn fill_series_single_cell_increments_by_one() {
     let at = |r: u32| {
         cells
             .iter()
-            .find(|c| c.row == Row::new(r) && c.col == Col::new(0))
+            .find(|c| c.row == Pos::<Row>::new(r) && c.col == Pos::<Col>::new(0))
             .unwrap()
             .text
             .clone()
@@ -769,35 +772,35 @@ fn fill_copy_multi_cell_tiles_verbatim() {
     use crate::FillMode;
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "2".to_owned(),
     });
 
     state.handle_command(TrameCommand::FillRange {
         sheet_id: state.active_sheet.clone(),
         src: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(1), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(1), Pos::<Col>::new(0)),
         ),
         dest: crate::CellRect::spanning(
-            crate::CellPos::new(Row::new(0), Col::new(0)),
-            crate::CellPos::new(Row::new(5), Col::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+            crate::CellPos::new(Pos::<Row>::new(5), Pos::<Col>::new(0)),
         ),
         mode: FillMode::Copy,
     });
 
     let evts = state.handle_command(TrameCommand::ScrollViewport {
         version: ambre_core::Generation::nth(1),
-        row_start: Row::new(0),
-        row_end: Row::new(5),
-        col_start: Col::new(0),
-        col_end: Col::new(0),
+        row_start: Pos::<Row>::new(0),
+        row_end: Pos::<Row>::new(5),
+        col_start: Pos::<Col>::new(0),
+        col_end: Pos::<Col>::new(0),
     });
     let TrameEvent::ViewportData { cells, .. } = &evts.display[0] else {
         panic!()
@@ -805,7 +808,7 @@ fn fill_copy_multi_cell_tiles_verbatim() {
     let at = |r: u32| {
         cells
             .iter()
-            .find(|c| c.row == Row::new(r) && c.col == Col::new(0))
+            .find(|c| c.row == Pos::<Row>::new(r) && c.col == Pos::<Col>::new(0))
             .unwrap()
             .text
             .clone()

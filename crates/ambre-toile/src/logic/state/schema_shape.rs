@@ -32,9 +32,10 @@
 //! `LoroText` reads as `text` and a register as `string`, so a body demoted
 //! from a text container moves a line.
 
+use ambre_core::Char;
 use ambre_core::Px;
 use ambre_core::Rgba;
-use ambre_core::{CharCount, CharOffset};
+use ambre_core::index::{Count, Pos};
 use std::collections::BTreeSet;
 
 use kurbo::{BezPath, Point, Size};
@@ -583,8 +584,8 @@ pub(super) fn board_of_every_key() -> ToileState {
         frame: slide,
         base: String::new(),
         delta: TextDelta {
-            at: CharOffset::ZERO,
-            delete: CharCount::ZERO,
+            at: Pos::<Char>::ZERO,
+            delete: Count::<Char>::ZERO,
             insert: "say this".to_owned(),
         },
     });

@@ -11,7 +11,8 @@
 use super::*;
 use crate::formula::text::fold_char;
 use crate::formula::types::CellId;
-use ambre_bus::app::find::{FindText, MatchCount, MatchIndex};
+use ambre_bus::app::find::{FindText, Match};
+use ambre_core::index::{Count, Pos};
 
 pub use ambre_bus::app::trame::{CaseMatch, FindOptions, MatchExtent, SearchScope, SheetScope};
 
@@ -86,7 +87,7 @@ impl TrameState {
             None
         } else {
             let after = matches.iter().position(|&at| at > self.active);
-            Some(MatchIndex::from_usize(after.unwrap_or(0)))
+            Some(Pos::<Match>::from_usize(after.unwrap_or(0)))
         };
         TrameOutcome::display_only(vec![TrameEvent::FindResult { matches, active }])
     }
@@ -102,7 +103,7 @@ impl TrameState {
     /// The reply to an empty replace: nothing replaced.
     pub(super) fn replace_nothing() -> TrameOutcome {
         TrameOutcome::display_only(vec![TrameEvent::ReplaceDone {
-            replaced: MatchCount::ZERO,
+            replaced: Count::<Match>::ZERO,
         }])
     }
 
@@ -174,9 +175,9 @@ impl TrameState {
 
         let _ = self.undo_manager.group_start();
         let replaced = if self.replace_active_cell(at, &needle, replacement, options) {
-            MatchCount::ONE
+            Count::<Match>::ONE
         } else {
-            MatchCount::ZERO
+            Count::<Match>::ZERO
         };
 
         // Recompute the match set so the UI can advance to (and highlight) the
@@ -203,8 +204,8 @@ impl TrameState {
         needle: &FoldedNeedle,
         replacement: &Replacement,
         options: FindOptions,
-    ) -> MatchCount {
-        let mut replaced = MatchCount::ZERO;
+    ) -> Count<Match> {
+        let mut replaced = Count::<Match>::ZERO;
         for at in self
             .index
             .used_range()
@@ -212,7 +213,7 @@ impl TrameState {
             .flat_map(CellRect::cells)
         {
             if self.replace_active_cell(at, needle, replacement, options) {
-                replaced += MatchCount::ONE;
+                replaced += Count::<Match>::ONE;
             }
         }
         replaced
@@ -270,9 +271,9 @@ impl TrameState {
         needle: &FoldedNeedle,
         replacement: &Replacement,
         options: FindOptions,
-    ) -> MatchCount {
+    ) -> Count<Match> {
         let Some(&idx) = self.engine_sheet_by_id.get(sheet_id) else {
-            return MatchCount::ZERO;
+            return Count::<Match>::ZERO;
         };
         let index = self.build_sheet_index(sheet_id);
         let map = self
@@ -339,7 +340,7 @@ impl TrameState {
         }
         drop(lines);
         self.write_refusals.extend(refusals);
-        let count = MatchCount::from_len(edits.len());
+        let count = Count::<Match>::from_len(edits.len());
         for ((rl, cl), stored) in edits {
             match stored {
                 Some(text) => {

@@ -6,9 +6,10 @@
 //! the anchor fields of the entry are a cache of it (`PROSE-FEAT-075`).
 //! Nothing in this module writes.
 
+use ambre_core::index::{self, Axis, Count, Pos};
 use std::collections::HashMap;
 
-use ambre_bus::app::prose::{DocCount, DocOffset};
+use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Comment, Id, Reply, User};
 use loro::{Container, LoroDoc, LoroList, TreeID, ValueOrContainer};
 
@@ -42,8 +43,8 @@ fn thread_of_key(key: &str) -> Option<Id<Comment>> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Span {
     pub block: TreeID,
-    pub start: DocOffset,
-    pub end: DocOffset,
+    pub start: Pos<DocChar>,
+    pub end: Pos<DocChar>,
 }
 
 /// The entry of thread `id`, when `annots` holds one of that kind.
@@ -67,28 +68,23 @@ pub(crate) fn replies_of(entry: &Fields<AnnotKey>) -> Option<LoroList> {
     }
 }
 
-ambre_core::define_index! {
-    /// The place of a reply in its thread's list, the head being zero.
-    pub struct ReplySlot(usize);
-    /// A number of replies of one thread.
-    pub struct ReplySlotCount;
-    /// The signed gap between two replies of one thread.
-    pub struct ReplySlotDelta(isize);
-    /// A stretch of replies of one thread.
-    pub struct ReplySlotSpan;
-    /// A list indexed by reply of one thread.
-    pub struct ReplySlotVec;
+/// The place of a reply in its thread's list, the head being zero.
+#[derive(PartialEq, Eq)]
+pub enum ReplySlot {}
+
+impl Axis for ReplySlot {
+    const NAME: &'static str = "ReplySlot";
 }
 
 /// Every place of a reply list, the head first.
 #[must_use]
-pub(crate) fn reply_slots(list: &LoroList) -> ReplySlotSpan {
-    ReplySlotSpan::from_count(ReplySlot::ZERO, ReplySlotCount::from_len(list.len()))
+pub(crate) fn reply_slots(list: &LoroList) -> index::Span<ReplySlot> {
+    Count::<ReplySlot>::from_len(list.len()).span()
 }
 
 /// Reply `slot` of a list.
 #[must_use]
-pub(crate) fn reply_at(list: &LoroList, slot: ReplySlot) -> Option<Fields<ReplyKey>> {
+pub(crate) fn reply_at(list: &LoroList, slot: Pos<ReplySlot>) -> Option<Fields<ReplyKey>> {
     match list.get(slot.to_usize()) {
         Some(ValueOrContainer::Container(Container::Map(map))) => Some(Fields::of(map)),
         _ => None,
@@ -143,8 +139,9 @@ pub(crate) fn all(document: &LoroDoc) -> Vec<Id<Comment>> {
 #[must_use]
 pub(crate) fn cached(entry: &Fields<AnnotKey>) -> Option<Span> {
     let block = TreeID::try_from(doc::read_string(entry, AnnotKey::AnchorBlock)?.as_str()).ok()?;
-    let start = DocOffset::new(u32::try_from(doc::read_i64(entry, AnnotKey::AnchorStart)?).ok()?);
-    let end = DocOffset::new(u32::try_from(doc::read_i64(entry, AnnotKey::AnchorEnd)?).ok()?);
+    let start =
+        Pos::<DocChar>::new(u32::try_from(doc::read_i64(entry, AnnotKey::AnchorStart)?).ok()?);
+    let end = Pos::<DocChar>::new(u32::try_from(doc::read_i64(entry, AnnotKey::AnchorEnd)?).ok()?);
     Some(Span { block, start, end })
 }
 
@@ -154,12 +151,12 @@ pub(crate) fn cached(entry: &Fields<AnnotKey>) -> Option<Span> {
 pub(crate) fn runs(document: &LoroDoc, blocks: &[TreeID]) -> Vec<(Id<Comment>, Span)> {
     let mut out = Vec::new();
     for id in blocks {
-        let mut offset = DocOffset::ZERO;
+        let mut offset = Pos::<DocChar>::ZERO;
         for delta in doc::get_block_text(document, id).to_delta() {
             let loro::TextDelta::Insert { insert, attributes } = delta else {
                 continue;
             };
-            let length = DocCount::of(&insert);
+            let length = ambre_core::char_len(&insert).as_axis::<DocChar>();
             let end = offset + length;
             for key in attributes.iter().flat_map(|attributes| attributes.keys()) {
                 if let Some(thread) = thread_of_key(key) {
@@ -235,8 +232,8 @@ pub fn threads(document: &LoroDoc) -> Vec<CommentThread> {
             Some(CommentThread {
                 comment_id: id,
                 anchor_block: anchor.map(|span| block_id(span.block)),
-                anchor_start: anchor.map_or(DocOffset::ZERO, |span| span.start),
-                anchor_end: anchor.map_or(DocOffset::ZERO, |span| span.end),
+                anchor_start: anchor.map_or(Pos::<DocChar>::ZERO, |span| span.start),
+                anchor_end: anchor.map_or(Pos::<DocChar>::ZERO, |span| span.end),
                 orphaned: AnchorState::from_bool(live.is_none()),
                 resolved: ThreadState::resolved_if(
                     doc::read_bool(&entry, AnnotKey::Resolved) == Some(true),

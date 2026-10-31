@@ -291,7 +291,8 @@ pub fn percentiles<T: Copy + Default>(
 mod tests {
     use super::*;
     use ambre_bus::app::prose::BlockId;
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::Pos;
 
     fn block() -> BlockId {
         BlockId {
@@ -310,7 +311,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(7),
             "a",
             &block(),
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         let echo = probe.handled(
             ambre_core::PageTime::new(10.0),
@@ -376,7 +377,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "a",
             &block(),
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         probe.handled(
             ambre_core::PageTime::new(0.0),
@@ -395,7 +396,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(2),
             "b",
             &block(),
-            DocOffset::new(1),
+            Pos::<DocChar>::new(1),
         );
         probe.handled(
             ambre_core::PageTime::new(1.0),
@@ -430,7 +431,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "a",
             &block(),
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         probe.handled(
             ambre_core::PageTime::new(0.0),
@@ -442,7 +443,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(2),
             "b",
             &block(),
-            DocOffset::new(1),
+            Pos::<DocChar>::new(1),
         );
         probe.handled(
             ambre_core::PageTime::new(1.0),
@@ -486,7 +487,7 @@ mod tests {
             ambre_bus::app::prose::TextAck::new(1),
             "a",
             &block(),
-            DocOffset::ZERO,
+            Pos::<DocChar>::ZERO,
         );
         probe.handled(
             ambre_core::PageTime::new(0.0),

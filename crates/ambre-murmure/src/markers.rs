@@ -8,7 +8,8 @@
 
 use ambre_bus::{StyleMark, TextStyle};
 use ambre_commands::{Key, KeyChar};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, CharOffset, CharSpan, byte_to_char, char_len};
+use ambre_core::index::{Count, Pos, Span};
+use ambre_core::{Byte, Char, byte_to_char, char_len};
 use ambre_core::{Point, Px, View};
 
 use crate::Region;
@@ -50,7 +51,7 @@ pub struct MarkBar {
 }
 
 /// How much of the chars `range` the runs of `style` in `styles` cover.
-pub fn cover(styles: &[StyleMark], style: &TextStyle, range: CharSpan) -> Cover {
+pub fn cover(styles: &[StyleMark], style: &TextStyle, range: Span<Char>) -> Cover {
     let runs = crate::style::normalized(styles);
     let mut runs = runs.iter().filter(|run| run.style == *style);
     if runs
@@ -85,9 +86,9 @@ pub fn closes(text: &str) -> bool {
 /// marker, and the text between them, which takes the style.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Closed {
-    pub span: ByteSpan,
+    pub span: Span<Byte>,
     /// The bytes of the text that stays, inside `span`.
-    pub inner: ByteSpan,
+    pub inner: Span<Byte>,
     pub style: TextStyle,
 }
 
@@ -107,8 +108,8 @@ pub struct Unmarked {
 impl std::fmt::Debug for Unmarked {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Unmarked")
-            .field("between", &ByteCount::from_len(self.between.len()))
-            .field("after", &ByteCount::from_len(self.after.len()))
+            .field("between", &Count::<Byte>::from_len(self.between.len()))
+            .field("after", &Count::<Byte>::from_len(self.after.len()))
             .finish()
     }
 }
@@ -130,9 +131,9 @@ impl Closed {
     }
 
     /// The chars of the text that stays, once the markers left.
-    pub fn range(&self, text: &str) -> CharSpan {
+    pub fn range(&self, text: &str) -> Span<Char> {
         let start = byte_to_char(text, self.span.start);
-        CharSpan::from_count(start, char_len(&text[self.inner.to_usize_range()]))
+        Span::<Char>::from_count(start, char_len(&text[self.inner.to_usize_range()]))
     }
 }
 
@@ -150,8 +151,8 @@ fn holds(inner: &str) -> bool {
 ///
 /// `**text**` is bold, `_text_` italic, `` `text` `` inline code, and
 /// `[text](address)` a link to an `http` or `https` address.
-pub fn closed(text: &str, caret: ByteOffset, code: &[CharSpan]) -> Option<Closed> {
-    let before = text.get(..caret.get())?;
+pub fn closed(text: &str, caret: Pos<Byte>, code: &[Span<Char>]) -> Option<Closed> {
+    let before = text.get(..caret.to_usize())?;
     if let Some(block) = code_block(before) {
         return outside(text, block, code);
     }
@@ -161,9 +162,9 @@ pub fn closed(text: &str, caret: ByteOffset, code: &[CharSpan]) -> Option<Closed
         .or_else(|| italic(line))
         .or_else(|| inline_code(line))
         .or_else(|| link(line))?;
-    let shift = |span: ByteSpan| {
-        let by = ByteCount::from_len(line_start);
-        ByteSpan::new(span.start + by, span.end + by)
+    let shift = |span: Span<Byte>| {
+        let by = Count::<Byte>::from_len(line_start);
+        Span::<Byte>::new(span.start + by, span.end + by)
     };
     let closed = Closed {
         span: shift(found.span),
@@ -176,27 +177,27 @@ pub fn closed(text: &str, caret: ByteOffset, code: &[CharSpan]) -> Option<Closed
 /// The block marker of the line a line break just ended, the last break
 /// before the byte `caret`, or `None` (`MURMURE-563`). Text typed after the
 /// break in the same frame leaves it found. `code` is as for [`closed`].
-pub fn closed_by_break(text: &str, caret: ByteOffset, code: &[CharSpan]) -> Option<Closed> {
-    let end = text.get(..caret.get())?.rfind('\n')? + 1;
+pub fn closed_by_break(text: &str, caret: Pos<Byte>, code: &[Span<Char>]) -> Option<Closed> {
+    let end = text.get(..caret.to_usize())?.rfind('\n')? + 1;
     let line_start = text[..end - 1].rfind('\n').map_or(0, |at| at + 1);
-    let line = ByteSpan::from_usize_range(line_start..end);
+    let line = Span::<Byte>::from_usize_range(line_start..end);
     outside(text, line_marker(text, line)?, code)
 }
 
 /// The block marker of the last line of `text`, closed by the send of the
 /// draft, or `None` (`MURMURE-563`). `code` is as for [`closed`].
-pub fn closed_at_send(text: &str, code: &[CharSpan]) -> Option<Closed> {
+pub fn closed_at_send(text: &str, code: &[Span<Char>]) -> Option<Closed> {
     let line_start = text.rfind('\n').map_or(0, |at| at + 1);
-    let line = ByteSpan::from_usize_range(line_start..text.len());
+    let line = Span::<Byte>::from_usize_range(line_start..text.len());
     outside(text, line_marker(text, line)?, code)
 }
 
 /// `closed`, unless a marker of it touches code (`MURMURE-198`).
-fn outside(text: &str, closed: Closed, code: &[CharSpan]) -> Option<Closed> {
+fn outside(text: &str, closed: Closed, code: &[Span<Char>]) -> Option<Closed> {
     let first = byte_to_char(text, closed.span.start);
     let last = byte_to_char(text, closed.span.end)
         .prev()
-        .unwrap_or(CharOffset::ZERO);
+        .unwrap_or(Pos::<Char>::ZERO);
     let in_code = code.iter().any(|run| {
         run.contains(first) || run.contains(last) || (first < run.start && run.end <= last)
     });
@@ -206,8 +207,8 @@ fn outside(text: &str, closed: Closed, code: &[CharSpan]) -> Option<Closed> {
 /// The marker of a quote, `> `, or of a list item, `- `, that opens a line
 /// of `text`. The bytes `line` hold the line, its line break included.
 /// The mark takes the line, and the line must hold some text.
-fn line_marker(text: &str, span: ByteSpan) -> Option<Closed> {
-    let (start, end) = (span.start.get(), span.end.get());
+fn line_marker(text: &str, span: Span<Byte>) -> Option<Closed> {
+    let (start, end) = (span.start.to_usize(), span.end.to_usize());
     let line = text.get(start..end)?;
     // A fence a line above still opens a code block, since a closed one
     // took its fences out: the line is code.
@@ -224,7 +225,7 @@ fn line_marker(text: &str, span: ByteSpan) -> Option<Closed> {
     let inner = start + QUOTE_MARKER.len()..end;
     (!text[inner.clone()].trim().is_empty()).then_some(Closed {
         span,
-        inner: ByteSpan::from_usize_range(inner),
+        inner: Span::<Byte>::from_usize_range(inner),
         style,
     })
 }
@@ -255,8 +256,8 @@ fn code_block(before: &str) -> Option<Closed> {
     }
     let code = &open_end[inner.clone()];
     (at_line_start && !code.trim().is_empty() && !code.starts_with('`')).then_some(Closed {
-        span: ByteSpan::from_usize_range(open..before.len()),
-        inner: ByteSpan::from_usize_range(inner),
+        span: Span::<Byte>::from_usize_range(open..before.len()),
+        inner: Span::<Byte>::from_usize_range(inner),
         style: TextStyle::CodeBlock,
     })
 }
@@ -267,8 +268,8 @@ fn bold(line: &str) -> Option<Closed> {
     let open = open_end.rfind("**")?;
     let inner = open + 2..open_end.len();
     holds(&line[inner.clone()]).then_some(Closed {
-        span: ByteSpan::from_usize_range(open..line.len()),
-        inner: ByteSpan::from_usize_range(inner),
+        span: Span::<Byte>::from_usize_range(open..line.len()),
+        inner: Span::<Byte>::from_usize_range(inner),
         style: TextStyle::Bold,
     })
 }
@@ -284,8 +285,8 @@ fn italic(line: &str) -> Option<Closed> {
         .is_none_or(|c| !c.is_alphanumeric() && c != '_');
     let inner = open + 1..open_end.len();
     (starts && holds(&line[inner.clone()])).then_some(Closed {
-        span: ByteSpan::from_usize_range(open..line.len()),
-        inner: ByteSpan::from_usize_range(inner),
+        span: Span::<Byte>::from_usize_range(open..line.len()),
+        inner: Span::<Byte>::from_usize_range(inner),
         style: TextStyle::Italic,
     })
 }
@@ -298,8 +299,8 @@ fn inline_code(line: &str) -> Option<Closed> {
     let inner = open + 1..open_end.len();
     let text = &line[inner.clone()];
     (!text.trim().is_empty() && !line[..open].ends_with('`')).then_some(Closed {
-        span: ByteSpan::from_usize_range(open..line.len()),
-        inner: ByteSpan::from_usize_range(inner),
+        span: Span::<Byte>::from_usize_range(open..line.len()),
+        inner: Span::<Byte>::from_usize_range(inner),
         style: TextStyle::Code,
     })
 }
@@ -315,8 +316,8 @@ fn link(line: &str) -> Option<Closed> {
     let text = &line[inner.clone()];
     let address = ambre_core::LinkUrl::from(address);
     (holds(text) && !text.contains(']') && linkable(&address)).then(|| Closed {
-        span: ByteSpan::from_usize_range(open..line.len()),
-        inner: ByteSpan::from_usize_range(inner),
+        span: Span::<Byte>::from_usize_range(open..line.len()),
+        inner: Span::<Byte>::from_usize_range(inner),
         style: TextStyle::Link(address),
     })
 }
@@ -337,8 +338,8 @@ pub struct DraftEdit<'a> {
 impl std::fmt::Debug for DraftEdit<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DraftEdit")
-            .field("before", &ByteCount::from_len(self.before.len()))
-            .field("after", &ByteCount::from_len(self.after.len()))
+            .field("before", &Count::<Byte>::from_len(self.before.len()))
+            .field("after", &Count::<Byte>::from_len(self.after.len()))
             .finish()
     }
 }
@@ -347,9 +348,9 @@ impl std::fmt::Debug for DraftEdit<'_> {
 /// change in the text before and in the text after.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Changed {
-    pub head: CharOffset,
-    pub before_end: CharOffset,
-    pub after_end: CharOffset,
+    pub head: Pos<Char>,
+    pub before_end: Pos<Char>,
+    pub after_end: Pos<Char>,
 }
 
 /// Where `edit` falls.
@@ -366,9 +367,9 @@ pub(crate) fn change(edit: DraftEdit<'_>) -> Changed {
         .take_while(|(a, b)| a == b)
         .count();
     Changed {
-        head: CharOffset::from_usize(head),
-        before_end: CharOffset::from_usize(old.len() - tail),
-        after_end: CharOffset::from_usize(new.len() - tail),
+        head: Pos::<Char>::from_usize(head),
+        before_end: Pos::<Char>::from_usize(old.len() - tail),
+        after_end: Pos::<Char>::from_usize(new.len() - tail),
     }
 }
 
@@ -381,7 +382,7 @@ pub fn kept_styles(edit: DraftEdit<'_>, styles: &[StyleMark]) -> Vec<StyleMark> 
         before_end,
         after_end,
     } = change(edit);
-    let shifted = |at: CharOffset| at + (after_end - before_end);
+    let shifted = |at: Pos<Char>| at + (after_end - before_end);
     styles
         .iter()
         .filter_map(|mark| {
@@ -402,7 +403,7 @@ pub fn kept_styles(edit: DraftEdit<'_>, styles: &[StyleMark]) -> Vec<StyleMark> 
             };
             (start < end).then(|| StyleMark {
                 style: mark.style.clone(),
-                range: CharSpan::new(start, end),
+                range: Span::<Char>::new(start, end),
             })
         })
         .collect()
@@ -410,7 +411,7 @@ pub fn kept_styles(edit: DraftEdit<'_>, styles: &[StyleMark]) -> Vec<StyleMark> 
 
 /// `styles` with `style` put on `range`, or taken off it when it already
 /// covers every char of it (`MURMURE-431`). An empty range changes nothing.
-pub fn toggled(styles: &[StyleMark], style: &TextStyle, range: CharSpan) -> Vec<StyleMark> {
+pub fn toggled(styles: &[StyleMark], style: &TextStyle, range: Span<Char>) -> Vec<StyleMark> {
     if range.is_empty() {
         return styles.to_vec();
     }
@@ -430,8 +431,8 @@ pub fn toggled(styles: &[StyleMark], style: &TextStyle, range: CharSpan) -> Vec<
             continue;
         }
         let parts = [
-            CharSpan::new(run.range.start, range.start),
-            CharSpan::new(range.end, run.range.end),
+            Span::<Char>::new(run.range.start, range.start),
+            Span::<Char>::new(range.end, run.range.end),
         ];
         for part in parts {
             if !part.is_empty() {
@@ -455,14 +456,14 @@ mod tests {
     fn mark(style: TextStyle, range: Range<usize>) -> StyleMark {
         StyleMark {
             style,
-            range: CharSpan::from_usize_range(range),
+            range: Span::<Char>::from_usize_range(range),
         }
     }
 
     /// The draft once the marker `text` closes at its end leaves it, and the
     /// chars of the text that took the style.
     fn converted(text: &str) -> Option<(String, Range<usize>, TextStyle)> {
-        let closed = closed(text, ByteOffset::from_usize(text.len()), &[])?;
+        let closed = closed(text, Pos::<Byte>::from_usize(text.len()), &[])?;
         let after = closed.apply(text).after;
         Some((after, closed.range(text).to_usize_range(), closed.style))
     }
@@ -470,7 +471,7 @@ mod tests {
     /// The draft once the break that ends `text` closes the marker of its
     /// line, and the chars of the text that took the style.
     fn broken(text: &str) -> Option<(String, Range<usize>, TextStyle)> {
-        let closed = closed_by_break(text, ByteOffset::from_usize(text.len()), &[])?;
+        let closed = closed_by_break(text, Pos::<Byte>::from_usize(text.len()), &[])?;
         let after = closed.apply(text).after;
         Some((after, closed.range(text).to_usize_range(), closed.style))
     }
@@ -497,7 +498,7 @@ mod tests {
 
         // The caret closes the marker before it, on its own line.
         let text = "a\n**b** tail";
-        let closed = closed(text, ByteOffset::from_usize("a\n**b**".len()), &[])
+        let closed = closed(text, Pos::<Byte>::from_usize("a\n**b**".len()), &[])
             .expect("closed at the caret");
         assert_eq!(
             closed.apply(text),
@@ -506,9 +507,9 @@ mod tests {
                 after: "a\nb tail".to_owned(),
             }
         );
-        assert_eq!(closed.range(text), CharSpan::from_usize_range(2..3));
+        assert_eq!(closed.range(text), Span::<Char>::from_usize_range(2..3));
         assert_eq!(
-            super::closed("é", ByteOffset::new(1), &[]),
+            super::closed("é", Pos::<Byte>::new(1), &[]),
             None,
             "not a char boundary"
         );
@@ -573,13 +574,13 @@ mod tests {
 
         // Text typed after the break in the same frame leaves the line found.
         let text = "> one\n two";
-        let closed = closed_by_break(text, ByteOffset::from_usize(text.len()), &[])
+        let closed = closed_by_break(text, Pos::<Byte>::from_usize(text.len()), &[])
             .expect("closed at the break");
         assert_eq!(closed.apply(text).after, "one\n two");
-        assert_eq!(closed.range(text), CharSpan::from_usize_range(0..4));
-        assert_eq!(closed_by_break("no break", ByteOffset::new(8), &[]), None);
+        assert_eq!(closed.range(text), Span::<Char>::from_usize_range(0..4));
+        assert_eq!(closed_by_break("no break", Pos::<Byte>::new(8), &[]), None);
         assert_eq!(
-            closed_by_break("é\n", ByteOffset::new(1), &[]),
+            closed_by_break("é\n", Pos::<Byte>::new(1), &[]),
             None,
             "not a char boundary"
         );
@@ -622,22 +623,22 @@ mod tests {
         assert_eq!(
             closed_by_break(
                 text,
-                ByteOffset::from_usize(text.len()),
-                from_ref(&CharSpan::from_usize_range(0..9))
+                Pos::<Byte>::from_usize(text.len()),
+                from_ref(&Span::<Char>::from_usize_range(0..9))
             ),
             None
         );
         assert_eq!(
-            closed_at_send("fn a\n- b", from_ref(&CharSpan::from_usize_range(0..8))),
+            closed_at_send("fn a\n- b", from_ref(&Span::<Char>::from_usize_range(0..8))),
             None
         );
         assert!(
-            closed_by_break(text, ByteOffset::from_usize(text.len()), &[]).is_some(),
+            closed_by_break(text, Pos::<Byte>::from_usize(text.len()), &[]).is_some(),
             "the same line outside code"
         );
         let text = "```\n> b\n";
         assert_eq!(
-            closed_by_break(text, ByteOffset::from_usize(text.len()), &[]),
+            closed_by_break(text, Pos::<Byte>::from_usize(text.len()), &[]),
             None,
             "under a fence still open"
         );
@@ -651,8 +652,8 @@ mod tests {
         assert_eq!(
             closed(
                 text,
-                ByteOffset::from_usize(caret),
-                from_ref(&CharSpan::from_usize_range(1..8))
+                Pos::<Byte>::from_usize(caret),
+                from_ref(&Span::<Char>::from_usize_range(1..8))
             ),
             None,
             "inside a code run"
@@ -661,22 +662,22 @@ mod tests {
         assert_eq!(
             closed(
                 text,
-                ByteOffset::from_usize(text.len()),
-                from_ref(&CharSpan::from_usize_range(3..4))
+                Pos::<Byte>::from_usize(text.len()),
+                from_ref(&Span::<Char>::from_usize_range(3..4))
             ),
             None,
             "around a code run"
         );
         assert!(
-            closed(text, ByteOffset::from_usize(text.len()), &[]).is_some(),
+            closed(text, Pos::<Byte>::from_usize(text.len()), &[]).is_some(),
             "the same marker outside code"
         );
         let text = "x **b**";
         assert!(
             closed(
                 text,
-                ByteOffset::from_usize(text.len()),
-                from_ref(&CharSpan::from_usize_range(0..1))
+                Pos::<Byte>::from_usize(text.len()),
+                from_ref(&Span::<Char>::from_usize_range(0..1))
             )
             .is_some(),
             "code beside the marker leaves it a marker"
@@ -749,14 +750,17 @@ mod tests {
     #[test]
     fn a_chord_puts_a_style_on_or_takes_it_off() {
         let bold = TextStyle::Bold;
-        let on = toggled(&[], &bold, CharSpan::from_usize_range(2..4));
+        let on = toggled(&[], &bold, Span::<Char>::from_usize_range(2..4));
         assert_eq!(on, [mark(bold.clone(), 2..4)]);
-        assert_eq!(toggled(&on, &bold, CharSpan::from_usize_range(2..4)), []);
+        assert_eq!(
+            toggled(&on, &bold, Span::<Char>::from_usize_range(2..4)),
+            []
+        );
         assert_eq!(
             toggled(
                 &[mark(bold.clone(), 0..4)],
                 &bold,
-                CharSpan::from_usize_range(1..2)
+                Span::<Char>::from_usize_range(1..2)
             ),
             [mark(bold.clone(), 0..1), mark(bold.clone(), 2..4)]
         );
@@ -764,7 +768,7 @@ mod tests {
             toggled(
                 &[mark(bold.clone(), 0..4)],
                 &bold,
-                CharSpan::from_usize_range(3..6)
+                Span::<Char>::from_usize_range(3..6)
             ),
             [mark(bold.clone(), 0..6)],
             "a selection half covered takes the style"
@@ -774,13 +778,17 @@ mod tests {
             toggled(
                 &[italic.clone(), mark(bold.clone(), 0..4)],
                 &bold,
-                CharSpan::from_usize_range(0..4)
+                Span::<Char>::from_usize_range(0..4)
             ),
             from_ref(&italic),
             "another style stays"
         );
         assert_eq!(
-            toggled(from_ref(&italic), &bold, CharSpan::from_usize_range(2..2)),
+            toggled(
+                from_ref(&italic),
+                &bold,
+                Span::<Char>::from_usize_range(2..2)
+            ),
             [italic]
         );
     }
@@ -793,16 +801,16 @@ mod tests {
         let bold = TextStyle::Bold;
         let styles = [mark(bold.clone(), 0..2), mark(bold.clone(), 2..4)];
         assert_eq!(
-            cover(&styles, &bold, CharSpan::from_usize_range(1..4)),
+            cover(&styles, &bold, Span::<Char>::from_usize_range(1..4)),
             Cover::Whole,
             "two runs, one cover"
         );
         assert_eq!(
-            cover(&styles, &bold, CharSpan::from_usize_range(3..6)),
+            cover(&styles, &bold, Span::<Char>::from_usize_range(3..6)),
             Cover::Part
         );
         assert_eq!(
-            cover(&styles, &bold, CharSpan::from_usize_range(4..6)),
+            cover(&styles, &bold, Span::<Char>::from_usize_range(4..6)),
             Cover::None,
             "a run ending at it"
         );
@@ -810,7 +818,7 @@ mod tests {
             cover(
                 &styles,
                 &TextStyle::Italic,
-                CharSpan::from_usize_range(0..2)
+                Span::<Char>::from_usize_range(0..2)
             ),
             Cover::None
         );

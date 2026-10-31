@@ -4,8 +4,9 @@
 //! call is one carrier character marked with the entry's identity. The identity is minted once, by
 //! the peer that inserts the note (`PROSE-FEAT-096`, `PROSE-087`).
 
-use ambre_bus::app::prose::DocOffset;
+use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Footnote, Id};
+use ambre_core::index::Pos;
 use loro::{LoroMap, LoroText, TreeID, UpdateOptions};
 
 use crate::doc;
@@ -50,7 +51,7 @@ impl ProseState {
     pub(super) fn insert_footnote(
         &mut self,
         block: &TreeID,
-        pos: DocOffset,
+        pos: Pos<DocChar>,
         text: &str,
     ) -> ProseOutcome {
         let tree = doc::blocks(&self.doc);
@@ -144,7 +145,7 @@ impl ProseState {
     /// The mark never expands, so typing beside it stays plain text.
     pub(super) fn write_carrier(
         body: &LoroText,
-        at: DocOffset,
+        at: Pos<DocChar>,
         anchor: &OwnedAnchor<'_>,
     ) -> Result<(), doc::WriteError> {
         let at = at.to_usize();
@@ -183,7 +184,8 @@ mod tests {
         BlockId, BlockInit, FootnoteEntry, FootnoteOrdinal, ProseCommand, block_id,
     };
     use crate::logic::ProseOutcome;
-    use ambre_bus::app::prose::DocSpan;
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::Span;
 
     fn refusal(outcome: &ProseOutcome) -> Option<ProseRefusal> {
         outcome.display.iter().find_map(|event| match event {
@@ -219,14 +221,14 @@ mod tests {
         for (id, text) in ids.iter().zip(texts) {
             state.handle_command(ProseCommand::InsertText {
                 block_id: *id,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: (*text).to_owned(),
             });
         }
         (state, ids)
     }
 
-    fn add(state: &mut ProseState, block: BlockId, pos: DocOffset, text: &str) -> Id<Footnote> {
+    fn add(state: &mut ProseState, block: BlockId, pos: Pos<DocChar>, text: &str) -> Id<Footnote> {
         let before: Vec<Id<Footnote>> = state.footnotes().iter().map(|n| n.footnote_id).collect();
         state.handle_command(ProseCommand::InsertFootnote {
             block_id: block,
@@ -256,7 +258,7 @@ mod tests {
     #[test]
     fn deleting_a_note_deletes_a_call_spelled_another_way() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["Hello world"]);
-        let id = add(&mut state, ids[0], DocOffset::new(5), "A note.");
+        let id = add(&mut state, ids[0], Pos::<DocChar>::new(5), "A note.");
         let body = doc::get_block_text(state.document(), &crate::events::tree_id(ids[0]));
         let upper = id.to_hyphenated().to_uppercase();
         body.insert(0, "\u{fffc}").expect("the carrier lands");
@@ -271,7 +273,7 @@ mod tests {
     #[test]
     fn a_note_lands_as_one_call_and_an_entry_holding_its_text() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["Hello world"]);
-        let id = add(&mut state, ids[0], DocOffset::new(5), "A note.");
+        let id = add(&mut state, ids[0], Pos::<DocChar>::new(5), "A note.");
         assert_eq!(
             state.text_of(&ids[0]).as_deref(),
             Some("Hello\u{fffc} world"),
@@ -279,7 +281,7 @@ mod tests {
         );
         let calls = note::footnote_calls(state.document());
         assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].offset, DocOffset::new(5));
+        assert_eq!(calls[0].offset, Pos::<DocChar>::new(5));
         assert_eq!(calls[0].value, id);
         assert_eq!(
             note::body(state.document(), &id).map(|t| t.to_string()),
@@ -290,9 +292,9 @@ mod tests {
     #[test]
     fn a_note_touches_no_other_note() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["abc"]);
-        let first = add(&mut state, ids[0], DocOffset::new(3), "one");
+        let first = add(&mut state, ids[0], Pos::<DocChar>::new(3), "one");
         let before = note::body(state.document(), &first).map(|t| t.get_richtext_value());
-        add(&mut state, ids[0], DocOffset::ZERO, "two");
+        add(&mut state, ids[0], Pos::<DocChar>::ZERO, "two");
         let after = note::body(state.document(), &first).map(|t| t.get_richtext_value());
         assert_eq!(before, after);
     }
@@ -300,8 +302,8 @@ mod tests {
     #[test]
     fn a_note_is_numbered_from_the_order_of_its_calls_and_stores_no_number() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["first", "second"]);
-        add(&mut state, ids[1], DocOffset::new(6), "later");
-        add(&mut state, ids[0], DocOffset::new(5), "earlier");
+        add(&mut state, ids[1], Pos::<DocChar>::new(6), "later");
+        add(&mut state, ids[0], Pos::<DocChar>::new(5), "earlier");
         assert_eq!(
             numbers(&state),
             vec![
@@ -329,7 +331,7 @@ mod tests {
     #[test]
     fn a_note_keeps_its_identity_through_a_move_an_edit_and_a_remote_change() {
         let (mut alice, ids) = document(ambre_core::PeerId::new(1), &["one", "two"]);
-        let id = add(&mut alice, ids[0], DocOffset::new(3), "note");
+        let id = add(&mut alice, ids[0], Pos::<DocChar>::new(3), "note");
         let mut bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("bob");
         bob.import_snapshot(&alice.export_snapshot())
             .expect("bob opens");
@@ -344,7 +346,7 @@ mod tests {
         });
         let from_bob = bob.handle_command(ProseCommand::InsertText {
             block_id: ids[1],
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "x".to_owned(),
         });
         if let Some(delta) = &from_bob.update {
@@ -368,12 +370,12 @@ mod tests {
             .expect("bob opens");
         let from_alice = alice.handle_command(ProseCommand::InsertFootnote {
             block_id: ids[0],
-            pos: DocOffset::new(4),
+            pos: Pos::<DocChar>::new(4),
             note_text: "alice".to_owned(),
         });
         let from_bob = bob.handle_command(ProseCommand::InsertFootnote {
             block_id: ids[0],
-            pos: DocOffset::new(4),
+            pos: Pos::<DocChar>::new(4),
             note_text: "bob".to_owned(),
         });
         alice.apply_remote(&from_bob.update.expect("bob's note travels"));
@@ -390,10 +392,10 @@ mod tests {
     #[test]
     fn deleting_the_text_of_a_call_keeps_the_note_and_lists_it_as_orphaned() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["abc"]);
-        let id = add(&mut state, ids[0], DocOffset::new(1), "kept");
+        let id = add(&mut state, ids[0], Pos::<DocChar>::new(1), "kept");
         state.handle_command(ProseCommand::DeleteText {
             block_id: ids[0],
-            range: DocSpan::from_usize_range(0..3),
+            range: Span::<DocChar>::from_usize_range(0..3),
         });
         assert_eq!(state.text_of(&ids[0]).as_deref(), Some("c"));
         assert_eq!(
@@ -409,8 +411,8 @@ mod tests {
     #[test]
     fn deleting_a_note_removes_its_body_and_its_calls_and_nothing_else() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["abcdef"]);
-        let gone = add(&mut state, ids[0], DocOffset::new(2), "gone");
-        let kept = add(&mut state, ids[0], DocOffset::new(5), "kept");
+        let gone = add(&mut state, ids[0], Pos::<DocChar>::new(2), "gone");
+        let kept = add(&mut state, ids[0], Pos::<DocChar>::new(5), "kept");
         let kept_body = note::body(state.document(), &kept).map(|t| t.to_string());
         let outcome = state.handle_command(ProseCommand::DeleteFootnote { footnote_id: gone });
         assert!(note::entry(state.document(), &gone).is_none());
@@ -432,7 +434,7 @@ mod tests {
     #[test]
     fn a_note_deleted_while_a_peer_edits_it_leaves_no_call() {
         let (mut alice, ids) = document(ambre_core::PeerId::new(1), &["text"]);
-        let id = add(&mut alice, ids[0], DocOffset::new(4), "body");
+        let id = add(&mut alice, ids[0], Pos::<DocChar>::new(4), "body");
         let mut bob = ProseState::with_peer(ambre_core::PeerId::new(2)).expect("bob");
         bob.import_snapshot(&alice.export_snapshot())
             .expect("bob opens");
@@ -452,7 +454,7 @@ mod tests {
     #[test]
     fn an_entry_is_a_note_by_its_declared_kind_and_by_nothing_else() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["text"]);
-        let real = add(&mut state, ids[0], DocOffset::new(4), "a note");
+        let real = add(&mut state, ids[0], Pos::<DocChar>::new(4), "a note");
         let annots = doc::annots(state.document());
         let shaped_alike = Id::<Footnote>::mint();
         let entry = annots
@@ -490,7 +492,7 @@ mod tests {
         let before = state.document().oplog_vv();
         let outcome = state.handle_command(ProseCommand::InsertFootnote {
             block_id: block_id(footer),
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             note_text: "no".to_owned(),
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::FootnoteInBand));
@@ -503,14 +505,14 @@ mod tests {
     #[test]
     fn a_note_holds_its_text_in_a_block_out_of_the_flow() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["text"]);
-        let id = add(&mut state, ids[0], DocOffset::new(4), "a note");
+        let id = add(&mut state, ids[0], Pos::<DocChar>::new(4), "a note");
         let block = note::block(state.document(), &id).expect("the note's block");
         assert_eq!(state.text_of(&block_id(block)).as_deref(), Some("a note"));
         assert_eq!(state.root_blocks(), ids, "the flow holds no note");
         // Typing in the note is typing in any block.
         state.handle_command(ProseCommand::InsertText {
             block_id: block_id(block),
-            pos: DocOffset::new(6),
+            pos: Pos::<DocChar>::new(6),
             text: " more".to_owned(),
         });
         assert_eq!(
@@ -530,24 +532,24 @@ mod tests {
     #[test]
     fn a_note_refuses_a_note_a_comment_and_a_split() {
         let (mut state, ids) = document(ambre_core::PeerId::new(1), &["text"]);
-        let id = add(&mut state, ids[0], DocOffset::new(4), "a note");
+        let id = add(&mut state, ids[0], Pos::<DocChar>::new(4), "a note");
         let block = block_id(note::block(state.document(), &id).expect("the note's block"));
         let outcome = state.handle_command(ProseCommand::InsertFootnote {
             block_id: block,
-            pos: DocOffset::new(1),
+            pos: Pos::<DocChar>::new(1),
             note_text: "inner".to_owned(),
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::FootnoteInNote));
         let outcome = state.handle_command(ProseCommand::AddComment {
             block_id: block,
-            range: DocSpan::from_usize_range(0..2),
+            range: Span::<DocChar>::from_usize_range(0..2),
             text: "a thread".to_owned(),
             now: ambre_core::Timestamp::new(0),
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::CommentInNote));
         let outcome = state.handle_command(ProseCommand::SplitBlock {
             block_id: block,
-            pos: DocOffset::new(2),
+            pos: Pos::<DocChar>::new(2),
         });
         assert!(refusal(&outcome).is_some(), "a note does not split");
         assert_eq!(state.root_blocks(), ids);
@@ -558,11 +560,11 @@ mod tests {
     #[test]
     fn a_reloaded_note_keeps_its_text_and_its_marks() {
         let (mut author, ids) = document(ambre_core::PeerId::new(1), &["text"]);
-        let id = add(&mut author, ids[0], DocOffset::new(4), "a note");
+        let id = add(&mut author, ids[0], Pos::<DocChar>::new(4), "a note");
         let block = block_id(note::block(author.document(), &id).expect("the note's block"));
         author.handle_command(ProseCommand::ApplyMark {
             block_id: block,
-            range: DocSpan::from_usize_range(0..1),
+            range: Span::<DocChar>::from_usize_range(0..1),
             key: "b".into(),
             value: None,
         });

@@ -25,6 +25,7 @@
 //    AVERAGE = SUM/COUNT / MIN<=x<=MAX / COUNT invariants.
 // ============================================================================
 
+use ambre_core::index::{Count, Pos};
 use std::collections::HashMap;
 
 use proptest::prelude::*;
@@ -41,7 +42,7 @@ use super::types::{
 };
 use super::vm::EvalContext;
 use crate::model::Uid;
-use crate::{Col, ColCount, Row, RowCount};
+use crate::{Col, Row};
 
 // -----------------------------------------------------------------------------
 // Shared helpers
@@ -103,17 +104,18 @@ fn num_leaf() -> impl Strategy<Value = f64> {
 
 /// Cell references inside a generous positional window.
 fn cellref() -> impl Strategy<Value = CellRef> {
-    (0u32..1_000, 0u32..1_000).prop_map(|(r, c)| CellRef::new(Row::new(r), Col::new(c)))
+    (0u32..1_000, 0u32..1_000)
+        .prop_map(|(r, c)| CellRef::new(Pos::<Row>::new(r), Pos::<Col>::new(c)))
 }
 
 /// Normalized ranges (`start <= end` on both axes), as the parser emits.
 fn rangedep() -> impl Strategy<Value = RangeDep> {
     (0u32..500, 0u32..500, 0u32..500, 0u32..500).prop_map(|(a, b, c, d)| {
         RangeDep::new(
-            Row::new(a.min(b)),
-            Row::new(a.max(b)),
-            Col::new(c.min(d)),
-            Col::new(c.max(d)),
+            Pos::<Row>::new(a.min(b)),
+            Pos::<Row>::new(a.max(b)),
+            Pos::<Col>::new(c.min(d)),
+            Pos::<Col>::new(c.max(d)),
         )
     })
 }
@@ -417,8 +419,8 @@ proptest! {
     fn sum_flattens_range_like_scalars(xs in proptest::collection::vec(-100_000i64..100_000, 0..24)) {
         let scalar = as_num(&call_builtin(&function("SUM"), &nums(&xs), fnctx()));
         let range = CellValue::Range(RangeValue::new(
-            RowCount::ONE,
-            ColCount::from_len(xs.len()),
+            Count::<Row>::ONE,
+            Count::<Col>::from_len(xs.len()),
             nums(&xs),
         ));
         let ranged = as_num(&call_builtin(&function("SUM"), &[range], fnctx()));

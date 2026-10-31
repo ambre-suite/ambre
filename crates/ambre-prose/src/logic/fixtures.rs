@@ -10,13 +10,14 @@
 //! (`ProseState::with_peer`) is engine API and stays ungated, as does
 //! `ProseState::import_snapshot`.
 
+use ambre_core::index::{Count, Pos, Span};
 use std::collections::{BTreeMap, HashMap};
 
-use ambre_bus::app::grid::{CellPos, Col, ColCount, Row, RowCount};
-use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
+use ambre_bus::app::grid::{CellPos, Col, Row};
+use ambre_bus::app::prose::DocChar;
 use ambre_core::id::{Footnote, Id, User};
 use ambre_core::{
-    CharCount, DocBlockCount, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape,
+    Char, DocBlockCount, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape,
     GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
 };
 use loro::{LoroTree, LoroValue, TextDelta, TreeID};
@@ -40,8 +41,8 @@ impl ProseState {
             .document_order()
             .iter()
             .filter_map(|id| self.body_of(id))
-            .fold(CharCount::ZERO, |total, body| {
-                total + CharCount::from_len(body.len_unicode())
+            .fold(Count::<Char>::ZERO, |total, body| {
+                total + Count::<Char>::from_len(body.len_unicode())
             });
         FixtureShape {
             // The loader's own pinned peer is not an author of the document.
@@ -424,7 +425,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         &mut state,
         ProseCommand::InsertText {
             block_id: block_id(title),
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Quarterly report".to_owned(),
         },
     )?;
@@ -451,7 +452,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         &mut state,
         ProseCommand::InsertText {
             block_id: block_id(body),
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: text.to_owned(),
         },
     )?;
@@ -459,7 +460,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         &mut state,
         ProseCommand::ApplyMark {
             block_id: block_id(body),
-            range: DocSpan::from_usize_range(0..7),
+            range: Span::<DocChar>::from_usize_range(0..7),
             key: "b".into(),
             value: None,
         },
@@ -468,7 +469,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         &mut state,
         ProseCommand::ApplyMark {
             block_id: block_id(body),
-            range: DocSpan::from_usize_range(16..30),
+            range: Span::<DocChar>::from_usize_range(16..30),
             key: "i".into(),
             value: None,
         },
@@ -479,8 +480,8 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         ProseCommand::InsertTable {
             parent_id: None,
             after_id: Some(block_id(body)),
-            rows: RowCount::new(2),
-            cols: ColCount::new(2),
+            rows: Count::<Row>::new(2),
+            cols: Count::<Col>::new(2),
         },
     )?;
     let table = root_after(&state, body)?;
@@ -493,7 +494,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         (1, 1, "12%"),
     ] {
         let cell = grid
-            .cell(CellPos::new(Row::new(row), Col::new(col)))
+            .cell(CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col)))
             .ok_or(FixtureError::Missing("no cell"))?;
         let tree = doc::blocks(&state.doc);
         let paragraph = *doc::children_of(&tree, Some(cell))
@@ -503,7 +504,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
             &mut state,
             ProseCommand::InsertText {
                 block_id: block_id(paragraph),
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: cell_text.to_owned(),
             },
         )?;
@@ -529,7 +530,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         &mut state,
         ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Confidential".to_owned(),
         },
     )?;
@@ -538,11 +539,11 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         ProseCommand::InsertFooterField {
             field: HeaderField::PageNumber,
             target: HfTarget::Regular,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
         },
     )?;
 
-    let end = DocOffset::ZERO + DocCount::of(text);
+    let end = Pos::<DocChar>::ZERO + ambre_core::char_len(text).as_axis::<DocChar>();
     run(
         &mut state,
         ProseCommand::InsertFootnote {
@@ -555,7 +556,7 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
         &mut state,
         ProseCommand::AddComment {
             block_id: block_id(body),
-            range: DocSpan::from_usize_range(0..7),
+            range: Span::<DocChar>::from_usize_range(0..7),
             text: "Is this net or gross?".to_owned(),
             now: COMMENT_AT,
         },
@@ -578,8 +579,9 @@ fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> 
 
 #[cfg(test)]
 mod tests {
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
     use ambre_core::FixtureGen;
+    use ambre_core::index::{Count, Pos};
 
     use super::{ProseFixture, build_styled_document};
     use crate::events::ProseCommand;
@@ -592,7 +594,7 @@ mod tests {
         let block = state.root_blocks()[0];
         state.handle_command(ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "hello".to_owned(),
         });
         let shape = state.fixture_shape();
@@ -601,7 +603,7 @@ mod tests {
             shape.body,
             ambre_core::ShapeBody::Prose {
                 blocks: ambre_core::DocBlockCount::new(1),
-                characters: ambre_core::CharCount::new(5)
+                characters: Count::<ambre_core::Char>::new(5)
             }
         );
     }
@@ -616,7 +618,7 @@ mod tests {
             let block = state.root_blocks()[0];
             state.handle_command(ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: "one route".to_owned(),
             });
         }

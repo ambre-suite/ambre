@@ -12,13 +12,14 @@
 // No DOM, no Loro: this stays in `ui` and is host-tested, like `ui::find`.
 // ============================================================================
 
-use ambre_core::{CharCount, CharOffset, Utf16Offset, char_len, char_to_utf16, utf16_to_char};
+use ambre_core::index::{Count, Pos};
+use ambre_core::{Char, Utf16, char_len, char_to_utf16, utf16_to_char};
 
 use ambre_bus::app::toile::Broadcast;
 use ambre_core::id::{Id, User};
 
 use crate::logic::TextLen;
-use crate::logic::command::{SlideCount, SlidePosition, TextDelta};
+use crate::logic::command::{Slide, SlidePosition, TextDelta};
 
 /// An intent emitted by the presenter panel. The launcher maps each variant to a
 /// `ToileCommand` sent to Logic. `Prev`/`Next` -> `PrevSlide`/`NextSlide`,
@@ -67,7 +68,7 @@ impl std::fmt::Debug for PresenterIntent {
 pub fn slide_counter_label(slide: SlidePosition) -> String {
     let count = slide.count();
     let human = if count.is_zero() {
-        SlideCount::ZERO
+        Count::<Slide>::ZERO
     } else {
         slide.index().number()
     };
@@ -109,8 +110,8 @@ pub fn notes_delta(old: &str, new: &str) -> Option<TextDelta> {
         .take(new.len() - prefix - suffix)
         .collect();
     Some(TextDelta {
-        at: CharOffset::from_usize(prefix),
-        delete: CharCount::from_len(delete),
+        at: Pos::<Char>::from_usize(prefix),
+        delete: Count::<Char>::from_len(delete),
         insert,
     })
 }
@@ -120,7 +121,7 @@ pub fn notes_delta(old: &str, new: &str) -> Option<TextDelta> {
 /// units, as a `<textarea>` counts them. A caret before the change stays, a
 /// caret after it shifts with it, and one inside a removed run lands after
 /// what replaced it.
-pub fn caret_through(before: &str, caret: Utf16Offset, after: &str) -> Utf16Offset {
+pub fn caret_through(before: &str, caret: Pos<Utf16>, after: &str) -> Pos<Utf16> {
     let Some(delta) = notes_delta(before, after) else {
         return caret;
     };
@@ -139,7 +140,7 @@ pub fn caret_through(before: &str, caret: Utf16Offset, after: &str) -> Utf16Offs
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logic::command::SlideIndex;
+    use crate::logic::command::Slide;
 
     /// `TOILE-289`: a notes edit's debug form prints lengths, none of the note.
     #[test]
@@ -159,31 +160,31 @@ mod tests {
     fn a_caret_keeps_its_place_under_a_peer_write() {
         // A prefix before the caret shifts it; a suffix after it does not.
         assert_eq!(
-            caret_through("Hello world", Utf16Offset::new(5), "Dear Hello world"),
-            Utf16Offset::new(10)
+            caret_through("Hello world", Pos::<Utf16>::new(5), "Dear Hello world"),
+            Pos::<Utf16>::new(10)
         );
         assert_eq!(
-            caret_through("Hello world", Utf16Offset::new(5), "Hello world!"),
-            Utf16Offset::new(5)
+            caret_through("Hello world", Pos::<Utf16>::new(5), "Hello world!"),
+            Pos::<Utf16>::new(5)
         );
         // A caret inside a removed run lands after its replacement.
         assert_eq!(
-            caret_through("Hello world", Utf16Offset::new(8), "Hello you"),
-            Utf16Offset::new(9)
+            caret_through("Hello world", Pos::<Utf16>::new(8), "Hello you"),
+            Pos::<Utf16>::new(9)
         );
         // Offsets count UTF-16 units: an astral emoji is two.
         assert_eq!(
-            caret_through("\u{1f600}ab", Utf16Offset::new(3), "x\u{1f600}ab"),
-            Utf16Offset::new(4)
+            caret_through("\u{1f600}ab", Pos::<Utf16>::new(3), "x\u{1f600}ab"),
+            Pos::<Utf16>::new(4)
         );
         assert_eq!(
-            caret_through("same", Utf16Offset::new(2), "same"),
-            Utf16Offset::new(2)
+            caret_through("same", Pos::<Utf16>::new(2), "same"),
+            Pos::<Utf16>::new(2)
         );
     }
 
     fn position(index: u32, count: u32) -> SlidePosition {
-        SlidePosition::new(SlideIndex::new(index), SlideCount::new(count))
+        SlidePosition::new(Pos::<Slide>::new(index), Count::<Slide>::new(count))
     }
 
     #[test]
@@ -202,8 +203,8 @@ mod tests {
     /// A slide position keeps its index inside the deck (`UI-THREAD-060`).
     #[test]
     fn a_slide_position_stays_inside_its_deck() {
-        assert_eq!(position(12, 10).index(), SlideIndex::new(9));
-        assert_eq!(position(3, 0).index(), SlideIndex::ZERO);
+        assert_eq!(position(12, 10).index(), Pos::<Slide>::new(9));
+        assert_eq!(position(3, 0).index(), Pos::<Slide>::ZERO);
         assert_eq!(slide_counter_label(position(12, 10)), "10 / 10");
     }
 
@@ -219,8 +220,8 @@ mod tests {
         assert_eq!(
             notes_delta("abc", "abcd"),
             Some(TextDelta {
-                at: CharOffset::new(3),
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::new(3),
+                delete: Count::<Char>::ZERO,
                 insert: "d".to_owned()
             })
         );
@@ -232,8 +233,8 @@ mod tests {
         assert_eq!(
             notes_delta("bc", "abc"),
             Some(TextDelta {
-                at: CharOffset::ZERO,
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::ZERO,
+                delete: Count::<Char>::ZERO,
                 insert: "a".to_owned()
             })
         );
@@ -245,8 +246,8 @@ mod tests {
         assert_eq!(
             notes_delta("abcd", "abd"),
             Some(TextDelta {
-                at: CharOffset::new(2),
-                delete: CharCount::new(1),
+                at: Pos::<Char>::new(2),
+                delete: Count::<Char>::new(1),
                 insert: String::new()
             })
         );
@@ -258,8 +259,8 @@ mod tests {
         assert_eq!(
             notes_delta("abXYcd", "abZcd"),
             Some(TextDelta {
-                at: CharOffset::new(2),
-                delete: CharCount::new(2),
+                at: Pos::<Char>::new(2),
+                delete: Count::<Char>::new(2),
                 insert: "Z".to_owned()
             })
         );
@@ -270,8 +271,8 @@ mod tests {
         assert_eq!(
             notes_delta("", "hi"),
             Some(TextDelta {
-                at: CharOffset::ZERO,
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::ZERO,
+                delete: Count::<Char>::ZERO,
                 insert: "hi".to_owned()
             })
         );
@@ -282,8 +283,8 @@ mod tests {
         assert_eq!(
             notes_delta("hi", ""),
             Some(TextDelta {
-                at: CharOffset::ZERO,
-                delete: CharCount::new(2),
+                at: Pos::<Char>::ZERO,
+                delete: Count::<Char>::new(2),
                 insert: String::new()
             })
         );
@@ -296,8 +297,8 @@ mod tests {
         assert_eq!(
             notes_delta("\u{e9}\u{e9}", "\u{e9}\u{e9}!"),
             Some(TextDelta {
-                at: CharOffset::new(2),
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::new(2),
+                delete: Count::<Char>::ZERO,
                 insert: "!".to_owned()
             })
         );
@@ -311,8 +312,8 @@ mod tests {
         assert_eq!(
             notes_delta("x\u{e9}y", "x\u{fc}y"),
             Some(TextDelta {
-                at: CharOffset::new(1),
-                delete: CharCount::new(1),
+                at: Pos::<Char>::new(1),
+                delete: Count::<Char>::new(1),
                 insert: "\u{fc}".to_owned()
             })
         );
@@ -325,8 +326,8 @@ mod tests {
         assert_eq!(
             notes_delta("aaa", "aa"),
             Some(TextDelta {
-                at: CharOffset::new(2),
-                delete: CharCount::new(1),
+                at: Pos::<Char>::new(2),
+                delete: Count::<Char>::new(1),
                 insert: String::new()
             })
         );

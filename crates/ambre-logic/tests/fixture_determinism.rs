@@ -23,6 +23,7 @@
 
 use ambre_bus::{CellPos, Col, DocType, Row, TrameCommand};
 use ambre_core::id::{Document, Id};
+use ambre_core::index::Pos;
 use ambre_logic::DocState;
 use ambre_prose::{ProseCommand, ProseState};
 use ambre_toile::ToileState;
@@ -60,23 +61,28 @@ fn doc_id() -> Id<Document> {
 fn build_trame(seed: u64, doc_id: Id<Document>) -> Vec<u8> {
     let mut state = TrameState::with_peer(ambre_core::PeerId::new(seed));
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "21".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(1),
-        col: Col::new(0),
+        row: Pos::<Row>::new(1),
+        col: Pos::<Col>::new(0),
         text: "=A1*2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(2),
-        col: Col::new(0),
+        row: Pos::<Row>::new(2),
+        col: Pos::<Col>::new(0),
         text: "=A2+A1".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellsBatch {
         cells: (0..8)
-            .map(|i| (CellPos::new(Row::new(i), Col::new(3)), format!("row {i}")))
+            .map(|i| {
+                (
+                    CellPos::new(Pos::<Row>::new(i), Pos::<Col>::new(3)),
+                    format!("row {i}"),
+                )
+            })
             .collect::<Vec<_>>(),
     });
     state
@@ -159,8 +165,8 @@ fn an_unpinned_peer_is_not_deterministic() {
     let bare = |()| {
         let mut state = TrameState::new();
         state.handle_command(TrameCommand::SetCellText {
-            row: Row::new(0),
-            col: Col::new(0),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
             text: "21".to_owned(),
         });
         state
@@ -247,13 +253,13 @@ fn a_two_peer_merge_is_deterministic() {
         let mut alice = TrameState::with_peer(ambre_core::PeerId::new(SEED));
         let mut bob = TrameState::with_peer(ambre_core::PeerId::new(SEED ^ 0xFFFF_FFFF));
         alice.handle_command(TrameCommand::SetCellText {
-            row: Row::new(0),
-            col: Col::new(0),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
             text: "from alice".to_owned(),
         });
         bob.handle_command(TrameCommand::SetCellText {
-            row: Row::new(5),
-            col: Col::new(2),
+            row: Pos::<Row>::new(5),
+            col: Pos::<Col>::new(2),
             text: "from bob".to_owned(),
         });
         // Both directions, so the merged history carries both peers' ops.
@@ -298,7 +304,7 @@ fn a_large_document_is_deterministic() {
             cells: (0..250)
                 .flat_map(|row| {
                     (0..20).map(move |col| {
-                        let at = CellPos::new(Row::new(row), Col::new(col));
+                        let at = CellPos::new(Pos::<Row>::new(row), Pos::<Col>::new(col));
                         (at, format!("v{row}_{col}"))
                     })
                 })
@@ -378,8 +384,8 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
     // `ToileState::import_snapshot` had to exist for the Toile arm.
     let mut trame = TrameState::with_peer(ambre_core::PeerId::new(SEED));
     trame.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "21".to_owned(),
     });
     assert_round_trip(&DocState::Trame(Box::new(trame)), DocType::Trame);
@@ -400,7 +406,7 @@ fn the_round_trip_is_stable_on_every_doc_state_variant() {
     let block = prose.root_blocks()[0];
     prose.handle_command(ProseCommand::InsertText {
         block_id: block,
-        pos: ambre_bus::app::prose::DocOffset::ZERO,
+        pos: Pos::<ambre_bus::app::prose::DocChar>::ZERO,
         text: "a paragraph".to_owned(),
     });
     assert_round_trip(&DocState::Prose(Box::new(prose)), DocType::Prose);

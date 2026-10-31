@@ -13,9 +13,10 @@
     reason = "a test asserts by panicking (ARCH-028 holds outside the tests)"
 )]
 
-use ambre_bus::app::prose::{DocOffset, ProseError, ProseRefusal};
+use ambre_bus::app::prose::{DocChar, ProseError, ProseRefusal};
 use ambre_bus::{AppEvent, UiEvent};
 use ambre_core::id::{Comment, Document, Id, Reply, User};
+use ambre_core::index::Pos;
 use ambre_prose::chrome::{self, ProseCommentsPanel, ProseSignals};
 use ambre_prose::events::{CommentReply, CommentThread, ProseEvent};
 use ambre_prose::ui::ProseUiState;
@@ -51,8 +52,8 @@ fn thread(id: Id<Comment>, replies: &[&str]) -> CommentThread {
     CommentThread {
         comment_id: id,
         anchor_block: None,
-        anchor_start: DocOffset::ZERO,
-        anchor_end: DocOffset::new(3),
+        anchor_start: Pos::<DocChar>::ZERO,
+        anchor_end: Pos::<DocChar>::new(3),
         orphaned: ambre_bus::app::prose::AnchorState::Anchored,
         resolved: ambre_core::ThreadState::Open,
         replies: replies

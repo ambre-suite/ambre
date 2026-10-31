@@ -1276,6 +1276,7 @@ mod pass_tests {
     use super::*;
     use ambre_bus::app::prose::{ProseCommand, ProseEvent};
     use ambre_bus::{AppCommand, AppEvent, DocType};
+    use ambre_core::index::Pos;
 
     /// A state with every outbound receiver kept, and one open Prose document
     /// whose opening answers are already drained.
@@ -1346,7 +1347,7 @@ mod pass_tests {
             document_id: rig.document_id,
             command: AppCommand::Prose(ProseCommand::InsertText {
                 block_id: rig.block,
-                pos: ambre_bus::app::prose::DocOffset::new(pos),
+                pos: Pos::<ambre_bus::app::prose::DocChar>::new(pos),
                 text: "a".to_owned(),
             }),
         }
@@ -1721,6 +1722,7 @@ mod authorship_tests {
     //! The authorship check on the Logic side (`ambre-spec-op-authorship.md`):
     //! Sync derived the PeerID from the signer, and Logic compares it with
     //! every operation a delta carries.
+    use ambre_core::index::Pos;
 
     use super::*;
     use ambre_bus::TrameCommand;
@@ -1770,8 +1772,8 @@ mod authorship_tests {
         assert!(author.adopt_session(peer, crate::test_entry(peer)));
         author
             .handle_command(TrameCommand::SetCellText {
-                row: Row::new(0),
-                col: Col::new(0),
+                row: Pos::<Row>::new(0),
+                col: Pos::<Col>::new(0),
                 text: text.to_owned(),
             })
             .update
@@ -1825,8 +1827,8 @@ mod authorship_tests {
         rig.state.handle_logic_command(LogicCommand::App {
             document_id: rig.document_id,
             command: AppCommand::Trame(TrameCommand::SetCellText {
-                row: Row::new(1),
-                col: Col::new(1),
+                row: Pos::<Row>::new(1),
+                col: Pos::<Col>::new(1),
                 text: text.to_owned(),
             }),
         });
@@ -2233,8 +2235,8 @@ mod authorship_tests {
         rig.state.handle_logic_command(LogicCommand::App {
             document_id: rig.document_id,
             command: AppCommand::Trame(TrameCommand::SetCellText {
-                row: Row::new(1),
-                col: Col::new(1),
+                row: Pos::<Row>::new(1),
+                col: Pos::<Col>::new(1),
                 text: "early".to_owned(),
             }),
         });
@@ -2346,8 +2348,8 @@ mod authorship_tests {
             .map(|text| {
                 author
                     .handle_command(TrameCommand::SetCellText {
-                        row: Row::new(0),
-                        col: Col::new(0),
+                        row: Pos::<Row>::new(0),
+                        col: Pos::<Col>::new(0),
                         text: (*text).to_owned(),
                     })
                     .update

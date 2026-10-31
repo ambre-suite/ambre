@@ -12,6 +12,7 @@
 //!   `DisplayViewport`, and the command / event enums.
 //! * No `LoroDoc` handle, no `unsafe`, US-keyboard characters only.
 
+use ambre_core::index::{Axis, Count, Numbered, Pos, Shown};
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -272,7 +273,7 @@ impl Default for ElementStyle {
 /// title names a region of a board and is read in a one-line field, so nothing
 /// legible reaches this. The cut is what keeps an unbounded register out of a
 /// document every peer replicates.
-pub const FRAME_NAME_MAX: ambre_core::CharCount = ambre_core::CharCount::new(120);
+pub const FRAME_NAME_MAX: Count<ambre_core::Char> = Count::<ambre_core::Char>::new(120);
 
 /// The default sticky-note card colour (RGBA): a warm pastel yellow, the Miro /
 /// Figma-whiteboard default. Used as the seeded fill for a `sticky` element and
@@ -1061,33 +1062,22 @@ impl std::fmt::Debug for ClipElement {
     }
 }
 
-ambre_core::define_index! {
-    /// A message's place in its comment thread, 0 for the opening message. It
-    /// means nothing outside that thread.
-    pub struct ThreadMessageIndex(u32);
-    /// A number of messages in one thread.
-    pub struct ThreadMessageCount;
-    /// The signed gap between two messages of one thread.
-    pub struct ThreadMessageDelta(i64);
-    /// A run of messages of one thread.
-    pub struct ThreadMessageSpan;
-    /// A list indexed by message of one thread.
-    pub struct ThreadMessageVec;
+/// A message's place in its comment thread, 0 for the opening message. It
+/// means nothing outside that thread.
+#[derive(PartialEq, Eq)]
+pub enum ThreadMessage {}
+
+impl Axis for ThreadMessage {
+    const NAME: &'static str = "ThreadMessage";
 }
 
-ambre_core::define_index! {
-    /// The rank of an element in one clipboard payload: its place in
-    /// [`ClipboardPayload::elements`]. It means nothing outside that payload.
-    pub struct ClipSlot(u32);
-    /// A number of elements in one clipboard payload.
-    pub struct ClipSlotCount;
-    /// The signed gap between two clip slots.
-    pub struct ClipSlotDelta(i64);
-    /// A run of clip slots.
-    pub struct ClipSlotSpan;
-    /// A list indexed by clip slot, such as the fresh id of each pasted
-    /// element.
-    pub struct ClipSlotVec;
+/// The rank of an element in one clipboard payload: its place in
+/// [`ClipboardPayload::elements`]. It means nothing outside that payload.
+#[derive(PartialEq, Eq)]
+pub enum ClipSlot {}
+
+impl Axis for ClipSlot {
+    const NAME: &'static str = "ClipSlot";
 }
 
 /// A connector captured with both endpoints remapped to element slot indices.
@@ -1095,8 +1085,8 @@ ambre_core::define_index! {
 /// so both slots always resolve.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipConnector {
-    pub from_slot: ClipSlot,
-    pub to_slot: ClipSlot,
+    pub from_slot: Pos<ClipSlot>,
+    pub to_slot: Pos<ClipSlot>,
     /// Non-endpoint scalar fields (anchors, path type, arrows).
     #[serde(deserialize_with = "known_fields")]
     pub fields: Vec<(ConnectorKey, ClipValue)>,
@@ -1105,8 +1095,8 @@ pub struct ClipConnector {
 /// Group / frame membership remapped from ids to element slot indices.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipMembership {
-    pub parent_slot: ClipSlot,
-    pub child_slots: Vec<ClipSlot>,
+    pub parent_slot: Pos<ClipSlot>,
+    pub child_slots: Vec<Pos<ClipSlot>>,
 }
 
 /// Self-contained, id-free snapshot of a selection produced by `CopyElements`
@@ -1167,19 +1157,14 @@ impl fmt::Debug for InitContent {
     }
 }
 
-ambre_core::define_index! {
-    /// The rank of a media blob in one import batch (`toile-media`). It names
-    /// the blob until Sync returns the blob's address, and it means nothing
-    /// outside that batch.
-    pub struct ImportSlot(u32);
-    /// A number of media blobs in one import batch.
-    pub struct ImportSlotCount;
-    /// The signed gap between two import slots.
-    pub struct ImportSlotDelta(i64);
-    /// A run of import slots.
-    pub struct ImportSlotSpan;
-    /// A list indexed by import slot.
-    pub struct ImportSlotVec;
+/// The rank of a media blob in one import batch (`toile-media`). It names
+/// the blob until Sync returns the blob's address, and it means nothing
+/// outside that batch.
+#[derive(PartialEq, Eq)]
+pub enum ImportSlot {}
+
+impl Axis for ImportSlot {
+    const NAME: &'static str = "ImportSlot";
 }
 
 /// The blob a picture names: one Sync stored, or one an import still holds.
@@ -1192,7 +1177,7 @@ pub enum MediaRef {
     /// The content address Sync returned.
     Stored(ambre_core::ContentHash),
     /// The blob at this slot of an import, before Sync answers.
-    Pending(ImportSlot),
+    Pending(Pos<ImportSlot>),
 }
 
 impl MediaRef {
@@ -1207,17 +1192,12 @@ impl MediaRef {
     }
 }
 
-ambre_core::define_index! {
-    /// A place in the board's z-order, 0 at the back.
-    pub struct ZOrderIndex(u32);
-    /// A number of places in the z-order.
-    pub struct ZOrderCount;
-    /// The signed gap between two places in the z-order.
-    pub struct ZOrderDelta(i64);
-    /// A run of places in the z-order.
-    pub struct ZOrderSpan;
-    /// A list indexed by place in the z-order.
-    pub struct ZOrderVec;
+/// A place in the board's z-order, 0 at the back.
+#[derive(PartialEq, Eq)]
+pub enum ZOrder {}
+
+impl Axis for ZOrder {
+    const NAME: &'static str = "ZOrder";
 }
 
 /// Z-order target for `Reorder` (`toile-z-order`).
@@ -1227,7 +1207,7 @@ pub enum ZTarget {
     Back,
     Forward,
     Backward,
-    Index(ZOrderIndex),
+    Index(Pos<ZOrder>),
 }
 
 /// Which endpoint of a connector to retarget.
@@ -1269,8 +1249,8 @@ pub struct FindResults {
 /// `Debug` prints the length of `insert` alone.
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct TextDelta {
-    pub at: ambre_core::CharOffset,
-    pub delete: ambre_core::CharCount,
+    pub at: Pos<ambre_core::Char>,
+    pub delete: Count<ambre_core::Char>,
     pub insert: String,
 }
 
@@ -1290,8 +1270,8 @@ impl TextDelta {
     /// end.
     pub fn clamped(
         &self,
-        len: ambre_core::CharCount,
-    ) -> (ambre_core::CharOffset, ambre_core::CharCount) {
+        len: Count<ambre_core::Char>,
+    ) -> (Pos<ambre_core::Char>, Count<ambre_core::Char>) {
         let at = self.at.min(len.as_end());
         (at, self.delete.min(len.as_end().count_from(at)))
     }
@@ -1480,7 +1460,7 @@ pub struct CommentThread {
 pub struct CommentPin {
     pub thread: Id<Thread>,
     pub at: Point,
-    pub messages: ThreadMessageCount,
+    pub messages: Count<ThreadMessage>,
     pub resolved: ambre_core::ThreadState,
 }
 
@@ -1496,7 +1476,7 @@ pub struct CommentSummary {
     pub id: Id<Thread>,
     pub anchor: CommentAnchor,
     pub resolved: ambre_core::ThreadState,
-    pub messages: ThreadMessageCount,
+    pub messages: Count<ThreadMessage>,
     pub preview: String,
 }
 
@@ -1662,50 +1642,33 @@ impl Padding {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PlaybackState {
     /// Index into the shared slide `order`; clamped to the deck length.
-    pub active: SlideIndex,
+    pub active: Pos<Slide>,
     /// Whether the presentation hides the editing chrome.
     pub focus: PresentFocus,
 }
 
-ambre_core::define_index! {
-    /// A slide's zero-based rank in the shared slide order
-    /// (`toile-presentation`). The deck names frames by id, and this rank
-    /// only says which of them a viewer is on.
-    pub struct SlideIndex(u32);
-    /// A number of slides.
-    pub struct SlideCount;
-    /// The signed gap between two slide ranks.
-    pub struct SlideDelta(i64);
-    /// A run of slide ranks.
-    pub struct SlideSpan;
-    /// A list indexed by slide rank.
-    pub struct SlideVec;
+/// A slide's zero-based rank in the shared slide order
+/// (`toile-presentation`). The deck names frames by id, and this rank
+/// only says which of them a viewer is on.
+#[derive(PartialEq, Eq)]
+pub enum Slide {}
+
+impl Axis for Slide {
+    const NAME: &'static str = "Slide";
 }
 
-impl SlideIndex {
-    /// The number a person reads for this slide: the first slide is 1. It is
-    /// the count of slides up to and with this one, so it saturates with the
-    /// axis.
-    #[must_use]
-    pub const fn number(self) -> SlideCount {
-        self.next().count_from(Self::ZERO)
+/// The number a person reads for a slide: the first slide is 1. It is the
+/// count of slides up to and with this one, so it saturates with the axis.
+impl Numbered for Slide {
+    type Number = Count<Slide>;
+
+    fn number_of(pos: Pos<Slide>) -> Count<Slide> {
+        Count::through(pos)
     }
 }
 
-impl SlideCount {
-    /// `index` pulled back into a deck of this many slides. A rank past the
-    /// end reads as the last slide, and an empty deck reads as the first.
-    #[must_use]
-    pub fn clamp(self, index: SlideIndex) -> SlideIndex {
-        index.min(self.as_end().prev().unwrap_or(SlideIndex::ZERO))
-    }
-}
-
-impl std::fmt::Display for SlideCount {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.get().fmt(f)
-    }
-}
+/// A deck shows its number of slides to a reader.
+impl Shown for Slide {}
 
 /// Whether a presentation hides the editing chrome (`toile-presentation`,
 /// `EnterPresent { focus }`).
@@ -1797,26 +1760,26 @@ impl Broadcast {
 /// The index is below the count, and both read 0 on an empty deck.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SlidePosition {
-    index: SlideIndex,
-    count: SlideCount,
+    index: Pos<Slide>,
+    count: Count<Slide>,
 }
 
 impl SlidePosition {
     /// Slide `index` of a deck of `count`, the index pulled back into the deck.
-    pub fn new(index: SlideIndex, count: SlideCount) -> Self {
+    pub fn new(index: Pos<Slide>, count: Count<Slide>) -> Self {
         Self {
-            index: count.clamp(index),
+            index: index.within(count),
             count,
         }
     }
 
     /// The zero-based index of the slide on screen.
-    pub fn index(self) -> SlideIndex {
+    pub fn index(self) -> Pos<Slide> {
         self.index
     }
 
     /// How many slides the deck holds.
-    pub fn count(self) -> SlideCount {
+    pub fn count(self) -> Count<Slide> {
         self.count
     }
 }
@@ -2052,7 +2015,7 @@ pub enum ToileCommand {
     PrevSlide,
     /// Jump the local playback cursor to `0`-based slide index, clamped to the
     /// deck length (`toile-presentation`). Local only.
-    GotoSlide(SlideIndex),
+    GotoSlide(Pos<Slide>),
     /// Enter presentation (focus) mode, resetting the cursor to the first slide;
     /// `focus` drives whether the UI hides its chrome
     /// (`toile-presentation`). Local only.
@@ -2133,7 +2096,7 @@ pub enum ToileCommand {
     /// rejected no-op.
     EditComment {
         thread: Id<Thread>,
-        message: ThreadMessageIndex,
+        message: Pos<ThreadMessage>,
         delta: TextDelta,
     },
     /// Resolve `thread`, or reopen it. Idempotent and convergent, and it
@@ -2608,7 +2571,7 @@ pub struct PresencePayload {
     /// it. `None` = not broadcasting. Purely ephemeral, like every other field
     /// here (the playback position is never CRDT -- see the rejected-decisions
     /// table).
-    pub present_slide: Option<SlideIndex>,
+    pub present_slide: Option<Pos<Slide>>,
 }
 
 /// A remote peer's latest presence, keyed by the canonical `Id<User>`
@@ -3206,7 +3169,7 @@ mod tests {
             id: thread.clone(),
             anchor: CommentAnchor::Element(id.clone()),
             resolved: ambre_core::ThreadState::default(),
-            messages: ThreadMessageCount::new(1),
+            messages: Count::<ThreadMessage>::new(1),
             preview: secret.clone(),
         };
         let frame = DeckFrame {

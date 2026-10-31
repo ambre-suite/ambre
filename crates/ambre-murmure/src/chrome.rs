@@ -9,6 +9,7 @@
 // Wasm-only, like the rest of the chrome stack (leptos CSR + DOM).
 // ============================================================================
 
+use ambre_core::index::{Count, Pos};
 use std::collections::{HashMap, HashSet};
 
 use crate::commands::{
@@ -19,7 +20,7 @@ use crate::commands::{
 use crate::drafts::DraftShelf;
 use crate::emoji;
 use crate::markers::{Cover, MarkBar};
-use crate::mention_list::{MentionList, OfferIndex};
+use crate::mention_list::{MentionEntry, MentionList};
 use crate::uploads::PickedFile;
 use crate::{
     Activity, MessageRef, MurmurePane, Region, Sidebar, SidebarEntry, SidebarGroup, SidebarSection,
@@ -365,7 +366,7 @@ pub struct MurmureRelay {
     /// (`MURMURE-555`).
     pub mentions: RwSignal<Option<MentionList>>,
     /// The entry a click picked in the `@` list, until its region takes it.
-    picked: RwSignal<Option<(Region, OfferIndex)>>,
+    picked: RwSignal<Option<(Region, Pos<MentionEntry>)>>,
     /// The format bar a region of the page shows, `None` while nothing is
     /// selected (`MURMURE-432`).
     pub mark_bar: RwSignal<Option<MarkBar>>,
@@ -424,7 +425,10 @@ impl std::fmt::Debug for SearchBox {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SearchBox")
             .field("open", &self.open)
-            .field("query", &ambre_core::ByteCount::from_len(self.query.len()))
+            .field(
+                "query",
+                &Count::<ambre_core::Byte>::from_len(self.query.len()),
+            )
             .field("channels", &self.channels.len())
             .finish()
     }
@@ -505,7 +509,10 @@ impl std::fmt::Debug for Notice {
         f.debug_struct("Notice")
             .field("channel_id", &self.channel_id)
             .field("at", &self.at)
-            .field("title", &ambre_core::ByteCount::from_len(self.title.len()))
+            .field(
+                "title",
+                &Count::<ambre_core::Byte>::from_len(self.title.len()),
+            )
             .finish()
     }
 }
@@ -1273,7 +1280,7 @@ impl MurmureRelay {
 
     /// A click on the entry `index` of the `@` list shown: its region takes
     /// the pick at its next frame (`MURMURE-555`).
-    pub fn pick_mention(&self, index: OfferIndex) {
+    pub fn pick_mention(&self, index: Pos<MentionEntry>) {
         if let Some(region) = self
             .mentions
             .with_untracked(|m| m.as_ref().map(|m| m.region))
@@ -1283,7 +1290,7 @@ impl MurmureRelay {
     }
 
     /// The pick of `region`, taken once.
-    pub fn take_pick(&self, region: Region) -> Option<OfferIndex> {
+    pub fn take_pick(&self, region: Region) -> Option<Pos<MentionEntry>> {
         let (picked, index) = self.picked.get_untracked()?;
         if picked != region {
             return None;

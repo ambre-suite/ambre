@@ -8,6 +8,7 @@
 
 use super::*;
 use crate::formula::shift::shift_formula;
+use ambre_core::index::Count;
 
 impl TrameState {
     /// Paste `payload` with its top-left landing on `target`
@@ -86,14 +87,14 @@ impl TrameState {
         let origin = self.active;
         let normalized = text.replace('\r', "");
         let mut cells = Vec::new();
-        let mut rows = RowCount::ZERO;
-        let mut cols = ColCount::ZERO;
+        let mut rows = Count::<Row>::ZERO;
+        let mut cols = Count::<Col>::ZERO;
         for (dr, line) in normalized.trim_end_matches('\n').split('\n').enumerate() {
-            let dr = RowCount::from_len(dr);
-            rows = rows.max(dr + RowCount::ONE);
+            let dr = Count::<Row>::from_len(dr);
+            rows = rows.max(dr + Count::<Row>::ONE);
             for (dc, field) in line.split('\t').enumerate() {
-                let dc = ColCount::from_len(dc);
-                cols = cols.max(dc + ColCount::ONE);
+                let dc = Count::<Col>::from_len(dc);
+                cols = cols.max(dc + Count::<Col>::ONE);
                 if field.is_empty() {
                     continue;
                 }

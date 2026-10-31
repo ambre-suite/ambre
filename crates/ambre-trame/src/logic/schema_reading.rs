@@ -25,6 +25,7 @@
 //! here, so a command added to it lands with a raised version, like a new key.
 
 use ambre_core::Rgb;
+use ambre_core::index::Pos;
 use std::collections::BTreeSet;
 
 use ambre_bus::{CellBorder, CellStyle, SheetId, TrameCommand};
@@ -475,7 +476,7 @@ fn a_stored_value_moving_moves_the_reading() {
     moved.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::ZERO,
         sheet_id: super::schema::default_sheet(),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         width: ambre_core::Px::<ambre_core::Doc>::new(90.0),
     });
     let after = readings_of(&moved, &reopened(&moved)).lines;
@@ -489,8 +490,10 @@ fn a_reader_moving_moves_the_reading() {
     // A reader that takes the stored width as points: the stored bytes are
     // the same, only what this build makes of them moved.
     let mut misread = reopened(&state);
-    let width = misread.col_width(Col::new(0));
-    misread.col_widths.insert(Col::new(0), width * 96.0 / 72.0);
+    let width = misread.col_width(Pos::<Col>::new(0));
+    misread
+        .col_widths
+        .insert(Pos::<Col>::new(0), width * 96.0 / 72.0);
     let after = readings_of(&state, &misread).lines;
     assert_ne!(
         render(&before),

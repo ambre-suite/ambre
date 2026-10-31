@@ -2,10 +2,11 @@
 //! (`features/ambre-spec-murmure-composer.md`).
 
 use crate::Receipt;
-use ambre_bus::CharSpan;
+use ambre_bus::Char;
 use ambre_bus::{MessageDraft, MessageView, StyleMark, TextStyle, Timestamp};
 use ambre_core::Seq;
 use ambre_core::id::{Channel, Id, User};
+use ambre_core::index::Span;
 use loro::{Container, LoroText, LoroValue, TextDelta, ValueOrContainer};
 
 use crate::schema::{Mark, MessageKey, Root};
@@ -46,7 +47,7 @@ fn open_from(state: &ChannelState) -> ChannelState {
 fn mark(style: TextStyle, range: std::ops::Range<usize>) -> StyleMark {
     StyleMark {
         style,
-        range: CharSpan::from_usize_range(range),
+        range: Span::<Char>::from_usize_range(range),
     }
 }
 

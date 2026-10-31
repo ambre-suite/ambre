@@ -2,12 +2,13 @@
 //! (`features/ambre-spec-murmure-messages.md`).
 
 use crate::Receipt;
-use ambre_bus::CharSpan;
+use ambre_bus::Char;
 use ambre_bus::{
     ActivityKind, Mention, MentionTarget, MessageDraft, MessageView, Reaction, Timestamp,
 };
 use ambre_core::Seq;
 use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
+use ambre_core::index::Span;
 
 use crate::schema::{self, Root};
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
@@ -137,7 +138,7 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
         styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::User(carol),
-            range: CharSpan::from_usize_range(0..6),
+            range: Span::<Char>::from_usize_range(0..6),
         }],
     });
     assert_eq!(alice.only_message().edited, ambre_bus::Revision::Original);
@@ -146,7 +147,7 @@ fn an_edit_changes_the_body_and_marks_the_message_edited() {
         styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::User(dave),
-            range: CharSpan::from_usize_range(15..20),
+            range: Span::<Char>::from_usize_range(15..20),
         }],
     };
 
@@ -192,7 +193,7 @@ fn an_edit_with_a_mention_past_its_body_is_refused() {
         styles: Vec::new(),
         mentions: vec![Mention {
             target: MentionTarget::Channel,
-            range: CharSpan::from_usize_range(0..9),
+            range: Span::<Char>::from_usize_range(0..9),
         }],
     };
     let refused = alice

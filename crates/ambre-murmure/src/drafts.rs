@@ -10,13 +10,14 @@
 //! The key of a row starts with the user's identifier. So a second person
 //! signed in on the device reads none of the first's.
 
+use ambre_core::index::{Pos, Span};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use ambre_bus::{DraftKey, Mention, MentionTarget, MessageDraft, StyleMark, TextStyle};
 use ambre_core::id::{Channel, Id, Message, User};
-use ambre_core::{CharOffset, CharSpan, Generation, GenerationKind};
+use ambre_core::{Char, Generation, GenerationKind};
 use serde::{Deserialize, Serialize};
 
 use crate::composer::DraftOf;
@@ -277,8 +278,8 @@ struct Row {
 #[derive(Serialize, Deserialize)]
 struct RowMention {
     user: Option<Id<User>>,
-    start: CharOffset,
-    end: CharOffset,
+    start: Pos<Char>,
+    end: Pos<Char>,
 }
 
 /// A style of a row, by its mark name, with the address of a link. A name
@@ -288,8 +289,8 @@ struct RowStyle {
     #[serde(with = "mark_name")]
     style: Option<Mark>,
     link: Option<ambre_core::LinkUrl>,
-    start: CharOffset,
-    end: CharOffset,
+    start: Pos<Char>,
+    end: Pos<Char>,
 }
 
 /// A style name kept as the word of its mark. An older or a newer build may
@@ -365,7 +366,7 @@ fn decode(row: &DraftRow) -> Option<MessageDraft> {
             target: mention
                 .user
                 .map_or(MentionTarget::Channel, MentionTarget::User),
-            range: CharSpan::new(mention.start, mention.end),
+            range: Span::<Char>::new(mention.start, mention.end),
         })
         .collect();
     let styles = row
@@ -386,7 +387,7 @@ fn decode(row: &DraftRow) -> Option<MessageDraft> {
             };
             Some(StyleMark {
                 style,
-                range: CharSpan::new(mark.start, mark.end),
+                range: Span::<Char>::new(mark.start, mark.end),
             })
         })
         .collect();
@@ -429,11 +430,11 @@ mod tests {
             mentions: vec![
                 Mention {
                     target: MentionTarget::User(ada),
-                    range: CharSpan::from_usize_range(3..7),
+                    range: Span::<Char>::from_usize_range(3..7),
                 },
                 Mention {
                     target: MentionTarget::Channel,
-                    range: CharSpan::from_usize_range(8..16),
+                    range: Span::<Char>::from_usize_range(8..16),
                 },
             ],
             styles: [
@@ -448,7 +449,7 @@ mod tests {
             .into_iter()
             .map(|style| StyleMark {
                 style,
-                range: CharSpan::from_usize_range(0..2),
+                range: Span::<Char>::from_usize_range(0..2),
             })
             .collect(),
         };

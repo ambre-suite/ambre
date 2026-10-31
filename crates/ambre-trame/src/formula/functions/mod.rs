@@ -5,7 +5,8 @@
 //! `Range` values transparently (so `SUM(A1:A10)` works with the range as a
 //! single argument containing 10 values).
 
-use ambre_bus::{Col, ColCount, Row, RowCount};
+use ambre_bus::{Col, Row};
+use ambre_core::index::Pos;
 
 use super::types::{CellValue, FormulaError, FunctionName, finite_number, nearly_equal};
 use ambre_bus::{DateParts, DateSerial, DayCount, DayOfMonth, DaySerial, MonthCount, Year};
@@ -35,9 +36,9 @@ use builtins_c::*;
 pub struct FnCtx {
     pub now_serial: DateSerial,
     /// The row of the evaluating cell, `None` when it is unknown.
-    pub cell_row: Option<Row>,
+    pub cell_row: Option<Pos<Row>>,
     /// The column of the evaluating cell, `None` when it is unknown.
-    pub cell_col: Option<Col>,
+    pub cell_col: Option<Pos<Col>>,
 }
 
 impl FnCtx {

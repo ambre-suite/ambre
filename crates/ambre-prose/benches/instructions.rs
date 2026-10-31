@@ -13,6 +13,7 @@
 
 #![allow(clippy::panic, reason = "a bench aborts on a fixture it cannot run")]
 
+use ambre_core::index::Count;
 use std::hint::black_box;
 
 use ambre_bus::app::prose::ParagraphStyle;
@@ -21,7 +22,7 @@ use ambre_draw::ParleyBrush;
 use ambre_prose::doc::DocDefaults;
 use ambre_prose::layout::fonts::register_faces;
 use ambre_prose::layout::measure::{EffectiveStyle, Measurer, reshape_paragraph};
-use ambre_prose::layout::run::{ParleyRunData, RunLineCount, ShapedRun};
+use ambre_prose::layout::run::{ParleyRunData, RunLine, ShapedRun};
 use parley::{FontContext, LayoutContext};
 
 /// The longest paragraph the "Text layout" row holds to its budget at its
@@ -124,7 +125,7 @@ fn paragraph_shape() {
                 &style,
                 Px::<Doc>::new(COLUMN_PX),
             );
-            if run.data().segment_count() == ambre_prose::layout::run::RunSegmentCount::ONE {
+            if run.data().segment_count() == Count::<ambre_prose::layout::run::RunSegment>::ONE {
                 found = Some((laid, typed));
                 break 'search;
             }
@@ -140,7 +141,7 @@ fn paragraph_shape() {
         black_box(&typed),
         &style,
     );
-    if run.data().line_count() < RunLineCount::new(2) {
+    if run.data().line_count() < Count::<RunLine>::new(2) {
         panic!("a long paragraph breaks into lines");
     }
 }

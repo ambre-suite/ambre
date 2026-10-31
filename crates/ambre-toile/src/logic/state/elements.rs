@@ -648,6 +648,7 @@ mod inner_tests {
     //! undo item, the invariant `apply_import` relies on.
 
     use ambre_core::Rgba;
+    use ambre_core::index::Pos;
     use kurbo::{Point, Size};
 
     use crate::logic::align::AlignOp;
@@ -680,7 +681,7 @@ mod inner_tests {
             Point::ZERO,
             Size::new(10.0, 10.0),
             InitContent::Image(crate::logic::command::MediaRef::Pending(
-                crate::logic::command::ImportSlot::ZERO,
+                Pos::<crate::logic::command::ImportSlot>::ZERO,
             )),
             None,
         );

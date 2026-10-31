@@ -12,12 +12,11 @@ mod html_read;
 mod html_write;
 mod sink;
 
+use ambre_core::index::{Count, Pos, Span};
 use loro::{LoroValue, TreeID, TreeParentId};
 use serde::{Deserialize, Serialize};
 
-use ambre_bus::app::prose::{
-    BlockInit, CodeLang, DocCount, DocOffset, DocSpan, HeadingLevel, ListStyle, OrderedStyle,
-};
+use ambre_bus::app::prose::{BlockInit, CodeLang, DocChar, HeadingLevel, ListStyle, OrderedStyle};
 
 use super::ProseState;
 use super::text::{MarkedRun, marked_runs, write_runs};
@@ -248,11 +247,10 @@ fn marked(block: &ClipBlock) -> Vec<MarkedRun> {
     block.runs.iter().map(ClipRun::marked).collect()
 }
 
-fn len_of(block: &ClipBlock) -> DocCount {
-    block
-        .runs
-        .iter()
-        .fold(DocCount::ZERO, |sum, run| sum + DocCount::of(&run.text))
+fn len_of(block: &ClipBlock) -> Count<DocChar> {
+    block.runs.iter().fold(Count::<DocChar>::ZERO, |sum, run| {
+        sum + ambre_core::char_len(&run.text).as_axis::<DocChar>()
+    })
 }
 
 impl ProseState {
@@ -277,8 +275,8 @@ impl ProseState {
     /// (`PROSE-UI-040`). It writes nothing (`PROSE-UI-109`).
     pub(super) fn copy_range(
         &self,
-        anchor: (BlockId, DocOffset),
-        focus: (BlockId, DocOffset),
+        anchor: (BlockId, Pos<DocChar>),
+        focus: (BlockId, Pos<DocChar>),
     ) -> ProseOutcome {
         let mut blocks = Vec::new();
         let mut text = String::new();
@@ -319,7 +317,7 @@ impl ProseState {
 
     /// Write plain text of several lines at `at`, one paragraph per line,
     /// the way a rich payload of paragraphs lands (`PROSE-UI-042`).
-    fn paste_text(&mut self, at: (TreeID, DocOffset), text: &str) -> ProseOutcome {
+    fn paste_text(&mut self, at: (TreeID, Pos<DocChar>), text: &str) -> ProseOutcome {
         let blocks = text
             .split('\n')
             .map(|line| ClipBlock {
@@ -351,7 +349,7 @@ impl ProseState {
     /// through to the next half.
     pub(super) fn paste(
         &mut self,
-        at: (TreeID, DocOffset),
+        at: (TreeID, Pos<DocChar>),
         text: &str,
         html: Option<&str>,
         bytes: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>,
@@ -377,19 +375,19 @@ impl ProseState {
         self.paste_text(at, text)
     }
 
-    fn paste_blocks(&mut self, at: (TreeID, DocOffset), payload: Payload) -> ProseOutcome {
+    fn paste_blocks(&mut self, at: (TreeID, Pos<DocChar>), payload: Payload) -> ProseOutcome {
         let Some(body) = self.body_of(&at.0) else {
             return Self::err_no_block(&at.0);
         };
         let pos = at.1;
-        let len = DocCount::from_len(body.len_unicode()).as_end();
+        let len = Count::<DocChar>::from_len(body.len_unicode()).as_end();
         if pos > len {
             return Self::err_bad_range();
         }
         let Some((first, rest)) = payload.blocks.split_first() else {
             return ProseOutcome::nothing();
         };
-        if len == DocOffset::ZERO
+        if len == Pos::<DocChar>::ZERO
             && let Err(refused) = self.adopt(&at.0, first)
         {
             return refused;
@@ -407,7 +405,7 @@ impl ProseState {
         if doc::is_aside(&doc::blocks(&self.doc), &at.0) {
             return Self::err_nesting();
         }
-        let tail = marked_runs(&body, DocSpan::new(pos, len));
+        let tail = marked_runs(&body, Span::<DocChar>::new(pos, len));
         if pos < len
             && let Err(e) = body.delete(pos.to_usize(), len.count_from(pos).to_usize())
         {
@@ -427,7 +425,7 @@ impl ProseState {
                 return Self::err_write(e);
             }
             let text = doc::get_block_text(&self.doc, &id);
-            if let Err(e) = write_runs(&text, DocOffset::ZERO, &marked(block)) {
+            if let Err(e) = write_runs(&text, Pos::<DocChar>::ZERO, &marked(block)) {
                 return Self::err_write(e);
             }
             previous = id;
@@ -482,8 +480,8 @@ mod tests {
     use crate::events::{BlockInit, ProseCommand};
     use crate::link::HREF_MAX;
     use crate::view::tests::append;
+    use ambre_bus::app::prose::DocChar;
     use ambre_bus::app::prose::OrderedStyle;
-    use ambre_bus::app::prose::{DocOffset, DocSpan};
 
     #[test]
     fn a_copied_run_prints_its_text_by_length_alone() {
@@ -505,8 +503,8 @@ mod tests {
         bool,
     ) {
         let (anchor, focus) = (
-            (anchor.0, DocOffset::new(anchor.1)),
-            (focus.0, DocOffset::new(focus.1)),
+            (anchor.0, Pos::<DocChar>::new(anchor.1)),
+            (focus.0, Pos::<DocChar>::new(focus.1)),
         );
         let outcome = state.handle_command(ProseCommand::CopyRange { anchor, focus });
         let wrote = outcome.update.is_some();
@@ -555,7 +553,7 @@ mod tests {
         let bold = append(&mut state, BlockInit::Paragraph, "bold text");
         state.handle_command(ProseCommand::ApplyMark {
             block_id: bold,
-            range: DocSpan::from_usize_range(0..4),
+            range: Span::<DocChar>::from_usize_range(0..4),
             key: "b".into(),
             value: None,
         });
@@ -569,7 +567,7 @@ mod tests {
         let (text, payload, _) = copied(&mut state, (heading, 0), (item, 4));
         let target = append(&mut state, BlockInit::Paragraph, "");
         state.handle_command(ProseCommand::Paste {
-            at: (target, DocOffset::ZERO),
+            at: (target, Pos::<DocChar>::ZERO),
             text,
             html: None,
             payload: Some(payload),
@@ -610,7 +608,7 @@ mod tests {
         };
         let bytes = postcard::to_allocvec(&payload).expect("a payload encodes");
         state.handle_command(ProseCommand::Paste {
-            at: (first, DocOffset::ZERO),
+            at: (first, Pos::<DocChar>::ZERO),
             text: "x".repeat(len),
             html: None,
             payload: Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
@@ -619,9 +617,9 @@ mod tests {
         });
         assert_eq!(state.text_of(&first), Some("x".repeat(len)));
         let body = state.body_of(&tree_id(first)).expect("the paragraph");
-        let span = DocSpan::new(
-            DocOffset::ZERO,
-            DocCount::from_len(body.len_unicode()).as_end(),
+        let span = Span::<DocChar>::new(
+            Pos::<DocChar>::ZERO,
+            Count::<DocChar>::from_len(body.len_unicode()).as_end(),
         );
         marked_runs(&body, span)
             .into_iter()
@@ -754,7 +752,7 @@ mod tests {
     fn foreign_bytes_paste_as_plain_text() {
         let (mut state, first) = document();
         state.handle_command(ProseCommand::Paste {
-            at: (first, DocOffset::ZERO),
+            at: (first, Pos::<DocChar>::ZERO),
             text: "one\ntwo".to_owned(),
             html: None,
             payload: Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
@@ -775,7 +773,7 @@ mod tests {
         let middle = append(&mut state, BlockInit::Paragraph, "headtail");
         let after = append(&mut state, BlockInit::Paragraph, "after");
         let outcome = state.handle_command(ProseCommand::Paste {
-            at: (middle, DocOffset::new(4)),
+            at: (middle, Pos::<DocChar>::new(4)),
             text: "A\nB".to_owned(),
             html: None,
             payload: None,
@@ -799,8 +797,8 @@ mod tests {
         focus: (BlockId, u32),
     ) -> ProseEvent {
         let (anchor, focus) = (
-            (anchor.0, DocOffset::new(anchor.1)),
-            (focus.0, DocOffset::new(focus.1)),
+            (anchor.0, Pos::<DocChar>::new(anchor.1)),
+            (focus.0, Pos::<DocChar>::new(focus.1)),
         );
         let outcome = state.handle_command(ProseCommand::CopyRange { anchor, focus });
         outcome.display.into_iter().next().expect("a copy answers")
@@ -840,7 +838,10 @@ mod tests {
         ] {
             state.handle_command(ProseCommand::ApplyMark {
                 block_id: body,
-                range: DocSpan::new(DocOffset::new(range.0), DocOffset::new(range.1)),
+                range: Span::<DocChar>::new(
+                    Pos::<DocChar>::new(range.0),
+                    Pos::<DocChar>::new(range.1),
+                ),
                 key: key.into(),
                 value: value.map(crate::mark::test_value),
             });
@@ -870,7 +871,7 @@ mod tests {
         let count = state.root_blocks().len();
         let rich = append(&mut state, BlockInit::Paragraph, "");
         state.handle_command(ProseCommand::Paste {
-            at: (rich, DocOffset::ZERO),
+            at: (rich, Pos::<DocChar>::ZERO),
             text: text.clone(),
             html: None,
             payload: Some(payload),
@@ -878,7 +879,7 @@ mod tests {
         let middle = state.root_blocks().len();
         let from_html = append(&mut state, BlockInit::Paragraph, "");
         state.handle_command(ProseCommand::Paste {
-            at: (from_html, DocOffset::ZERO),
+            at: (from_html, Pos::<DocChar>::ZERO),
             text,
             html: Some(html),
             payload: None,
@@ -958,7 +959,7 @@ mod tests {
         let (mut state, first) = document();
         state.handle_command(ProseCommand::InsertText {
             block_id: first,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "own".to_owned(),
         });
         let ProseEvent::Clipboard { payload, .. } = clipboard(&mut state, (first, 0), (first, 3))
@@ -971,7 +972,7 @@ mod tests {
              payload: Option<ambre_core::Payload<ambre_core::ClipboardBytes>>| {
                 let target = append(state, BlockInit::Paragraph, "");
                 state.handle_command(ProseCommand::Paste {
-                    at: (target, DocOffset::ZERO),
+                    at: (target, Pos::<DocChar>::ZERO),
                     text: "plain".to_owned(),
                     html: html.map(str::to_owned),
                     payload,
@@ -1063,7 +1064,7 @@ mod tests {
                 .expect("the fixture is committed");
             let (mut state, first) = document();
             state.handle_command(ProseCommand::Paste {
-                at: (first, DocOffset::ZERO),
+                at: (first, Pos::<DocChar>::ZERO),
                 text: String::new(),
                 html: Some(html),
                 payload: None,

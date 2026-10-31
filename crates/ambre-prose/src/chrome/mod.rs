@@ -9,6 +9,7 @@
 // one `AnnotationIntent`: the DOM holds no command channel.
 // ============================================================================
 
+use ambre_core::index::Pos;
 use std::collections::HashMap;
 
 use ambre_core::id::{Comment, Id};
@@ -74,7 +75,7 @@ pub struct ProseSignals {
     /// The slash menu, its anchor in CSS pixels (`PROSE-UI-090`).
     pub slash: RwSignal<SlashMenuState>,
     /// The menu item picked with the pointer, until the view drains it.
-    pub slash_pick: RwSignal<Option<crate::view::slash::SlashChoice>>,
+    pub slash_pick: RwSignal<Option<Pos<crate::view::slash::SlashChoice>>>,
     /// The ruler (`PROSE-UI-064`).
     pub ruler: RwSignal<RulerState>,
     /// A released ruler handle, until the view drains it (`PROSE-UI-063`).

@@ -8,10 +8,11 @@
 //! (`PROSE-UI-097`).
 
 use ambre_commands::CommandId;
+use ambre_core::index::Span;
 use ambre_core::{Doc, Point, Px, View};
 
 use crate::events::{ActiveMarks, MarkAction, ProseCommand, TriState};
-use crate::layout::run::RunSpan;
+use crate::layout::run::RunChar;
 use crate::mark::MarkRoot;
 use crate::ui::ProseUiState;
 use crate::view::caret::Spot;
@@ -140,7 +141,7 @@ impl ProseUiState {
             run.len().as_end()
         };
         let first = run
-            .range_boxes(RunSpan::new(from, to.max(from)))
+            .range_boxes(Span::<RunChar>::new(from, to.max(from)))
             .into_iter()
             .next();
         let (x0, x1, y0) = match first {

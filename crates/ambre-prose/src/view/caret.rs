@@ -7,13 +7,14 @@
 
 use ambre_commands::SelectionMode;
 use ambre_core::StepDirection;
+use ambre_core::index::{Count, Pos};
 use ambre_core::{Doc, Point, Px, View};
 use ambre_draw::kinetic::EdgeSpeed;
 
 use crate::events::{BlockId, CursorPosition, block_id, tree_id};
-use ambre_bus::app::prose::{DocCount, DocOffset};
+use ambre_bus::app::prose::DocChar;
 
-use crate::layout::run::{Affinity, LineEdge, ParleyRunData, RunCount, RunLine, RunOffset};
+use crate::layout::run::{Affinity, LineEdge, ParleyRunData, RunChar, RunLine};
 use crate::ui::ProseUiState;
 use crate::view::hit::HitOffset;
 
@@ -49,7 +50,7 @@ pub(crate) enum SelectUnit {
 }
 
 /// A place in the text: a block and a code-point offset.
-pub(crate) type Spot = (BlockId, DocOffset);
+pub(crate) type Spot = (BlockId, Pos<DocChar>);
 
 impl ProseUiState {
     /// The run the view draws a text block with. The provisional one serves
@@ -74,7 +75,7 @@ impl ProseUiState {
     /// The first and the last text block of the document, the last with its
     /// length in the layout in force. They hold whether or not the layout in
     /// force carries them (`PROSE-UI-167`).
-    pub(crate) fn text_ends(&self) -> Option<(BlockId, BlockId, RunCount)> {
+    pub(crate) fn text_ends(&self) -> Option<(BlockId, BlockId, Count<RunChar>)> {
         let ends = self.shaped.ends()?;
         let last = block_id(ends.last);
         let len = self.run_of(last).map_or(ends.last_len, ParleyRunData::len);
@@ -86,7 +87,7 @@ impl ProseUiState {
         let after = direction == StepDirection::Forward;
         let index = self.flow_index(&tree_id(block))?;
         let is_text = |(at, b): &(
-            crate::layout::run::FlowIndex,
+            Pos<crate::layout::run::Flow>,
             &crate::layout::place::BlockLayout,
         )| {
             (if after { *at > index } else { *at < index })
@@ -101,31 +102,31 @@ impl ProseUiState {
     }
 
     /// How many code points a block holds, the draft typed into it counted.
-    pub(crate) fn block_len(&self, block: BlockId) -> DocCount {
+    pub(crate) fn block_len(&self, block: BlockId) -> Count<DocChar> {
         if let Some(run) = self.provisional_run(block) {
-            return run.data().len().as_doc();
+            return run.data().len().as_axis::<DocChar>();
         }
         let laid = self
             .run_of(block)
-            .map_or(RunCount::ZERO, ParleyRunData::len);
-        let end = laid.as_end().as_doc() + self.draft.delta(block);
-        end.count_from(DocOffset::ZERO)
+            .map_or(Count::<RunChar>::ZERO, ParleyRunData::len);
+        let end = laid.as_end().as_axis::<DocChar>() + self.draft.delta(block);
+        end.count_from(Pos::<DocChar>::ZERO)
     }
 
     /// A document offset, as the run [`Self::run_of`] gives counts it. A laid
     /// run lacks the draft, so the draft is taken out; a provisional one
     /// holds it.
-    pub(crate) fn to_laid(&self, block: BlockId, offset: DocOffset) -> RunOffset {
+    pub(crate) fn to_laid(&self, block: BlockId, offset: Pos<DocChar>) -> Pos<RunChar> {
         if self.provisional_run(block).is_some() {
-            return RunOffset::from_doc(offset);
+            return offset.as_axis::<RunChar>();
         }
         self.draft.to_laid(block, offset)
     }
 
     /// An offset of the run [`Self::run_of`] gives, as the document counts it.
-    pub(crate) fn to_doc(&self, block: BlockId, laid: RunOffset) -> DocOffset {
+    pub(crate) fn to_doc(&self, block: BlockId, laid: Pos<RunChar>) -> Pos<DocChar> {
         if self.provisional_run(block).is_some() {
-            return laid.as_doc();
+            return laid.as_axis::<DocChar>();
         }
         self.draft.to_doc(block, laid)
     }
@@ -214,7 +215,7 @@ impl ProseUiState {
                 (block, offset, up)
             }
             Direction::DocStart => match self.text_ends() {
-                Some((first, ..)) => (first, RunOffset::ZERO, Affinity::Downstream),
+                Some((first, ..)) => (first, Pos::<RunChar>::ZERO, Affinity::Downstream),
                 None => (block, laid, affinity),
             },
             Direction::DocEnd => match self.text_ends() {
@@ -252,10 +253,10 @@ impl ProseUiState {
     fn step(
         &self,
         block: BlockId,
-        laid: RunOffset,
+        laid: Pos<RunChar>,
         direction: StepDirection,
         unit: StepUnit,
-    ) -> (BlockId, RunOffset, Affinity) {
+    ) -> (BlockId, Pos<RunChar>, Affinity) {
         let Some(run) = self.run_of(block) else {
             return (block, laid, Affinity::Downstream);
         };
@@ -269,11 +270,13 @@ impl ProseUiState {
             return (block, offset, Affinity::Downstream);
         }
         match (self.neighbour(block, direction), direction) {
-            (Some(next), StepDirection::Forward) => (next, RunOffset::ZERO, Affinity::Downstream),
+            (Some(next), StepDirection::Forward) => {
+                (next, Pos::<RunChar>::ZERO, Affinity::Downstream)
+            }
             (Some(next), StepDirection::Backward) => (
                 next,
                 self.run_of(next)
-                    .map_or(RunCount::ZERO, ParleyRunData::len)
+                    .map_or(Count::<RunChar>::ZERO, ParleyRunData::len)
                     .as_end(),
                 Affinity::Downstream,
             ),
@@ -287,11 +290,11 @@ impl ProseUiState {
     fn line_step(
         &self,
         block: BlockId,
-        laid: RunOffset,
+        laid: Pos<RunChar>,
         affinity: Affinity,
         direction: StepDirection,
         x_goal: Option<Px<Doc>>,
-    ) -> (BlockId, RunOffset, Affinity) {
+    ) -> (BlockId, Pos<RunChar>, Affinity) {
         let Some(run) = self.run_of(block) else {
             return (block, laid, affinity);
         };
@@ -313,19 +316,19 @@ impl ProseUiState {
                     return (block, laid, affinity);
                 };
                 let target = if down {
-                    RunLine::ZERO
+                    Pos::<RunLine>::ZERO
                 } else {
                     next_run
                         .line_count()
                         .as_end()
                         .prev()
-                        .unwrap_or(RunLine::ZERO)
+                        .unwrap_or(Pos::<RunLine>::ZERO)
                 };
                 let (offset, up) = next_run.at_line(target, x - next_run.indent());
                 (next, offset, up)
             }
             None if down => (block, run.len().as_end(), Affinity::Downstream),
-            None => (block, RunOffset::ZERO, Affinity::Downstream),
+            None => (block, Pos::<RunChar>::ZERO, Affinity::Downstream),
         }
     }
 
@@ -360,7 +363,7 @@ impl ProseUiState {
 
     /// After a local insertion, advance the caret past it and reveal it. The
     /// column is dropped: an edit ends a run of vertical moves.
-    pub(crate) fn advance_cursor(&mut self, n: DocCount) {
+    pub(crate) fn advance_cursor(&mut self, n: Count<DocChar>) {
         let Some(cursor) = &mut self.cursor else {
             return;
         };
@@ -399,7 +402,7 @@ impl ProseUiState {
     pub(crate) fn flow_span(
         &self,
         block_id: BlockId,
-        offset: DocOffset,
+        offset: Pos<DocChar>,
         affinity: Affinity,
     ) -> Option<(Px<Doc>, Px<Doc>)> {
         let laid = self.to_laid(block_id, offset);
@@ -432,7 +435,7 @@ impl ProseUiState {
 
     /// Where the caret is drawn in a band, on the page it was placed on, or
     /// in a note, on the page that carries it.
-    fn band_caret_span(&self, block: BlockId, laid: RunOffset) -> Option<(Px<Doc>, Px<Doc>)> {
+    fn band_caret_span(&self, block: BlockId, laid: Pos<RunChar>) -> Option<(Px<Doc>, Px<Doc>)> {
         let id = tree_id(block);
         let (page, top) = match self.note_page(block) {
             Some(page) => {
@@ -516,7 +519,7 @@ impl ProseUiState {
         self.cursor = Some(CursorPosition {
             block_id: last,
             offset: end,
-            anchor: Some((first, DocOffset::ZERO)).filter(|anchor| *anchor != (last, end)),
+            anchor: Some((first, Pos::<DocChar>::ZERO)).filter(|anchor| *anchor != (last, end)),
         });
         self.caret_affinity = Affinity::Downstream;
         self.x_goal = None;
@@ -552,7 +555,7 @@ impl ProseUiState {
             (StepDirection::Backward, StepDirection::Forward)
         };
         let edge = |next: BlockId, side: StepDirection| match side {
-            StepDirection::Forward => (next, DocOffset::ZERO),
+            StepDirection::Forward => (next, Pos::<DocChar>::ZERO),
             StepDirection::Backward => (next, self.block_len(next).as_end()),
         };
         self.neighbour(block, side)
@@ -636,7 +639,7 @@ impl ProseUiState {
         // The paragraph ends where the document's text does, past any text
         // drafted at the laid end (`PROSE-UI-171`).
         let (start, end) = match unit {
-            SelectUnit::Paragraph => (DocOffset::ZERO, self.block_len(spot.0).as_end()),
+            SelectUnit::Paragraph => (Pos::<DocChar>::ZERO, self.block_len(spot.0).as_end()),
             SelectUnit::Word => {
                 let word = run.word_around(self.to_laid(spot.0, spot.1));
                 (

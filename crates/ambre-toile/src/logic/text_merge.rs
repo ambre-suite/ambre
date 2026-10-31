@@ -7,7 +7,8 @@
 //! It is pure and holds no CRDT, so the UI may call it (`UI-THREAD-051`).
 //! Both threads then compute the same text from the same three strings.
 
-use ambre_core::{ByteCount, CharCount, CharOffset};
+use ambre_core::index::{Count, Pos};
+use ambre_core::{Byte, Char};
 
 /// Edit steps past which a diff stops looking for the shortest script. A
 /// longer change becomes one hunk over everything between the common prefix
@@ -25,8 +26,8 @@ enum Side {
 /// One run of the base, `start..end` in characters, replaced by `text`. An
 /// empty run is an insertion before `start`.
 struct Hunk {
-    start: CharOffset,
-    end: CharOffset,
+    start: Pos<Char>,
+    end: Pos<Char>,
     text: String,
     side: Side,
 }
@@ -34,9 +35,9 @@ struct Hunk {
 /// One step of an edit script over the trimmed middle of the base.
 enum Step {
     /// The base character at this index goes.
-    Delete(CharOffset),
+    Delete(Pos<Char>),
     /// The character comes in before the base character at this index.
-    Insert(CharOffset, char),
+    Insert(Pos<Char>, char),
 }
 
 /// One edit of the stored text: `delete` characters from `at` go, and `insert`
@@ -44,8 +45,8 @@ enum Step {
 /// reads the text with the edits before it already applied.
 #[derive(PartialEq, Eq)]
 pub struct Edit {
-    pub at: CharOffset,
-    pub delete: CharCount,
+    pub at: Pos<Char>,
+    pub delete: Count<Char>,
     pub insert: String,
 }
 
@@ -90,7 +91,7 @@ pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
     // the middle is decoded and diffed. A close then costs little more than a
     // copy of the body, however long it is (`TOILE-UI-383`).
     let (head, tail) = common_ends(base, stored, typed);
-    fn middle(s: &str, head: ByteCount, tail: ByteCount) -> &str {
+    fn middle(s: &str, head: Count<Byte>, tail: Count<Byte>) -> &str {
         s.get(head.to_usize()..s.len() - tail.to_usize())
             .unwrap_or_default()
     }
@@ -103,7 +104,7 @@ pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
     let (head, tail) = (head.to_usize(), tail.to_usize());
     let shift = base.get(..head).unwrap_or_default().chars().count();
     for e in &mut merge.edits {
-        e.at += CharCount::from_len(shift);
+        e.at += Count::<Char>::from_len(shift);
     }
     let mut text = String::with_capacity(head + merge.text.len() + tail);
     text.push_str(base.get(..head).unwrap_or_default());
@@ -117,7 +118,7 @@ pub fn merge_edits(base: &str, stored: &str, typed: &str) -> Merge {
 
 /// The bytes the three texts share at their start and at their end. Both cut
 /// at a character boundary, and they never overlap in any of the three.
-fn common_ends(base: &str, stored: &str, typed: &str) -> (ByteCount, ByteCount) {
+fn common_ends(base: &str, stored: &str, typed: &str) -> (Count<Byte>, Count<Byte>) {
     let (a, b, c) = (base.as_bytes(), stored.as_bytes(), typed.as_bytes());
     let same = |((x, y), z): &((&u8, &u8), &u8)| x == y && y == z;
     let mut head = a.iter().zip(b).zip(c).take_while(same).count();
@@ -138,7 +139,7 @@ fn common_ends(base: &str, stored: &str, typed: &str) -> (ByteCount, ByteCount) 
     while !base.is_char_boundary(base.len() - tail) {
         tail -= 1;
     }
-    (ByteCount::from_len(head), ByteCount::from_len(tail))
+    (Count::<Byte>::from_len(head), Count::<Byte>::from_len(tail))
 }
 
 /// [`merge_edits`] over texts that share no start and no end, positions
@@ -156,7 +157,7 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
     // The characters written so far: where the next edit lands in the stored
     // text once the edits before it apply.
     let mut pos = 0;
-    let mut at = CharOffset::ZERO;
+    let mut at = Pos::<Char>::ZERO;
     let mut rest = hunks.as_slice();
     while let Some(first) = rest.first() {
         let (group, tail, end) = cluster(rest);
@@ -175,8 +176,8 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
                 out.push_str(&s);
                 out.push_str(&t);
                 let insert = Edit {
-                    at: CharOffset::from_usize(pos),
-                    delete: CharCount::ZERO,
+                    at: Pos::<Char>::from_usize(pos),
+                    delete: Count::<Char>::ZERO,
                     insert: t,
                 };
                 pos += insert.insert.chars().count();
@@ -189,8 +190,8 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
             (None, Some(t)) => {
                 out.push_str(&t);
                 let replace = Edit {
-                    at: CharOffset::from_usize(pos),
-                    delete: CharCount::from_len(run(&base, first.start, end).len()),
+                    at: Pos::<Char>::from_usize(pos),
+                    delete: Count::<Char>::from_len(run(&base, first.start, end).len()),
                     insert: t,
                 };
                 pos += replace.insert.chars().count();
@@ -201,12 +202,12 @@ fn merge_middle(base: &str, stored: &str, typed: &str) -> Merge {
         at = end;
         rest = tail;
     }
-    out.extend(run(&base, at, CharOffset::from_usize(base.len())));
+    out.extend(run(&base, at, Pos::<Char>::from_usize(base.len())));
     Merge { text: out, edits }
 }
 
 /// The base characters `start..end`, or none when the run is out of range.
-fn run(base: &[char], start: CharOffset, end: CharOffset) -> &[char] {
+fn run(base: &[char], start: Pos<Char>, end: Pos<Char>) -> &[char] {
     base.get(start.to_usize()..end.to_usize())
         .unwrap_or_default()
 }
@@ -215,9 +216,9 @@ fn run(base: &[char], start: CharOffset, end: CharOffset) -> &[char] {
 /// the base index their group ends at. Two runs collide when they overlap, and
 /// two insertions collide when they land at the same index. An insertion at
 /// the edge of a run does not collide with it: it lands before or after it.
-fn cluster(hunks: &[Hunk]) -> (&[Hunk], &[Hunk], CharOffset) {
+fn cluster(hunks: &[Hunk]) -> (&[Hunk], &[Hunk], Pos<Char>) {
     let Some(first) = hunks.first() else {
-        return (&[], hunks, CharOffset::ZERO);
+        return (&[], hunks, Pos::<Char>::ZERO);
     };
     let mut end = first.end;
     let mut points = first.start == first.end;
@@ -241,8 +242,8 @@ fn region(
     base: &[char],
     group: &[Hunk],
     side: Side,
-    start: CharOffset,
-    end: CharOffset,
+    start: Pos<Char>,
+    end: Pos<Char>,
 ) -> Option<String> {
     let mut hunks = group.iter().filter(|h| h.side == side).peekable();
     hunks.peek()?;
@@ -272,8 +273,8 @@ fn diff(base: &[char], side: &[char], tag: Side) -> Vec<Hunk> {
     let a = a.get(..a.len() - tail).unwrap_or_default();
     let b = b.get(..b.len() - tail).unwrap_or_default();
     let whole = || Hunk {
-        start: CharOffset::from_usize(head),
-        end: CharOffset::from_usize(head + a.len()),
+        start: Pos::<Char>::from_usize(head),
+        end: Pos::<Char>::from_usize(head + a.len()),
         text: b.iter().collect(),
         side: tag,
     };
@@ -281,7 +282,7 @@ fn diff(base: &[char], side: &[char], tag: Side) -> Vec<Hunk> {
         (true, true) => Vec::new(),
         (true, false) | (false, true) => vec![whole()],
         (false, false) => match myers(a, b) {
-            Some(steps) => hunks(steps, CharCount::from_len(head), tag),
+            Some(steps) => hunks(steps, Count::<Char>::from_len(head), tag),
             None => vec![whole()],
         },
     }
@@ -289,12 +290,12 @@ fn diff(base: &[char], side: &[char], tag: Side) -> Vec<Hunk> {
 
 /// Group a script into hunks, shifting each index by `head`. Adjacent steps
 /// share one hunk.
-fn hunks(steps: Vec<Step>, head: CharCount, tag: Side) -> Vec<Hunk> {
+fn hunks(steps: Vec<Step>, head: Count<Char>, tag: Side) -> Vec<Hunk> {
     let mut out: Vec<Hunk> = Vec::new();
     for step in steps {
         let (at, gone, ch) = match step {
-            Step::Delete(i) => (i + head, CharCount::new(1), None),
-            Step::Insert(i, c) => (i + head, CharCount::ZERO, Some(c)),
+            Step::Delete(i) => (i + head, Count::<Char>::new(1), None),
+            Step::Insert(i, c) => (i + head, Count::<Char>::ZERO, Some(c)),
         };
         match out.last_mut() {
             Some(h) if h.end == at => {
@@ -334,8 +335,8 @@ impl GraphOffset {
 
     /// The offset as a position of the text it counts into, `None` before
     /// its start.
-    fn char_offset(self) -> Option<CharOffset> {
-        CharOffset::from_index(usize::try_from(self.0).ok()?)
+    fn char_offset(self) -> Option<Pos<Char>> {
+        Pos::<Char>::from_index(usize::try_from(self.0).ok()?)
     }
 }
 
@@ -513,8 +514,8 @@ mod tests {
     #[test]
     fn an_edit_debug_form_prints_no_text() {
         let edit = Edit {
-            at: CharOffset::new(3),
-            delete: CharCount::new(1),
+            at: Pos::<Char>::new(3),
+            delete: Count::<Char>::new(1),
             insert: "wire funds".to_owned(),
         };
         let form = format!("{edit:?}");
@@ -647,8 +648,8 @@ mod tests {
             let base: Vec<char> = base.chars().collect();
             let side: Vec<char> = side.chars().collect();
             let hunks = diff(&base, &side, Side::Typed);
-            let end = CharOffset::from_usize(base.len());
-            let rebuilt = region(&base, &hunks, Side::Typed, CharOffset::ZERO, end)
+            let end = Pos::<Char>::from_usize(base.len());
+            let rebuilt = region(&base, &hunks, Side::Typed, Pos::<Char>::ZERO, end)
                 .unwrap_or_else(|| base.iter().collect());
             proptest::prop_assert_eq!(rebuilt, side.iter().collect::<String>());
         }

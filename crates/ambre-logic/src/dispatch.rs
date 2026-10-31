@@ -755,11 +755,12 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::prose::DocOffset;
+    use ambre_bus::app::prose::DocChar;
     use ambre_bus::app::toile::ToileCommand;
     use ambre_bus::{Col, Row};
     use ambre_bus::{Request, RestCommand, RestEvent, TrameCommand};
     use ambre_core::Generation;
+    use ambre_core::index::Pos;
     use std::io::Cursor;
 
     /// A `LogicState` wired to two drainable receivers (UI-bound, Sync-bound).
@@ -875,7 +876,7 @@ mod tests {
             document_id,
             command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::InsertText {
                 block_id: block,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
                 text: "typed".to_owned(),
             }),
         });
@@ -925,7 +926,7 @@ mod tests {
         };
         state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::InsertText {
             block_id: block,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "typed".to_owned(),
         }));
         state.answer_pass();
@@ -965,7 +966,7 @@ mod tests {
         state.handle_logic_command(prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
             pos: ambre_bus::app::prose::CursorPosition {
                 block_id: block,
-                offset: DocOffset::new(1),
+                offset: Pos::<DocChar>::new(1),
                 anchor: None,
             },
         }));
@@ -993,7 +994,7 @@ mod tests {
             command: AppCommand::Prose(ambre_bus::app::prose::ProseCommand::UpdateCursor {
                 pos: ambre_bus::app::prose::CursorPosition {
                     block_id: block,
-                    offset: DocOffset::ZERO,
+                    offset: Pos::<DocChar>::ZERO,
                     anchor: None,
                 },
             }),
@@ -1051,8 +1052,8 @@ mod tests {
         state.handle_logic_command(LogicCommand::App {
             document_id,
             command: AppCommand::Trame(TrameCommand::SetCellText {
-                row: Row::new(3),
-                col: Col::new(1),
+                row: Pos::<Row>::new(3),
+                col: Pos::<Col>::new(1),
                 text: "kept".to_owned(),
             }),
         });
@@ -1076,10 +1077,10 @@ mod tests {
         reopened.handle_logic_command(LogicCommand::App {
             document_id,
             command: AppCommand::Trame(TrameCommand::ScrollViewport {
-                row_start: Row::new(0),
-                col_start: Col::new(0),
-                row_end: Row::new(16),
-                col_end: Col::new(8),
+                row_start: Pos::<Row>::new(0),
+                col_start: Pos::<Col>::new(0),
+                row_end: Pos::<Row>::new(16),
+                col_end: Pos::<Col>::new(8),
                 version: ambre_core::Generation::nth(1),
             }),
         });
@@ -1087,9 +1088,9 @@ mod tests {
             UiEvent::Viewport {
                 event: AppEvent::Trame(ambre_bus::TrameEvent::ViewportData { cells, .. }),
                 ..
-            } => cells
-                .iter()
-                .any(|c| c.row == Row::new(3) && c.col == Col::new(1) && c.text == "kept"),
+            } => cells.iter().any(|c| {
+                c.row == Pos::<Row>::new(3) && c.col == Pos::<Col>::new(1) && c.text == "kept"
+            }),
             _ => false,
         });
         assert!(kept, "the saved file reopened without the edit it carried");
@@ -1253,10 +1254,10 @@ mod tests {
     fn scroll(version: u64) -> AppCommand {
         AppCommand::Trame(TrameCommand::ScrollViewport {
             version: ambre_core::Generation::nth(version),
-            row_start: Row::new(0),
-            row_end: Row::new(4),
-            col_start: Col::new(0),
-            col_end: Col::new(4),
+            row_start: Pos::<Row>::new(0),
+            row_end: Pos::<Row>::new(4),
+            col_start: Pos::<Col>::new(0),
+            col_end: Pos::<Col>::new(4),
         })
     }
 
@@ -1488,8 +1489,8 @@ mod tests {
     /// A mutating Trame command (writes a cell, hence a CRDT delta).
     fn set_cell(text: &str) -> AppCommand {
         AppCommand::Trame(TrameCommand::SetCellText {
-            row: Row::new(0),
-            col: Col::new(0),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
             text: text.into(),
         })
     }
@@ -1568,8 +1569,8 @@ mod tests {
                 delimiter: None,
                 header: ambre_bus::HeaderRow::Absent,
                 target_sheet_id: None,
-                start_row: Row::new(0),
-                start_col: Col::new(0),
+                start_row: Pos::<Row>::new(0),
+                start_col: Pos::<Col>::new(0),
             }),
         });
         let sent: Vec<SyncCommand> = std::iter::from_fn(|| sync_rx.try_recv().ok()).collect();

@@ -11,19 +11,20 @@
 //! The runs are kept with what they were shaped from. A frame reads them only
 //! while that still holds, and reads the layout in force otherwise.
 
+use ambre_core::index::{Count, IdxVec, Pos, Span};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::events::grid::{RowCount, RowVec};
-use crate::events::{BlockId, PageIndex, tree_id};
+use crate::events::grid::Row;
+use crate::events::{BlockId, Page, tree_id};
 use crate::input::ProseInput;
 use crate::layout::measure::{MarkedSpan, reshape_paragraph, shape_paragraph};
 use crate::layout::run::LayoutVersion;
-use ambre_bus::app::prose::DocOffset;
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, char_len, char_to_byte};
+use ambre_bus::app::prose::DocChar;
+use ambre_core::{Byte, char_len, char_to_byte};
 use ambre_core::{Doc, Px};
 
-use crate::layout::run::{RunCount, RunOffset, ShapedRun, TableShape};
+use crate::layout::run::{RunChar, ShapedRun, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::hit::{Fragment, fragment};
 
@@ -32,7 +33,7 @@ use crate::view::hit::{Fragment, fragment};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Splitting {
     pub block: BlockId,
-    pub at: DocOffset,
+    pub at: Pos<DocChar>,
     pub new_block: Option<BlockId>,
 }
 
@@ -81,13 +82,13 @@ pub(crate) struct Ghost {
     pub below: BlockId,
     pub run: ShapedRun,
     /// Where the caret is drawn in it, while the document has not named it.
-    pub caret: Option<RunOffset>,
+    pub caret: Option<Pos<RunChar>>,
 }
 
 /// One block a page shows, where the view draws it.
 #[derive(Clone, Debug)]
 pub(crate) struct Piece {
-    pub index: crate::layout::run::FlowIndex,
+    pub index: Pos<crate::layout::run::Flow>,
     pub fragment: Fragment,
     pub run: Option<ShapedRun>,
     pub table: Option<Arc<TableShape>>,
@@ -108,13 +109,13 @@ ambre_core::define_flag! {
 }
 
 /// The marks over `bytes` of a text, counted from its start.
-fn clip_marks(marks: &[MarkedSpan], bytes: ByteSpan) -> Vec<MarkedSpan> {
+fn clip_marks(marks: &[MarkedSpan], bytes: Span<Byte>) -> Vec<MarkedSpan> {
     marks
         .iter()
         .filter(|mark| mark.end > bytes.start && mark.start < bytes.end)
         .map(|mark| MarkedSpan {
-            start: ByteOffset::ZERO + mark.start.max(bytes.start).count_from(bytes.start),
-            end: ByteOffset::ZERO + mark.end.min(bytes.end).count_from(bytes.start),
+            start: Pos::<Byte>::ZERO + mark.start.max(bytes.start).count_from(bytes.start),
+            end: Pos::<Byte>::ZERO + mark.end.min(bytes.end).count_from(bytes.start),
             ..*mark
         })
         .collect()
@@ -200,8 +201,8 @@ impl ProseUiState {
     /// row never shrinks before the answer.
     fn provisional_table(&self, table: &TableShape) -> (TableShape, Px<Doc>) {
         let mut shape = table.clone();
-        let rows = table.row_tops.len().saturating_sub(RowCount::ONE);
-        let mut growth: RowVec<Px<Doc>> = vec![Px::<Doc>::ZERO; rows.to_usize()].into();
+        let rows = table.row_tops.len().saturating_sub(Count::<Row>::ONE);
+        let mut growth: IdxVec<Row, Px<Doc>> = vec![Px::<Doc>::ZERO; rows.to_usize()].into();
         for cell in &mut shape.cells {
             let mut shift = Px::<Doc>::ZERO;
             for (block, top, run) in &mut cell.blocks {
@@ -275,12 +276,12 @@ impl ProseUiState {
             let mut text = self.draft.text_of(block, laid.text());
             let mut marks = self.draft.marks_of(block, laid.text(), laid.marks());
             if let Some(split) = self.splitting.filter(|split| split.block == block) {
-                let cut = char_to_byte(&text, split.at.as_char());
-                let end = ByteCount::from_len(text.len()).as_end();
+                let cut = char_to_byte(&text, split.at.as_axis::<ambre_core::Char>());
+                let end = Count::<Byte>::from_len(text.len()).as_end();
                 let tail = text.get(cut.to_usize()..).unwrap_or("").to_owned();
-                let tail_marks = clip_marks(&marks, ByteSpan::new(cut, end));
+                let tail_marks = clip_marks(&marks, Span::<Byte>::new(cut, end));
                 text.truncate(cut.to_usize());
-                marks = clip_marks(&marks, ByteSpan::new(ByteOffset::ZERO, cut));
+                marks = clip_marks(&marks, Span::<Byte>::new(Pos::<Byte>::ZERO, cut));
                 let (ghost_text, ghost_marks, caret) = match split.new_block {
                     Some(new_block) => (
                         self.draft.text_of(new_block, &tail),
@@ -289,7 +290,7 @@ impl ProseUiState {
                     ),
                     None => {
                         let held = self.held_text();
-                        let n = ByteCount::from_len(held.len());
+                        let n = Count::<Byte>::from_len(held.len());
                         let mut ghost_marks = tail_marks;
                         for mark in &mut ghost_marks {
                             mark.start += n;
@@ -301,13 +302,13 @@ impl ProseUiState {
                             ghost_marks.insert(
                                 0,
                                 MarkedSpan {
-                                    start: ByteOffset::ZERO,
+                                    start: Pos::<Byte>::ZERO,
                                     end: n.as_end(),
                                     ..before
                                 },
                             );
                         }
-                        let caret = RunCount::from_chars(char_len(&held)).as_end();
+                        let caret = char_len(&held).as_axis::<RunChar>().as_end();
                         (format!("{held}{tail}"), ghost_marks, Some(caret))
                     }
                 };
@@ -353,7 +354,7 @@ impl ProseUiState {
     /// The blocks after a block drawn provisionally move on its last page. They
     /// move by what it grew, and by the paragraph a split opens below it. A
     /// block pushed past the foot of the body is cut there.
-    pub(crate) fn pieces(&self, page: PageIndex) -> (Vec<Piece>, Option<Fragment>) {
+    pub(crate) fn pieces(&self, page: Pos<Page>) -> (Vec<Piece>, Option<Fragment>) {
         let body = self.shaped.layout.body_height();
         let drawn = self.provisional_drawn();
         let ghost = self.provisional.ghost.as_ref().filter(|_| drawn);
@@ -444,6 +445,7 @@ impl ProseUiState {
 
 #[cfg(test)]
 mod tests {
+    use ambre_core::index::Pos;
     #[test]
     fn a_shaping_key_prints_its_held_text_by_length_alone() {
         let key = super::Key {
@@ -460,10 +462,10 @@ mod tests {
         let menu = crate::view::slash::SlashMenu {
             origin: (
                 crate::events::block_id(loro::TreeID::new(1, 0)),
-                super::DocOffset::ZERO,
+                Pos::<super::DocChar>::ZERO,
             ),
             query: "headi".into(),
-            selected: crate::view::slash::SlashChoice::default(),
+            selected: Pos::<crate::view::slash::SlashChoice>::default(),
         };
         assert!(crate::redact::tests::hides(&menu, "headi"));
         let state = crate::view::slash::SlashMenuState {

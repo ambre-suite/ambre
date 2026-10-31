@@ -13,8 +13,9 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
-use ambre_core::Utf16Offset;
+use ambre_core::Utf16;
 use ambre_core::id::{Id, User};
+use ambre_core::index::Pos;
 use leptos::html;
 use leptos::prelude::*;
 
@@ -53,8 +54,8 @@ pub fn PresenterPanel(
                 let end = area.selection_end().ok().flatten();
                 area.set_value(&next);
                 if let (Some(start), Some(end)) = (start, end) {
-                    let start = caret_through(&shown, Utf16Offset::new(start), &next);
-                    let end = caret_through(&shown, Utf16Offset::new(end), &next);
+                    let start = caret_through(&shown, Pos::<Utf16>::new(start), &next);
+                    let end = caret_through(&shown, Pos::<Utf16>::new(end), &next);
                     let _ = area.set_selection_range(start.get(), end.get());
                 }
             }

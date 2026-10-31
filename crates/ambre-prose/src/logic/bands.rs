@@ -11,7 +11,8 @@
 //! (`PROSE-FEAT-163`, `PROSE-FEAT-283`). Its value is resolved when a page is
 //! drawn and never stored (`PROSE-FEAT-065`).
 
-use ambre_bus::app::prose::DocOffset;
+use ambre_bus::app::prose::DocChar;
+use ambre_core::index::Pos;
 use loro::TreeID;
 
 use crate::doc;
@@ -96,7 +97,7 @@ impl ProseState {
         side: Side,
         field: HeaderField,
         target: HfTarget,
-        pos: DocOffset,
+        pos: Pos<DocChar>,
     ) -> ProseOutcome {
         let bands = doc::read_bands(&self.doc);
         if target == HfTarget::FirstPage && bands.different_first_page == FirstPage::SameAsRest {
@@ -233,8 +234,9 @@ impl ProseState {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::events::{BlockId, DateFieldFormat, PageCount, PageIndex, ProseCommand};
-    use ambre_bus::app::prose::DocSpan;
+    use crate::events::{BlockId, DateFieldFormat, Page, ProseCommand};
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::{Count, Span};
     use ambre_core::{Doc, Px};
 
     pub(crate) fn with_header() -> (ProseState, BlockId) {
@@ -279,14 +281,14 @@ pub(crate) mod tests {
         let (mut state, header) = with_header();
         let outcome = state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Report".to_owned(),
         });
         assert!(outcome.update.is_some());
         assert_eq!(state.text_of(&header).as_deref(), Some("Report"));
         state.handle_command(ProseCommand::ApplyMark {
             block_id: header,
-            range: DocSpan::from_usize_range(0..6),
+            range: Span::<DocChar>::from_usize_range(0..6),
             key: "b".into(),
             value: None,
         });
@@ -318,7 +320,7 @@ pub(crate) mod tests {
             },
             ProseCommand::SplitBlock {
                 block_id: header,
-                pos: DocOffset::ZERO,
+                pos: Pos::<DocChar>::ZERO,
             },
         ] {
             let outcome = state.handle_command(command);
@@ -331,7 +333,7 @@ pub(crate) mod tests {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Secret title".to_owned(),
         });
         let meta = doc::meta(state.document()).map().get_deep_value();
@@ -368,7 +370,7 @@ pub(crate) mod tests {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Kept".to_owned(),
         });
         state.handle_command(ProseCommand::SetHeaderEnabled {
@@ -391,7 +393,7 @@ pub(crate) mod tests {
         let first = state.bands().header_first.expect("minted with the side");
         state.handle_command(ProseCommand::InsertText {
             block_id: first,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Cover".to_owned(),
         });
         let before = state.bands();
@@ -429,7 +431,7 @@ pub(crate) mod tests {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Page ".to_owned(),
         });
         state.handle_command(ProseCommand::SetDifferentFirstPage {
@@ -439,7 +441,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::PageNumber,
             target: HfTarget::Regular,
-            pos: DocOffset::new(5),
+            pos: Pos::<DocChar>::new(5),
         });
         assert_eq!(state.text_of(&header), Some(format!("Page {FIELD_CHAR}")));
         assert_eq!(
@@ -456,13 +458,13 @@ pub(crate) mod tests {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "ab".to_owned(),
         });
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::Title,
             target: HfTarget::Regular,
-            pos: DocOffset::new(99),
+            pos: Pos::<DocChar>::new(99),
         });
         assert_eq!(state.text_of(&header), Some(format!("ab{FIELD_CHAR}")));
     }
@@ -474,7 +476,7 @@ pub(crate) mod tests {
         let outcome = state.handle_command(ProseCommand::InsertFooterField {
             field: HeaderField::PageCount,
             target: HfTarget::FirstPage,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
         });
         assert_eq!(refusal(&outcome), Some(ProseRefusal::FirstPageBandOff));
         assert!(outcome.update.is_none());
@@ -490,7 +492,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::Date(DateFieldFormat::Long),
             target: HfTarget::Regular,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
         });
         assert_eq!(
             marks_of(&state, &header),
@@ -505,9 +507,9 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::PageNumber,
             target: HfTarget::Regular,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
         });
-        for pos in [DocOffset::new(1), DocOffset::ZERO] {
+        for pos in [Pos::<DocChar>::new(1), Pos::<DocChar>::ZERO] {
             state.handle_command(ProseCommand::InsertText {
                 block_id: header,
                 pos,
@@ -518,7 +520,7 @@ pub(crate) mod tests {
         assert_eq!(marked.len(), 1, "the mark covers the field alone");
         state.handle_command(ProseCommand::DeleteText {
             block_id: header,
-            range: DocSpan::from_usize_range(1..2),
+            range: Span::<DocChar>::from_usize_range(1..2),
         });
         assert_eq!(state.text_of(&header).as_deref(), Some("xx"));
         assert!(marks_of(&state, &header).is_empty());
@@ -532,7 +534,7 @@ pub(crate) mod tests {
         });
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Left".to_owned(),
         });
         let style = state.paragraph_style_of(&header);
@@ -558,7 +560,7 @@ pub(crate) mod tests {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "a".to_owned(),
         });
         let stamped = state.handle_command(ProseCommand::StampModified {
@@ -610,12 +612,12 @@ pub(crate) mod tests {
         assert_eq!(bob.bands().header, Some(header));
         let a = alice.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Alice ".to_owned(),
         });
         let b = bob.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Bob ".to_owned(),
         });
         send(&a, &mut bob);
@@ -636,7 +638,7 @@ pub(crate) mod tests {
         let field = alice.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::Date(DateFieldFormat::Iso),
             target: HfTarget::Regular,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
         });
         send(&field, &mut bob);
         let stamp = alice.handle_command(ProseCommand::StampModified {
@@ -644,10 +646,18 @@ pub(crate) mod tests {
         });
         send(&stamp, &mut bob);
         let header = crate::events::tree_id(alice.bands().header.expect("the header"));
-        let seen_by_alice =
-            crate::band::resolve(alice.document(), &header, PageIndex::ZERO, PageCount::ONE);
-        let seen_by_bob =
-            crate::band::resolve(bob.document(), &header, PageIndex::ZERO, PageCount::ONE);
+        let seen_by_alice = crate::band::resolve(
+            alice.document(),
+            &header,
+            Pos::<Page>::ZERO,
+            Count::<Page>::ONE,
+        );
+        let seen_by_bob = crate::band::resolve(
+            bob.document(),
+            &header,
+            Pos::<Page>::ZERO,
+            Count::<Page>::ONE,
+        );
         assert_eq!(seen_by_alice, "2026-03-05");
         assert_eq!(seen_by_bob, seen_by_alice);
     }
@@ -658,7 +668,7 @@ pub(crate) mod tests {
         state.handle_command(ProseCommand::InsertHeaderField {
             field: HeaderField::Date(DateFieldFormat::Long),
             target: HfTarget::Regular,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
         });
         state.handle_command(ProseCommand::StampModified {
             now: ambre_core::Timestamp::new(1_772_712_000_000),
@@ -666,21 +676,37 @@ pub(crate) mod tests {
         let header = crate::events::tree_id(header);
         // A new document carries no language, so the date takes the neutral
         // form rather than a fixed language (`LOCALE-013`).
-        let seeded =
-            crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
+        let seeded = crate::band::resolve(
+            state.document(),
+            &header,
+            Pos::<Page>::ZERO,
+            Count::<Page>::ONE,
+        );
         assert_eq!(seeded, "2026-03-05");
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "en");
-        let english =
-            crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
+        let english = crate::band::resolve(
+            state.document(),
+            &header,
+            Pos::<Page>::ZERO,
+            Count::<Page>::ONE,
+        );
         assert_eq!(english, "March 5, 2026");
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "fr");
-        let french =
-            crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
+        let french = crate::band::resolve(
+            state.document(),
+            &header,
+            Pos::<Page>::ZERO,
+            Count::<Page>::ONE,
+        );
         assert_eq!(french, "5 mars 2026");
         // A peer's malformed tag is no language, not French nor English.
         let _ = doc::meta(state.document()).insert(doc::MetaKey::Locale, "fr_FR");
-        let unnamed =
-            crate::band::resolve(state.document(), &header, PageIndex::ZERO, PageCount::ONE);
+        let unnamed = crate::band::resolve(
+            state.document(),
+            &header,
+            Pos::<Page>::ZERO,
+            Count::<Page>::ONE,
+        );
         assert_eq!(unnamed, "2026-03-05");
     }
 
@@ -689,12 +715,12 @@ pub(crate) mod tests {
         let (mut state, header) = with_header();
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "Page  of ".to_owned(),
         });
         for (pos, field) in [
-            (DocOffset::new(9), HeaderField::PageCount),
-            (DocOffset::new(5), HeaderField::PageNumber),
+            (Pos::<DocChar>::new(9), HeaderField::PageCount),
+            (Pos::<DocChar>::new(5), HeaderField::PageNumber),
         ] {
             state.handle_command(ProseCommand::InsertHeaderField {
                 field,
@@ -708,8 +734,8 @@ pub(crate) mod tests {
                 crate::band::resolve(
                     state.document(),
                     &header,
-                    crate::events::PageIndex::new(page),
-                    crate::events::PageCount::new(3),
+                    Pos::<crate::events::Page>::new(page),
+                    Count::<crate::events::Page>::new(3),
                 )
             })
             .collect();
@@ -725,7 +751,7 @@ pub(crate) mod tests {
         let set = state.bands();
         let block = |band: Option<doc::Band>| band.and_then(|b| b.block).map(block_id);
         let off = state.paginate(&[]).clone();
-        for page in (0..2).map(PageIndex::new) {
+        for page in (0..2).map(Pos::<Page>::new) {
             let (header, footer) = off.bands_on_page(page);
             assert_eq!((block(header), block(footer)), (set.header, set.footer));
         }
@@ -733,12 +759,12 @@ pub(crate) mod tests {
             first_page: crate::events::FirstPage::OwnBands,
         });
         let on = state.paginate(&[]).clone();
-        let (header, footer) = on.bands_on_page(PageIndex::new(0));
+        let (header, footer) = on.bands_on_page(Pos::<Page>::new(0));
         assert_eq!(
             (block(header), block(footer)),
             (set.header_first, set.footer_first)
         );
-        let (header, footer) = on.bands_on_page(PageIndex::new(1));
+        let (header, footer) = on.bands_on_page(Pos::<Page>::new(1));
         assert_eq!((block(header), block(footer)), (set.header, set.footer));
     }
 
@@ -750,7 +776,7 @@ pub(crate) mod tests {
             align: Align::Center,
         });
         let layout = state.paginate(&[]).clone();
-        for page in (0..3).map(PageIndex::new) {
+        for page in (0..3).map(Pos::<Page>::new) {
             let (drawn, _) = layout.bands_on_page(page);
             assert_eq!(drawn.map(|band| band.align), Some(Align::Center));
         }
@@ -768,7 +794,7 @@ pub(crate) mod tests {
         let header = state.bands().header.expect("the header");
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "A header".to_owned(),
         });
         let banded = state.paginate(&[]).clone();
@@ -782,13 +808,13 @@ pub(crate) mod tests {
         state.load_faces(&crate::layout::fonts::shipped_faces());
         state.handle_command(ProseCommand::InsertText {
             block_id: header,
-            pos: DocOffset::ZERO,
+            pos: Pos::<DocChar>::ZERO,
             text: "a very long header line ".repeat(400),
         });
         let layout = state.paginate(&[]).clone();
         let cap = layout.content_height * crate::layout::geometry::BAND_SHARE;
         assert!((layout.header_height - cap).abs() < Px::<Doc>::new(0.01));
         assert!(layout.body_height() >= layout.content_height * 0.5);
-        assert_eq!(layout.page_count, crate::events::PageCount::new(1));
+        assert_eq!(layout.page_count, Count::<crate::events::Page>::new(1));
     }
 }

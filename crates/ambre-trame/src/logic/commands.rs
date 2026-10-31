@@ -8,6 +8,7 @@
 use super::find::Replacement;
 use super::*;
 use ambre_core::HistoryStep;
+use ambre_core::index::Pos;
 
 impl TrameState {
     /// Handle a UI command and return a typed outcome.
@@ -466,14 +467,14 @@ impl TrameState {
     /// Every non-empty cell of grid column `col`, all rows, for an auto-fit
     /// (`TRAME-UI-128`). The viewport cache holds only the loaded window, so the
     /// canvas cannot measure a column whose content lies outside it.
-    pub(super) fn column_content(&mut self, col: Col) -> TrameOutcome {
+    pub(super) fn column_content(&mut self, col: Pos<Col>) -> TrameOutcome {
         let indices = self.engine_indices();
         self.engine.compute_all_dirty(&indices);
-        let cells = match Row::last(&self.index) {
+        let cells = match Row::len(&self.index).last() {
             None => Vec::new(),
             Some(last) => self
                 .pack_cells(CellRect::spanning(
-                    CellPos::new(Row::ZERO, col),
+                    CellPos::new(Pos::<Row>::ZERO, col),
                     CellPos::new(last, col),
                 ))
                 .into_iter()

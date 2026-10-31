@@ -20,6 +20,7 @@
 // formatting id a control or a chord left in its signal (`PROSE-UI-056`).
 // ============================================================================
 
+use ambre_core::index::Count;
 use leptos::prelude::*;
 use parley::{FontContext, LayoutContext};
 
@@ -783,7 +784,7 @@ fn download(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::prose::{GraphemeCount, PageCount, ParagraphCount, WordTotal};
+    use ambre_bus::app::prose::{GraphemeCount, Page, ParagraphCount, WordTotal};
     use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
     use wasm_bindgen_test::wasm_bindgen_test;
 
@@ -941,7 +942,7 @@ mod tests {
             characters: GraphemeCount::new(60),
             characters_with_spaces: GraphemeCount::new(71),
             paragraphs: ParagraphCount::new(1),
-            pages: PageCount::new(2),
+            pages: Count::<Page>::new(2),
         };
         view.update();
         leptos::task::tick().await;

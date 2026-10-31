@@ -7,7 +7,8 @@
 //! to compare, only state and derived structures.
 
 use ambre_core::Rgba;
-use ambre_core::{CharCount, CharOffset, ElementCount, StepDirection};
+use ambre_core::index::{Count, Pos};
+use ambre_core::{Char, ElementCount, StepDirection};
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
@@ -17,8 +18,8 @@ use crate::logic::align::AlignOp;
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
 use crate::logic::command::{
     BoolOp, Broadcast, CommentAnchor, DisplayGeom, DisplayNode, End, InitContent, PresencePayload,
-    PresentFocus, PresentMode, Reaction, ReactionKind, SlideIndex, Sources, StatsRequestKind,
-    TextDelta, ThreadMessageIndex, ToileCommand, ToileError, ToileEvent, ZTarget,
+    PresentFocus, PresentMode, Reaction, ReactionKind, Slide, Sources, StatsRequestKind, TextDelta,
+    ThreadMessage, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
     Anchor, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId, PathType, ShapeKind,
@@ -2695,8 +2696,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
         frame: st.frame(&frame).expect("a frame"),
         base: String::new(),
         delta: TextDelta {
-            at: CharOffset::ZERO,
-            delete: CharCount::ZERO,
+            at: Pos::<Char>::ZERO,
+            delete: Count::<Char>::ZERO,
             insert: "open on the budget".into(),
         },
     });
@@ -2727,8 +2728,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
             frame: copy_frame.clone(),
             base: "open on the budget".into(),
             delta: TextDelta {
-                at: CharOffset::ZERO,
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::ZERO,
+                delete: Count::<Char>::ZERO,
                 insert: "A: ".into(),
             },
         })
@@ -2739,8 +2740,8 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
             frame: copy_frame.clone(),
             base: "open on the budget".into(),
             delta: TextDelta {
-                at: CharOffset::new(18),
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::new(18),
+                delete: Count::<Char>::ZERO,
                 insert: " (B)".into(),
             },
         })
@@ -3449,7 +3450,7 @@ fn shorter_deck_clamps_the_active_slide() {
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b, c],
     });
-    st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)));
+    st.handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)));
     assert_eq!(st.playback().1.active.get(), 2);
 
     st.handle_command(ToileCommand::SetSlideOrder {
@@ -3471,7 +3472,7 @@ fn deleting_a_frame_drops_its_slide() {
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone(), c.clone()],
     });
-    st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)));
+    st.handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)));
 
     st.handle_command(ToileCommand::DeleteElements {
         ids: vec![b.clone().into()],
@@ -3537,7 +3538,7 @@ fn playback_bounds() {
     );
     // Goto clamps to the deck length.
     assert_eq!(
-        slide_changed(&st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(99)))),
+        slide_changed(&st.handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(99)))),
         Some(2)
     );
 }
@@ -3710,7 +3711,7 @@ fn leaving_the_presentation_stops_the_broadcast() {
     rx.apply_ephemeral(presenter, &frame);
     assert_eq!(
         rx.peer_presence(&presenter)
-            .and_then(|p| p.present_slide.map(SlideIndex::get)),
+            .and_then(|p| p.present_slide.map(Pos::<Slide>::get)),
         None
     );
 }
@@ -3787,7 +3788,7 @@ fn broadcast_slide(out: &crate::logic::command::ToileOutcome) -> Option<u32> {
     let bytes = out.ephemeral.as_ref()?;
     let p: PresencePayload =
         postcard::from_bytes(bytes.as_bytes()).expect("decodable presence sample");
-    p.present_slide.map(SlideIndex::get)
+    p.present_slide.map(Pos::<Slide>::get)
 }
 
 /// A three-frame deck shared by the follow-presenter tests.
@@ -3920,8 +3921,8 @@ fn a_peers_note_edit_reaches_the_slide_on_screen() {
             frame: frame.clone(),
             base: String::new(),
             delta: TextDelta {
-                at: CharOffset::ZERO,
-                delete: CharCount::ZERO,
+                at: Pos::<Char>::ZERO,
+                delete: Count::<Char>::ZERO,
                 insert: "open on the budget".into(),
             },
         })
@@ -3968,7 +3969,7 @@ fn stopping_a_broadcast_sends_a_sample_naming_no_slide() {
     rx.apply_ephemeral(presenter, &frame);
     assert_eq!(
         rx.peer_presence(&presenter)
-            .and_then(|p| p.present_slide.map(SlideIndex::get)),
+            .and_then(|p| p.present_slide.map(Pos::<Slide>::get)),
         None,
         "the peer is still offered as a presenter"
     );
@@ -3989,7 +3990,7 @@ fn follower_adopts_presenter_slide() {
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
-        .handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)))
+        .handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)))
         .ephemeral
         .expect("broadcast frame");
 
@@ -4025,7 +4026,7 @@ fn non_follower_ignores_broadcast() {
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
-        .handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)))
+        .handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)))
         .ephemeral
         .expect("broadcast frame");
 
@@ -4053,7 +4054,7 @@ fn following_other_peer_ignores_broadcast() {
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
     let frame = presenter
-        .handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)))
+        .handle_command(ToileCommand::GotoSlide(Pos::<Slide>::new(2)))
         .ephemeral
         .expect("broadcast frame");
 
@@ -4078,7 +4079,7 @@ fn adopted_slide_is_clamped_to_deck() {
     let alice = Id::<User>::mint();
     rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
     let frame = postcard::to_allocvec(&PresencePayload {
-        present_slide: Some(SlideIndex::new(99)),
+        present_slide: Some(Pos::<Slide>::new(99)),
         ..Default::default()
     })
     .unwrap();
@@ -4118,7 +4119,7 @@ fn follow_snaps_to_last_known_slide() {
     let alice = Id::<User>::mint();
     // Store a broadcast frame from alice before following her.
     let frame = postcard::to_allocvec(&PresencePayload {
-        present_slide: Some(SlideIndex::new(2)),
+        present_slide: Some(Pos::<Slide>::new(2)),
         ..Default::default()
     })
     .unwrap();
@@ -4193,8 +4194,8 @@ fn follow_state_is_not_synced() {
 /// A single-splice insertion at `at` (no deletion), the common editor edit.
 fn insert_notes(at: usize, s: &str) -> TextDelta {
     TextDelta {
-        at: CharOffset::from_usize(at),
-        delete: CharCount::ZERO,
+        at: Pos::<Char>::from_usize(at),
+        delete: Count::<Char>::ZERO,
         insert: s.to_owned(),
     }
 }
@@ -4331,8 +4332,8 @@ fn edit_notes_clamps_out_of_range_splice() {
         frame: f.clone(),
         base: "abcZ".into(),
         delta: TextDelta {
-            at: CharOffset::ZERO,
-            delete: CharCount::new(999),
+            at: Pos::<Char>::ZERO,
+            delete: Count::<Char>::new(999),
             insert: String::new(),
         },
     });
@@ -5405,7 +5406,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
     let da = a
         .handle_command(ToileCommand::EditComment {
             thread: t.clone(),
-            message: ThreadMessageIndex::ZERO,
+            message: Pos::<ThreadMessage>::ZERO,
             delta: insert_notes(0, "AAA"),
         })
         .update
@@ -5413,7 +5414,7 @@ fn concurrent_edits_of_one_message_converge_character_wise() {
     let db = b
         .handle_command(ToileCommand::EditComment {
             thread: t.clone(),
-            message: ThreadMessageIndex::ZERO,
+            message: Pos::<ThreadMessage>::ZERO,
             delta: insert_notes(0, "BBB"),
         })
         .update
@@ -5451,7 +5452,7 @@ fn editing_another_authors_message_is_refused() {
 
     let out = b.handle_command(ToileCommand::EditComment {
         thread: t.clone(),
-        message: ThreadMessageIndex::ZERO,
+        message: Pos::<ThreadMessage>::ZERO,
         delta: insert_notes(0, "hijacked"),
     });
     assert!(
@@ -5699,10 +5700,10 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
     // Correct the middle message: insert the missing letter.
     st.handle_command(ToileCommand::EditComment {
         thread: t.clone(),
-        message: ThreadMessageIndex::new(1),
+        message: Pos::<ThreadMessage>::new(1),
         delta: TextDelta {
-            at: CharOffset::new(3),
-            delete: CharCount::ZERO,
+            at: Pos::<Char>::new(3),
+            delete: Count::<Char>::ZERO,
             insert: "o".to_owned(),
         },
     });

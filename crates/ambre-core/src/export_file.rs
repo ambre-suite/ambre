@@ -5,9 +5,10 @@
 //! that honours it, a separator or a `..` names a place outside the download
 //! folder. So the name is a validated type (`DOCFILE-019`, `DOCFILE-020`).
 
+use crate::index::Count;
 use crate::media::ByteSize;
 use crate::payload::{Payload, PayloadKind};
-use crate::text_offset::ByteCount;
+use crate::text_offset::Byte;
 
 /// The extension an export file carries, one per format the suite writes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -83,7 +84,7 @@ impl std::fmt::Debug for ExportFilename {
 impl ExportFilename {
     /// The most UTF-8 bytes a name holds, extension included: the limit of
     /// most file systems.
-    pub const MAX_SIZE: ByteCount = ByteCount::new(255);
+    pub const MAX_SIZE: Count<Byte> = Count::<Byte>::new(255);
 
     /// The stem an export takes when its title leaves nothing to name it by.
     const FALLBACK_STEM: &'static str = "export";
@@ -109,7 +110,7 @@ impl ExportFilename {
         if text.chars().any(is_deceptive_character) {
             return Err(ExportFilenameError::DeceptiveCharacter);
         }
-        if ByteCount::from_len(text.len()) > Self::MAX_SIZE {
+        if Count::<Byte>::from_len(text.len()) > Self::MAX_SIZE {
             return Err(ExportFilenameError::TooLong);
         }
         Ok(Self(text.to_owned()))
@@ -130,7 +131,7 @@ impl ExportFilename {
     pub fn from_title(title: &str, fallback: &'static str, extension: ExportExtension) -> Self {
         let suffix = extension.as_str();
         // The stem's room: the bound, less the dot and the extension.
-        let room = Self::MAX_SIZE.saturating_sub(ByteCount::from_len(suffix.len() + 1));
+        let room = Self::MAX_SIZE.saturating_sub(Count::<Byte>::from_len(suffix.len() + 1));
         let stem = [title, fallback, Self::FALLBACK_STEM]
             .into_iter()
             .map(|text| clean_stem(text, room))
@@ -140,7 +141,7 @@ impl ExportFilename {
     }
 
     /// The longest extension a received name keeps.
-    const MAX_EXTENSION: ByteCount = ByteCount::new(16);
+    const MAX_EXTENSION: Count<Byte> = Count::<Byte>::new(16);
 
     /// The name a file another user sent saves under, from the `name` its
     /// sender gave it.
@@ -157,7 +158,7 @@ impl ExportFilename {
             _ => (base, None),
         };
         // The stem's room: the bound, less the dot and the extension.
-        let room = Self::MAX_SIZE.saturating_sub(ByteCount::from_len(
+        let room = Self::MAX_SIZE.saturating_sub(Count::<Byte>::from_len(
             extension.map_or(0, |extension| extension.len() + 1),
         ));
         let stem = [stem, fallback, Self::FALLBACK_STEM]
@@ -191,7 +192,7 @@ impl std::fmt::Display for ExportFilename {
 /// control character, both separators, and `: * ? " < > |`. Every deceptive
 /// character goes too. A stem of dots alone is dropped, so `..` never
 /// reaches a name.
-fn clean_stem(text: &str, room: ByteCount) -> String {
+fn clean_stem(text: &str, room: Count<Byte>) -> String {
     let kept: String = text
         .chars()
         .filter(|&c| {
@@ -202,7 +203,7 @@ fn clean_stem(text: &str, room: ByteCount) -> String {
         .collect();
     let mut stem = String::new();
     for c in kept.trim().chars() {
-        if ByteCount::from_len(stem.len() + c.len_utf8()) > room {
+        if Count::<Byte>::from_len(stem.len() + c.len_utf8()) > room {
             break;
         }
         stem.push(c);
@@ -249,7 +250,7 @@ const fn is_deceptive_character(c: char) -> bool {
 /// holds a character a host refuses.
 fn is_kept_extension(extension: &str) -> bool {
     !extension.is_empty()
-        && ByteCount::from_len(extension.len()) <= ExportFilename::MAX_EXTENSION
+        && Count::<Byte>::from_len(extension.len()) <= ExportFilename::MAX_EXTENSION
         && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())
 }
 
@@ -465,7 +466,7 @@ mod tests {
     fn a_long_title_is_cut_and_keeps_its_extension() {
         let title = "\u{e9}".repeat(400);
         let name = ExportFilename::from_title(&title, "x", ExportExtension::Markdown);
-        assert!(ByteCount::from_len(name.as_str().len()) <= ExportFilename::MAX_SIZE);
+        assert!(Count::<Byte>::from_len(name.as_str().len()) <= ExportFilename::MAX_SIZE);
         assert!(name.as_str().ends_with(".md"));
         assert!(ExportFilename::new(name.as_str()).is_ok());
     }
@@ -497,7 +498,7 @@ mod tests {
     fn a_long_received_name_keeps_its_extension() {
         let sent = format!("{}.pdf", "\u{e9}".repeat(400));
         let name = ExportFilename::from_received(&sent, "attachment");
-        assert!(ByteCount::from_len(name.as_str().len()) <= ExportFilename::MAX_SIZE);
+        assert!(Count::<Byte>::from_len(name.as_str().len()) <= ExportFilename::MAX_SIZE);
         assert!(name.as_str().ends_with(".pdf"));
         assert!(ExportFilename::new(name.as_str()).is_ok());
     }

@@ -27,8 +27,9 @@
 //! shape belt's, so the two belts read the same document. Its values are
 //! frozen here, so a command added to it lands with a raised version.
 
-use ambre_bus::app::prose::{DocOffset, FootnoteOrdinal};
+use ambre_bus::app::prose::{DocChar, FootnoteOrdinal};
 use ambre_core::Rgba;
+use ambre_core::index::{Count, Pos};
 use std::collections::BTreeSet;
 
 use ambre_core::Uuid;
@@ -465,7 +466,7 @@ fn attribute_reading(reader: &ProseState, id: &TreeID, stored: &Stored) -> Optio
             let at = stored.at(3)?;
             let stored_widths = doc::col_widths(&tree, id);
             let content = PageBox::from_mm(doc::read_page_format(&reader.doc)).content_width;
-            let cols = crate::events::grid::ColCount::from_len(stored_widths.len());
+            let cols = Count::<crate::events::grid::Col>::from_len(stored_widths.len());
             let widths = column_widths(&stored_widths, cols, content);
             format!("column {} is {} px wide", at + 1, widths.get(at)?.get())
         }
@@ -605,10 +606,12 @@ fn mark_reading(
     let what = if mark.starts_with("f:") {
         let pages = reader
             .full_layout()
-            .map_or(crate::events::PageCount::ONE, |layout| layout.page_count);
+            .map_or(Count::<crate::events::Page>::ONE, |layout| {
+                layout.page_count
+            });
         format!(
             "band shows {:?} on page 1",
-            crate::band::resolve(&reader.doc, block, crate::events::PageIndex::ZERO, pages)
+            crate::band::resolve(&reader.doc, block, Pos::<crate::events::Page>::ZERO, pages)
         )
     } else if mark == crate::mark::MarkRoot::Footnote.as_str() {
         let id = ambre_core::Id::<ambre_core::id::Footnote>::parse_str(stored.string()?).ok();
@@ -623,7 +626,7 @@ fn mark_reading(
     } else if mark == crate::mark::MarkRoot::CrossRef.as_str() {
         let resolved = crate::xref::resolve_all(&reader.doc, reader.full_layout());
         match resolved.into_iter().find(|r| {
-            crate::events::tree_id(r.block_id) == *block && r.offset == DocOffset::new(at)
+            crate::events::tree_id(r.block_id) == *block && r.offset == Pos::<DocChar>::new(at)
         }) {
             Some(found) => format!(
                 "refers to {} showing {:?}",

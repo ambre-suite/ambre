@@ -44,6 +44,7 @@
 //! enforced while walking. Any breach aborts the whole import atomically: the
 //! returned `Err` carries no commands.
 
+use ambre_core::index::Pos;
 use ambre_core::{ElementCount, Rgb, Rgba};
 use kurbo::{BezPath, PathEl, Point, Rect, Shape, Size};
 use usvg::tiny_skia_path::PathSegment;
@@ -322,7 +323,7 @@ fn import_image(
     };
 
     // The blob's slot is its rank in the batch's media, pushed below.
-    let media = MediaRef::Pending(ImportSlot::from_usize(batch.media.len()));
+    let media = MediaRef::Pending(Pos::<ImportSlot>::from_usize(batch.media.len()));
     let blob = decode_media(raw, limits, media.clone())?;
 
     let rect = limits.clamp_rect(rect_from_usvg(image.abs_bounding_box()));

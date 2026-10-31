@@ -2,6 +2,7 @@
 // TrameView: document binding, event dispatch, per-frame update and paint.
 
 use super::*;
+use ambre_core::index::Pos;
 
 impl TrameView {
     /// Swap the active document in place (SPA route change). Drop every
@@ -22,8 +23,8 @@ impl TrameView {
         self.needs_full = true;
         self.viewport_changed = false;
         self.data_dirty = false;
-        self.prev_top_row = Row::ZERO;
-        self.prev_left_col = Col::ZERO;
+        self.prev_top_row = Pos::<Row>::ZERO;
+        self.prev_left_col = Pos::<Col>::ZERO;
         self.cut_pending = false;
         // Retract any floating-toolbar anchor from the previous document.
         self.last_anchor = None;
@@ -128,7 +129,7 @@ impl TrameView {
                 #[cfg(target_arch = "wasm32")]
                 self.find_result.set(Some(crate::chrome::FindPosition::new(
                     active,
-                    ambre_bus::app::find::MatchCount::from_len(matches.len()),
+                    Count::<ambre_bus::app::find::Match>::from_len(matches.len()),
                 )));
                 self.state.find_matches = matches.clone();
                 self.needs_full = true;

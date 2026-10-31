@@ -5,17 +5,18 @@
 //! shaping pass (`PROSE-UI-114`). So a block the view culled and never painted
 //! answers like any other (`PROSE-UI-172`).
 
+use ambre_core::index::Pos;
 use ambre_core::{Doc, Point, Px, View};
 use ambre_draw::HitTest;
 use loro::TreeID;
 
-use crate::events::{BlockId, PageIndex, block_id, tree_id};
+use crate::events::{BlockId, Page, block_id, tree_id};
 use crate::layout::place::BlockLayout;
-use crate::layout::run::{CellShape, RunOffset, TableShape};
+use crate::layout::run::{CellShape, RunChar, TableShape};
 use crate::ui::ProseUiState;
 use crate::view::column::DocPos;
 use crate::view::provisional::PieceRuns;
-use ambre_bus::app::prose::{DocOffset, VAlign};
+use ambre_bus::app::prose::{DocChar, VAlign};
 
 /// The part of a block one page shows.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -65,17 +66,17 @@ pub(crate) fn cell_frame(table: &TableShape, cell: &CellShape) -> Option<CellFra
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum HitOffset {
     /// Read off a provisional run, which holds the draft: a document offset.
-    Drawn(DocOffset),
+    Drawn(Pos<DocChar>),
     /// Read off the run of the layout in force, which lacks the draft.
-    Laid(RunOffset),
+    Laid(Pos<RunChar>),
 }
 
 impl HitOffset {
     /// The offset read off the run drawn for `block`, in the space that run
     /// counts.
-    fn of(ui: &ProseUiState, block: BlockId, offset: RunOffset) -> Self {
+    fn of(ui: &ProseUiState, block: BlockId, offset: Pos<RunChar>) -> Self {
         if ui.provisional_run(block).is_some() {
-            Self::Drawn(offset.as_doc())
+            Self::Drawn(offset.as_axis::<DocChar>())
         } else {
             Self::Laid(offset)
         }
@@ -84,7 +85,7 @@ impl HitOffset {
 
 /// The block and the offset under `(x, y)` in `table`, both from its
 /// top-left corner, the offset counted in the run held there.
-fn cell_hit(table: &TableShape, x: Px<Doc>, y: Px<Doc>) -> Option<(BlockId, RunOffset)> {
+fn cell_hit(table: &TableShape, x: Px<Doc>, y: Px<Doc>) -> Option<(BlockId, Pos<RunChar>)> {
     let (cell, frame) = table.cells.iter().find_map(|cell| {
         let frame = cell_frame(table, cell)?;
         (x >= frame.x0 && x < frame.x1 && y >= frame.y0 && y < frame.y1).then_some((cell, frame))
@@ -108,7 +109,7 @@ fn cell_hit(table: &TableShape, x: Px<Doc>, y: Px<Doc>) -> Option<(BlockId, RunO
 /// there.
 pub(crate) fn fragment(
     block: &BlockLayout,
-    page: PageIndex,
+    page: Pos<Page>,
     line_tops: &[Px<Doc>],
 ) -> Option<Fragment> {
     if page == block.page_start {
@@ -160,9 +161,9 @@ pub(crate) struct NoteSlot {
 /// last on the last. `None` for a layout with no page, or a page that shows
 /// no block.
 impl HitTest for ProseUiState {
-    type Target = (BlockId, DocOffset);
+    type Target = (BlockId, Pos<DocChar>);
 
-    fn hit_test(&self, at: Point<Px<View>>) -> Option<(BlockId, DocOffset)> {
+    fn hit_test(&self, at: Point<Px<View>>) -> Option<(BlockId, Pos<DocChar>)> {
         let (block, offset) = self.hit(at)?;
         Some((block, self.doc_of_hit(block, offset)))
     }
@@ -172,7 +173,7 @@ impl ProseUiState {
     /// The notes `page` draws at its foot, in the order of their ordinals,
     /// stacked up from the foot of the body. The one geometry the painter
     /// and the hit-test both read.
-    pub(crate) fn note_slots(&self, page: PageIndex) -> Vec<NoteSlot> {
+    pub(crate) fn note_slots(&self, page: Pos<Page>) -> Vec<NoteSlot> {
         let layout = &self.shaped.layout;
         let mut notes: Vec<&crate::layout::place::FootnoteLayout> = self
             .blocks_on(page)
@@ -201,9 +202,9 @@ impl ProseUiState {
 
     /// The header and the footer `page` draws, where it draws them. The one
     /// geometry the painter and the hit-test both read.
-    pub(crate) fn band_slots(&self, page: PageIndex) -> Vec<BandSlot> {
+    pub(crate) fn band_slots(&self, page: Pos<Page>) -> Vec<BandSlot> {
         let layout = &self.shaped.layout;
-        let first = page == PageIndex::ZERO && layout.bands.different_first_page.has_own();
+        let first = page == Pos::<Page>::ZERO && layout.bands.different_first_page.has_own();
         let (header_height, footer_height) = if first {
             (layout.header_first_height, layout.footer_first_height)
         } else {
@@ -235,7 +236,7 @@ impl ProseUiState {
     }
 
     /// The page a note's text is drawn on, when `block` holds a note's text.
-    pub(crate) fn note_page(&self, block: BlockId) -> Option<PageIndex> {
+    pub(crate) fn note_page(&self, block: BlockId) -> Option<Pos<Page>> {
         let id = tree_id(block);
         self.shaped
             .layout
@@ -250,10 +251,10 @@ impl ProseUiState {
     /// is in one.
     fn band_hit(
         &self,
-        page: PageIndex,
+        page: Pos<Page>,
         x_in_page: Px<Doc>,
         y_in_page: Px<Doc>,
-    ) -> Option<(BlockId, RunOffset)> {
+    ) -> Option<(BlockId, Pos<RunChar>)> {
         let bands = self
             .band_slots(page)
             .into_iter()
@@ -277,12 +278,12 @@ impl ProseUiState {
 
     /// The indices of the blocks a page shows, in flow order. Read from the
     /// index built when the layout was taken, never by walking every block.
-    pub(crate) fn blocks_on(&self, page: PageIndex) -> &[crate::layout::run::FlowIndex] {
+    pub(crate) fn blocks_on(&self, page: Pos<Page>) -> &[Pos<crate::layout::run::Flow>] {
         self.shaped.blocks_on(page)
     }
 
     /// The document offset a hit on `block` names.
-    pub(crate) fn doc_of_hit(&self, block: BlockId, offset: HitOffset) -> DocOffset {
+    pub(crate) fn doc_of_hit(&self, block: BlockId, offset: HitOffset) -> Pos<DocChar> {
         match offset {
             HitOffset::Drawn(doc) => doc,
             HitOffset::Laid(laid) => self.to_doc(block, laid),
@@ -322,7 +323,10 @@ impl ProseUiState {
             let x = x_in_page - layout.margin_left - run.indent();
             return Some((
                 new_block,
-                HitOffset::Drawn(run.offset_at(Point::new(x, y_body - at.top)).as_doc()),
+                HitOffset::Drawn(
+                    run.offset_at(Point::new(x, y_body - at.top))
+                        .as_axis::<DocChar>(),
+                ),
             ));
         }
         let mut chosen: Option<&crate::view::provisional::Piece> = None;
@@ -350,7 +354,7 @@ impl ProseUiState {
                 let drawn = chosen.provisional == PieceRuns::Provisional
                     && self.drawn_provisional_run(id).is_some();
                 let offset = if drawn {
-                    HitOffset::Drawn(offset.as_doc())
+                    HitOffset::Drawn(offset.as_axis::<DocChar>())
                 } else {
                     HitOffset::Laid(offset)
                 };
@@ -366,10 +370,10 @@ impl ProseUiState {
                     + piece.run_top;
                 run.offset_at(Point::new(x, y))
             }
-            None => RunOffset::ZERO,
+            None => Pos::<RunChar>::ZERO,
         };
         let offset = if chosen.provisional == PieceRuns::Provisional {
-            HitOffset::Drawn(offset.as_doc())
+            HitOffset::Drawn(offset.as_axis::<DocChar>())
         } else {
             HitOffset::Laid(offset)
         };
@@ -380,8 +384,9 @@ impl ProseUiState {
 #[cfg(test)]
 #[cfg(not(target_arch = "wasm32"))]
 mod tests {
-    use crate::layout::run::RunOffset;
-    use ambre_bus::app::prose::DocOffset;
+    use crate::layout::run::RunChar;
+    use ambre_bus::app::prose::DocChar;
+    use ambre_core::index::Pos;
     use ambre_core::{Doc, Point, Px, View};
     use ambre_draw::HitTest;
 
@@ -395,7 +400,7 @@ mod tests {
         let layout = &ui.shaped.layout;
         let block = &layout.blocks[index];
         let run = ui.shaped.blocks[&block.block_id].data();
-        let caret = run.caret_box(RunOffset::new(offset));
+        let caret = run.caret_box(Pos::<RunChar>::new(offset));
         let x = layout.margin_left
             + run.indent()
             + Px::<Doc>::new(caret.x0 as f32)
@@ -426,7 +431,7 @@ mod tests {
             let (x, y) = drawn_at(&ui, far, offset);
             let hit = ui.hit_test(Point::new(Px::<View>::new(x), Px::<View>::new(y)));
             let expected = block_id(ui.shaped.layout.blocks[far].block_id);
-            assert_eq!(hit, Some((expected, DocOffset::new(offset))));
+            assert_eq!(hit, Some((expected, Pos::<DocChar>::new(offset))));
         }
         // Resolving built nothing: the drawing state is a paint's alone.
         assert_eq!(ui.runs.built(), crate::view::cache::BuildCount::ZERO);

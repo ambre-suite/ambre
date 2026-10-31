@@ -3,8 +3,9 @@
 // logic-module items are reached with `super::super::` paths.
 
 use super::*;
+use ambre_core::index::{Count, Pos};
 
-const COL_1: Col = Col::new(1);
+const COL_1: Pos<Col> = Pos::<Col>::new(1);
 
 /// The user's real scenario: type 6 columns x 10 rows (A1:F10), then export.
 /// The output must be exactly 6 columns wide, no trailing empties.
@@ -14,8 +15,8 @@ fn csv_export_typed_6x10_has_no_trailing_columns() {
     for row in 0..10u32 {
         for col in 0..6u32 {
             state.handle_command(TrameCommand::SetCellText {
-                row: Row::new(row),
-                col: Col::new(col),
+                row: Pos::<Row>::new(row),
+                col: Pos::<Col>::new(col),
                 text: (14 + col).to_string(),
             });
         }
@@ -35,13 +36,13 @@ fn csv_export_typed_6x10_has_no_trailing_columns() {
 fn csv_export_evaluates_formulas() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "2".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "=A1*3".to_owned(),
     });
     let out = state.handle_command(TrameCommand::ExportCsv {
@@ -67,8 +68,8 @@ fn autofill_series_survives_incremental_delta_replay() {
     // A1 = 1 (the seed).
     let u1 = author
         .handle_command(TrameCommand::SetCellText {
-            row: Row::new(0),
-            col: Col::new(0),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
             text: "1".to_owned(),
         })
         .update
@@ -79,12 +80,12 @@ fn autofill_series_survives_incremental_delta_replay() {
         .handle_command(TrameCommand::FillRange {
             sheet_id: SheetId::new("s0".to_owned()),
             src: crate::CellRect::spanning(
-                crate::CellPos::new(Row::new(0), Col::new(0)),
-                crate::CellPos::new(Row::new(0), Col::new(0)),
+                crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+                crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
             ),
             dest: crate::CellRect::spanning(
-                crate::CellPos::new(Row::new(0), Col::new(0)),
-                crate::CellPos::new(Row::new(3), Col::new(0)),
+                crate::CellPos::new(Pos::<Row>::new(0), Pos::<Col>::new(0)),
+                crate::CellPos::new(Pos::<Row>::new(3), Pos::<Col>::new(0)),
             ),
             mode: FillMode::Series,
         })
@@ -123,10 +124,10 @@ fn batched_formatting_broadcasts_complete_delta() {
     // Select A1:C3 on an empty sheet: nothing is materialized yet, so the bold
     // pass must create rows 0..2 and columns 0..2 as it goes.
     author.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(0),
-        col: Col::new(0),
-        anchor_row: Row::new(2),
-        anchor_col: Col::new(2),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(2),
+        anchor_col: Pos::<Col>::new(2),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -165,8 +166,8 @@ fn batched_formatting_broadcasts_complete_delta() {
 fn a_reader_that_sent_nothing_holds_no_history_of_its_own() {
     let mut author = TrameState::new();
     author.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "1".to_owned(),
     });
     let mut reader = TrameState::new();
@@ -180,8 +181,8 @@ fn a_reader_that_sent_nothing_holds_no_history_of_its_own() {
     );
     let delta = author
         .handle_command(TrameCommand::SetCellText {
-            row: Row::new(1),
-            col: Col::new(0),
+            row: Pos::<Row>::new(1),
+            col: Pos::<Col>::new(0),
             text: "2".to_owned(),
         })
         .update
@@ -197,8 +198,8 @@ fn edit_after_reopen_broadcasts_causally_complete_delta() {
     let mut author = TrameState::new();
     let u_a1 = author
         .handle_command(TrameCommand::SetCellText {
-            row: Row::new(0),
-            col: Col::new(0),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
             text: "1".to_owned(),
         })
         .update
@@ -209,8 +210,8 @@ fn edit_after_reopen_broadcasts_causally_complete_delta() {
     reopened.apply_remote(&u_a1);
     let u_a2 = reopened
         .handle_command(TrameCommand::SetCellText {
-            row: Row::new(1),
-            col: Col::new(0),
+            row: Pos::<Row>::new(1),
+            col: Pos::<Col>::new(0),
             text: "1".to_owned(),
         })
         .update
@@ -243,16 +244,16 @@ fn apply_remote_batch_emits_single_datareset_with_full_state() {
     let mut author = TrameState::new();
     let u1 = author
         .handle_command(TrameCommand::SetCellText {
-            row: Row::new(0),
-            col: Col::new(0),
+            row: Pos::<Row>::new(0),
+            col: Pos::<Col>::new(0),
             text: "1".to_owned(),
         })
         .update
         .expect("A1 delta");
     let u2 = author
         .handle_command(TrameCommand::SetCellText {
-            row: Row::new(1),
-            col: Col::new(0),
+            row: Pos::<Row>::new(1),
+            col: Pos::<Col>::new(0),
             text: "2".to_owned(),
         })
         .update
@@ -277,7 +278,7 @@ fn resize_col_round_trips_through_viewport() {
     let evts = state.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
-        col: Col::new(1),
+        col: Pos::<Col>::new(1),
         width: ambre_core::Px::<ambre_core::Doc>::new(150.0),
     });
     assert!(
@@ -301,7 +302,7 @@ fn resize_row_round_trips_and_clamps_to_minimum() {
     state.handle_command(TrameCommand::ResizeRow {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
-        row: Row::new(2),
+        row: Pos::<Row>::new(2),
         height: ambre_core::Px::<ambre_core::Doc>::new(1.0),
     });
     let (_, heights) = viewport_metrics(&mut state, 0, 3, 0, 0);
@@ -314,7 +315,7 @@ fn resize_survives_snapshot_roundtrip() {
     state.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         width: ambre_core::Px::<ambre_core::Doc>::new(200.0),
     });
     let snapshot = state.export_snapshot();
@@ -335,13 +336,13 @@ fn concurrent_resize_of_same_col_converges_lww() {
     a.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         width: ambre_core::Px::<ambre_core::Doc>::new(120.0),
     });
     b.handle_command(TrameCommand::ResizeCol {
         version: ambre_core::Generation::nth(1),
         sheet_id: default_sheet(),
-        col: Col::new(0),
+        col: Pos::<Col>::new(0),
         width: ambre_core::Px::<ambre_core::Doc>::new(300.0),
     });
     let (sa, sb) = (a.export_snapshot(), b.export_snapshot());
@@ -368,21 +369,21 @@ fn copy_range_covers_the_full_selection_not_a_viewport() {
     let mut state = TrameState::new();
     // Two literals far apart: A1 (0,0) and a cell hundreds of rows down.
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "top".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(500),
-        col: Col::new(3),
+        row: Pos::<Row>::new(500),
+        col: Pos::<Col>::new(3),
         text: "bottom".to_owned(),
     });
     // Select the whole rectangle spanning both (top-left A1 -> row 500, col 3).
     state.handle_command(TrameCommand::SetActiveCell {
-        row: Row::new(0),
-        col: Col::new(0),
-        anchor_row: Row::new(500),
-        anchor_col: Col::new(3),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
+        anchor_row: Pos::<Row>::new(500),
+        anchor_col: Pos::<Col>::new(3),
         extra: vec![],
         kind: crate::SelectionKind::Cells,
     });
@@ -391,23 +392,23 @@ fn copy_range_covers_the_full_selection_not_a_viewport() {
     let TrameEvent::Clipboard(payload) = &out.display[0] else {
         panic!("expected a Clipboard event");
     };
-    assert_eq!(payload.src_row, Row::new(0));
-    assert_eq!(payload.src_col, Col::new(0));
-    assert_eq!(payload.rows, RowCount::new(501));
-    assert_eq!(payload.cols, ColCount::new(4));
+    assert_eq!(payload.src_row, Pos::<Row>::new(0));
+    assert_eq!(payload.src_col, Pos::<Col>::new(0));
+    assert_eq!(payload.rows, Count::<Row>::new(501));
+    assert_eq!(payload.cols, Count::<Col>::new(4));
     // Both non-empty cells are present, including the far one a viewport-based
     // build would have dropped; blanks in between are omitted.
     assert_eq!(payload.cells.len(), 2);
     let top = payload
         .cells
         .iter()
-        .find(|c| c.dr == RowCount::new(0) && c.dc == ColCount::new(0))
+        .find(|c| c.dr == Count::<Row>::new(0) && c.dc == Count::<Col>::new(0))
         .unwrap();
     assert_eq!(top.raw, "top");
     let bottom = payload
         .cells
         .iter()
-        .find(|c| c.dr == RowCount::new(500) && c.dc == ColCount::new(3))
+        .find(|c| c.dr == Count::<Row>::new(500) && c.dc == Count::<Col>::new(3))
         .unwrap();
     assert_eq!(bottom.raw, "bottom");
     // Non-mutating: no CRDT delta emitted.
@@ -418,8 +419,8 @@ fn copy_range_covers_the_full_selection_not_a_viewport() {
 fn percent_sheet() -> TrameState {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(0),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(0),
         text: "0.5".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellStyle {
@@ -478,8 +479,8 @@ fn import_reports_unreadable_records() {
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: Some(SheetId::new("s0".to_owned())),
-        start_row: Row::new(0),
-        start_col: Col::new(0),
+        start_row: Pos::<Row>::new(0),
+        start_col: Pos::<Col>::new(0),
     });
     assert!(
         out.display
@@ -507,7 +508,7 @@ fn an_import_past_the_grid_edge_is_cut_and_said() {
         delimiter: None,
         header: HeaderRow::Absent,
         target_sheet_id: Some(SheetId::new("s0".to_owned())),
-        start_row: Row::new(0),
+        start_row: Pos::<Row>::new(0),
         start_col: crate::LAST_COL.prev().expect("a column before the last"),
     });
     assert!(
@@ -537,8 +538,8 @@ fn an_import_starting_past_the_grid_edge_writes_nothing() {
     state.flush_delta();
     let sheets = state.all_sheet_ids().len();
     for (start_row, start_col) in [
-        (crate::TOTAL_ROWS.as_end(), Col::new(0)),
-        (Row::new(0), crate::TOTAL_COLS.as_end()),
+        (crate::TOTAL_ROWS.as_end(), Pos::<Col>::new(0)),
+        (Pos::<Row>::new(0), crate::TOTAL_COLS.as_end()),
     ] {
         let out = state.handle_command(TrameCommand::ImportCsv {
             data: ambre_core::Payload::<ambre_core::FileBytes>::new(b"a,b\n".to_vec()),
@@ -586,16 +587,18 @@ fn export_with_nothing_to_write_says_so() {
 fn column_content_reaches_every_row() {
     let mut state = TrameState::new();
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(0),
-        col: Col::new(1),
+        row: Pos::<Row>::new(0),
+        col: Pos::<Col>::new(1),
         text: "top".to_owned(),
     });
     state.handle_command(TrameCommand::SetCellText {
-        row: Row::new(900),
-        col: Col::new(1),
+        row: Pos::<Row>::new(900),
+        col: Pos::<Col>::new(1),
         text: "a long label far below the loaded window".to_owned(),
     });
-    let out = state.handle_command(TrameCommand::RequestColumnContent { col: Col::new(1) });
+    let out = state.handle_command(TrameCommand::RequestColumnContent {
+        col: Pos::<Col>::new(1),
+    });
     assert!(out.update.is_none(), "a query writes nothing");
     let [TrameEvent::ColumnContent { col: COL_1, cells }] = &out.display[..] else {
         panic!("expected ColumnContent, got {:?}", out.display)

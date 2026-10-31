@@ -2,6 +2,7 @@
 // The shared autofilter popover and its state.
 
 use super::*;
+use ambre_core::index::Pos;
 
 /// Open state of the shared filter popover: which grid column it targets and the
 /// viewport (client-space) anchor point under which it is drawn. `None` means
@@ -10,7 +11,7 @@ use super::*;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FilterPopoverState {
     /// Grid column (0-based) the filter targets.
-    pub col: Col,
+    pub col: Pos<Col>,
     /// The popover's top-left on the page.
     pub at: ambre_core::Point<ambre_core::Px<ambre_core::Css>>,
 }
@@ -34,7 +35,7 @@ const FILTER_OPS: &[(FilterOp, &str)] = &[
 ];
 
 /// A1-style column label for a grid column (0 -> "A", 26 -> "AA").
-fn col_label(col: Col) -> String {
+fn col_label(col: Pos<Col>) -> String {
     crate::columns::col_to_alpha(col)
 }
 

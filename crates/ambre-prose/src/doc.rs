@@ -13,15 +13,16 @@
 //! separator (`PROSE-088`).
 
 use ambre_core::crdt::FieldKey;
+use ambre_core::index::{Pos, Span};
 use ambre_core::{FontSize, LangTag, Mm, Pt};
 use loro::{
     LoroDoc, LoroMap, LoroMovableList, LoroText, LoroTree, LoroValue, TreeID, TreeParentId,
 };
 
 use ambre_bus::app::prose::{
-    Align, BandState, BlockType, DocCount, DocOffset, DocSpan, FirstPage, HeadingLevel,
-    KeepTogether, KeepWithNext, LineHeight, LineHeightMode, LineSpacingMultiple, ListStyle,
-    OrderedStyle, ParagraphStyle, StyleId, TocNumbering,
+    Align, BandState, BlockType, DocChar, FirstPage, HeadingLevel, KeepTogether, KeepWithNext,
+    LineHeight, LineHeightMode, LineSpacingMultiple, ListStyle, OrderedStyle, ParagraphStyle,
+    StyleId, TocNumbering,
 };
 
 // -----------------------------------------------------------------------------
@@ -1473,8 +1474,8 @@ impl Bands {
     /// page's own pair while the setting is on, the regular pair otherwise
     /// (`PROSE-FEAT-169`, `PROSE-UI-133`). A hidden side draws nothing.
     #[must_use]
-    pub fn on_page(&self, page: crate::events::PageIndex) -> (Option<Band>, Option<Band>) {
-        let first = page == crate::events::PageIndex::ZERO && self.different_first_page.has_own();
+    pub fn on_page(&self, page: Pos<crate::events::Page>) -> (Option<Band>, Option<Band>) {
+        let first = page == Pos::<crate::events::Page>::ZERO && self.different_first_page.has_own();
         let (header, footer) = if first {
             (self.header_first, self.footer_first)
         } else {
@@ -1707,7 +1708,7 @@ pub(crate) fn flow(tree: &LoroTree) -> Vec<TreeID> {
 pub(crate) struct Anchor<V> {
     pub block: TreeID,
     /// A count of code points into the block's body.
-    pub offset: DocOffset,
+    pub offset: Pos<DocChar>,
     pub value: V,
 }
 
@@ -1728,12 +1729,12 @@ pub(crate) fn anchors<V: Clone>(
         if !block_type_of(&tree, &id).is_some_and(BlockType::has_body) {
             continue;
         }
-        let mut offset = DocOffset::ZERO;
+        let mut offset = Pos::<DocChar>::ZERO;
         for span in get_block_text(document, &id).to_delta() {
             let loro::TextDelta::Insert { insert, attributes } = span else {
                 continue;
             };
-            let length = DocCount::of(&insert);
+            let length = ambre_core::char_len(&insert).as_axis::<DocChar>();
             let value = attributes
                 .as_ref()
                 .and_then(|attributes| attributes.get(key))
@@ -1742,7 +1743,7 @@ pub(crate) fn anchors<V: Clone>(
                     _ => None,
                 });
             if let Some(value) = value {
-                for at in DocSpan::from_count(offset, length) {
+                for at in Span::<DocChar>::from_count(offset, length) {
                     out.push(Anchor {
                         block: id,
                         offset: at,

@@ -7,6 +7,7 @@
 
 use super::*;
 use crate::formula::identity::{AxisEdit, LineEdit};
+use ambre_core::index::{Count, Pos, Span};
 
 impl TrameState {
     /// Single-column sort of a row range (`trame-sort`).
@@ -35,7 +36,7 @@ impl TrameState {
         &mut self,
         sheet_id: &SheetId,
         rect: CellRect,
-        sort_col: ColCount,
+        sort_col: Count<Col>,
         order: SortOrder,
         header: HeaderRow,
     ) -> TrameOutcome {
@@ -80,9 +81,9 @@ impl TrameState {
 
     /// The rows of `rect` a sort reorders: clamped to the materialized rows,
     /// past its `header` rows. `None` with fewer than two rows to order.
-    fn sortable_rows(&self, rect: CellRect, header: RowCount) -> Option<RowSpan> {
+    fn sortable_rows(&self, rect: CellRect, header: Count<Row>) -> Option<Span<Row>> {
         // Virtual rows carry no cell data to reorder and no value to sort on.
-        let row_end = rect.bottom_right.row.min(Row::last(&self.index)?);
+        let row_end = rect.bottom_right.row.min(Row::len(&self.index).last()?);
         if rect.top_left.row > row_end {
             return None;
         }
@@ -114,7 +115,7 @@ impl TrameState {
         }
         // Resolve the keys to absolute columns inside the range; drop out-of-range
         // ones. With no usable key there is nothing to order by.
-        let keys: Vec<(Col, SortOrder)> = sort_keys
+        let keys: Vec<(Pos<Col>, SortOrder)> = sort_keys
             .iter()
             .map(|k| (rect.top_left.col + k.col, k.order))
             .filter(|(col, _)| *col <= rect.bottom_right.col)
@@ -166,7 +167,12 @@ impl TrameState {
     /// desired one (same multiset), and `sort_start` the first sortable position.
     /// Returns [`TrameEvent::SortComplete`] alone (no CRDT delta) when the order
     /// is already correct.
-    fn realize_sort(&mut self, sort_start: Row, before: &[Uid], target: Vec<Uid>) -> TrameOutcome {
+    fn realize_sort(
+        &mut self,
+        sort_start: Pos<Row>,
+        before: &[Uid],
+        target: Vec<Uid>,
+    ) -> TrameOutcome {
         if before == target {
             // Stable sort left the order untouched: acknowledge, no CRDT delta.
             return TrameOutcome::display_only(vec![TrameEvent::SortComplete]);
@@ -240,10 +246,10 @@ impl TrameState {
 }
 
 /// The rows a sort leaves in place at the top of its range.
-fn header_rows(header: HeaderRow) -> RowCount {
+fn header_rows(header: HeaderRow) -> Count<Row> {
     match header {
-        HeaderRow::Absent => RowCount::ZERO,
-        HeaderRow::Present => RowCount::new(1),
+        HeaderRow::Absent => Count::<Row>::ZERO,
+        HeaderRow::Present => Count::<Row>::new(1),
     }
 }
 

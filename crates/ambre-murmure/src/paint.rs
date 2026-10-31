@@ -5,21 +5,22 @@
 //! It paints them on any drawing surface: the page's canvas, or the
 //! recording surface of a host test.
 
+use ambre_core::index::{Count, IdxVec, Pos, Span};
 use std::collections::HashMap;
 
 use ambre_bus::{Attachment, ContentHash, Emoji, TextStyle, Timestamp};
 use ambre_canvas::theme::{FONT_BODY, FONT_UI, SPACE_2, SPACE_4, SPACE_8};
 use ambre_canvas::{Palette, SpanShape, TextCache};
 use ambre_core::id::{Id, Message, User};
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, Px, Size, Surface, View};
+use ambre_core::{Byte, Px, Size, Surface, View};
 use ambre_draw::{
     Affine, Affinity, Alignment, Brush, Color, Cursor, DrawSurface, FontContext, ImageSource,
     Layout, ParleyBrush, Point, PositionedLayoutItem, Rect, Selection,
 };
 
 use crate::list::{
-    BodyInk, HeaderWords, JUMP_TO_LATEST, ListRow, ListRowCount, ListRowVec, MessageList, OnScreen,
-    RowKey, RowWords, UNREAD_LINE, chip_label, file_label, window,
+    BodyInk, HeaderWords, JUMP_TO_LATEST, ListRow, MessageList, OnScreen, RowKey, RowWords,
+    UNREAD_LINE, chip_label, file_label, window,
 };
 use crate::look;
 use crate::pictures::{Pictures, frame_at, frame_key, previews};
@@ -84,14 +85,14 @@ impl RowBounds {
 /// A row on screen: its index in the list, and where it lies.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PaintedRow {
-    pub index: ListRow,
+    pub index: Pos<ListRow>,
     pub bounds: RowBounds,
 }
 
 /// A row the paint laid out: its index in the list, its top and its height.
 #[derive(Debug, Clone, Copy)]
 struct LaidRow {
-    index: ListRow,
+    index: Pos<ListRow>,
     top: Px<View>,
     tall: Px<View>,
 }
@@ -142,7 +143,7 @@ pub(crate) fn text_height(layout: &Layout<ParleyBrush>) -> Px<View> {
 pub struct Painted {
     /// The rows laid out: the ones the viewport reaches, never the whole
     /// list.
-    pub laid_out: ListRowCount,
+    pub laid_out: Count<ListRow>,
     /// Whether the latest row is on screen.
     pub latest_shown: OnScreen,
     /// Whether the oldest row the list holds is on screen (`MURMURE-191`).
@@ -150,11 +151,11 @@ pub struct Painted {
     /// Whether the unread line is on screen (`MURMURE-184`).
     pub line_shown: OnScreen,
     /// The row the list rests on and its top, `None` on the latest row.
-    pub rest: Option<(ListRow, Px<View>)>,
+    pub rest: Option<(Pos<ListRow>, Px<View>)>,
     /// The first row on screen and its top, wherever the list rests.
-    pub top: Option<(ListRow, Px<View>)>,
+    pub top: Option<(Pos<ListRow>, Px<View>)>,
     /// The last row on screen, wherever the list rests.
-    pub bottom: Option<ListRow>,
+    pub bottom: Option<Pos<ListRow>>,
     /// The top and the bottom of the focused row, `None` when it is off
     /// screen (`MURMURE-205`).
     pub focus: Option<RowBounds>,
@@ -168,7 +169,7 @@ pub struct Painted {
     pub link: Option<ambre_core::LinkUrl>,
     /// The reaction chip a click landed on: the index of its row, and its
     /// emoji.
-    pub chip: Option<(ListRow, Emoji)>,
+    pub chip: Option<(Pos<ListRow>, Emoji)>,
     /// The file chip a click landed on: the file it fetches.
     pub file: Option<Attachment>,
     /// The files whose preview this paint drew, decoded or not. Only these
@@ -182,7 +183,7 @@ pub struct Painted {
 impl Painted {
     /// The index of the row under the height `y`, `None` between rows or
     /// past them.
-    pub fn row_at(&self, y: Px<View>) -> Option<ListRow> {
+    pub fn row_at(&self, y: Px<View>) -> Option<Pos<ListRow>> {
         self.rows
             .iter()
             .find(|row| row.bounds.holds(y))
@@ -197,9 +198,9 @@ pub struct Shown<'a> {
     pub list: &'a MessageList,
     pub unread: Option<Id<Message>>,
     /// The row at the top and its top, `None` to rest on the latest row.
-    pub anchor: Option<(ListRow, Px<View>)>,
+    pub anchor: Option<(Pos<ListRow>, Px<View>)>,
     /// The row that holds the focus, ringed in the accent (`MURMURE-205`).
-    pub focus: Option<ListRow>,
+    pub focus: Option<Pos<ListRow>>,
     /// The selection, and the points of a drag the paint resolves.
     pub selecting: Selecting,
     /// The signed-in member, whose own reactions take the accent.
@@ -229,7 +230,7 @@ pub fn paint_list<S: DrawSurface>(
     surface.fill_rect(backdrop, palette.content_bg);
     let rows = shown.list.rows();
     let text_width = (width - SPACE_8 * 2.0).max(Px::<View>::new(1.0));
-    let mut words: HashMap<ListRow, (RowWords, LineAbove)> = HashMap::new();
+    let mut words: HashMap<Pos<ListRow>, (RowWords, LineAbove)> = HashMap::new();
     let reached = window(rows.len(), height, shown.anchor, |i| {
         let Some(row) = rows.get(i) else {
             return Px::<View>::ZERO;
@@ -258,7 +259,7 @@ pub fn paint_list<S: DrawSurface>(
     let keys = if active {
         shown.list.keys()
     } else {
-        ListRowVec::new()
+        IdxVec::<ListRow, _>::new()
     };
     let mut selection = selecting.selection;
     let mut spot_at = |at| spot_at(font_cx, cache, &laid, &words, &keys, at, text_width);
@@ -297,8 +298,8 @@ pub fn paint_list<S: DrawSurface>(
         };
         let band = selection
             .zip(keys.get(i))
-            .and_then(|(s, &key)| s.range_in(&keys, key, ByteCount::from_len(row.body.len())));
-        let tints: Vec<(ByteSpan, Color)> = row
+            .and_then(|(s, &key)| s.range_in(&keys, key, Count::<Byte>::from_len(row.body.len())));
+        let tints: Vec<(Span<Byte>, Color)> = row
             .marks
             .iter()
             .filter_map(|mark| look::tint(&mark.style, palette).map(|c| (mark.bytes, c)))
@@ -355,7 +356,7 @@ pub fn paint_list<S: DrawSurface>(
         }
     }
     Painted {
-        laid_out: ListRowCount::from_len(words.len()),
+        laid_out: Count::<ListRow>::from_len(words.len()),
         latest_shown: reached.latest,
         oldest_shown: reached.oldest,
         line_shown,
@@ -388,11 +389,11 @@ fn chip_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<ListRow, (RowWords, LineAbove)>,
+    words: &HashMap<Pos<ListRow>, (RowWords, LineAbove)>,
     at: ambre_core::Point<Px<View>>,
     width: Px<View>,
     pics: Option<Pictured<'_>>,
-) -> Option<(ListRow, Emoji)> {
+) -> Option<(Pos<ListRow>, Emoji)> {
     let (x, y) = (at.x, at.y);
     let &LaidRow { index: i, top, .. } = rows.iter().find(|row| row.holds(y))?;
     let (row, line) = words.get(&i)?;
@@ -576,7 +577,7 @@ fn file_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<ListRow, (RowWords, LineAbove)>,
+    words: &HashMap<Pos<ListRow>, (RowWords, LineAbove)>,
     at: ambre_core::Point<Px<View>>,
     width: Px<View>,
     pics: Option<Pictured<'_>>,
@@ -615,7 +616,7 @@ fn link_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<ListRow, (RowWords, LineAbove)>,
+    words: &HashMap<Pos<ListRow>, (RowWords, LineAbove)>,
     at: ambre_core::Point<Px<View>>,
     width: Px<View>,
 ) -> Option<ambre_core::LinkUrl> {
@@ -629,8 +630,9 @@ fn link_at(
         let TextStyle::Link(address) = &mark.style else {
             return None;
         };
-        let from = Cursor::from_byte_index(layout, mark.bytes.start.get(), Affinity::Downstream);
-        let to = Cursor::from_byte_index(layout, mark.bytes.end.get(), Affinity::Upstream);
+        let from =
+            Cursor::from_byte_index(layout, mark.bytes.start.to_usize(), Affinity::Downstream);
+        let to = Cursor::from_byte_index(layout, mark.bytes.end.to_usize(), Affinity::Upstream);
         let hit = Selection::new(from, to)
             .geometry(layout)
             .iter()
@@ -646,8 +648,8 @@ fn spot_at(
     font_cx: &mut FontContext,
     cache: &mut TextCache,
     rows: &[LaidRow],
-    words: &HashMap<ListRow, (RowWords, LineAbove)>,
-    keys: &ListRowVec<RowKey>,
+    words: &HashMap<Pos<ListRow>, (RowWords, LineAbove)>,
+    keys: &IdxVec<ListRow, RowKey>,
     at: ambre_core::Point<Px<View>>,
     width: Px<View>,
 ) -> Option<Spot> {
@@ -662,7 +664,7 @@ fn spot_at(
     let cursor = Cursor::from_point(layout, (x - SPACE_8).get(), (y - body_y).get());
     Some(Spot {
         row: *keys.get(i)?,
-        byte: ByteOffset::from_usize(cursor.index()),
+        byte: Pos::<Byte>::from_usize(cursor.index()),
     })
 }
 
@@ -852,12 +854,12 @@ fn body<'c>(
 fn fill_bytes<S: DrawSurface>(
     surface: &mut S,
     layout: &Layout<ParleyBrush>,
-    bytes: ByteSpan,
+    bytes: Span<Byte>,
     body_y: Px<View>,
     color: Color,
 ) {
-    let from = Cursor::from_byte_index(layout, bytes.start.get(), Affinity::Downstream);
-    let to = Cursor::from_byte_index(layout, bytes.end.get(), Affinity::Upstream);
+    let from = Cursor::from_byte_index(layout, bytes.start.to_usize(), Affinity::Downstream);
+    let to = Cursor::from_byte_index(layout, bytes.end.to_usize(), Affinity::Upstream);
     let (x, y) = (surface_px(SPACE_8).get(), surface_px(body_y).get());
     for (bb, _) in Selection::new(from, to).geometry(layout) {
         surface.fill_rect(Rect::new(bb.x0 + x, bb.y0 + y, bb.x1 + x, bb.y1 + y), color);
@@ -1129,7 +1131,7 @@ fn draw_body<S: DrawSurface>(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use ambre_bus::CharSpan;
+    use ambre_bus::Char;
     use ambre_bus::{Mention, MentionTarget, StyleMark, TextStyle, ThreadHead};
     use ambre_canvas::fonts::font_context_from_bytes;
     use ambre_canvas::theme::LIGHT;
@@ -1260,7 +1262,7 @@ pub(crate) mod tests {
             me: None,
             pictures: None,
         };
-        let (surface, painted) = paint_from(focused(ListRow::new(98)), 300.0);
+        let (surface, painted) = paint_from(focused(Pos::<ListRow>::new(98)), 300.0);
         let rings: Vec<Rect> = surface
             .ops()
             .iter()
@@ -1280,12 +1282,12 @@ pub(crate) mod tests {
         assert!(top >= Px::<View>::ZERO && bottom <= Px::<View>::new(300.0) && bottom > top);
         assert_eq!(
             painted.bottom,
-            Some(ListRow::new(99)),
+            Some(Pos::<ListRow>::new(99)),
             "the latest row is the last one"
         );
         let body = runs(&surface, LIGHT.cell_text);
         assert!(body.iter().any(|&(y, _)| y > ring.y0 && y < ring.y1));
-        let (surface, painted) = paint_from(focused(ListRow::new(3)), 300.0);
+        let (surface, painted) = paint_from(focused(Pos::<ListRow>::new(3)), 300.0);
         assert_eq!(painted.focus, None);
         assert!(
             !surface.ops().iter().any(
@@ -1332,12 +1334,15 @@ pub(crate) mod tests {
             me: None,
             pictures: None,
         };
-        let (_, painted) = paint_from(at((ListRow::new(10), Px::<View>::ZERO)), 200.0);
-        assert_eq!(painted.rest, Some((ListRow::new(10), Px::<View>::ZERO)));
+        let (_, painted) = paint_from(at((Pos::<ListRow>::new(10), Px::<View>::ZERO)), 200.0);
+        assert_eq!(
+            painted.rest,
+            Some((Pos::<ListRow>::new(10), Px::<View>::ZERO))
+        );
         let shown = |painted: &Painted| (painted.oldest_shown, painted.latest_shown);
         assert_eq!(shown(&painted), (OnScreen::Hidden, OnScreen::Hidden));
         assert!(painted.laid_out.get() < 20, "{painted:?}");
-        let (_, top) = paint_from(at((ListRow::ZERO, Px::<View>::ZERO)), 200.0);
+        let (_, top) = paint_from(at((Pos::<ListRow>::ZERO, Px::<View>::ZERO)), 200.0);
         assert_eq!(shown(&top), (OnScreen::Shown, OnScreen::Hidden));
         let (_, bottom) = paint(&list, 200.0);
         assert_eq!(bottom.rest, None);
@@ -1435,7 +1440,7 @@ pub(crate) mod tests {
         assert!(tall(&painted) > tall(&plain), "the chips take room");
         assert_eq!(
             painted.chip,
-            Some((ListRow::ZERO, Emoji::from("\u{1F44D}")))
+            Some((Pos::<ListRow>::ZERO, Emoji::from("\u{1F44D}")))
         );
         let fills = |color: Color| -> Vec<Rect> {
             surface
@@ -1671,16 +1676,16 @@ pub(crate) mod tests {
         );
         sent.mentions = vec![Mention {
             target: MentionTarget::User(Id::<User>::mint()),
-            range: CharSpan::from_usize_range(0..3),
+            range: Span::<Char>::from_usize_range(0..3),
         }];
         let mark = |style, range| StyleMark { style, range };
         sent.styles = vec![
             mark(
                 TextStyle::Link("https://ambre.dev".into()),
-                CharSpan::from_usize_range(14..15),
+                Span::<Char>::from_usize_range(14..15),
             ),
-            mark(TextStyle::Bold, CharSpan::from_usize_range(7..11)),
-            mark(TextStyle::Code, CharSpan::from_usize_range(12..13)),
+            mark(TextStyle::Bold, Span::<Char>::from_usize_range(7..11)),
+            mark(TextStyle::Code, Span::<Char>::from_usize_range(12..13)),
         ];
         let mut list = MessageList::default();
         list.absorb(Id::<Segment>::mint(), vec![sent]);
@@ -1694,7 +1699,7 @@ pub(crate) mod tests {
         let mut marks: Vec<(usize, usize)> = row
             .marks
             .iter()
-            .map(|m| (m.bytes.start.get(), m.bytes.end.get()))
+            .map(|m| (m.bytes.start.to_usize(), m.bytes.end.to_usize()))
             .collect();
         marks.sort_unstable();
         assert_eq!(marks, [(8, 12), (13, 14), (15, 16)]);
@@ -1757,11 +1762,14 @@ pub(crate) mod tests {
         };
         let mark = |style, range| StyleMark { style, range };
         let blocks = vec![
-            mark(TextStyle::Quote, CharSpan::from_usize_range(0..5)),
-            mark(TextStyle::List, CharSpan::from_usize_range(5..12)),
+            mark(TextStyle::Quote, Span::<Char>::from_usize_range(0..5)),
+            mark(TextStyle::List, Span::<Char>::from_usize_range(5..12)),
         ];
         assert_eq!(margin("said\none\ntwo", blocks), (3, 0), "a rule, two dots");
-        let code = vec![mark(TextStyle::CodeBlock, CharSpan::from_usize_range(0..4))];
+        let code = vec![mark(
+            TextStyle::CodeBlock,
+            Span::<Char>::from_usize_range(0..4),
+        )];
         assert_eq!(margin("fn a", code), (0, 1), "a tint, no margin mark");
     }
 
@@ -1779,7 +1787,7 @@ pub(crate) mod tests {
             );
             sent.styles = vec![StyleMark {
                 style,
-                range: CharSpan::from_usize_range(0..long.len() + 1),
+                range: Span::<Char>::from_usize_range(0..long.len() + 1),
             }];
             let mut list = MessageList::default();
             list.absorb(Id::<Segment>::mint(), vec![sent]);
@@ -1923,15 +1931,15 @@ pub(crate) mod tests {
         assert_eq!(
             selection.anchor,
             Spot {
-                row: keys[ListRow::ZERO],
-                byte: ByteOffset::ZERO
+                row: keys[Pos::<ListRow>::ZERO],
+                byte: Pos::<Byte>::ZERO
             }
         );
         assert_eq!(
             selection.focus,
             Spot {
-                row: keys[ListRow::new(1)],
-                byte: ByteOffset::new(5)
+                row: keys[Pos::<ListRow>::new(1)],
+                byte: Pos::<Byte>::new(5)
             }
         );
         let tint = selection_tint(LIGHT.selection);
@@ -1947,8 +1955,8 @@ pub(crate) mod tests {
         assert_eq!(
             focus,
             Spot {
-                row: keys[ListRow::new(2)],
-                byte: ByteOffset::new(5)
+                row: keys[Pos::<ListRow>::new(2)],
+                byte: Pos::<Byte>::new(5)
             }
         );
         let (_, none) = paint_from(drag(press, press), 600.0);
@@ -1963,7 +1971,7 @@ pub(crate) mod tests {
         assert_eq!(
             painted,
             Painted {
-                laid_out: ListRowCount::ZERO,
+                laid_out: Count::<ListRow>::ZERO,
                 latest_shown: OnScreen::Hidden,
                 oldest_shown: OnScreen::Hidden,
                 line_shown: OnScreen::Hidden,
