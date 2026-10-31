@@ -82,10 +82,7 @@ pub(crate) fn unwrap_own<'a>(
         .into_iter()
         .find(|(own, _, _)| **own == ours)
         .ok_or(SyncError::OwnRowMissing)?;
-    let encrypted = enc.as_bytes();
-    let (nonce, ciphertext) = ambre_core::Nonce::split_from(encrypted)
-        .map(|(nonce, ciphertext)| (nonce, ambre_core::Ciphertext(ciphertext.to_vec())))
-        .ok_or(SyncError::Malformed(Part::WrappedKey))?;
+    let (nonce, ciphertext) = enc.parts().ok_or(SyncError::Malformed(Part::WrappedKey))?;
     let wrapper = if wrapper.is_empty() { own } else { wrapper };
     let peer = decode_exchange_pubkey(wrapper)?;
     let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };

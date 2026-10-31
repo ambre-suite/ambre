@@ -164,8 +164,8 @@ const FAMILY_MAX: ambre_core::ByteSize = ambre_core::ByteSize(64);
 fn pasted(root: MarkRoot, raw: Option<&str>) -> Option<mark::MarkValue> {
     if matches!(root, MarkRoot::FontSize) {
         let size = mark::read_font_size(raw?)?;
-        let points = mark::canonical_number(size.points());
-        return mark::validate_value(&root.key(), points.as_deref()).ok();
+        let points = mark::canonical_number(size);
+        return mark::validate_value(&root.key(), Some(&points)).ok();
     }
     let value = mark::validate_value(&root.key(), raw).ok()?;
     let kept = match root {

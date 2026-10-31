@@ -1,11 +1,11 @@
 # The unwrap report (ai/ambre-rust-style.md, the newtype rule): `ambre-primitives unwrap --strict`.
 # One line per key that hands a newtype's primitive to workspace code: the number of sites it allows, then the true reason they may. Add a line by hand only; a reviewer reads it.
 key	count	reason
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark::MarkRoot::of | MarkKey::root -> Self::parse	1	MarkRoot::parse is the crdt_names! decoder of any stored str; MarkRoot::of is the named conversion over it.
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark::validate_value | FontSize::points -> canonical_number	1	canonical_number is the one f32 spelling of a stored mark, shared with raw, unclamped pasted sizes.
-ambre-crypto | src/aead.rs | crate::aead::open | Ciphertext::0 -> open_under	1	open_under is the private AEAD kernel over bytes; every public opener types its input first.
-ambre-crypto | src/aead.rs | crate::aead::open_anchored_key | Ciphertext::0 -> open_under	1	open_under is the private AEAD kernel over bytes; every public opener types its input first.
-ambre-crypto | src/aead.rs | crate::aead::open_file | Ciphertext::0 -> open_under	1	open_under is the private AEAD kernel over bytes; every public opener types its input first.
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark::MarkRoot::of | MarkKey::root -> Self::parse	1	MarkRoot::parse is the crdt_names! decoder of any stored str; MarkRoot::of is the typed reader over it.
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark::canonical_number | FontSize::points -> spell	1	spell is the private kernel canonical_number shares with canonical_value, which spells the raw number a stored or command string reads as.
+ambre-crypto | src/aead.rs | crate::aead::open | Ciphertext::0 -> open_under	1	open_under is the private AEAD kernel over bytes, so open_row can open a slice of its row in place; every public opener types its input.
+ambre-crypto | src/aead.rs | crate::aead::open_anchored_key | Ciphertext::0 -> open_under	1	open_under is the private AEAD kernel over bytes, so open_row can open a slice of its row in place; every public opener types its input.
+ambre-crypto | src/aead.rs | crate::aead::open_file | Ciphertext::0 -> open_under	1	open_under is the private AEAD kernel over bytes, so open_row can open a slice of its row in place; every public opener types its input.
 ambre-crypto | src/envelope.rs | crate::envelope::seal_media | MediaBytes::as_bytes -> aead::seal	1	aead::seal seals any plaintext; the slice spares a copy of the media.
 ambre-crypto | src/hash.rs | crate::hash::chain_hash | Ciphertext::0 -> Tail	1	Tail marks the last field of a length-prefixed BLAKE2b input, which hashes bytes of any origin.
 ambre-crypto | src/hash.rs | crate::hash::dev_seed | DisplayName::as_str -> Tail	1	Tail marks the last field of a length-prefixed BLAKE2b input, which hashes bytes of any origin.
@@ -15,20 +15,16 @@ ambre-crypto | src/signature.rs | crate::signature::message | Aad::as_bytes -> p
 ambre-crypto | src/signature.rs | crate::signature::message | Ciphertext::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, whatever field it is.
 ambre-crypto | src/signature.rs | crate::signature::message | CommitmentTag::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, whatever field it is.
 ambre-crypto | src/signature.rs | crate::signature::message | Nonce::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, whatever field it is.
-ambre-logic | src/persistence.rs | crate::persistence::IdbKey::document | Uuid::to_simple -> Self	1	IdbKey::document is the named conversion itself: a document id to its IndexedDB key text.
-ambre-logic | src/persistence.rs | crate::persistence::IdbKey::user | Uuid::to_simple -> Self	1	IdbKey::user is the named conversion itself: a user id to its IndexedDB key text.
+ambre-logic | src/persistence.rs | crate::persistence::IdbKey::document | Uuid::to_simple -> Self	1	The id's 32-hex simple spelling is the IndexedDB key text, built only in this constructor.
+ambre-logic | src/persistence.rs | crate::persistence::IdbKey::user | Uuid::to_simple -> Self	1	The id's 32-hex simple spelling is the IndexedDB key text, built only in this constructor.
 ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::save_delta | SealedRowBytes::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
 ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::save_draft | SealedRowBytes::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
 ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::write_snapshot | SealedRowBytes::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
-ambre-prose | src/logic/clipboard/html_read.rs | crate::logic::clipboard::html_read::style_marks | FontSize::points -> mark::canonical_number	1	canonical_number is the one f32 spelling of a stored mark, shared with raw, unclamped pasted sizes.
-ambre-prose | src/logic/clipboard/html_write.rs | crate::logic::clipboard::html_write::runs | FontSize::points -> mark::canonical_number	1	canonical_number is the one f32 spelling of a stored mark, shared with raw, unclamped pasted sizes.
-ambre-prose | src/logic/clipboard/mod.rs | crate::logic::clipboard::pasted | FontSize::points -> mark::canonical_number	1	canonical_number is the one f32 spelling of a stored mark, shared with raw, unclamped pasted sizes.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | Aad::as_bytes -> push_framed	1	push_framed length-prefixes one field of the signed transcript, the same framing the client signs.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | Ciphertext::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, the same framing the client signs.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | CommitmentTag::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, the same framing the client signs.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | Nonce::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, the same framing the client signs.
-ambre-sync | src/documents.rs | crate::documents::unwrap_listed_key | WrappedDocKey::as_bytes -> ambre_core::Nonce::split_from	1	Nonce::split_from is the fixed-width parser of any byte prefix; the wire form is nonce then ciphertext.
-ambre-sync | src/members.rs | crate::members::SyncState::handle_search_users | UserSearch::as_str -> .query	1	ApiRoot::query percent-encodes any text into the URL.
+ambre-sync | src/members.rs | crate::members::SyncState::handle_search_users | UserSearch::as_str -> .query	1	RelayUrl::query percent-encodes any text into the value of a closed QueryKey (SYNC-179).
 ambre-sync | src/membership_log.rs | crate::membership_log::sign | SignedTranscript::as_bytes -> ambre_crypto::signature::sign_message	1	sign_message is Ed25519 over any bytes, in a crate below the transcript type.
 ambre-sync | src/pipeline.rs | crate::pipeline::seal_ephemeral | EphemeralBytes::as_bytes -> seal_payload	1	seal_payload compresses and seals any payload kind; each caller types its own.
 ambre-sync | src/pipeline.rs | crate::pipeline::seal_snapshot | SnapshotBytes::as_bytes -> seal_payload	1	seal_payload compresses and seals any payload kind; each caller types its own.

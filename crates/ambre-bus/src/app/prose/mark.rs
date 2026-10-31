@@ -61,24 +61,26 @@ impl MarkRoot {
     }
 }
 
-/// The canonical spelling of a number carried as a mark value (`PROSE-008`).
+/// The canonical spelling of a font size carried as a mark value
+/// (`PROSE-008`).
 ///
 /// Base 10, a `.` separator, no exponent, no trailing zero and no unit. Two
 /// peers writing the same size therefore produce the same bytes, and the merge
 /// holds one value rather than a choice between two spellings (`PROSE-091`).
 ///
-/// A value that is not finite has no canonical spelling, and the caller refuses
-/// the command rather than writing a marker no reader can use.
+/// A size is finite, so every size has one.
 #[must_use]
-pub fn canonical_number(value: f32) -> Option<String> {
-    if !value.is_finite() {
-        return None;
-    }
+pub fn canonical_number(size: FontSize) -> String {
+    spell(size.points())
+}
+
+/// The spelling of [`canonical_number`], over any finite number: a typed
+/// size, or the number a stored or command string reads as. The caller
+/// refuses a value that is not finite before it reaches here.
+fn spell(value: f32) -> String {
     // `f32::to_string` prints the shortest decimal that reads back as the same
-    // value, with no trailing zero. It prints an exponent outside the range a
-    // font size or a colour component lives in, and the caller refuses that.
-    let rendered = value.to_string();
-    (!rendered.contains(['e', 'E'])).then_some(rendered)
+    // value, with no trailing zero and never an exponent.
+    value.to_string()
 }
 
 /// The keys whose presence alone is the formatting, and which therefore take
@@ -239,9 +241,7 @@ pub fn validate_value(key: &MarkKey, raw: Option<&str>) -> Result<MarkValue, Mar
     }
     if NUMERIC_KEYS.contains(&root) {
         let size = parse_font_size(raw)?;
-        return canonical_number(size.points())
-            .map(MarkValue)
-            .ok_or_else(|| MarkValueError::BadFontSize(raw.to_owned()));
+        return Ok(MarkValue(canonical_number(size)));
     }
     Ok(MarkValue(raw.to_owned()))
 }
@@ -257,7 +257,7 @@ const NUMERIC_KEYS: [MarkRoot; 1] = [MarkRoot::FontSize];
 /// The canonical spelling of a mark value a command carried, or `None` when the
 /// value has none (`PROSE-008`, `PROSE-091`).
 ///
-/// A value under a numeric key is re-spelled through [`canonical_number`], so
+/// A value under a numeric key is re-spelled as [`canonical_number`] spells, with no size range, so
 /// `"11.0"` and `"11"` reach the document as one string. A value that is not a
 /// finite number is refused. Every other key's value is its own canonical form:
 /// a URL, a family name and a `Uuid` are spelled once.
@@ -266,5 +266,6 @@ pub fn canonical_value(mark_key: &MarkKey, raw: &str) -> Option<MarkValue> {
     if !MarkRoot::of(mark_key).is_some_and(|root| NUMERIC_KEYS.contains(&root)) {
         return Some(MarkValue(raw.to_owned()));
     }
-    canonical_number(raw.parse::<f32>().ok()?).map(MarkValue)
+    let value = raw.parse::<f32>().ok().filter(|value| value.is_finite())?;
+    Some(MarkValue(spell(value)))
 }

@@ -176,7 +176,7 @@ fn runs(html: &mut String, block: &[ClipRun]) {
         }
         if let Some(size) = value(run, MarkRoot::FontSize)
             .and_then(|size| mark::parse_font_size(size).ok())
-            .and_then(|size| mark::canonical_number(size.points()))
+            .map(mark::canonical_number)
         {
             let _ = write!(style, "font-size:{size}pt;");
         }

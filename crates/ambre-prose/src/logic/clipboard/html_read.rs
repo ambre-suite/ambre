@@ -850,9 +850,7 @@ fn style_marks(style: &Declarations<'_>) -> Vec<Change> {
                 }
             }
             CssProperty::FontSize => {
-                if let Some(points) =
-                    font_size(&lower).and_then(|size| mark::canonical_number(size.points()))
-                {
+                if let Some(points) = font_size(&lower).map(mark::canonical_number) {
                     changes.extend(set(MarkRoot::FontSize, &points));
                 }
             }

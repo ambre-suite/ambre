@@ -141,12 +141,22 @@ define_encoded! {
 }
 
 impl WrappedDocKey {
-    /// The wire form of a wrapped key: its nonce, then its ciphertext.
+    /// The wire form of a wrapped key: its nonce, then its ciphertext. The
+    /// parts fix the length; nothing checks it against
+    /// [`WrappedDocKey::LENGTHS`] here.
     pub fn from_parts(nonce: &crate::Nonce, ciphertext: &crate::Ciphertext) -> Self {
         let mut bytes = Vec::with_capacity(nonce.0.len() + ciphertext.0.len());
-        bytes.extend_from_slice(&nonce.0);
+        nonce.push_to(&mut bytes);
         bytes.extend_from_slice(&ciphertext.0);
         Self(bytes)
+    }
+
+    /// The nonce and the ciphertext [`WrappedDocKey::from_parts`] joined.
+    /// `None` when the bytes are shorter than a nonce.
+    #[must_use]
+    pub fn parts(&self) -> Option<(crate::Nonce, crate::Ciphertext)> {
+        let (nonce, ciphertext) = crate::Nonce::split_from(&self.0)?;
+        Some((nonce, crate::Ciphertext(ciphertext.to_vec())))
     }
 }
 
@@ -267,7 +277,9 @@ define_encoded! {
 
 #[cfg(test)]
 mod tests {
-    use super::{MasterKeySalt, SealedName, WrappedDocKey, WrappedMasterKey};
+    use super::{
+        KEY_LEN, MasterKeySalt, NONCE_LEN, SealedName, TAG_LEN, WrappedDocKey, WrappedMasterKey,
+    };
     use serde::de::DeserializeOwned;
 
     fn wire(len: usize) -> String {
@@ -315,15 +327,18 @@ mod tests {
     }
 
     /// A wrapped key joins its nonce and its ciphertext in that order, at a
-    /// length the wire reads back.
+    /// length the wire reads back. It splits back into the same parts, and
+    /// bytes shorter than a nonce have none.
     #[test]
     fn a_wrapped_key_is_its_nonce_then_its_ciphertext() {
-        let nonce = crate::Nonce([1; 24]);
-        let ciphertext = crate::Ciphertext(vec![2; 48]);
+        let nonce = crate::Nonce([1; NONCE_LEN]);
+        let ciphertext = crate::Ciphertext(vec![2; KEY_LEN + TAG_LEN]);
         let key = WrappedDocKey::from_parts(&nonce, &ciphertext);
-        assert_eq!(&key.as_bytes()[..24], &[1; 24]);
-        assert_eq!(&key.as_bytes()[24..], &[2; 48][..]);
+        assert_eq!(&key.as_bytes()[..NONCE_LEN], &[1; NONCE_LEN]);
+        assert_eq!(&key.as_bytes()[NONCE_LEN..], &ciphertext.0[..]);
         assert!(WrappedDocKey::LENGTHS.contains(&key.as_bytes().len()));
+        assert_eq!(key.parts(), Some((nonce, ciphertext)));
+        assert_eq!(WrappedDocKey::new(vec![0; NONCE_LEN - 1]).parts(), None);
     }
 
     /// A salt of any width but its own is refused when it is built, so a

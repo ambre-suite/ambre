@@ -183,12 +183,13 @@ ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValue::as_str(
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadColor.0 | field | String	generic	the refused value the error echoes
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | MarkValueError::BadFontSize.0 | field | String	generic	the refused value the error echoes
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_color() | ret | String	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number() | ret | Option<String>	free-text	text content / label / parser input
-ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number(value) | param | f32	math	a font size or colour component, spelled as a mark value
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_number() | ret | String	free-text	text content / label / parser input
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | canonical_value(raw) | param | &str	free-text	the raw text the constructor reads; the canonical spelling comes back as a MarkValue
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_color(raw) | param | &str	free-text	text content / label / parser input
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | parse_font_size(raw) | param | &str	free-text	text content / label / parser input
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | read_font_size(raw) | param | &str	free-text	text content / label / parser input
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell() | ret | String	free-text	the canonical spelling of a number, wrapped into a MarkValue by its callers
+ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | spell(value) | param | f32	math	a typed size's points, or the number a stored or command string reads as
 ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark | validate_value(raw) | param | Option<&str>	free-text	the raw text the constructor checks; the value that passes comes back as a MarkValue
 ambre-bus | src/app/toile.rs | crate::app::toile | <FontSizeChoice as TryFrom<f32>>::try_from(points) | param | f32	newtype-inner	FontSizeChoice field, constructor or accessor: the stored points and the whole points a picker lists
 ambre-bus | src/app/toile.rs | crate::app::toile | Broadcast::is_on() | ret | bool	generic	named flag, setter of a flag, or predicate

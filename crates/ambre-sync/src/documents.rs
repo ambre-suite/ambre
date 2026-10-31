@@ -394,12 +394,8 @@ pub(crate) fn unwrap_listed_key(
     wrapper_exchange_pub_key: &ambre_core::ExchangeKeyHex,
     exchange_key: &x25519_dalek::StaticSecret,
 ) -> Option<DocumentKey> {
-    let wrapped_bytes = doc_key_enc.as_bytes();
-    let (nonce, ciphertext) = ambre_core::Nonce::split_from(wrapped_bytes)?;
-    let wrapped = ambre_crypto::WrappedKey {
-        nonce,
-        ciphertext: ambre_core::Ciphertext(ciphertext.to_vec()),
-    };
+    let (nonce, ciphertext) = doc_key_enc.parts()?;
+    let wrapped = ambre_crypto::WrappedKey { nonce, ciphertext };
     let wrapper_hex = if wrapper_exchange_pub_key.is_empty() {
         // Self-wrapped owner row: the DH peer is our own public key.
         ambre_core::ExchangeKeyHex::encode(x25519_dalek::PublicKey::from(exchange_key).as_bytes())

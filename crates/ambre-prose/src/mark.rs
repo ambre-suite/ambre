@@ -230,9 +230,10 @@ mod tests {
                 .map(MarkValue::as_str),
             Some("11.5")
         );
-        assert_eq!(canonical_number(0.5).as_deref(), Some("0.5"));
-        assert_eq!(canonical_number(f32::NAN), None);
-        assert_eq!(canonical_number(f32::INFINITY), None);
+        let half = ambre_core::FontSize::new(0.5).expect("a finite size");
+        assert_eq!(canonical_number(half), "0.5");
+        assert_eq!(canonical_value(&"fs".into(), "NaN"), None);
+        assert_eq!(canonical_value(&"fs".into(), "inf"), None);
     }
 
     #[test]
