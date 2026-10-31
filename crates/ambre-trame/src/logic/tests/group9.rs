@@ -61,7 +61,11 @@ fn relay(from: &mut TrameState, to: &mut TrameState, cmd: TrameCommand) -> Vec<T
     to.apply_remote(&update)
 }
 
-fn commit(state: &mut TrameState, session: crate::EditSessionId, text: &str) -> TrameOutcome {
+fn commit(
+    state: &mut TrameState,
+    session: ambre_bus::Token<crate::EditSession>,
+    text: &str,
+) -> TrameOutcome {
     let out = state.handle_command(TrameCommand::CommitCellEdit {
         session,
         text: text.to_owned(),

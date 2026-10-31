@@ -18,8 +18,8 @@ use std::collections::{HashMap, HashSet};
 
 use ambre_bus::app::toile::CommentAnchor;
 use ambre_bus::app::toile::{
-    ClipboardPayload as ToileClipboardPayload, ConnectorId, CorrelationToken, DisplayConnector,
-    DisplayElement, DisplayGeom, DisplayNode, DisplayViewport, ElementId, ElementKind, End,
+    ClipboardPayload as ToileClipboardPayload, ConnectorId, DisplayConnector, DisplayElement,
+    DisplayGeom, DisplayNode, DisplayViewport, ElementCreation, ElementId, ElementKind, End,
     LinkTarget, PresencePayload, PresentMode, StatsRequestKind, ThreadId, ToileCommand, ToileError,
     ToileEvent, Viewport,
 };
@@ -368,9 +368,9 @@ pub struct ToileView {
     /// The `correlate` token the Sticky / Text tool's `CreateElement` carried,
     /// so the deferred open claims that element and no other (`TOILE-UI-194`).
     /// `None` when no placement awaits its reply.
-    edit_open_on_create: Option<CorrelationToken>,
+    edit_open_on_create: Option<ambre_bus::Token<ElementCreation>>,
     /// The token the next placement's `CreateElement.correlate` carries.
-    next_create_token: CorrelationToken,
+    next_create_token: ambre_bus::Token<ElementCreation>,
     /// Deferred close: the editor commits its buffer as `SetText` and closes on
     /// the next paint (so any intents typed since the last paint flush first).
     edit_closing: bool,
@@ -768,7 +768,7 @@ impl ToileView {
             edit_frame: None,
             edit_pending_open: None,
             edit_open_on_create: None,
-            next_create_token: CorrelationToken::FIRST,
+            next_create_token: ambre_bus::Token::FIRST,
             edit_closing: false,
             caret_drawn: None,
             edit_dirty: false,

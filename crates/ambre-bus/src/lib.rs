@@ -22,7 +22,7 @@
 //! `Rest*` payloads it carries, derives `Serialize`/`Deserialize` and is postcard-encoded
 //! on that hop.
 
-mod token;
+pub mod token;
 
 pub mod activity;
 pub mod app;
@@ -64,11 +64,11 @@ pub use app::trame::{
     CellStyle, CellValueKind, ClipboardCell, ClipboardPayload, Col, ColCount, ColDelta, ColSpan,
     ColVec, CondFormatId, CondFormatKind, CondFormatPriority, CondStyle, CsvDelimiter, DateParts,
     DateSerial, DayCount, DayOfMonth, DaySerial, Decimals, DecimalsStep, DefinedName, DisplayCell,
-    EditSessionId, FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, Merge,
-    MergeSpan, Month, MonthCount, Percent, Row, RowCount, RowDelta, RowFilter, RowSpan, RowVec,
-    SelectionKind, SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos,
-    Slant, SortKey, SortOrder, Strikethrough, StylePatch, TrameCommand, TrameEvent, Underline,
-    VAlign, ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
+    EditSession, FillMode, FilterKind, FilterOp, FilterViewId, HAlign, HeaderRow, Merge, MergeSpan,
+    Month, MonthCount, Percent, Row, RowCount, RowDelta, RowFilter, RowSpan, RowVec, SelectionKind,
+    SheetId, SheetName, SheetNameKey, SheetNameRefusal, SheetTab, SheetTabPos, Slant, SortKey,
+    SortOrder, Strikethrough, StylePatch, TrameCommand, TrameEvent, Underline, VAlign,
+    ValidationKind, ValidationOnInvalid, Weight, WordBreak, Year,
 };
 pub use logic::{AppCommand, LogicCommand, StoreRoom};
 pub use lossy::{LossyOutcome, send_lossy};
@@ -78,6 +78,7 @@ pub use rest::{
     RestEvent, RowPlace, SealedRow, SecretBytes, SecretString, UserInfo, next_request,
 };
 pub use sink::CommandSink;
+pub use token::{Token, TokenKind};
 pub use ui::{AppEvent, MentionState, UiEvent};
 
 /// App-agnostic clipboard transport carried across the host <-> view seam and, serialized,

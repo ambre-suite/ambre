@@ -386,7 +386,7 @@ pub struct TrameView {
     editor: Option<CellEditor>,
     /// The token the next edit session opens under. Each session takes it and
     /// moves it on, so an event about a closed session matches no open editor.
-    next_edit_session: crate::EditSessionId,
+    next_edit_session: ambre_bus::Token<crate::EditSession>,
     /// A commit requested from a grid key / click, deferred to the next paint. The
     /// shared editor applies edits only at paint-time flush, since a `FontContext`
     /// is live only then. The buffer is not final when the key is handled, so the
