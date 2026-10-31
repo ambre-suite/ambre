@@ -3040,9 +3040,6 @@ ambre-prose | src/doc.rs | crate::doc | StoredLevel.0 | field | u8	newtype-inner
 ambre-prose | src/doc.rs | crate::doc | StoredLevel::from_stored(level) | param | u8	newtype-inner	a heading level as the document stores it, kept raw when an import wrote one past six
 ambre-prose | src/doc.rs | crate::doc | StoredLevel::get() | ret | u8	newtype-inner	a heading level as the document stores it, for an export and a diagnostic
 ambre-prose | src/logic/tables.rs | crate::logic::tables | ProseState::drop_regions_cornered_in(doomed) | param | impl Fn(CellPos)->bool	generic	predicate result: whether a grid position is doomed
-ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor.0 | field | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::as_bytes() | ret | &[u8]	newtype-inner	newtype inner, accessor or constructor
-ambre-bus | src/app/prose.rs | crate::app::prose | EncodedCursor::new(bytes) | param | Vec<u8>	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | <LineSpacingMultiple as TryFrom<f32>>::try_from(ratio) | param | f32	newtype-inner	newtype inner, accessor or constructor
 ambre-bus | src/app/prose.rs | crate::app::prose | InvalidLineSpacingMultiple.0 | field | f32	newtype-inner	the refused value an error reports
 ambre-bus | src/app/prose.rs | crate::app::prose | LineSpacingMultiple.0 | field | f32	newtype-inner	newtype inner, accessor or constructor

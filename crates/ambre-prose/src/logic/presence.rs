@@ -19,6 +19,7 @@ use loro::{ContainerTrait, TreeID};
 use ambre_core::UserId;
 
 use ambre_bus::app::prose::{DocOffset, EncodedCursor};
+use ambre_core::Payload;
 
 use crate::doc;
 use crate::events::{
@@ -42,11 +43,11 @@ impl ProseState {
         };
         let anchor = pos.anchor.and_then(|(block_id, offset)| {
             self.cursor_at(&tree_id(block_id), offset)
-                .map(|cursor| (block_id, EncodedCursor::new(cursor.encode())))
+                .map(|cursor| (block_id, Payload::new(cursor.encode())))
         });
         let payload = PresencePayload {
             block_id: pos.block_id,
-            cursor: EncodedCursor::new(cursor.encode()),
+            cursor: Payload::new(cursor.encode()),
             anchor,
             display_name: self.my_name.clone(),
         };
@@ -180,7 +181,7 @@ impl ProseState {
     }
 
     /// One encoded cursor, resolved against this replica's own document.
-    fn resolve_one(&self, block: BlockId, encoded: &EncodedCursor) -> Option<DocOffset> {
+    fn resolve_one(&self, block: BlockId, encoded: &Payload<EncodedCursor>) -> Option<DocOffset> {
         // A block this peer has not received, or one already tombstoned, is not
         // a place a caret can sit.
         self.body_of(&tree_id(block))?;
