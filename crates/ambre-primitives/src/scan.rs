@@ -3314,11 +3314,12 @@ fn idents(path: &syn::Path) -> Vec<String> {
 /// `<P as Trait>::Name`, or `P::Name` with `P: Trait`. Under `P::Name`,
 /// each trait that bounds `P` counts. An impl writes `Name` only for the
 /// trait that declares it, and a foreign bound never places in the
-/// workspace. A trait written with generic arguments counts for none: two
-/// impls of `Trait<A>` and `Trait<B>` give one type two representations.
-/// A trait path with a leading `::` counts for none either: it names an
-/// extern crate, which the module lookup of the gate would not tell from a
-/// child module of the same name.
+/// workspace.
+///
+/// A trait written with generic arguments counts for none: two impls of
+/// `Trait<A>` and `Trait<B>` give one type two representations. A trait
+/// path with a leading `::` counts for none either. It names an extern
+/// crate, which the gate's module lookup confuses with a child module.
 pub(crate) fn representation_slots(
     generics: &syn::Generics,
     ty: &syn::Type,
