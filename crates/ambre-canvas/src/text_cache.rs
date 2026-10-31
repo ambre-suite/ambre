@@ -362,7 +362,10 @@ impl TextCache {
     /// GPU layers still hold the tofu pixels. It must also hand the same bytes
     /// to the threads that keep a context of their own (`CANVAS-068`).
     #[must_use]
-    pub fn poll_lazy_fonts(&mut self, font_cx: &mut FontContext) -> Vec<ambre_core::FontBytes> {
+    pub fn poll_lazy_fonts(
+        &mut self,
+        font_cx: &mut FontContext,
+    ) -> Vec<ambre_core::Payload<ambre_core::FontBytes>> {
         let faces = self.lazy_fonts.drain_into(font_cx);
         if !faces.is_empty() {
             self.layouts.clear();
@@ -639,7 +642,7 @@ mod tests {
             "/../ambre-app/fonts/NotoSans-Regular.ttf"
         );
         let face = std::fs::read(path).unwrap_or_default();
-        crate::fonts::font_context_from_bytes([ambre_core::FontBytes::new(face)])
+        crate::fonts::font_context_from_bytes([ambre_core::Payload::new(face)])
     }
 
     /// Shape `text` through the cache and return its width and glyph count.
@@ -671,7 +674,7 @@ mod tests {
         const DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../ambre-app/fonts/");
         let faces = ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"]
             .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"))
-            .map(ambre_core::FontBytes::new);
+            .map(ambre_core::Payload::new);
         let mut cx = crate::fonts::font_context_from_bytes(faces);
         let mut cache = TextCache::new();
         let bold = SpanShape {

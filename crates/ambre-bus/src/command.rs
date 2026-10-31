@@ -69,7 +69,7 @@ pub enum SyncCommand {
     /// Raw CRDT delta produced by `LoroDoc::export_updates()`.
     SendUpdate {
         document_id: DocumentId,
-        payload: ambre_core::DeltaBytes,
+        payload: ambre_core::Payload<ambre_core::DeltaBytes>,
         /// What the delta holds, when the application wrote a summary
         /// (`ambre-spec-residency.md`). A Murmure message carries one
         /// (the Murmure messages spec). The Sync worker seals it inside the ciphertext
@@ -82,14 +82,14 @@ pub enum SyncCommand {
     /// PeerID that wrote them (`AUTHOR-028`).
     SendUnsent {
         document_id: DocumentId,
-        payload: ambre_core::DeltaBytes,
+        payload: ambre_core::Payload<ambre_core::DeltaBytes>,
         nonce: FixedBytes<SessionNonce>,
     },
 
     /// Full CRDT state for compaction (presigned URL -> S3).
     SendSnapshot {
         document_id: DocumentId,
-        payload: ambre_core::SnapshotBytes,
+        payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         /// The last delta `seq` the Logic thread holds with no gap below it.
         /// The snapshot claims to fold in every delta up to it (`SRV-083`).
         covered_seq: Seq,
@@ -109,7 +109,7 @@ pub enum SyncCommand {
     /// Cursor / presence data (encrypted by the Sync thread before sending).
     SendEphemeral {
         document_id: DocumentId,
-        payload: ambre_core::EphemeralBytes,
+        payload: ambre_core::Payload<ambre_core::EphemeralBytes>,
     },
 
     /// Reconnect the WebSocket after a disconnect.
@@ -218,7 +218,7 @@ pub enum SyncCommand {
         segment: SegmentId,
         lease: LeaseId,
         horizon: Seq,
-        payload: ambre_core::SnapshotBytes,
+        payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
     },
     /// Ask the relay for the lease that folds the amendments of the final
     /// segment `segment` into it (`SRV-204`). Answered by
@@ -239,7 +239,7 @@ pub enum SyncCommand {
         lease: LeaseId,
         horizon: Seq,
         amendments_seq: Seq,
-        payload: ambre_core::SnapshotBytes,
+        payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
     },
     /// Count a segment of a closed channel as a light subscription, from its
     /// first number. It opens under the key of the light subscription of

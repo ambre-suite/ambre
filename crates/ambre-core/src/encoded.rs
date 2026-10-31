@@ -1,18 +1,23 @@
-//! Sealed and signed bytes, one type per role.
+//! Sealed and signed bytes, one generic type over a role marker.
 //!
 //! A member row carries a wrapped document key beside a sealed name. An
 //! account carries a wrapped master key beside its salt, and a change
 //! carries a signed log entry. The relay stores all of them and reads none.
 //! A bare `Vec<u8>` lets one stand for another, down to the argument order
-//! of an insert. One type per role keeps them apart, from the JSON body to
-//! the column.
+//! of an insert. [`Encoded`] keeps them apart, from the JSON body to the
+//! column: `Encoded<WrappedDocKey>` and `Encoded<SealedName>` are two types.
 //!
 //! On the wire each is its URL-safe base64 text, decoded when the body is
 //! read. A value that is not base64 refuses the body there, as any field
 //! that does not decode does (`SRV-178`). A role whose layout fixes its
 //! length refuses any other length there too (`SRV-226`). A sealed name
-//! refuses a length past the longest name it holds (`SRV-230`). `Debug`
+//! refuses a length past the longest name it holds (`SRV-230`). Each policy
+//! is a constant of the marker, and one decoder reads them all. `Debug`
 //! prints the length alone.
+
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE;
@@ -43,146 +48,211 @@ const OBJECT_HEADER_LEN: usize = crate::ByteSize(1)
 /// The most bytes one character takes in UTF-8.
 const UTF8_MAX_LEN: usize = 4;
 
-macro_rules! define_encoded {
-    ($(#[$meta:meta])* $name:ident $(, lengths: [$($len:expr),+])? $(, max: $max:expr)?) => {
-        $(#[$meta])*
-        #[derive(Clone, Default, PartialEq, Eq, Hash)]
-        pub struct $name(Vec<u8>);
+/// The lengths of a wrapped document key: the key sealed alone, or beside
+/// the anchor of its log.
+const WRAPPED_DOC_KEY_LENGTHS: &[usize] = &[
+    NONCE_LEN + KEY_LEN + TAG_LEN,
+    NONCE_LEN + KEY_LEN + ANCHOR_LEN + TAG_LEN,
+];
+/// The one length of a wrapped master key.
+const WRAPPED_MASTER_KEY_LENGTHS: &[usize] = &[NONCE_LEN + KEY_LEN + TAG_LEN];
+/// The longest name a sealed name holds, in characters.
+const SEALED_NAME_MAX_CHARS: usize = crate::NAME_MAX_CHARS;
+/// The most bytes a sealed name holds: its overhead and the longest name.
+const SEALED_NAME_MAX_LEN: usize =
+    OBJECT_HEADER_LEN + UTF8_MAX_LEN * SEALED_NAME_MAX_CHARS + TAG_LEN;
 
-        impl $name {
-            $(
-                /// The lengths the layout of this role allows; a read refuses
-                /// any other.
-                pub const LENGTHS: &'static [usize] = &[$($len),+];
-            )?
-            $(
-                /// The most bytes a value of this role holds; a read refuses
-                /// more.
-                pub const MAX_LEN: usize = $max;
-            )?
-
-            /// Wraps the bytes.
-            pub fn new(bytes: Vec<u8>) -> Self {
-                Self(bytes)
-            }
-
-            /// The bytes.
-            pub fn as_bytes(&self) -> &[u8] {
-                &self.0
-            }
-
-            /// The bytes, owned.
-            pub fn into_bytes(self) -> Vec<u8> {
-                self.0
-            }
-
-            /// Whether there are no bytes.
-            pub fn is_empty(&self) -> bool {
-                self.0.is_empty()
-            }
-
-            /// The text the wire carries.
-            pub fn to_base64(&self) -> String {
-                URL_SAFE.encode(&self.0)
-            }
-        }
-
-        impl From<Vec<u8>> for $name {
-            fn from(bytes: Vec<u8>) -> Self {
-                Self(bytes)
-            }
-        }
-
-        impl std::fmt::Debug for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, concat!(stringify!($name), "({} bytes)"), self.0.len())
-            }
-        }
-
-        impl Serialize for $name {
-            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-                serializer.serialize_str(&self.to_base64())
-            }
-        }
-
-        impl<'de> Deserialize<'de> for $name {
-            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-                let text = String::deserialize(deserializer)?;
-                let bytes = URL_SAFE
-                    .decode(text.as_bytes())
-                    .map_err(|e| serde::de::Error::custom(format!("not base64: {e}")))?;
-                $(
-                    let lengths: &[usize] = &[$($len),+];
-                    if !lengths.contains(&bytes.len()) {
-                        return Err(serde::de::Error::custom(format!(
-                            concat!(stringify!($name), " of {} bytes, not one of {:?}"),
-                            bytes.len(),
-                            lengths,
-                        )));
-                    }
-                )?
-                $(
-                    if bytes.len() > $max {
-                        return Err(serde::de::Error::custom(format!(
-                            concat!(stringify!($name), " of {} bytes, past {}"),
-                            bytes.len(),
-                            $max,
-                        )));
-                    }
-                )?
-                Ok(Self(bytes))
-            }
-        }
-    };
+/// The role of a sealed or signed value that travels as base64: its name,
+/// and the lengths its layout allows.
+pub trait EncodedKind: 'static {
+    /// The name the debug form and a refusal print.
+    const NAME: &'static str;
+    /// The lengths the layout of this role allows; a read refuses any other.
+    /// `None` when no layout fixes the length.
+    const LENGTHS: Option<&'static [usize]> = None;
+    /// The most bytes a value of this role holds; a read refuses more.
+    const MAX_LEN: Option<usize> = None;
 }
 
-define_encoded! {
-    /// A document key wrapped to one member: `nonce || ciphertext`, the key
-    /// sealed alone or beside the anchor of its log.
-    WrappedDocKey,
-    lengths: [NONCE_LEN + KEY_LEN + TAG_LEN, NONCE_LEN + KEY_LEN + ANCHOR_LEN + TAG_LEN]
+/// A sealed or signed value of the role `K`. On the wire it is its URL-safe
+/// base64 text, and a read refuses any length its role does not allow.
+pub struct Encoded<K: EncodedKind> {
+    bytes: Vec<u8>,
+    kind: PhantomData<fn() -> K>,
 }
 
-impl WrappedDocKey {
+impl<K: EncodedKind> Encoded<K> {
+    /// Wraps the bytes.
+    #[must_use]
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self {
+            bytes,
+            kind: PhantomData,
+        }
+    }
+
+    /// The bytes.
+    #[must_use]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// The bytes, owned.
+    #[must_use]
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+
+    /// Whether there are no bytes.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    /// The text the wire carries.
+    #[must_use]
+    pub fn to_base64(&self) -> String {
+        URL_SAFE.encode(&self.bytes)
+    }
+
+    /// Why `bytes` cannot be a value of this role, or `None` when it can.
+    fn refusal(bytes: &[u8]) -> Option<String> {
+        let len = bytes.len();
+        if let Some(lengths) = K::LENGTHS.filter(|lengths| !lengths.contains(&len)) {
+            return Some(format!(
+                "{} of {len} bytes, not one of {lengths:?}",
+                K::NAME
+            ));
+        }
+        K::MAX_LEN
+            .filter(|max| len > *max)
+            .map(|max| format!("{} of {len} bytes, past {max}", K::NAME))
+    }
+}
+
+impl<K: EncodedKind> From<Vec<u8>> for Encoded<K> {
+    fn from(bytes: Vec<u8>) -> Self {
+        Self::new(bytes)
+    }
+}
+
+impl<K: EncodedKind> Clone for Encoded<K> {
+    fn clone(&self) -> Self {
+        Self::new(self.bytes.clone())
+    }
+}
+
+impl<K: EncodedKind> Default for Encoded<K> {
+    fn default() -> Self {
+        Self::new(Vec::new())
+    }
+}
+
+impl<K: EncodedKind> PartialEq for Encoded<K> {
+    fn eq(&self, other: &Self) -> bool {
+        self.bytes == other.bytes
+    }
+}
+
+impl<K: EncodedKind> Eq for Encoded<K> {}
+
+impl<K: EncodedKind> Hash for Encoded<K> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.bytes.hash(state);
+    }
+}
+
+impl<K: EncodedKind> fmt::Debug for Encoded<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}({} bytes)", K::NAME, self.bytes.len())
+    }
+}
+
+impl<K: EncodedKind> Serialize for Encoded<K> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_base64())
+    }
+}
+
+impl<'de, K: EncodedKind> Deserialize<'de> for Encoded<K> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        let bytes = URL_SAFE
+            .decode(text.as_bytes())
+            .map_err(|e| serde::de::Error::custom(format!("not base64: {e}")))?;
+        match Self::refusal(&bytes) {
+            Some(refusal) => Err(serde::de::Error::custom(refusal)),
+            None => Ok(Self::new(bytes)),
+        }
+    }
+}
+
+/// The role of a document key wrapped to one member: `nonce || ciphertext`,
+/// the key sealed alone or beside the anchor of its log.
+/// `Encoded<WrappedDocKey>`.
+pub enum WrappedDocKey {}
+
+impl EncodedKind for WrappedDocKey {
+    const NAME: &'static str = "WrappedDocKey";
+    const LENGTHS: Option<&'static [usize]> = Some(WRAPPED_DOC_KEY_LENGTHS);
+}
+
+impl Encoded<WrappedDocKey> {
+    /// The lengths the layout of a wrapped key allows; a read refuses any
+    /// other.
+    pub const LENGTHS: &'static [usize] = WRAPPED_DOC_KEY_LENGTHS;
+
     /// The wire form of a wrapped key: its nonce, then its ciphertext. The
-    /// parts fix the length; nothing checks it against
-    /// [`WrappedDocKey::LENGTHS`] here.
+    /// parts fix the length; nothing checks it against [`Self::LENGTHS`] here.
+    #[must_use]
     pub fn from_parts(nonce: &FixedBytes<Nonce>, ciphertext: &crate::Ciphertext) -> Self {
         let mut bytes = Vec::with_capacity(NONCE_LEN + ciphertext.0.len());
         nonce.push_to(&mut bytes);
         bytes.extend_from_slice(&ciphertext.0);
-        Self(bytes)
+        Self::new(bytes)
     }
 
-    /// The nonce and the ciphertext [`WrappedDocKey::from_parts`] joined.
-    /// `None` when the bytes are shorter than a nonce.
+    /// The nonce and the ciphertext [`Self::from_parts`] joined. `None` when
+    /// the bytes are shorter than a nonce.
     #[must_use]
     pub fn parts(&self) -> Option<(FixedBytes<Nonce>, crate::Ciphertext)> {
-        let (nonce, ciphertext) = FixedBytes::<Nonce>::split_from(&self.0)?;
+        let (nonce, ciphertext) = FixedBytes::<Nonce>::split_from(&self.bytes)?;
         Some((nonce, crate::Ciphertext(ciphertext.to_vec())))
     }
 }
 
-define_encoded! {
-    /// A document or channel name sealed under its document key: the object
-    /// header, the name, the tag.
-    SealedName,
-    max: OBJECT_HEADER_LEN + UTF8_MAX_LEN * SealedName::MAX_CHARS + TAG_LEN
+/// The role of a document or channel name sealed under its document key: the
+/// object header, the name, the tag. `Encoded<SealedName>`.
+pub enum SealedName {}
+
+impl EncodedKind for SealedName {
+    const NAME: &'static str = "SealedName";
+    const MAX_LEN: Option<usize> = Some(SEALED_NAME_MAX_LEN);
 }
 
-impl SealedName {
+impl Encoded<SealedName> {
     /// The longest name a sealed name holds, in characters.
-    pub const MAX_CHARS: usize = crate::NAME_MAX_CHARS;
+    pub const MAX_CHARS: usize = SEALED_NAME_MAX_CHARS;
 
     /// The bytes a sealed name adds to the name it holds.
     pub const OVERHEAD: usize = OBJECT_HEADER_LEN + TAG_LEN;
+
+    /// The most bytes a sealed name holds; a read refuses more.
+    pub const MAX_LEN: usize = SEALED_NAME_MAX_LEN;
 }
 
-define_encoded! {
-    /// An account's master seed wrapped under the key its passphrase derives:
-    /// `nonce || ciphertext`.
-    WrappedMasterKey,
-    lengths: [NONCE_LEN + KEY_LEN + TAG_LEN]
+/// The role of an account's master seed wrapped under the key its passphrase
+/// derives: `nonce || ciphertext`. `Encoded<WrappedMasterKey>`.
+pub enum WrappedMasterKey {}
+
+impl EncodedKind for WrappedMasterKey {
+    const NAME: &'static str = "WrappedMasterKey";
+    const LENGTHS: Option<&'static [usize]> = Some(WRAPPED_MASTER_KEY_LENGTHS);
+}
+
+impl Encoded<WrappedMasterKey> {
+    /// The one length the layout of a wrapped master key allows.
+    pub const LENGTHS: &'static [usize] = WRAPPED_MASTER_KEY_LENGTHS;
 }
 
 /// The width of a master-key salt, in bytes.
@@ -204,75 +274,86 @@ impl FixedRole for MasterKeySalt {
     type Array = [u8; MASTER_KEY_SALT_LEN];
 }
 
-define_encoded! {
-    /// A member's master seed sealed to their organization, for a recovery
-    /// (`SRV-067`). No client seals one yet, so no layout fixes its length.
-    EscrowedKey
+/// The role of a member's master seed sealed to their organization, for a
+/// recovery (`SRV-067`). No client seals one yet, so no layout fixes its
+/// length. `Encoded<EscrowedKey>`.
+pub enum EscrowedKey {}
+
+impl EncodedKind for EscrowedKey {
+    const NAME: &'static str = "EscrowedKey";
 }
 
-define_encoded! {
-    /// One share of an organization's recovery secret, sealed to its holder.
-    SealedShare
+/// The role of one share of an organization's recovery secret, sealed to its
+/// holder. `Encoded<SealedShare>`.
+pub enum SealedShare {}
+
+impl EncodedKind for SealedShare {
+    const NAME: &'static str = "SealedShare";
 }
 
-define_encoded! {
-    /// A signed entry of a document's membership log.
-    EncodedLogEntry
+/// The role of a signed entry of a document's membership log.
+/// `Encoded<EncodedLogEntry>`.
+pub enum EncodedLogEntry {}
+
+impl EncodedKind for EncodedLogEntry {
+    const NAME: &'static str = "EncodedLogEntry";
 }
 
-define_encoded! {
-    /// A signed link from one document key to the next.
-    EncodedKeyLink
+/// The role of a signed link from one document key to the next.
+/// `Encoded<EncodedKeyLink>`.
+pub enum EncodedKeyLink {}
+
+impl EncodedKind for EncodedKeyLink {
+    const NAME: &'static str = "EncodedKeyLink";
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        FixedBytes, KEY_LEN, MASTER_KEY_SALT_LEN, MasterKeySalt, NONCE_LEN, SealedName, TAG_LEN,
-        WrappedDocKey, WrappedMasterKey,
+        Encoded, EncodedKind, FixedBytes, KEY_LEN, MASTER_KEY_SALT_LEN, MasterKeySalt, NONCE_LEN,
+        SealedName, TAG_LEN, WrappedDocKey, WrappedMasterKey,
     };
-    use serde::de::DeserializeOwned;
 
     fn wire(len: usize) -> String {
-        serde_json::to_string(&SealedName::new(vec![7; len])).unwrap()
+        serde_json::to_string(&Encoded::<SealedName>::new(vec![7; len])).unwrap()
     }
 
-    fn reads<T: DeserializeOwned>(len: usize) -> bool {
-        serde_json::from_str::<T>(&wire(len)).is_ok()
+    fn reads<K: EncodedKind>(len: usize) -> bool {
+        serde_json::from_str::<Encoded<K>>(&wire(len)).is_ok()
     }
 
     #[test]
     fn an_encoded_value_travels_as_its_url_safe_base64() {
-        let name = SealedName::new(vec![0xab, 0xcd, 0xef]);
+        let name = Encoded::<SealedName>::new(vec![0xab, 0xcd, 0xef]);
         assert_eq!(serde_json::to_string(&name).unwrap(), "\"q83v\"");
-        let parsed: SealedName = serde_json::from_str("\"q83v\"").unwrap();
+        let parsed: Encoded<SealedName> = serde_json::from_str("\"q83v\"").unwrap();
         assert_eq!(parsed.as_bytes(), &[0xab, 0xcd, 0xef]);
         assert_eq!(format!("{parsed:?}"), "SealedName(3 bytes)");
     }
 
     #[test]
     fn a_value_that_is_not_base64_refuses_the_read() {
-        assert!(serde_json::from_str::<SealedName>("\"not base64!\"").is_err());
-        assert!(serde_json::from_str::<SealedName>("\"q83\"").is_err());
+        assert!(serde_json::from_str::<Encoded<SealedName>>("\"not base64!\"").is_err());
+        assert!(serde_json::from_str::<Encoded<SealedName>>("\"q83\"").is_err());
     }
 
     /// `SRV-226`: each role whose layout fixes its length reads that length
     /// alone. An empty value, one byte short and one byte past are refused.
     #[test]
     fn a_fixed_role_refuses_any_other_length() {
-        fn only<T: DeserializeOwned>(lengths: &[usize]) {
+        fn only<K: EncodedKind>(lengths: &[usize]) {
             for &len in lengths {
-                assert!(reads::<T>(len), "{len}");
-                assert!(!reads::<T>(len - 1), "{}", len - 1);
-                assert!(!reads::<T>(len + 1), "{}", len + 1);
+                assert!(reads::<K>(len), "{len}");
+                assert!(!reads::<K>(len - 1), "{}", len - 1);
+                assert!(!reads::<K>(len + 1), "{}", len + 1);
             }
-            assert!(!reads::<T>(0));
+            assert!(!reads::<K>(0));
         }
-        only::<WrappedDocKey>(WrappedDocKey::LENGTHS);
-        only::<WrappedMasterKey>(WrappedMasterKey::LENGTHS);
-        assert_eq!(WrappedDocKey::LENGTHS, [72, 104]);
-        assert_eq!(WrappedMasterKey::LENGTHS, [72]);
-        assert!(reads::<SealedName>(0) && reads::<SealedName>(SealedName::MAX_LEN));
+        only::<WrappedDocKey>(Encoded::<WrappedDocKey>::LENGTHS);
+        only::<WrappedMasterKey>(Encoded::<WrappedMasterKey>::LENGTHS);
+        assert_eq!(Encoded::<WrappedDocKey>::LENGTHS, [72, 104]);
+        assert_eq!(Encoded::<WrappedMasterKey>::LENGTHS, [72]);
+        assert!(reads::<SealedName>(0) && reads::<SealedName>(Encoded::<SealedName>::MAX_LEN));
     }
 
     /// A wrapped key joins its nonce and its ciphertext in that order, at a
@@ -282,12 +363,13 @@ mod tests {
     fn a_wrapped_key_is_its_nonce_then_its_ciphertext() {
         let nonce = FixedBytes::<crate::Nonce>::from_array([1; NONCE_LEN]);
         let ciphertext = crate::Ciphertext(vec![2; KEY_LEN + TAG_LEN]);
-        let key = WrappedDocKey::from_parts(&nonce, &ciphertext);
+        let key = Encoded::<WrappedDocKey>::from_parts(&nonce, &ciphertext);
         assert_eq!(&key.as_bytes()[..NONCE_LEN], &[1; NONCE_LEN]);
         assert_eq!(&key.as_bytes()[NONCE_LEN..], &ciphertext.0[..]);
-        assert!(WrappedDocKey::LENGTHS.contains(&key.as_bytes().len()));
+        assert!(Encoded::<WrappedDocKey>::LENGTHS.contains(&key.as_bytes().len()));
         assert_eq!(key.parts(), Some((nonce, ciphertext)));
-        assert_eq!(WrappedDocKey::new(vec![0; NONCE_LEN - 1]).parts(), None);
+        let short = Encoded::<WrappedDocKey>::new(vec![0; NONCE_LEN - 1]);
+        assert_eq!(short.parts(), None);
     }
 
     /// A salt of any width but its own is refused when it is built, from a
@@ -313,8 +395,8 @@ mod tests {
     /// characters, and a byte past it is refused.
     #[test]
     fn a_sealed_name_past_the_longest_name_is_refused() {
-        assert_eq!(SealedName::MAX_LEN, 185 + 4 * 128);
-        assert!(reads::<SealedName>(SealedName::MAX_LEN));
-        assert!(!reads::<SealedName>(SealedName::MAX_LEN + 1));
+        assert_eq!(Encoded::<SealedName>::MAX_LEN, 185 + 4 * 128);
+        assert!(reads::<SealedName>(Encoded::<SealedName>::MAX_LEN));
+        assert!(!reads::<SealedName>(Encoded::<SealedName>::MAX_LEN + 1));
     }
 }

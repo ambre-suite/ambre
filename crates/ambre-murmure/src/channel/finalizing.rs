@@ -8,7 +8,9 @@
 //! each delay is stamped by the next tick.
 
 use ambre_bus::Timestamp;
-use ambre_core::{DeltaBytes, FailureCount, LeaseId, Millis, SegmentId, Seq, SnapshotBytes};
+use ambre_core::{
+    DeltaBytes, FailureCount, LeaseId, Millis, Payload, SegmentId, Seq, SnapshotBytes,
+};
 use loro::{ExportMode, LoroDoc};
 
 use super::ChannelState;
@@ -64,7 +66,7 @@ pub struct FinalSnapshot {
     /// The last delta it covers, the one the relay returned.
     pub horizon: Seq,
     /// The shallow snapshot, framed as every channel snapshot is.
-    pub payload: SnapshotBytes,
+    pub payload: Payload<SnapshotBytes>,
 }
 
 impl ChannelState {
@@ -231,8 +233,9 @@ impl ChannelState {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let shallow =
-            SnapshotBytes::new(doc.export(ExportMode::shallow_snapshot(&doc.oplog_frontiers()))?);
+        let shallow = Payload::<SnapshotBytes>::new(
+            doc.export(ExportMode::shallow_snapshot(&doc.oplog_frontiers()))?,
+        );
         let payload = match self.sequences.get(&document_id) {
             Some(sequence) => sequence.frame(shallow),
             None => shallow,
@@ -257,7 +260,10 @@ impl ChannelState {
     /// - [`MurmureError::NotHeld`]: this client does not finalize `segment`.
     /// - [`MurmureError::NoSession`]: the PeerID of `meta` has not landed.
     /// - [`MurmureError::Crdt`]: Loro refused a write.
-    pub fn mark_final(&mut self, segment: SegmentId) -> Result<Option<DeltaBytes>, MurmureError> {
+    pub fn mark_final(
+        &mut self,
+        segment: SegmentId,
+    ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         if self.refinalizing == Some(segment) {
             self.refinalizing = None;
             self.finalizing = None;

@@ -792,7 +792,7 @@ mod tests {
             .doc
             .export(loro::ExportMode::updates(&base))
             .expect("a delta");
-        st.apply_remote(&ambre_core::DeltaBytes::new(delta));
+        st.apply_remote(&ambre_core::Payload::<ambre_core::DeltaBytes>::new(delta));
         assert!(
             st.bounds.contains_key(&g1) && st.bounds.contains_key(&g2),
             "both groups keep a box, so the alignment reaches them"

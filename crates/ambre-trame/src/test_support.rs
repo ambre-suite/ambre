@@ -84,7 +84,7 @@ impl MockSyncHandle {
     /// Drain only the CRDT-update payloads (`SendUpdate`), in capture order.
     /// Other captured commands are dropped -- this is the relay payload a
     /// peer needs.
-    pub fn drain_update_payloads(&self) -> Vec<ambre_core::DeltaBytes> {
+    pub fn drain_update_payloads(&self) -> Vec<ambre_core::Payload<ambre_core::DeltaBytes>> {
         self.drain()
             .into_iter()
             .filter_map(|cmd| match cmd {

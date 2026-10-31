@@ -95,7 +95,7 @@ fn paragraph_shape() {
     let mut measurer = Measurer::new();
     let mut font_cx = FontContext::new();
     for bytes in faces() {
-        let face = ambre_core::FontBytes::new(bytes);
+        let face = ambre_core::Payload::<ambre_core::FontBytes>::new(bytes);
         measurer.register_faces(face.clone());
         register_faces(&mut font_cx, face);
     }

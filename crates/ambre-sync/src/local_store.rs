@@ -86,7 +86,7 @@ mod tests {
         rx: &ambre_bus::conduit::Receiver<LogicEvent>,
         place: RowPlace,
         plain: &[u8],
-    ) -> ambre_core::SealedRowBytes {
+    ) -> ambre_core::Payload<ambre_core::SealedRowBytes> {
         state.handle_rest(
             RequestId(1),
             RestCommand::SealLocalRow {
@@ -169,7 +169,7 @@ mod tests {
             },
             SealedRow {
                 place: RowPlace::Document(doc),
-                sealed: ambre_core::SealedRowBytes::new(b"in the clear".to_vec()),
+                sealed: ambre_core::Payload::new(b"in the clear".to_vec()),
             },
             SealedRow {
                 place: RowPlace::Draft(ambre_bus::DraftKey::new("u|c".into())),

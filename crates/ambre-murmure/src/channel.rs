@@ -14,7 +14,7 @@ use ambre_bus::{
     Notice, Revision, SearchMatch, StyleMark, ThreadHead, Timestamp, UnreadCount, Unreadable,
 };
 use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, LoroPayload, LoroPayloadRef, MessageId, MetaId,
+    ChannelId, DeltaBytes, DocumentId, LoroPayload, LoroPayloadRef, MessageId, MetaId, Payload,
     PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId,
 };
 use loro::{
@@ -218,7 +218,7 @@ pub struct Sent {
     /// document.
     pub document: DocumentId,
     /// Every operation of the send, as a Loro JSON update (`MURMURE-223`).
-    pub delta: DeltaBytes,
+    pub delta: Payload<DeltaBytes>,
     /// What the delta holds, readable with no document (`MURMURE-081`).
     pub summary: ActivitySummary,
     /// The new message, for the view.
@@ -233,7 +233,7 @@ pub struct Named {
     pub meta: MetaId,
     /// Every operation of the change, as a Loro update. Empty of operations
     /// when the name was already so.
-    pub delta: DeltaBytes,
+    pub delta: Payload<DeltaBytes>,
     /// The name now, for the view.
     pub event: MurmureEvent,
 }
@@ -366,7 +366,7 @@ impl ChannelState {
         document_id: DocumentId,
         peer: ambre_core::PeerId,
         entry: PeerEntryBytes,
-    ) -> Result<Option<DeltaBytes>, MurmureError> {
+    ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         let channel_id = self.channel_id;
         let Some(held) = self.held_mut(document_id) else {
             let segment = SegmentId::from_document(document_id);
@@ -494,8 +494,8 @@ impl ChannelState {
     pub fn open(
         channel_id: ChannelId,
         meta_id: MetaId,
-        meta_bytes: &SnapshotBytes,
-        segments: &HashMap<SegmentId, SnapshotBytes>,
+        meta_bytes: &Payload<SnapshotBytes>,
+        segments: &HashMap<SegmentId, Payload<SnapshotBytes>>,
     ) -> Result<Self, MurmureError> {
         let meta_id = meta_id.document_id();
         let meta = Held::served(
@@ -626,11 +626,13 @@ impl ChannelState {
     /// # Errors
     /// [`MurmureError::NotHeld`] for an identifier the channel does not hold,
     /// [`MurmureError::Crdt`] when Loro refuses the export.
-    pub fn export_all(&self, document_id: DocumentId) -> Result<DeltaBytes, MurmureError> {
+    pub fn export_all(&self, document_id: DocumentId) -> Result<Payload<DeltaBytes>, MurmureError> {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        Ok(DeltaBytes::new(doc.export(ExportMode::all_updates())?))
+        Ok(Payload::<DeltaBytes>::new(
+            doc.export(ExportMode::all_updates())?,
+        ))
     }
 
     /// The channel this state holds.
@@ -696,11 +698,14 @@ impl ChannelState {
     /// # Errors
     /// [`MurmureError::NotHeld`] for an identifier the channel does not hold,
     /// [`MurmureError::Crdt`] when Loro refuses the export.
-    pub fn snapshot(&self, document_id: DocumentId) -> Result<SnapshotBytes, MurmureError> {
+    pub fn snapshot(
+        &self,
+        document_id: DocumentId,
+    ) -> Result<Payload<SnapshotBytes>, MurmureError> {
         let doc = self
             .doc(document_id)
             .ok_or(MurmureError::NotHeld(document_id))?;
-        let loro = SnapshotBytes::new(doc.export(ExportMode::Snapshot)?);
+        let loro = Payload::<SnapshotBytes>::new(doc.export(ExportMode::Snapshot)?);
         Ok(match self.sequences.get(&document_id) {
             Some(sequence) => sequence.frame(loro),
             None => loro,
@@ -1378,7 +1383,7 @@ impl ChannelState {
     ///
     /// # Errors
     /// [`MurmureError::NoThread`] for a thread the channel does not hold.
-    fn changed_at(&self, at: MessageAt, delta: DeltaBytes) -> Result<Sent, MurmureError> {
+    fn changed_at(&self, at: MessageAt, delta: Payload<DeltaBytes>) -> Result<Sent, MurmureError> {
         let mut sent = self.reacted_at(at, delta)?;
         sent.summary.kind = ActivityKind::Edit;
         Ok(sent)
@@ -1389,7 +1394,7 @@ impl ChannelState {
     ///
     /// # Errors
     /// [`MurmureError::NoThread`] for a thread the channel does not hold.
-    fn reacted_at(&self, at: MessageAt, delta: DeltaBytes) -> Result<Sent, MurmureError> {
+    fn reacted_at(&self, at: MessageAt, delta: Payload<DeltaBytes>) -> Result<Sent, MurmureError> {
         match at {
             MessageAt::Segment(segment) => Ok(self.reacted(segment, delta)),
             MessageAt::Thread(root) => self.thread_reacted(root, delta),
@@ -1399,7 +1404,7 @@ impl ChannelState {
     /// What an edit or a delete produced: the delta, its summary of kind
     /// edit, and the segment's messages for the view. An edit names no one,
     /// so its summary lists no mention.
-    fn changed(&self, segment: SegmentId, delta: DeltaBytes) -> Sent {
+    fn changed(&self, segment: SegmentId, delta: Payload<DeltaBytes>) -> Sent {
         let mut sent = self.reacted(segment, delta);
         sent.summary.kind = ActivityKind::Edit;
         sent
@@ -1407,7 +1412,7 @@ impl ChannelState {
 
     /// What a reaction delta produced: the delta, its summary of kind
     /// reaction (`MURMURE-093`), and the segment's messages for the view.
-    fn reacted(&self, segment: SegmentId, delta: DeltaBytes) -> Sent {
+    fn reacted(&self, segment: SegmentId, delta: Payload<DeltaBytes>) -> Sent {
         let messages = self.read_segment(segment).unwrap_or_default();
         Sent {
             segment,
@@ -1518,7 +1523,7 @@ impl ChannelState {
     fn replace_from_shallow(
         &mut self,
         document_id: DocumentId,
-        snapshot: &SnapshotBytes,
+        snapshot: &Payload<SnapshotBytes>,
     ) -> Result<(), MurmureError> {
         let fresh = LoroDoc::new();
         if sequence::import(&fresh, LoroPayloadRef::Snapshot(snapshot))?
@@ -1552,7 +1557,7 @@ impl ChannelState {
         &mut self,
         document_id: DocumentId,
         seq: Seq,
-        payload: &DeltaBytes,
+        payload: &Payload<DeltaBytes>,
         signer: Signer,
     ) -> Result<Vec<MurmureEvent>, MurmureError> {
         if document_id == self.meta.id {
@@ -1833,7 +1838,7 @@ impl ChannelState {
     pub fn load_older(
         &mut self,
         segment: SegmentId,
-        payload: &SnapshotBytes,
+        payload: &Payload<SnapshotBytes>,
     ) -> Result<MurmureEvent, MurmureError> {
         let arrival = Arrival::Bytes(LoroPayload::Snapshot(payload.clone()));
         self.load_older_from(segment, vec![arrival])

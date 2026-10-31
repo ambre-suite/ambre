@@ -22,7 +22,7 @@ impl ToileState {
     pub fn export_ambre_plaintext(
         &self,
         doc_id: DocumentId,
-    ) -> Option<ambre_core::PlaintextContainer> {
+    ) -> Option<ambre_core::Payload<ambre_core::PlaintextContainer>> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
 
@@ -41,7 +41,7 @@ impl ToileState {
     /// engine refuses the payload. The board is unchanged in either case.
     pub fn import_ambre_plaintext(
         &mut self,
-        data: &ambre_core::PlaintextContainer,
+        data: &ambre_core::Payload<ambre_core::PlaintextContainer>,
     ) -> Result<(DocumentId, Vec<ToileEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
         // The container has said its piece; the schema register inside the
@@ -160,7 +160,7 @@ mod tests {
         let trame = write_ambre_plaintext(
             DocType::Trame,
             doc_id(),
-            &ambre_core::SnapshotBytes::new(b"whatever".to_vec()),
+            &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(b"whatever".to_vec()),
         );
         assert_eq!(
             import_ambre_plaintext(&trame),
@@ -185,7 +185,7 @@ mod tests {
         let bytes = write_ambre_plaintext(
             DocType::Toile,
             doc_id(),
-            &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+            &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(b"not a loro snapshot".to_vec()),
         );
         let mut state = ToileState::new();
         assert_eq!(
@@ -221,19 +221,22 @@ mod tests {
             write_ambre_plaintext(
                 DocType::Trame,
                 doc_id(),
-                &ambre_core::SnapshotBytes::new(b"whatever".to_vec()),
+                &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(b"whatever".to_vec()),
             )
             .into_bytes(),
             write_ambre_plaintext(
                 DocType::Toile,
                 doc_id(),
-                &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+                &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
+                    b"not a loro snapshot".to_vec(),
+                ),
             )
             .into_bytes(),
         ];
         for bytes in cases {
             let before_bytes = bytes.clone();
-            let container = ambre_core::PlaintextContainer::new(bytes.clone());
+            let container =
+                ambre_core::Payload::<ambre_core::PlaintextContainer>::new(bytes.clone());
             assert!(state.import_ambre_plaintext(&container).is_err());
             assert_eq!(bytes, before_bytes, "a failed import rewrote its input");
             assert_eq!(

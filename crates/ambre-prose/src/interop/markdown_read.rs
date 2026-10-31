@@ -37,7 +37,9 @@ pub use crate::numbering::ListDepth;
 /// [`InteropError::TooLarge`] past [`MAX_SIZE`], and
 /// [`InteropError::ParseFailed`] for bytes that are not UTF-8. Every string of
 /// text is some Markdown document, so nothing else fails.
-pub fn read(file: &ambre_core::FileBytes) -> Result<(ProseIr, ConversionReport), InteropError> {
+pub fn read(
+    file: &ambre_core::Payload<ambre_core::FileBytes>,
+) -> Result<(ProseIr, ConversionReport), InteropError> {
     let size = file.size();
     if size > MAX_SIZE {
         return Err(InteropError::TooLarge(size));
@@ -478,7 +480,9 @@ mod tests {
 
     /// [`read`] over a file of `bytes`.
     fn read_bytes(bytes: &[u8]) -> Result<(ProseIr, ConversionReport), InteropError> {
-        read(&ambre_core::FileBytes::new(bytes.to_vec()))
+        read(&ambre_core::Payload::<ambre_core::FileBytes>::new(
+            bytes.to_vec(),
+        ))
     }
 
     fn blocks(markdown: &str) -> Vec<IrBlock> {

@@ -5,7 +5,7 @@ use proptest::prelude::*;
 use crate::keys::{DocumentKey, FileKey, MasterSeed};
 use crate::{CryptoError, aead, commitment, ecdh, envelope, hash, passphrase};
 use ambre_core::{
-    Aad, Ciphertext, EntryDigest, FileSalt, FixedBytes, MasterKeySalt, MediaBytes, Nonce,
+    Aad, Ciphertext, EntryDigest, FileSalt, FixedBytes, MasterKeySalt, MediaBytes, Nonce, Payload,
     SealedRowBytes,
 };
 
@@ -52,7 +52,7 @@ fn a_media_seal_opens_as_any_envelope() {
     let author =
         FixedBytes::<ambre_core::PublicKey>::from_array(signing.verifying_key().to_bytes());
     let aad = &Aad::of(b"public-data");
-    let media = MediaBytes::new(b"\x89PNG a picture".to_vec());
+    let media = Payload::<MediaBytes>::new(b"\x89PNG a picture".to_vec());
 
     let sealed = envelope::seal_media(&media, aad, &doc_key, &signing).unwrap();
     let opened = envelope::open(&sealed, aad, &doc_key, &author).unwrap();
@@ -333,7 +333,7 @@ fn a_store_row_opens_only_where_it_was_sealed() {
     if let Some(last) = flipped.last_mut() {
         *last ^= 1;
     }
-    let flipped = SealedRowBytes::new(flipped);
+    let flipped = Payload::<SealedRowBytes>::new(flipped);
     assert!(aead::open_row(&flipped, &Aad::of(b"doc:0a"), &key).is_err());
     // A row the store held in the clear, or a stub, opens as nothing.
     for stub in [
@@ -341,7 +341,7 @@ fn a_store_row_opens_only_where_it_was_sealed() {
         Vec::new(),
         vec![aead::RowLayout::CURRENT.byte()],
     ] {
-        let stub = SealedRowBytes::new(stub);
+        let stub = Payload::<SealedRowBytes>::new(stub);
         assert!(aead::open_row(&stub, &Aad::of(b"doc:0a"), &key).is_err());
     }
 }
@@ -460,12 +460,15 @@ fn a_wrap_has_a_length_the_wire_reads() {
         )
         .unwrap(),
     );
-    assert_eq!(ambre_core::WrappedDocKey::LENGTHS, [bare, anchored]);
+    assert_eq!(
+        ambre_core::Encoded::<ambre_core::WrappedDocKey>::LENGTHS,
+        [bare, anchored]
+    );
 
     let seed = MasterSeed::from_array([0x03; 32]);
     let wrapped = seed.wrap_for_storage(&doc_key, &Aad::of(b"aad")).unwrap();
     assert_eq!(
-        ambre_core::WrappedMasterKey::LENGTHS,
+        ambre_core::Encoded::<ambre_core::WrappedMasterKey>::LENGTHS,
         [wrapped.as_bytes().len()]
     );
 }
@@ -497,7 +500,7 @@ fn a_stored_seed_opens_under_its_user_key_and_its_aad_alone() {
         Err(CryptoError::AeadFailed)
     ));
     assert!(matches!(
-        MasterSeed::open_from_storage(&ambre_core::WrappedMasterKey::new(vec![0; 10]), &user, &aad),
+        MasterSeed::open_from_storage(&ambre_core::Encoded::new(vec![0; 10]), &user, &aad),
         Err(CryptoError::InvalidKeyLength)
     ));
 }
@@ -584,7 +587,7 @@ fn the_keyless_digests_keep_their_bytes() {
     blake2::Digest::update(&mut hasher, 0u64.to_le_bytes());
     blake2::Digest::update(&mut hasher, b"file");
     let full = blake2::Digest::finalize(hasher);
-    let file = ambre_core::PickedContainer::new(b"file".to_vec());
+    let file = ambre_core::Payload::<ambre_core::PickedContainer>::new(b"file".to_vec());
     assert_eq!(hash::file_digest(&file).as_array()[..], full[..32]);
     assert_eq!(
         hash::chain_hash(None, &Ciphertext(b"file".to_vec())).as_array(),
@@ -653,7 +656,7 @@ fn a_previous_key_opens_under_the_next_one_and_no_other() {
 fn a_media_address_needs_the_document_key() {
     use blake2::{Blake2b512, Digest};
 
-    let picture = MediaBytes::new(b"the same picture, used twice".to_vec());
+    let picture = Payload::<MediaBytes>::new(b"the same picture, used twice".to_vec());
     let address = commitment::media_address(&fixed_doc_key(), &picture);
     assert_eq!(
         address,
@@ -663,7 +666,7 @@ fn a_media_address_needs_the_document_key() {
         address,
         commitment::media_address(&DocumentKey::from_array([0x12; 32]), &picture)
     );
-    let another = MediaBytes::new(b"another picture".to_vec());
+    let another = Payload::<MediaBytes>::new(b"another picture".to_vec());
     assert_ne!(
         address,
         commitment::media_address(&fixed_doc_key(), &another)
@@ -963,7 +966,7 @@ fn the_commitment_tag_keeps_its_bytes() {
 
 #[test]
 fn the_media_address_keeps_its_bytes() {
-    let picture = MediaBytes::new(b"a picture".to_vec());
+    let picture = Payload::<MediaBytes>::new(b"a picture".to_vec());
     let address = commitment::media_address(&fixed_doc_key(), &picture);
     let expected: [u8; 32] =
         golden("c72a97882edaf9922202a868bba98c10b9d8391391ee833ce679124602fd0f98")
@@ -1005,7 +1008,7 @@ fn the_chain_hash_and_the_keyless_digests_keep_their_bytes() {
         hash::chain_hash(None, &snapshot).as_slice().to_vec(),
         headless
     );
-    let file = ambre_core::PickedContainer::new(snapshot.0.clone());
+    let file = ambre_core::Payload::<ambre_core::PickedContainer>::new(snapshot.0.clone());
     assert_eq!(hash::file_digest(&file).as_array().to_vec(), headless);
 }
 
@@ -1054,7 +1057,7 @@ fn a_row_the_old_code_sealed_still_opens() {
     // A row sealed by the build that wrote `RowLayout::V1` as a bare byte:
     // the layout byte, the nonce, then the ciphertext. A store a user holds
     // today keeps rows of this shape, so every later build opens them.
-    let row = SealedRowBytes::new(golden(
+    let row = Payload::<SealedRowBytes>::new(golden(
         "01a11182bb03cf28fbbeb25b10c25f4d53019867ee3101ff1ca1d3e4b463358f16a8df15edbd570d3cfd0c5ac5fdcb",
     ));
     let key = fixed_seed().derive_store_key();

@@ -71,7 +71,7 @@ pub enum LogicEvent {
     /// Decrypted and decompressed CRDT snapshot.
     RemoteSnapshot {
         document_id: DocumentId,
-        payload: ambre_core::SnapshotBytes,
+        payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         /// The last delta `seq` it folds in, 0 when unknown. The Logic thread
         /// counts the deltas a later snapshot must hold from it (`AUTHOR-016`).
         covered_seq: Seq,
@@ -87,7 +87,7 @@ pub enum LogicEvent {
         /// The last delta `seq` it claims to fold in.
         covered_seq: Seq,
         /// Decrypted and decompressed, as in `RemoteSnapshot`.
-        payload: ambre_core::SnapshotBytes,
+        payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         purpose: SnapshotPurpose,
     },
 
@@ -114,7 +114,7 @@ pub enum LogicEvent {
     RemoteEphemeral {
         document_id: DocumentId,
         from_user_id: UserId,
-        payload: ambre_core::EphemeralBytes,
+        payload: ambre_core::Payload<ambre_core::EphemeralBytes>,
     },
 
     /// A peer stopped watching a document (`PRESENCE-014`): they unsubscribed, or their
@@ -346,7 +346,7 @@ pub enum LogicEvent {
     /// again: the new messages they carry go to the active segment.
     DeltasLocked {
         document_id: DocumentId,
-        deltas: Vec<ambre_core::DeltaBytes>,
+        deltas: Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
     },
     /// A public channel of the space has a new key, sealed under the current
     /// space key, answering
@@ -541,7 +541,7 @@ pub struct SignedDelta {
     /// which deltas a horizon covers from it (`AUTHOR-016`).
     pub seq: Seq,
     /// The Loro update, decrypted and decompressed.
-    pub payload: ambre_core::DeltaBytes,
+    pub payload: ambre_core::Payload<ambre_core::DeltaBytes>,
     /// The session nonce of its author, opened from inside the ciphertext.
     pub nonce: FixedBytes<SessionNonce>,
     /// The only PeerID its operations may carry.

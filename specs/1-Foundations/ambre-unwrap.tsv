@@ -6,7 +6,7 @@ ambre-bus | src/app/prose/mark.rs | crate::app::prose::mark::canonical_number | 
 ambre-crypto | src/aead.rs | crate::aead::open | Ciphertext::0 -> open_under	1	open_under is the private AEAD kernel over bytes, so open_row can open a slice of its row in place; every public opener types its input.
 ambre-crypto | src/aead.rs | crate::aead::open_anchored_key | Ciphertext::0 -> open_under	1	open_under is the private AEAD kernel over bytes, so open_row can open a slice of its row in place; every public opener types its input.
 ambre-crypto | src/aead.rs | crate::aead::open_file | Ciphertext::0 -> open_under	1	open_under is the private AEAD kernel over bytes, so open_row can open a slice of its row in place; every public opener types its input.
-ambre-crypto | src/envelope.rs | crate::envelope::seal_media | MediaBytes::as_bytes -> aead::seal	1	aead::seal seals any plaintext; the slice spares a copy of the media.
+ambre-crypto | src/envelope.rs | crate::envelope::seal_media | Payload::as_bytes -> aead::seal	1	aead::seal seals any plaintext; the slice spares a copy of the media.
 ambre-crypto | src/hash.rs | crate::hash::chain_hash | Ciphertext::0 -> Tail	1	Tail marks the last field of a length-prefixed BLAKE2b input, which hashes bytes of any origin.
 ambre-crypto | src/hash.rs | crate::hash::dev_seed | DisplayName::as_str -> Tail	1	Tail marks the last field of a length-prefixed BLAKE2b input, which hashes bytes of any origin.
 ambre-crypto | src/keys.rs | crate::keys::FileKey::from_passphrase | FixedBytes::as_array -> crate::passphrase::argon2id	1	argon2id is the KDF kernel shared by the file and the account salt, each typed by its caller.
@@ -16,16 +16,16 @@ ambre-crypto | src/signature.rs | crate::signature::message | Ciphertext::0 -> p
 ambre-crypto | src/signature.rs | crate::signature::message | FixedBytes::as_slice -> push_framed	2	push_framed length-prefixes one field of the signed transcript, whatever field it is: here the commitment tag and the nonce.
 ambre-logic | src/persistence.rs | crate::persistence::IdbKey::document | Uuid::to_simple -> Self	1	The id's 32-hex simple spelling is the IndexedDB key text, built only in this constructor.
 ambre-logic | src/persistence.rs | crate::persistence::IdbKey::user | Uuid::to_simple -> Self	1	The id's 32-hex simple spelling is the IndexedDB key text, built only in this constructor.
-ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::save_delta | SealedRowBytes::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
-ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::save_draft | SealedRowBytes::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
-ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::write_snapshot | SealedRowBytes::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
+ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::save_delta | Payload::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
+ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::save_draft | Payload::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
+ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::write_snapshot | Payload::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | Aad::as_bytes -> push_framed	1	push_framed length-prefixes one field of the signed transcript, the same framing the client signs.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | Ciphertext::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, the same framing the client signs.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | FixedBytes::as_slice -> push_framed	2	push_framed length-prefixes one field of the signed transcript, the same framing the client signs: here the commitment tag and the nonce.
 ambre-sync | src/members.rs | crate::members::SyncState::handle_search_users | UserSearch::as_str -> .query	1	RelayUrl::query percent-encodes any text into the value of a closed QueryKey (SYNC-179).
 ambre-sync | src/membership_log.rs | crate::membership_log::sign | SignedTranscript::as_bytes -> ambre_crypto::signature::sign_message	1	sign_message is Ed25519 over any bytes, in a crate below the transcript type.
-ambre-sync | src/pipeline.rs | crate::pipeline::seal_ephemeral | EphemeralBytes::as_bytes -> seal_payload	1	seal_payload compresses and seals any payload kind; each caller types its own.
-ambre-sync | src/pipeline.rs | crate::pipeline::seal_snapshot | SnapshotBytes::as_bytes -> seal_payload	1	seal_payload compresses and seals any payload kind; each caller types its own.
-ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster::import_raster | FileBytes::as_bytes -> decode_media	1	decode_media is the shared image decoder, also fed the slices usvg hands out.
+ambre-sync | src/pipeline.rs | crate::pipeline::seal_ephemeral | Payload::as_bytes -> seal_payload	1	seal_payload compresses and seals any payload kind; each caller types its own.
+ambre-sync | src/pipeline.rs | crate::pipeline::seal_snapshot | Payload::as_bytes -> seal_payload	1	seal_payload compresses and seals any payload kind; each caller types its own.
+ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster::import_raster | Payload::as_bytes -> decode_media	1	decode_media is the shared image decoder, also fed the slices usvg hands out.
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find::text_matches | FindText::as_str -> contains_match	1	contains_match also runs on case-folded Strings built at the call.
 ambre-toile | src/ui/presence.rs | crate::ui::presence::paint_cursor | DisplayName::as_str -> .get_or_build	1	The text cache shapes any string, whatever it names.

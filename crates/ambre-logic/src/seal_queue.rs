@@ -10,7 +10,7 @@
 use std::collections::VecDeque;
 
 use ambre_bus::{DocumentId, SecretBytes};
-use ambre_core::SealedRowBytes;
+use ambre_core::{Payload, SealedRowBytes};
 
 use crate::{PersistWrite, SealedWrite};
 
@@ -121,7 +121,7 @@ impl SealQueue {
 
     /// The seal of `ticket` came back. `None` is a seal that did not happen,
     /// and its write is dropped: the store never holds a row in the clear.
-    pub fn sealed(&mut self, ticket: SealTicket, sealed: Option<SealedRowBytes>) {
+    pub fn sealed(&mut self, ticket: SealTicket, sealed: Option<Payload<SealedRowBytes>>) {
         let Some(at) = self.entries.iter().position(
             |entry| matches!(entry.slot, Slot::Waiting { ticket: waits, .. } if waits == ticket),
         ) else {
@@ -166,10 +166,10 @@ impl SealQueue {
 mod tests {
     use super::*;
     use ambre_bus::DocType;
-    use ambre_core::{DeltaBytes, SealedRowBytes, SnapshotBytes};
+    use ambre_core::{DeltaBytes, Payload, SealedRowBytes, SnapshotBytes};
 
-    fn sealed(bytes: &[u8]) -> SealedRowBytes {
-        SealedRowBytes::new(bytes.to_vec())
+    fn sealed(bytes: &[u8]) -> Payload<SealedRowBytes> {
+        Payload::new(bytes.to_vec())
     }
 
     /// Each seal takes its own ticket, so no answer lands on another write:
@@ -190,12 +190,15 @@ mod tests {
         let (first, plain) = queue
             .push(
                 doc,
-                PersistWrite::Snapshot(SnapshotBytes::new(b"whole".to_vec())),
+                PersistWrite::Snapshot(Payload::<SnapshotBytes>::new(b"whole".to_vec())),
             )
             .expect("a snapshot is sealed");
         assert_eq!(plain.into_plaintext(), b"whole");
         let (second, _) = queue
-            .push(doc, PersistWrite::Delta(DeltaBytes::new(b"edit".to_vec())))
+            .push(
+                doc,
+                PersistWrite::Delta(Payload::<DeltaBytes>::new(b"edit".to_vec())),
+            )
             .expect("a delta is sealed");
         assert!(
             queue
@@ -236,12 +239,15 @@ mod tests {
         let doc = DocumentId::new();
         let mut queue = SealQueue::default();
         let (delta, _) = queue
-            .push(doc, PersistWrite::Delta(DeltaBytes::new(b"edit".to_vec())))
+            .push(
+                doc,
+                PersistWrite::Delta(Payload::<DeltaBytes>::new(b"edit".to_vec())),
+            )
             .expect("a delta is sealed");
         let (snapshot, _) = queue
             .push(
                 doc,
-                PersistWrite::Snapshot(SnapshotBytes::new(b"whole".to_vec())),
+                PersistWrite::Snapshot(Payload::<SnapshotBytes>::new(b"whole".to_vec())),
             )
             .expect("a snapshot is sealed");
         queue.sealed(snapshot, Some(sealed(b"s")));
@@ -271,7 +277,10 @@ mod tests {
         let doc = DocumentId::new();
         let mut queue = SealQueue::default();
         let (ticket, _) = queue
-            .push(doc, PersistWrite::Delta(DeltaBytes::new(b"edit".to_vec())))
+            .push(
+                doc,
+                PersistWrite::Delta(Payload::<DeltaBytes>::new(b"edit".to_vec())),
+            )
             .expect("a delta is sealed");
         queue.push(doc, PersistWrite::Hidden);
         queue.sealed(ticket, None);

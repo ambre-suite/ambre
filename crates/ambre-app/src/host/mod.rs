@@ -816,7 +816,9 @@ mod tests {
         let blob = ambre_bus::ClipboardBlob {
             text: "a\tb".to_owned(),
             html: Some("<p>a</p>".to_owned()),
-            ambre: Some(ambre_core::ClipboardBytes::new(bytes.to_vec())),
+            ambre: Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
+                bytes.to_vec(),
+            )),
             ..ambre_bus::ClipboardBlob::default()
         };
         let Published { item, web } = publish_item(
@@ -841,7 +843,7 @@ mod tests {
         assert_eq!(
             blob.ambre
                 .as_ref()
-                .map(ambre_core::ClipboardBytes::as_bytes),
+                .map(ambre_core::Payload::<ambre_core::ClipboardBytes>::as_bytes),
             Some(&bytes[..])
         );
         assert_eq!(
@@ -863,7 +865,9 @@ mod tests {
         let blob = ambre_bus::ClipboardBlob {
             text: "a".to_owned(),
             html: Some("<p>a</p>".to_owned()),
-            ambre: Some(ambre_core::ClipboardBytes::new(vec![1, 2, 3])),
+            ambre: Some(ambre_core::Payload::<ambre_core::ClipboardBytes>::new(
+                vec![1, 2, 3],
+            )),
             ..ambre_bus::ClipboardBlob::default()
         };
         let Published { item, web } = publish_item(

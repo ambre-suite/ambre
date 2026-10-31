@@ -445,7 +445,7 @@ pub async fn recover_master_key(
 #[derive(serde::Serialize)]
 pub struct RecoveredResponse {
     pub status: ambre_core::WriteStatus,
-    pub master_key_enc: ambre_core::EscrowedKey,
+    pub master_key_enc: ambre_core::Encoded<ambre_core::EscrowedKey>,
 }
 
 #[cfg(test)]
@@ -587,7 +587,7 @@ mod tests {
             email: "user@test.com".into(),
             display_name: ambre_core::DisplayName::new("Test User").unwrap(),
             role: Role::Admin,
-            shamir_share_enc: Some(ambre_core::SealedShare::new(vec![1, 2, 3])),
+            shamir_share_enc: Some(ambre_core::Encoded::new(vec![1, 2, 3])),
             created_at: chrono::Utc::now(),
         };
         let resp = member_to_response(&member);
@@ -1323,7 +1323,12 @@ mod tests {
             for released in 1..=2 {
                 let (status, body) = release().await;
                 assert_eq!(status, StatusCode::OK);
-                assert!(body.contains(&ambre_core::EscrowedKey::new(vec![0xA5u8; 48]).to_base64()));
+                assert!(
+                    body.contains(
+                        &ambre_core::Encoded::<ambre_core::EscrowedKey>::new(vec![0xA5u8; 48])
+                            .to_base64()
+                    )
+                );
                 let records: Vec<(String, String, String)> = sqlx::query_as(
                     "SELECT org_id::text, target_user_id::text, recovered_by::text \
                      FROM org_recovery_log",
@@ -1349,7 +1354,10 @@ mod tests {
             let (status, body) = release().await;
             assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
             assert!(
-                !body.contains(&ambre_core::EscrowedKey::new(vec![0xA5u8; 48]).to_base64()),
+                !body.contains(
+                    &ambre_core::Encoded::<ambre_core::EscrowedKey>::new(vec![0xA5u8; 48])
+                        .to_base64()
+                ),
                 "an unrecorded release answers no key"
             );
         }

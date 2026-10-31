@@ -948,7 +948,7 @@ impl SyncState {
     pub(crate) fn send_summarized_update(
         &mut self,
         document_id: DocumentId,
-        payload: ambre_core::DeltaBytes,
+        payload: ambre_core::Payload<ambre_core::DeltaBytes>,
         summary: Option<ActivitySummary>,
     ) {
         if self.signing_key.is_none() {
@@ -987,7 +987,7 @@ impl SyncState {
         document_id: DocumentId,
         nonce: FixedBytes<SessionNonce>,
         summary: Option<&ambre_core::activity::ActivitySummary>,
-        delta: &ambre_core::DeltaBytes,
+        delta: &ambre_core::Payload<ambre_core::DeltaBytes>,
     ) {
         match pipeline::update_body(&nonce, summary, delta) {
             Ok(body) => self.send_body(document_id, body),
@@ -1001,7 +1001,7 @@ impl SyncState {
     pub(crate) fn handle_send_unsent(
         &mut self,
         document_id: DocumentId,
-        payload: ambre_core::DeltaBytes,
+        payload: ambre_core::Payload<ambre_core::DeltaBytes>,
         nonce: FixedBytes<SessionNonce>,
     ) {
         if self.signing_key.is_none() {
@@ -1464,7 +1464,7 @@ impl SyncState {
     pub(crate) fn handle_send_snapshot(
         &mut self,
         document_id: DocumentId,
-        payload: ambre_core::SnapshotBytes,
+        payload: ambre_core::Payload<ambre_core::SnapshotBytes>,
         covered_seq: Seq,
     ) {
         let upload = match self.snapshot_upload(document_id, &payload, covered_seq) {
@@ -1507,7 +1507,7 @@ impl SyncState {
     pub(crate) fn snapshot_upload(
         &self,
         document_id: DocumentId,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
         covered_seq: Seq,
     ) -> Result<SnapshotUpload, crate::error::SyncError> {
         use crate::error::SyncError;
@@ -1543,7 +1543,7 @@ impl SyncState {
     pub(crate) fn handle_send_ephemeral(
         &mut self,
         document_id: DocumentId,
-        payload: ambre_core::EphemeralBytes,
+        payload: ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) {
         let Some(signing_key) = self.signing_key.clone() else {
             tracing::warn!("Sync: SendEphemeral before session keys ready, dropping");
@@ -1906,7 +1906,7 @@ mod tests {
         let mut raw = row.doc_key_enc.as_bytes().to_vec();
         let last = raw.len() - 1;
         raw[last] ^= 1;
-        row.doc_key_enc = ambre_core::WrappedDocKey::new(raw.to_vec());
+        row.doc_key_enc = ambre_core::Encoded::new(raw.to_vec());
         let resp = http::MembersResponse {
             members: vec![row],
             rotation_owed: ambre_core::RotationDebt::Settled,
@@ -2091,7 +2091,7 @@ mod tests {
             parent_snapshot_update_clocks: Vec::new(),
         };
         let snapshot = pipeline::seal_snapshot(
-            &ambre_core::SnapshotBytes::new(payload.to_vec()),
+            &ambre_core::Payload::new(payload.to_vec()),
             public_data,
             doc_key,
             signing_key,
@@ -3230,7 +3230,7 @@ mod tests {
                 author_pubkey: FixedBytes::from_array(sk.verifying_key().to_bytes()),
                 covered_seq: ambre_bus::Seq(3),
                 blob: pipeline::snapshot_blob(
-                    &ambre_core::SnapshotBytes::new(b"base".to_vec()),
+                    &ambre_core::Payload::new(b"base".to_vec()),
                     public_data,
                     &key,
                     &sk,
@@ -3534,7 +3534,7 @@ mod tests {
                 segment,
                 ambre_bus::LeaseId::new(),
                 ambre_bus::Seq(3),
-                &ambre_core::SnapshotBytes::new(b"s".to_vec()),
+                &ambre_core::Payload::new(b"s".to_vec()),
             );
         };
         let ends = |events: &[LogicEvent]| -> Vec<ambre_core::FinalizeEnd> {

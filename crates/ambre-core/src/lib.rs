@@ -115,8 +115,8 @@ pub use docfile::{
 };
 pub use email::Email;
 pub use encoded::{
-    EncodedKeyLink, EncodedLogEntry, EscrowedKey, MASTER_KEY_SALT_LEN, MasterKeySalt, SealedName,
-    SealedShare, WrappedDocKey, WrappedMasterKey,
+    Encoded, EncodedKeyLink, EncodedKind, EncodedLogEntry, EscrowedKey, MASTER_KEY_SALT_LEN,
+    MasterKeySalt, SealedName, SealedShare, WrappedDocKey, WrappedMasterKey,
 };
 pub use envelope::{Aad, ChainHash, Ciphertext, CommitmentTag, EntryDigest, Nonce, Signature};
 pub use error::{DocTypeError, Error, UuidError, VersionError};
@@ -155,8 +155,9 @@ pub use name::{
 pub use object_key::ObjectKey;
 pub use payload::{
     ClipboardBytes, DeltaBytes, EphemeralBytes, FontBytes, FormatMagic, LoroPayload,
-    LoroPayloadRef, MediaBytes, PickedContainer, PickedFile, PlaintextContainer, RgbaPixels,
-    SealedContainer, SealedPreviousKey, SealedRowBytes, SnapshotBytes, ThumbnailPng,
+    LoroPayloadRef, MediaBytes, Payload, PayloadKind, PickedContainer, PickedFile,
+    PlaintextContainer, RgbaPixels, SealedContainer, SealedPreviousKey, SealedRowBytes,
+    SnapshotBytes, ThumbnailPng,
 };
 pub use provider::OidcProvider;
 pub use public_key::{ExchangePublicKey, PublicKey};

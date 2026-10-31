@@ -45,7 +45,7 @@ fn corpus(name: &str) -> DocState {
 }
 
 /// The `.ambre` payload of a corpus, for the import benches.
-fn payload(name: &str) -> ambre_core::SnapshotBytes {
+fn payload(name: &str) -> ambre_core::Payload<ambre_core::SnapshotBytes> {
     corpus(name).export_snapshot()
 }
 
@@ -275,7 +275,10 @@ fn bench_prose_paragraph_shape(c: &mut Criterion) {
     for face in ["NotoSans-Regular.ttf", "NotoSans-Bold.ttf"] {
         let bytes =
             std::fs::read(format!("{FACES}{face}")).unwrap_or_else(|e| panic!("{face}: {e}"));
-        fonts::register_faces(&mut font_cx, ambre_core::FontBytes::new(bytes));
+        fonts::register_faces(
+            &mut font_cx,
+            ambre_core::Payload::<ambre_core::FontBytes>::new(bytes),
+        );
     }
     let mut layout_cx = parley::LayoutContext::new();
     let style = measure::EffectiveStyle::from_parts(

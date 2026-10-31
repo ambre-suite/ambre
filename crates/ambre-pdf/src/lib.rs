@@ -434,7 +434,7 @@ mod tests {
             let mut surface = page.surface();
             let mut s = KrillaSurface::new(&mut surface);
             // 2x2 opaque RGBA checkerboard.
-            let pixels = ambre_draw::RgbaPixels::new(vec![
+            let pixels = ambre_draw::Payload::new(vec![
                 255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
             ]);
             let src = ImageSource {
@@ -451,7 +451,7 @@ mod tests {
             // Malformed source (wrong length): skipped.
             let bad = ImageSource {
                 key: ImageKey(2),
-                pixels: &ambre_draw::RgbaPixels::new(vec![0, 1, 2]),
+                pixels: &ambre_draw::Payload::new(vec![0, 1, 2]),
                 size: ambre_draw::ImageSize::new(
                     ambre_draw::WholePx::new(2),
                     ambre_draw::WholePx::new(2),

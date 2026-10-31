@@ -158,10 +158,10 @@ pub struct MemberChannelRow {
     pub visibility: ambre_core::Visibility,
     pub meta_id: ambre_core::MetaId,
     /// The name sealed beside `meta`, if any (`SRV-219`).
-    pub name_enc: Option<ambre_core::SealedName>,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     /// The caller's copy of the channel key, and the exchange key of whoever
     /// wrapped it, `None` for a self-wrapped row.
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     pub wrapper_exchange_pubkey: Option<FixedBytes<ambre_core::ExchangePublicKey>>,
     /// For a direct message, the display names of its other members, by
     /// name then id. Empty for a channel of a space (`SRV-220`).
@@ -213,8 +213,8 @@ pub async fn list_member_channels(
                 )),
                 name_enc: r
                     .try_get::<Option<Vec<u8>>, _>("name_enc")?
-                    .map(ambre_core::SealedName::new),
-                doc_key_enc: ambre_core::WrappedDocKey::new(r.try_get("doc_key_enc")?),
+                    .map(ambre_core::Encoded::new),
+                doc_key_enc: ambre_core::Encoded::new(r.try_get("doc_key_enc")?),
                 wrapper_exchange_pubkey: decode_opt_exchange_key(
                     r.try_get("wrapper_exchange_pubkey")?,
                 )?,
@@ -1397,7 +1397,7 @@ pub async fn add_channel_member_if_absent(
     meta_id: &ambre_core::MetaId,
     user_id: &ambre_core::UserId,
     role: ambre_core::Role,
-    doc_key_enc: &ambre_core::WrappedDocKey,
+    doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     entry: Option<&LogEntry>,
 ) -> Result<bool, AppError> {
     let uid = id_to_uuid(*user_id);
@@ -1446,7 +1446,10 @@ pub struct NewDirectMessage<'a> {
     /// Who creates it: a member too, and the author of every entry.
     pub creator: ambre_core::UserId,
     /// Every member, the creator included, with the key wrapped for them.
-    pub members: &'a [(ambre_core::UserId, ambre_core::WrappedDocKey)],
+    pub members: &'a [(
+        ambre_core::UserId,
+        ambre_core::Encoded<ambre_core::WrappedDocKey>,
+    )],
     /// The log of `meta`, in position order.
     pub entries: &'a [LogEntry],
 }
@@ -1603,7 +1606,7 @@ mod tests {
             &document,
             &member,
             ambre_core::Role::Editor,
-            &ambre_core::WrappedDocKey::new([6u8; 32].to_vec()),
+            &ambre_core::Encoded::new([6u8; 32].to_vec()),
             &owner,
             None,
         )
@@ -1638,7 +1641,7 @@ mod tests {
         assert_eq!(row.role, ambre_core::Role::Editor);
         assert_eq!(
             row.doc_key_enc,
-            ambre_core::WrappedDocKey::new([6u8; 32].to_vec()),
+            ambre_core::Encoded::new([6u8; 32].to_vec()),
             "the key sealed on `meta`"
         );
 

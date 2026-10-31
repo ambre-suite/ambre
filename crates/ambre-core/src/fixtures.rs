@@ -233,7 +233,7 @@ pub trait FixtureGen {
     /// is a bug, not a runtime condition. It **panics** rather than emit a
     /// half-built document -- a corpus that silently lost a merge is worse than a
     /// failed `just fixtures`.
-    fn build(&self) -> crate::PlaintextContainer;
+    fn build(&self) -> crate::Payload<crate::PlaintextContainer>;
 }
 
 // -----------------------------------------------------------------------------

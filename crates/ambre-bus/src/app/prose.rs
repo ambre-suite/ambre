@@ -1654,7 +1654,7 @@ pub enum ProseCommand {
         at: (BlockId, DocOffset),
         text: String,
         html: Option<String>,
-        payload: Option<ambre_core::ClipboardBytes>,
+        payload: Option<ambre_core::Payload<ambre_core::ClipboardBytes>>,
     },
     /// Apply one presence mark over a whole selection, or remove it. Every
     /// block the selection covers changes in one commit, so one undo takes
@@ -1845,7 +1845,7 @@ pub enum ProseCommand {
     /// [`InteropError`] when the file produced nothing (`PROSE-IO-047`).
     ImportDocument {
         format: ImportFormat,
-        data: ambre_core::FileBytes,
+        data: ambre_core::Payload<ambre_core::FileBytes>,
     },
 }
 
@@ -2532,7 +2532,7 @@ pub enum ProseEvent {
     ExportReady {
         filename: ambre_core::ExportFilename,
         media_type: ambre_core::MediaType,
-        data: ambre_core::FileBytes,
+        data: ambre_core::Payload<ambre_core::FileBytes>,
         /// What the format could not carry (`PROSE-IO-018`).
         report: ConversionReport,
     },
@@ -2560,7 +2560,7 @@ pub enum ProseEvent {
     Clipboard {
         text: String,
         html: String,
-        payload: ambre_core::ClipboardBytes,
+        payload: ambre_core::Payload<ambre_core::ClipboardBytes>,
     },
     /// A cell a merge covers still holds text: masked, not destroyed. A hint,
     /// and it blocks nothing (`PROSE-FEAT-255`).
@@ -3163,7 +3163,7 @@ mod tests {
                 ProseEvent::Clipboard {
                     text: secret.clone(),
                     html: secret.clone(),
-                    payload: ambre_core::ClipboardBytes::default(),
+                    payload: ambre_core::Payload::default(),
                 }
             ),
             format!(

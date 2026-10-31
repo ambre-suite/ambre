@@ -16,7 +16,7 @@ use crate::state::AppState;
 /// written (`SRV-232`, `SRV-242`).
 #[derive(serde::Deserialize)]
 pub struct StoreMasterKeysRequest {
-    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     pub master_key_salt: FixedBytes<MasterKeySalt>,
     pub signing_pubkey: FixedBytes<PublicKey>,
     pub exchange_pubkey: FixedBytes<ExchangePublicKey>,
@@ -97,7 +97,7 @@ pub struct KeysStoredResponse {
 /// Each is `null` until the key setup: no empty value stands for an absent one.
 #[derive(serde::Serialize)]
 pub struct MasterKeysResponse {
-    pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
+    pub master_key_enc: Option<ambre_core::Encoded<ambre_core::WrappedMasterKey>>,
     pub master_key_salt: Option<FixedBytes<MasterKeySalt>>,
     pub signing_pubkey: Option<FixedBytes<PublicKey>>,
     pub exchange_pubkey: Option<FixedBytes<ExchangePublicKey>>,
@@ -140,7 +140,7 @@ impl RotatedResponse {
 /// Only `master_key_enc` and `master_key_salt` change; the seed is unchanged.
 #[derive(serde::Deserialize)]
 pub struct RotateMasterKeysRequest {
-    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     pub master_key_salt: FixedBytes<MasterKeySalt>,
 }
 

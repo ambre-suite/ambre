@@ -10,7 +10,7 @@ use ambre_core::{FixedBytes, MediaAddress};
 /// Seals a blob for one document and the address it is stored under
 /// (`SYNC-051`, `SYNC-074`).
 fn seal_blob(
-    data: &ambre_core::MediaBytes,
+    data: &ambre_core::Payload<ambre_core::MediaBytes>,
     document_id: DocumentId,
     address: &FixedBytes<MediaAddress>,
     doc_key: &DocumentKey,
@@ -33,12 +33,12 @@ fn open_blob(
     document_id: DocumentId,
     content_hash: &ambre_core::ContentHash,
     doc_key: &DocumentKey,
-) -> Result<ambre_core::MediaBytes, SyncError> {
+) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, SyncError> {
     let address = FixedBytes::<MediaAddress>::of_hash(content_hash);
     let data = pipeline::open_object(blob, &pipeline::media_aad(document_id, &address), doc_key)?;
     // The media file keeps its bytes in the clear by role, so they move out
     // of the wrapper with no copy. A blob the address refuses is wiped.
-    let data = ambre_core::MediaBytes::new(data.into_plaintext());
+    let data = ambre_core::Payload::new(data.into_plaintext());
     if ambre_crypto::commitment::media_address(doc_key, &data) != address {
         data.wipe();
         return Err(SyncError::BlobMismatch);
@@ -52,7 +52,7 @@ fn open_blob_named(
     blob: &pipeline::FetchedBlob,
     content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
-) -> Result<ambre_core::MediaBytes, SyncError> {
+) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, SyncError> {
     let wanted = pipeline::object_key(blob)?;
     let key = keyring.find(wanted).ok_or(SyncError::KeyOutOfReach)?;
     open_blob(blob, keyring.document_id, content_hash, &key)
@@ -79,7 +79,7 @@ impl SyncState {
         &mut self,
         id: RequestId,
         document_id: DocumentId,
-        data: ambre_core::MediaBytes,
+        data: ambre_core::Payload<ambre_core::MediaBytes>,
     ) {
         if let Some(doc_state) = self
             .documents
@@ -200,7 +200,7 @@ impl SyncState {
                 RestEvent::MediaDownloaded {
                     document_id,
                     content_hash,
-                    data: ambre_core::MediaBytes::default(),
+                    data: ambre_core::Payload::default(),
                 },
             );
             return;
@@ -323,7 +323,7 @@ fn report(logic_tx: &LogicSink, id: RequestId, request: ApiRequest, error: impl 
 pub(crate) struct Upload {
     id: RequestId,
     document_id: DocumentId,
-    data: ambre_core::MediaBytes,
+    data: ambre_core::Payload<ambre_core::MediaBytes>,
     address: FixedBytes<MediaAddress>,
     doc_key: DocumentKey,
     signing_key: SigningKey,
@@ -469,7 +469,7 @@ async fn download_leg(
     base: &http::RelayUrl,
     content_hash: &ambre_core::ContentHash,
     keyring: &crate::chain::Keyring,
-) -> Result<ambre_core::MediaBytes, http::Failed> {
+) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, http::Failed> {
     let link: http::DownloadUrlResponse = http
         .post_json(
             &base.join("/media/download-url"),
@@ -811,7 +811,7 @@ mod tests {
         key: &DocumentKey,
     ) -> (pipeline::FetchedBlob, ambre_core::ContentHash) {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
-        let data = ambre_core::MediaBytes::new(data.to_vec());
+        let data = ambre_core::Payload::new(data.to_vec());
         let address = ambre_crypto::commitment::media_address(key, &data);
         let blob = seal_blob(&data, document_id, &address, key, &signing).unwrap();
         (
@@ -880,7 +880,7 @@ mod tests {
 
         let address = ambre_crypto::commitment::media_address(&key, &b"a picture".to_vec().into());
         let signing = SigningKey::from_bytes(&[0x07; 32]);
-        let other = ambre_core::MediaBytes::new(b"other bytes".to_vec());
+        let other = ambre_core::Payload::new(b"other bytes".to_vec());
         let forged = seal_blob(&other, document_id, &address, &key, &signing).unwrap();
         let forged = &pipeline::FetchedBlob::new(forged.into_bytes());
         assert_eq!(

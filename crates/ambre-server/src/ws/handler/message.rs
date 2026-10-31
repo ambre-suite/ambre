@@ -1782,7 +1782,7 @@ mod access_tests {
             &doc_id,
             &editor,
             ambre_core::Role::Editor,
-            &ambre_core::WrappedDocKey::new([5u8; 32].to_vec()),
+            &ambre_core::Encoded::new([5u8; 32].to_vec()),
             &owner,
             None,
         )
@@ -2749,7 +2749,7 @@ mod channel_gate_tests {
                 &meta,
                 &member,
                 role,
-                &ambre_core::WrappedDocKey::new([6u8; 32].to_vec()),
+                &ambre_core::Encoded::new([6u8; 32].to_vec()),
                 &owner,
                 None,
             )

@@ -24,7 +24,7 @@ use ambre_core::{
 pub fn export_ambre_plaintext(
     doc: &LoroDoc,
     doc_id: DocumentId,
-) -> Option<ambre_core::PlaintextContainer> {
+) -> Option<ambre_core::Payload<ambre_core::PlaintextContainer>> {
     // `None` rather than a header over nothing (`TOILE-IO-069`). A well-formed
     // file carrying the right document id and an empty board is what the user
     // cannot tell from a board they emptied themselves.
@@ -35,7 +35,7 @@ pub fn export_ambre_plaintext(
     Some(write_ambre_plaintext(
         DocType::Toile,
         doc_id,
-        &ambre_core::SnapshotBytes::new(payload),
+        &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(payload),
     ))
 }
 
@@ -53,7 +53,7 @@ pub fn export_ambre_plaintext(
 /// Every error of [`read_ambre_plaintext_as`], including
 /// [`DocFileError::WrongDocType`] for a valid file of another app.
 pub fn import_ambre_plaintext(
-    data: &ambre_core::PlaintextContainer,
+    data: &ambre_core::Payload<ambre_core::PlaintextContainer>,
 ) -> Result<AmbreHeader, DocFileError> {
     read_ambre_plaintext_as(DocType::Toile, data)
 }

@@ -203,7 +203,7 @@ impl ToileState {
     /// transiently clears this presenter's cursor halo on followers until the
     /// next cursor sample, which is acceptable (presenters emit cursor / laser
     /// continuously). `None` when not broadcasting or on an encode failure.
-    fn slide_broadcast_sample(&self) -> Option<ambre_core::EphemeralBytes> {
+    fn slide_broadcast_sample(&self) -> Option<ambre_core::Payload<ambre_core::EphemeralBytes>> {
         if !self.broadcasting.is_on() {
             return None;
         }
@@ -212,7 +212,9 @@ impl ToileState {
             ..Default::default()
         };
         match postcard::to_allocvec(&payload) {
-            Ok(bytes) => Some(ambre_core::EphemeralBytes::new(bytes)),
+            Ok(bytes) => Some(ambre_core::Payload::<ambre_core::EphemeralBytes>::new(
+                bytes,
+            )),
             Err(e) => {
                 tracing::warn!("Toile: slide broadcast encode failed: {e}");
                 None
@@ -551,9 +553,11 @@ impl ToileState {
 /// A presence sample carrying no slide: what a viewer sends when it stops
 /// broadcasting (`TOILE-UI-315`). The peers read the whole live set, so a
 /// sample naming no slide is what drops this viewer from the presenters.
-fn silent_presence_frame() -> Option<ambre_core::EphemeralBytes> {
+fn silent_presence_frame() -> Option<ambre_core::Payload<ambre_core::EphemeralBytes>> {
     match postcard::to_allocvec(&PresencePayload::default()) {
-        Ok(bytes) => Some(ambre_core::EphemeralBytes::new(bytes)),
+        Ok(bytes) => Some(ambre_core::Payload::<ambre_core::EphemeralBytes>::new(
+            bytes,
+        )),
         Err(e) => {
             tracing::warn!("Toile: the end-of-broadcast frame failed to encode: {e}");
             None

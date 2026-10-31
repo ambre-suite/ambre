@@ -27,7 +27,7 @@ pub struct SetupAccountRequest {
     /// User-supplied display name (N3). A body whose name breaks the rule
     /// does not decode (`SRV-234`).
     pub display_name: ambre_core::DisplayName,
-    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
     /// A key that is not 32 bytes of hexadecimal refuses the body when it is
     /// read, before any row is written (`SRV-232`, `SRV-242`).
@@ -170,10 +170,10 @@ pub struct DocumentSummaryJson {
     pub owner_id: ambre_core::UserId,
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<ambre_core::SealedName>,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     /// Serialized as its lowercase word.
     pub role: Role,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// Exchange public key (hex) of whoever wrapped `doc_key_enc`. The client
     /// ECDH-unwraps the doc key with it to decrypt the name for the launcher.
     /// `null` when unknown (self-wrapped owner row): the client falls back to
@@ -225,8 +225,8 @@ pub async fn list_documents(
 pub struct CreateDocumentRequest {
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<ambre_core::SealedName>,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// Optional client-generated document id (lazy creation). When present the
     /// server materializes the row under this id idempotently.
     #[serde(default, with = "ambre_core::serde_id::document_id::option")]
@@ -234,7 +234,7 @@ pub struct CreateDocumentRequest {
     /// The first entry of the membership log, signed by the creator
     /// (`SYNC-132`).
     #[serde(default)]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
     /// The document is a Murmure space, which its members list
     /// (`SRV-216`).
     #[serde(default, with = "ambre_core::serde_enums::space_flag")]
@@ -332,10 +332,10 @@ pub struct GetDocumentResponse {
     pub owner_id: ambre_core::UserId,
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<ambre_core::SealedName>,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     /// Serialized as its lowercase word.
     pub role: Option<Role>,
-    pub doc_key_enc: Option<ambre_core::WrappedDocKey>,
+    pub doc_key_enc: Option<ambre_core::Encoded<ambre_core::WrappedDocKey>>,
     pub created_at: ambre_core::Rfc3339,
     pub updated_at: ambre_core::Rfc3339,
 }
@@ -380,7 +380,7 @@ pub async fn get_document(
 /// Request body for renaming a document. The name is E2EE encrypted.
 #[derive(serde::Deserialize)]
 pub struct RenameDocumentRequest {
-    pub name_enc: ambre_core::SealedName,
+    pub name_enc: ambre_core::Encoded<ambre_core::SealedName>,
 }
 
 pub async fn rename_document(
@@ -536,7 +536,7 @@ pub struct MemberInfoJson {
     pub role: Role,
     pub signing_pub_key: FixedBytes<PublicKey>,
     pub exchange_pub_key: FixedBytes<ExchangePublicKey>,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// Exchange public key of whoever wrapped `doc_key_enc` (the inviter, or the
     /// member themselves at creation). The recipient unwraps via ECDH against
     /// THIS key, not its own. Falls back to the member's own key for legacy rows.
@@ -601,7 +601,7 @@ pub struct MembersResponse {
     /// Whether a member with write access must rotate before it sends.
     pub rotation_owed: ambre_core::RotationDebt,
     /// The signed membership entries, each in URL-safe base64.
-    pub log: Vec<ambre_core::EncodedLogEntry>,
+    pub log: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// Request body for changing a member's role.
@@ -612,7 +612,7 @@ pub struct UpdateMemberRoleRequest {
     pub role: ambre_core::Role,
     /// The signed entry that gives the role (`SYNC-132`).
     #[serde(default)]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 pub async fn update_document_member_role(

@@ -353,7 +353,7 @@ impl Measurer {
     /// The path a lazily fetched script face takes to the paginator
     /// (`CANVAS-006`). The layout measured before it arrived is stale, and
     /// the next reflow recomputes in full (`PROSE-111`).
-    pub fn register_faces(&mut self, bytes: ambre_core::FontBytes) {
+    pub fn register_faces(&mut self, bytes: ambre_core::Payload<ambre_core::FontBytes>) {
         fonts::register_faces(&mut self.font_cx, bytes);
     }
 

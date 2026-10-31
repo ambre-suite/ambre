@@ -59,7 +59,7 @@ impl FixtureGen for Gen {
     fn generator_version(&self) -> ambre_core::GeneratorVersion {
         ambre_core::GeneratorVersion::new(self.version)
     }
-    fn build(&self) -> ambre_core::PlaintextContainer {
+    fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
         let mut state = TrameState::with_peer(ambre_core::PeerId(self.seed));
         state.handle_command(TrameCommand::SetCellsBatch {
             cells: (0..self.filler)

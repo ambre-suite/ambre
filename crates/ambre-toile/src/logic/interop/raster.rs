@@ -31,7 +31,7 @@ const THUMB_MAX_EDGE: WholePx<ambre_core::ImagePx> = WholePx::new(256);
 /// [`ImportError::Decode`] when the decoder refuses `bytes`, and
 /// [`ImportError::ImageTooLarge`] when the decoded image exceeds `limits`.
 pub fn import_raster(
-    bytes: &ambre_core::FileBytes,
+    bytes: &ambre_core::Payload<ambre_core::FileBytes>,
     limits: &Limits,
 ) -> Result<ImportBatch, ImportError> {
     let mut batch = ImportBatch::default();
@@ -109,10 +109,10 @@ pub(super) fn decode_media(
 
     Ok(MediaBlob {
         media,
-        plaintext: ambre_core::MediaBytes::new(bytes.to_vec()),
+        plaintext: ambre_core::Payload::<ambre_core::MediaBytes>::new(bytes.to_vec()),
         mime: mime_of(format),
         size,
-        thumb: ambre_core::ThumbnailPng::new(thumb),
+        thumb: ambre_core::Payload::<ambre_core::ThumbnailPng>::new(thumb),
     })
 }
 
@@ -132,7 +132,7 @@ fn mime_of(format: ImageFormat) -> ambre_core::MediaType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::FileBytes;
+    use ambre_core::Payload;
 
     /// A minimal in-memory PNG of the given solid size, encoded with `image` so
     /// the test never reads a fixture file for the decode path.
@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn imports_one_image_with_thumbnail() {
         let png = solid_png(64, 48);
-        let batch = import_raster(&FileBytes::new(png.clone()), &Limits::default()).unwrap();
+        let batch = import_raster(&Payload::new(png.clone()), &Limits::default()).unwrap();
         assert_eq!(batch.commands.len(), 1);
         assert_eq!(batch.media.len(), 1);
         assert_eq!(batch.report.imported.get(), 1);
@@ -190,7 +190,7 @@ mod tests {
             max_image: ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256)),
             ..Limits::default()
         };
-        let err = import_raster(&FileBytes::new(png), &limits).unwrap_err();
+        let err = import_raster(&Payload::new(png), &limits).unwrap_err();
         assert!(matches!(
             err,
             ImportError::ImageTooLarge { limit, .. } if limit == ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256))
@@ -216,7 +216,7 @@ mod tests {
             ..Limits::default()
         };
         assert_eq!(
-            import_raster(&FileBytes::new(header_only), &limits).unwrap_err(),
+            import_raster(&Payload::new(header_only), &limits).unwrap_err(),
             ImportError::ImageTooLarge {
                 size: ambre_core::ImageSize::new(WholePx::new(300), WholePx::new(20)),
                 limit: ambre_core::ImageSize::new(WholePx::new(256), WholePx::new(256)),
@@ -256,8 +256,7 @@ mod tests {
 
     #[test]
     fn garbage_bytes_fail_to_decode() {
-        let err =
-            import_raster(&FileBytes::new(vec![0u8, 1, 2, 3]), &Limits::default()).unwrap_err();
+        let err = import_raster(&Payload::new(vec![0u8, 1, 2, 3]), &Limits::default()).unwrap_err();
         assert!(matches!(err, ImportError::Decode(_)));
     }
 }

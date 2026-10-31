@@ -7,7 +7,9 @@
 //! what the relay serves (`SYNC-103`). The relay stores the entries and checks
 //! the signature, and computes no digest.
 
-use ambre_core::{DocumentId, EncodedLogEntry, FixedBytes, KeyId, PublicKey, Role, UserId};
+use ambre_core::{
+    DocumentId, Encoded, EncodedLogEntry, FixedBytes, KeyId, PublicKey, Role, UserId,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::error::SerializationError;
@@ -201,8 +203,8 @@ impl MembershipEntry {
     /// # Errors
     ///
     /// [`SerializationError::Postcard`] from the encoder.
-    pub fn encode(&self) -> Result<EncodedLogEntry, SerializationError> {
-        Ok(EncodedLogEntry::new(postcard::to_allocvec(self)?))
+    pub fn encode(&self) -> Result<Encoded<EncodedLogEntry>, SerializationError> {
+        Ok(Encoded::new(postcard::to_allocvec(self)?))
     }
 
     /// Reads back what [`Self::encode`] wrote, and nothing else. The relay
@@ -215,7 +217,7 @@ impl MembershipEntry {
     /// * [`SerializationError::Postcard`] for bytes that are not an entry.
     /// * [`SerializationError::NotCanonical`] for bytes past the entry, or a
     ///   field written in a longer form than its encoding.
-    pub fn decode(encoded: &EncodedLogEntry) -> Result<Self, SerializationError> {
+    pub fn decode(encoded: &Encoded<EncodedLogEntry>) -> Result<Self, SerializationError> {
         let entry: Self = postcard::from_bytes(encoded.as_bytes())?;
         if entry.encode()? != *encoded {
             return Err(SerializationError::NotCanonical);
@@ -299,7 +301,7 @@ mod tests {
         assert_ne!(sent[tail - 1], ENTRY_SIGNATURE_LEN as u8);
         assert_eq!(sent[tail..], [7; ENTRY_SIGNATURE_LEN]);
         let short = sent[..sent.len() - 1].to_vec();
-        assert!(MembershipEntry::decode(&EncodedLogEntry::new(short)).is_err());
+        assert!(MembershipEntry::decode(&Encoded::new(short)).is_err());
     }
 
     /// `SRV-227`: an entry reads from its own encoding alone. A byte past its
@@ -310,7 +312,7 @@ mod tests {
         let mut trailing = sent.clone();
         trailing.push(0);
         assert_eq!(
-            MembershipEntry::decode(&EncodedLogEntry::new(trailing)),
+            MembershipEntry::decode(&Encoded::new(trailing)),
             Err(SerializationError::NotCanonical)
         );
         // The position follows the 16 bytes of the document id. Position 1 is
@@ -319,7 +321,7 @@ mod tests {
         let mut longer = sent[..16].to_vec();
         longer.extend([0x81, 0x00]);
         longer.extend(&sent[17..]);
-        assert!(MembershipEntry::decode(&EncodedLogEntry::new(longer)).is_err());
+        assert!(MembershipEntry::decode(&Encoded::new(longer)).is_err());
     }
 
     /// An ownerless log opens with its creation, and leaves the creator and

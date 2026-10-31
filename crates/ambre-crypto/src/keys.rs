@@ -16,7 +16,8 @@
 use std::sync::Arc;
 
 use ambre_core::{
-    EntryDigest, FileSalt, FixedBytes, KeyId, SALT_LEN, Secret, SecretString, WrappedMasterKey,
+    Encoded, EntryDigest, FileSalt, FixedBytes, KeyId, SALT_LEN, Secret, SecretString,
+    WrappedMasterKey,
 };
 use blake2::{Blake2b512, Digest};
 use ed25519_dalek::SigningKey;
@@ -150,11 +151,11 @@ impl MasterSeed {
         &self,
         key: &DocumentKey,
         aad: &ambre_core::Aad,
-    ) -> Result<WrappedMasterKey, CryptoError> {
+    ) -> Result<Encoded<WrappedMasterKey>, CryptoError> {
         let (nonce, ciphertext) = aead::seal(self.0.expose(), aad, key)?;
         let mut wrapped = nonce.as_slice().to_vec();
         wrapped.extend_from_slice(&ciphertext.0);
-        Ok(WrappedMasterKey::new(wrapped))
+        Ok(Encoded::new(wrapped))
     }
 
     /// Opens a seed that [`Self::wrap_for_storage`] sealed under `key` with the
@@ -168,7 +169,7 @@ impl MasterSeed {
     /// * [`CryptoError::InvalidKeyLength`] when `wrapped` is too short to hold
     ///   a nonce, or the opened seed is not 32 bytes long.
     pub fn open_from_storage(
-        wrapped: &WrappedMasterKey,
+        wrapped: &Encoded<WrappedMasterKey>,
         key: &crate::passphrase::UserKey,
         aad: &ambre_core::Aad,
     ) -> Result<Self, CryptoError> {

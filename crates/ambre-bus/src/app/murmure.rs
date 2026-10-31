@@ -323,7 +323,7 @@ pub struct Picture {
 /// height * 4` bytes of its size, shown for `delay`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PictureFrame {
-    pub pixels: ambre_core::RgbaPixels,
+    pub pixels: ambre_core::Payload<ambre_core::RgbaPixels>,
     pub delay: ambre_core::Millis,
 }
 
@@ -491,7 +491,7 @@ pub enum MurmureCommand {
     /// holds no document of the channel, so the Logic thread names it.
     UploadFile {
         id: crate::RequestId,
-        data: ambre_core::MediaBytes,
+        data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
     /// Fetch the file `media_ref` of a message, stored under the channel's
     /// `meta`. The answer is the `MediaDownloaded` of request `id`.

@@ -3,7 +3,7 @@
 
 use crate::Receipt;
 use ambre_bus::{MessageDraft, Timestamp, UnreadCount};
-use ambre_core::{ChannelId, SegmentId, Seq, SnapshotBytes, UserId};
+use ambre_core::{ChannelId, Payload, SegmentId, Seq, SnapshotBytes, UserId};
 use loro::{Container, ValueOrContainer};
 
 use crate::schema::{MessageKey, Root};
@@ -234,7 +234,7 @@ fn a_truncated_table_is_refused_before_any_import() {
     let mut payload = crate::sequence::FRAME_MAGIC.to_vec();
     payload.extend_from_slice(&3u32.to_le_bytes());
     payload.extend_from_slice(&[0; 10]);
-    let payload = SnapshotBytes::new(payload);
+    let payload = Payload::<SnapshotBytes>::new(payload);
     assert!(matches!(
         bob.apply_remote_at(segment, Some(Order::Snapshot(Seq(2))), (&payload).into()),
         Err(MurmureError::Crdt(_))

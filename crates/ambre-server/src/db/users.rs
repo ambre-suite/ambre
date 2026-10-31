@@ -15,7 +15,7 @@ pub struct UserRow {
     /// an OIDC login reclaims an unverified holder's email.
     pub email_verified: EmailProof,
     pub display_name: ambre_core::DisplayName,
-    pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
+    pub master_key_enc: Option<ambre_core::Encoded<ambre_core::WrappedMasterKey>>,
     pub master_key_salt: Option<FixedBytes<ambre_core::MasterKeySalt>>,
     /// `None` until the account registers its keys: a provider login creates
     /// the account first (`SRV-027`). Both keys are set or neither is.
@@ -74,7 +74,7 @@ pub async fn get_user(
             display_name: decode_display_name(r.try_get("display_name")?)?,
             master_key_enc: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
-                .map(ambre_core::WrappedMasterKey::new),
+                .map(ambre_core::Encoded::new),
             master_key_salt: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
                 .map(decode_salt)
@@ -126,7 +126,7 @@ pub async fn get_user_by_email(
             display_name: decode_display_name(r.try_get("display_name")?)?,
             master_key_enc: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
-                .map(ambre_core::WrappedMasterKey::new),
+                .map(ambre_core::Encoded::new),
             master_key_salt: r
                 .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
                 .map(decode_salt)
@@ -146,7 +146,7 @@ pub async fn create_user(
     pool: &PgPool,
     email: &ambre_core::Email,
     display_name: &ambre_core::DisplayName,
-    master_key_enc: &ambre_core::WrappedMasterKey,
+    master_key_enc: &ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     master_key_salt: &FixedBytes<ambre_core::MasterKeySalt>,
     signing_pubkey: &FixedBytes<ambre_core::PublicKey>,
     exchange_pubkey: &FixedBytes<ambre_core::ExchangePublicKey>,
@@ -176,7 +176,7 @@ pub async fn create_user(
         display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
             .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
-            .map(ambre_core::WrappedMasterKey::new),
+            .map(ambre_core::Encoded::new),
         master_key_salt: row
             .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
             .map(decode_salt)
@@ -253,7 +253,7 @@ pub async fn upsert_user_from_oidc(
         display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
             .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
-            .map(ambre_core::WrappedMasterKey::new),
+            .map(ambre_core::Encoded::new),
         master_key_salt: row
             .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
             .map(decode_salt)
@@ -314,7 +314,7 @@ pub async fn dev_upsert_user(
         display_name: decode_display_name(row.try_get("display_name")?)?,
         master_key_enc: row
             .try_get::<Option<Vec<u8>>, _>("master_key_enc")?
-            .map(ambre_core::WrappedMasterKey::new),
+            .map(ambre_core::Encoded::new),
         master_key_salt: row
             .try_get::<Option<Vec<u8>>, _>("master_key_salt")?
             .map(decode_salt)
@@ -366,7 +366,7 @@ pub async fn search_users(pool: &PgPool, query: &UserSearch) -> Result<Vec<UserI
 pub async fn update_master_key(
     pool: &PgPool,
     user_id: &ambre_core::UserId,
-    master_key_enc: &ambre_core::WrappedMasterKey,
+    master_key_enc: &ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     master_key_salt: &FixedBytes<ambre_core::MasterKeySalt>,
 ) -> Result<(), AppError> {
     let uid = id_to_uuid(*user_id);
@@ -431,7 +431,7 @@ mod tests {
             &pool,
             &ambre_core::Email::from("alice@example.com"),
             &ambre_core::DisplayName::new("Alice").unwrap(),
-            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+            &ambre_core::Encoded::new([1u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
             &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
@@ -498,7 +498,7 @@ mod tests {
             &pool,
             &ambre_core::Email::from("DAVE@example.com"),
             &ambre_core::DisplayName::new("Impostor").unwrap(),
-            &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
+            &ambre_core::Encoded::new([9u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([8u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([7u8; 32]),
             &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([6u8; 32]),
@@ -571,7 +571,7 @@ mod tests {
             &pool,
             &ambre_core::Email::from("bob@example.com"),
             &ambre_core::DisplayName::new("Bob").unwrap(),
-            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+            &ambre_core::Encoded::new([1u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
             &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),
@@ -583,7 +583,7 @@ mod tests {
             &pool,
             &ambre_core::Email::from("BOB@example.com"),
             &ambre_core::DisplayName::new("Impostor").unwrap(),
-            &ambre_core::WrappedMasterKey::new([9u8; 32].to_vec()),
+            &ambre_core::Encoded::new([9u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([8u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([7u8; 32]),
             &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([6u8; 32]),
@@ -602,7 +602,7 @@ mod tests {
             &pool,
             &ambre_core::Email::from("carol@example.com"),
             &ambre_core::DisplayName::new("Carol").unwrap(),
-            &ambre_core::WrappedMasterKey::new([1u8; 32].to_vec()),
+            &ambre_core::Encoded::new([1u8; 32].to_vec()),
             &FixedBytes::<ambre_core::MasterKeySalt>::from_array([2u8; 32]),
             &FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
             &FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32]),

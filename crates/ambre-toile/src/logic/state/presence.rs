@@ -71,7 +71,7 @@ impl ToileState {
     pub fn apply_ephemeral(
         &mut self,
         from_user_id: UserId,
-        payload: &ambre_core::EphemeralBytes,
+        payload: &ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) -> Vec<ToileEvent> {
         let presence: PresencePayload = match postcard::from_bytes(payload.as_bytes()) {
             Ok(p) => p,

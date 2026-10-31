@@ -298,7 +298,7 @@ impl SyncState {
         meta: MetaId,
         key: &DocumentKey,
         name: &ambre_core::Name,
-    ) -> Result<ambre_core::SealedName, SyncError> {
+    ) -> Result<ambre_core::Encoded<ambre_core::SealedName>, SyncError> {
         let signing_key = self.signing_key.as_ref().ok_or(SyncError::SessionLocked)?;
         Ok(Self::seal_document_name(
             meta.document_id(),
@@ -970,7 +970,7 @@ fn channel_key_aad(channel_id: ChannelId) -> ambre_core::Aad {
 /// The digest of an entry in request form: the anchor of the log a first
 /// entry opens, and the link the entry after it carries.
 fn digest_of(
-    entry: &ambre_core::EncodedLogEntry,
+    entry: &ambre_core::Encoded<ambre_core::EncodedLogEntry>,
 ) -> Option<FixedBytes<ambre_protocol::EntryDigest>> {
     membership_log::decode(std::slice::from_ref(entry))
         .first()
@@ -1038,7 +1038,13 @@ pub(crate) fn join_key(
     sealed: &SealedChannelKey,
     space_keys: &crate::chain::Keyring,
     exchange_key: &StaticSecret,
-) -> Result<(ambre_core::WrappedDocKey, FixedBytes<KeyId>), SyncError> {
+) -> Result<
+    (
+        ambre_core::Encoded<ambre_core::WrappedDocKey>,
+        FixedBytes<KeyId>,
+    ),
+    SyncError,
+> {
     let (key, anchor) = unseal_channel_key(channel_id, sealed, space_keys)?;
     let own_pub = crate::sharing::own_exchange_key(exchange_key);
     let wrapped = crate::sharing::wrap_anchored_b64(exchange_key, &own_pub, &key, anchor)?;
@@ -1052,7 +1058,7 @@ pub(crate) fn self_join_entry(
     author: &crate::sharing::Author,
     head: &http::JoinHeadResponse,
     key: FixedBytes<KeyId>,
-) -> Result<Option<ambre_core::EncodedLogEntry>, SyncError> {
+) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
     if head.length.is_first() {
         return Ok(None);
     }
@@ -1308,7 +1314,7 @@ pub(crate) mod tests {
     /// The key a wrapped value opens to, for its holder.
     fn unwrap_own(
         exchange_key: &StaticSecret,
-        doc_key_enc: &ambre_core::WrappedDocKey,
+        doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     ) -> Option<DocumentKey> {
         let bytes = doc_key_enc.as_bytes();
         let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;
@@ -1328,7 +1334,10 @@ pub(crate) mod tests {
         channel_id: ChannelId,
         space_key: &DocumentKey,
         creator: &StaticSecret,
-    ) -> (SealedChannelKey, ambre_core::WrappedDocKey) {
+    ) -> (
+        SealedChannelKey,
+        ambre_core::Encoded<ambre_core::WrappedDocKey>,
+    ) {
         let channel_key = DocumentKey::generate();
         let sealed = seal_channel_key(channel_id, &channel_key, space_key, ANCHOR).expect("seal");
         let own_pub = crate::sharing::own_exchange_key(creator);
@@ -1674,7 +1683,10 @@ pub(crate) mod tests {
         // A wrap of the right length that opens under no key of this user.
         let keys = format!(
             r#""doc_key_enc":{},"wrapper_exchange_pub_key":null"#,
-            serde_json::to_string(&ambre_core::WrappedDocKey::new(vec![0; 72])).unwrap()
+            serde_json::to_string(&ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(
+                vec![0; 72]
+            ))
+            .unwrap()
         );
         let body = format!(
             r#"{{"channels":[
@@ -1777,20 +1789,21 @@ pub(crate) mod tests {
         let own_pub = crate::sharing::own_exchange_key(&own);
         let key = DocumentKey::generate();
         let wrapped = ambre_crypto::ecdh::wrap_document_key(&own, &own_pub, &key).unwrap();
-        let doc_key_enc = ambre_core::WrappedDocKey::new(
-            [wrapped.nonce.as_slice(), &wrapped.ciphertext.0].concat(),
-        );
+        let doc_key_enc =
+            ambre_core::Encoded::new([wrapped.nonce.as_slice(), &wrapped.ciphertext.0].concat());
         let entry =
-            |meta: MetaId, name_enc: Option<ambre_core::SealedName>| http::MemberChannelEntry {
-                channel_id: ChannelId::new(),
-                space_id: None,
-                visibility: ambre_core::Visibility::Private,
-                meta_id: meta,
-                name_enc,
-                doc_key_enc: doc_key_enc.clone(),
-                wrapper_exchange_pub_key: None,
-                peers: Vec::new(),
-                meta_last: None,
+            |meta: MetaId, name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>| {
+                http::MemberChannelEntry {
+                    channel_id: ChannelId::new(),
+                    space_id: None,
+                    visibility: ambre_core::Visibility::Private,
+                    meta_id: meta,
+                    name_enc,
+                    doc_key_enc: doc_key_enc.clone(),
+                    wrapper_exchange_pub_key: None,
+                    peers: Vec::new(),
+                    meta_last: None,
+                }
             };
         let (named, elsewhere, cleared, bare) =
             (MetaId::new(), MetaId::new(), MetaId::new(), MetaId::new());
@@ -1829,7 +1842,7 @@ pub(crate) mod tests {
         // Each key opens, and one that does not is left out.
         // Each keeps the last number of its meta, none where none is listed.
         let mut answer = answer;
-        answer.channels[3].doc_key_enc = ambre_core::WrappedDocKey::new(vec![0]);
+        answer.channels[3].doc_key_enc = ambre_core::Encoded::new(vec![0]);
         answer.channels[0].meta_last = Some(ambre_core::Seq(6));
         let keys: Vec<_> = listed_keys(&answer, &own)
             .into_iter()
@@ -1894,9 +1907,9 @@ pub(crate) mod tests {
             let request = http::CreateDocumentRequest {
                 doc_type: DocType::Murmure,
                 name_enc: None,
-                doc_key_enc: ambre_core::WrappedDocKey::new(Vec::new()),
+                doc_key_enc: ambre_core::Encoded::new(Vec::new()),
                 document_id: Some(document_id),
-                entry: Some(ambre_core::EncodedLogEntry::new(Vec::new())),
+                entry: Some(ambre_core::Encoded::new(Vec::new())),
                 space: if state.new_spaces.contains(&document_id) {
                     ambre_core::DocumentScope::Space
                 } else {
@@ -1957,7 +1970,7 @@ pub(crate) mod tests {
     fn unwrap_from(
         holder: &StaticSecret,
         sender: &StaticSecret,
-        doc_key_enc: &ambre_core::WrappedDocKey,
+        doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     ) -> Option<(DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>)> {
         let bytes = doc_key_enc.as_bytes();
         let (nonce, ciphertext) = FixedBytes::<ambre_core::Nonce>::split_from(bytes)?;

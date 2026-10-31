@@ -16,11 +16,11 @@
 //   stays on screen. So the CPU pays once and no frame pays.
 // ============================================================================
 
-use ambre_core::{ByteSize, ImageSize, RgbaPixels};
+use ambre_core::{ByteSize, ImageSize, Payload, RgbaPixels};
 
 /// One level of a mip chain: RGBA8 samples and the dimensions they describe.
 pub struct MipLevel {
-    pub pixels: RgbaPixels,
+    pub pixels: Payload<RgbaPixels>,
     pub width: u32,
     pub height: u32,
 }
@@ -46,7 +46,7 @@ pub fn level0_size(size: ImageSize) -> ByteSize {
 ///
 /// `pixels` shorter than `width * height * 4` yields no levels at all: a
 /// malformed source is a caller bug the upload path already declines to guess at.
-pub fn build_chain(pixels: &RgbaPixels, size: ImageSize) -> Vec<MipLevel> {
+pub fn build_chain(pixels: &Payload<RgbaPixels>, size: ImageSize) -> Vec<MipLevel> {
     let mut out = Vec::new();
     let (width, height) = (size.width.get(), size.height.get());
     if width == 0 || height == 0 {
@@ -108,7 +108,7 @@ pub fn sampler() -> wgpu::SamplerDescriptor<'static> {
 /// * An odd dimension leaves a final row or column with no partner. Each such
 ///   texel takes the block that starts at its own doubled coordinate, clamped.
 ///   The clamp carries the edge rather than dropping it.
-fn reduce(src: &RgbaPixels, w: u32, h: u32, nw: u32, nh: u32) -> RgbaPixels {
+fn reduce(src: &Payload<RgbaPixels>, w: u32, h: u32, nw: u32, nh: u32) -> Payload<RgbaPixels> {
     let src = src.as_bytes();
     let mut dst = vec![0u8; (nw as usize) * (nh as usize) * 4];
     // A texel past the end of `src` reads as zero. The caller sizes `src` as
@@ -131,7 +131,7 @@ fn reduce(src: &RgbaPixels, w: u32, h: u32, nw: u32, nh: u32) -> RgbaPixels {
             *out = ((sum + 2) / 4) as u8;
         }
     }
-    RgbaPixels::new(dst)
+    Payload::new(dst)
 }
 
 #[cfg(test)]
@@ -144,7 +144,7 @@ mod tests {
     }
 
     fn chain_of(px: Vec<u8>, width: u32, height: u32) -> Vec<MipLevel> {
-        build_chain(&RgbaPixels::new(px), size(width, height))
+        build_chain(&Payload::new(px), size(width, height))
     }
 
     /// The chain descends to 1x1 and every step halves (`CANVAS-065`). Without

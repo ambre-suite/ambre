@@ -3,7 +3,7 @@
 
 use crate::Receipt;
 use ambre_bus::{ActivityKind, MessageDraft, MessageView, Reaction, Timestamp, UnreadCount};
-use ambre_core::{ChannelId, DeltaBytes, MessageId, SegmentId, Seq, UserId};
+use ambre_core::{ChannelId, DeltaBytes, MessageId, Payload, SegmentId, Seq, UserId};
 use loro::{Container, LoroMap, ValueOrContainer, VersionVector};
 
 use crate::schema::{MessageKey, Root};
@@ -251,7 +251,7 @@ fn reactions_map(member: &Member) -> LoroMap {
 }
 
 /// What `member` wrote since `before`, as a segment delta travels.
-fn written_since(member: &Member, before: &VersionVector) -> DeltaBytes {
+fn written_since(member: &Member, before: &VersionVector) -> Payload<DeltaBytes> {
     let doc = member
         .state
         .doc(member.segment().document_id())

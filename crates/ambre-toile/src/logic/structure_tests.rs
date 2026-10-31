@@ -703,7 +703,7 @@ fn a_command_culls_against_the_last_reported_camera() {
 #[test]
 fn a_remote_batch_repaints_once() {
     let mut a = ToileState::with_peer(ambre_core::PeerId(1));
-    let deltas: Vec<ambre_core::DeltaBytes> = (0..5)
+    let deltas: Vec<ambre_core::Payload<ambre_core::DeltaBytes>> = (0..5)
         .map(|i| {
             create(
                 &mut a,

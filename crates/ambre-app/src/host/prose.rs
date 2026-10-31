@@ -745,7 +745,7 @@ impl ProseView {
 fn download(
     filename: &ambre_core::ExportFilename,
     media_type: &ambre_bus::MediaType,
-    data: &ambre_core::FileBytes,
+    data: &ambre_core::Payload<ambre_core::FileBytes>,
 ) {
     use wasm_bindgen::JsCast;
     let parts = js_sys::Array::new();

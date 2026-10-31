@@ -112,13 +112,13 @@ pub fn seal_row(
     plaintext: &SecretBytes,
     context: &ambre_core::Aad,
     key: &StoreKey,
-) -> Result<SealedRowBytes, CryptoError> {
+) -> Result<ambre_core::Payload<SealedRowBytes>, CryptoError> {
     let (nonce, ciphertext) = seal_under(plaintext.secret().expose(), context, key.as_bytes())?;
     let mut row = Vec::with_capacity(1 + NONCE_LEN + ciphertext.len());
     row.push(RowLayout::CURRENT.byte());
     row.extend_from_slice(nonce.as_slice());
     row.extend_from_slice(&ciphertext.0);
-    Ok(SealedRowBytes::new(row))
+    Ok(ambre_core::Payload::new(row))
 }
 
 /// Opens a row [`seal_row`] sealed under the same `context`.
@@ -129,7 +129,7 @@ pub fn seal_row(
 /// hold a nonce, a wrong key, another `context` or a modified row. The caller
 /// treats them alike: the row is not one this session can read.
 pub fn open_row(
-    row: &SealedRowBytes,
+    row: &ambre_core::Payload<SealedRowBytes>,
     context: &ambre_core::Aad,
     key: &StoreKey,
 ) -> Result<SecretBytes, CryptoError> {

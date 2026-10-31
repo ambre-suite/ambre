@@ -111,7 +111,7 @@ impl Paginator {
     ///
     /// The next reflow recomputes in full when the face covers a script an
     /// earlier run was missing (`PROSE-111`).
-    pub fn register_faces(&mut self, bytes: ambre_core::FontBytes) {
+    pub fn register_faces(&mut self, bytes: ambre_core::Payload<ambre_core::FontBytes>) {
         self.measurer.register_faces(bytes);
     }
 
@@ -790,7 +790,7 @@ mod convergence {
             let Ok(bytes) = std::fs::read(format!("{FONT_DIR}{file}")) else {
                 continue;
             };
-            paginator.register_faces(ambre_core::FontBytes::new(bytes));
+            paginator.register_faces(ambre_core::Payload::<ambre_core::FontBytes>::new(bytes));
         }
         paginator
     }
@@ -868,7 +868,7 @@ mod convergence {
         let Ok(bytes) = std::fs::read(format!("{FONT_DIR}NotoSansSC-Regular.otf")) else {
             return;
         };
-        paginator.register_faces(ambre_core::FontBytes::new(bytes));
+        paginator.register_faces(ambre_core::Payload::<ambre_core::FontBytes>::new(bytes));
         let layout = paginator.reflow(&document, &[]).clone();
         assert_eq!(
             paginator.shaped(),

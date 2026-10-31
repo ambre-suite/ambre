@@ -92,7 +92,7 @@ impl SyncState {
         segment: SegmentId,
         lease: LeaseId,
         horizon: Seq,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) {
         let document_id = segment.document_id();
         let Some(doc_state) = self.documents.get(&document_id) else {
@@ -209,7 +209,7 @@ mod tests {
             author_pubkey: ambre_core::FixedBytes::from_array(sk.verifying_key().to_bytes()),
             covered_seq: horizon,
             blob: pipeline::snapshot_blob(
-                &ambre_core::SnapshotBytes::new(b"final".to_vec()),
+                &ambre_core::Payload::new(b"final".to_vec()),
                 public_data,
                 &key,
                 &sk,

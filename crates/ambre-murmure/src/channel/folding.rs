@@ -12,7 +12,8 @@
 
 use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
 use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, FailureCount, LeaseId, Millis, SegmentId, Seq, SnapshotBytes,
+    ChannelId, DeltaBytes, DocumentId, FailureCount, LeaseId, Millis, Payload, SegmentId, Seq,
+    SnapshotBytes,
 };
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
@@ -80,7 +81,7 @@ pub struct FoldSnapshot {
     /// The last delta number of those amendments it holds.
     pub amendments_seq: Seq,
     /// The shallow snapshot, framed as every channel snapshot is.
-    pub payload: SnapshotBytes,
+    pub payload: Payload<SnapshotBytes>,
 }
 
 /// What a fold `meta` marks did to this copy.
@@ -243,8 +244,9 @@ impl ChannelState {
             folding.step = Step::Asked;
         }
         let doc = self.folded(segment, grant.amendments, reached)?;
-        let shallow =
-            SnapshotBytes::new(doc.export(ExportMode::shallow_snapshot(&doc.oplog_frontiers()))?);
+        let shallow = Payload::<SnapshotBytes>::new(
+            doc.export(ExportMode::shallow_snapshot(&doc.oplog_frontiers()))?,
+        );
         let payload = match self.sequences.get(&segment.document_id()) {
             Some(sequence) => sequence.frame(shallow),
             None => shallow,
@@ -345,7 +347,7 @@ impl ChannelState {
         &mut self,
         segment: SegmentId,
         amendments: DocumentId,
-    ) -> Result<Option<DeltaBytes>, MurmureError> {
+    ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         if folded_amendments(&self.meta.doc, segment) == Some(amendments) {
             return Ok(None);
         }
@@ -368,7 +370,7 @@ impl ChannelState {
     pub fn amendments_gone(
         &mut self,
         amendments: DocumentId,
-    ) -> Result<Option<DeltaBytes>, MurmureError> {
+    ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         let segment = self
             .amendments
             .iter()

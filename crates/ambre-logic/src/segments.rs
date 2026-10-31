@@ -395,7 +395,7 @@ impl LogicState {
     pub(crate) fn deltas_locked(
         &mut self,
         document_id: DocumentId,
-        deltas: &[ambre_core::DeltaBytes],
+        deltas: &[ambre_core::Payload<ambre_core::DeltaBytes>],
     ) {
         let Some((&channel_id, channel)) = self
             .channels

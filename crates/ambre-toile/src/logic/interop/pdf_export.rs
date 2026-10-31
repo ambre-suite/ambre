@@ -107,7 +107,7 @@ pub fn export_pdf(
     font_cx: &mut FontContext,
     text_cache: &mut TextCache,
     images: &ImageStore,
-) -> Result<ambre_core::FileBytes, PdfExportError> {
+) -> Result<ambre_core::Payload<ambre_core::FileBytes>, PdfExportError> {
     if pages.is_empty() {
         return Err(PdfExportError::Empty);
     }
@@ -129,7 +129,7 @@ pub fn export_pdf(
     }
 
     doc.finish()
-        .map(ambre_core::FileBytes::new)
+        .map(ambre_core::Payload::<ambre_core::FileBytes>::new)
         .map_err(|e| PdfExportError::Serialize(format!("{e:?}")))
 }
 

@@ -40,14 +40,16 @@ pub(crate) fn wrap_anchored_b64(
     peer_pub: &FixedBytes<ambre_core::ExchangePublicKey>,
     doc_key: &DocumentKey,
     anchor: Option<FixedBytes<EntryDigest>>,
-) -> Result<ambre_core::WrappedDocKey, ambre_crypto::CryptoError> {
+) -> Result<ambre_core::Encoded<ambre_core::WrappedDocKey>, ambre_crypto::CryptoError> {
     // Fails if the peer public key is non-contributory (low-order): we refuse to
     // wrap under a predictable KEK rather than hand out a forgeable share.
     let wrapped = ambre_crypto::ecdh::wrap_anchored(my_xk, peer_pub, doc_key, anchor.as_ref())?;
-    Ok(ambre_core::WrappedDocKey::from_parts(
-        &wrapped.nonce,
-        &wrapped.ciphertext,
-    ))
+    Ok(
+        ambre_core::Encoded::<ambre_core::WrappedDocKey>::from_parts(
+            &wrapped.nonce,
+            &wrapped.ciphertext,
+        ),
+    )
 }
 
 /// Unwraps our own copy of the key among `rows`, given as `(exchange key,
@@ -61,7 +63,7 @@ pub(crate) fn unwrap_own<'a>(
     rows: impl IntoIterator<
         Item = (
             &'a FixedBytes<ambre_core::ExchangePublicKey>,
-            &'a ambre_core::WrappedDocKey,
+            &'a ambre_core::Encoded<ambre_core::WrappedDocKey>,
             Option<&'a FixedBytes<ambre_core::ExchangePublicKey>>,
         ),
     >,
@@ -139,7 +141,7 @@ pub(crate) fn served_log_under(
 pub(crate) fn walk_served_under(
     document_id: DocumentId,
     anchor: Option<FixedBytes<EntryDigest>>,
-    texts: &[ambre_core::EncodedLogEntry],
+    texts: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
     rule: &LogRule,
 ) -> Log {
     let entries = membership_log::decode(texts);
@@ -153,7 +155,7 @@ fn entry_after(
     log: &Log,
     draft: Draft,
     author: &Author,
-) -> Result<Option<ambre_core::EncodedLogEntry>, SyncError> {
+) -> Result<Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, SyncError> {
     let next = log.next();
     if next.is_empty() {
         return Ok(None);
@@ -170,7 +172,13 @@ pub(crate) fn creation(
     doc_key: &DocumentKey,
     exchange_key: &StaticSecret,
     author: &Author,
-) -> Result<(ambre_core::WrappedDocKey, ambre_core::EncodedLogEntry), SyncError> {
+) -> Result<
+    (
+        ambre_core::Encoded<ambre_core::WrappedDocKey>,
+        ambre_core::Encoded<ambre_core::EncodedLogEntry>,
+    ),
+    SyncError,
+> {
     let draft = Draft {
         document: document_id,
         member: author.user_id,
@@ -197,7 +205,7 @@ pub(crate) fn build_invite_request(
     doc_key: &DocumentKey,
     role: Role,
     anchor: Option<FixedBytes<EntryDigest>>,
-    entry: Option<ambre_core::EncodedLogEntry>,
+    entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 ) -> Result<http::InviteRequest, SyncError> {
     let (invitee_email, invitee_id) = match invitee {
         InviteeName::Email(email) => (Some(email), None),
@@ -1228,7 +1236,13 @@ fn link_to(
     previous: &DocumentKey,
     next: &DocumentKey,
     signing_key: &SigningKey,
-) -> Result<(ambre_protocol::KeyLink, ambre_core::EncodedKeyLink), SyncError> {
+) -> Result<
+    (
+        ambre_protocol::KeyLink,
+        ambre_core::Encoded<ambre_core::EncodedKeyLink>,
+    ),
+    SyncError,
+> {
     let link = crate::pipeline::seal_link(document_id, previous, next, signing_key)?;
     let text = http::encode_link(&link)?;
     Ok((link, text))
@@ -1480,7 +1494,7 @@ mod tests {
             email: "m@test.local".into(),
             signing_pub_key: FixedBytes::from_array([0; 32]),
             exchange_pub_key,
-            doc_key_enc: ambre_core::WrappedDocKey::new(Vec::new()),
+            doc_key_enc: ambre_core::Encoded::new(Vec::new()),
             role: Role::Editor,
             wrapper_exchange_pub_key: exchange_pub_key,
         }
@@ -1490,7 +1504,7 @@ mod tests {
     fn unwrap_b64(
         recipient: &StaticSecret,
         wrapper_pub: &FixedBytes<ambre_core::ExchangePublicKey>,
-        doc_key_enc: &ambre_core::WrappedDocKey,
+        doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     ) -> Result<DocumentKey, SyncError> {
         unwrap_anchor_b64(recipient, wrapper_pub, doc_key_enc).map(|(key, _)| key)
     }
@@ -1499,7 +1513,7 @@ mod tests {
     fn unwrap_anchor_b64(
         recipient: &StaticSecret,
         wrapper_pub: &FixedBytes<ambre_core::ExchangePublicKey>,
-        doc_key_enc: &ambre_core::WrappedDocKey,
+        doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     ) -> Result<(DocumentKey, Option<FixedBytes<EntryDigest>>), SyncError> {
         let own = own_exchange_key(recipient);
         unwrap_own(recipient, [(&own, doc_key_enc, Some(wrapper_pub))])
@@ -1612,7 +1626,7 @@ mod tests {
                 "email": "m@test.local",
                 "signing_pub_key": "cd".repeat(32),
                 "exchange_pub_key": "ab".repeat(32),
-                "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]),
+                "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]),
                 "role": role,
                 "wrapper_exchange_pub_key": "ab".repeat(32),
             }))
@@ -1816,10 +1830,11 @@ mod tests {
         match &calls[2] {
             Call::Post(url, body) => {
                 assert!(url.ends_with("/share"));
-                let enc = &serde_json::from_value::<ambre_core::WrappedDocKey>(
-                    body["doc_key_enc"].clone(),
-                )
-                .unwrap();
+                let enc =
+                    &serde_json::from_value::<ambre_core::Encoded<ambre_core::WrappedDocKey>>(
+                        body["doc_key_enc"].clone(),
+                    )
+                    .unwrap();
                 assert!(unwrap_b64(&invitee_xk, &my_pub, enc).is_ok());
                 assert!(body.get("entry").is_none());
             }
@@ -1864,10 +1879,11 @@ mod tests {
                 assert!(url.ends_with("/share"));
                 assert_eq!(body["invitee_id"], INVITEE);
                 assert!(body.get("invitee_email").is_none());
-                let enc = &serde_json::from_value::<ambre_core::WrappedDocKey>(
-                    body["doc_key_enc"].clone(),
-                )
-                .unwrap();
+                let enc =
+                    &serde_json::from_value::<ambre_core::Encoded<ambre_core::WrappedDocKey>>(
+                        body["doc_key_enc"].clone(),
+                    )
+                    .unwrap();
                 assert!(unwrap_b64(&invitee_xk, &my_pub, enc).is_ok());
             }
             other => panic!("expected share POST, got {other:?}"),
@@ -2146,7 +2162,7 @@ mod tests {
 
     /// The link a request carried, read back as the relay would.
     fn posted_link(body: &serde_json::Value) -> ambre_protocol::KeyLink {
-        let link: ambre_core::EncodedKeyLink =
+        let link: ambre_core::Encoded<ambre_core::EncodedKeyLink> =
             serde_json::from_value(body["link"].clone()).expect("the request carries a link");
         ambre_protocol::KeyLink::decode(&link).unwrap()
     }
@@ -2161,7 +2177,7 @@ mod tests {
             "user_id": uid,
             "display_name": name, "email": "m@test.local",
             "signing_pub_key": "00".repeat(32), "exchange_pub_key": pub_hex,
-            "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "editor",
+            "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]), "role": "editor",
             "wrapper_exchange_pub_key": pub_hex,
         })
     }
@@ -3039,7 +3055,7 @@ mod tests {
                     "user_id": "11111111-1111-1111-1111-111111111111",
                     "display_name": "A", "email": "a@test.local",
                     "signing_pub_key": "00".repeat(32), "exchange_pub_key": a_pub,
-                    "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "editor",
+                    "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]), "role": "editor",
                     "wrapper_exchange_pub_key": a_pub,
                 },
                 {
@@ -3047,7 +3063,7 @@ mod tests {
                     "user_id": "22222222-2222-2222-2222-222222222222",
                     "display_name": "Broken", "email": "b@test.local",
                     "signing_pub_key": "00".repeat(32), "exchange_pub_key": "00".repeat(32),
-                    "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "editor",
+                    "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]), "role": "editor",
                     "wrapper_exchange_pub_key": "00".repeat(32),
                 },
             ] })),
@@ -3107,7 +3123,7 @@ mod tests {
             "user_id": "11111111-1111-1111-1111-111111111111",
             "display_name": "A", "email": "a@test.local",
             "signing_pub_key": "00".repeat(32), "exchange_pub_key": "ab".repeat(32),
-            "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "viewer",
+            "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]), "role": "viewer",
             "wrapper_exchange_pub_key": "ab".repeat(32),
         } ] }))]);
         let (etx, erx, _sink, _lrx) = channels();
@@ -3153,7 +3169,7 @@ mod tests {
                     "user_id": "11111111-1111-1111-1111-111111111111",
                     "display_name": "A", "email": "a@test.local",
                     "signing_pub_key": signing_pub_key, "exchange_pub_key": "ab".repeat(32),
-                    "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]),
+                    "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]),
                     "role": "viewer", "wrapper_exchange_pub_key": "ab".repeat(32),
                 } ]
             }))
@@ -3214,7 +3230,7 @@ mod tests {
             "user_id": uid,
             "display_name": "A", "email": "a@test.local",
             "signing_pub_key": key_hex, "exchange_pub_key": "ab".repeat(32),
-            "doc_key_enc": ambre_core::WrappedDocKey::new(vec![0; 72]), "role": "viewer",
+            "doc_key_enc": ambre_core::Encoded::<ambre_core::WrappedDocKey>::new(vec![0; 72]), "role": "viewer",
             "wrapper_exchange_pub_key": "ab".repeat(32),
         } ] }))]);
         let (etx, erx, _sink, _lrx) = channels();
@@ -3278,7 +3294,7 @@ mod tests {
         anchor: FixedBytes<EntryDigest>,
         owner_exchange: String,
         rows: Vec<serde_json::Value>,
-        log: Vec<ambre_core::EncodedLogEntry>,
+        log: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
     }
 
     impl Logged {
@@ -3302,7 +3318,12 @@ mod tests {
             logged
         }
 
-        fn row(&mut self, peer: &Peer, doc_key_enc: ambre_core::WrappedDocKey, role: Role) {
+        fn row(
+            &mut self,
+            peer: &Peer,
+            doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
+            role: Role,
+        ) {
             self.rows.push(serde_json::json!({
                 "user_id": peer.author.user_id.to_string(),
                 "display_name": "Member", "email": "m@test.local",
@@ -3421,8 +3442,10 @@ mod tests {
             (MemberStanding::Verified, Some(Role::Editor))
         );
         let owner_pub = own_exchange_key(&owner.xk);
-        let enc = &serde_json::from_value::<ambre_core::WrappedDocKey>(body["doc_key_enc"].clone())
-            .unwrap();
+        let enc = &serde_json::from_value::<ambre_core::Encoded<ambre_core::WrappedDocKey>>(
+            body["doc_key_enc"].clone(),
+        )
+        .unwrap();
         let (key, anchor) = unwrap_anchor_b64(&invitee_xk, &owner_pub, enc).unwrap();
         assert_eq!(key.id(), logged.doc_key.id());
         assert_eq!(anchor, Some(logged.anchor));
@@ -3598,7 +3621,7 @@ mod tests {
         logged.rows[1]["role"] = "owner".into();
         logged.row(
             &Peer::new(9),
-            ambre_core::WrappedDocKey::new(vec![0; 72]),
+            ambre_core::Encoded::new(vec![0; 72]),
             Role::Editor,
         );
         let resp: http::DocumentMembersResponse = serde_json::from_value(logged.answer()).unwrap();
@@ -3637,11 +3660,7 @@ mod tests {
             .unwrap()
             .unwrap();
         logged.log.push(entry);
-        logged.row(
-            &joiner,
-            ambre_core::WrappedDocKey::new(vec![0; 72]),
-            Role::Editor,
-        );
+        logged.row(&joiner, ambre_core::Encoded::new(vec![0; 72]), Role::Editor);
         let rules: [(membership_log::SelfJoinRule, MemberStanding); 2] = [
             (
                 membership_log::public_channel_self_join,

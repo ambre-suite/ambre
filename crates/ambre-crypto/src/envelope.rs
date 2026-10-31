@@ -9,7 +9,8 @@
 //! compression version byte live in the Sync thread, not here.
 
 use ambre_core::{
-    Ciphertext, CommitmentTag, FixedBytes, MediaBytes, Nonce, PublicKey, SecretBytes, Signature,
+    Ciphertext, CommitmentTag, FixedBytes, MediaBytes, Nonce, Payload, PublicKey, SecretBytes,
+    Signature,
 };
 use ed25519_dalek::SigningKey;
 
@@ -68,7 +69,7 @@ pub fn seal(
 ///
 /// [`CryptoError::EncryptionFailed`] from the AEAD, as [`seal`].
 pub fn seal_media(
-    plaintext: &MediaBytes,
+    plaintext: &Payload<MediaBytes>,
     aad: &ambre_core::Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,

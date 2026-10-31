@@ -206,7 +206,7 @@ mod tests {
         let mut sealed = tampered.sealed.into_bytes();
         let last = sealed.len() - 1;
         sealed[last] ^= 1;
-        tampered.sealed = ambre_core::SealedPreviousKey::new(sealed);
+        tampered.sealed = ambre_core::Payload::new(sealed);
         let chain = Chain::new(document_id, [tampered]);
         assert!(chain.recover(document_id, &keys[1], keys[0].id()).is_none());
 

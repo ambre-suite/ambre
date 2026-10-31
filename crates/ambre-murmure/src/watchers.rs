@@ -94,7 +94,7 @@ impl Sample {
     /// The bytes of the sample: its tag, the state, then a thread's root or
     /// zeros. They name no channel, so a sample cannot show which other
     /// channel a member reads (`MURMURE-127`).
-    pub fn bytes(self) -> ambre_core::EphemeralBytes {
+    pub fn bytes(self) -> ambre_core::Payload<ambre_core::EphemeralBytes> {
         let (tag, root) = match self {
             Self::Watching => (SampleTag::Watching, [0; 16]),
             Self::Typing => (SampleTag::Typing, [0; 16]),
@@ -103,12 +103,12 @@ impl Sample {
         let mut bytes = Vec::with_capacity(SAMPLE_LEN.as_len());
         bytes.extend([tag.byte(), SampleState::On.byte()]);
         bytes.extend(root);
-        ambre_core::EphemeralBytes::new(bytes)
+        ambre_core::Payload::<ambre_core::EphemeralBytes>::new(bytes)
     }
 
     /// The sample `payload` holds. One that does not decode is `None`, and
     /// is dropped without an error (`PRESENCE-013`).
-    pub fn read(payload: &ambre_core::EphemeralBytes) -> Option<Self> {
+    pub fn read(payload: &ambre_core::Payload<ambre_core::EphemeralBytes>) -> Option<Self> {
         let [tag, state, rest @ ..] = payload.as_bytes() else {
             return None;
         };
@@ -350,7 +350,7 @@ mod tests {
             &unknown_tag,
             &off,
         ] {
-            let payload = ambre_core::EphemeralBytes::new(payload.to_vec());
+            let payload = ambre_core::Payload::<ambre_core::EphemeralBytes>::new(payload.to_vec());
             assert_eq!(Sample::read(&payload), None);
         }
     }
@@ -370,7 +370,8 @@ mod tests {
         assert_eq!(Sample::Typing.bytes(), with(0x54, [0; 16]));
         assert_eq!(Sample::TypingIn(root).bytes(), with(0x74, [0x42; 16]));
         for sample in [Sample::Watching, Sample::Typing, Sample::TypingIn(root)] {
-            let earlier = ambre_core::EphemeralBytes::new(sample.bytes().into_bytes());
+            let earlier =
+                ambre_core::Payload::<ambre_core::EphemeralBytes>::new(sample.bytes().into_bytes());
             assert_eq!(Sample::read(&earlier), Some(sample));
         }
     }

@@ -248,12 +248,12 @@ fn sync_command_roundtrips_through_postcard() {
     // A genuine network-byte payload survives verbatim.
     roundtrip_sync(&SyncCommand::SendUpdate {
         document_id: doc,
-        payload: ambre_core::DeltaBytes::new(vec![0, 1, 2, 250, 255]),
+        payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![0, 1, 2, 250, 255]),
         summary: None,
     });
     roundtrip_sync(&SyncCommand::SendUpdate {
         document_id: doc,
-        payload: ambre_core::DeltaBytes::new(vec![7]),
+        payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![7]),
         summary: Some(ActivitySummary {
             kind: ActivityKind::Content,
             mentions: vec![UserId::new()],
@@ -263,7 +263,7 @@ fn sync_command_roundtrips_through_postcard() {
     });
     roundtrip_sync(&SyncCommand::SendUnsent {
         document_id: doc,
-        payload: ambre_core::DeltaBytes::new(vec![3, 4]),
+        payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![3, 4]),
         nonce: ambre_core::FixedBytes::from_array([5; 16]),
     });
     roundtrip_sync(&SyncCommand::OpenChannel {
@@ -288,7 +288,7 @@ fn logic_event_roundtrips_through_postcard() {
         document_id: doc,
         delta: ambre_bus::SignedDelta {
             seq: ambre_bus::Seq(8),
-            payload: ambre_core::DeltaBytes::new(vec![3, 1, 4, 1, 5, 9]),
+            payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![3, 1, 4, 1, 5, 9]),
             nonce: ambre_core::FixedBytes::from_array([2; 16]),
             peer: ambre_core::PeerId(7),
             user: Some(UserId::from_bytes([1; 16])),
@@ -451,7 +451,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
     let snapshot = SnapshotId::genesis(doc);
     let delta = SignedDelta {
         seq: ambre_bus::Seq(3),
-        payload: ambre_core::DeltaBytes::new(vec![1, 2, 255]),
+        payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![1, 2, 255]),
         nonce: FixedBytes::from_array([4; 16]),
         peer: ambre_core::PeerId(9),
         user: Some(user),
@@ -476,7 +476,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         SyncCommand::SendUpdate {
             document_id: doc,
-            payload: ambre_core::DeltaBytes::new(vec![0, 7]),
+            payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![0, 7]),
             summary: Some(ActivitySummary {
                 kind: ActivityKind::Content,
                 mentions: vec![user],
@@ -486,12 +486,12 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         SyncCommand::SendUnsent {
             document_id: doc,
-            payload: ambre_core::DeltaBytes::new(vec![8]),
+            payload: ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![8]),
             nonce: FixedBytes::from_array([6; 16]),
         },
         SyncCommand::SendSnapshot {
             document_id: doc,
-            payload: ambre_core::SnapshotBytes::new(vec![1; 4]),
+            payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![1; 4]),
             covered_seq: ambre_bus::Seq(40),
         },
         SyncCommand::SnapshotVerdict {
@@ -507,7 +507,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         SyncCommand::SendEphemeral {
             document_id: doc,
-            payload: ambre_core::EphemeralBytes::new(vec![5]),
+            payload: ambre_core::Payload::<ambre_core::EphemeralBytes>::new(vec![5]),
         },
         SyncCommand::Reconnect { document_id: doc },
         SyncCommand::OpenChannel {
@@ -560,7 +560,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             segment,
             lease: LeaseId::new(),
             horizon: ambre_bus::Seq(42),
-            payload: ambre_core::SnapshotBytes::new(vec![4; 3]),
+            payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![4; 3]),
         },
         SyncCommand::TakeFoldLease {
             channel_id: chan,
@@ -572,7 +572,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
             lease: LeaseId::new(),
             horizon: ambre_bus::Seq(42),
             amendments_seq: ambre_bus::Seq(7),
-            payload: ambre_core::SnapshotBytes::new(vec![5; 3]),
+            payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![5; 3]),
         },
         SyncCommand::WatchSegment { segment, meta },
         SyncCommand::WatchThread {
@@ -638,14 +638,14 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         },
         LogicEvent::RemoteSnapshot {
             document_id: doc,
-            payload: ambre_core::SnapshotBytes::new(vec![9; 3]),
+            payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![9; 3]),
             covered_seq: ambre_bus::Seq(30),
         },
         LogicEvent::PendingSnapshot {
             document_id: doc,
             snapshot_id: snapshot,
             covered_seq: ambre_bus::Seq(31),
-            payload: ambre_core::SnapshotBytes::new(vec![4]),
+            payload: ambre_core::Payload::<ambre_core::SnapshotBytes>::new(vec![4]),
             purpose: SnapshotPurpose::Open,
         },
         LogicEvent::SnapshotDropped {
@@ -658,7 +658,7 @@ fn every_envelope_variant_roundtrips_through_postcard() {
         LogicEvent::RemoteEphemeral {
             document_id: doc,
             from_user_id: user,
-            payload: ambre_core::EphemeralBytes::new(vec![2]),
+            payload: ambre_core::Payload::<ambre_core::EphemeralBytes>::new(vec![2]),
         },
         LogicEvent::PeerLeft {
             document_id: doc,

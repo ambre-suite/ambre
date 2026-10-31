@@ -124,7 +124,7 @@ pub enum ProseInput {
     Paste {
         text: String,
         html: Option<String>,
-        rich: Option<ambre_core::ClipboardBytes>,
+        rich: Option<ambre_core::Payload<ambre_core::ClipboardBytes>>,
     },
 }
 
@@ -503,7 +503,7 @@ impl ProseUiState {
         &mut self,
         text: &str,
         html: Option<&str>,
-        rich: Option<&ambre_core::ClipboardBytes>,
+        rich: Option<&ambre_core::Payload<ambre_core::ClipboardBytes>>,
         send: &mut dyn FnMut(ProseCommand) -> SendResult,
     ) -> Consumed {
         if rich.is_none() && html.is_none() && !text.contains('\n') {

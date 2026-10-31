@@ -20,14 +20,14 @@ use std::collections::VecDeque;
 pub(crate) const REPLAY_SLICE_BYTES: usize = 64 << 10;
 
 /// The deltas of a replay not yet imported, oldest first, with their seq.
-pub(crate) type ReplayQueue = VecDeque<(Seq, ambre_core::DeltaBytes)>;
+pub(crate) type ReplayQueue = VecDeque<(Seq, ambre_core::Payload<ambre_core::DeltaBytes>)>;
 
 impl LogicState {
     /// Queue the accepted deltas of a replay, and import its first slice now.
     pub(crate) fn replay(
         &mut self,
         document_id: DocumentId,
-        accepted: Vec<(Seq, ambre_core::DeltaBytes)>,
+        accepted: Vec<(Seq, ambre_core::Payload<ambre_core::DeltaBytes>)>,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
@@ -63,9 +63,10 @@ impl LogicState {
             return;
         }
         let done = doc.replay.is_empty();
-        let (seqs, payloads): (Vec<Seq>, Vec<ambre_core::DeltaBytes>) = slice.into_iter().unzip();
+        let (seqs, payloads): (Vec<Seq>, Vec<ambre_core::Payload<ambre_core::DeltaBytes>>) =
+            slice.into_iter().unzip();
         self.merge_batch(document_id, &payloads);
-        let applied: Vec<(Seq, &ambre_core::DeltaBytes)> =
+        let applied: Vec<(Seq, &ambre_core::Payload<ambre_core::DeltaBytes>)> =
             seqs.into_iter().zip(payloads.iter()).collect();
         self.track_waiting(document_id, &applied);
         if done {
@@ -114,7 +115,7 @@ impl LogicState {
 }
 
 /// Take the oldest deltas up to [`REPLAY_SLICE_BYTES`], and at least one.
-fn take_slice(queue: &mut ReplayQueue) -> Vec<(Seq, ambre_core::DeltaBytes)> {
+fn take_slice(queue: &mut ReplayQueue) -> Vec<(Seq, ambre_core::Payload<ambre_core::DeltaBytes>)> {
     let mut bytes = 0usize;
     let mut slice = Vec::new();
     while let Some((_, payload)) = queue.front() {

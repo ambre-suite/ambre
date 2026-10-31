@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{ByteSize, LoroPayloadRef, MessageId, Seq, SnapshotBytes};
+use ambre_core::{ByteSize, LoroPayloadRef, MessageId, Payload, Seq, SnapshotBytes};
 use loro::{
     ContainerID, ContainerTrait, ID, ImportBlobMetadata, ImportStatus, LoroDoc, LoroError,
     VersionVector,
@@ -217,7 +217,7 @@ impl Sequence {
 
     /// The numbers this member knows, framed before `loro`: the snapshot it
     /// hands the relay. With no number known, the bare Loro bytes.
-    pub(crate) fn frame(&self, loro: SnapshotBytes) -> SnapshotBytes {
+    pub(crate) fn frame(&self, loro: Payload<SnapshotBytes>) -> Payload<SnapshotBytes> {
         if self.exact.is_empty() {
             return loro;
         }
@@ -237,7 +237,7 @@ impl Sequence {
             out.extend_from_slice(&seq.to_le_bytes());
         }
         out.extend_from_slice(loro.as_bytes());
-        SnapshotBytes::new(out)
+        Payload::<SnapshotBytes>::new(out)
     }
 }
 
@@ -292,7 +292,7 @@ struct Framed<'a> {
     loro: LoroBytes<'a>,
 }
 
-fn split(payload: &SnapshotBytes) -> Option<Framed<'_>> {
+fn split(payload: &Payload<SnapshotBytes>) -> Option<Framed<'_>> {
     let rest = payload.as_bytes().strip_prefix(FRAME_MAGIC)?;
     let (count, rest) = rest.split_first_chunk::<4>()?;
     let len = usize::try_from(u32::from_le_bytes(*count))
@@ -341,7 +341,7 @@ fn blob_meta(payload: LoroPayloadRef<'_>) -> Result<ImportBlobMetadata, LoroErro
 }
 
 /// The rows a framed snapshot carries, `None` for a bare one.
-fn table(payload: &SnapshotBytes) -> Option<impl Iterator<Item = (MessageId, Seq)> + '_> {
+fn table(payload: &Payload<SnapshotBytes>) -> Option<impl Iterator<Item = (MessageId, Seq)> + '_> {
     let framed = split(payload)?;
     Some(
         framed

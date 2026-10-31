@@ -103,10 +103,10 @@ pub enum LogicCommand {
         doc_type: DocType,
         /// Full Loro snapshot (`ExportMode::Snapshot`) read back from local
         /// storage, when one was saved.
-        snapshot: Option<ambre_core::SnapshotBytes>,
+        snapshot: Option<ambre_core::Payload<ambre_core::SnapshotBytes>>,
         /// The deltas logged since that snapshot, in no set order. A Loro
         /// import does not depend on it.
-        deltas: Vec<ambre_core::DeltaBytes>,
+        deltas: Vec<ambre_core::Payload<ambre_core::DeltaBytes>>,
         /// The earlier sessions of this user on the document: each PeerID with
         /// the nonce it derives from, so what one left unsent travels
         /// (`AUTHOR-028`).
@@ -221,7 +221,9 @@ pub enum LogicCommand {
     /// (`toile-pdf-export`). Sent at boot with the base faces, and again for
     /// each script face fetched on demand. Local-only -- it never reaches Sync
     /// or the server. Each entry is one font file's bytes.
-    LoadFonts { faces: Vec<ambre_core::FontBytes> },
+    LoadFonts {
+        faces: Vec<ambre_core::Payload<ambre_core::FontBytes>>,
+    },
 }
 
 // -----------------------------------------------------------------------------

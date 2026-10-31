@@ -134,7 +134,7 @@ pub struct PageReads {
 }
 
 /// What the page does with a file fetched, and its bytes.
-pub type SaveFile = Rc<dyn Fn(&Attachment, ambre_core::MediaBytes)>;
+pub type SaveFile = Rc<dyn Fn(&Attachment, ambre_core::Payload<ambre_core::MediaBytes>)>;
 
 /// The id of the content canvas, which the channel's region paints. The
 /// shell names it.
@@ -1972,7 +1972,7 @@ mod tests {
     }
 
     /// A file the view handed the page, and its bytes.
-    type Saved = (Attachment, ambre_core::MediaBytes);
+    type Saved = (Attachment, ambre_core::Payload<ambre_core::MediaBytes>);
 
     /// A format bar the view handed the page, and whether the thread's
     /// region shows it.

@@ -26,7 +26,7 @@ use super::ProseState;
 pub fn export_ambre_plaintext(
     doc: &LoroDoc,
     doc_id: DocumentId,
-) -> Option<ambre_core::PlaintextContainer> {
+) -> Option<ambre_core::Payload<ambre_core::PlaintextContainer>> {
     let payload = doc
         .export(ExportMode::Snapshot)
         .inspect_err(|e| tracing::error!("Prose: .ambre export failed, writing no file: {e:?}"))
@@ -34,7 +34,7 @@ pub fn export_ambre_plaintext(
     Some(write_ambre_plaintext(
         DocType::Prose,
         doc_id,
-        &ambre_core::SnapshotBytes::new(payload),
+        &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(payload),
     ))
 }
 
@@ -49,7 +49,7 @@ pub fn export_ambre_plaintext(
 /// # Errors
 /// Every error of [`read_ambre_plaintext_as`].
 pub fn import_ambre_plaintext(
-    data: &ambre_core::PlaintextContainer,
+    data: &ambre_core::Payload<ambre_core::PlaintextContainer>,
 ) -> Result<AmbreHeader, DocFileError> {
     read_ambre_plaintext_as(DocType::Prose, data)
 }
@@ -64,7 +64,7 @@ impl ProseState {
     pub fn export_ambre_plaintext(
         &self,
         doc_id: DocumentId,
-    ) -> Option<ambre_core::PlaintextContainer> {
+    ) -> Option<ambre_core::Payload<ambre_core::PlaintextContainer>> {
         export_ambre_plaintext(&self.doc, doc_id)
     }
 
@@ -80,7 +80,7 @@ impl ProseState {
     /// payload and [`DocFileError::PayloadSchema`] when the schema gate does.
     pub fn import_ambre_plaintext(
         &mut self,
-        data: &ambre_core::PlaintextContainer,
+        data: &ambre_core::Payload<ambre_core::PlaintextContainer>,
     ) -> Result<(DocumentId, Vec<ProseEvent>), DocFileError> {
         let header = import_ambre_plaintext(data)?;
         let events = self.import_snapshot(&header.payload).map_err(|e| match e {
@@ -191,7 +191,7 @@ mod tests {
         let bytes = write_ambre_plaintext(
             DocType::Trame,
             doc_id(),
-            &ambre_core::SnapshotBytes::new(b"not prose".to_vec()),
+            &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(b"not prose".to_vec()),
         );
         let mut state = populated();
         let before = state.doc.oplog_vv();
@@ -212,7 +212,7 @@ mod tests {
         let bytes = write_ambre_plaintext(
             DocType::Prose,
             doc_id(),
-            &ambre_core::SnapshotBytes::new(b"not a snapshot".to_vec()),
+            &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(b"not a snapshot".to_vec()),
         );
         let mut state = populated();
         let before = state.doc.oplog_vv();

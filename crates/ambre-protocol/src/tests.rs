@@ -578,7 +578,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
         document_id: document,
         key: FixedBytes::from_array([2; 16]),
         previous: FixedBytes::from_array([3; 16]),
-        sealed: ambre_core::SealedPreviousKey::new(vec![7; 5]),
+        sealed: ambre_core::Payload::new(vec![7; 5]),
     };
     let entry = MembershipEntry {
         document,

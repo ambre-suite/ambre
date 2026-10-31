@@ -10,7 +10,7 @@ use ambre_bus::{
 };
 use ambre_core::schema::SchemaError;
 use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, MetaId, SegmentId, Seq, SnapshotBytes, UserId,
+    ChannelId, DeltaBytes, DocumentId, MetaId, Payload, SegmentId, Seq, SnapshotBytes, UserId,
 };
 use loro::{Container, ExportMode, LoroDoc, LoroValue, ValueOrContainer};
 
@@ -35,8 +35,8 @@ fn draft(text: &str) -> MessageDraft {
     }
 }
 
-fn snapshot(doc: &LoroDoc) -> SnapshotBytes {
-    SnapshotBytes::new(doc.export(ExportMode::Snapshot).expect("snapshot"))
+fn snapshot(doc: &LoroDoc) -> Payload<SnapshotBytes> {
+    Payload::<SnapshotBytes>::new(doc.export(ExportMode::Snapshot).expect("snapshot"))
 }
 
 /// A segment document of `channel`, as a peer would have stored it.
@@ -51,11 +51,11 @@ fn segment_doc(channel: ChannelId) -> LoroDoc {
 struct Stored {
     channel: ChannelId,
     meta_id: MetaId,
-    meta: SnapshotBytes,
+    meta: Payload<SnapshotBytes>,
     final_id: SegmentId,
     closing_id: SegmentId,
     active_id: SegmentId,
-    segments: HashMap<SegmentId, SnapshotBytes>,
+    segments: HashMap<SegmentId, Payload<SnapshotBytes>>,
 }
 
 fn stored_channel() -> Stored {
@@ -324,7 +324,8 @@ fn a_remote_delta_reaches_the_document_it_names_and_no_other() {
     );
     map.insert(MessageKey::Id, "x").expect("insert");
     remote.commit();
-    let delta = DeltaBytes::new(remote.export(ExportMode::updates(&before)).expect("delta"));
+    let delta =
+        Payload::<DeltaBytes>::new(remote.export(ExportMode::updates(&before)).expect("delta"));
 
     let active_before = state
         .doc(stored.active_id.document_id())
@@ -368,7 +369,10 @@ fn a_delta_for_a_document_the_channel_does_not_hold_is_refused() {
     let stranger = DocumentId::new();
     assert_eq!(
         state
-            .apply_remote(stranger, (&DeltaBytes::new(vec![1, 2, 3])).into())
+            .apply_remote(
+                stranger,
+                (&Payload::<DeltaBytes>::new(vec![1, 2, 3])).into()
+            )
             .err(),
         Some(MurmureError::NotHeld(stranger))
     );
@@ -377,7 +381,7 @@ fn a_delta_for_a_document_the_channel_does_not_hold_is_refused() {
         state
             .apply_remote(
                 stored.final_id.document_id(),
-                (&DeltaBytes::new(Vec::new())).into()
+                (&Payload::<DeltaBytes>::new(Vec::new())).into()
             )
             .err(),
         Some(MurmureError::NotHeld(stored.final_id.document_id()))
@@ -528,7 +532,7 @@ fn bytes_the_crdt_engine_refuses_never_reach_the_header_check() {
     let refused = ChannelState::open(
         stored.channel,
         stored.meta_id,
-        &SnapshotBytes::new(b"not a loro document".to_vec()),
+        &Payload::<SnapshotBytes>::new(b"not a loro document".to_vec()),
         &stored.segments,
     );
     assert_eq!(
@@ -729,7 +733,7 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
                      other_knew: &loro::VersionVector,
                      at: usize,
                      text: &str|
-     -> DeltaBytes {
+     -> Payload<DeltaBytes> {
         let doc = state.doc(segment.document_id()).expect("segment");
         let Some(message) = crate::schema::root_list(doc, Root::Messages)
             .get(0)
@@ -744,7 +748,7 @@ fn two_peers_typing_in_one_message_keep_both_texts() {
         };
         content.insert(at, text).expect("type");
         doc.commit();
-        DeltaBytes::new(doc.export(ExportMode::updates(other_knew)).expect("delta"))
+        Payload::<DeltaBytes>::new(doc.export(ExportMode::updates(other_knew)).expect("delta"))
     };
     let from_alice = type_into(&alice, &bob_knew, 0, "A:");
     let from_bob = type_into(&bob, &alice_knew, 4, ":B");
@@ -1105,7 +1109,8 @@ fn a_meta_delta_during_the_opening_reaches_the_open_channel() {
         .insert(ChannelKey::Name, "renamed")
         .expect("rename");
     editor.commit();
-    let delta = DeltaBytes::new(editor.export(ExportMode::updates(&before)).expect("delta"));
+    let delta =
+        Payload::<DeltaBytes>::new(editor.export(ExportMode::updates(&before)).expect("delta"));
     assert_eq!(
         opening.receive(stored.meta_id.document_id(), (&delta).into()),
         Receipt::Kept
@@ -1228,7 +1233,7 @@ fn a_damaged_closing_segment_opens_the_channel_without_it() {
     assert_eq!(
         opening.receive(
             stored.closing_id.document_id(),
-            (&SnapshotBytes::new(vec![0xff; 8])).into()
+            (&Payload::<SnapshotBytes>::new(vec![0xff; 8])).into()
         ),
         Receipt::Kept
     );
@@ -1261,7 +1266,7 @@ fn a_damaged_active_segment_still_ends_the_opening() {
     assert_eq!(
         opening.receive(
             stored.active_id.document_id(),
-            (&SnapshotBytes::new(vec![0xff; 8])).into()
+            (&Payload::<SnapshotBytes>::new(vec![0xff; 8])).into()
         ),
         Receipt::Kept
     );

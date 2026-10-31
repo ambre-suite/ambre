@@ -364,7 +364,7 @@ pub struct ExportFile {
     /// The media type the Logic thread named for the bytes.
     pub media_type: ambre_core::MediaType,
     /// The file itself.
-    pub bytes: ambre_core::FileBytes,
+    pub bytes: ambre_core::Payload<ambre_core::FileBytes>,
 }
 
 ambre_core::define_flag! {
@@ -1048,7 +1048,7 @@ mod tests {
         state.apply_event(&ProseEvent::ExportReady {
             filename: filename.clone(),
             media_type: ambre_core::MediaType::from("application/octet-stream"),
-            data: ambre_core::FileBytes::new(vec![1, 2, 3]),
+            data: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![1, 2, 3]),
             report: ambre_bus::app::prose::ConversionReport::clean(
                 ambre_bus::app::prose::ConversionFormat::Ambre,
             ),
@@ -1058,7 +1058,7 @@ mod tests {
             Some(ExportFile {
                 filename,
                 media_type: ambre_core::MediaType::from("application/octet-stream"),
-                bytes: ambre_core::FileBytes::new(vec![1, 2, 3]),
+                bytes: ambre_core::Payload::<ambre_core::FileBytes>::new(vec![1, 2, 3]),
             })
         );
         assert_eq!(state.take_export(), None);
@@ -1187,7 +1187,9 @@ mod tests {
         );
         // A change alone keeps the draft: the text is not laid out yet.
         state.apply_event(&ProseEvent::DocUpdated {
-            payload: ambre_core::LoroPayload::Delta(ambre_core::DeltaBytes::new(vec![1])),
+            payload: ambre_core::LoroPayload::Delta(
+                ambre_core::Payload::<ambre_core::DeltaBytes>::new(vec![1]),
+            ),
         });
         assert_eq!(state.draft.text_of(block, ""), "hel");
         let typed = TextEdit {
@@ -1277,7 +1279,9 @@ mod tests {
         let mut now = 0.0;
         while now < 1000.0 {
             state.apply_event(&ProseEvent::DocUpdated {
-                payload: ambre_core::LoroPayload::Delta(ambre_core::DeltaBytes::new(vec![1])),
+                payload: ambre_core::LoroPayload::Delta(ambre_core::Payload::<
+                    ambre_core::DeltaBytes,
+                >::new(vec![1])),
             });
             recounts += usize::from(state.tick(ambre_core::PageTime(now)).is_some());
             now += 16.0;

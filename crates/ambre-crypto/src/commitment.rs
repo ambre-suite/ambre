@@ -77,7 +77,7 @@ const MEDIA_ADDRESS_DOMAIN: &[u8] = b"ambre-media-address-v1";
 /// Never. HMAC accepts a key of any length, so its constructor cannot fail.
 pub fn media_address(
     key: &DocumentKey,
-    plaintext: &ambre_core::MediaBytes,
+    plaintext: &ambre_core::Payload<ambre_core::MediaBytes>,
 ) -> FixedBytes<ambre_core::MediaAddress> {
     // The subkey is key material, so the HMAC writes it in place under the
     // wiping wrapper, and no bare copy of it leaves this function.

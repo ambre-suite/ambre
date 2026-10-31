@@ -31,7 +31,7 @@ pub(crate) async fn checked_entry(
     state: &AppState,
     auth: &auth::AuthSession,
     doc_id: ambre_core::DocumentId,
-    entry: Option<&ambre_core::EncodedLogEntry>,
+    entry: Option<&ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
     expected: Expected,
 ) -> Result<Option<db::LogEntry>, AppError> {
     use ed25519_dalek::{Signature, VerifyingKey};
@@ -87,14 +87,14 @@ pub struct InviteRequest {
     /// always has, rather than the extractor's 422.
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// The key `doc_key_enc` wraps, in hex. A rotation that replaced it
     /// refuses the invitation (`SRV-168`).
     #[serde(with = "ambre_core::serde_id::key_id")]
     pub key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
     /// The signed entry the invite appends to the log (`SYNC-105`).
     #[serde(default)]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 #[derive(serde::Serialize)]
 pub struct InviteResponse {
@@ -240,7 +240,7 @@ pub async fn invite_to_document(
 #[derive(serde::Deserialize)]
 pub struct RemovalRequest {
     #[serde(default)]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 pub async fn revoke_from_document(
@@ -339,10 +339,10 @@ pub struct RevokeRequest {
     #[serde(with = "ambre_core::serde_id::user_id::vec")]
     pub members: Vec<ambre_core::UserId>,
     /// The link back to the key the revoke replaces (`SYNC-118`).
-    pub link: ambre_core::EncodedKeyLink,
+    pub link: ambre_core::Encoded<ambre_core::EncodedKeyLink>,
     /// The signed entry that records the removal (`SYNC-132`).
     #[serde(default)]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// Removes a member and installs the new key for everyone who stays, in one
@@ -538,7 +538,13 @@ async fn restore_debt_mirror(state: &AppState, doc_id: &ambre_core::DocumentId) 
 /// Decodes the wrapped copies of a rotation payload.
 fn decode_keys(
     entries: &[RotateKeyEntry],
-) -> Result<Vec<(ambre_core::UserId, ambre_core::WrappedDocKey)>, AppError> {
+) -> Result<
+    Vec<(
+        ambre_core::UserId,
+        ambre_core::Encoded<ambre_core::WrappedDocKey>,
+    )>,
+    AppError,
+> {
     Ok(entries
         .iter()
         .map(|e| (e.user_id, e.doc_key_enc.clone()))
@@ -548,7 +554,7 @@ fn decode_keys(
 /// Decodes a rotation's link and refuses one the relay must not store: a
 /// malformed one, one past the size bound, one of another document.
 fn decode_link(
-    sent: &ambre_core::EncodedKeyLink,
+    sent: &ambre_core::Encoded<ambre_core::EncodedKeyLink>,
     doc_id: ambre_core::DocumentId,
 ) -> Result<ambre_protocol::KeyLink, AppError> {
     let link = ambre_protocol::KeyLink::decode(sent)
@@ -584,7 +590,7 @@ pub async fn list_key_links(
 /// Every link of a document, each in URL-safe base64, oldest first.
 #[derive(serde::Serialize)]
 pub struct KeyLinksResponse {
-    pub links: Vec<ambre_core::EncodedKeyLink>,
+    pub links: Vec<ambre_core::Encoded<ambre_core::EncodedKeyLink>>,
 }
 
 /// Request to rotate the Document Key after revoking a member.
@@ -596,14 +602,14 @@ pub struct RotateKeyRequest {
     #[serde(with = "ambre_core::serde_id::user_id::vec")]
     pub members: Vec<ambre_core::UserId>,
     /// The link back to the key the rotation replaces (`SYNC-118`).
-    pub link: ambre_core::EncodedKeyLink,
+    pub link: ambre_core::Encoded<ambre_core::EncodedKeyLink>,
 }
 /// One entry in the rotation payload: a user and their re-encrypted DocumentKey.
 #[derive(serde::Deserialize)]
 pub struct RotateKeyEntry {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
 }
 
 pub async fn rotate_document_key(

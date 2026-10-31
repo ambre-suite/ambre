@@ -9,7 +9,9 @@ use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
 use ambre_core::authorship::PeerEntry;
-use ambre_core::{ChannelId, DeltaBytes, DocumentId, FixedBytes, PeerEntryBytes, Seq, UserId};
+use ambre_core::{
+    ChannelId, DeltaBytes, DocumentId, FixedBytes, Payload, PeerEntryBytes, Seq, UserId,
+};
 use loro::{Container, ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer, VersionVector};
 
 use crate::schema::{MessageKey, Root};
@@ -76,7 +78,7 @@ impl Member {
     }
 
     /// Every operation written since `before`, as a segment delta travels.
-    fn json_since(&self, before: &VersionVector) -> DeltaBytes {
+    fn json_since(&self, before: &VersionVector) -> Payload<DeltaBytes> {
         let doc = self.doc();
         doc.commit();
         crate::delta::encode(
@@ -180,7 +182,7 @@ fn a_binary_delta_on_a_segment_is_refused() {
         .state
         .send(&draft("binary"), alice.user, NOW)
         .expect("send");
-    let binary = DeltaBytes::new(
+    let binary = Payload::<DeltaBytes>::new(
         alice
             .doc()
             .export(ExportMode::updates(&before))
@@ -213,7 +215,7 @@ fn a_json_update_of_another_version_is_refused_and_asks_an_update() {
     let mut update: serde_json::Value =
         serde_json::from_slice(sent.delta.as_bytes()).expect("json");
     update["schema_version"] = serde_json::Value::from(JSON_SCHEMA_VERSION.get() + 1);
-    let newer = DeltaBytes::new(serde_json::to_vec(&update).expect("bytes"));
+    let newer = Payload::<DeltaBytes>::new(serde_json::to_vec(&update).expect("bytes"));
     let was = bob.everything();
     let segment = bob.segment();
     let refused = refusal(
@@ -586,7 +588,7 @@ fn a_delta_refused_while_the_channel_opens_is_left_out() {
         opening.receive_signed(
             segment,
             Seq(3),
-            &DeltaBytes::new(b"loro".to_vec()),
+            &Payload::<DeltaBytes>::new(b"loro".to_vec()),
             alice.signer()
         ),
         Err(MurmureError::Refused(Refusal::Binary))

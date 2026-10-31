@@ -11,7 +11,7 @@ pub struct MemberRow {
     #[allow(dead_code)]
     pub user_id: ambre_core::UserId,
     pub role: ambre_core::Role,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     #[allow(dead_code)]
     pub invited_by: Option<ambre_core::UserId>,
 }
@@ -60,7 +60,7 @@ pub struct MemberWithUserRow {
     pub role: ambre_core::Role,
     pub signing_pubkey: FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     #[allow(dead_code)]
     pub invited_by: Option<ambre_core::UserId>,
     /// Exchange public key of the member who wrapped `doc_key_enc` (the inviter,
@@ -76,7 +76,7 @@ pub struct MemberWithUserRow {
 pub struct LogEntry {
     /// The place the entry was signed for.
     pub position: ambre_protocol::LogPosition,
-    pub bytes: ambre_core::EncodedLogEntry,
+    pub bytes: ambre_core::Encoded<ambre_core::EncodedLogEntry>,
 }
 
 /// The document whose member rows decide access to `$1` (`SRV-103`).
@@ -111,7 +111,7 @@ pub async fn add_document_member(
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
     role: ambre_core::Role,
-    doc_key_enc: &ambre_core::WrappedDocKey,
+    doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     invited_by: &ambre_core::UserId,
     entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
@@ -185,17 +185,14 @@ pub(super) async fn record_change(
 pub async fn membership_log(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-) -> Result<Vec<ambre_core::EncodedLogEntry>, AppError> {
+) -> Result<Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, AppError> {
     let rows: Vec<Vec<u8>> = sqlx::query_scalar(
         "SELECT entry FROM document_membership_log WHERE document_id = $1 ORDER BY position",
     )
     .bind(id_to_uuid(*document_id))
     .fetch_all(pool)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(ambre_core::EncodedLogEntry::new)
-        .collect())
+    Ok(rows.into_iter().map(ambre_core::Encoded::new).collect())
 }
 
 /// Adds a member with a copy of the key named `key_id`, refused when a
@@ -208,7 +205,7 @@ pub async fn invite_document_member(
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
     role: ambre_core::Role,
-    doc_key_enc: &ambre_core::WrappedDocKey,
+    doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     invited_by: &ambre_core::UserId,
     key_id: &FixedBytes<ambre_core::KeyId>,
     entry: Option<&LogEntry>,
@@ -243,7 +240,7 @@ async fn upsert_member(
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
     role: ambre_core::Role,
-    doc_key_enc: &ambre_core::WrappedDocKey,
+    doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     invited_by: &ambre_core::UserId,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
@@ -329,7 +326,7 @@ pub async fn get_document_member(
             document_id: r.try_get::<PgId, _>("document_id")?.into(),
             user_id: r.try_get::<PgId, _>("user_id")?.into(),
             role: decode_role(r.try_get("role")?)?,
-            doc_key_enc: ambre_core::WrappedDocKey::new(r.try_get("doc_key_enc")?),
+            doc_key_enc: ambre_core::Encoded::new(r.try_get("doc_key_enc")?),
             invited_by: r.try_get::<PgOptId, _>("invited_by")?.into(),
         })),
         None => Ok(None),
@@ -368,7 +365,7 @@ pub async fn list_document_members(
                 role: decode_role(r.try_get("role")?)?,
                 signing_pubkey: decode_key(r.try_get("signing_pubkey")?)?,
                 exchange_pubkey: decode_exchange_key(r.try_get("exchange_pubkey")?)?,
-                doc_key_enc: ambre_core::WrappedDocKey::new(r.try_get("doc_key_enc")?),
+                doc_key_enc: ambre_core::Encoded::new(r.try_get("doc_key_enc")?),
                 invited_by: r.try_get::<PgOptId, _>("invited_by")?.into(),
                 wrapper_exchange_pubkey: decode_opt_exchange_key(
                     r.try_get("wrapper_exchange_pubkey")?,
@@ -450,7 +447,10 @@ pub async fn revoke_and_rotate(
     document_id: &ambre_core::DocumentId,
     user_id: &ambre_core::UserId,
     rotated_by: &ambre_core::UserId,
-    keys: &[(ambre_core::UserId, ambre_core::WrappedDocKey)],
+    keys: &[(
+        ambre_core::UserId,
+        ambre_core::Encoded<ambre_core::WrappedDocKey>,
+    )],
     members: &[ambre_core::UserId],
     link: &ambre_protocol::KeyLink,
     entry: Option<&LogEntry>,
@@ -543,7 +543,7 @@ async fn append_link(
 pub async fn document_key_links(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
-) -> Result<Vec<ambre_core::EncodedKeyLink>, AppError> {
+) -> Result<Vec<ambre_core::Encoded<ambre_core::EncodedKeyLink>>, AppError> {
     let rows = sqlx::query_scalar::<_, Vec<u8>>(concat!(
         "SELECT link FROM document_key_links WHERE document_id = ",
         access_document!(),
@@ -552,10 +552,7 @@ pub async fn document_key_links(
     .bind(id_to_uuid(*document_id))
     .fetch_all(pool)
     .await?;
-    Ok(rows
-        .into_iter()
-        .map(ambre_core::EncodedKeyLink::new)
-        .collect())
+    Ok(rows.into_iter().map(ambre_core::Encoded::new).collect())
 }
 
 /// Whether the document owes a rotation (`SRV-122`).
@@ -693,7 +690,10 @@ pub async fn rotate_document_keys(
     pool: &PgPool,
     document_id: &ambre_core::DocumentId,
     rotated_by: &ambre_core::UserId,
-    keys: &[(ambre_core::UserId, ambre_core::WrappedDocKey)],
+    keys: &[(
+        ambre_core::UserId,
+        ambre_core::Encoded<ambre_core::WrappedDocKey>,
+    )],
     members: &[ambre_core::UserId],
     link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
@@ -715,7 +715,10 @@ async fn rewrap_members(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     document_id: ambre_core::DocumentId,
     rotator: ambre_core::UserId,
-    keys: &[(ambre_core::UserId, ambre_core::WrappedDocKey)],
+    keys: &[(
+        ambre_core::UserId,
+        ambre_core::Encoded<ambre_core::WrappedDocKey>,
+    )],
     members: &[ambre_core::UserId],
     link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {

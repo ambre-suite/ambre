@@ -1389,7 +1389,7 @@ fn presence_frame(
     st: &mut ToileState,
     payload: PresencePayload,
     now: ambre_core::PageTime,
-) -> ambre_core::EphemeralBytes {
+) -> ambre_core::Payload<ambre_core::EphemeralBytes> {
     st.handle_command(ToileCommand::Presence { payload, now })
         .ephemeral
         .expect("presence broadcasts an ephemeral")
@@ -6035,7 +6035,10 @@ fn live_ids(st: &ToileState) -> Vec<ElementId> {
 }
 
 /// Apply one op locally and return the CRDT delta it produced (if any) to relay.
-fn apply_local(st: &mut ToileState, op: &PeerOp) -> Option<ambre_core::DeltaBytes> {
+fn apply_local(
+    st: &mut ToileState,
+    op: &PeerOp,
+) -> Option<ambre_core::Payload<ambre_core::DeltaBytes>> {
     let ids = live_ids(st);
     let nth = |n: usize| ids.get(n % ids.len().max(1)).cloned();
     let out = match op {

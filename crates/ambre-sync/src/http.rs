@@ -1118,7 +1118,7 @@ pub(crate) async fn fetch_bytes(
 pub(crate) struct SetupAccountRequest {
     pub email: ambre_core::Email,
     pub display_name: ambre_core::DisplayName,
-    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
     pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
@@ -1179,7 +1179,7 @@ pub(crate) struct ProviderCallbackResponse {
 
 #[derive(Deserialize)]
 pub(crate) struct MasterKeyResponse {
-    pub master_key_enc: Option<ambre_core::WrappedMasterKey>,
+    pub master_key_enc: Option<ambre_core::Encoded<ambre_core::WrappedMasterKey>>,
     pub master_key_salt: Option<ambre_core::FixedBytes<ambre_core::MasterKeySalt>>,
 }
 
@@ -1194,7 +1194,7 @@ impl MasterKeyResponse {
 #[derive(Serialize)]
 #[allow(dead_code)]
 pub(crate) struct SetupKeyRequest {
-    pub master_key_enc: ambre_core::WrappedMasterKey,
+    pub master_key_enc: ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     pub master_key_salt: ambre_core::FixedBytes<ambre_core::MasterKeySalt>,
     pub signing_pubkey: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pubkey: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
@@ -1293,9 +1293,9 @@ pub(crate) struct MemberChannelEntry {
     pub meta_id: ambre_core::MetaId,
     /// Base64 of the sealed name, none for a meta never named.
     #[serde(default)]
-    pub name_enc: Option<ambre_core::SealedName>,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     /// Base64 of `nonce || ciphertext`.
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// Hex, `null` for a self-wrapped row.
     pub wrapper_exchange_pub_key: Option<ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
     /// The display names of a direct message's other members (`SRV-220`).
@@ -1380,13 +1380,13 @@ pub(crate) struct DocumentEntry {
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
     #[serde(default)]
-    pub name_enc: Option<ambre_core::SealedName>,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
     /// The caller's wrapped copy of the DocumentKey (base64). Unwrapped via ECDH
     /// to decrypt `name_enc` for the launcher list.
     #[serde(default)]
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// Exchange pubkey (hex) of whoever wrapped `doc_key_enc`. `null` => fall
     /// back to our own key (self-wrapped owner row).
     #[serde(default)]
@@ -1401,8 +1401,8 @@ pub(crate) struct DocumentEntry {
 pub(crate) struct CreateDocumentRequest {
     #[serde(with = "ambre_core::serde_enums::doc_type")]
     pub doc_type: ambre_core::DocType,
-    pub name_enc: Option<ambre_core::SealedName>,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     #[serde(
         skip_serializing_if = "Option::is_none",
         with = "ambre_core::serde_id::document_id::option"
@@ -1411,7 +1411,7 @@ pub(crate) struct CreateDocumentRequest {
     /// The first entry of the membership log, as `membership_log::encode`
     /// writes it (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
     /// Whether the document is a Murmure space, which its members list. The
     /// JSON flag `space` is written for a space alone.
     #[serde(
@@ -1573,7 +1573,7 @@ pub(crate) struct ConfirmSnapshotResponse {
 pub(crate) struct DirectMemberJson {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
 }
 
 /// `POST /api/channels/direct`: a direct message of the caller and
@@ -1588,13 +1588,13 @@ pub(crate) struct CreateDirectMessageRequest {
     pub segment_id: ambre_core::SegmentId,
     pub members: Vec<DirectMemberJson>,
     /// The channel key wrapped for the caller.
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// The identifier of the channel key, in hex.
     #[serde(with = "ambre_core::serde_id::key_id")]
     pub key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
     /// The log of `meta`: its `Create`, one editor `Invite` per member in
     /// the order of `members`, then the caller's own `ChangeRole` to editor.
-    pub entries: Vec<ambre_core::EncodedLogEntry>,
+    pub entries: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// The direct message a request reached: the one it created, or the one that
@@ -1610,11 +1610,11 @@ pub(crate) struct DirectMessageResponse {
 /// `POST /api/channels/{id}/join`: the channel key, wrapped for the caller.
 #[derive(Serialize)]
 pub(crate) struct JoinChannelRequest {
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// The signed `SelfJoin` entry that extends meta's log, absent when the
     /// log is empty (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// `GET /api/channels/{id}/join`: the end of the log a self-join extends.
@@ -1629,7 +1629,7 @@ pub(crate) struct JoinHeadResponse {
     pub length: ambre_protocol::LogPosition,
     /// The last entry (base64), absent on an empty log.
     #[serde(default)]
-    pub last: Option<ambre_core::EncodedLogEntry>,
+    pub last: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 #[derive(Deserialize)]
@@ -1643,7 +1643,7 @@ pub(crate) struct CreateDocumentResponse {
 
 #[derive(Serialize)]
 pub(crate) struct RenameDocumentRequest {
-    pub name_enc: ambre_core::SealedName,
+    pub name_enc: ambre_core::Encoded<ambre_core::SealedName>,
 }
 
 #[derive(Deserialize)]
@@ -1655,7 +1655,7 @@ pub(crate) struct MembersResponse {
     pub rotation_owed: ambre_core::RotationDebt,
     /// The membership log, oldest entry first (`SRV-104`).
     #[serde(default)]
-    pub log: Vec<ambre_core::EncodedLogEntry>,
+    pub log: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 #[derive(Deserialize)]
@@ -1665,7 +1665,7 @@ pub(crate) struct MemberEntry {
     pub user_id: ambre_core::UserId,
     pub signing_pub_key: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
     /// Exchange public key of whoever wrapped `doc_key_enc`. The ECDH unwrap must
@@ -1784,20 +1784,20 @@ pub(crate) struct InviteRequest {
     pub invitee_id: Option<ambre_core::UserId>,
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// The key `doc_key_enc` wraps, in hex (`SYNC-143`).
     #[serde(with = "ambre_core::serde_id::key_id")]
     pub key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
     /// The entry the inviter signs for this invitation (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// The body of a departure: the entry the leaver signs (`SYNC-132`).
 #[derive(Serialize)]
 pub(crate) struct LeaveRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// The body of a role change: the role and the entry the owner signs for it
@@ -1807,7 +1807,7 @@ pub(crate) struct RoleChangeRequest {
     #[serde(with = "ambre_core::serde_enums::role")]
     pub role: ambre_core::Role,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 #[derive(Deserialize)]
@@ -1825,7 +1825,7 @@ pub(crate) struct RotateKeyRequest {
     pub members: Vec<ambre_core::UserId>,
     /// The link to the key this rotation replaces, as [`encode_link`] writes
     /// it (`SYNC-118`).
-    pub link: ambre_core::EncodedKeyLink,
+    pub link: ambre_core::Encoded<ambre_core::EncodedKeyLink>,
 }
 
 /// One revoke: the member removed and the new key wrapped for everyone who
@@ -1839,22 +1839,25 @@ pub(crate) struct RevokeRequest {
     #[serde(with = "ambre_core::serde_id::user_id::vec")]
     pub members: Vec<ambre_core::UserId>,
     /// The link to the key this revoke replaces (`SYNC-118`).
-    pub link: ambre_core::EncodedKeyLink,
+    pub link: ambre_core::Encoded<ambre_core::EncodedKeyLink>,
     /// The entry the owner signs for this revoke (`SYNC-132`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub entry: Option<ambre_core::EncodedLogEntry>,
+    pub entry: Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 /// The links of one document's chain, oldest first (`SYNC-117`).
 #[derive(Deserialize)]
 pub(crate) struct KeyLinksResponse {
-    pub links: Vec<ambre_core::EncodedKeyLink>,
+    pub links: Vec<ambre_core::Encoded<ambre_core::EncodedKeyLink>>,
 }
 
 /// The form a link takes in a request: its postcard bytes, in base64.
 pub(crate) fn encode_link(
     link: &ambre_protocol::KeyLink,
-) -> Result<ambre_core::EncodedKeyLink, ambre_protocol::error::SerializationError> {
+) -> Result<
+    ambre_core::Encoded<ambre_core::EncodedKeyLink>,
+    ambre_protocol::error::SerializationError,
+> {
     link.encode()
 }
 
@@ -1890,7 +1893,7 @@ pub(crate) async fn fetch_key_links(
 pub(crate) struct RotateKeyEntry {
     #[serde(with = "ambre_core::serde_id::user_id")]
     pub user_id: ambre_core::UserId,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
 }
 
 #[derive(Deserialize)]
@@ -1928,7 +1931,7 @@ pub(crate) struct DocumentMembersResponse {
     pub rotation_owed: ambre_core::RotationDebt,
     /// The membership log, oldest entry first (`SRV-104`).
     #[serde(default)]
-    pub log: Vec<ambre_core::EncodedLogEntry>,
+    pub log: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>,
 }
 
 #[derive(Deserialize)]
@@ -1940,7 +1943,7 @@ pub(crate) struct DocumentMemberEntry {
     /// Ed25519 verifying key: feeds the presence directory (`presence_directory`).
     pub signing_pub_key: ambre_core::FixedBytes<ambre_core::PublicKey>,
     pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
-    pub doc_key_enc: ambre_core::WrappedDocKey,
+    pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// The relay's column, which the signed log overrides (`SYNC-110`). An
     /// unknown word refuses the whole answer when it is read (`SRV-180`).
     #[serde(with = "ambre_core::serde_enums::role")]
@@ -2378,7 +2381,7 @@ mod tests {
             "https://store.test/bucket/object?X-Amz-Signature=secret-sig".to_owned(),
         );
         let blob = crate::pipeline::object_blob(
-            &ambre_core::MediaBytes::new(b"media".to_vec()),
+            &ambre_core::Payload::new(b"media".to_vec()),
             &ambre_core::Aad::of(b"aad"),
             &ambre_crypto::DocumentKey::generate(),
             &ed25519_dalek::SigningKey::from_bytes(&[7; 32]),
@@ -2662,7 +2665,7 @@ mod tests {
             serde_json::from_str(r#"{"master_key_enc":null,"master_key_salt":null}"#).unwrap();
         assert!(owed.setup_owed());
         let stored = serde_json::json!({
-            "master_key_enc": ambre_core::WrappedMasterKey::new(vec![1; 72]),
+            "master_key_enc": ambre_core::Encoded::<ambre_core::WrappedMasterKey>::new(vec![1; 72]),
             "master_key_salt": ambre_core::FixedBytes::<ambre_core::MasterKeySalt>::from_array([2; 32]),
         });
         let stored: MasterKeyResponse = serde_json::from_value(stored).unwrap();

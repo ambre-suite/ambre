@@ -546,8 +546,8 @@ impl LogicState {
     pub(crate) fn channel_copy_landed(
         &mut self,
         document_id: DocumentId,
-        snapshot: Option<ambre_core::SnapshotBytes>,
-        deltas: &[ambre_core::DeltaBytes],
+        snapshot: Option<ambre_core::Payload<ambre_core::SnapshotBytes>>,
+        deltas: &[ambre_core::Payload<ambre_core::DeltaBytes>],
     ) {
         let Some((&channel_id, closed)) = self
             .closed_channels
@@ -977,7 +977,7 @@ impl LogicState {
     pub(crate) fn channel_snapshot(
         &self,
         document_id: DocumentId,
-    ) -> Option<(ambre_core::SnapshotBytes, Seq)> {
+    ) -> Option<(ambre_core::Payload<ambre_core::SnapshotBytes>, Seq)> {
         let channel = self.channels.values().find(|c| c.holds(document_id))?;
         let payload = channel
             .snapshot(document_id)
@@ -998,7 +998,7 @@ impl LogicState {
         document_id: DocumentId,
         snapshot_id: ambre_bus::SnapshotId,
         covered: Seq,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
         purpose: ambre_bus::SnapshotPurpose,
     ) {
         let Some(channel) = self.channels.values().find(|c| c.holds(document_id)) else {
@@ -1038,7 +1038,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         seq: Seq,
-        payload: Option<&ambre_core::DeltaBytes>,
+        payload: Option<&ambre_core::Payload<ambre_core::DeltaBytes>>,
     ) {
         if self.holds_murmure(document_id) {
             self.channel_ledgers
@@ -1737,7 +1737,7 @@ impl LogicState {
         &mut self,
         document_id: DocumentId,
         from: UserId,
-        payload: &ambre_core::EphemeralBytes,
+        payload: &ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) -> bool {
         let Some(channel_id) = self.channel_of_meta(document_id) else {
             return false;
@@ -2469,7 +2469,7 @@ mod tests {
         drain(&sync);
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
         assert!(!state.channels.contains_key(&channel_id));
-        let empty = ambre_core::DeltaBytes::default();
+        let empty = ambre_core::Payload::<ambre_core::DeltaBytes>::default();
         assert!(!state.apply_channel_remote(
             active.document_id(),
             &[(None, ambre_core::LoroPayloadRef::Delta(&empty))]
@@ -2688,13 +2688,14 @@ mod tests {
         drain(&store);
 
         state.handle_logic_command(LogicCommand::CloseChannel { channel_id });
-        let copies: HashMap<DocumentId, ambre_core::SnapshotBytes> = drain(&store)
-            .into_iter()
-            .filter_map(|(id, write)| match write {
-                PersistWrite::Snapshot(copy) => Some((id, copy)),
-                _ => None,
-            })
-            .collect();
+        let copies: HashMap<DocumentId, ambre_core::Payload<ambre_core::SnapshotBytes>> =
+            drain(&store)
+                .into_iter()
+                .filter_map(|(id, write)| match write {
+                    PersistWrite::Snapshot(copy) => Some((id, copy)),
+                    _ => None,
+                })
+                .collect();
         assert_eq!(copies.len(), 2, "each document reaches the store");
         let horizons: HashMap<DocumentId, Seq> = drain(&sync)
             .into_iter()
@@ -3493,7 +3494,9 @@ mod tests {
                 user: Some(m.author),
                 ..crate::remote_delta(
                     1,
-                    ambre_core::DeltaBytes::new(serde_json::to_vec(&update).expect("bytes")),
+                    ambre_core::Payload::<ambre_core::DeltaBytes>::new(
+                        serde_json::to_vec(&update).expect("bytes"),
+                    ),
                 )
             },
         });
@@ -4042,7 +4045,9 @@ mod tests {
 
     /// The ephemerals that left for the Sync worker, by document. Any other
     /// command fails the test.
-    fn ephemerals(sync: &Receiver<SyncCommand>) -> Vec<(DocumentId, ambre_core::EphemeralBytes)> {
+    fn ephemerals(
+        sync: &Receiver<SyncCommand>,
+    ) -> Vec<(DocumentId, ambre_core::Payload<ambre_core::EphemeralBytes>)> {
         drain(sync)
             .into_iter()
             .map(|sent| match sent {
@@ -5388,7 +5393,7 @@ mod tests {
             channel_id,
             edit_to(closing, message, "two", at(1)),
         );
-        let refused: Vec<ambre_core::DeltaBytes> = drain(&sync)
+        let refused: Vec<ambre_core::Payload<ambre_core::DeltaBytes>> = drain(&sync)
             .into_iter()
             .filter_map(|c| match c {
                 SyncCommand::SendUpdate {
@@ -6090,17 +6095,20 @@ mod tests {
         state.hold_channel(crate::identified(reopened));
         drain(&sync);
         drain(&ui);
-        let deliver = |state: &mut LogicState, document_id, payload: &ambre_core::SnapshotBytes| {
-            state.handle_logic_event(LogicEvent::RemoteSnapshot {
-                document_id,
-                covered_seq: ambre_core::Seq(1),
-                payload: payload.clone(),
-            });
-            state.handle_logic_event(LogicEvent::DocumentReady {
-                document_id,
-                role: ambre_bus::Role::Editor,
-            });
-        };
+        let deliver =
+            |state: &mut LogicState,
+             document_id,
+             payload: &ambre_core::Payload<ambre_core::SnapshotBytes>| {
+                state.handle_logic_event(LogicEvent::RemoteSnapshot {
+                    document_id,
+                    covered_seq: ambre_core::Seq(1),
+                    payload: payload.clone(),
+                });
+                state.handle_logic_event(LogicEvent::DocumentReady {
+                    document_id,
+                    role: ambre_bus::Role::Editor,
+                });
+            };
 
         command(&mut state, channel_id, MurmureCommand::SeekRoot { thread });
         assert_eq!(sent(&sync), [Sent::Open(thread)], "the probe");

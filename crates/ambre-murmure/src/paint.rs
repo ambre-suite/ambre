@@ -1125,7 +1125,7 @@ pub(crate) mod tests {
         ]
         .iter()
         .map(|file| std::fs::read(format!("{DIR}{file}")).expect("a shipped face"))
-        .map(ambre_core::FontBytes::new);
+        .map(ambre_core::Payload::<ambre_core::FontBytes>::new);
         font_context_from_bytes(faces)
     }
 

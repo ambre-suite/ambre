@@ -58,8 +58,8 @@ use thiserror::Error;
 
 use crate::fixed_bytes::{DebugForm, FixedBytes, FixedRole};
 use crate::{
-    Ciphertext, DocType, DocumentId, Nonce, PickedContainer, PlaintextContainer, SealedContainer,
-    SnapshotBytes, Uuid,
+    Ciphertext, DocType, DocumentId, Nonce, Payload, PickedContainer, PlaintextContainer,
+    SealedContainer, SnapshotBytes, Uuid,
 };
 
 /// Magic bytes `"AMBR"` (`0x414D4252`), offset 0.
@@ -188,7 +188,7 @@ pub struct AmbreHeader {
     /// Document identity, UUID v7.
     pub document_id: DocumentId,
     /// Offset 22 onward: the raw Loro snapshot, uncompressed and unencrypted.
-    pub payload: crate::SnapshotBytes,
+    pub payload: Payload<SnapshotBytes>,
 }
 
 /// Container-level failures. Fatal by nature: a header failure leaves no
@@ -302,14 +302,14 @@ pub trait ContainerFile: AsRef<[u8]> + container_file::Sealed {}
 mod container_file {
     /// Closes [`super::ContainerFile`] to the three container roles.
     pub trait Sealed {}
-    impl Sealed for crate::PickedContainer {}
-    impl Sealed for crate::PlaintextContainer {}
-    impl Sealed for crate::SealedContainer {}
+    impl Sealed for crate::Payload<crate::PickedContainer> {}
+    impl Sealed for crate::Payload<crate::PlaintextContainer> {}
+    impl Sealed for crate::Payload<crate::SealedContainer> {}
 }
 
-impl ContainerFile for PickedContainer {}
-impl ContainerFile for PlaintextContainer {}
-impl ContainerFile for SealedContainer {}
+impl ContainerFile for Payload<PickedContainer> {}
+impl ContainerFile for Payload<PlaintextContainer> {}
+impl ContainerFile for Payload<SealedContainer> {}
 
 /// Read the magic and the version byte, and say which lineage the file belongs
 /// to -- nothing more.
@@ -351,8 +351,8 @@ pub fn classify<F: ContainerFile>(file: &F) -> Result<ContainerKind, DocFileErro
 pub fn write_ambre_plaintext(
     doc_type: DocType,
     document_id: DocumentId,
-    payload: &SnapshotBytes,
-) -> PlaintextContainer {
+    payload: &Payload<SnapshotBytes>,
+) -> Payload<PlaintextContainer> {
     let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
     out.extend_from_slice(&AMBRE_MAGIC);
     out.push(AMBRE_VERSION.as_u8());
@@ -360,7 +360,7 @@ pub fn write_ambre_plaintext(
     out.extend_from_slice(document_id.as_bytes());
     debug_assert_eq!(out.len(), HEADER_LEN);
     out.extend_from_slice(payload.as_bytes());
-    PlaintextContainer::new(out)
+    Payload::new(out)
 }
 
 // -----------------------------------------------------------------------------
@@ -382,7 +382,7 @@ pub fn write_ambre_plaintext(
 /// * [`DocFileError::UnsupportedVersion`] on any other version.
 /// * [`DocFileError::UnknownDocType`] when the type byte names no app this
 ///   build knows.
-pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError> {
+pub fn parse_header(file: &Payload<PlaintextContainer>) -> Result<AmbreHeader, DocFileError> {
     let Some((head, payload)) = file.as_bytes().split_first_chunk::<HEADER_LEN>() else {
         return Err(DocFileError::TruncatedHeader);
     };
@@ -412,7 +412,7 @@ pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileErr
         version,
         doc_type,
         document_id,
-        payload: crate::SnapshotBytes::new(payload.to_vec()),
+        payload: crate::Payload::new(payload.to_vec()),
     })
 }
 
@@ -431,7 +431,9 @@ pub fn parse_header(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileErr
 /// the container needs the migration walk. A version above [`AMBRE_VERSION`]
 /// keeps its [`DocFileError::UnsupportedVersion`]: this build cannot read
 /// forward.
-pub fn read_ambre_plaintext(file: &PlaintextContainer) -> Result<AmbreHeader, DocFileError> {
+pub fn read_ambre_plaintext(
+    file: &Payload<PlaintextContainer>,
+) -> Result<AmbreHeader, DocFileError> {
     match parse_header(file) {
         // Older container: migrate forward, then parse the result. The migrated
         // buffer is a fresh allocation, so nothing here touches `file`.
@@ -457,7 +459,7 @@ pub fn read_ambre_plaintext(file: &PlaintextContainer) -> Result<AmbreHeader, Do
 /// the same bytes.
 pub fn read_ambre_plaintext_as(
     expected: DocType,
-    file: &PlaintextContainer,
+    file: &Payload<PlaintextContainer>,
 ) -> Result<AmbreHeader, DocFileError> {
     let header = read_ambre_plaintext(file)?;
     if header.doc_type != expected {
@@ -533,13 +535,13 @@ pub fn write_ambre_sealed(
     salt: &FixedBytes<FileSalt>,
     nonce: &FixedBytes<Nonce>,
     ciphertext: &Ciphertext,
-) -> SealedContainer {
+) -> Payload<SealedContainer> {
     let mut out = Vec::with_capacity(SEALED_HEADER_LEN + ciphertext.len());
     out.extend_from_slice(sealed_aad(salt).as_bytes());
     nonce.push_to(&mut out);
     debug_assert_eq!(out.len(), SEALED_HEADER_LEN);
     out.extend_from_slice(&ciphertext.0);
-    SealedContainer::new(out)
+    Payload::new(out)
 }
 
 /// Parse a sealed `.ambre` header, at the current sealed layout exactly.
@@ -561,7 +563,7 @@ pub fn write_ambre_sealed(
 /// Every error of [`classify`], plus [`DocFileError::NotSealed`] on a plaintext
 /// container, [`DocFileError::SealedVersionUnsupported`] on an unknown layout,
 /// and [`DocFileError::TruncatedHeader`] below [`SEALED_HEADER_LEN`].
-pub fn parse_sealed_header(file: &SealedContainer) -> Result<SealedAmbre, DocFileError> {
+pub fn parse_sealed_header(file: &Payload<SealedContainer>) -> Result<SealedAmbre, DocFileError> {
     let version = match classify(file)? {
         ContainerKind::Plaintext(_) => return Err(DocFileError::NotSealed),
         ContainerKind::Sealed(version) => version,
@@ -602,7 +604,7 @@ pub fn parse_sealed_header(file: &SealedContainer) -> Result<SealedAmbre, DocFil
 struct Migration {
     from: ContainerVersion,
     to: ContainerVersion,
-    apply: fn(&PlaintextContainer) -> Result<PlaintextContainer, DocFileError>,
+    apply: fn(&Payload<PlaintextContainer>) -> Result<Payload<PlaintextContainer>, DocFileError>,
 }
 
 /// The version registry: one row per container version bump, appended
@@ -628,8 +630,8 @@ const MIGRATIONS: &[Migration] = &[];
 /// unchanged.
 pub fn migrate_ambre(
     from: ContainerVersion,
-    file: &PlaintextContainer,
-) -> Result<PlaintextContainer, DocFileError> {
+    file: &Payload<PlaintextContainer>,
+) -> Result<Payload<PlaintextContainer>, DocFileError> {
     // The walk would refuse a sealed version anyway, since every one of them
     // sits above `AMBRE_VERSION`. But it would call it an unknown *plaintext*
     // version, the one message that sends the user to the changelog instead of
@@ -646,8 +648,8 @@ fn migrate_steps(
     steps: &[Migration],
     from: ContainerVersion,
     target: ContainerVersion,
-    file: &PlaintextContainer,
-) -> Result<PlaintextContainer, DocFileError> {
+    file: &Payload<PlaintextContainer>,
+) -> Result<Payload<PlaintextContainer>, DocFileError> {
     if from > target {
         return Err(DocFileError::UnsupportedVersion { found: from });
     }
@@ -679,20 +681,20 @@ mod tests {
         DocumentId::from_bytes(DOC_ID)
     }
 
-    fn plain(bytes: &[u8]) -> PlaintextContainer {
-        PlaintextContainer::new(bytes.to_vec())
+    fn plain(bytes: &[u8]) -> Payload<PlaintextContainer> {
+        Payload::new(bytes.to_vec())
     }
 
-    fn sealed(bytes: &[u8]) -> SealedContainer {
-        SealedContainer::new(bytes.to_vec())
+    fn sealed(bytes: &[u8]) -> Payload<SealedContainer> {
+        Payload::new(bytes.to_vec())
     }
 
-    fn picked(bytes: &[u8]) -> PickedContainer {
-        PickedContainer::new(bytes.to_vec())
+    fn picked(bytes: &[u8]) -> Payload<PickedContainer> {
+        Payload::new(bytes.to_vec())
     }
 
-    fn snap(bytes: &[u8]) -> SnapshotBytes {
-        SnapshotBytes::new(bytes.to_vec())
+    fn snap(bytes: &[u8]) -> Payload<SnapshotBytes> {
+        Payload::new(bytes.to_vec())
     }
 
     fn sample(doc_type: DocType) -> Vec<u8> {
@@ -881,21 +883,25 @@ mod tests {
     // the row is the whole change.
 
     /// `0x01` -> `0x02`: rewrite the version byte, leave the payload alone.
-    fn bump_to_2(file: &PlaintextContainer) -> Result<PlaintextContainer, DocFileError> {
+    fn bump_to_2(
+        file: &Payload<PlaintextContainer>,
+    ) -> Result<Payload<PlaintextContainer>, DocFileError> {
         let mut out = file.as_bytes().to_vec();
         *out.get_mut(VERSION_AT)
             .ok_or(DocFileError::TruncatedHeader)? = 2;
-        Ok(PlaintextContainer::new(out))
+        Ok(Payload::new(out))
     }
 
     /// `0x02` -> `0x03`: same shape, plus a payload edit, so the multi-step walk
     /// must chain outputs rather than re-read the original.
-    fn bump_to_3(file: &PlaintextContainer) -> Result<PlaintextContainer, DocFileError> {
+    fn bump_to_3(
+        file: &Payload<PlaintextContainer>,
+    ) -> Result<Payload<PlaintextContainer>, DocFileError> {
         let mut out = file.as_bytes().to_vec();
         *out.get_mut(VERSION_AT)
             .ok_or(DocFileError::TruncatedHeader)? = 3;
         out.extend_from_slice(b"+v3");
-        Ok(PlaintextContainer::new(out))
+        Ok(Payload::new(out))
     }
 
     const SYNTHETIC: &[Migration] = &[

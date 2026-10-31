@@ -8,7 +8,7 @@
 //! learn which user a PeerID stands for (`ambre-spec-op-authorship.md`).
 
 use ambre_core::authorship::PeerEntry;
-use ambre_core::{DeltaBytes, DocumentId, LoroPayload, MessageId, UserId};
+use ambre_core::{DeltaBytes, DocumentId, LoroPayload, MessageId, Payload, UserId};
 use loro::json::{JsonOpContent, JsonSchema, ListOp, MapOp};
 use loro::{
     Container, ContainerID, ContainerType, Index, LoroDoc, LoroValue, ValueOrContainer,
@@ -119,9 +119,9 @@ impl Refusal {
 ///
 /// # Errors
 /// [`MurmureError::Crdt`] when the update does not serialise.
-pub(crate) fn encode(update: &JsonSchema) -> Result<DeltaBytes, MurmureError> {
+pub(crate) fn encode(update: &JsonSchema) -> Result<Payload<DeltaBytes>, MurmureError> {
     serde_json::to_vec(update)
-        .map(DeltaBytes::new)
+        .map(Payload::<DeltaBytes>::new)
         .map_err(|e| MurmureError::Crdt(e.to_string()))
 }
 
@@ -134,7 +134,7 @@ pub(crate) fn encode(update: &JsonSchema) -> Result<DeltaBytes, MurmureError> {
 /// # Errors
 /// [`Refusal::Binary`] for a Loro blob, [`Refusal::Version`] for another
 /// schema version, and [`Refusal::Malformed`] for anything else unreadable.
-pub(crate) fn read(payload: &DeltaBytes) -> Result<JsonSchema, Refusal> {
+pub(crate) fn read(payload: &Payload<DeltaBytes>) -> Result<JsonSchema, Refusal> {
     #[derive(Deserialize)]
     struct Version {
         schema_version: JsonSchemaVersion,
@@ -676,7 +676,7 @@ pub(crate) fn import_arrivals(
 
 /// Whether every operation of a binary update was written under `peer`
 /// (`AUTHOR-012`). The `meta` document travels binary, and is checked so.
-pub(crate) fn binary_by(payload: &DeltaBytes, peer: ambre_core::PeerId) -> bool {
+pub(crate) fn binary_by(payload: &Payload<DeltaBytes>, peer: ambre_core::PeerId) -> bool {
     LoroDoc::decode_import_blob_meta(payload.as_bytes(), false).is_ok_and(|meta| {
         meta.mode == loro::EncodedBlobMode::Updates
             && meta.partial_end_vv.keys().all(|p| *p == peer.0)

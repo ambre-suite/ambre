@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, StyleMark, TextStyle, Timestamp};
 use ambre_core::{
-    ByteSize, ChannelId, DeltaBytes, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId,
+    ByteSize, ChannelId, DeltaBytes, Payload, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId,
 };
 
 use crate::channel::live_segments;
@@ -33,7 +33,7 @@ fn channel(size: usize) -> ChannelState {
 
 /// A second member's copy of `state`, opened from its live documents.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, SnapshotBytes> = state
+    let segments: HashMap<SegmentId, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -50,7 +50,9 @@ fn peer_of(state: &ChannelState) -> ChannelState {
 /// Close the active segment of `state` into a successor it created, and
 /// adopt the successor's identity. Returns the successor, the `meta` delta,
 /// and the successor's first update.
-fn close_created(state: &mut ChannelState) -> (SegmentId, DeltaBytes, DeltaBytes) {
+fn close_created(
+    state: &mut ChannelState,
+) -> (SegmentId, Payload<DeltaBytes>, Payload<DeltaBytes>) {
     let closing = state.active_id();
     let successor = SegmentId::new();
     let closed = state

@@ -368,13 +368,15 @@ pub(crate) fn sign(
 /// The encoder's error.
 pub(crate) fn encode(
     entry: &MembershipEntry,
-) -> Result<ambre_core::EncodedLogEntry, SerializationError> {
+) -> Result<ambre_core::Encoded<ambre_core::EncodedLogEntry>, SerializationError> {
     entry.encode()
 }
 
 /// The entries a members answer carries, up to the first that does not
 /// decode. The walk could not pass it anyway.
-pub(crate) fn decode(texts: &[ambre_core::EncodedLogEntry]) -> Vec<MembershipEntry> {
+pub(crate) fn decode(
+    texts: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
+) -> Vec<MembershipEntry> {
     texts
         .iter()
         .map_while(|text| MembershipEntry::decode(text).ok())
@@ -608,7 +610,7 @@ pub(crate) mod tests {
         assert_eq!(view.wraps(bob.id), Some(FixedBytes::from_array([1; 16])));
         assert!(Log::walk(DOC, None, &log, no_self_join).signers().is_none());
         // The entries travel through their request form.
-        let texts: Vec<ambre_core::EncodedLogEntry> =
+        let texts: Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>> =
             log.iter().map(|e| encode(e).unwrap()).collect();
         assert_eq!(decode(&texts), log);
     }

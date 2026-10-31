@@ -623,7 +623,7 @@ enum SyncEvent {
         id: RequestId,
         document_id: DocumentId,
         content_hash: ambre_core::ContentHash,
-        data: ambre_core::MediaBytes,
+        data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
 }
 
@@ -664,7 +664,7 @@ struct SyncDocumentState {
     /// Uploads asked for while the document is local-only. The relay signs no
     /// link for a document it does not hold, so each one waits for the lazy
     /// creation (`SYNC-145`).
-    pending_uploads: Vec<(RequestId, ambre_core::MediaBytes)>,
+    pending_uploads: Vec<(RequestId, ambre_core::Payload<ambre_core::MediaBytes>)>,
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
     current_snapshot_id: SnapshotId,
@@ -762,7 +762,7 @@ struct PendingCheck {
     author: FixedBytes<PublicKey>,
     covered_seq: Seq,
     /// The opened snapshot, kept on open only: a match adopts it.
-    payload: Option<ambre_core::SnapshotBytes>,
+    payload: Option<ambre_core::Payload<ambre_core::SnapshotBytes>>,
 }
 
 /// A snapshot only its author confirmed, still sealed (`SRV-128`).
@@ -875,7 +875,7 @@ impl SyncDocumentState {
     fn open_ephemeral_named(
         &self,
         eph: &ambre_protocol::Ephemeral,
-    ) -> Result<ambre_core::EphemeralBytes, pipeline::PipelineError> {
+    ) -> Result<ambre_core::Payload<ambre_core::EphemeralBytes>, pipeline::PipelineError> {
         let key = self
             .key_named(eph.public_data.key_id)
             .ok_or(pipeline::PipelineError::WrongKey)?;
@@ -954,7 +954,7 @@ impl SyncDocumentState {
     fn open_snapshot_blob(
         &self,
         blob: &pipeline::FetchedBlob,
-    ) -> Result<ambre_core::SnapshotBytes, pipeline::PipelineError> {
+    ) -> Result<ambre_core::Payload<ambre_core::SnapshotBytes>, pipeline::PipelineError> {
         self.open_signed_snapshot(blob).map(|(payload, _)| payload)
     }
 
@@ -963,7 +963,13 @@ impl SyncDocumentState {
     fn open_signed_snapshot(
         &self,
         blob: &pipeline::FetchedBlob,
-    ) -> Result<(ambre_core::SnapshotBytes, FixedBytes<PublicKey>), pipeline::PipelineError> {
+    ) -> Result<
+        (
+            ambre_core::Payload<ambre_core::SnapshotBytes>,
+            FixedBytes<PublicKey>,
+        ),
+        pipeline::PipelineError,
+    > {
         let snapshot = pipeline::decode_snapshot_blob(blob, self.document_id)?;
         let key = self
             .key_named(snapshot.public_data.key_id)
@@ -1146,7 +1152,11 @@ pub struct SyncState {
     /// `RequestMissing` replay, so `local_clock` has caught up to the server and
     /// no CLOCK_MISMATCH occurs. A local-only doc flushes right when it opens.
     /// Each keeps the summary it was sent with.
-    pending_pre_session_updates: Vec<(DocumentId, ambre_core::DeltaBytes, Option<ActivitySummary>)>,
+    pending_pre_session_updates: Vec<(
+        DocumentId,
+        ambre_core::Payload<ambre_core::DeltaBytes>,
+        Option<ActivitySummary>,
+    )>,
 
     /// The session nonce of each open document, drawn when it opens and dropped
     /// when it closes (`AUTHOR-002`). Every update this session seals for the

@@ -212,7 +212,7 @@ pub struct OrgMemberRow {
     #[sqlx(try_from = "String")]
     pub role: ambre_core::Role,
     #[sqlx(try_from = "PgOptBytes")]
-    pub shamir_share_enc: Option<ambre_core::SealedShare>,
+    pub shamir_share_enc: Option<ambre_core::Encoded<ambre_core::SealedShare>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -453,7 +453,7 @@ pub struct OrgMembershipRow {
     pub role: ambre_core::Role,
     #[allow(dead_code)]
     #[sqlx(try_from = "PgOptBytes")]
-    pub shamir_share_enc: Option<ambre_core::SealedShare>,
+    pub shamir_share_enc: Option<ambre_core::Encoded<ambre_core::SealedShare>>,
     #[allow(dead_code)]
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -539,7 +539,13 @@ pub async fn update_org_member_role(
 pub async fn get_org_shamir_shares(
     pool: &PgPool,
     org_id: &ambre_core::OrgId,
-) -> Result<Vec<(ambre_core::UserId, ambre_core::SealedShare)>, AppError> {
+) -> Result<
+    Vec<(
+        ambre_core::UserId,
+        ambre_core::Encoded<ambre_core::SealedShare>,
+    )>,
+    AppError,
+> {
     let rows = sqlx::query(
         "SELECT user_id, shamir_share_enc FROM organization_members WHERE org_id = $1 AND shamir_share_enc IS NOT NULL"
     )
@@ -551,10 +557,16 @@ pub async fn get_org_shamir_shares(
         .map(|r| {
             Ok((
                 r.try_get::<PgId, _>("user_id")?.into(),
-                ambre_core::SealedShare::new(r.try_get("shamir_share_enc")?),
+                ambre_core::Encoded::new(r.try_get("shamir_share_enc")?),
             ))
         })
-        .collect::<Result<Vec<(ambre_core::UserId, ambre_core::SealedShare)>, sqlx::Error>>()?;
+        .collect::<Result<
+            Vec<(
+                ambre_core::UserId,
+                ambre_core::Encoded<ambre_core::SealedShare>,
+            )>,
+            sqlx::Error,
+        >>()?;
     Ok(shares)
 }
 
@@ -583,7 +595,7 @@ pub async fn log_org_recovery(
 pub async fn get_user_org_master_key_enc(
     pool: &PgPool,
     user_id: &ambre_core::UserId,
-) -> Result<Option<ambre_core::EscrowedKey>, AppError> {
+) -> Result<Option<ambre_core::Encoded<ambre_core::EscrowedKey>>, AppError> {
     let row = sqlx::query("SELECT org_master_key_enc FROM users WHERE id = $1")
         .bind(id_to_uuid(*user_id))
         .fetch_optional(pool)
@@ -592,6 +604,6 @@ pub async fn get_user_org_master_key_enc(
         r.try_get::<Option<Vec<u8>>, _>("org_master_key_enc")
             .ok()
             .flatten()
-            .map(ambre_core::EscrowedKey::new)
+            .map(ambre_core::Encoded::new)
     }))
 }

@@ -80,9 +80,9 @@ pub struct TrameOutcome {
     /// Display events destined for the UI Thread.
     pub display: Vec<TrameEvent>,
     /// Binary CRDT delta (Loro `ExportMode::Updates`) to encrypt and broadcast.
-    pub update: Option<ambre_core::DeltaBytes>,
+    pub update: Option<ambre_core::Payload<ambre_core::DeltaBytes>>,
     /// Ephemeral (presence) payload to encrypt and broadcast.
-    pub ephemeral: Option<ambre_core::EphemeralBytes>,
+    pub ephemeral: Option<ambre_core::Payload<ambre_core::EphemeralBytes>>,
 }
 
 impl TrameOutcome {

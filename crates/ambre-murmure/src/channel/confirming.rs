@@ -7,7 +7,7 @@
 //! reads this copy and never writes it (`MURMURE-153`).
 
 use ambre_bus::SnapshotVerdict;
-use ambre_core::{DocumentId, LoroPayloadRef, Seq, SnapshotBytes};
+use ambre_core::{DocumentId, LoroPayloadRef, Payload, Seq, SnapshotBytes};
 use loro::{LoroDoc, VersionVector};
 
 use super::{ChannelState, folding};
@@ -30,7 +30,7 @@ impl ChannelState {
         &self,
         document_id: DocumentId,
         covered: Seq,
-        snapshot: &SnapshotBytes,
+        snapshot: &Payload<SnapshotBytes>,
     ) -> Result<SnapshotVerdict, MurmureError> {
         let own = self
             .doc(document_id)

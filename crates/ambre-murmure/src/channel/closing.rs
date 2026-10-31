@@ -6,7 +6,7 @@
 //! writes the same entries, so two writers converge on one successor.
 
 use ambre_bus::{MurmureEvent, Timestamp};
-use ambre_core::{ByteSize, DeltaBytes, FailureCount, Millis, PeerEntryBytes, SegmentId};
+use ambre_core::{ByteSize, DeltaBytes, FailureCount, Millis, Payload, PeerEntryBytes, SegmentId};
 use loro::{ExportMode, LoroDoc};
 
 use super::{
@@ -70,7 +70,7 @@ pub use ambre_bus::app::murmure::Successor;
 #[derive(Debug)]
 pub struct Closed {
     /// Every operation the close wrote in `meta`, as a Loro update.
-    pub meta: DeltaBytes,
+    pub meta: Payload<DeltaBytes>,
     /// The successor to open, when this client did not create it. Its bytes
     /// then go to [`ChannelState::apply_remote`], and
     /// [`ChannelState::segment_ready`] admits it once they are all in.

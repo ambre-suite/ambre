@@ -14,7 +14,7 @@ use std::io::Read;
 use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::SessionNonce;
 use ambre_core::{
-    Aad, ByteSize, EphemeralBytes, FixedBytes, KeyId, MediaBytes, PublicKey, SecretBytes,
+    Aad, ByteSize, EphemeralBytes, FixedBytes, KeyId, MediaBytes, Payload, PublicKey, SecretBytes,
     SnapshotBytes,
 };
 use ambre_crypto::{CryptoError, DocumentKey, Sealed, envelope};
@@ -146,7 +146,7 @@ pub struct UpdateBody {
     /// document (`RESID-014`).
     pub summary: Option<ActivitySummary>,
     /// The Loro update, opaque to the envelope.
-    pub delta: ambre_core::DeltaBytes,
+    pub delta: Payload<ambre_core::DeltaBytes>,
 }
 
 /// The plaintext an update seals: the session nonce of its author, the summary
@@ -212,7 +212,7 @@ impl std::fmt::Debug for UpdateFrame {
 pub fn update_body(
     nonce: &FixedBytes<SessionNonce>,
     summary: Option<&ActivitySummary>,
-    delta: &ambre_core::DeltaBytes,
+    delta: &Payload<ambre_core::DeltaBytes>,
 ) -> Result<UpdateFrame, PipelineError> {
     let summary = summary.map(ActivitySummary::encode).transpose()?;
     let summary_len = summary.as_ref().map_or(0, Vec::len);
@@ -266,7 +266,7 @@ fn split_frame(body: &[u8]) -> Result<UpdateBody, PipelineError> {
     Ok(UpdateBody {
         nonce,
         summary,
-        delta: ambre_core::DeltaBytes::new(delta.to_vec()),
+        delta: Payload::new(delta.to_vec()),
     })
 }
 
@@ -392,13 +392,13 @@ impl OpenedPayload {
     }
 
     /// The payload as a full CRDT state.
-    fn into_snapshot(self) -> SnapshotBytes {
-        SnapshotBytes::new(self.0)
+    fn into_snapshot(self) -> Payload<SnapshotBytes> {
+        Payload::new(self.0)
     }
 
     /// The payload as one presence sample.
-    fn into_ephemeral(self) -> EphemeralBytes {
-        EphemeralBytes::new(self.0)
+    fn into_ephemeral(self) -> Payload<EphemeralBytes> {
+        Payload::new(self.0)
     }
 }
 
@@ -490,7 +490,7 @@ pub fn open_update(update: &Update, doc_key: &DocumentKey) -> Result<UpdateFrame
 
 /// Compresses, encrypts and signs `payload` into a [`Snapshot`].
 pub fn seal_snapshot(
-    payload: &SnapshotBytes,
+    payload: &Payload<SnapshotBytes>,
     public_data: SnapshotPublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -536,7 +536,7 @@ pub fn decode_snapshot_blob(
 pub fn open_snapshot(
     snapshot: &Snapshot,
     doc_key: &DocumentKey,
-) -> Result<SnapshotBytes, PipelineError> {
+) -> Result<Payload<SnapshotBytes>, PipelineError> {
     check_key(snapshot.public_data.key_id, doc_key)?;
     let aad = aad_of(&snapshot.public_data)?;
     let sealed = sealed_from(
@@ -553,7 +553,7 @@ pub fn open_snapshot(
 
 /// Compresses, encrypts and signs `payload` into an [`Ephemeral`].
 pub fn seal_ephemeral(
-    payload: &EphemeralBytes,
+    payload: &Payload<EphemeralBytes>,
     public_data: EphemeralPublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -576,7 +576,7 @@ pub fn seal_ephemeral(
 pub fn open_ephemeral(
     ephemeral: &Ephemeral,
     doc_key: &DocumentKey,
-) -> Result<EphemeralBytes, PipelineError> {
+) -> Result<Payload<EphemeralBytes>, PipelineError> {
     check_key(ephemeral.public_data.key_id, doc_key)?;
     let aad = aad_of(&ephemeral.public_data)?;
     let sealed = sealed_from(
@@ -666,14 +666,14 @@ impl SealedBlob {
     }
 
     /// The sealed bytes, moved out, as the body of a key link.
-    pub(crate) fn into_previous_key(self) -> ambre_core::SealedPreviousKey {
-        ambre_core::SealedPreviousKey::new(self.0)
+    pub(crate) fn into_previous_key(self) -> Payload<ambre_core::SealedPreviousKey> {
+        Payload::new(self.0)
     }
 
     /// The sealed bytes as the name of a document, which the relay stores
     /// and never opens.
-    pub(crate) fn into_name(self) -> ambre_core::SealedName {
-        ambre_core::SealedName::new(self.0)
+    pub(crate) fn into_name(self) -> ambre_core::Encoded<ambre_core::SealedName> {
+        ambre_core::Encoded::new(self.0)
     }
 
     /// The size the relay is told, which is the sealed size.
@@ -701,8 +701,8 @@ mod stored_object {
     pub trait Sealed {}
     impl Sealed for super::SealedBlob {}
     impl Sealed for super::FetchedBlob {}
-    impl Sealed for ambre_core::SealedName {}
-    impl Sealed for ambre_core::SealedPreviousKey {}
+    impl Sealed for ambre_core::Encoded<ambre_core::SealedName> {}
+    impl Sealed for ambre_core::Payload<ambre_core::SealedPreviousKey> {}
 }
 
 impl StoredObject for SealedBlob {
@@ -717,13 +717,13 @@ impl StoredObject for FetchedBlob {
     }
 }
 
-impl StoredObject for ambre_core::SealedName {
+impl StoredObject for ambre_core::Encoded<ambre_core::SealedName> {
     fn object(&self) -> &[u8] {
         self.as_bytes()
     }
 }
 
-impl StoredObject for ambre_core::SealedPreviousKey {
+impl StoredObject for Payload<ambre_core::SealedPreviousKey> {
     fn object(&self) -> &[u8] {
         self.as_bytes()
     }
@@ -750,7 +750,7 @@ pub fn update_frame(
 ///
 /// Every error [`seal_ephemeral`] raises.
 pub fn ephemeral_frame(
-    payload: &EphemeralBytes,
+    payload: &Payload<EphemeralBytes>,
     public_data: EphemeralPublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -768,7 +768,7 @@ pub fn ephemeral_frame(
 /// Every error [`seal_snapshot`] raises, and [`PipelineError::Postcard`] when
 /// the snapshot does not serialize.
 pub fn snapshot_blob(
-    payload: &SnapshotBytes,
+    payload: &Payload<SnapshotBytes>,
     public_data: SnapshotPublicData,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -787,7 +787,7 @@ pub fn snapshot_blob(
 ///
 /// Every error [`seal_object`] raises.
 pub fn object_blob(
-    plaintext: &MediaBytes,
+    plaintext: &Payload<MediaBytes>,
     aad: &Aad,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -1132,13 +1132,8 @@ mod tests {
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
-        let snapshot = seal_snapshot(
-            &ambre_core::SnapshotBytes::new(payload.to_vec()),
-            pd,
-            &doc_key,
-            &signing,
-        )
-        .unwrap();
+        let snapshot =
+            seal_snapshot(&Payload::new(payload.to_vec()), pd, &doc_key, &signing).unwrap();
         // Compressed ciphertext is far smaller than the 4 KiB plaintext.
         assert!(snapshot.ciphertext.0.len() < payload.len());
         assert_eq!(open_snapshot(&snapshot, &doc_key).unwrap(), payload);
@@ -1161,12 +1156,7 @@ mod tests {
             parent_snapshot_update_clocks: vec![(author, Clock(1)), (author, Clock(2))],
         };
         assert!(matches!(
-            seal_snapshot(
-                &ambre_core::SnapshotBytes::new(b"board".to_vec()),
-                pd,
-                &doc_key,
-                &signing
-            ),
+            seal_snapshot(&Payload::new(b"board".to_vec()), pd, &doc_key, &signing),
             Err(PipelineError::Validation(
                 ValidationError::DuplicatePublicKey
             ))
@@ -1241,7 +1231,7 @@ mod tests {
                 UpdateBody {
                     nonce,
                     summary: None,
-                    delta: ambre_core::DeltaBytes::new(b"delta".to_vec())
+                    delta: Payload::new(b"delta".to_vec())
                 }
             );
         }
@@ -1279,7 +1269,7 @@ mod tests {
             UpdateBody {
                 nonce,
                 summary: Some(summary),
-                delta: ambre_core::DeltaBytes::new(b"delta".to_vec())
+                delta: Payload::new(b"delta".to_vec())
             }
         );
     }
@@ -1345,13 +1335,8 @@ mod tests {
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
-        let snapshot = snapshot_blob(
-            &SnapshotBytes::new(plaintext.to_vec()),
-            pd,
-            &doc_key,
-            &signing,
-        )
-        .unwrap();
+        let snapshot =
+            snapshot_blob(&Payload::new(plaintext.to_vec()), pd, &doc_key, &signing).unwrap();
         assert!(!contains(snapshot.as_bytes()));
         let decoded =
             decode_snapshot_blob(&FetchedBlob::new(snapshot.as_bytes().to_vec()), document_id)
@@ -1359,13 +1344,8 @@ mod tests {
         assert_eq!(open_snapshot(&decoded, &doc_key).unwrap(), plaintext);
 
         let aad = name_aad(document_id);
-        let object = object_blob(
-            &MediaBytes::new(plaintext.to_vec()),
-            &aad,
-            &doc_key,
-            &signing,
-        )
-        .unwrap();
+        let object =
+            object_blob(&Payload::new(plaintext.to_vec()), &aad, &doc_key, &signing).unwrap();
         assert!(!contains(object.as_bytes()));
         assert_eq!(object.len(), object.as_bytes().len());
         assert_eq!(
@@ -1386,13 +1366,7 @@ mod tests {
             key_id: key_id(),
             counter: Counter(7),
         };
-        let eph = seal_ephemeral(
-            &EphemeralBytes::new(payload.to_vec()),
-            pd,
-            &doc_key,
-            &signing,
-        )
-        .unwrap();
+        let eph = seal_ephemeral(&Payload::new(payload.to_vec()), pd, &doc_key, &signing).unwrap();
         assert_eq!(open_ephemeral(&eph, &doc_key).unwrap(), payload);
     }
 
@@ -1690,7 +1664,7 @@ mod tests {
     #[test]
     fn an_update_body_keeps_the_bytes_of_the_old_layout() {
         let nonce = FixedBytes::<SessionNonce>::from_array([0x5a; SESSION_NONCE_LEN]);
-        let delta = ambre_core::DeltaBytes::new(b"delta".to_vec());
+        let delta = Payload::<ambre_core::DeltaBytes>::new(b"delta".to_vec());
         let summary = ActivitySummary {
             kind: ActivityKind::Content,
             mentions: vec![UserId::from_bytes([0xA7; 16])],

@@ -46,7 +46,7 @@ pub use walk::DocumentWalk;
 
 /// The size and the pixels of an image, and the width of a stroke. A back end
 /// sees no other `ambre-core` type.
-pub use ambre_core::{ImageSize, RgbaPixels, SurfacePx, WholePx};
+pub use ambre_core::{ImageSize, Payload, RgbaPixels, SurfacePx, WholePx};
 
 #[cfg(feature = "testing")]
 pub mod testing;
@@ -72,7 +72,7 @@ pub struct ImageSource<'a> {
     /// key is the caller's bug, not the surface's.
     pub key: ImageKey,
     /// Non-premultiplied RGBA8 samples, row-major, `width * height * 4` bytes.
-    pub pixels: &'a RgbaPixels,
+    pub pixels: &'a Payload<RgbaPixels>,
     /// Native pixel size of the image.
     pub size: ambre_core::ImageSize,
 }

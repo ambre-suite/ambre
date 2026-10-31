@@ -59,7 +59,11 @@ impl SeqLedger {
 
     /// Record the delta the relay numbered `seq`. `payload` is `None` when the
     /// delta was refused. A seq of 0 is no relay's number and is ignored.
-    pub(crate) fn record(&mut self, seq: Seq, payload: Option<&ambre_core::DeltaBytes>) {
+    pub(crate) fn record(
+        &mut self,
+        seq: Seq,
+        payload: Option<&ambre_core::Payload<ambre_core::DeltaBytes>>,
+    ) {
         if seq == Seq::ZERO || seq <= self.floor {
             return;
         }
@@ -117,7 +121,7 @@ impl SeqLedger {
 pub(crate) fn check_snapshot(
     own: &LoroDoc,
     ledger: &SeqLedger,
-    snapshot: &ambre_core::SnapshotBytes,
+    snapshot: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     covered: Seq,
     purpose: Purpose,
 ) -> Outcome {
@@ -362,7 +366,7 @@ mod tests {
             check_snapshot(
                 &bob,
                 &ledger,
-                &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
+                &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(snapshot.to_vec()),
                 covered,
                 Purpose::Confirm
             ),
@@ -390,7 +394,7 @@ mod tests {
             check_snapshot(
                 &bob,
                 &ledger,
-                &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
+                &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(snapshot.to_vec()),
                 covered,
                 Purpose::Confirm
             ),
@@ -412,7 +416,7 @@ mod tests {
             check_snapshot(
                 &bob,
                 &ledger,
-                &ambre_core::SnapshotBytes::new(early.to_vec()),
+                &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(early.to_vec()),
                 seq,
                 Purpose::Confirm
             ),
@@ -429,7 +433,7 @@ mod tests {
             check_snapshot(
                 &bob,
                 &ledger,
-                &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
+                &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(snapshot.to_vec()),
                 past,
                 Purpose::Confirm
             ),
@@ -456,7 +460,7 @@ mod tests {
             check_snapshot(
                 &bob,
                 &ledger,
-                &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
+                &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(snapshot.to_vec()),
                 covered,
                 Purpose::Confirm
             ),
@@ -479,7 +483,7 @@ mod tests {
         let _ = check_snapshot(
             &bob,
             &ledger,
-            &ambre_core::SnapshotBytes::new(snapshot.to_vec()),
+            &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(snapshot.to_vec()),
             ambre_core::Seq(1),
             Purpose::Confirm,
         );

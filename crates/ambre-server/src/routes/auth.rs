@@ -321,7 +321,7 @@ mod tests {
             display_name: ambre_core::DisplayName::new("A").unwrap(),
             master_key_enc: signing_pubkey
                 .as_ref()
-                .map(|_| ambre_core::WrappedMasterKey::new(vec![1u8; 56])),
+                .map(|_| ambre_core::Encoded::new(vec![1u8; 56])),
             master_key_salt: None,
             exchange_pubkey: signing_pubkey.as_ref().map(|_| {
                 ambre_core::FixedBytes::<ambre_core::ExchangePublicKey>::from_array([4u8; 32])

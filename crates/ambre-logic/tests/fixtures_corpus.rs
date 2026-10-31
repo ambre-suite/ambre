@@ -65,7 +65,7 @@ impl FixtureGen for TrameGen {
     fn generator_version(&self) -> ambre_core::GeneratorVersion {
         ambre_core::GeneratorVersion::new(self.version)
     }
-    fn build(&self) -> ambre_core::PlaintextContainer {
+    fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
         let mut state = TrameState::with_peer(ambre_core::PeerId(self.seed));
         for (row, text) in [(0, "21"), (1, "=A1*2"), (2, "plain")] {
             state.handle_command(TrameCommand::SetCellText {
@@ -99,7 +99,7 @@ impl FixtureGen for ToileGen {
     fn generator_version(&self) -> ambre_core::GeneratorVersion {
         ambre_core::GeneratorVersion::new(1)
     }
-    fn build(&self) -> ambre_core::PlaintextContainer {
+    fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
         let mut state = ToileState::with_peer(ambre_core::PeerId(self.seed));
         for i in 0..3 {
             state.handle_command(ToileCommand::CreateElement {
@@ -180,7 +180,9 @@ fn the_manifest_describes_the_artifact_beside_it() {
     // `digest` matches the whole `.ambre` file, header included (C8).
     assert_eq!(
         manifest.digest,
-        digest_of(&ambre_core::PlaintextContainer::new(bytes.to_vec()))
+        digest_of(&ambre_core::Payload::<ambre_core::PlaintextContainer>::new(
+            bytes.to_vec()
+        ))
     );
     // `ambre_version` matches the version the artifact itself carries.
     assert_eq!(manifest.ambre_version, AMBRE_VERSION);
@@ -236,8 +238,12 @@ fn a_flipped_header_byte_moves_the_digest() {
     let mut tampered = bytes.clone();
     tampered[10] ^= 0x01; // inside `document_id`, not the payload
     assert_ne!(
-        digest_of(&ambre_core::PlaintextContainer::new(bytes.to_vec())),
-        digest_of(&ambre_core::PlaintextContainer::new(tampered.to_vec()))
+        digest_of(&ambre_core::Payload::<ambre_core::PlaintextContainer>::new(
+            bytes.to_vec()
+        )),
+        digest_of(&ambre_core::Payload::<ambre_core::PlaintextContainer>::new(
+            tampered.to_vec()
+        ))
     );
 }
 
@@ -260,7 +266,7 @@ fn a_generator_whose_doc_type_contradicts_its_bytes_is_refused() {
         fn generator_version(&self) -> ambre_core::GeneratorVersion {
             ambre_core::GeneratorVersion::new(1)
         }
-        fn build(&self) -> ambre_core::PlaintextContainer {
+        fn build(&self) -> ambre_core::Payload<ambre_core::PlaintextContainer> {
             TRAME.build()
         }
     }
@@ -485,7 +491,9 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
             write_ambre_plaintext(
                 DocType::Trame,
                 doc_id,
-                &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+                &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
+                    b"not a loro snapshot".to_vec(),
+                ),
             )
             .into_bytes(),
             DocFileError::PayloadRejected,
@@ -499,7 +507,9 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
             write_ambre_plaintext(
                 DocType::Toile,
                 doc_id,
-                &ambre_core::SnapshotBytes::new(b"not a loro snapshot".to_vec()),
+                &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
+                    b"not a loro snapshot".to_vec(),
+                ),
             )
             .into_bytes(),
             DocFileError::PayloadRejected,
@@ -508,7 +518,9 @@ fn every_header_failure_is_typed_and_none_of_them_panics() {
 
     for (label, bytes, expected) in cases {
         let before = bytes.clone();
-        match fixtures::import_fixture(&ambre_core::PlaintextContainer::new(bytes.to_vec())) {
+        match fixtures::import_fixture(&ambre_core::Payload::<ambre_core::PlaintextContainer>::new(
+            bytes.to_vec(),
+        )) {
             Err(FixtureError::Container(actual)) => {
                 assert_eq!(actual, expected, "{label}")
             }
@@ -532,7 +544,7 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
     let murmure = write_ambre_plaintext(
         DocType::Murmure,
         DocumentId::from_bytes([0x44; 16]),
-        &ambre_core::SnapshotBytes::new(b"payload".to_vec()),
+        &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(b"payload".to_vec()),
     );
     match fixtures::import_fixture(&murmure) {
         Err(FixtureError::NoEngine { doc_type }) => assert_eq!(doc_type, DocType::Murmure),
@@ -543,7 +555,7 @@ fn a_doc_type_with_no_engine_degrades_cleanly() {
     let prose = write_ambre_plaintext(
         DocType::Prose,
         DocumentId::from_bytes([0x44; 16]),
-        &ambre_core::SnapshotBytes::new(b"payload".to_vec()),
+        &ambre_core::Payload::<ambre_core::SnapshotBytes>::new(b"payload".to_vec()),
     );
     match fixtures::import_fixture(&prose) {
         Err(FixtureError::Container(DocFileError::PayloadRejected)) => {}

@@ -2315,23 +2315,23 @@ pub enum ToileCommand {
     /// where the user put it and never at a fixed point of the world
     /// (`TOILE-IO-023`).
     ImportSvg {
-        bytes: ambre_core::FileBytes,
+        bytes: ambre_core::Payload<ambre_core::FileBytes>,
         at: Point,
     },
     /// Import a raster image (PNG / JPG) dropped onto the board. `at` as above.
     ImportImage {
-        bytes: ambre_core::FileBytes,
+        bytes: ambre_core::Payload<ambre_core::FileBytes>,
         mime: ambre_core::MediaType,
         at: Point,
     },
     /// Import a Figma document (a `.fig` JSON export). `at` as above.
     ImportFigma {
-        bytes: ambre_core::FileBytes,
+        bytes: ambre_core::Payload<ambre_core::FileBytes>,
         at: Point,
     },
     /// Import a Miro board (a JSON export). `at` as above.
     ImportMiro {
-        bytes: ambre_core::FileBytes,
+        bytes: ambre_core::Payload<ambre_core::FileBytes>,
         at: Point,
     },
     /// Serialize the board to an SVG document and hand the bytes back
@@ -2758,7 +2758,7 @@ pub enum ToileEvent {
     MediaDecoded {
         hash: ambre_core::ContentHash,
         size: ambre_core::ImageSize,
-        pixels: ambre_core::RgbaPixels,
+        pixels: ambre_core::Payload<ambre_core::RgbaPixels>,
     },
     /// A freshly-created element, with the `correlate` token its `CreateElement`
     /// carried (`TOILE-UI-194`). `None` when the create requested no deferred
@@ -2904,7 +2904,7 @@ pub enum ToileEvent {
     /// right extension.
     ExportComplete {
         filename: ambre_core::ExportFilename,
-        data: ambre_core::FileBytes,
+        data: ambre_core::Payload<ambre_core::FileBytes>,
         /// What the file could not express, one line per element, in board
         /// order (`TOILE-IO-025`). Empty when the board left whole.
         skipped: Vec<String>,

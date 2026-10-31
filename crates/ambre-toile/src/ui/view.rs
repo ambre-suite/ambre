@@ -227,7 +227,10 @@ const LIVE_STROKE_TAIL: usize = 64;
 /// anchor: the same path Trame's CSV export takes, because the browser offers no
 /// other. Best effort -- the view logs a blob the browser refuses, never fails.
 #[cfg(target_arch = "wasm32")]
-fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::FileBytes) {
+fn trigger_download(
+    filename: &ambre_core::ExportFilename,
+    data: &ambre_core::Payload<ambre_core::FileBytes>,
+) {
     use wasm_bindgen::JsCast;
     let array = js_sys::Uint8Array::from(data.as_bytes());
     let parts = js_sys::Array::new();
@@ -262,7 +265,10 @@ fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::Fi
 /// exhaustive event dispatch compiles in the headless tests. A host test reads
 /// back each file the view handed over (`PDF-014`).
 #[cfg(not(target_arch = "wasm32"))]
-fn trigger_download(filename: &ambre_core::ExportFilename, data: &ambre_core::FileBytes) {
+fn trigger_download(
+    filename: &ambre_core::ExportFilename,
+    data: &ambre_core::Payload<ambre_core::FileBytes>,
+) {
     #[cfg(test)]
     DOWNLOADS.with(|d| {
         d.borrow_mut()
@@ -1033,7 +1039,7 @@ impl ToileView {
                     html: None,
                     ambre: postcard::to_allocvec(&payload)
                         .ok()
-                        .map(ambre_core::ClipboardBytes::new),
+                        .map(ambre_core::Payload::<ambre_core::ClipboardBytes>::new),
                     form: ambre_core::PasteForm::Rich,
                 };
                 self.last_clip = Some(blob.clone());

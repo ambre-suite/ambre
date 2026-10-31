@@ -9,7 +9,7 @@
 use ambre_bus::{
     Deletion, MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead, Timestamp,
 };
-use ambre_core::{DeltaBytes, DocumentId, MessageId, PeerEntryBytes, SegmentId, UserId};
+use ambre_core::{DeltaBytes, DocumentId, MessageId, Payload, PeerEntryBytes, SegmentId, UserId};
 use loro::LoroDoc;
 
 use super::{
@@ -587,7 +587,7 @@ impl ChannelState {
     pub(super) fn thread_reacted(
         &self,
         root: MessageId,
-        delta: DeltaBytes,
+        delta: Payload<DeltaBytes>,
     ) -> Result<Sent, MurmureError> {
         let thread = self
             .threads

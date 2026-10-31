@@ -65,7 +65,7 @@ fn write_entry(
 impl TrameState {
     /// Export any new CRDT ops since `last_exported_vv` and bump the tracking
     /// cursor. Returns `Some` binary delta if there were new ops.
-    pub(super) fn flush_delta(&mut self) -> Option<ambre_core::DeltaBytes> {
+    pub(super) fn flush_delta(&mut self) -> Option<ambre_core::Payload<ambre_core::DeltaBytes>> {
         let current = self.doc.oplog_vv();
         if current == self.last_exported_vv {
             return None;
@@ -103,7 +103,7 @@ impl TrameState {
         };
         self.last_exported_vv = current;
         tracing::info!("[Logic] flush_delta -> {} bytes of CRDT ops", delta.len());
-        Some(ambre_core::DeltaBytes::new(delta))
+        Some(ambre_core::Payload::<ambre_core::DeltaBytes>::new(delta))
     }
 
     /// Write under the session identity Sync issued for this workbook
@@ -136,7 +136,10 @@ impl TrameState {
     /// reseed path as [`import_snapshot`](Self::import_snapshot) applies. That
     /// path merges the ops, reseeds the formula engine, and tells the UI to
     /// re-fetch.
-    pub fn apply_remote(&mut self, payload: &ambre_core::DeltaBytes) -> Vec<TrameEvent> {
+    pub fn apply_remote(
+        &mut self,
+        payload: &ambre_core::Payload<ambre_core::DeltaBytes>,
+    ) -> Vec<TrameEvent> {
         self.import_and_reseed(LoroPayloadRef::Delta(payload), MergeOrigin::Delta)
     }
 
@@ -145,7 +148,7 @@ impl TrameState {
     /// schema gate.
     pub fn apply_remote_snapshot(
         &mut self,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) -> Vec<TrameEvent> {
         self.import_and_reseed(LoroPayloadRef::Snapshot(payload), MergeOrigin::Snapshot)
     }
@@ -153,7 +156,10 @@ impl TrameState {
     /// Apply a remote ephemeral (presence) payload and return presence events.
     ///
     /// Stubbed until collaborator presence is wired.
-    pub fn apply_ephemeral(&mut self, _payload: &ambre_core::EphemeralBytes) -> Vec<TrameEvent> {
+    pub fn apply_ephemeral(
+        &mut self,
+        _payload: &ambre_core::Payload<ambre_core::EphemeralBytes>,
+    ) -> Vec<TrameEvent> {
         vec![]
     }
 
@@ -168,11 +174,13 @@ impl TrameState {
         &self.doc
     }
 
-    pub fn export_snapshot(&self) -> ambre_core::SnapshotBytes {
-        ambre_core::SnapshotBytes::new(self.doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
-            tracing::error!("[Logic] export_snapshot failed, returning empty snapshot: {e:?}");
-            Vec::new()
-        }))
+    pub fn export_snapshot(&self) -> ambre_core::Payload<ambre_core::SnapshotBytes> {
+        ambre_core::Payload::<ambre_core::SnapshotBytes>::new(
+            self.doc.export(ExportMode::Snapshot).unwrap_or_else(|e| {
+                tracing::error!("[Logic] export_snapshot failed, returning empty snapshot: {e:?}");
+                Vec::new()
+            }),
+        )
     }
 
     /// Import a full CRDT snapshot (local restore from IndexedDB at startup).
@@ -196,7 +204,7 @@ impl TrameState {
     /// nothing in it to compare.
     pub fn import_snapshot(
         &mut self,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) -> Result<Vec<TrameEvent>, SchemaError> {
         // Before a single container is used (`SCHEMA-006`). What comes back is
         // the payload itself at the current version, or a migrated snapshot.
@@ -240,7 +248,10 @@ impl TrameState {
     /// last delta visibly flickers in from blank. Merging the whole batch first,
     /// then reseeding once, renders the final state in a single repaint. A no-op
     /// (no display events) if nothing imported.
-    pub fn apply_remote_batch(&mut self, payloads: &[ambre_core::DeltaBytes]) -> Vec<TrameEvent> {
+    pub fn apply_remote_batch(
+        &mut self,
+        payloads: &[ambre_core::Payload<ambre_core::DeltaBytes>],
+    ) -> Vec<TrameEvent> {
         let order = self.sheet_order_ids();
         let mut merged_any = false;
         for payload in payloads {

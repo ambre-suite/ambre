@@ -95,7 +95,7 @@ impl SyncState {
         segment: SegmentId,
         reach: FoldReach,
         horizon: Seq,
-        payload: &ambre_core::SnapshotBytes,
+        payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) {
         let document_id = segment.document_id();
         let upload = match self.snapshot_upload(document_id, payload, horizon) {
@@ -171,7 +171,7 @@ mod tests {
             author_pubkey: ambre_core::FixedBytes::from_array(sk.verifying_key().to_bytes()),
             covered_seq: horizon,
             blob: pipeline::snapshot_blob(
-                &ambre_core::SnapshotBytes::new(b"fold".to_vec()),
+                &ambre_core::Payload::new(b"fold".to_vec()),
                 public_data,
                 &key,
                 &sk,

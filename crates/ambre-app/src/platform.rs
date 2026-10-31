@@ -21,7 +21,7 @@ pub(crate) fn open_file_picker(
     accept: ambre_chrome::FileAccept,
     unreadable: &'static str,
     toasts: Toasts,
-    on_bytes: impl Fn(ambre_core::FileBytes) + Clone + 'static,
+    on_bytes: impl Fn(ambre_core::Payload<ambre_core::FileBytes>) + Clone + 'static,
 ) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
         return;
@@ -44,7 +44,7 @@ pub(crate) fn open_file_picker(
         let on_bytes = on_bytes.clone();
         wasm_bindgen_futures::spawn_local(async move {
             match wasm_bindgen_futures::JsFuture::from(file.array_buffer()).await {
-                Ok(buf) => on_bytes(ambre_core::FileBytes::new(
+                Ok(buf) => on_bytes(ambre_core::Payload::<ambre_core::FileBytes>::new(
                     js_sys::Uint8Array::new(&buf).to_vec(),
                 )),
                 Err(_) => toasts.warning(unreadable),
@@ -141,7 +141,8 @@ pub(crate) async fn read_clipboard_blob(
         if has(host::ClipboardFormat::WebAmbre)
             && let Some(b64) = read_clipboard_item(&item, host::ClipboardFormat::WebAmbre).await
         {
-            blob.ambre = host::base64_decode(&b64).map(ambre_core::ClipboardBytes::new);
+            blob.ambre = host::base64_decode(&b64)
+                .map(ambre_core::Payload::<ambre_core::ClipboardBytes>::new);
             found = true;
         }
         if has(host::ClipboardFormat::WebAmbreToken)
@@ -651,7 +652,7 @@ pub(crate) fn install_command_keys(keymap: Keymap, commands: shell::CommandPath)
 /// One path, taken every time, beats two that differ by the byte at offset 5.
 pub(crate) fn open_ambre_file_picker(
     toasts: Toasts,
-    on_sealed: Callback<ambre_core::SealedContainer>,
+    on_sealed: Callback<ambre_core::Payload<ambre_core::SealedContainer>>,
     opened: RwSignal<Option<OpenedFile>>,
 ) {
     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
@@ -692,7 +693,7 @@ pub(crate) fn open_ambre_file_picker(
 fn read_ambre_file(
     file: web_sys::File,
     toasts: Toasts,
-    on_sealed: Callback<ambre_core::SealedContainer>,
+    on_sealed: Callback<ambre_core::Payload<ambre_core::SealedContainer>>,
     opened: RwSignal<Option<OpenedFile>>,
 ) {
     wasm_bindgen_futures::spawn_local(async move {
@@ -700,7 +701,9 @@ fn read_ambre_file(
             toasts.error("Ambre could not read that file");
             return;
         };
-        let picked = ambre_core::PickedContainer::new(js_sys::Uint8Array::new(&buf).to_vec());
+        let picked = ambre_core::Payload::<ambre_core::PickedContainer>::new(
+            js_sys::Uint8Array::new(&buf).to_vec(),
+        );
 
         // A sealed file is a container of the other lineage, and the version
         // byte alone says which (`DOCFILE-010`). Nothing here can read it: it
@@ -718,7 +721,7 @@ fn read_ambre_file(
 
 /// A plaintext container the picker read, on its way to the store's seal.
 #[derive(Clone)]
-pub(crate) struct OpenedFile(pub(crate) ambre_core::PlaintextContainer);
+pub(crate) struct OpenedFile(pub(crate) ambre_core::Payload<ambre_core::PlaintextContainer>);
 
 /// Attribute a plaintext container, persist its payload sealed and navigate
 /// to it.
@@ -728,7 +731,7 @@ pub(crate) struct OpenedFile(pub(crate) ambre_core::PlaintextContainer);
 /// is a whole plaintext container, so the two lineages share every step after
 /// the seal comes off (`DOCFILE-014`).
 pub(crate) fn open_plaintext_container(
-    container: ambre_core::PlaintextContainer,
+    container: ambre_core::Payload<ambre_core::PlaintextContainer>,
     toasts: Toasts,
     vault: crate::vault::Vault,
 ) {
@@ -756,9 +759,13 @@ pub(crate) fn open_plaintext_container(
 /// The container's document, its type and its payload, once this build
 /// can render it. A refusal reaches the user by name.
 fn read_container(
-    container: &ambre_core::PlaintextContainer,
+    container: &ambre_core::Payload<ambre_core::PlaintextContainer>,
     toasts: Toasts,
-) -> Option<(DocumentId, ambre_bus::DocType, ambre_core::SnapshotBytes)> {
+) -> Option<(
+    DocumentId,
+    ambre_bus::DocType,
+    ambre_core::Payload<ambre_core::SnapshotBytes>,
+)> {
     let header = match ambre_core::docfile::read_ambre_plaintext(container) {
         Ok(header) => header,
         Err(e) => {
@@ -784,7 +791,7 @@ fn read_container(
 async fn store_container(
     document_id: DocumentId,
     doc_type: ambre_bus::DocType,
-    sealed: ambre_core::SealedRowBytes,
+    sealed: ambre_core::Payload<ambre_core::SealedRowBytes>,
     toasts: Toasts,
 ) {
     let store = match ambre_logic::persistence::PersistenceStore::open().await {

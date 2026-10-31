@@ -5,7 +5,9 @@
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, SnapshotVerdict, Timestamp};
-use ambre_core::{ChannelId, LeaseId, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId};
+use ambre_core::{
+    ChannelId, LeaseId, Payload, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId,
+};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::schema::{MessageKey, Root};
@@ -56,7 +58,7 @@ fn closed_with(texts: &[&str]) -> (ChannelState, SegmentId) {
 
 /// A second member's copy of `state`, opened from its live documents.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, SnapshotBytes> = state
+    let segments: HashMap<SegmentId, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -344,7 +346,14 @@ fn a_dropped_final_snapshot_is_sealed_again_by_another_member() {
 /// Alice's channel of two-message segments, and Bob's copy of it holding
 /// her first `received` deltas, numbered as the relay delivered them. Alice
 /// then closes the segment, and seals its final snapshot at the horizon 2.
-fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, SnapshotBytes) {
+fn finalized_for(
+    received: u64,
+) -> (
+    ChannelState,
+    ChannelState,
+    SegmentId,
+    Payload<SnapshotBytes>,
+) {
     let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
         .expect("create")
         .with_segment_size(crate::MessageCount::new(2))
@@ -383,11 +392,15 @@ fn finalized_for(received: u64) -> (ChannelState, ChannelState, SegmentId, Snaps
 
 /// A shallow snapshot of `state`'s copy of `segment` after `forge` wrote on
 /// a fork of it.
-fn forged(state: &ChannelState, segment: SegmentId, forge: impl FnOnce(&LoroDoc)) -> SnapshotBytes {
+fn forged(
+    state: &ChannelState,
+    segment: SegmentId,
+    forge: impl FnOnce(&LoroDoc),
+) -> Payload<SnapshotBytes> {
     let fork = state.doc(segment.document_id()).expect("held").fork();
     forge(&fork);
     fork.commit();
-    SnapshotBytes::new(
+    Payload::<SnapshotBytes>::new(
         fork.export(ExportMode::shallow_snapshot(&fork.oplog_frontiers()))
             .expect("export"),
     )
@@ -448,7 +461,7 @@ fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
         .expect("operations");
     short.insert(peer, end - 1);
     let early = doc.fork_at(&doc.vv_to_frontiers(&short)).expect("fork");
-    let dropped = SnapshotBytes::new(
+    let dropped = Payload::<SnapshotBytes>::new(
         early
             .export(ExportMode::shallow_snapshot(&early.oplog_frontiers()))
             .expect("export"),
@@ -462,7 +475,7 @@ fn a_final_snapshot_at_odds_with_the_deltas_is_refused() {
         bob.check_snapshot(
             document_id,
             ambre_core::Seq(2),
-            &SnapshotBytes::new(b"not a snapshot".to_vec())
+            &Payload::<SnapshotBytes>::new(b"not a snapshot".to_vec())
         )
         .expect("check"),
         SnapshotVerdict::Mismatch

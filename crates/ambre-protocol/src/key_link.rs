@@ -4,7 +4,7 @@
 //! the rotator (`SYNC-116`). The relay stores the link and indexes it by the two
 //! identifiers it names, and opens nothing: the sealed key is a client object.
 
-use ambre_core::{DocumentId, EncodedKeyLink, FixedBytes, KeyId};
+use ambre_core::{DocumentId, Encoded, EncodedKeyLink, FixedBytes, KeyId};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{SerializationError, ValidationError};
@@ -25,7 +25,7 @@ pub struct KeyLink {
     pub previous: FixedBytes<KeyId>,
     /// `previous`, sealed under `key` and signed by the rotator. Its header
     /// names `key` and the rotator's signing key.
-    pub sealed: ambre_core::SealedPreviousKey,
+    pub sealed: ambre_core::Payload<ambre_core::SealedPreviousKey>,
 }
 
 impl KeyLink {
@@ -54,8 +54,8 @@ impl KeyLink {
     /// # Errors
     ///
     /// [`SerializationError::Postcard`] from the encoder.
-    pub fn encode(&self) -> Result<EncodedKeyLink, SerializationError> {
-        Ok(EncodedKeyLink::new(postcard::to_allocvec(self)?))
+    pub fn encode(&self) -> Result<Encoded<EncodedKeyLink>, SerializationError> {
+        Ok(Encoded::new(postcard::to_allocvec(self)?))
     }
 
     /// Reads back what [`Self::encode`] wrote.
@@ -63,7 +63,7 @@ impl KeyLink {
     /// # Errors
     ///
     /// [`SerializationError::Postcard`] for bytes that are not a link.
-    pub fn decode(encoded: &EncodedKeyLink) -> Result<Self, SerializationError> {
+    pub fn decode(encoded: &Encoded<EncodedKeyLink>) -> Result<Self, SerializationError> {
         Ok(postcard::from_bytes(encoded.as_bytes())?)
     }
 }
@@ -77,7 +77,7 @@ mod tests {
             document_id: DocumentId::from_bytes([1; 16]),
             key: FixedBytes::from_array([2; 16]),
             previous: FixedBytes::from_array([previous; 16]),
-            sealed: ambre_core::SealedPreviousKey::new(vec![7; sealed]),
+            sealed: ambre_core::Payload::new(vec![7; sealed]),
         }
     }
 

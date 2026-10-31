@@ -75,7 +75,7 @@ const OPENED_FOR: ambre_core::Millis = ambre_core::Millis(60_000);
 /// Hand the browser a file a member fetched. A raster image opens in a tab of
 /// its own. Any other file saves, typed as a plain stream of bytes. So no
 /// file a member sent runs in this page's origin.
-fn save_file(file: &Attachment, data: ambre_core::MediaBytes) {
+fn save_file(file: &Attachment, data: ambre_core::Payload<ambre_core::MediaBytes>) {
     use wasm_bindgen::JsCast;
     let opens = opens_as(&file.media_type);
     let parts = js_sys::Array::new();

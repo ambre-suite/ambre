@@ -9,7 +9,8 @@ use ambre_bus::{
     ActivityKind, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle, Timestamp,
 };
 use ambre_core::{
-    DeltaBytes, DocumentId, MessageId, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId,
+    DeltaBytes, DocumentId, MessageId, Payload, PeerEntryBytes, SegmentId, Seq, SnapshotBytes,
+    UserId,
 };
 use loro::{LoroDoc, LoroMap, VersionVector};
 
@@ -68,7 +69,10 @@ fn locked_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
 
 /// Create the amendments of `segment`, adopt their session and link them.
 /// Returns them, their first update, and the `meta` delta that names them.
-fn amended(state: &mut ChannelState, segment: SegmentId) -> (DocumentId, DeltaBytes, DeltaBytes) {
+fn amended(
+    state: &mut ChannelState,
+    segment: SegmentId,
+) -> (DocumentId, Payload<DeltaBytes>, Payload<DeltaBytes>) {
     let ChangeTarget::Create(amendments) = state.change_target(segment, NOW).expect("target")
     else {
         panic!("a locked segment with no amendments creates them");
@@ -89,7 +93,7 @@ fn amended(state: &mut ChannelState, segment: SegmentId) -> (DocumentId, DeltaBy
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, SnapshotBytes> = state
+    let segments: HashMap<SegmentId, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -118,7 +122,7 @@ fn messages_of(event: &MurmureEvent) -> &[MessageView] {
 }
 
 /// Every operation of `doc` past `before`, as a delta travels.
-fn json_since(doc: &LoroDoc, before: &VersionVector) -> DeltaBytes {
+fn json_since(doc: &LoroDoc, before: &VersionVector) -> Payload<DeltaBytes> {
     doc.commit();
     crate::delta::encode(&doc.export_json_updates_without_peer_compression(before, &doc.oplog_vv()))
         .expect("encode")
@@ -129,8 +133,8 @@ fn bob_holding(
     alice: &ChannelState,
     segment: SegmentId,
     amendments: DocumentId,
-    first: &DeltaBytes,
-    meta: &DeltaBytes,
+    first: &Payload<DeltaBytes>,
+    meta: &Payload<DeltaBytes>,
     author: UserId,
 ) -> ChannelState {
     let mut bob = peer_of(alice);
