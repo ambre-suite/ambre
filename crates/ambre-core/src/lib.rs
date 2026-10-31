@@ -168,10 +168,7 @@ pub use secret::{
     SecretString,
 };
 pub use seq::{DeltaCount, Seq};
-pub use space::{
-    Css, Device, Doc, GlyphRaster, Image, Parley, Space, Surface, Texel, View, WholeCss,
-    WholeParley,
-};
+pub use space::{CanvasCss, Css, Device, Doc, Image, Space, Surface, Texel, View};
 pub use span::{
     FailureCount, FrameRate, LamportStamp, Millis, Nanos, PageMillis, PageTime, Rfc3339, Seconds,
     Timestamp, UnixMillis, UnixSeconds,

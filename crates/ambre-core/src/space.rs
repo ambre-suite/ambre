@@ -11,16 +11,16 @@
 //! | [`View`] | `f32` | a pointer, a caret |
 //! | [`Css`] | `f32` | a wheel delta, a fixed element |
 //! | [`Surface`] | `f64` | an absolute sheet position |
-//! | [`WholeCss`] | `u32` | the CSS box of a canvas, a token length |
+//! | [`CanvasCss`] | `u32` | the CSS box of a canvas element |
 //! | [`Device`] | `i32` | a shift of the drawing buffer |
 //! | [`Texel`] | `u32` | an edge of the drawing buffer, a glyph in the atlas |
 //! | [`Image`] | `u32` | an edge of a decoded image |
-//! | [`Parley`] | `f32` | a font size or a wrap width of a parley layout |
-//! | [`WholeParley`] | `u16` | a paragraph indent |
-//! | [`GlyphRaster`] | `f32` | the size a glyph is rasterized at |
 //!
 //! Every marker is an enum with no variant: it names a space and holds no
-//! value.
+//! value. `Space` is open, so a crate may declare a space of its own.
+//! `ambre-canvas` declares the spaces of a parley layout and of a glyph
+//! raster. `Scalar` is sealed here, so the list holds each number those
+//! spaces need.
 
 use std::fmt;
 use std::iter::Sum;
@@ -186,6 +186,8 @@ impl Scalar for i32 {
     }
 }
 
+/// No space of this crate holds a `u16`. The paragraph indent of
+/// `ambre-canvas` does, and the seal stops that crate from adding the impl.
 impl Scalar for u16 {
     const ZERO: Self = 0;
 
@@ -277,14 +279,14 @@ impl Space for Surface {
     const NAME: &'static str = "Surface";
 }
 
-/// Whole CSS pixels: the CSS box of a canvas element as the browser reports
-/// it, or a token length as the token source writes it.
+/// The whole CSS pixels of the box of a canvas element, as the browser
+/// reports it. A view lays out against that box (`CANVAS-044`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum WholeCss {}
+pub enum CanvasCss {}
 
-impl Space for WholeCss {
+impl Space for CanvasCss {
     type Repr = u32;
-    const NAME: &'static str = "WholeCss";
+    const NAME: &'static str = "CanvasCss";
 }
 
 /// Whole device pixels, signed: a shift of the drawing buffer.
@@ -317,38 +319,4 @@ pub enum Image {}
 impl Space for Image {
     type Repr = u32;
     const NAME: &'static str = "Image";
-}
-
-/// The units of a parley layout, which are the units of its caller: view
-/// pixels for a screen text, document pixels for a board text.
-///
-/// A drawn glyph run no longer knows which, so the units get a space of
-/// their own. A font size, a wrap width and an indent of one layout share it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Parley {}
-
-impl Space for Parley {
-    type Repr = f32;
-    const NAME: &'static str = "Parley";
-}
-
-/// Whole units of the width a layout breaks to: a paragraph indent
-/// (`CANVAS-084`). Whole, so a span keeps its `Eq` and its `Hash` in the
-/// cache key.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum WholeParley {}
-
-impl Space for WholeParley {
-    type Repr = u16;
-    const NAME: &'static str = "WholeParley";
-}
-
-/// The device pixels a glyph is rasterized at, as the float Swash takes. It
-/// is the layout size, times the scale of the transform, times the density.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum GlyphRaster {}
-
-impl Space for GlyphRaster {
-    type Repr = f32;
-    const NAME: &'static str = "GlyphRaster";
 }

@@ -153,7 +153,7 @@ const REVEAL_SLACK: Px<View> = Px::<View>::new(0.5);
 
 /// The size of a region, from the CSS pixels the page gives it. A view
 /// pixel is a CSS pixel in size (`CANVAS-032`).
-fn view_size(size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>) -> Size<Px<View>> {
+fn view_size(size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>) -> Size<Px<View>> {
     #[allow(clippy::cast_precision_loss)]
     let (width, height) = (size.width.get() as f32, size.height.get() as f32);
     Size::new(Px::<View>::new(width), Px::<View>::new(height))
@@ -387,7 +387,7 @@ impl MurmureView {
         from_logic: Option<Receiver<UiEvent>>,
         to_logic: Option<Sender<LogicCommand>>,
         reads: PageReads,
-        size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>,
+        size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>,
         theme_ctl: ThemeControl,
     ) -> Self {
         let theme = theme_ctl.get();
@@ -432,7 +432,7 @@ impl MurmureView {
 
     /// The view of the thread's region: the same theme and the same lists,
     /// and no queue of its own (`MURMURE-420`).
-    pub fn region(&self, size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>) -> Self {
+    pub fn region(&self, size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>) -> Self {
         let (to_logic, reads) = (self.to_logic.clone(), self.reads.clone());
         let theme_ctl = self.theme_ctl.clone();
         let mut view = Self::new(None, to_logic, reads, size, theme_ctl);
@@ -1636,7 +1636,7 @@ impl MurmureView {
     }
 
     /// The region now lays out at `size` logical pixels (`CANVAS-044`).
-    pub fn resize(&mut self, size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>) {
+    pub fn resize(&mut self, size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>) {
         self.size = view_size(size);
         self.dirty = Repaint::Due;
     }

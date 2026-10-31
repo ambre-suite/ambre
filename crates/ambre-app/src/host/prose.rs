@@ -32,7 +32,7 @@ use ambre_canvas::{
 };
 use ambre_chrome::commands::{ClipboardWrite, Modifiers};
 use ambre_core::id::{Document, Id};
-use ambre_core::{Css, Point, Px, Size, View, WholeCss};
+use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
 use ambre_draw::{Consumed, DrawSurface, ParleyBrush, Rect};
 pub use ambre_prose::chrome::ProseSignals;
 use ambre_prose::events::BlockId;
@@ -113,7 +113,7 @@ pub struct ProseView {
 
 /// The width and the height of a canvas box, as the view pixels the page
 /// lays out against. A view pixel is a CSS pixel in size (`CANVAS-032`).
-fn view_size(size: Size<Px<WholeCss>>) -> (Px<View>, Px<View>) {
+fn view_size(size: Size<Px<CanvasCss>>) -> (Px<View>, Px<View>) {
     (
         Px::<View>::new(size.width.get() as f32),
         Px::<View>::new(size.height.get() as f32),
@@ -126,7 +126,7 @@ impl ProseView {
         document_id: Id<Document>,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
-        size: Size<Px<WholeCss>>,
+        size: Size<Px<CanvasCss>>,
         text_input: TextInput,
         theme_ctl: ThemeControl,
         figures: RwSignal<Option<ambre_prose::ui::StatusFigures>>,
@@ -528,7 +528,7 @@ impl ProseView {
     }
 
     /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
-    pub fn resize(&mut self, size: Size<Px<WholeCss>>) {
+    pub fn resize(&mut self, size: Size<Px<CanvasCss>>) {
         self.size = view_size(size);
         self.state.resize(self.size.0, self.size.1);
         self.dirty = true;
@@ -784,7 +784,7 @@ fn download(
 mod tests {
     use super::*;
     use ambre_bus::app::prose::{GraphemeCount, PageCount, ParagraphCount, WordTotal};
-    use ambre_core::{Css, Point, Px, Size, View, WholeCss};
+    use ambre_core::{CanvasCss, Css, Point, Px, Size, View};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// A pointer at canvas `(x, y)`, as the host hands it over.

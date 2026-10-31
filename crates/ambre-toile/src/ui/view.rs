@@ -4078,7 +4078,7 @@ impl ToileView {
     }
 
     /// The canvas now lays out at `size` logical pixels (`CANVAS-044`).
-    pub fn resize(&mut self, size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>) {
+    pub fn resize(&mut self, size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>) {
         self.cam.set_size(ambre_draw::Size::new(
             f64::from(size.width.get()),
             f64::from(size.height.get()),

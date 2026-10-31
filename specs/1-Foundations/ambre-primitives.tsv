@@ -3681,22 +3681,14 @@ ambre-core | src/space.rs | crate::space | <Device as Space>::NAME | const | &'s
 ambre-core | src/space.rs | crate::space | <Device as Space>::Repr | assoc | i32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <Doc as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-core | src/space.rs | crate::space | <Doc as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-core | src/space.rs | crate::space | <GlyphRaster as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
-ambre-core | src/space.rs | crate::space | <GlyphRaster as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <Image as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-core | src/space.rs | crate::space | <Image as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-core | src/space.rs | crate::space | <Parley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
-ambre-core | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <Surface as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-core | src/space.rs | crate::space | <Surface as Space>::Repr | assoc | f64	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <Texel as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-core | src/space.rs | crate::space | <Texel as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <View as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
 ambre-core | src/space.rs | crate::space | <View as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-core | src/space.rs | crate::space | <WholeCss as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
-ambre-core | src/space.rs | crate::space | <WholeCss as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
-ambre-core | src/space.rs | crate::space | <WholeParley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
-ambre-core | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
 ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
 ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::scaled(factor) | param | f64	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
 ambre-core | src/space.rs | crate::space | <f32 as Rescale<f32>>::unscaled() | ret | f32	math	a length number scaled by a factor between two float spaces; the seal closes the source number to the scalar list
@@ -3717,3 +3709,12 @@ ambre-core | src/unit.rs | crate::unit | <Px<S> as Mul<f64>>::mul(factor) | para
 ambre-core | src/unit.rs | crate::unit | <Px<S> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
 ambre-core | src/unit.rs | crate::unit | Px<S>::is_finite() | ret | bool	generic	predicate
 ambre-core | src/unit.rs | crate::unit | Px<S>::unsigned_abs() | ret | u32	newtype-inner	the magnitude of a signed length, in the unsigned texel coordinate wgpu takes
+ambre-core | src/space.rs | crate::space | <CanvasCss as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-core | src/space.rs | crate::space | <CanvasCss as Space>::Repr | assoc | u32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <GlyphRaster as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-canvas | src/space.rs | crate::space | <GlyphRaster as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <Parley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-canvas | src/space.rs | crate::space | <Parley as Space>::Repr | assoc | f32	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::NAME | const | &'static str	free-text	the space name a length prints through Debug, for a log line
+ambre-canvas | src/space.rs | crate::space | <WholeParley as Space>::Repr | assoc | u16	newtype-inner	the number a length of this pixel space holds, the inside of Px
+ambre-canvas | src/tokens.rs | crate::tokens | Px.0 | field | u32	newtype-inner	newtype inner, a CSS pixel length of the token source

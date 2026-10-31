@@ -7,7 +7,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_core::{Px, View, WholeCss};
+use ambre_core::{CanvasCss, Px, View};
 
 /// The container the shell mounts over the canvas for a board's web embeds
 /// (`TOILE-088`). `None` before the shell renders, and for a host page that does
@@ -88,10 +88,10 @@ fn remap_with(ev: &InputEvent, to_child: impl Fn(Point) -> Option<Point>) -> Opt
 /// board must recomposite: a new child, a resize, or a pumped change.
 fn reconcile_children<C>(
     children: &mut HashMap<Id<Element>, C>,
-    sizes: &mut HashMap<Id<Element>, ambre_core::Size<Px<WholeCss>>>,
+    sizes: &mut HashMap<Id<Element>, ambre_core::Size<Px<CanvasCss>>>,
     embeds: &[VisibleEmbed],
     mut make: impl FnMut(&VisibleEmbed) -> C,
-    mut resize: impl FnMut(&mut C, ambre_core::Size<Px<WholeCss>>),
+    mut resize: impl FnMut(&mut C, ambre_core::Size<Px<CanvasCss>>),
     mut pump: impl FnMut(&mut C) -> bool,
 ) -> bool {
     let live: HashSet<Id<Element>> = embeds.iter().map(|e| e.element.clone()).collect();
@@ -190,7 +190,7 @@ pub struct FrameHost {
     children: HashMap<Id<Element>, AppView>,
     /// The last logical canvas size each child was resized to. A moved or zoomed
     /// embed only triggers a child `resize` when its box actually changes.
-    child_sizes: HashMap<Id<Element>, ambre_core::Size<Px<WholeCss>>>,
+    child_sizes: HashMap<Id<Element>, ambre_core::Size<Px<CanvasCss>>>,
     /// The launcher's child-view factory (see [`MakeChild`]). `None` for a host
     /// that never embeds (or before the launcher installs it).
     make_child: Option<MakeChild>,

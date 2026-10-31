@@ -105,7 +105,7 @@ fn update(&mut self);                                   // drain inbound (link t
 fn plan_repaint(&mut self, now: PageTime, hud_tick: HudTick) -> RepaintPlan;
 fn paint_content<S: DrawSurface>(&mut self, s: &mut S, fc: &mut FontContext, tc: &mut TextCache, strip: Option<Rect>);
 fn paint_overlay<S: DrawSurface>(&mut self, s: &mut S, fc: &mut FontContext, tc: &mut TextCache, stats: &FrameStats);
-fn resize(&mut self, size: Size<Px<WholeCss>>);         // logical pixels (`CANVAS-044`)
+fn resize(&mut self, size: Size<Px<CanvasCss>>);        // logical pixels (`CANVAS-044`)
 fn handle_input(&mut self, ev: &InputEvent) -> bool;   // true => host calls preventDefault()
 ```
 

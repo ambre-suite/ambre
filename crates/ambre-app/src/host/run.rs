@@ -42,7 +42,7 @@ pub fn run_with<F, C, P>(
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
 ) -> DocSwitcher
 where
-    F: FnOnce(ambre_core::Size<Px<WholeCss>>, TextInput) -> AppView,
+    F: FnOnce(ambre_core::Size<Px<CanvasCss>>, TextInput) -> AppView,
     C: Fn(Id<Document>, DocType, Size, TextInput) -> AppView + 'static,
     P: FnMut() + 'static,
 {

@@ -384,7 +384,7 @@ impl DrawSurface for WgpuSurface<'_> {
 
         let parley_run = run.run();
         let font_data = parley_run.font();
-        let font_size = Px::<ambre_core::Parley>::new(parley_run.font_size());
+        let font_size = Px::<crate::space::Parley>::new(parley_run.font_size());
         // swash reads the raw bits. A static face has no coordinate, and an
         // empty Vec does not allocate.
         let coords: Vec<i16> = parley_run
@@ -670,7 +670,7 @@ fn line_join(join: kurbo::Join) -> LineJoin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::GlyphRaster;
+    use crate::space::GlyphRaster;
 
     fn ratio(r: f64) -> Scale<Css, Device> {
         Scale::<Css, Device>::new(r).expect("a positive density")
@@ -822,7 +822,7 @@ mod tests {
     #[test]
     fn a_glyph_is_rasterized_at_the_physical_size() {
         assert_eq!(
-            raster_of_layout(Px::<ambre_core::Parley>::new(14.0), 1.0, ratio(2.0)),
+            raster_of_layout(Px::<crate::space::Parley>::new(14.0), 1.0, ratio(2.0)),
             Px::<GlyphRaster>::new(28.0)
         );
         // A bitmap of 20 x 30 device pixels at density 2.
@@ -872,7 +872,7 @@ mod tests {
     fn a_density_change_asks_for_a_new_raster() {
         use super::super::atlas::{FontId, GlyphKey};
         let key = |density| {
-            let size = raster_of_layout(Px::<ambre_core::Parley>::new(14.0), 1.0, ratio(density));
+            let size = raster_of_layout(Px::<crate::space::Parley>::new(14.0), 1.0, ratio(density));
             GlyphKey::new(FontId::of_blob(7), GlyphId::new(42), size)
         };
         assert_ne!(key(1.0), key(2.0));
@@ -887,14 +887,14 @@ mod tests {
     fn a_zoomed_glyph_is_rasterized_at_its_screen_size() {
         assert_eq!(
             raster_of_layout(
-                Px::<ambre_core::Parley>::new(14.0),
+                Px::<crate::space::Parley>::new(14.0),
                 2.0,
                 Scale::<Css, Device>::ONE
             ),
             Px::<GlyphRaster>::new(28.0)
         );
         assert_eq!(
-            raster_of_layout(Px::<ambre_core::Parley>::new(14.0), 2.0, ratio(2.0)),
+            raster_of_layout(Px::<crate::space::Parley>::new(14.0), 2.0, ratio(2.0)),
             Px::<GlyphRaster>::new(56.0)
         );
 

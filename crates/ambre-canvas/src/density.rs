@@ -8,7 +8,7 @@
 // logical size alone (`CANVAS-044`), so it has nothing to scale by.
 // ============================================================================
 
-use ambre_core::{Css, Device, Px, Scale, Size, Texel, View, WholeCss};
+use ambre_core::{CanvasCss, Css, Device, Px, Scale, Size, Texel, View};
 
 use crate::render::ContentRepaint;
 use crate::view::RepaintPlan;
@@ -19,7 +19,7 @@ use crate::view::RepaintPlan;
 /// read by the renderer and the GPU bootstrap of this crate.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SurfaceSize {
-    logical: Size<Px<WholeCss>>,
+    logical: Size<Px<CanvasCss>>,
     physical: Size<Px<Texel>>,
     density: Scale<Css, Device>,
 }
@@ -36,9 +36,9 @@ impl SurfaceSize {
     /// The CSS box `logical` at `density`, or `None` when the drawing buffer
     /// has no area.
     #[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
-    pub(crate) fn new(logical: Size<Px<WholeCss>>, density: Scale<Css, Device>) -> Option<Self> {
+    pub(crate) fn new(logical: Size<Px<CanvasCss>>, density: Scale<Css, Device>) -> Option<Self> {
         let scale =
-            |side: Px<WholeCss>| Px::new((f64::from(side.get()) * density.get()).round() as u32);
+            |side: Px<CanvasCss>| Px::new((f64::from(side.get()) * density.get()).round() as u32);
         let physical = Size::new(scale(logical.width), scale(logical.height));
         if physical.width == Px::ZERO || physical.height == Px::ZERO {
             return None;
@@ -51,7 +51,7 @@ impl SurfaceSize {
     }
 
     /// The size a view lays out against, in CSS pixels.
-    pub fn logical(&self) -> Size<Px<WholeCss>> {
+    pub fn logical(&self) -> Size<Px<CanvasCss>> {
         self.logical
     }
 

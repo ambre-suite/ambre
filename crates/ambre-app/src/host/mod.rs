@@ -44,7 +44,7 @@ use ambre_canvas::{
 };
 use ambre_chrome::commands::ClipboardWrite;
 use ambre_core::id::{Document, Element, Id};
-use ambre_core::{CanvasId, Device, Px, View, WholeCss};
+use ambre_core::{CanvasCss, CanvasId, Device, Px, View};
 use ambre_draw::{Consumed, DrawSurface, Point, Rect, Size};
 use ambre_toile::ui::ToileView;
 use ambre_toile::ui::embed::{VisibleEmbed, VisibleWebEmbed};
@@ -387,7 +387,7 @@ impl AppView {
     }
 
     /// Canvas resized to `size` logical pixels (`CANVAS-044`).
-    fn resize(&mut self, size: ambre_core::Size<Px<WholeCss>>) {
+    fn resize(&mut self, size: ambre_core::Size<Px<CanvasCss>>) {
         match self {
             AppView::Trame(v) => v.resize(size),
             AppView::Toile(v) => v.resize(size),
@@ -591,7 +591,7 @@ impl AppView {
 
     /// The view of the cell named `id`, at `size` logical pixels. `None` for
     /// an id this view does not show.
-    fn cell_view(&self, id: CanvasId, size: ambre_core::Size<Px<WholeCss>>) -> Option<AppView> {
+    fn cell_view(&self, id: CanvasId, size: ambre_core::Size<Px<CanvasCss>>) -> Option<AppView> {
         match self {
             AppView::Murmure(v) if id == THREAD_CANVAS => Some(AppView::Murmure(v.region(size))),
             _ => None,

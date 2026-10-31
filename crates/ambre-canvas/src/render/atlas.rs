@@ -16,7 +16,9 @@
 
 use rustc_hash::FxHashMap;
 
-use ambre_core::{Css, Device, GlyphRaster, Parley, Px, Scale, Size, Texel};
+use ambre_core::{Css, Device, Px, Scale, Size, Texel};
+
+use crate::space::{GlyphRaster, Parley};
 
 // ============================================================================
 // GlyphAtlas

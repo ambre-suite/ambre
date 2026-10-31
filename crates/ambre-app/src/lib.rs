@@ -1846,7 +1846,7 @@ pub fn main() {
 
     let switcher = host::run_with(
         ambre_core::CanvasId::CONTENT,
-        move |size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>, text_input| {
+        move |size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>, text_input| {
             let w = ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.width.get()));
             let h = ambre_core::Px::<ambre_core::Surface>::new(f64::from(size.height.get()));
             // Pick the view by the booted document's type. Cross-type in-session

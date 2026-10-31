@@ -642,7 +642,7 @@ impl TextEditor {
                 italic: span.italic,
                 family: span.family.clone(),
                 underline: span.underline,
-                indent: ambre_core::Px::<ambre_core::WholeParley>::ZERO,
+                indent: Px::<crate::space::WholeParley>::ZERO,
             };
             let placed = push_shape(&mut builder, &text, &shape);
             if placed && span.indent > Px::<Doc>::ZERO {

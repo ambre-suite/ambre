@@ -21,6 +21,9 @@
 pub mod render;
 pub mod text_cache;
 
+// -- The pixel spaces of a parley layout and of a glyph raster ---------------
+pub mod space;
+
 // -- Shared inline text-editor core (parley PlainEditor + font-free intent
 //    queue), wrapped by Toile's element editor and Trame's cell editor --------
 pub mod editor;
@@ -92,6 +95,7 @@ pub use intent::{FilterOpenPublisher, NoticePublisher};
 pub use perf::PerfPublisher;
 pub use render::{ContentRepaint, Layer, LayerRepaint, QuadRenderer, WgpuSurface};
 pub use request_registry::{RequestRegistry, RequestTag};
+pub use space::{Parley, WholeParley};
 pub use text_cache::{
     Slant, SpanShape, TextCache, TextLength, Weight, WordBreak, registered_family_name,
 };

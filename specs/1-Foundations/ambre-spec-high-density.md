@@ -67,8 +67,9 @@ high-density one, and a fraction on a scaled desktop.
 
 **The types.** Each unit is a pixel space of `ambre_core::space`, and a length is a `Px` of its
 space. A logical length is a `Px<Css>` or a `Px<View>`, and the CSS box of a canvas is a
-`Size<Px<WholeCss>>`. A shift of the buffer is a `Px<Device>`, and an edge of the buffer is a
-`Px<Texel>`. The density is a `Scale<Css, Device>`.
+`Size<Px<CanvasCss>>`. A shift of the buffer is a `Px<Device>`, and an edge of the buffer is a
+`Px<Texel>`. The density is a `Scale<Css, Device>`. A glyph raster is measured in `GlyphRaster`, a
+space `ambre-canvas` declares beside the atlas.
 
 **One reader.** `crates/ambre-canvas/src/density.rs` reads the factor and builds a `SurfaceSize`.
 That value carries both sizes. Only the logical one is readable outside `ambre-canvas`.

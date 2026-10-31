@@ -12,7 +12,7 @@
 // ============================================================================
 
 use ambre_bus::ByteSpan;
-use ambre_core::{Doc, Parley, Px, View, WholeParley};
+use ambre_core::{Doc, Px, View};
 
 use ambre_draw::{Brush, BundledFamily, Color};
 use parley::style::{
@@ -25,6 +25,7 @@ use parley::{
 use rustc_hash::FxHashMap;
 
 use crate::fonts::LazyFontLoader;
+use crate::space::{Parley, WholeParley};
 
 /// Map a font family to the face the application ships. `None` names the
 /// default family.
@@ -699,7 +700,7 @@ mod tests {
         let text = format!("top\r\n{long}\r\nend");
         let indent = SpanShape {
             range: ByteSpan::from_usize_range(5..5 + long.len() + 2),
-            indent: Px::<ambre_core::WholeParley>::new(12),
+            indent: Px::<crate::space::WholeParley>::new(12),
             ..SpanShape::default()
         };
         let layout = cache.get_or_build_spans(

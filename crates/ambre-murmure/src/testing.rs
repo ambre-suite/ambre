@@ -29,7 +29,7 @@ pub fn watchers(channel_id: Id<Channel>, watching: Vec<Id<User>>) -> UiEvent {
 /// "t", and the queue that fed it. The messages land on the next update.
 pub fn channel_of(
     texts: &[&str],
-    size: ambre_core::Size<ambre_core::Px<ambre_core::WholeCss>>,
+    size: ambre_core::Size<ambre_core::Px<ambre_core::CanvasCss>>,
 ) -> (MurmureView, Sender<UiEvent>) {
     let channel_id = Id::<Channel>::mint();
     let reads = PageReads {
