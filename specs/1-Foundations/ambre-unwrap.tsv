@@ -9,6 +9,7 @@ ambre-crypto | src/aead.rs | crate::aead::open_file | Ciphertext::0 -> open_unde
 ambre-crypto | src/envelope.rs | crate::envelope::seal_media | MediaBytes::as_bytes -> aead::seal	1	aead::seal seals any plaintext; the slice spares a copy of the media.
 ambre-crypto | src/hash.rs | crate::hash::chain_hash | Ciphertext::0 -> Tail	1	Tail marks the last field of a length-prefixed BLAKE2b input, which hashes bytes of any origin.
 ambre-crypto | src/hash.rs | crate::hash::dev_seed | DisplayName::as_str -> Tail	1	Tail marks the last field of a length-prefixed BLAKE2b input, which hashes bytes of any origin.
+ambre-crypto | src/keys.rs | crate::keys::FileKey::from_passphrase | FixedBytes::as_array -> crate::passphrase::argon2id	1	argon2id is the KDF kernel shared by the file and the account salt, each typed by its caller.
 ambre-crypto | src/passphrase.rs | crate::passphrase::derive_user_key | FixedBytes::as_slice -> argon2id	1	argon2id is the KDF kernel shared by the file and the account salt, each typed by its caller.
 ambre-crypto | src/signature.rs | crate::signature::message | Aad::as_bytes -> push_framed	1	push_framed length-prefixes one field of the signed transcript, whatever field it is.
 ambre-crypto | src/signature.rs | crate::signature::message | Ciphertext::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, whatever field it is.

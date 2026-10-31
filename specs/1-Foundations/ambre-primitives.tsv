@@ -811,6 +811,20 @@ ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::split_from
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::split_from(bytes) | param | &[u8]	generic	the bytes of a layout the value opens, followed by fields of any type
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytes<R>::to_hex() | ret | String	newtype-inner	FixedBytes's own hex spelling
 ambre-core | src/fixed_bytes.rs | crate::fixed_bytes | FixedBytesError::InvalidLength.0 | field | usize	generic	the length of the refused input, which the error echoes
+ambre-core | src/authorship.rs | crate::authorship | <SessionNonce as FixedRole>::Array | assoc | [u8;SESSION_NONCE_LEN]	newtype-inner	the storage of FixedBytes<SessionNonce>, which states its width
+ambre-core | src/docfile.rs | crate::docfile | <FileDigest as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<FileDigest>, which states its width
+ambre-core | src/docfile.rs | crate::docfile | <FileSalt as FixedRole>::Array | assoc | [u8;SALT_LEN]	newtype-inner	the storage of FixedBytes<FileSalt>, which states its width
+ambre-core | src/encoded.rs | crate::encoded | <MasterKeySalt as FixedRole>::Array | assoc | [u8;MASTER_KEY_SALT_LEN]	newtype-inner	the storage of FixedBytes<MasterKeySalt>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <ChainHash as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<ChainHash>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <CommitmentTag as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<CommitmentTag>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <EntryDigest as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<EntryDigest>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <Nonce as FixedRole>::Array | assoc | [u8;24]	newtype-inner	the storage of FixedBytes<Nonce>, which states its width
+ambre-core | src/envelope.rs | crate::envelope | <Signature as FixedRole>::Array | assoc | [u8;64]	newtype-inner	the storage of FixedBytes<Signature>, which states its width
+ambre-core | src/key_id.rs | crate::key_id | <KeyId as FixedRole>::Array | assoc | [u8;KEY_ID_LEN]	newtype-inner	the storage of FixedBytes<KeyId>, which states its width
+ambre-core | src/media.rs | crate::media | <MediaAddress as FixedRole>::Array | assoc | [u8;MEDIA_ADDRESS_LEN]	newtype-inner	the storage of FixedBytes<MediaAddress>, which states its width
+ambre-core | src/payload.rs | crate::payload | <FormatMagic as crate::FixedRole>::Array | assoc | [u8;4]	newtype-inner	the storage of FixedBytes<FormatMagic>, which states its width
+ambre-core | src/public_key.rs | crate::public_key | <ExchangePublicKey as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<ExchangePublicKey>, which states its width
+ambre-core | src/public_key.rs | crate::public_key | <PublicKey as FixedRole>::Array | assoc | [u8;32]	newtype-inner	the storage of FixedBytes<PublicKey>, which states its width
 ambre-core | src/authorship.rs | crate::authorship | <SessionNonce as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
 ambre-core | src/docfile.rs | crate::docfile | <FileDigest as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
 ambre-core | src/docfile.rs | crate::docfile | <FileSalt as FixedRole>::NAME | const | &'static str	free-text	the role name a debug form and a refusal print for a person
