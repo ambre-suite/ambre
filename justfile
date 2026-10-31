@@ -312,6 +312,15 @@ primitives:
 primitives-files:
     cargo run -q -p ambre-primitives -- files
 
+# The unwrap report (`ai/ambre-rust-style.md`, the newtype rule). It refuses a
+# newtype unwrapped early inside a body, unless a line of
+# `specs/1-Foundations/ambre-unwrap.tsv` names its key with a count and a
+# reason.
+# In strict mode, an unlisted key, a line over its count and a stale line all
+# fail. The report walks the syntax and compiles nothing. CI runs this recipe.
+unwrap:
+    cargo run -q -p ambre-primitives -- unwrap --strict
+
 # Remove the lines that name no site, after a value was typed. No recipe adds
 # a line: a new one is a hand edit a reviewer reads (`ARCH-035`).
 primitives-prune:

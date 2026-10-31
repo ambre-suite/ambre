@@ -68,6 +68,11 @@ jobs:
       # each compile and reads its dep-info (`ARCH-033`, `ARCH-045`), and prints
       # that half's count before the allowlist half.
       - run: just primitives
+      # The unwrap report: no newtype unwrapped early inside a body unless
+      # `ambre-unwrap.tsv` names its key with a count and a reason. In strict
+      # mode, an unlisted key, a line over its count and a stale line all fail
+      # (`ai/ambre-rust-style.md`, the newtype rule).
+      - run: just unwrap
       # What a spec quotes: no function body in a spec (template §0).
       - run: just spec-code
       # How a spec is built: prose share, production markers in a feature

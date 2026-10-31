@@ -239,9 +239,10 @@
   macro argument, or a closure that returns the unwrap.
 
   A missing or malformed `specs/1-Foundations/ambre-unwrap.tsv` fails the report, which otherwise
-  exits 0. With `--strict`, it also fails on a refusal key that no line names. Each line carries
-  the count of sites its key allows. A key with more sites fails, and a line with fewer is stale
-  and fails too.
+  exits 0. Each line carries the count of sites its key allows. With `--strict`, the report also
+  fails on a refusal key no line names, and on a key with more sites than its line allows. A line
+  with fewer sites is stale, and fails a strict report too. CI runs the report with `--strict`,
+  through `just unwrap`.
 * **Minimal allocations.** Borrow before you clone. Never allocate on a hot path.
 * **No `unsafe` in our code.** A third-party crate with C or C++ bindings is allowed, but native
   Rust is preferred. The workspace lint table forbids `unsafe_code`, and every crate inherits it.
