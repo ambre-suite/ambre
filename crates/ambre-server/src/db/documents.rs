@@ -6,8 +6,8 @@ use super::*;
 /// Row returned by `SELECT * FROM documents`.
 #[derive(Debug)]
 pub struct DocumentRow {
-    pub id: ambre_core::DocumentId,
-    pub owner_id: ambre_core::UserId,
+    pub id: Id<Document>,
+    pub owner_id: Id<User>,
     pub doc_type: ambre_core::DocType,
     pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -17,8 +17,8 @@ pub struct DocumentRow {
 /// Document joined with the caller's membership row.
 #[derive(Debug)]
 pub struct DocumentSummaryRow {
-    pub id: ambre_core::DocumentId,
-    pub owner_id: ambre_core::UserId,
+    pub id: Id<Document>,
+    pub owner_id: Id<User>,
     pub doc_type: ambre_core::DocType,
     pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
@@ -36,7 +36,7 @@ pub struct DocumentSummaryRow {
 /// Fetches a document by id.
 pub async fn get_document(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<Option<DocumentRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let row = sqlx::query(
@@ -64,7 +64,7 @@ pub async fn get_document(
 /// Lists all documents the user is a member of, with role and doc_key_enc.
 pub async fn list_documents_for_user(
     pool: &PgPool,
-    user_id: &ambre_core::UserId,
+    user_id: &Id<User>,
 ) -> Result<Vec<DocumentSummaryRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     // `inv` resolves the exchange pubkey of whoever wrapped our `doc_key_enc`,
@@ -114,7 +114,7 @@ pub enum Insertion {
 }
 
 /// Creates a document, optionally with a client-supplied id, and returns the full
-/// row. Lazy creation: the WASM client generates the `DocumentId` up front, and
+/// row. Lazy creation: the WASM client generates the `Id<Document>` up front, and
 /// only materializes the row on the first modification. Returns the row and
 /// whether this call inserted it ([`Insertion::Existing`] when an idempotent
 /// retry hit an existing id).
@@ -125,10 +125,10 @@ pub enum Insertion {
 /// that already exists.
 pub async fn create_document(
     pool: &PgPool,
-    owner_id: &ambre_core::UserId,
+    owner_id: &Id<User>,
     doc_type: ambre_core::DocType,
     name_enc: Option<&ambre_core::Encoded<ambre_core::SealedName>>,
-    document_id: Option<&ambre_core::DocumentId>,
+    document_id: Option<&Id<Document>>,
 ) -> Result<(DocumentRow, Insertion), AppError> {
     let owner_uid = id_to_uuid(*owner_id);
     let doc_type = doc_type.as_str();
@@ -191,7 +191,7 @@ pub async fn create_document(
 /// Updates the encrypted name of a document.
 pub async fn rename_document(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     name_enc: &ambre_core::Encoded<ambre_core::SealedName>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
@@ -207,7 +207,7 @@ pub async fn rename_document(
 /// there, and its second sweep is due at `sweep_due`.
 #[derive(Debug)]
 pub struct PendingDeletion {
-    pub document_id: ambre_core::DocumentId,
+    pub document_id: Id<Document>,
     pub sweep_due: ambre_core::UnixSeconds,
     /// Whether the document row is still there: the delete stopped before its
     /// last step.
@@ -234,13 +234,13 @@ ambre_core::define_flag! {
 /// document. A direct message belongs to no space, so none is touched.
 pub async fn begin_deletion(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     sweep_due: ambre_core::UnixSeconds,
 ) -> Result<Vec<super::DeletedChannel>, AppError> {
     let mut tx = pool.begin().await?;
     let channels = super::channels::delete_space_channels_in(
         &mut tx,
-        ambre_core::SpaceId::from_document(*document_id),
+        Id::<Space>::from_document(*document_id),
         sweep_due,
     )
     .await?;
@@ -254,7 +254,7 @@ pub async fn begin_deletion(
 /// are left, and forgets them last (`SRV-165`).
 pub(super) async fn begin_deletions_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    documents: &[ambre_core::DocumentId],
+    documents: &[Id<Document>],
     sweep_due: ambre_core::UnixSeconds,
 ) -> Result<(), AppError> {
     let documents: Vec<uuid::Uuid> = documents.iter().copied().map(id_to_uuid).collect();
@@ -299,7 +299,7 @@ pub async fn pending_deletions(
 /// later mark pushed the sweep past it meanwhile.
 pub async fn end_deletion(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     swept_at: ambre_core::UnixSeconds,
 ) -> Result<(), AppError> {
     sqlx::query("DELETE FROM document_deletions WHERE document_id = $1 AND sweep_due <= $2")
@@ -311,10 +311,7 @@ pub async fn end_deletion(
 }
 
 /// Cascade-deletes a document and all associated rows (members, snapshots, updates).
-pub async fn delete_document(
-    pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-) -> Result<(), AppError> {
+pub async fn delete_document(pool: &PgPool, document_id: &Id<Document>) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     sqlx::query("DELETE FROM documents WHERE id = $1")
         .bind(did)

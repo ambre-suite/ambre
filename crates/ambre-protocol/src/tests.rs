@@ -2,7 +2,8 @@
 
 use super::*;
 use crate::messages::{Ciphertext, Clock, Counter, Seq};
-use ambre_core::{DocumentId, FixedBytes, SnapshotId, UserId};
+use ambre_core::FixedBytes;
+use ambre_core::id::{self, Document, Id, User};
 
 #[test]
 fn update_roundtrip() {
@@ -10,10 +11,10 @@ fn update_roundtrip() {
         ciphertext: Ciphertext(vec![1, 2, 3, 4]),
         nonce: FixedBytes::from_array([0u8; 24]),
         public_data: UpdatePublicData {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             pub_key: FixedBytes::from_array([5u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Clock(42),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
@@ -45,10 +46,10 @@ fn snapshot_roundtrip() {
         ciphertext: Ciphertext(vec![8, 9, 10]),
         nonce: FixedBytes::from_array([11u8; 24]),
         public_data: SnapshotPublicData {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             pub_key: FixedBytes::from_array([12u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: Some(FixedBytes::from_array([13u8; 32])),
             parent_snapshot_update_clocks: vec![
                 (FixedBytes::from_array([15u8; 32]), Clock(16)),
@@ -91,7 +92,7 @@ fn ephemeral_roundtrip() {
         ciphertext: Ciphertext(vec![21, 22, 23]),
         nonce: FixedBytes::from_array([24u8; 24]),
         public_data: EphemeralPublicData {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             pub_key: FixedBytes::from_array([25u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
             counter: Counter(26),
@@ -121,10 +122,10 @@ fn ws_messages_roundtrip() {
         ciphertext: Ciphertext(vec![1]),
         nonce: FixedBytes::from_array([2u8; 24]),
         public_data: UpdatePublicData {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             pub_key: FixedBytes::from_array([3u8; 32]),
             key_id: FixedBytes::from_array([8u8; 16]),
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Clock(4),
         },
         commitment_tag: FixedBytes::from_array([5u8; 32]),
@@ -162,7 +163,7 @@ fn ws_messages_roundtrip() {
 #[test]
 fn signaling_messages_roundtrip() {
     let client_msg = SignalingClientMsg::Offer {
-        target_user_id: UserId::new(),
+        target_user_id: Id::<User>::mint(),
         sdp: SessionDescription::new("test sdp".to_owned()),
     };
     let bytes = postcard::to_allocvec(&client_msg).unwrap();
@@ -178,7 +179,7 @@ fn signaling_messages_roundtrip() {
     }
 
     let server_msg = SignalingServerMsg::ParticipantJoined {
-        user_id: UserId::new(),
+        user_id: Id::<User>::mint(),
     };
     let bytes = postcard::to_allocvec(&server_msg).unwrap();
     let decoded: SignalingServerMsg = postcard::from_bytes(&bytes).unwrap();
@@ -219,7 +220,7 @@ fn a_wire_message_that_does_not_decode_is_a_typed_error() {
         Err(WireDecodeError::UnsupportedVersion(0x02))
     ));
     let wire = encode_client_msg(&WsClientMsg::Subscribe {
-        document_id: DocumentId::new(),
+        document_id: Id::<Document>::mint(),
     });
     for cut in 1..wire.len() {
         let cut_frame = frame(&wire.as_bytes()[..cut]);
@@ -250,10 +251,10 @@ fn sample_update(fill: u8) -> Update {
         ciphertext: Ciphertext(vec![fill, fill + 1]),
         nonce: FixedBytes::from_array([fill; 24]),
         public_data: UpdatePublicData {
-            document_id: DocumentId::from_bytes([fill; 16]),
+            document_id: Id::<Document>::from_bytes([fill; 16]),
             pub_key: FixedBytes::from_array([fill + 2; 32]),
             key_id: FixedBytes::from_array([fill + 3; 16]),
-            snapshot_id: SnapshotId::from_bytes([fill + 4; 16]),
+            snapshot_id: Id::<id::Snapshot>::from_bytes([fill + 4; 16]),
             clock: Clock(u64::from(fill) + 5),
         },
         commitment_tag: FixedBytes::from_array([fill + 6; 32]),
@@ -266,7 +267,7 @@ fn sample_ephemeral(fill: u8) -> Ephemeral {
         ciphertext: Ciphertext(vec![fill]),
         nonce: FixedBytes::from_array([fill + 1; 24]),
         public_data: EphemeralPublicData {
-            document_id: DocumentId::from_bytes([fill + 2; 16]),
+            document_id: Id::<Document>::from_bytes([fill + 2; 16]),
             pub_key: FixedBytes::from_array([fill + 3; 32]),
             key_id: FixedBytes::from_array([fill + 4; 16]),
             counter: Counter(u64::from(fill) + 5),
@@ -279,7 +280,7 @@ fn sample_ephemeral(fill: u8) -> Ephemeral {
 /// One client message per variant, in declaration order.
 fn client_samples() -> Vec<crate::ws::WsClientMsg> {
     use crate::ws::WsClientMsg as C;
-    let doc = DocumentId::from_bytes([1; 16]);
+    let doc = Id::<Document>::from_bytes([1; 16]);
     vec![
         C::Subscribe { document_id: doc },
         C::Unsubscribe { document_id: doc },
@@ -302,7 +303,7 @@ fn client_samples() -> Vec<crate::ws::WsClientMsg> {
 /// One server message per variant, in declaration order.
 fn server_samples() -> Vec<crate::ws::WsServerMsg> {
     use crate::ws::WsServerMsg as S;
-    let doc = DocumentId::from_bytes([1; 16]);
+    let doc = Id::<Document>::from_bytes([1; 16]);
     vec![
         S::Subscribed { document_id: doc },
         S::Update {
@@ -324,7 +325,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         S::SnapshotRequired { document_id: doc },
         S::SnapshotAvailable {
             document_id: doc,
-            snapshot_id: SnapshotId::from_bytes([7; 16]),
+            snapshot_id: Id::<id::Snapshot>::from_bytes([7; 16]),
             covered_seq: Seq(12),
         },
         S::KeyRotationRequired { document_id: doc },
@@ -360,7 +361,7 @@ fn server_samples() -> Vec<crate::ws::WsServerMsg> {
         },
         S::SnapshotDropped {
             document_id: doc,
-            snapshot_id: SnapshotId::from_bytes([17; 16]),
+            snapshot_id: Id::<id::Snapshot>::from_bytes([17; 16]),
             author: FixedBytes::from_array([18; 32]),
             reporter: FixedBytes::from_array([19; 32]),
             after: ambre_core::AfterDrop::Refinalize,
@@ -443,7 +444,7 @@ fn the_wire_layout_is_frozen_under_its_version() {
 /// and the signature, which bind it and open nothing.
 #[test]
 fn the_relay_reads_only_the_listed_fields() {
-    let doc = DocumentId::new();
+    let doc = Id::<Document>::mint();
     let pk = FixedBytes::from_array([5u8; 32]);
     let kid = FixedBytes::from_array([8u8; 16]);
     let update = Update {
@@ -453,7 +454,7 @@ fn the_relay_reads_only_the_listed_fields() {
             document_id: doc,
             pub_key: pk,
             key_id: kid,
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Clock(1),
         },
         commitment_tag: FixedBytes::from_array([6u8; 32]),
@@ -466,7 +467,7 @@ fn the_relay_reads_only_the_listed_fields() {
             document_id: doc,
             pub_key: pk,
             key_id: kid,
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: vec![],
         },
@@ -573,7 +574,7 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     use crate::membership::ENTRY_SIGNATURE_LEN;
     use crate::snapshot_report::report_transcript;
     use ambre_core::Role;
-    let document = DocumentId::from_bytes([1; 16]);
+    let document = Id::<Document>::from_bytes([1; 16]);
     let link = KeyLink {
         document_id: document,
         key: FixedBytes::from_array([2; 16]),
@@ -583,21 +584,21 @@ fn the_frames_outside_the_versioned_layout_keep_their_bytes() {
     let entry = MembershipEntry {
         document,
         position: LogPosition::new(1),
-        member: UserId::from_bytes([2; 16]),
+        member: Id::<User>::from_bytes([2; 16]),
         member_key: FixedBytes::from_array([3; 32]),
         act: MembershipAct::Invite,
         role: Role::Editor,
         key: Some(FixedBytes::from_array([4; 16])),
         previous: Some(FixedBytes::from_array([5; 32])),
-        author: UserId::from_bytes([6; 16]),
+        author: Id::<User>::from_bytes([6; 16]),
         signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
     };
     let transcript = report_transcript(
         document,
-        SnapshotId::from_bytes([8; 16]),
+        Id::<id::Snapshot>::from_bytes([8; 16]),
         &FixedBytes::from_array([9; 32]),
     );
-    let peer = UserId::from_bytes([10; 16]);
+    let peer = Id::<User>::from_bytes([10; 16]);
     let client = [
         SignalingClientMsg::Offer {
             target_user_id: peer,

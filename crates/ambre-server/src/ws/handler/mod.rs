@@ -20,7 +20,8 @@ use tokio::sync::mpsc;
 #[allow(clippy::single_component_path_imports)]
 use tracing;
 
-use ambre_core::{ChannelId, DocumentId, FixedBytes, PublicKey, RefusalCode, UserId};
+use ambre_core::id::{Channel, Document, Id, User};
+use ambre_core::{FixedBytes, PublicKey, RefusalCode};
 use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg};
 
 use crate::payload::{self, Payload};
@@ -114,26 +115,26 @@ impl DocWrite {
 /// Per-connection state tracking which documents this client is currently
 /// subscribed to.
 struct WsConnectionState {
-    user_id: UserId,
+    user_id: Id<User>,
     /// Ed25519 signing key bound to this session (from the access token's `spk`
     /// claim). Every authored `Update` MUST carry this exact key. It bounds the
     /// per-document clock hash to one entry per member, and stops a member from
     /// authoring under an arbitrary self-generated key (impersonation).
     signing_pubkey: FixedBytes<PublicKey>,
-    doc_subscriptions: HashSet<DocumentId>,
+    doc_subscriptions: HashSet<Id<Document>>,
     /// Last instant membership was verified for each subscribed document. Drives
     /// the [`MEMBERSHIP_RECHECK_TTL`] re-check in `handle_update` (H8).
-    doc_access_verified_at: HashMap<DocumentId, Instant>,
+    doc_access_verified_at: HashMap<Id<Document>, Instant>,
     /// Whether the caller's role on each subscribed document permits writing
     /// (`owner`/`editor`, not `viewer`). Captured at `Subscribe` and refreshed on
     /// the H8 membership recheck, so `handle_update` can reject a read-only
     /// member's delta without a per-message DB hit. The REST write paths gate on
     /// the same role set. Without this the hot WS write path would let a `viewer`
     /// author sequenced, persisted, broadcast updates.
-    doc_write: HashMap<DocumentId, DocWrite>,
+    doc_write: HashMap<Id<Document>, DocWrite>,
     /// Last instant a `RequestMissing` replay was served per document, enforcing
     /// [`REPLAY_MIN_INTERVAL`] against replay amplification.
-    last_replay_at: HashMap<DocumentId, Instant>,
+    last_replay_at: HashMap<Id<Document>, Instant>,
     /// Per-connection inbound-message rate limiter. The WS upgrade is rate-limited
     /// once, but a long-lived socket is otherwise unbounded. Each `Update` drives
     /// a Postgres + Redis + S3 write and a fan-out, so an authorized flooder is a
@@ -147,19 +148,19 @@ struct WsConnectionState {
     /// kind there. Read once at `Subscribe`. A socket watching a document of
     /// a channel hears the activity of its threads, and a delta on a thread
     /// signals it (`SRV-161`).
-    doc_channels: HashMap<DocumentId, (ChannelId, ambre_core::ChannelDocumentKind)>,
+    doc_channels: HashMap<Id<Document>, (Id<Channel>, ambre_core::ChannelDocumentKind)>,
 }
 
 impl WsConnectionState {
     /// The channel `document_id` belongs to, while this socket watches it.
-    fn channel_of(&self, document_id: &DocumentId) -> Option<ChannelId> {
+    fn channel_of(&self, document_id: &Id<Document>) -> Option<Id<Channel>> {
         self.doc_channels
             .get(document_id)
             .map(|(channel, _)| *channel)
     }
 
     /// Whether this socket still watches a document of `channel`.
-    fn watches_channel(&self, channel: &ChannelId) -> bool {
+    fn watches_channel(&self, channel: &Id<Channel>) -> bool {
         self.doc_channels.values().any(|(held, _)| held == channel)
     }
 }
@@ -167,7 +168,7 @@ impl WsConnectionState {
 /// A document whose unsubscribe makes the socket loop panic, so a test can
 /// force the failure `SRV-101` is about.
 #[cfg(test)]
-pub(crate) const PANIC_DOCUMENT: DocumentId = DocumentId::from_bytes([0xff; 16]);
+pub(crate) const PANIC_DOCUMENT: Id<Document> = Id::<Document>::from_bytes([0xff; 16]);
 
 /// The close code a refused upgrade sends for `error`. The code carries its
 /// reason text.
@@ -384,7 +385,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
             .unsubscribe(Topic::document(doc_id), connection_id.clone())
             .await;
     }
-    let channels: HashSet<ChannelId> = conn.doc_channels.values().map(|(c, _)| *c).collect();
+    let channels: HashSet<Id<Channel>> = conn.doc_channels.values().map(|(c, _)| *c).collect();
     for channel in &channels {
         pubsub
             .unsubscribe(Topic::channel(channel), connection_id.clone())

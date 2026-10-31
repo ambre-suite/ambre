@@ -759,7 +759,7 @@ mod tests {
     use ambre_bus::app::prose::DocSpan;
     use ambre_bus::app::prose::{DocCount, DocOffset};
     use ambre_core::ByteOffset;
-    use ambre_core::UserId;
+    use ambre_core::id::{Id, User};
     use ambre_core::{DocPx, SurfacePx, ViewPx};
     use ambre_draw::testing::{DrawOp, RecordingSurface};
     use ambre_draw::{Color, DocumentWalk};
@@ -928,7 +928,7 @@ mod tests {
         ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
-        let user = UserId::from_bytes([7; 16]);
+        let user = Id::<User>::from_bytes([7; 16]);
         ui.remote_at.insert(
             id,
             vec![RemoteCursor {
@@ -958,7 +958,7 @@ mod tests {
         ui.resize(ViewPx::new(1200.0), ViewPx::new(900.0));
         ui.apply_layout(shaped);
         let id = first_block(&ui);
-        let user = UserId::from_bytes([9; 16]);
+        let user = Id::<User>::from_bytes([9; 16]);
         ui.remote_at.insert(
             id,
             vec![RemoteCursor {
@@ -1980,7 +1980,7 @@ mod tests {
 
     fn thread(block: BlockId, start: u32, end: u32) -> crate::events::CommentThread {
         crate::events::CommentThread {
-            comment_id: ambre_core::CommentId::new(),
+            comment_id: Id::mint(),
             anchor_block: Some(block),
             anchor_start: DocOffset::new(start),
             anchor_end: DocOffset::new(end),

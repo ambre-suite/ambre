@@ -19,10 +19,10 @@ use serde::de::DeserializeOwned;
 use x25519_dalek::StaticSecret;
 
 use ambre_bus::{
-    ApiFailure, ApiRequest, ChannelDocumentKind, ChannelId, DocumentId, LogicEvent, MemberInfo,
-    MessageId, Request, Role, SegmentId, UserId,
+    ApiFailure, ApiRequest, ChannelDocumentKind, LogicEvent, MemberInfo, Request, Role,
 };
 use ambre_core::Generation;
+use ambre_core::id::{Channel, Document, Id, Message, Segment, Space, User};
 
 use crate::http;
 use crate::membership_log::{self, Draft, Log, LogHead, LogRule};
@@ -91,7 +91,7 @@ pub(crate) fn own_exchange_key(secret: &StaticSecret) -> FixedBytes<ambre_core::
 
 /// The user who signs the entries a change appends (`SYNC-132`).
 pub(crate) struct Author {
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub signing_key: SigningKey,
 }
 
@@ -106,7 +106,7 @@ impl Author {
 /// own copy of the key (`SYNC-104`). The anchor is `None` when our row does
 /// not unwrap or carries none.
 pub(crate) fn served_log(
-    document_id: DocumentId,
+    document_id: Id<Document>,
     exchange_key: &StaticSecret,
     resp: &http::DocumentMembersResponse,
 ) -> (Log, Option<FixedBytes<EntryDigest>>) {
@@ -115,7 +115,7 @@ pub(crate) fn served_log(
 
 /// [`served_log`], under the rule of the document's log (`SYNC-106`).
 pub(crate) fn served_log_under(
-    document_id: DocumentId,
+    document_id: Id<Document>,
     exchange_key: &StaticSecret,
     resp: &http::DocumentMembersResponse,
     rule: &LogRule,
@@ -140,7 +140,7 @@ pub(crate) fn served_log_under(
 /// of the document's log (`SYNC-106`). A public channel's `meta` admits a
 /// self-join and heeds its space; any other log does neither.
 pub(crate) fn walk_served_under(
-    document_id: DocumentId,
+    document_id: Id<Document>,
     anchor: Option<FixedBytes<EntryDigest>>,
     texts: &[ambre_core::Encoded<ambre_core::EncodedLogEntry>],
     rule: &LogRule,
@@ -169,7 +169,7 @@ fn entry_after(
 /// log in request form (`SYNC-132`). The creator signs the entry, and the
 /// copy seals its digest as the anchor (`SYNC-104`).
 pub(crate) fn creation(
-    document_id: DocumentId,
+    document_id: Id<Document>,
     doc_key: &DocumentKey,
     exchange_key: &StaticSecret,
     author: &Author,
@@ -255,15 +255,15 @@ pub(crate) fn rotate_entries_for(
     (entries, unwrapped)
 }
 
-/// Builds the presence directory (Ed25519 signing key -> canonical `UserId`)
+/// Builds the presence directory (Ed25519 signing key -> canonical `Id<User>`)
 /// from any members response, given each entry's `(user_id, signing_pub_key)`
 /// (`ambre-spec-membership.md`). Both the open path and the member-list path
 /// feed it, hence the pair input rather than one of the two entry structs. The
 /// identifier and the key were parsed when the response was read. A
 /// malformed one refused the whole answer there, so nothing here can fail.
 pub(crate) fn presence_directory<'a>(
-    entries: impl IntoIterator<Item = (UserId, &'a FixedBytes<ambre_core::PublicKey>)>,
-) -> Vec<(FixedBytes<ambre_core::PublicKey>, UserId)> {
+    entries: impl IntoIterator<Item = (Id<User>, &'a FixedBytes<ambre_core::PublicKey>)>,
+) -> Vec<(FixedBytes<ambre_core::PublicKey>, Id<User>)> {
     entries
         .into_iter()
         .map(|(user_id, signing_pub_key)| (*signing_pub_key, user_id))
@@ -271,7 +271,7 @@ pub(crate) fn presence_directory<'a>(
 }
 
 /// Picks this client's own role out of a members response, given `(user_id,
-/// role)` pairs and our canonical `UserId` (architecture).
+/// role)` pairs and our canonical `Id<User>` (architecture).
 ///
 /// Every failure path -- no session id, no row for us, a role that is not a
 /// document one -- yields `Role::Viewer`. That is the safe direction for a UX
@@ -279,8 +279,8 @@ pub(crate) fn presence_directory<'a>(
 /// would offer edits the server then rejects. An unknown role word never gets
 /// here: it refused the answer when it was read (`SRV-180`).
 pub(crate) fn own_role(
-    entries: impl IntoIterator<Item = (UserId, Role)>,
-    my_user_id: Option<UserId>,
+    entries: impl IntoIterator<Item = (Id<User>, Role)>,
+    my_user_id: Option<Id<User>>,
 ) -> Role {
     let Some(me) = my_user_id else {
         return Role::Viewer;
@@ -409,13 +409,13 @@ fn failed(logic_tx: &LogicSink, request: ApiRequest, error: impl http::Reported)
 /// Inputs for [`invite_task`], gathered from `SyncState` before spawning.
 pub(crate) struct InviteParams {
     pub id: Generation<Request>,
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     /// The email phase 1 searched, or `None` for a member known by id.
     pub invitee_email: Option<ambre_core::Email>,
     /// The user phase 1 answered, whom the user confirmed.
-    pub invitee: UserId,
+    pub invitee: Id<User>,
     pub role: Role,
     pub exchange_key: StaticSecret,
     pub doc_key: DocumentKey,
@@ -597,13 +597,13 @@ fn invitee_named(p: &InviteParams) -> InviteeName {
 /// The one name a share carries for its invitee.
 pub(crate) enum InviteeName {
     Email(ambre_core::Email),
-    Id(UserId),
+    Id(Id<User>),
 }
 
 /// Inputs for [`fetch_invitee_key_task`] (TOFU phase 1).
 pub(crate) struct FetchInviteeKeyParams {
     pub id: Generation<Request>,
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub invitee_email: ambre_core::Email,
@@ -662,7 +662,7 @@ pub(crate) async fn fetch_invitee_key_task<H: ShareHttp>(
 /// Inputs for [`fetch_member_key_task`].
 pub(crate) struct FetchMemberKeyParams {
     pub id: Generation<Request>,
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
 }
@@ -706,8 +706,8 @@ const ROTATION_TRIES: usize = 3;
 /// Inputs for [`revoke_task`], gathered from `SyncState` before spawning.
 pub(crate) struct RevokeParams {
     pub id: Generation<Request>,
-    pub document_id: DocumentId,
-    pub user_id: UserId,
+    pub document_id: Id<Document>,
+    pub user_id: Id<User>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
@@ -843,7 +843,7 @@ pub(crate) async fn revoke_task<H: ShareHttp>(
 /// Inputs for [`leave_task`].
 pub(crate) struct LeaveParams {
     pub id: Generation<Request>,
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     /// This user, who signs their own revoke: a departure removes no one else.
     pub author: Author,
     pub url_scheme: crate::http::UrlScheme,
@@ -886,7 +886,7 @@ pub(crate) async fn leave_task<H: ShareHttp>(
 /// on the log the relay serves. A log that moved meanwhile is read again.
 async fn leave_document<H: ShareHttp>(
     http: &H,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     author: &Author,
     url_scheme: crate::http::UrlScheme,
     api_base: &crate::http::RelayHost,
@@ -931,7 +931,7 @@ async fn leave_document<H: ShareHttp>(
 /// Inputs for [`leave_channel_task`], gathered from `SyncState` before
 /// spawning.
 pub(crate) struct ChannelLeaveParams {
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     /// This user, who signs their own revoke on the channel's `meta`.
     pub author: Author,
     pub url_scheme: crate::http::UrlScheme,
@@ -967,9 +967,9 @@ pub(crate) async fn leave_channel_task<H: ShareHttp>(
 /// Inputs for [`close_segment_task`], gathered from `SyncState` before
 /// spawning.
 pub(crate) struct SegmentCloseParams {
-    pub channel_id: ChannelId,
-    pub closing: SegmentId,
-    pub successor: SegmentId,
+    pub channel_id: Id<Channel>,
+    pub closing: Id<Segment>,
+    pub successor: Id<Segment>,
     /// The current key of the channel's `meta`, which opens every document
     /// of the channel.
     pub meta_key: DocumentKey,
@@ -1025,9 +1025,9 @@ pub(crate) async fn close_segment_task<H: ShareHttp>(
 /// Inputs for [`amendments_task`], gathered from `SyncState` before
 /// spawning.
 pub(crate) struct AmendmentsParams {
-    pub channel_id: ChannelId,
-    pub segment: SegmentId,
-    pub amendments: DocumentId,
+    pub channel_id: Id<Channel>,
+    pub segment: Id<Segment>,
+    pub amendments: Id<Document>,
     /// The current key of the channel's `meta`, which opens every document
     /// of the channel.
     pub meta_key: DocumentKey,
@@ -1047,7 +1047,7 @@ pub(crate) struct AmendmentsParams {
 pub(crate) async fn amendments_task<H: ShareHttp>(
     http: &H,
     p: AmendmentsParams,
-) -> Result<DocumentId, http::HttpError> {
+) -> Result<Id<Document>, http::HttpError> {
     let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let (doc_key_enc, entry) = creation(p.amendments, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
@@ -1081,9 +1081,9 @@ pub(crate) async fn amendments_task<H: ShareHttp>(
 
 /// Inputs for [`thread_task`], gathered from `SyncState` before spawning.
 pub(crate) struct ThreadParams {
-    pub channel_id: ChannelId,
-    pub root: MessageId,
-    pub thread: DocumentId,
+    pub channel_id: Id<Channel>,
+    pub root: Id<Message>,
+    pub thread: Id<Document>,
     /// The current key of the channel's `meta`, which opens every document
     /// of the channel.
     pub meta_key: DocumentKey,
@@ -1103,7 +1103,7 @@ pub(crate) struct ThreadParams {
 pub(crate) async fn thread_task<H: ShareHttp>(
     http: &H,
     p: ThreadParams,
-) -> Result<DocumentId, http::HttpError> {
+) -> Result<Id<Document>, http::HttpError> {
     let base = crate::http::ApiRoot::of(p.url_scheme, &p.api_base);
     let (doc_key_enc, entry) = creation(p.thread, &p.meta_key, &p.exchange_key, &p.author)?;
     let body = http::CreateDocumentRequest {
@@ -1135,7 +1135,7 @@ pub(crate) async fn thread_task<H: ShareHttp>(
 
 /// Inputs for [`settle_task`].
 pub(crate) struct SettleParams {
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
@@ -1148,9 +1148,9 @@ pub(crate) struct SettleParams {
 /// Inputs for [`role_change_task`].
 pub(crate) struct RoleChangeParams {
     pub id: Generation<Request>,
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     /// The member whose role changes.
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub role: Role,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
@@ -1233,7 +1233,7 @@ pub(crate) async fn role_change_task<H: ShareHttp>(
 
 /// The link from `next` back to `previous`, and the text a request carries.
 fn link_to(
-    document_id: DocumentId,
+    document_id: Id<Document>,
     previous: &DocumentKey,
     next: &DocumentKey,
     signing_key: &SigningKey,
@@ -1328,8 +1328,8 @@ pub(crate) async fn settle_task<H: ShareHttp>(
 
 /// Inputs for [`rotate_channel_task`].
 pub(crate) struct RotateChannelParams {
-    pub space_id: ambre_bus::SpaceId,
-    pub channel_id: ChannelId,
+    pub space_id: Id<Space>,
+    pub channel_id: Id<Channel>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     pub exchange_key: StaticSecret,
@@ -1420,7 +1420,7 @@ pub(crate) struct ListMembersParams {
     /// Which listing of this document this is, so an answer older than the
     /// directory held changes nothing (`SYNC-037`).
     pub asked: ambre_core::Generation<crate::generation::Listing>,
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub url_scheme: crate::http::UrlScheme,
     pub api_base: crate::http::RelayHost,
     /// Unwraps our own row, whose seal carries the log anchor (`SYNC-104`).
@@ -1475,6 +1475,7 @@ pub(crate) async fn list_members_task<H: ShareHttp>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::id::Meta;
     use ambre_crypto::MasterSeed;
     use x25519_dalek::PublicKey;
 
@@ -1490,7 +1491,7 @@ mod tests {
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
     ) -> http::DocumentMemberEntry {
         http::DocumentMemberEntry {
-            user_id: UserId::parse_str(uid).expect("a test id"),
+            user_id: Id::<User>::parse_str(uid).expect("a test id"),
             display_name: ambre_core::DisplayName::new("Member").unwrap(),
             email: "m@test.local".into(),
             signing_pub_key: FixedBytes::from_array([0; 32]),
@@ -1605,7 +1606,7 @@ mod tests {
         // valid ones are wrapped (`SYNC-043`).
         assert_eq!(unwrapped.len(), 1);
         assert_eq!(entries.len(), 2);
-        let id = |s| UserId::parse_str(s).unwrap();
+        let id = |s| Id::<User>::parse_str(s).unwrap();
         assert_eq!(
             entries[0].user_id,
             id("11111111-1111-1111-1111-111111111111")
@@ -1641,9 +1642,14 @@ mod tests {
         assert!(read(sound_id, "bogus").is_err());
         assert!(read(sound_id, "Editor").is_err());
         let sound = read(sound_id, "editor").expect("a sound row");
-        let none = Log::walk(DocumentId::new(), None, &[], membership_log::no_self_join);
+        let none = Log::walk(
+            Id::<Document>::mint(),
+            None,
+            &[],
+            membership_log::no_self_join,
+        );
         let mapped = map_members(vec![sound], &none);
-        assert_eq!(mapped[0].user_id, UserId::parse_str(sound_id).unwrap());
+        assert_eq!(mapped[0].user_id, Id::<User>::parse_str(sound_id).unwrap());
         assert_eq!(mapped[0].role, Role::Editor);
     }
 
@@ -1736,7 +1742,7 @@ mod tests {
     /// The author every task test signs as.
     fn author() -> Author {
         Author {
-            user_id: UserId::new(),
+            user_id: Id::<User>::mint(),
             signing_key: MasterSeed::from_array([9; 32]).derive_signing_key(),
         }
     }
@@ -1784,11 +1790,11 @@ mod tests {
     ) -> InviteParams {
         InviteParams {
             id: ambre_bus::next_request(),
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             invitee_email: Some("invitee@test.local".into()),
-            invitee: UserId::parse_str(INVITEE).expect("an id"),
+            invitee: Id::<User>::parse_str(INVITEE).expect("an id"),
             role: Role::Editor,
             exchange_key: my_xk.clone(),
             doc_key: DocumentKey::generate(),
@@ -2011,7 +2017,7 @@ mod tests {
         ))]);
         let (etx, erx, sink, lrx) = channels();
         let mut params = invite_params(&my_xk, invitee_pub);
-        params.invitee = UserId::new();
+        params.invitee = Id::<User>::mint();
         invite_task(&http, params, &etx, &sink).await;
 
         match lrx.try_recv().expect("ApiError emitted") {
@@ -2030,7 +2036,7 @@ mod tests {
     fn fetch_key_params() -> FetchInviteeKeyParams {
         FetchInviteeKeyParams {
             id: ambre_bus::next_request(),
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             invitee_email: "invitee@test.local".into(),
@@ -2069,7 +2075,7 @@ mod tests {
         assert_eq!(http.calls().len(), 1);
     }
 
-    fn member_key_params(user_id: UserId) -> FetchMemberKeyParams {
+    fn member_key_params(user_id: Id<User>) -> FetchMemberKeyParams {
         FetchMemberKeyParams {
             id: ambre_bus::next_request(),
             user_id,
@@ -2084,7 +2090,7 @@ mod tests {
     async fn a_member_key_is_fetched_by_user_id_and_wraps_nothing() {
         let (_member_xk, member_pub_hex) = keypair(3);
         let member_pub = member_pub_hex;
-        let user_id = UserId::new();
+        let user_id = Id::<User>::mint();
         let http = FakeHttp::new(vec![Ok(serde_json::json!({
             "signing_pubkey": "00".repeat(32),
             "exchange_pubkey": member_pub_hex,
@@ -2123,7 +2129,7 @@ mod tests {
         for answer in [Err(http::HttpError::Local("404".into())), Ok(malformed)] {
             let http = FakeHttp::new(vec![answer]);
             let (etx, erx, sink, lrx) = channels();
-            fetch_member_key_task(&http, member_key_params(UserId::new()), &etx, &sink).await;
+            fetch_member_key_task(&http, member_key_params(Id::<User>::mint()), &etx, &sink).await;
             assert!(erx.try_recv().is_err(), "no key answered");
             assert!(matches!(
                 lrx.try_recv(),
@@ -2151,8 +2157,8 @@ mod tests {
     fn revoke_params(my_xk: &StaticSecret) -> RevokeParams {
         RevokeParams {
             id: ambre_bus::next_request(),
-            document_id: DocumentId::new(),
-            user_id: UserId::new(),
+            document_id: Id::<Document>::mint(),
+            user_id: Id::<User>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
@@ -2425,9 +2431,9 @@ mod tests {
         logged.invite(&owner, &bob, Role::Editor);
         let me = bob.author.user_id;
         let meta = logged.document_id;
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         let listing = serde_json::json!({ "documents": [
-            { "document_id": DocumentId::new().to_string(), "kind": "segment" },
+            { "document_id": Id::<Document>::mint().to_string(), "kind": "segment" },
             { "document_id": meta.to_string(), "kind": "meta" },
         ]});
         let http = FakeHttp::new(vec![
@@ -2467,7 +2473,7 @@ mod tests {
     #[tokio::test]
     async fn a_refused_leave_answers_its_reason() {
         let params = || ChannelLeaveParams {
-            channel_id: ChannelId::new(),
+            channel_id: Id::<Channel>::mint(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
@@ -2480,14 +2486,14 @@ mod tests {
         );
 
         let no_meta = serde_json::json!({ "documents": [
-            { "document_id": DocumentId::new().to_string(), "kind": "segment" },
+            { "document_id": Id::<Document>::mint().to_string(), "kind": "segment" },
         ]});
         let http = FakeHttp::new(vec![Ok(no_meta)]);
         assert!(leave_channel_task(&http, params()).await.is_err());
         assert_eq!(http.calls().len(), 1, "nothing is posted");
 
         let listing = serde_json::json!({ "documents": [
-            { "document_id": DocumentId::new().to_string(), "kind": "meta" },
+            { "document_id": Id::<Document>::mint().to_string(), "kind": "meta" },
         ]});
         let http = FakeHttp::new(vec![
             Ok(listing),
@@ -2498,10 +2504,10 @@ mod tests {
         assert_eq!(http.calls().len(), 3, "a refusal is not tried again");
     }
 
-    fn close_params(successor: SegmentId) -> SegmentCloseParams {
+    fn close_params(successor: Id<Segment>) -> SegmentCloseParams {
         SegmentCloseParams {
-            channel_id: ChannelId::new(),
-            closing: SegmentId::new(),
+            channel_id: Id::<Channel>::mint(),
+            closing: Id::<Segment>::mint(),
             successor,
             meta_key: DocumentKey::generate(),
             author: author(),
@@ -2517,10 +2523,10 @@ mod tests {
     #[tokio::test]
     async fn a_lost_close_deletes_the_successor_it_created() {
         let created = serde_json::json!({
-            "document_id": DocumentId::new().to_string(), "doc_type": "murmure",
+            "document_id": Id::<Document>::mint().to_string(), "doc_type": "murmure",
         });
-        let mine = SegmentId::new();
-        let answer = |active: SegmentId, created: bool| serde_json::json!({ "active": active.to_string(), "created": created });
+        let mine = Id::<Segment>::mint();
+        let answer = |active: Id<Segment>, created: bool| serde_json::json!({ "active": active.to_string(), "created": created });
         let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer(mine, true))]);
         let won = close_segment_task(&http, close_params(mine)).await;
         assert_eq!(
@@ -2540,7 +2546,7 @@ mod tests {
             assert!(close.ends_with("/segments"));
         }
 
-        let winner = SegmentId::new();
+        let winner = Id::<Segment>::mint();
         let http = FakeHttp::new(vec![
             Ok(created.clone()),
             Ok(answer(winner, false)),
@@ -2576,7 +2582,7 @@ mod tests {
     /// deleted.
     #[tokio::test]
     async fn a_close_asked_again_keeps_its_successor() {
-        let mine = SegmentId::new();
+        let mine = Id::<Segment>::mint();
         let created = serde_json::json!({
             "document_id": mine.document_id().to_string(), "doc_type": "murmure",
         });
@@ -2598,10 +2604,10 @@ mod tests {
         assert_eq!(close["successor"], mine.to_string());
     }
 
-    fn amendments_params(amendments: DocumentId) -> AmendmentsParams {
+    fn amendments_params(amendments: Id<Document>) -> AmendmentsParams {
         AmendmentsParams {
-            channel_id: ChannelId::new(),
-            segment: SegmentId::new(),
+            channel_id: Id::<Channel>::mint(),
+            segment: Id::<Segment>::mint(),
             amendments,
             meta_key: DocumentKey::generate(),
             author: author(),
@@ -2616,11 +2622,11 @@ mod tests {
     /// registration deletes nothing.
     #[tokio::test]
     async fn a_lost_registration_deletes_the_amendments_it_created() {
-        let mine = DocumentId::new();
+        let mine = Id::<Document>::mint();
         let created = serde_json::json!({
             "document_id": mine.to_string(), "doc_type": "murmure",
         });
-        let answer = |held: DocumentId, created: bool| serde_json::json!({ "amendments": held.to_string(), "created": created });
+        let answer = |held: Id<Document>, created: bool| serde_json::json!({ "amendments": held.to_string(), "created": created });
         let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer(mine, true))]);
         assert_eq!(
             amendments_task(&http, amendments_params(mine)).await,
@@ -2640,7 +2646,7 @@ mod tests {
             assert_eq!(linked["amendments"], mine.to_string());
         }
 
-        let winner = DocumentId::new();
+        let winner = Id::<Document>::mint();
         let http = FakeHttp::new(vec![
             Ok(created.clone()),
             Ok(answer(winner, false)),
@@ -2671,10 +2677,10 @@ mod tests {
         );
     }
 
-    fn thread_params(thread: DocumentId) -> ThreadParams {
+    fn thread_params(thread: Id<Document>) -> ThreadParams {
         ThreadParams {
-            channel_id: ChannelId::new(),
-            root: MessageId::new(),
+            channel_id: Id::<Channel>::mint(),
+            root: Id::<Message>::mint(),
             thread,
             meta_key: DocumentKey::generate(),
             author: author(),
@@ -2689,13 +2695,13 @@ mod tests {
     /// failed registration deletes nothing.
     #[tokio::test]
     async fn a_lost_registration_deletes_the_thread_it_created() {
-        let mine = DocumentId::new();
+        let mine = Id::<Document>::mint();
         let params = thread_params(mine);
         let root = params.root;
         let created = serde_json::json!({
             "document_id": mine.to_string(), "doc_type": "murmure",
         });
-        let answer = |held: DocumentId, created: bool| serde_json::json!({ "thread": held.to_string(), "created": created });
+        let answer = |held: Id<Document>, created: bool| serde_json::json!({ "thread": held.to_string(), "created": created });
         let http = FakeHttp::new(vec![Ok(created.clone()), Ok(answer(mine, true))]);
         assert_eq!(thread_task(&http, params).await, Ok(mine));
         {
@@ -2710,7 +2716,7 @@ mod tests {
             assert_eq!(linked["root"], root.to_string());
         }
 
-        let winner = DocumentId::new();
+        let winner = Id::<Document>::mint();
         let http = FakeHttp::new(vec![
             Ok(created.clone()),
             Ok(answer(winner, false)),
@@ -2777,7 +2783,7 @@ mod tests {
         let (etx, erx, sink, lrx) = channels();
         let params = LeaveParams {
             id: ambre_bus::next_request(),
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             author,
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
@@ -2819,7 +2825,7 @@ mod tests {
         let (etx, _erx, sink, lrx) = channels();
         let params = LeaveParams {
             id: ambre_bus::next_request(),
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
@@ -2832,7 +2838,7 @@ mod tests {
         ));
 
         let listing = serde_json::json!({ "documents": [
-            { "document_id": DocumentId::new().to_string(), "kind": "meta" },
+            { "document_id": Id::<Document>::mint().to_string(), "kind": "meta" },
         ]});
         let http = FakeHttp::new(vec![
             Ok(listing),
@@ -2840,7 +2846,7 @@ mod tests {
             Err(refusal()),
         ]);
         let params = ChannelLeaveParams {
-            channel_id: ChannelId::new(),
+            channel_id: Id::<Channel>::mint(),
             author: author(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
@@ -2852,7 +2858,7 @@ mod tests {
 
     fn settle_params(my_xk: &StaticSecret) -> SettleParams {
         SettleParams {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: my_xk.clone(),
@@ -2904,8 +2910,8 @@ mod tests {
     async fn a_public_channel_is_rekeyed_under_the_current_space_key() {
         let (my_xk, my_pub) = keypair(1);
         let (_a_xk, a_pub) = keypair(2);
-        let (space_id, channel_id) = (ambre_bus::SpaceId::new(), ChannelId::new());
-        let meta = ambre_core::MetaId::new();
+        let (space_id, channel_id) = (Id::<Space>::mint(), Id::<Channel>::mint());
+        let meta = Id::<Meta>::mint();
         let head = serde_json::json!({
             "meta_id": meta.to_string(), "role": "editor", "length": 1,
         });
@@ -3109,7 +3115,7 @@ mod tests {
         ListMembersParams {
             id: Some(ambre_bus::next_request()),
             asked: ambre_core::Generation::nth(1),
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             url_scheme: crate::http::UrlScheme::Https,
             api_base: crate::http::RelayHost::new("api.test".to_owned()),
             exchange_key: keypair(1).0,
@@ -3151,7 +3157,7 @@ mod tests {
 
     #[test]
     fn presence_directory_maps_valid_entries() {
-        let uid = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let uid = Id::<User>::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         let key = FixedBytes::from_array([0xaa; 32]);
         let dir = presence_directory([(uid, &key)]);
 
@@ -3163,7 +3169,7 @@ mod tests {
         // A bad row never reaches the directory: the answer that carries it
         // is refused when it is read (`SRV-242`). A fabricated id would
         // attribute a cursor to the wrong person, which is what keying
-        // presence on the UserId prevents.
+        // presence on the Id<User> prevents.
         let read = |signing_pub_key: String| {
             serde_json::from_value::<http::DocumentMembersResponse>(serde_json::json!({
                 "members": [ {
@@ -3185,7 +3191,7 @@ mod tests {
                 .iter()
                 .map(|m| (m.user_id, &m.signing_pub_key)),
         );
-        let good_uid = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let good_uid = Id::<User>::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         assert_eq!(dir, vec![(FixedBytes::from_array([0xbb; 32]), good_uid)]);
     }
 
@@ -3193,8 +3199,8 @@ mod tests {
 
     #[test]
     fn own_role_reads_our_own_row() {
-        let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        let other = UserId::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
+        let me = Id::<User>::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let other = Id::<User>::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
         let role = own_role([(other, Role::Owner), (me, Role::Viewer)], Some(me));
 
         // Our own row wins: a peer being owner says nothing about our access.
@@ -3203,8 +3209,8 @@ mod tests {
 
     #[test]
     fn own_role_falls_back_to_viewer_when_unresolvable() {
-        let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
-        let other = UserId::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
+        let me = Id::<User>::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let other = Id::<User>::parse_str("22222222-2222-2222-2222-222222222222").unwrap();
 
         // No session id yet.
         assert_eq!(own_role([(other, Role::Owner)], None), Role::Viewer);
@@ -3216,7 +3222,7 @@ mod tests {
 
     #[test]
     fn own_role_reads_writable_roles() {
-        let me = UserId::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
+        let me = Id::<User>::parse_str("11111111-1111-1111-1111-111111111111").unwrap();
         for role in [Role::Owner, Role::Editor] {
             assert_eq!(own_role([(me, role)], Some(me)), role);
             assert!(role.can_write_document());
@@ -3243,7 +3249,7 @@ mod tests {
                     signing_keys,
                     vec![(
                         FixedBytes::from_array([0xcc; 32]),
-                        UserId::parse_str(uid).unwrap()
+                        Id::<User>::parse_str(uid).unwrap()
                     )]
                 );
             }
@@ -3275,7 +3281,7 @@ mod tests {
         fn new(seed: u8) -> Self {
             Self {
                 author: Author {
-                    user_id: UserId::from_bytes([seed; 16]),
+                    user_id: Id::<User>::from_bytes([seed; 16]),
                     signing_key: MasterSeed::from_array([seed; 32]).derive_signing_key(),
                 },
                 xk: keypair(seed).0,
@@ -3290,7 +3296,7 @@ mod tests {
     /// A document `owner` created with a log: its key, the rows and the
     /// entries the relay serves for it.
     struct Logged {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_key: DocumentKey,
         anchor: FixedBytes<EntryDigest>,
         owner_exchange: String,
@@ -3300,7 +3306,7 @@ mod tests {
 
     impl Logged {
         fn new(owner: &Peer) -> Self {
-            let document_id = DocumentId::new();
+            let document_id = Id::<Document>::mint();
             let doc_key = DocumentKey::generate();
             let (enc, entry) = creation(document_id, &doc_key, &owner.xk, &owner.author).unwrap();
             let anchor = membership_log::decode(std::slice::from_ref(&entry))
@@ -3433,7 +3439,7 @@ mod tests {
             panic!("expected the share POST: {calls:?}");
         };
         let entry = posted_entry(body);
-        let invitee = UserId::parse_str("55555555-5555-5555-5555-555555555555").unwrap();
+        let invitee = Id::<User>::parse_str("55555555-5555-5555-5555-555555555555").unwrap();
         assert_eq!(entry.act, MembershipAct::Invite);
         assert_eq!(entry.member, invitee);
         assert_eq!(entry.key, Some(logged.doc_key.id()));

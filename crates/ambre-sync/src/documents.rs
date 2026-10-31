@@ -85,7 +85,7 @@ impl SyncState {
     /// (`SYNC-018`, `SYNC-068`). A [`ambre_core::Name`] never runs past its
     /// budget, so the relay never holds one it would refuse (`SYNC-178`).
     pub(crate) fn seal_document_name(
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_key: &DocumentKey,
         signing_key: &SigningKey,
         name: &ambre_core::Name,
@@ -104,9 +104,9 @@ impl SyncState {
     /// (`SYNC-136`). A malformed id never reaches here: the answer is refused
     /// when it is read.
     fn created_document(
-        minted: DocumentId,
-        answered: DocumentId,
-    ) -> Result<DocumentId, crate::error::SyncError> {
+        minted: Id<Document>,
+        answered: Id<Document>,
+    ) -> Result<Id<Document>, crate::error::SyncError> {
         if answered == minted {
             Ok(minted)
         } else {
@@ -142,7 +142,7 @@ impl SyncState {
                 let doc_key = DocumentKey::generate();
                 // The client mints the id, so the name is bound to its document
                 // before the relay has seen either (`SYNC-068`).
-                let document_id = DocumentId::new();
+                let document_id = Id::<Document>::mint();
 
                 // Sealing and wrapping fail only on a bug. The document is not
                 // created then, and the caller reads why.
@@ -199,7 +199,7 @@ impl SyncState {
             });
         } else {
             tracing::info!("Sync: CreateDocument {doc_type:?} '{name}'");
-            let document_id = DocumentId::new();
+            let document_id = Id::<Document>::mint();
             self.doc_metadata.insert(document_id, (doc_type, name));
             self.reply(
                 id,
@@ -214,7 +214,7 @@ impl SyncState {
     pub(crate) fn handle_delete_document(
         &mut self,
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) {
         let event_tx = self.event_tx.clone();
 
@@ -248,7 +248,7 @@ impl SyncState {
     pub(crate) fn handle_rename_document(
         &mut self,
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         name: ambre_core::Name,
     ) {
         let event_tx = self.event_tx.clone();
@@ -354,7 +354,7 @@ impl SyncState {
 /// `nonce || ciphertext`; the wrapper's exchange key is `None` for a
 /// self-wrapped owner row.
 pub(crate) struct ListedName<'a> {
-    pub(crate) document_id: DocumentId,
+    pub(crate) document_id: Id<Document>,
     pub(crate) doc_key_enc: &'a ambre_core::Encoded<ambre_core::WrappedDocKey>,
     pub(crate) wrapper_exchange_pub_key:
         Option<&'a ambre_core::FixedBytes<ambre_core::ExchangePublicKey>>,
@@ -414,7 +414,7 @@ pub(crate) fn unwrap_listed_key(
 /// `links` reach from it. `None` on any failure: a name sealed for another
 /// document, a forged author, a key out of reach, a name past the cap.
 pub(crate) fn open_name(
-    document_id: DocumentId,
+    document_id: Id<Document>,
     current: &DocumentKey,
     sealed: &ambre_core::Encoded<ambre_core::SealedName>,
     links: Vec<ambre_protocol::KeyLink>,
@@ -443,7 +443,7 @@ mod tests {
     /// that key, and open under it alone.
     #[test]
     fn a_document_name_reaches_the_relay_sealed_under_the_document_key() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let doc_key = DocumentKey::generate();
         let name = "Quarterly budget";
@@ -473,7 +473,7 @@ mod tests {
     /// overhead alone.
     #[test]
     fn a_name_past_its_budget_is_not_sealed() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let seal = |name: &str| {
@@ -497,7 +497,7 @@ mod tests {
     /// name. A member who seals one by hand gets the same answer as a forgery.
     #[test]
     fn a_sealed_name_that_is_no_text_or_past_the_cap_opens_to_none() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let doc_key = DocumentKey::generate();
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let seal = |bytes: Vec<u8>| {
@@ -528,7 +528,7 @@ mod tests {
     /// chain, and stays closed without the chain (`SYNC-042`).
     #[test]
     fn a_name_sealed_before_a_rotation_opens_through_the_chain() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let signing_key = MasterSeed::from_array([5; 32]).derive_signing_key();
         let keys: Vec<_> = (0..4).map(|_| DocumentKey::generate()).collect();
         let links: Vec<_> = keys
@@ -552,18 +552,21 @@ mod tests {
         );
         assert_eq!(open_name(document_id, current, &name, Vec::new()), None);
         // Another document's chain opens nothing here.
-        assert_eq!(open_name(DocumentId::new(), current, &name, links), None);
+        assert_eq!(
+            open_name(Id::<Document>::mint(), current, &name, links),
+            None
+        );
     }
 
     /// A create answer that names another document, or no document, fails:
     /// only the minted id opens the name sealed under it (`SYNC-136`).
     #[test]
     fn a_create_fails_on_a_foreign_answer() {
-        let minted = DocumentId::new();
+        let minted = Id::<Document>::mint();
         let answer = SyncState::created_document(minted, minted);
         assert_eq!(answer.ok(), Some(minted));
         assert!(matches!(
-            SyncState::created_document(minted, DocumentId::new()),
+            SyncState::created_document(minted, Id::<Document>::mint()),
             Err(crate::error::SyncError::WrongDocument { .. })
         ));
         let read = |id: String| {

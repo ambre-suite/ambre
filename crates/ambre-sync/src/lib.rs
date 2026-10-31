@@ -50,11 +50,11 @@ use web_sys::{CloseEvent, MessageEvent};
 use ambre_bus::ActivitySummary;
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    ApiFailure, ApiRequest, ChannelId, DocType, DocumentId, DocumentSummary, LogicEvent,
-    MemberInfo, MetaId, OpenFailure, Request, RestCommand, RestEvent, Role, SecretBytes,
-    SecretString, SignedDelta, SnapshotId, SnapshotPurpose, SnapshotVerdict, SpaceId, SyncCommand,
-    UserId, UserInfo,
+    ApiFailure, ApiRequest, DocType, DocumentSummary, LogicEvent, MemberInfo, OpenFailure, Request,
+    RestCommand, RestEvent, Role, SecretBytes, SecretString, SignedDelta, SnapshotPurpose,
+    SnapshotVerdict, SyncCommand, UserInfo,
 };
+use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
 use ambre_core::{FixedBytes, Generation, KeyId, PublicKey, SessionNonce};
 use ambre_crypto::{DocumentKey, MasterSeed};
 use ambre_protocol::messages::{Clock, Counter, Seq, Update};
@@ -231,14 +231,14 @@ enum SyncEvent {
     /// from the document's cursor (`SYNC-153`). A later stop or a reconnect
     /// makes the timer stale.
     ReplayRetry {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         ticket: ambre_core::Generation<generation::ReplayTicket>,
     },
     /// Fired by the timer armed when the relay failed to sequence a delta:
     /// send it again with every later one (`SYNC-159`). A later failure or
     /// refusal makes the timer stale.
     ResendRetry {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         ticket: ambre_core::Generation<generation::ResendTicket>,
     },
     /// The WebSocket `onopen` fired: the socket is now OPEN, so (re)subscriptions
@@ -253,7 +253,7 @@ enum SyncEvent {
     SessionReady {
         /// `None` for the silent re-login, which no request asked for.
         id: Option<Generation<Request>>,
-        user_id: UserId,
+        user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         master_seed: MasterSeed,
@@ -265,7 +265,7 @@ enum SyncEvent {
     /// account holds its keys. No key is held yet, so no socket opens.
     ProviderSignedIn {
         id: Generation<Request>,
-        user_id: UserId,
+        user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         keys_stored: ambre_bus::KeySetup,
@@ -285,22 +285,22 @@ enum SyncEvent {
     },
     DocumentCreated {
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     },
     DocumentDeleted {
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
     DocumentRenamed {
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
     OpenDocumentReady {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_key: DocumentKey,
         snapshot_payload: Option<pipeline::FetchedBlob>,
-        snapshot_id: SnapshotId,
+        snapshot_id: Id<Snapshot>,
         /// Highest delta `seq` folded into `snapshot_payload`, 0 when no snapshot
         /// was downloaded. The post-open `RequestMissing` starts after this seq,
         /// so the history already in the snapshot is not replayed.
@@ -316,12 +316,12 @@ enum SyncEvent {
         /// doc the server answered 404 for: no WebSocket subscription yet,
         /// and the first update triggers lazy creation.
         existence: Existence,
-        /// Members' Ed25519 signing keys -> canonical `UserId`, harvested from
+        /// Members' Ed25519 signing keys -> canonical `Id<User>`, harvested from
         /// the same members response that carried the wrapped DocumentKey
         /// (`ambre-spec-membership.md`). Seeds `SyncDocumentState::signing_keys` so
         /// inbound ephemerals resolve to a spoof-proof author. Empty for a
         /// local-only open (no members response, hence no peers to resolve).
-        signing_keys: Vec<(FixedBytes<PublicKey>, UserId)>,
+        signing_keys: Vec<(FixedBytes<PublicKey>, Id<User>)>,
         /// This client's own role on this document, read from its entry in the
         /// same members response (architecture). `Role::Owner` for a
         /// local-only open. Gates mutating commands in Logic as a UX measure;
@@ -336,113 +336,113 @@ enum SyncEvent {
     /// The answer to a channel listing (`SyncCommand::OpenChannel`): its
     /// documents, or why the relay refused it.
     ChannelListed {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         /// The space whose catalogue the Logic thread said lists the channel.
-        listed_in: Option<SpaceId>,
+        listed_in: Option<Id<Space>>,
         result: Result<Vec<ambre_bus::ChannelDocument>, http::HttpError>,
     },
     /// The open walked the document's log. What it says lands on the session
     /// the open made, for the channels a space lists (the Murmure spaces
     /// spec).
     LogWalked {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         word: membership_log::SpaceWord,
     },
     /// The answer to the rotation of one public channel of a space
     /// (`SyncCommand::RotateSpace`): its new key, sealed for the catalogue.
     ChannelRotated {
-        space_id: SpaceId,
-        channel_id: ChannelId,
+        space_id: Id<Space>,
+        channel_id: Id<Channel>,
         result: Result<ambre_bus::SealedChannelKey, http::HttpError>,
     },
     /// The answer to a channel creation (`SyncCommand::CreateChannel`): the
     /// sealed key for the catalogue of a public channel.
     ChannelCreated {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         result: Result<Option<ambre_bus::SealedChannelKey>, http::HttpError>,
     },
     /// The answer to a self-join (`SyncCommand::JoinChannel`).
     ChannelJoined {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         result: Result<(), http::HttpError>,
     },
     /// The answer to a channel delete (`SyncCommand::DeleteChannel`).
     ChannelDeleted {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         result: Result<(), http::HttpError>,
     },
     /// The answer to a channel leave (`SyncCommand::LeaveChannel`).
     ChannelLeft {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         result: Result<(), http::HttpError>,
     },
     /// The answer to a segment close (`SyncCommand::CloseSegment`): the
     /// active segment after it, and whether it is the successor asked for.
     SegmentClosed {
-        channel_id: ChannelId,
-        closing: ambre_bus::SegmentId,
+        channel_id: Id<Channel>,
+        closing: Id<Segment>,
         result: Result<http::ClosedSegmentResponse, http::HttpError>,
     },
     /// The answer to an amendments creation (`SyncCommand::CreateAmendments`):
     /// the document the relay holds for the segment.
     AmendmentsLinked {
-        channel_id: ChannelId,
-        segment: ambre_bus::SegmentId,
-        amendments: DocumentId,
-        result: Result<DocumentId, http::HttpError>,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
+        result: Result<Id<Document>, http::HttpError>,
     },
     /// The answer to a thread creation (`SyncCommand::CreateThread`): the
     /// document the relay holds for the root.
     ThreadLinked {
-        channel_id: ChannelId,
-        segment: ambre_bus::SegmentId,
-        root: ambre_bus::MessageId,
-        thread: DocumentId,
-        result: Result<DocumentId, http::HttpError>,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
+        result: Result<Id<Document>, http::HttpError>,
     },
     /// The answer to a finalize lease request
     /// (`SyncCommand::TakeFinalizeLease`).
     FinalizeLeaseAnswered {
-        channel_id: ChannelId,
-        segment: ambre_bus::SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         result: Result<ambre_bus::LeaseAnswer, http::HttpError>,
     },
     /// The answer to a finalize commit (`SyncCommand::FinalizeSegment`).
     SegmentFinalized {
-        channel_id: ChannelId,
-        segment: ambre_bus::SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         result: Result<(), http::HttpError>,
     },
     /// The answer to a fold lease request (`SyncCommand::TakeFoldLease`).
     FoldLeaseAnswered {
-        channel_id: ChannelId,
-        segment: ambre_bus::SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         result: Result<ambre_bus::FoldAnswer, http::HttpError>,
     },
     /// The answer to a fold commit (`SyncCommand::FoldSegment`).
     SegmentFolded {
-        channel_id: ChannelId,
-        segment: ambre_bus::SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         result: Result<(), http::HttpError>,
     },
     /// A confirmation of this client settled the fold of the segment
     /// `document_id`, and the relay erased `amendments` (`SRV-211`).
     AmendmentsFolded {
-        document_id: DocumentId,
-        amendments: DocumentId,
+        document_id: Id<Document>,
+        amendments: Id<Document>,
     },
     /// The answer to a direct message request
     /// (`SyncCommand::CreateDirectMessage`): the channel the relay created
     /// under the requested id, or the one that already held its members.
     DirectMessageOpened {
-        requested: ChannelId,
-        result: Result<ChannelId, http::HttpError>,
+        requested: Id<Channel>,
+        result: Result<Id<Channel>, http::HttpError>,
     },
     /// The answer to a listing of a space's public channels
     /// (`SyncCommand::ListSpaceChannels`).
     SpaceChannelsListed {
-        space_id: ambre_bus::SpaceId,
-        result: Result<Vec<ChannelId>, http::HttpError>,
+        space_id: Id<Space>,
+        result: Result<Vec<Id<Channel>>, http::HttpError>,
     },
     /// The answer to a listing of the user's channels
     /// (`SyncCommand::ListMemberChannels`).
@@ -461,19 +461,19 @@ enum SyncEvent {
     /// genuine authorization failure). Surfaced as an `AuthError` instead of
     /// silently opening with a random key (H3).
     OpenDocumentFailed {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         cause: OpenFailure,
         message: String,
     },
     /// A local-only document was lazily materialized server-side. Flushes the
     /// buffered updates and opens the WebSocket subscription.
     DocumentMaterialized {
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
     /// Lazy creation failed. The `creating` guard is cleared so a later update
     /// retries; the buffered updates are kept.
     DocumentCreateFailed {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         failure: http::Failed,
     },
     HttpError {
@@ -486,8 +486,8 @@ enum SyncEvent {
     /// yet -- the Main thread decides trust before phase 2 wraps.
     InviteeKeyReady {
         id: Generation<Request>,
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
         display_name: ambre_core::DisplayName,
         email: ambre_core::Email,
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
@@ -497,7 +497,7 @@ enum SyncEvent {
     /// Nothing is wrapped: the Main thread compares it with the pin first.
     MemberKeyReady {
         id: Generation<Request>,
-        user_id: UserId,
+        user_id: Id<User>,
         exchange_pub_key: FixedBytes<ambre_core::ExchangePublicKey>,
         fingerprint: ambre_core::KeyFingerprint,
     },
@@ -505,15 +505,15 @@ enum SyncEvent {
     /// server accepted the share request.
     InviteSent {
         id: Generation<Request>,
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
         display_name: ambre_core::DisplayName,
     },
     /// Key rotation initiated by this client is finished: the server has the new
     /// `doc_key_enc` entries and the new key must be swapped locally.
     RevocationComplete {
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         new_doc_key: DocumentKey,
         /// The link the revoke left, from `new_doc_key` back to the key it
         /// replaced (`SYNC-116`).
@@ -526,7 +526,7 @@ enum SyncEvent {
         id: Option<Generation<Request>>,
         /// Which listing of this document answered (`SYNC-037`).
         asked: ambre_core::Generation<generation::Listing>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         /// What the walked log says a channel listed in this space must heed.
         word: membership_log::SpaceWord,
         /// Whether the relay says the document owes a rotation (`SYNC-128`).
@@ -536,7 +536,7 @@ enum SyncEvent {
         /// the same response. Membership just changed often enough for someone to
         /// ask for the list. This is where a new member becomes resolvable and a
         /// revoked one stops. Ignored when the document is not open locally.
-        signing_keys: Vec<(FixedBytes<PublicKey>, UserId)>,
+        signing_keys: Vec<(FixedBytes<PublicKey>, Id<User>)>,
     },
     /// User search results from the server (decoded, plaintext).
     UserSearchReady {
@@ -546,14 +546,14 @@ enum SyncEvent {
     /// A document member's role was updated server-side.
     MemberRoleUpdatedEvent {
         id: Generation<Request>,
-        document_id: DocumentId,
-        user_id: UserId,
+        document_id: Id<Document>,
+        user_id: Id<User>,
         role: Role,
     },
     /// A remote key rotation was performed: the new DocumentKey has been fetched
     /// and unwrapped via ECDH; the local key cache must be swapped.
     KeyRotated {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         new_doc_key: DocumentKey,
         /// The document's chain as the relay serves it after the rotation
         /// (`SYNC-117`).
@@ -563,17 +563,17 @@ enum SyncEvent {
     /// (`SYNC-127`). The document closes locally.
     DocumentLeft {
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
     /// The document owes a rotation: a member left and nobody re-keyed since
     /// (`SYNC-128`). Found in a members answer, never guessed.
     DebtFound {
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
     /// This client paid the owed rotation: the relay stored `new_doc_key` for
     /// every member, and it becomes the current key (`SYNC-128`).
     DebtSettled {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         new_doc_key: DocumentKey,
         /// The link the rotation left (`SYNC-116`).
         link: ambre_protocol::KeyLink,
@@ -581,39 +581,39 @@ enum SyncEvent {
     /// The debt was paid by someone else before this client could. Their key
     /// is fetched like any other rotation's.
     DebtGone {
-        document_id: DocumentId,
+        document_id: Id<Document>,
     },
     /// Paying the debt failed. The next frame tries again.
     DebtUnsettled {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         message: String,
     },
     /// Media upload completed: the encrypted blob was PUT to S3 and the server
     /// confirmed the insertion in the `media` table.
     MediaUploaded {
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
     /// The relay holds no upload of this user's for the blob any more.
     MediaErased {
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     },
     /// Snapshot upload completed: the sealed blob was PUT to S3 and the server
     /// confirmed the insertion (and broadcast `SnapshotAvailable`). The returned
     /// `snapshot_id` becomes this document's current parent for future deltas.
     SnapshotUploaded {
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
     },
     /// A snapshot a peer announced was fetched, or could not be (`None`). Only
     /// its contents reaching the Logic thread make it a known parent
     /// (`SYNC-030`).
     SnapshotFetched {
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         /// The last delta its author says it folds in.
         covered_seq: Seq,
         blob: Option<pipeline::FetchedBlob>,
@@ -622,7 +622,7 @@ enum SyncEvent {
     /// decrypted. `data` is the raw plaintext bytes ready for display.
     MediaDownloaded {
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     },
@@ -647,7 +647,7 @@ impl SyncEvent {
 #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 struct SyncDocumentState {
     #[allow(dead_code)]
-    document_id: DocumentId,
+    document_id: Id<Document>,
     doc_key: DocumentKey,
     /// Document kind, used for lazy server creation on the first outbound update.
     doc_type: DocType,
@@ -671,7 +671,7 @@ struct SyncDocumentState {
     )>,
     /// Snapshot this document's updates are currently based on. Placeholder
     /// until the snapshot flow lands; carried in every `UpdatePublicData`.
-    current_snapshot_id: SnapshotId,
+    current_snapshot_id: Id<Snapshot>,
     local_clock: Clock,
     /// Monotonic counter for outbound ephemerals (anti-replay at the receiver).
     ephemeral_counter: Counter,
@@ -686,13 +686,13 @@ struct SyncDocumentState {
     /// Snapshots whose contents the Logic thread already holds. An inbound
     /// `Update` whose parent `snapshot_id` is here can be applied immediately;
     /// otherwise it is quarantined under that id.
-    known_snapshots: HashSet<SnapshotId>,
+    known_snapshots: HashSet<Id<Snapshot>>,
     /// Updates held back because their parent snapshot is not yet known, keyed by
     /// that parent `snapshot_id`. Stored sealed; decrypted only on release.
     /// Bounded by [`QUARANTINE_LIMIT`] (oldest-by-`clock` dropped past the cap).
     /// Each keeps the number the relay gave it, which the Logic thread's
     /// snapshot check reads.
-    quarantine: HashMap<SnapshotId, Vec<(Seq, Update)>>,
+    quarantine: HashMap<Id<Snapshot>, Vec<(Seq, Update)>>,
     /// The missing history was asked for this gap: the quarantine crossed the
     /// soft threshold and has not dropped back under it since. One request per
     /// gap, never one per arrival (`SYNC-031`).
@@ -709,7 +709,7 @@ struct SyncDocumentState {
     /// value is silently dropped.
     ephemeral_remote_counters: HashMap<FixedBytes<PublicKey>, Counter>,
     /// Directory of this document's members' Ed25519 signing keys, mapping an
-    /// ephemeral author's verifying key to their canonical `UserId`
+    /// ephemeral author's verifying key to their canonical `Id<User>`
     /// (`ambre-spec-membership.md`). Built from the members response already fetched at open and
     /// rebuilt when membership changes. A key absent here is not resolved, so the
     /// sample is dropped rather than attributed to a guessed identity.
@@ -717,7 +717,7 @@ struct SyncDocumentState {
     /// This is a *membership* directory, not a *trust* store: it trusts the
     /// server's key mapping. Detecting a server that substitutes a member's keys
     /// is the TOFU trusted-keys store's job (architecture) and is orthogonal.
-    signing_keys: HashMap<FixedBytes<PublicKey>, UserId>,
+    signing_keys: HashMap<FixedBytes<PublicKey>, Id<User>>,
     /// How many member listings of this document were asked, and which one
     /// the directory holds. Two listings can cross on the way, and the answer
     /// to the older one changes nothing. It cannot bring back the key of a
@@ -750,7 +750,7 @@ struct SyncDocumentState {
     rekey: rekey::Rekey,
     /// The snapshots handed to the Logic thread to check, awaiting its
     /// verdict (`AUTHOR-016`, `AUTHOR-022`).
-    checks: HashMap<SnapshotId, PendingCheck>,
+    checks: HashMap<Id<Snapshot>, PendingCheck>,
     /// A snapshot only its author confirmed, held until the open has replayed
     /// every delta the relay kept. It is checked then (`AUTHOR-022`).
     held_snapshot: Option<HeldSnapshot>,
@@ -782,14 +782,14 @@ pub(crate) enum Existence {
 
 #[derive(Debug, Clone)]
 pub(crate) struct HeldSnapshot {
-    pub snapshot_id: SnapshotId,
+    pub snapshot_id: Id<Snapshot>,
     pub covered_seq: Seq,
     pub blob: pipeline::FetchedBlob,
 }
 
 impl SyncDocumentState {
     fn new(
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_key: DocumentKey,
         doc_type: DocType,
         existence: Existence,
@@ -799,7 +799,7 @@ impl SyncDocumentState {
         // deltas reference this id. A fresh open (or a peer) then recognises their
         // parent instead of quarantining them forever. A later `OpenDocumentReady`
         // or `SnapshotAvailable` carrying a real snapshot id supersedes it.
-        let current_snapshot_id = SnapshotId::genesis(document_id);
+        let current_snapshot_id = Id::<Snapshot>::genesis(document_id);
         Self {
             document_id,
             doc_key,
@@ -934,12 +934,12 @@ impl SyncDocumentState {
     /// when it was read. So every entry here keys a member.
     fn set_signing_keys(
         &mut self,
-        entries: impl IntoIterator<Item = (FixedBytes<PublicKey>, UserId)>,
+        entries: impl IntoIterator<Item = (FixedBytes<PublicKey>, Id<User>)>,
     ) {
         self.signing_keys = entries.into_iter().collect();
     }
 
-    /// Resolve the canonical `UserId` behind an ephemeral's authoring Ed25519
+    /// Resolve the canonical `Id<User>` behind an ephemeral's authoring Ed25519
     /// key (`ambre-spec-membership.md`). Presence must be keyed by a per-user
     /// identity, not by the per-device signing key. The sender-supplied payload
     /// can never be trusted for identity, so the key is matched against the
@@ -949,7 +949,7 @@ impl SyncDocumentState {
     /// directory has not been filled yet). The caller drops the sample: presence
     /// is best-effort, so showing nothing is preferable to attributing a cursor
     /// to a guessed identity.
-    fn resolve_ephemeral_author(&self, author_pk: &FixedBytes<PublicKey>) -> Option<UserId> {
+    fn resolve_ephemeral_author(&self, author_pk: &FixedBytes<PublicKey>) -> Option<Id<User>> {
         self.signing_keys.get(author_pk).copied()
     }
 
@@ -1051,7 +1051,7 @@ pub struct SyncState {
     /// retry helpers. Kept in worker memory only.
     tokens: http::TokenStore,
     /// Authenticated user id, set after Unlock/SetupAccount.
-    user_id: Option<UserId>,
+    user_id: Option<Id<User>>,
 
     // -- Session-level crypto (derived once at Unlock, zeroized at Logout) ----
     master_seed: Option<MasterSeed>,
@@ -1065,10 +1065,10 @@ pub struct SyncState {
     /// that space, as the Logic thread reports them on each open. Their logs
     /// admit a self-join (`SYNC-106`) and heed their space; no other log
     /// does either.
-    self_join_logs: HashMap<DocumentId, SpaceId>,
+    self_join_logs: HashMap<Id<Document>, Id<Space>>,
     /// The rotations this admin client drives after a leave, per space
     /// document (the Murmure spaces spec).
-    space_rotations: HashMap<DocumentId, space_rotation::SpaceRotation>,
+    space_rotations: HashMap<Id<Document>, space_rotation::SpaceRotation>,
 
     // -- Single multiplexed WebSocket -----------------------------------------
     ws: Option<WebSocket>,
@@ -1106,7 +1106,7 @@ pub struct SyncState {
     held_outbox: RefCell<Vec<ambre_protocol::WireFrame>>,
     /// The stops of each document's replay since the socket last opened.
     /// Cleared on every open (`SYNC-153`, `SYNC-154`).
-    replay_stops: HashMap<DocumentId, websocket::ReplayStops>,
+    replay_stops: HashMap<Id<Document>, websocket::ReplayStops>,
     /// The ticket of the last replay timer armed. It only grows, so a timer
     /// armed before a reset never matches one armed after it.
     replay_ticket: ambre_core::Issuer<generation::ReplayTicket>,
@@ -1124,10 +1124,10 @@ pub struct SyncState {
     /// The key of each channel's `meta` the latest listing wrapped for this
     /// user. A channel never opened is watched under it (the Murmure
     /// notifications spec).
-    listed_keys: HashMap<ChannelId, (MetaId, DocumentKey)>,
+    listed_keys: HashMap<Id<Channel>, (Id<Meta>, DocumentKey)>,
     /// The documents of spaces this client created and the relay does not
     /// hold yet. Their lazy creation marks them spaces (`SYNC-170`).
-    new_spaces: HashSet<DocumentId>,
+    new_spaces: HashSet<Id<Document>>,
 
     // -- In-memory WS transport (test-only, off) -------------------------------
     mock_ws_tx: Option<ambre_bus::conduit::UnboundedSender<ambre_protocol::WireFrame>>,
@@ -1137,17 +1137,17 @@ pub struct SyncState {
     event_tx: Option<ambre_bus::conduit::UnboundedSender<SyncEvent>>,
 
     // -- Per-document sync sessions --------------------------------------------
-    documents: HashMap<DocumentId, SyncDocumentState>,
+    documents: HashMap<Id<Document>, SyncDocumentState>,
 
     // -- Document metadata (in-memory mirror for mock mode) --------------------
-    doc_metadata: HashMap<DocumentId, (DocType, ambre_core::Name)>,
+    doc_metadata: HashMap<Id<Document>, (DocType, ambre_core::Name)>,
 
     /// Opens received before the session keys were ready (for example a deep-link
     /// refresh dispatches `OpenDocument` at frame 0, before `DevLogin` lands). Held
     /// here and replayed by [`flush_pending_opens`](Self::flush_pending_opens) once
     /// the session is established. The document then fetches its real key and
     /// hydrates instead of opening local-only with a throwaway key.
-    pending_opens: Vec<(DocumentId, DocType)>,
+    pending_opens: Vec<(Id<Document>, DocType)>,
 
     /// Outbound updates produced before the session keys / document were ready.
     /// The user edits a restored cell in the milliseconds after F5, while
@@ -1157,7 +1157,7 @@ pub struct SyncState {
     /// no CLOCK_MISMATCH occurs. A local-only doc flushes right when it opens.
     /// Each keeps the summary it was sent with.
     pending_pre_session_updates: Vec<(
-        DocumentId,
+        Id<Document>,
         ambre_core::Payload<ambre_core::DeltaBytes>,
         Option<ActivitySummary>,
     )>,
@@ -1165,11 +1165,11 @@ pub struct SyncState {
     /// The session nonce of each open document, drawn when it opens and dropped
     /// when it closes (`AUTHOR-002`). Every update this session seals for the
     /// document carries it (`SYNC-112`).
-    session_nonces: HashMap<DocumentId, FixedBytes<SessionNonce>>,
+    session_nonces: HashMap<Id<Document>, FixedBytes<SessionNonce>>,
 
     /// The documents the Logic thread evicted, each kept as a light
     /// subscription (`RESID-004`).
-    light: HashMap<DocumentId, light::LightSubscription>,
+    light: HashMap<Id<Document>, light::LightSubscription>,
 
     /// Last dev username seen on `DevLogin`, kept so the WS reauth path can
     /// silently re-login if the refresh token is also dead. That happens when
@@ -1259,7 +1259,7 @@ impl SyncState {
     #[allow(dead_code)]
     fn deliver_remote<T>(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         opened: Option<Result<T, pipeline::PipelineError>>,
         make_event: impl FnOnce(T) -> LogicEvent,
     ) {
@@ -1296,7 +1296,7 @@ impl SyncState {
     /// lazy-creation POST. In production this flag is set by the async
     /// `OpenDocumentReady` (server returned members) or `DocumentMaterialized`
     /// flows. Neither can complete in a synchronous native test.
-    pub fn mark_document_server_created(&mut self, document_id: DocumentId) {
+    pub fn mark_document_server_created(&mut self, document_id: Id<Document>) {
         if let Some(doc_state) = self.documents.get_mut(&document_id) {
             doc_state.existence = crate::Existence::OnRelay;
         }
@@ -1914,7 +1914,7 @@ mod ephemeral_tests {
 
     fn doc_state() -> SyncDocumentState {
         SyncDocumentState::new(
-            DocumentId::new(),
+            Id::<Document>::mint(),
             DocumentKey::generate(),
             DocType::Prose,
             crate::Existence::LocalOnly,
@@ -1957,7 +1957,7 @@ mod ephemeral_tests {
     #[test]
     fn author_resolves_to_the_member_behind_the_signing_key() {
         let mut d = doc_state();
-        let alice = UserId::new();
+        let alice = Id::<User>::mint();
         d.set_signing_keys([(key(7), alice)]);
 
         assert_eq!(d.resolve_ephemeral_author(&key(7)), Some(alice));
@@ -1966,7 +1966,7 @@ mod ephemeral_tests {
     #[test]
     fn unknown_author_key_is_not_resolved() {
         let mut d = doc_state();
-        d.set_signing_keys([(key(7), UserId::new())]);
+        d.set_signing_keys([(key(7), Id::<User>::mint())]);
 
         // A non-member (or a document whose directory is not filled yet) must not
         // be attributed to anyone. The caller drops the sample rather than showing
@@ -1978,8 +1978,8 @@ mod ephemeral_tests {
     #[test]
     fn refreshing_the_directory_drops_revoked_members() {
         let mut d = doc_state();
-        let revoked = UserId::new();
-        let kept = UserId::new();
+        let revoked = Id::<User>::mint();
+        let kept = Id::<User>::mint();
         d.set_signing_keys([(key(1), revoked), (key(2), kept)]);
         assert_eq!(d.resolve_ephemeral_author(&key(1)), Some(revoked));
 
@@ -1995,7 +1995,7 @@ mod ephemeral_tests {
 mod seal_tests {
     use super::*;
     use ambre_bus::SyncCommand;
-    use ambre_core::{KeyId, SnapshotId};
+    use ambre_core::KeyId;
     use ambre_protocol::messages::{Ciphertext, Clock, CommitmentTag, Counter, Nonce, Signature};
     use ambre_protocol::public_data::{EphemeralPublicData, UpdatePublicData};
     use ambre_protocol::ws::decode_client_msg;
@@ -2005,13 +2005,13 @@ mod seal_tests {
     /// handed.
     fn with_socket() -> (
         SyncState,
-        DocumentId,
+        Id<Document>,
         ambre_bus::conduit::Receiver<ambre_protocol::WireFrame>,
     ) {
         let (sink, _rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.signing_key = Some(MasterSeed::generate().derive_signing_key());
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         let doc = SyncDocumentState::new(
             id,
             DocumentKey::generate(),
@@ -2042,7 +2042,7 @@ mod seal_tests {
         let (mut state, id, wire) = with_socket();
         let summary = ActivitySummary {
             kind: ActivityKind::Content,
-            mentions: vec![UserId::from_bytes([5; 16])],
+            mentions: vec![Id::<User>::from_bytes([5; 16])],
             mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
         };
@@ -2081,7 +2081,7 @@ mod seal_tests {
                 document_id: id,
                 pub_key,
                 key_id,
-                snapshot_id: SnapshotId::from_bytes([3u8; 16]),
+                snapshot_id: Id::<Snapshot>::from_bytes([3u8; 16]),
                 clock: Clock(1),
             },
             commitment_tag: FixedBytes::<CommitmentTag>::from_array([0u8; 32]),

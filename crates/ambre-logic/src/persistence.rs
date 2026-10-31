@@ -22,7 +22,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use ambre_bus::DraftKey;
-use ambre_core::{DocumentId, FixedBytes, Payload, SealedRowBytes, SessionNonce, UserId};
+use ambre_core::id::{Document, Id, User};
+use ambre_core::{FixedBytes, Payload, SealedRowBytes, SessionNonce};
 use futures_channel::oneshot;
 
 use crate::store_ledger::Meta;
@@ -133,19 +134,19 @@ struct IdbKey(String);
 
 impl IdbKey {
     /// A document's row: its id as 32 lowercase hex digits.
-    fn document(id: DocumentId) -> Self {
-        Self(id.as_uuid().to_simple())
+    fn document(id: Id<Document>) -> Self {
+        Self(id.uuid().to_simple())
     }
 
     /// A user's row: its id as 32 lowercase hex digits.
-    fn user(id: UserId) -> Self {
-        Self(id.as_uuid().to_simple())
+    fn user(id: Id<User>) -> Self {
+        Self(id.uuid().to_simple())
     }
 
     /// A key no other delta of `document` holds. It is the document's key,
     /// then the time and a counter for this page. A random draw last parts
     /// another tab writing in the same millisecond.
-    fn fresh_delta(document: DocumentId) -> Self {
+    fn fresh_delta(document: Id<Document>) -> Self {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let count = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -156,17 +157,17 @@ impl IdbKey {
     }
 
     /// The row of one session of `peer` on `document`.
-    fn session(document: DocumentId, peer: ambre_core::PeerId) -> Self {
+    fn session(document: Id<Document>, peer: ambre_core::PeerId) -> Self {
         Self(format!("{}:{peer}", Self::document(document)))
     }
 
     /// The document whose row IndexedDB keyed `text`, as
     /// [`IdbKey::document`] wrote it. `None` for any other text.
-    fn document_of(text: &str) -> Option<DocumentId> {
+    fn document_of(text: &str) -> Option<Id<Document>> {
         if text.len() != 32 {
             return None;
         }
-        DocumentId::parse_str(text).ok()
+        Id::<Document>::parse_str(text).ok()
     }
 
     /// The key, for the call into IndexedDB.
@@ -303,7 +304,7 @@ impl PersistenceStore {
     /// receiver says how it ended, so a quota refusal can be met (`RESID-017`).
     pub fn save_snapshot(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         snapshot: &Payload<SealedRowBytes>,
     ) -> oneshot::Receiver<Stored> {
         outcome(self.write_snapshot(document_id, snapshot))
@@ -315,7 +316,7 @@ impl PersistenceStore {
     /// receiver says how the write ended.
     pub fn save_delta(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         delta: &Payload<SealedRowBytes>,
     ) -> oneshot::Receiver<Stored> {
         let key = IdbKey::fresh_delta(document_id);
@@ -341,7 +342,7 @@ impl PersistenceStore {
 
     /// Write the ledger's row for a document (fire-and-forget). A row lost
     /// here only counts the document less precisely after a reload.
-    pub fn save_meta(&self, document_id: DocumentId, meta: &Meta) {
+    pub fn save_meta(&self, document_id: Id<Document>, meta: &Meta) {
         let key = IdbKey::document(document_id);
         if let Err(e) = self
             .db
@@ -357,7 +358,7 @@ impl PersistenceStore {
 
     /// Load every ledger row, keyed by its document. Resolves to an empty
     /// list when the read failed; a row that does not decode is skipped.
-    pub fn load_meta(&self) -> oneshot::Receiver<Vec<(DocumentId, Meta)>> {
+    pub fn load_meta(&self) -> oneshot::Receiver<Vec<(Id<Document>, Meta)>> {
         let (tx, rx) = answer();
         let Ok(txn) = self.db.transaction_with_str(IdbStore::Meta.name()) else {
             tx.send(Vec::new());
@@ -429,7 +430,7 @@ impl PersistenceStore {
     /// `None` when the transaction could not be opened or written to.
     fn write_snapshot(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         snapshot: &Payload<SealedRowBytes>,
     ) -> Option<web_sys::IdbTransaction> {
         let key = IdbKey::document(document_id);
@@ -487,7 +488,7 @@ impl PersistenceStore {
     /// document.
     pub fn save_snapshot_committed(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         snapshot: Payload<SealedRowBytes>,
     ) -> oneshot::Receiver<Commit> {
         let (tx, rx) = answer();
@@ -526,7 +527,7 @@ impl PersistenceStore {
     /// exists, or `None` (no snapshot / read error). Awaited on the Main thread.
     pub fn load_snapshot(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) -> oneshot::Receiver<Option<Payload<SealedRowBytes>>> {
         let (tx, rx) = answer();
         let key = IdbKey::document(document_id);
@@ -583,7 +584,7 @@ impl PersistenceStore {
     /// Resolves to an empty list when there is none or the read failed.
     pub fn load_deltas(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) -> oneshot::Receiver<Vec<Payload<SealedRowBytes>>> {
         let (tx, rx) = answer();
         let request = self
@@ -633,7 +634,7 @@ impl PersistenceStore {
     /// (`AUTHOR-028`). A lost row only loses that session's unsent tail.
     pub fn save_session(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         peer: ambre_core::PeerId,
         nonce: FixedBytes<SessionNonce>,
     ) {
@@ -651,7 +652,7 @@ impl PersistenceStore {
     }
 
     /// Drop one session the relay already holds whole (fire-and-forget).
-    pub fn forget_session(&self, document_id: DocumentId, peer: ambre_core::PeerId) {
+    pub fn forget_session(&self, document_id: Id<Document>, peer: ambre_core::PeerId) {
         let key = IdbKey::session(document_id, peer);
         let Some(store) = self.sessions_store(&key) else {
             return;
@@ -683,7 +684,7 @@ impl PersistenceStore {
     /// of the wrong length is skipped.
     pub fn load_sessions(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
     ) -> oneshot::Receiver<Vec<(ambre_core::PeerId, FixedBytes<SessionNonce>)>> {
         let (tx, rx) = answer();
         let request = self
@@ -735,7 +736,7 @@ impl PersistenceStore {
     /// classify the trust state (`ambre-spec-key-verification.md`).
     pub fn load_trusted_key(
         &self,
-        user_id: UserId,
+        user_id: Id<User>,
     ) -> oneshot::Receiver<Option<FixedBytes<ambre_core::ExchangePublicKey>>> {
         let (tx, rx) = answer();
         let key = IdbKey::user(user_id);
@@ -798,7 +799,7 @@ impl PersistenceStore {
     /// auto-commits when the Main thread returns to its event loop.
     pub fn save_trusted_key(
         &self,
-        user_id: UserId,
+        user_id: Id<User>,
         key: &FixedBytes<ambre_core::ExchangePublicKey>,
     ) {
         let row = IdbKey::user(user_id);
@@ -829,7 +830,7 @@ impl PersistenceStore {
 
     /// Remove a document's snapshot, its deltas, its sessions and its ledger
     /// row: the copy leaves the store, and a reopen fetches it (`RESID-012`).
-    pub fn delete_snapshot(&self, document_id: DocumentId) {
+    pub fn delete_snapshot(&self, document_id: Id<Document>) {
         let key = IdbKey::document(document_id);
         let stores = js_sys::Array::of4(
             &JsValue::from_str(IdbStore::Snapshots.name()),
@@ -1035,7 +1036,7 @@ fn session_of(row: &[u8]) -> Option<(ambre_core::PeerId, FixedBytes<SessionNonce
 /// The key range holding every row of `document`, in a store whose keys open
 /// with [`IdbKey::document`] and a colon. It runs from `"{key}:"` up to
 /// `"{key};"`, the character after the colon.
-fn rows_of(document: DocumentId) -> Option<web_sys::IdbKeyRange> {
+fn rows_of(document: Id<Document>) -> Option<web_sys::IdbKeyRange> {
     let key = IdbKey::document(document);
     web_sys::IdbKeyRange::bound(
         &JsValue::from_str(&format!("{key}:")),
@@ -1105,7 +1106,7 @@ mod wasm_tests {
     /// A database at [`DB_VERSION`] with ONLY the `snapshots` store, holding
     /// one snapshot row. It stands for a browser that holds documents and
     /// lacks a store the next version adds.
-    async fn seed_snapshots_only(name: &str, doc_id: DocumentId, bytes: &[u8]) {
+    async fn seed_snapshots_only(name: &str, doc_id: Id<Document>, bytes: &[u8]) {
         let (tx, rx) = answer::<()>();
         let req = factory()
             .open_with_u32(name, DB_VERSION.0)
@@ -1149,7 +1150,7 @@ mod wasm_tests {
     /// document. The hyphenated form is no key.
     #[wasm_bindgen_test]
     fn a_document_key_reads_back_as_its_document() {
-        let doc = DocumentId::from_bytes([0xab; 16]);
+        let doc = Id::<Document>::from_bytes([0xab; 16]);
         let key = IdbKey::document(doc);
         assert_eq!(key.to_string(), "ab".repeat(16));
         assert_eq!(IdbKey::document_of(&key.to_string()), Some(doc));
@@ -1165,7 +1166,7 @@ mod wasm_tests {
             .expect("channel")
             .expect("store opens");
 
-        let user = UserId::from_bytes([7; 16]);
+        let user = Id::<User>::from_bytes([7; 16]);
         // Absent before any write.
         assert_eq!(store.load_trusted_key(user).await.unwrap(), None);
 
@@ -1174,10 +1175,10 @@ mod wasm_tests {
         store.save_trusted_key(user, &key);
         assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(key));
 
-        // A different user is still absent (keys are per-UserId).
+        // A different user is still absent (keys are per-Id<User>).
         assert_eq!(
             store
-                .load_trusted_key(UserId::from_bytes([9; 16]))
+                .load_trusted_key(Id::<User>::from_bytes([9; 16]))
                 .await
                 .unwrap(),
             None
@@ -1195,7 +1196,10 @@ mod wasm_tests {
             .expect("channel")
             .expect("store opens");
 
-        let (alice, bob) = (UserId::from_bytes([1; 16]), UserId::from_bytes([2; 16]));
+        let (alice, bob) = (
+            Id::<User>::from_bytes([1; 16]),
+            Id::<User>::from_bytes([2; 16]),
+        );
         let pin = FixedBytes::<ambre_core::ExchangePublicKey>::from_array;
         store.save_trusted_key(alice, &pin([0xA1; 32]));
         store.save_trusted_key(bob, &pin([0xB1; 32]));
@@ -1215,7 +1219,7 @@ mod wasm_tests {
         let name = "ambre-test-migration-trusted-keys";
         delete_db(name).await;
 
-        let doc = DocumentId::from_bytes([3; 16]);
+        let doc = Id::<Document>::from_bytes([3; 16]);
         let snapshot = vec![1u8, 2, 3, 4, 5];
         seed_snapshots_only(name, doc, &snapshot).await;
 
@@ -1233,7 +1237,7 @@ mod wasm_tests {
         );
 
         // The new store is usable after the upgrade.
-        let user = UserId::from_bytes([4; 16]);
+        let user = Id::<User>::from_bytes([4; 16]);
         let key = FixedBytes::<ambre_core::ExchangePublicKey>::from_array([0x5A; 32]);
         store.save_trusted_key(user, &key);
         assert_eq!(store.load_trusted_key(user).await.unwrap(), Some(key));
@@ -1247,8 +1251,8 @@ mod wasm_tests {
             .await
             .expect("channel")
             .expect("store opens");
-        let doc = DocumentId::from_bytes([5; 16]);
-        let other = DocumentId::from_bytes([6; 16]);
+        let doc = Id::<Document>::from_bytes([5; 16]);
+        let other = Id::<Document>::from_bytes([6; 16]);
         assert!(store.load_deltas(doc).await.unwrap().is_empty());
 
         store.save_delta(doc, &row(&[1]));
@@ -1289,7 +1293,7 @@ mod wasm_tests {
             .await
             .expect("channel")
             .expect("store opens");
-        let doc = DocumentId::from_bytes([8; 16]);
+        let doc = Id::<Document>::from_bytes([8; 16]);
         let hex = IdbKey::document(doc);
         let (mine, theirs) = (
             DraftKey::new(format!("{hex}:a")),
@@ -1335,8 +1339,8 @@ mod wasm_tests {
             .expect("channel")
             .expect("store opens");
         let (doc, other) = (
-            DocumentId::from_bytes([9; 16]),
-            DocumentId::from_bytes([10; 16]),
+            Id::<Document>::from_bytes([9; 16]),
+            Id::<Document>::from_bytes([10; 16]),
         );
         let mut ledger = StoreLedger::default();
         ledger.observe(doc, &crate::SealedWrite::Shown);
@@ -1352,7 +1356,7 @@ mod wasm_tests {
         let rows = store.load_meta().await.unwrap();
         assert_eq!(rows, vec![(doc, meta), (other, meta)]);
         store.delete_snapshot(doc);
-        let rows: Vec<(DocumentId, Meta)> = store.load_meta().await.unwrap();
+        let rows: Vec<(Id<Document>, Meta)> = store.load_meta().await.unwrap();
         assert_eq!(rows, vec![(other, meta)]);
     }
 
@@ -1366,8 +1370,8 @@ mod wasm_tests {
             .await
             .expect("channel")
             .expect("store opens");
-        let doc = DocumentId::from_bytes([7; 16]);
-        let other = DocumentId::from_bytes([8; 16]);
+        let doc = Id::<Document>::from_bytes([7; 16]);
+        let other = Id::<Document>::from_bytes([8; 16]);
         let (one, two) = (
             FixedBytes::<SessionNonce>::from_array([1; 16]),
             FixedBytes::<SessionNonce>::from_array([2; 16]),
@@ -1398,7 +1402,7 @@ mod wasm_tests {
     async fn an_upgrade_adds_deltas_and_sessions() {
         let name = "ambre-test-migration-deltas";
         delete_db(name).await;
-        let doc = DocumentId::from_bytes([8; 16]);
+        let doc = Id::<Document>::from_bytes([8; 16]);
         seed_snapshots_only(name, doc, &[1, 2]).await;
         let store = PersistenceStore::open_at(DbName(name), DbVersion(DB_VERSION.0 + 1))
             .await

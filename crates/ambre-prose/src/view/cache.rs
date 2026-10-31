@@ -9,7 +9,8 @@
 
 use std::collections::HashMap;
 
-use ambre_core::{DocPx, FootnoteId, Generation, GenerationKind};
+use ambre_core::id::{Footnote, Id};
+use ambre_core::{DocPx, Generation, GenerationKind};
 use loro::TreeID;
 
 use crate::layout::run::{ParleyRunData, RunLine, ShapedRun};
@@ -63,7 +64,7 @@ pub struct GlyphRunAt {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RunKey {
     Block(TreeID),
-    Note(FootnoteId),
+    Note(Id<Footnote>),
 }
 
 /// The drawing half of a run: where each of its glyph runs sits, in the

@@ -76,13 +76,13 @@ each.
 ```rust
 #[derive(Debug)]
 pub struct ChannelState {
-    channel_id: ChannelId,
-    meta: Held,                          // a DocumentId and its LoroDoc
+    channel_id: Id<Channel>,
+    meta: Held,                          // an Id<Document> and its LoroDoc
     active: Held,
     closing: Option<Held>,
-    loaded: HashMap<SegmentId, LoroDoc>, // final segments, on demand
-    pending: HashMap<SegmentId, Vec<Arrival>>, // final segments asked for, still arriving
-    threads: HashMap<MessageId, Thread>, // the open threads, by their root
+    loaded: HashMap<Id<Segment>, LoroDoc>, // final segments, on demand
+    pending: HashMap<Id<Segment>, Vec<Arrival>>, // final segments asked for, still arriving
+    threads: HashMap<Id<Message>, Thread>, // the open threads, by their root
     /* and the bookkeeping: sequences, the segment lifecycle, amendments, the seek */
 }
 ```
@@ -120,7 +120,7 @@ pub enum MurmureCommand {
         now: Timestamp,
         confirmed: Confirmation,      // the `@channel` the author confirmed (`MURMURE-231`)
     },
-    LoadOlder { segment: SegmentId },
+    LoadOlder { segment: Id<Segment> },
     /* one variant per operation, each in the feature document that builds it */
 }
 ```

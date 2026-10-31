@@ -47,7 +47,7 @@ pub use svg_export::export_svg;
 pub use svg_import::import_svg;
 
 /// A reference to something the apply pass mints, used by converters that cannot
-/// name `ElementId`s, which are minted only when `CreateElement` is applied. It
+/// name `Id<Element>`s, which are minted only when `CreateElement` is applied. It
 /// is either a `CreateElement` slot (an index into [`ImportBatch::commands`]) or
 /// a group produced by an earlier [`ImportGroup`] (an index into
 /// [`ImportBatch::groups`]).

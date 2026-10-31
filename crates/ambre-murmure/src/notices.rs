@@ -60,16 +60,16 @@ pub fn warning_of(ev: &UiEvent) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::{ChannelId, UserId};
+    use ambre_core::id::{Channel, Id, User};
 
     /// `MURMURE-581`: a direct message that failed is told, and the cause
     /// stays out of the text, the member it names included. An opened one
     /// raises nothing.
     #[test]
     fn a_direct_message_that_failed_is_told_without_its_cause() {
-        let member = UserId::new();
+        let member = Id::<User>::mint();
         let failed = UiEvent::DirectMessage {
-            requested: ChannelId::new(),
+            requested: Id::<Channel>::mint(),
             event: DirectMessageEvent::Failed {
                 message: format!("the exchange key of {member} is not the one pinned"),
             },
@@ -80,9 +80,9 @@ mod tests {
         assert!(!text.contains("pinned"));
 
         let opened = UiEvent::DirectMessage {
-            requested: ChannelId::new(),
+            requested: Id::<Channel>::mint(),
             event: DirectMessageEvent::Opened {
-                channel_id: ChannelId::new(),
+                channel_id: Id::<Channel>::mint(),
             },
         };
         assert_eq!(warning_of(&opened), None);

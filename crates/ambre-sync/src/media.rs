@@ -11,7 +11,7 @@ use ambre_core::{FixedBytes, MediaAddress};
 /// (`SYNC-051`, `SYNC-074`).
 fn seal_blob(
     data: &ambre_core::Payload<ambre_core::MediaBytes>,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     address: &FixedBytes<MediaAddress>,
     doc_key: &DocumentKey,
     signing_key: &SigningKey,
@@ -30,7 +30,7 @@ fn seal_blob(
 /// other bytes.
 fn open_blob(
     blob: &pipeline::FetchedBlob,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     content_hash: &ambre_core::ContentHash,
     doc_key: &DocumentKey,
 ) -> Result<ambre_core::Payload<ambre_core::MediaBytes>, SyncError> {
@@ -78,7 +78,7 @@ impl SyncState {
     pub(crate) fn handle_upload_media(
         &mut self,
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         data: ambre_core::Payload<ambre_core::MediaBytes>,
     ) {
         if let Some(doc_state) = self
@@ -151,7 +151,7 @@ impl SyncState {
     /// so no request waits for good (`SYNC-146`).
     pub(crate) fn flush_pending_uploads(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         failure: Option<&http::Failed>,
     ) {
         let pending = self
@@ -182,7 +182,7 @@ impl SyncState {
     pub(crate) fn handle_download_media(
         &self,
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     ) {
         let event_tx = self.event_tx.clone();
@@ -229,7 +229,7 @@ impl SyncState {
     pub(crate) fn handle_erase_media(
         &self,
         id: Generation<Request>,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         content_hash: ambre_core::ContentHash,
     ) {
         let Some(tx) = self.event_tx.clone() else {
@@ -327,7 +327,7 @@ fn report(
 /// that seal it.
 pub(crate) struct Upload {
     id: Generation<Request>,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     data: ambre_core::Payload<ambre_core::MediaBytes>,
     address: FixedBytes<MediaAddress>,
     doc_key: DocumentKey,
@@ -403,7 +403,7 @@ async fn erase_media(
     http: &impl MediaHttp,
     base: &http::RelayUrl,
     id: Generation<Request>,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     content_hash: ambre_core::ContentHash,
     tx: &ambre_bus::conduit::UnboundedSender<SyncEvent>,
     logic_tx: &LogicSink,
@@ -505,7 +505,7 @@ mod tests {
         let picture = b"one picture, two documents".to_vec();
         let mut addresses = Vec::new();
         for byte in [0x31, 0x32] {
-            let document_id = DocumentId::new();
+            let document_id = Id::<Document>::mint();
             let key = DocumentKey::from_array([byte; 32]);
             let doc_state = SyncDocumentState::new(
                 document_id,
@@ -558,7 +558,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         for created in [true, false] {
-            let document_id = DocumentId::new();
+            let document_id = Id::<Document>::mint();
             let key = DocumentKey::from_array([0x41; 32]);
             let doc_state = SyncDocumentState::new(
                 document_id,
@@ -680,7 +680,7 @@ mod tests {
     async fn an_erase_answers_erased_unless_it_must_be_retried() {
         let (logic, logic_rx) = LogicSink::channel();
         let (tx, events) = ambre_bus::conduit::unbounded::<SyncEvent>();
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         for (fail, status, erased) in [
             ("", 200, true),
             ("", 403, true),
@@ -733,7 +733,7 @@ mod tests {
     #[tokio::test]
     async fn a_failed_upload_step_confirms_nothing() {
         let key = DocumentKey::from_array([0x31; 32]);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let address = ambre_crypto::commitment::media_address(&key, &b"a picture".to_vec().into());
         let upload = |id| Upload {
             id,
@@ -778,7 +778,7 @@ mod tests {
     #[tokio::test]
     async fn a_blob_that_fails_to_open_delivers_nothing() {
         let key = DocumentKey::from_array([0x31; 32]);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (blob, hash) = sealed(b"a picture", document_id, &key);
         let blob = blob.as_bytes().to_vec();
         let keyring = crate::chain::Keyring {
@@ -789,7 +789,7 @@ mod tests {
         };
         let mut altered = blob.clone();
         *altered.last_mut().unwrap() ^= 1;
-        let foreign = sealed(b"a picture", DocumentId::new(), &key)
+        let foreign = sealed(b"a picture", Id::<Document>::mint(), &key)
             .0
             .as_bytes()
             .to_vec();
@@ -824,7 +824,7 @@ mod tests {
 
     fn sealed(
         data: &[u8],
-        document_id: DocumentId,
+        document_id: Id<Document>,
         key: &DocumentKey,
     ) -> (pipeline::FetchedBlob, ambre_core::ContentHash) {
         let signing = SigningKey::from_bytes(&[0x07; 32]);
@@ -841,7 +841,7 @@ mod tests {
     /// the chain, and not without it (`SYNC-042`).
     #[test]
     fn a_blob_sealed_before_a_rotation_opens_through_the_chain() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let signing = SigningKey::from_bytes(&[0x07; 32]);
         let keys: Vec<_> = (0..3).map(|_| DocumentKey::generate()).collect();
         let links: Vec<_> = keys
@@ -867,10 +867,10 @@ mod tests {
     #[test]
     fn a_blob_opens_under_its_own_document_only() {
         let key = DocumentKey::from_array([0x31; 32]);
-        let own = DocumentId::new();
+        let own = Id::<Document>::mint();
         let (blob, address) = sealed(b"a picture", own, &key);
         assert_eq!(open_blob(&blob, own, &address, &key).unwrap(), b"a picture");
-        assert!(open_blob(&blob, DocumentId::new(), &address, &key).is_err());
+        assert!(open_blob(&blob, Id::<Document>::mint(), &address, &key).is_err());
     }
 
     /// A blob sealed under one address does not open under another address
@@ -878,7 +878,7 @@ mod tests {
     #[test]
     fn a_blob_opens_under_its_own_address_only() {
         let key = DocumentKey::from_array([0x31; 32]);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (blob, _) = sealed(b"a picture", document_id, &key);
         let (_, other) = sealed(b"another picture", document_id, &key);
         assert!(open_blob(&blob, document_id, &other, &key).is_err());
@@ -890,7 +890,7 @@ mod tests {
     #[test]
     fn a_download_refuses_a_blob_the_address_does_not_name() {
         let key = DocumentKey::from_array([0x31; 32]);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (_, wanted) = sealed(b"a picture", document_id, &key);
         let (served, _) = sealed(b"another picture", document_id, &key);
         assert!(open_blob(&served, document_id, &wanted, &key).is_err());

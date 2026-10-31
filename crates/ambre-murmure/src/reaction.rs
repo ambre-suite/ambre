@@ -8,7 +8,8 @@
 //! (`MURMURE-007`).
 
 use ambre_bus::{Emoji, Reaction};
-use ambre_core::{ByteCount, UserId};
+use ambre_core::ByteCount;
+use ambre_core::id::{Id, User};
 use loro::{Container, ContainerID, Index, LoroDoc, ValueOrContainer};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -21,14 +22,14 @@ const EMOJI_MAX_SIZE: ByteCount = ByteCount::new(64);
 /// The key of one reaction in the `reactions` map of a message: its member
 /// and its emoji (`MURMURE-006`).
 ///
-/// The user comes first: a `UserId` is written without a space, so the first
+/// The user comes first: a `Id<User>` is written without a space, so the first
 /// space ends it, whatever the emoji holds.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ReactionKey(String);
 
 impl ReactionKey {
     /// The key of the reaction of `user` with `emoji`.
-    pub(crate) fn of(user: UserId, emoji: &Emoji) -> Self {
+    pub(crate) fn of(user: Id<User>, emoji: &Emoji) -> Self {
         Self(format!("{user} {}", emoji.as_str()))
     }
 
@@ -39,9 +40,9 @@ impl ReactionKey {
 
     /// The member and the emoji a stored key names, `None` for a key no
     /// build writes.
-    pub(crate) fn read(stored: &str) -> Option<(UserId, Emoji)> {
+    pub(crate) fn read(stored: &str) -> Option<(Id<User>, Emoji)> {
         let (user, emoji) = stored.split_once(' ')?;
-        Some((UserId::parse_str(user).ok()?, Emoji::from(emoji)))
+        Some((Id::<User>::parse_str(user).ok()?, Emoji::from(emoji)))
     }
 }
 
@@ -61,7 +62,7 @@ pub(crate) fn read(message: &Fields<MessageKey>) -> Vec<Reaction> {
     else {
         return Vec::new();
     };
-    let mut entries: Vec<(Emoji, UserId)> = Vec::new();
+    let mut entries: Vec<(Emoji, Id<User>)> = Vec::new();
     map.for_each(|key, _| {
         if let Some((user, emoji)) = ReactionKey::read(key) {
             entries.push((emoji, user));

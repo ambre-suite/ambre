@@ -10,10 +10,8 @@
 use ambre_bus::{
     CatalogPosition, CatalogueEntry, CategoryView, SealedChannelKey, Timestamp, Topic,
 };
-use ambre_core::{
-    CategoryId, ChannelId, DeltaBytes, DocumentId, LoroPayloadRef, Name, Payload, PeerEntryBytes,
-    SnapshotBytes, SpaceId,
-};
+use ambre_core::id::{Category, Channel, Document, Id, Space};
+use ambre_core::{DeltaBytes, LoroPayloadRef, Name, Payload, PeerEntryBytes, SnapshotBytes};
 use loro::{ExportMode, LoroDoc, LoroValue, VersionVector};
 
 use crate::channel::ChannelState;
@@ -27,7 +25,7 @@ pub struct Listing<'a> {
     /// Absent when the channel has none.
     pub topic: Option<&'a Topic>,
     /// Absent for a channel outside every category.
-    pub category: Option<CategoryId>,
+    pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
     pub position: CatalogPosition,
     /// The channel key, sealed under the space key by the Sync worker.
@@ -37,7 +35,7 @@ pub struct Listing<'a> {
 /// An open space: its one document.
 #[derive(Debug)]
 pub struct SpaceState {
-    space_id: SpaceId,
+    space_id: Id<Space>,
     doc: LoroDoc,
     /// The PeerID this session writes the document under. `None` until the
     /// Sync worker issues it, and nothing is written before (`AUTHOR-029`).
@@ -62,7 +60,7 @@ impl SpaceState {
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses a write. A name past its
     /// cap makes no [`Name`], so it never reaches here (`MURMURE-579`).
-    pub fn create(space_id: SpaceId, name: &Name, now: Timestamp) -> Result<Self, MurmureError> {
+    pub fn create(space_id: Id<Space>, name: &Name, now: Timestamp) -> Result<Self, MurmureError> {
         let doc = LoroDoc::new();
         write_created(&doc, space_id, name, now)?;
         Ok(Self {
@@ -79,7 +77,10 @@ impl SpaceState {
     /// # Errors
     /// Every refusal of the header check, and
     /// [`MurmureError::ForeignSpace`] for a document of another space.
-    pub fn open(space_id: SpaceId, payloads: &[LoroPayloadRef<'_>]) -> Result<Self, MurmureError> {
+    pub fn open(
+        space_id: Id<Space>,
+        payloads: &[LoroPayloadRef<'_>],
+    ) -> Result<Self, MurmureError> {
         let doc = schema::admit_space(payloads, space_id)?;
         Ok(Self {
             space_id,
@@ -136,12 +137,12 @@ impl SpaceState {
     }
 
     /// The space this state holds.
-    pub fn space_id(&self) -> SpaceId {
+    pub fn space_id(&self) -> Id<Space> {
         self.space_id
     }
 
     /// The one document of the space.
-    pub fn document_id(&self) -> DocumentId {
+    pub fn document_id(&self) -> Id<Document> {
         self.space_id.document_id()
     }
 
@@ -192,7 +193,7 @@ impl SpaceState {
     /// [`MurmureError::Crdt`] when Loro refuses a write or the export.
     pub fn put_category(
         &mut self,
-        category_id: CategoryId,
+        category_id: Id<Category>,
         name: &Name,
         position: CatalogPosition,
     ) -> Result<Payload<DeltaBytes>, MurmureError> {
@@ -255,7 +256,7 @@ impl SpaceState {
     /// [`MurmureError::Crdt`] when Loro refuses the delete or the export.
     pub fn unlist_channel(
         &mut self,
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
     ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         let catalogue = crate::schema::root_map(&self.doc, Root::Catalogue);
         let key = channel_id.to_string();
@@ -276,7 +277,7 @@ impl SpaceState {
     /// [`MurmureError::Crdt`] when Loro refuses the write or the export.
     pub fn reseal_channel(
         &mut self,
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         key: &SealedChannelKey,
     ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         let Some(entry) = self.listed(channel_id) else {
@@ -296,7 +297,7 @@ impl SpaceState {
     /// # Errors
     /// [`MurmureError::NotListed`] when the catalogue lists no such channel,
     /// or holds no readable key for it.
-    pub fn sealed_key(&self, channel_id: ChannelId) -> Result<SealedChannelKey, MurmureError> {
+    pub fn sealed_key(&self, channel_id: Id<Channel>) -> Result<SealedChannelKey, MurmureError> {
         let entry = self
             .listed(channel_id)
             .ok_or(MurmureError::NotListed(channel_id))?;
@@ -308,7 +309,7 @@ impl SpaceState {
 
     /// The catalogue entry of `channel_id`, or `None` when the catalogue
     /// does not list it.
-    fn listed(&self, channel_id: ChannelId) -> Option<Fields<EntryKey>> {
+    fn listed(&self, channel_id: Id<Channel>) -> Option<Fields<EntryKey>> {
         crate::schema::root_map(&self.doc, Root::Catalogue)
             .get(&channel_id.to_string())
             .and_then(schema::fields_of)
@@ -320,7 +321,7 @@ impl SpaceState {
         let categories = crate::schema::root_map(&self.doc, Root::Categories);
         categories.for_each(|key, value| {
             let (Ok(id), Some(entry)) = (
-                CategoryId::parse_str(key),
+                Id::<Category>::parse_str(key),
                 schema::fields_of::<CategoryKey>(value),
             ) else {
                 return;
@@ -341,7 +342,7 @@ impl SpaceState {
         let mut found = Vec::new();
         crate::schema::root_map(&self.doc, Root::Catalogue).for_each(|key, value| {
             let (Ok(channel_id), Some(entry)) = (
-                ChannelId::parse_str(key),
+                Id::<Channel>::parse_str(key),
                 schema::fields_of::<EntryKey>(value),
             ) else {
                 return;
@@ -351,7 +352,7 @@ impl SpaceState {
                 name: schema::name(&entry, EntryKey::Name).unwrap_or_default(),
                 topic: schema::string(&entry, EntryKey::Topic).and_then(Topic::new),
                 category: schema::string(&entry, EntryKey::Category)
-                    .and_then(|s| CategoryId::parse_str(&s).ok()),
+                    .and_then(|s| Id::<Category>::parse_str(&s).ok()),
                 position: position_of(&entry, EntryKey::Position),
             });
         });
@@ -395,7 +396,7 @@ impl SpaceState {
 /// [`MurmureError::Crdt`] when Loro refuses a write.
 fn write_created(
     doc: &LoroDoc,
-    space_id: SpaceId,
+    space_id: Id<Space>,
     name: &Name,
     now: Timestamp,
 ) -> Result<(), MurmureError> {

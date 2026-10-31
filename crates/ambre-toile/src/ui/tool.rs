@@ -13,9 +13,10 @@
 // ============================================================================
 
 use ambre_bus::app::toile::{
-    Anchor, CommentAnchor, ConnectorId, DisplayGeom, DisplayNode, DisplayViewport, ElementId,
-    ElementKind, EndCaps, InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
+    Anchor, CommentAnchor, DisplayGeom, DisplayNode, DisplayViewport, ElementKind, EndCaps,
+    InitContent, PathType, ShapeKind, StrokePoint, ToileCommand,
 };
+use ambre_core::id::{Connector, Element, Id};
 use ambre_core::{BoardLength, Rgba, StoredBoardLength};
 use ambre_draw::{Affine, BezPath, Point, Rect, Size};
 use kurbo::Shape;
@@ -95,7 +96,7 @@ pub enum SelectOutcome {
     /// Nothing observable (idle move, or a drag step the view just repaints).
     None,
     /// Local selection changed to this set (never a command / never synced,).
-    SelectionChanged(Vec<ElementId>),
+    SelectionChanged(Vec<Id<Element>>),
     /// A committed document mutation to forward to Logic.
     Command(ToileCommand),
     /// A marquee rectangle is being dragged (world space); the overlay previews it.
@@ -106,12 +107,12 @@ pub enum SelectOutcome {
 #[derive(Clone, Debug)]
 enum Drag {
     Move {
-        ids: Vec<ElementId>,
+        ids: Vec<Id<Element>>,
         start: Point,
         last: Point,
     },
     Resize {
-        id: ElementId,
+        id: Id<Element>,
         base: Rect,
         handle: Handle,
         /// Pointer at press (world). The release compares against it: a press
@@ -126,7 +127,7 @@ enum Drag {
         last: Point,
     },
     Rotate {
-        id: ElementId,
+        id: Id<Element>,
         center: Point,
         /// Pointer at press (world), read by the release like the resize's own
         /// (`TOILE-UI-252`).
@@ -142,7 +143,7 @@ enum Drag {
         current: Point,
         /// The group scope at press time, so release resolves each hit the way a
         /// click would (`TOILE-UI-236`).
-        scope: Option<ElementId>,
+        scope: Option<Id<Element>>,
     },
 }
 
@@ -174,10 +175,10 @@ impl SelectTool {
         &mut self,
         world: Point,
         screen: Point,
-        selection: &[ElementId],
+        selection: &[Id<Element>],
         display: &DisplayViewport,
         cam: &ViewportTransform,
-        scope: Option<&ElementId>,
+        scope: Option<&Id<Element>>,
     ) -> SelectOutcome {
         // A single-element selection exposes transform handles; test them first so
         // a handle press starts a resize/rotate rather than a move.
@@ -372,7 +373,7 @@ impl SelectTool {
     /// corner / rotate handle. Never called while a drag is in flight.
     pub fn hover_handle(
         &self,
-        selection: &[ElementId],
+        selection: &[Id<Element>],
         display: &DisplayViewport,
         cam: &ViewportTransform,
         screen: Point,
@@ -406,7 +407,7 @@ impl SelectTool {
     pub fn gesture_overrides(
         &self,
         display: &DisplayViewport,
-    ) -> Vec<(ElementId, Rect, ambre_core::Radians)> {
+    ) -> Vec<(Id<Element>, Rect, ambre_core::Radians)> {
         match &self.drag {
             Some(Drag::Resize {
                 id,
@@ -475,7 +476,7 @@ pub enum ToolOutcome {
     /// Nothing to act on (idle move, or a draft step the view just repaints).
     None,
     /// Local selection changed to this set (never a command, never synced,).
-    SelectionChanged(Vec<ElementId>),
+    SelectionChanged(Vec<Id<Element>>),
     /// A committed document mutation to forward to Logic.
     Command(ToileCommand),
     /// The comment tool dropped a thread here (`TOILE-UI-042`). The view opens
@@ -529,7 +530,7 @@ enum Draft {
     },
     /// Connector drag from a source element anchor toward the cursor.
     Connector {
-        from: ElementId,
+        from: Id<Element>,
         from_anch: Anchor,
         origin: Point,
         current: Point,
@@ -661,10 +662,10 @@ impl ToolMachine {
         &mut self,
         world: Point,
         screen: Point,
-        selection: &[ElementId],
+        selection: &[Id<Element>],
         display: &DisplayViewport,
         cam: &ViewportTransform,
-        scope: Option<&ElementId>,
+        scope: Option<&Id<Element>>,
     ) -> ToolOutcome {
         self.cursor = world;
         self.pick = super::hit::pick_floor(cam);
@@ -940,7 +941,7 @@ impl ToolMachine {
     /// flight, and the pointer is on a single selection's edge / corner.
     pub fn hover_handle(
         &self,
-        selection: &[ElementId],
+        selection: &[Id<Element>],
         display: &DisplayViewport,
         cam: &ViewportTransform,
         screen: Point,
@@ -956,7 +957,7 @@ impl ToolMachine {
     pub fn gesture_overrides(
         &self,
         display: &DisplayViewport,
-    ) -> Vec<(ElementId, Rect, ambre_core::Radians)> {
+    ) -> Vec<(Id<Element>, Rect, ambre_core::Radians)> {
         self.select.gesture_overrides(display)
     }
 
@@ -999,14 +1000,14 @@ fn draw_style() -> ambre_bus::app::toile::ElementStyle {
 }
 
 /// World AABB of a single element (`None` if not in the current viewport).
-pub(crate) fn element_bounds(display: &DisplayViewport, id: &ElementId) -> Option<Rect> {
+pub(crate) fn element_bounds(display: &DisplayViewport, id: &Id<Element>) -> Option<Rect> {
     selection_bounds(std::slice::from_ref(id), display)
 }
 
 /// The immediate enclosing group of `id` in the current display, if any (the
 /// `DisplayElement.group` edge,). `None` for a top-level element or
 /// an id absent from the culled frame.
-fn enclosing_group_of(id: &ElementId, display: &DisplayViewport) -> Option<ElementId> {
+fn enclosing_group_of(id: &Id<Element>, display: &DisplayViewport) -> Option<Id<Element>> {
     display.nodes.iter().find_map(|n| match n {
         DisplayNode::Element(e) if &e.id == id => e.group.clone(),
         _ => None,
@@ -1015,7 +1016,7 @@ fn enclosing_group_of(id: &ElementId, display: &DisplayViewport) -> Option<Eleme
 
 /// Whether `id` names a group node in the current display (its geometry is the
 /// derived member union; it paints nothing,).
-pub(crate) fn is_group(id: &ElementId, display: &DisplayViewport) -> bool {
+pub(crate) fn is_group(id: &Id<Element>, display: &DisplayViewport) -> bool {
     display.nodes.iter().any(|n| {
         matches!(n, DisplayNode::Element(e) if &e.id == id
             && matches!(e.geom, DisplayGeom::Group))
@@ -1030,10 +1031,10 @@ pub(crate) fn is_group(id: &ElementId, display: &DisplayViewport) -> bool {
 ///   click selects a member or an immediate sub-group. A click outside the
 ///   scope falls back to the top-most group.
 pub(crate) fn resolve_group_target(
-    hit: ElementId,
+    hit: Id<Element>,
     display: &DisplayViewport,
-    scope: Option<&ElementId>,
-) -> ElementId {
+    scope: Option<&Id<Element>>,
+) -> Id<Element> {
     let mut chain = vec![hit.clone()];
     let mut cur = hit;
     // A peer can write a group into its own subtree. The walk stops at the
@@ -1106,7 +1107,7 @@ fn pen_bezpath(nodes: &[PenNode]) -> BezPath {
 /// World union AABB of the selected elements (`None` if empty / unresolved).
 /// A locked element is skipped, so it never wears the selection box
 /// (`TOILE-UI-231`) even when select-all or a stale id put it in the list.
-pub fn selection_bounds(selection: &[ElementId], display: &DisplayViewport) -> Option<Rect> {
+pub fn selection_bounds(selection: &[Id<Element>], display: &DisplayViewport) -> Option<Rect> {
     let mut acc: Option<Rect> = None;
     for node in &display.nodes {
         if let ambre_bus::app::toile::DisplayNode::Element(e) = node
@@ -1198,7 +1199,7 @@ fn edge_handle_at(screen_b: Rect, screen: Point) -> Option<Handle> {
 /// so there is nothing to stretch (`TOILE-UI-392`, `TOILE-155`). A press on its
 /// edge falls through to the board hit test instead.
 fn selection_handle_at(
-    id: &ElementId,
+    id: &Id<Element>,
     display: &DisplayViewport,
     screen_b: Rect,
     pick: Point,
@@ -1300,7 +1301,7 @@ fn resize_rect_rotated(base: Rect, handle: Handle, to: Point, rot: ambre_core::R
 /// Extract the rotation angle (radians) baked into an element's transform. The
 /// Logic derive stores it as a rotation about the AABB center, so the linear part
 /// is a pure rotation and `atan2(b, a)` recovers the angle.
-pub fn element_rotation(display: &DisplayViewport, id: &ElementId) -> ambre_core::Radians {
+pub fn element_rotation(display: &DisplayViewport, id: &Id<Element>) -> ambre_core::Radians {
     for node in &display.nodes {
         if let ambre_bus::app::toile::DisplayNode::Element(e) = node
             && &e.id == id
@@ -1316,11 +1317,11 @@ pub fn element_rotation(display: &DisplayViewport, id: &ElementId) -> ambre_core
 #[derive(Debug, PartialEq)]
 pub enum DoubleClickEdit {
     /// A frame's title, which sits outside the frame's own box.
-    FrameTitle(ElementId),
+    FrameTitle(Id<Element>),
     /// The body of an element that holds text.
-    Body(ElementId),
+    Body(Id<Element>),
     /// An arrow's caption.
-    Caption(ConnectorId),
+    Caption(Id<Connector>),
 }
 
 /// The editor a double-click at `screen` opens, or `None` when it opens none
@@ -1334,7 +1335,7 @@ pub fn double_click_edit(
     nodes: &[DisplayNode],
     screen: Point,
     cam: &ViewportTransform,
-    editable: impl Fn(&ElementId) -> bool,
+    editable: impl Fn(&Id<Element>) -> bool,
 ) -> Option<DoubleClickEdit> {
     if let Some(frame) = super::hit::frame_title_at(nodes, screen, cam) {
         return Some(DoubleClickEdit::FrameTitle(frame));
@@ -1353,7 +1354,7 @@ pub fn double_click_edit(
 /// change, and the selection's data the view then refetches names them. Ids
 /// are never reused, so a reply to an older selection drops only ids that are
 /// gone for good. Returns whether anything was dropped.
-pub fn drop_missing(selection: &mut Vec<ElementId>, missing: &[ElementId]) -> bool {
+pub fn drop_missing(selection: &mut Vec<Id<Element>>, missing: &[Id<Element>]) -> bool {
     if missing.is_empty() {
         return false;
     }
@@ -1374,7 +1375,7 @@ mod tests {
     /// keep their order, and an answer naming none changes nothing.
     #[test]
     fn a_selection_drops_the_ids_the_board_lost() {
-        let id = |s: &str| ElementId(s.to_owned());
+        let id = |s: &str| Id::<Element>::from_text(s.to_owned());
         let mut sel = vec![id("a"), id("b"), id("c")];
         assert!(drop_missing(&mut sel, &[id("b"), id("z")]));
         assert_eq!(sel, vec![id("a"), id("c")]);
@@ -1385,7 +1386,7 @@ mod tests {
 
     fn rect_elem(id: &str, bounds: Rect) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds,
@@ -1401,7 +1402,7 @@ mod tests {
     /// box (`TOILE-254`).
     fn frame_elem(id: &str, bounds: Rect, title: &str) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Frame,
             transform: Affine::IDENTITY,
             bounds,
@@ -1418,14 +1419,14 @@ mod tests {
         let DisplayNode::Element(mut e) = rect_elem(id, bounds) else {
             panic!("rect_elem builds an element")
         };
-        e.group = Some(ElementId(group.to_owned()));
+        e.group = Some(Id::<Element>::from_text(group.to_owned()));
         DisplayNode::Element(e)
     }
 
     /// A group node (paints nothing): `parent` is its own enclosing group, if any.
     fn group_node(id: &str, bounds: Rect, parent: Option<&str>) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Group,
             transform: Affine::IDENTITY,
             bounds,
@@ -1433,7 +1434,7 @@ mod tests {
             style: ElementStyle::default(),
             geom: DisplayGeom::Group,
             link: None,
-            group: parent.map(|p| ElementId(p.to_owned())),
+            group: parent.map(|p| Id::<Element>::from_text(p.to_owned())),
         })
     }
 
@@ -1457,8 +1458,8 @@ mod tests {
             group_node("outer", Rect::new(0.0, 0.0, 100.0, 100.0), None),
         ]);
         // No scope: a click resolves to the outermost enclosing group.
-        let target = resolve_group_target(ElementId("m".into()), &disp, None);
-        assert_eq!(target, ElementId("outer".into()));
+        let target = resolve_group_target(Id::<Element>::from_text("m".into()), &disp, None);
+        assert_eq!(target, Id::<Element>::from_text("outer".into()));
     }
 
     #[test]
@@ -1469,13 +1470,15 @@ mod tests {
             group_node("outer", Rect::new(0.0, 0.0, 100.0, 100.0), None),
         ]);
         // Scope = outer: the click peels one level and selects the sub-group `g`.
-        let scope = ElementId("outer".into());
-        let target = resolve_group_target(ElementId("m".into()), &disp, Some(&scope));
-        assert_eq!(target, ElementId("g".into()));
+        let scope = Id::<Element>::from_text("outer".into());
+        let target =
+            resolve_group_target(Id::<Element>::from_text("m".into()), &disp, Some(&scope));
+        assert_eq!(target, Id::<Element>::from_text("g".into()));
         // Scope = g: the click selects the member itself.
-        let scope = ElementId("g".into());
-        let target = resolve_group_target(ElementId("m".into()), &disp, Some(&scope));
-        assert_eq!(target, ElementId("m".into()));
+        let scope = Id::<Element>::from_text("g".into());
+        let target =
+            resolve_group_target(Id::<Element>::from_text("m".into()), &disp, Some(&scope));
+        assert_eq!(target, Id::<Element>::from_text("m".into()));
     }
 
     /// `TOILE-UI-398`: a peer wrote `g1` into `g2` and `g2` into `g1`. A click
@@ -1487,19 +1490,20 @@ mod tests {
             group_node("g1", Rect::new(0.0, 0.0, 100.0, 100.0), Some("g2")),
             group_node("g2", Rect::new(0.0, 0.0, 100.0, 100.0), Some("g1")),
         ]);
-        let target = resolve_group_target(ElementId("m".into()), &disp, None);
-        assert_eq!(target, ElementId("g2".into()));
-        let scope = ElementId("g1".into());
-        let target = resolve_group_target(ElementId("m".into()), &disp, Some(&scope));
-        assert_eq!(target, ElementId("m".into()));
+        let target = resolve_group_target(Id::<Element>::from_text("m".into()), &disp, None);
+        assert_eq!(target, Id::<Element>::from_text("g2".into()));
+        let scope = Id::<Element>::from_text("g1".into());
+        let target =
+            resolve_group_target(Id::<Element>::from_text("m".into()), &disp, Some(&scope));
+        assert_eq!(target, Id::<Element>::from_text("m".into()));
     }
 
     #[test]
     fn ungrouped_element_resolves_to_itself() {
         let disp = viewport(vec![rect_elem("a", Rect::new(0.0, 0.0, 100.0, 100.0))]);
-        let target = resolve_group_target(ElementId("a".into()), &disp, None);
-        assert_eq!(target, ElementId("a".into()));
-        assert!(!is_group(&ElementId("a".into()), &disp));
+        let target = resolve_group_target(Id::<Element>::from_text("a".into()), &disp, None);
+        assert_eq!(target, Id::<Element>::from_text("a".into()));
+        assert!(!is_group(&Id::<Element>::from_text("a".into()), &disp));
     }
 
     #[test]
@@ -1514,7 +1518,7 @@ mod tests {
         let out = tool.pointer_down(w, to_screen(&cam, w), &[], &disp, &cam, None);
         match out {
             SelectOutcome::SelectionChanged(ids) => {
-                assert_eq!(ids, vec![ElementId("g".into())]);
+                assert_eq!(ids, vec![Id::<Element>::from_text("g".into())]);
             }
             other => panic!("expected the group to be selected, got {other:?}"),
         }
@@ -1542,13 +1546,13 @@ mod tests {
         let w0 = Point::new(50.0, 50.0);
         let out = tool.pointer_down(w0, to_screen(&cam, w0), &[], &disp, &cam, None);
         assert!(
-            matches!(out, SelectOutcome::SelectionChanged(ref ids) if ids == &[ElementId("a".into())])
+            matches!(out, SelectOutcome::SelectionChanged(ref ids) if ids == &[Id::<Element>::from_text("a".into())])
         );
         tool.pointer_move(Point::new(70.0, 60.0));
         let up = tool.pointer_up(Point::new(70.0, 60.0), &disp);
         match up {
             SelectOutcome::Command(ToileCommand::MoveElements { ids, delta }) => {
-                assert_eq!(ids, vec![ElementId("a".into())]);
+                assert_eq!(ids, vec![Id::<Element>::from_text("a".into())]);
                 assert_eq!(delta, Vec2::new(20.0, 10.0));
             }
             other => panic!("expected MoveElements, got {other:?}"),
@@ -1587,7 +1591,7 @@ mod tests {
         let mut tool = SelectTool::new();
         let out = tool.pointer_down(world, screen, &[], &disp, &cam, None);
         assert!(
-            matches!(out, SelectOutcome::SelectionChanged(ref ids) if ids == &[ElementId("f".into())]),
+            matches!(out, SelectOutcome::SelectionChanged(ref ids) if ids == &[Id::<Element>::from_text("f".into())]),
             "the title did not select its frame: {out:?}"
         );
     }
@@ -1605,12 +1609,16 @@ mod tests {
             .1;
         assert_eq!(
             double_click_edit(&disp.nodes, band.center(), &cam, |_| true),
-            Some(DoubleClickEdit::FrameTitle(ElementId("f".into())))
+            Some(DoubleClickEdit::FrameTitle(Id::<Element>::from_text(
+                "f".into()
+            )))
         );
         let inside = to_screen(&cam, Point::new(150.0, 150.0));
         assert_ne!(
             double_click_edit(&disp.nodes, inside, &cam, |_| false),
-            Some(DoubleClickEdit::FrameTitle(ElementId("f".into())))
+            Some(DoubleClickEdit::FrameTitle(Id::<Element>::from_text(
+                "f".into()
+            )))
         );
     }
 
@@ -1628,7 +1636,7 @@ mod tests {
             .1;
         assert_eq!(
             super::super::hit::frame_title_at(&disp.nodes, band.center(), &cam),
-            Some(ElementId("f".into()))
+            Some(Id::<Element>::from_text("f".into()))
         );
     }
 
@@ -1646,7 +1654,7 @@ mod tests {
         assert!(matches!(m, SelectOutcome::Marquee(_)));
         let up = tool.pointer_up(Point::new(200.0, 200.0), &disp);
         assert!(
-            matches!(up, SelectOutcome::SelectionChanged(ref ids) if ids == &[ElementId("a".into())])
+            matches!(up, SelectOutcome::SelectionChanged(ref ids) if ids == &[Id::<Element>::from_text("a".into())])
         );
     }
 
@@ -1668,7 +1676,7 @@ mod tests {
         let _ = tool.pointer_move(Point::new(200.0, 200.0));
         let up = tool.pointer_up(Point::new(200.0, 200.0), &disp);
         assert!(
-            matches!(up, SelectOutcome::SelectionChanged(ref ids) if ids == &[ElementId("g".into())])
+            matches!(up, SelectOutcome::SelectionChanged(ref ids) if ids == &[Id::<Element>::from_text("g".into())])
         );
     }
 
@@ -1678,7 +1686,7 @@ mod tests {
         let disp = viewport(vec![rect_elem("a", bounds)]);
         let cam = cam();
         let mut tool = SelectTool::new();
-        let sel = vec![ElementId("a".into())];
+        let sel = vec![Id::<Element>::from_text("a".into())];
         // Press the SE handle (world corner 100,100 -> its screen position).
         let se_world = Point::new(100.0, 100.0);
         let se_screen = to_screen(&cam, se_world);
@@ -1689,7 +1697,7 @@ mod tests {
         let up = tool.pointer_up(Point::new(150.0, 140.0), &disp);
         match up {
             SelectOutcome::Command(ToileCommand::ResizeElement { id, new }) => {
-                assert_eq!(id, ElementId("a".into()));
+                assert_eq!(id, Id::<Element>::from_text("a".into()));
                 assert_eq!(new, Rect::new(0.0, 0.0, 150.0, 140.0));
             }
             other => panic!("expected ResizeElement, got {other:?}"),
@@ -1741,7 +1749,7 @@ mod tests {
         let disp = viewport(vec![rotated_rect_elem("a", bounds, FRAC_PI_2)]);
         let cam = cam();
         let m = ToolMachine::new();
-        let sel = vec![ElementId("a".into())];
+        let sel = vec![Id::<Element>::from_text("a".into())];
         let center = to_screen(&cam, bounds.center());
         let se_screen = to_screen(&cam, Point::new(100.0, 100.0)); // axis-aligned SE
         // The SE corner is drawn a quarter turn round the box center; the cursor
@@ -1788,7 +1796,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
         let disp = viewport(vec![rect_elem("a", bounds)]);
         let cam = cam();
-        let sel = vec![ElementId("a".into())];
+        let sel = vec![Id::<Element>::from_text("a".into())];
 
         // Resize from the SE corner: the override carries the live resized rect.
         let mut tool = SelectTool::new();
@@ -1797,7 +1805,7 @@ mod tests {
         tool.pointer_move(Point::new(150.0, 140.0));
         let ov = tool.gesture_overrides(&disp);
         assert_eq!(ov.len(), 1);
-        assert_eq!(ov[0].0, ElementId("a".into()));
+        assert_eq!(ov[0].0, Id::<Element>::from_text("a".into()));
         assert_eq!(ov[0].1, Rect::new(0.0, 0.0, 150.0, 140.0));
         assert_eq!(ov[0].2, ambre_core::Radians::ZERO);
 
@@ -1831,7 +1839,7 @@ mod tests {
         ]);
         let cam = cam();
         let mut m = ToolMachine::new();
-        let sel_a = vec![ElementId("a".into())];
+        let sel_a = vec![Id::<Element>::from_text("a".into())];
         // On the SE corner of the single selection -> the diagonal handle.
         let se = to_screen(&cam, Point::new(100.0, 100.0));
         assert_eq!(m.hover_handle(&sel_a, &disp, &cam, se), Some(Handle::Se));
@@ -1839,7 +1847,10 @@ mod tests {
         let inside = to_screen(&cam, Point::new(50.0, 50.0));
         assert_eq!(m.hover_handle(&sel_a, &disp, &cam, inside), None);
         // Multi-selection -> handles suppressed (Phase 0 shows the box only).
-        let sel_ab = vec![ElementId("a".into()), ElementId("b".into())];
+        let sel_ab = vec![
+            Id::<Element>::from_text("a".into()),
+            Id::<Element>::from_text("b".into()),
+        ];
         assert_eq!(m.hover_handle(&sel_ab, &disp, &cam, se), None);
         // A creation tool is armed -> never a resize hover.
         m.set_tool(Tool::Shape(ShapeKind::Rect));
@@ -1862,7 +1873,7 @@ mod tests {
             group_node("g", bounds, None),
         ]);
         let cam = cam();
-        let sel = vec![ElementId("g".into())];
+        let sel = vec![Id::<Element>::from_text("g".into())];
         for world in [Point::new(100.0, 100.0), Point::new(100.0, 50.0)] {
             let screen = to_screen(&cam, world);
             let mut m = ToolMachine::new();
@@ -1894,7 +1905,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
         let disp = viewport(vec![rect_elem("a", bounds)]);
         let cam = cam();
-        let sel = vec![ElementId("a".into())];
+        let sel = vec![Id::<Element>::from_text("a".into())];
 
         // Resize -> the grabbed handle.
         let mut m = ToolMachine::new();
@@ -1929,7 +1940,7 @@ mod tests {
         let bounds = Rect::new(0.0, 0.0, 100.0, 100.0);
         let disp = viewport(vec![rect_elem("a", bounds)]);
         let cam = cam();
-        let sel = vec![ElementId("a".into())];
+        let sel = vec![Id::<Element>::from_text("a".into())];
         let mut tool = SelectTool::new();
         let se = to_screen(&cam, Point::new(100.0, 100.0));
         tool.pointer_down(Point::new(100.0, 100.0), se, &sel, &disp, &cam, None);
@@ -1942,7 +1953,7 @@ mod tests {
         // Release commits one resize to the final pointer.
         match tool.pointer_up(Point::new(150.0, 140.0), &disp) {
             SelectOutcome::Command(ToileCommand::ResizeElement { id, new }) => {
-                assert_eq!(id, ElementId("a".into()));
+                assert_eq!(id, Id::<Element>::from_text("a".into()));
                 assert_eq!(new, Rect::new(0.0, 0.0, 150.0, 140.0));
             }
             other => panic!("expected a single ResizeElement, got {other:?}"),
@@ -2001,7 +2012,7 @@ mod tests {
         m.pointer_down(on_note, to_screen(&cam, on_note), &[], &disp, &cam, None);
         match m.pointer_up(on_note, &disp) {
             ToolOutcome::Comment(CommentAnchor::Element(id)) => {
-                assert_eq!(id, ElementId("note".to_owned()));
+                assert_eq!(id, Id::<Element>::from_text("note".to_owned()));
             }
             other => panic!("expected an element anchor, got {other:?}"),
         }
@@ -2187,8 +2198,8 @@ mod tests {
             ToolOutcome::Command(ToileCommand::CreateConnector {
                 from, to, arrows, ..
             }) => {
-                assert_eq!(from, ElementId("a".into()));
-                assert_eq!(to, ElementId("b".into()));
+                assert_eq!(from, Id::<Element>::from_text("a".into()));
+                assert_eq!(to, Id::<Element>::from_text("b".into()));
                 assert_eq!(
                     (arrows.start, arrows.end),
                     (
@@ -2472,7 +2483,7 @@ mod tests {
         let disp = viewport(vec![rect_elem("a", bounds)]);
         let cam = cam();
         let mut tool = SelectTool::new();
-        let sel = vec![ElementId("a".into())];
+        let sel = vec![Id::<Element>::from_text("a".into())];
         let se_world = Point::new(100.0, 100.0);
         let out = tool.pointer_down(se_world, to_screen(&cam, se_world), &sel, &disp, &cam, None);
         assert!(matches!(out, SelectOutcome::None));
@@ -2490,7 +2501,7 @@ mod tests {
         let disp = viewport(vec![rect_elem("a", bounds)]);
         let cam = cam();
         let mut tool = SelectTool::new();
-        let sel = vec![ElementId("a".into())];
+        let sel = vec![Id::<Element>::from_text("a".into())];
         let screen_b = world_rect_to_screen(bounds, &cam);
         let rot_screen = rotate_handle_point(screen_b);
         let rot_world = cam.screen_to_world() * rot_screen;
@@ -2509,7 +2520,7 @@ mod tests {
         let disp = viewport(vec![rect_elem("a", bounds)]);
         let cam = cam();
         let mut tool = SelectTool::new();
-        let sel = vec![ElementId("a".into())];
+        let sel = vec![Id::<Element>::from_text("a".into())];
         // Rotate handle sits above the top-center in screen space.
         let screen_b = world_rect_to_screen(bounds, &cam);
         let rot_screen = rotate_handle_point(screen_b);
@@ -2522,7 +2533,7 @@ mod tests {
         let up = tool.pointer_up(Point::new(60.0, 0.0), &disp);
         match up {
             SelectOutcome::Command(ToileCommand::RotateElement { id, radians }) => {
-                assert_eq!(id, ElementId("a".into()));
+                assert_eq!(id, Id::<Element>::from_text("a".into()));
                 assert!((radians.get() - std::f64::consts::FRAC_PI_2).abs() < 1e-6);
             }
             other => panic!("expected RotateElement, got {other:?}"),
@@ -2542,10 +2553,19 @@ mod tests {
         }
 
         // A locked-only selection wears no box.
-        assert_eq!(selection_bounds(&[ElementId("a".into())], &disp), None);
+        assert_eq!(
+            selection_bounds(&[Id::<Element>::from_text("a".into())], &disp),
+            None
+        );
         // A mixed selection's box covers the unlocked element alone.
-        let both =
-            selection_bounds(&[ElementId("a".into()), ElementId("b".into())], &disp).expect("box");
+        let both = selection_bounds(
+            &[
+                Id::<Element>::from_text("a".into()),
+                Id::<Element>::from_text("b".into()),
+            ],
+            &disp,
+        )
+        .expect("box");
         assert_eq!(both, Rect::new(40.0, 0.0, 50.0, 10.0));
     }
 }

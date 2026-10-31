@@ -9,14 +9,15 @@
 //! (`MURMURE-419`). The menu of a message offers the ones its target allows.
 
 use ambre_bus::{
-    ChannelId, Emoji, HeldReply, HeldSend, LogicCommand, Mention, MessageAt, MessageId,
-    MurmureCommand, StyleMark, Timestamp,
+    Emoji, HeldReply, HeldSend, LogicCommand, Mention, MessageAt, MurmureCommand, StyleMark,
+    Timestamp,
 };
 use ambre_commands::{
     Command, CommandCategory, CommandId, FunctionKey, Key, KeyBinding, KeyChar, Keymap, Locale,
     Modifiers,
 };
-use ambre_core::{ByteCount, DocumentId, UserId};
+use ambre_core::ByteCount;
+use ambre_core::id::{Channel, Document, Id, Message, User};
 
 use crate::{MessageRef, MurmurePane, Region};
 
@@ -221,13 +222,13 @@ ambre_core::define_flag! {
 #[derive(Clone, PartialEq)]
 pub struct MessageTarget {
     /// The channel the message lies in.
-    pub channel: ChannelId,
+    pub channel: Id<Channel>,
     /// Where it lies: a segment of the channel, or the thread of a root.
     pub at: MessageAt,
     /// The message.
-    pub message: MessageId,
+    pub message: Id<Message>,
     /// The member who wrote it.
-    pub author: UserId,
+    pub author: Id<User>,
     /// Its text, empty for a deleted message or a notice.
     pub text: String,
     /// Who its text names, as the list holds them.
@@ -274,7 +275,7 @@ pub enum FromThread {
     Root(MessageRef),
     /// In a segment the list has not loaded. The copy names its thread
     /// document, whose header names the segment to load down to.
-    Unloaded(DocumentId),
+    Unloaded(Id<Document>),
 }
 
 /// What an action of a message asks the page to do.
@@ -317,11 +318,11 @@ impl std::fmt::Debug for MessageAction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PendingReaction {
     /// The channel the message lies in.
-    pub channel: ChannelId,
+    pub channel: Id<Channel>,
     /// Where it lies: a segment of the channel, or the thread of a root.
     pub at: MessageAt,
     /// The message.
-    pub message: MessageId,
+    pub message: Id<Message>,
 }
 
 impl PendingReaction {
@@ -357,11 +358,11 @@ pub enum Picking {
 #[derive(Clone, PartialEq, Eq)]
 pub struct PendingEdit {
     /// The channel the message lies in.
-    pub channel: ChannelId,
+    pub channel: Id<Channel>,
     /// Where it lies. A reply loads into the composer of its thread.
     pub at: MessageAt,
     /// The message.
-    pub message: MessageId,
+    pub message: Id<Message>,
     /// Its text as the list holds it.
     pub text: String,
     /// Who that text names.
@@ -388,11 +389,11 @@ impl std::fmt::Debug for PendingEdit {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PendingDelete {
     /// The channel the message lies in.
-    pub channel: ChannelId,
+    pub channel: Id<Channel>,
     /// Where it lies: a segment of the channel, or the thread of a root.
     pub at: MessageAt,
     /// The message.
-    pub message: MessageId,
+    pub message: Id<Message>,
 }
 
 impl PendingDelete {
@@ -415,7 +416,7 @@ impl PendingDelete {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AskedAll {
     /// The channel the send writes in.
-    pub channel: ChannelId,
+    pub channel: Id<Channel>,
     /// How many members the channel holds, as the question says.
     pub members: ambre_core::MemberCount,
     /// The draft, and the thread it answers for a reply.
@@ -474,7 +475,7 @@ pub fn asked_all_title(members: ambre_core::MemberCount) -> String {
 /// notice takes no reply, a reply takes no thread of its own, and a message
 /// with no text no copy. Only the author deletes or edits a message. A reply
 /// is edited in the composer of its thread (`MURMURE-526`).
-pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<CommandId> {
+pub fn message_actions(target: &MessageTarget, me: Option<Id<User>>) -> Vec<CommandId> {
     let in_channel = matches!(target.at, MessageAt::Segment(_));
     let by_member = target.writer == Writer::Member;
     let mut ids = Vec::with_capacity(6);
@@ -502,7 +503,7 @@ pub fn message_actions(target: &MessageTarget, me: Option<UserId>) -> Vec<Comman
 pub fn message_action(
     id: CommandId,
     target: &MessageTarget,
-    me: Option<UserId>,
+    me: Option<Id<User>>,
 ) -> Option<MessageAction> {
     if !message_actions(target, me).contains(&id) {
         return None;
@@ -704,15 +705,16 @@ pub fn key_list(locale: &Locale) -> Vec<KeyRow> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{ReplyEcho, SegmentId};
+    use ambre_bus::ReplyEcho;
     use ambre_commands::shared;
+    use ambre_core::id::Segment;
 
     fn target(at: MessageAt, text: &str, notice: bool) -> MessageTarget {
         MessageTarget {
-            channel: ChannelId::new(),
+            channel: Id::<Channel>::mint(),
             at,
-            message: MessageId::new(),
-            author: UserId::new(),
+            message: Id::<Message>::mint(),
+            author: Id::<User>::mint(),
             text: text.to_owned(),
             mentions: Vec::new(),
             styles: Vec::new(),
@@ -728,7 +730,11 @@ mod tests {
     /// A message is plaintext.
     #[test]
     fn a_message_text_debugs_its_length_alone() {
-        let target = target(MessageAt::Segment(SegmentId::new()), "secret words", false);
+        let target = target(
+            MessageAt::Segment(Id::<Segment>::mint()),
+            "secret words",
+            false,
+        );
         let edit = PendingEdit {
             channel: target.channel,
             at: target.at,
@@ -769,7 +775,7 @@ mod tests {
     /// confirmed, to the channel or the thread it was for (`MURMURE-557`).
     #[test]
     fn a_confirmed_at_channel_sends_the_held_draft_again() {
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         let draft = ambre_bus::MessageDraft {
             text: "@channel hi".to_owned(),
             mentions: Vec::new(),
@@ -792,7 +798,7 @@ mod tests {
                 command: MurmureCommand::SendMessage { draft: d, now: Timestamp(7), confirmed: ambre_bus::Confirmation::Confirmed, .. },
             } if channel_id == channel && d == draft
         ));
-        let root = MessageId::new();
+        let root = Id::<Message>::mint();
         let reply = AskedAll {
             held: HeldSend {
                 draft: draft.clone(),
@@ -828,7 +834,7 @@ mod tests {
     /// the palette and a chord reach the same entry (`MURMURE-419`).
     #[test]
     fn every_action_of_a_message_is_a_command_of_the_table() {
-        let full = target(MessageAt::Segment(SegmentId::new()), "hi", false);
+        let full = target(MessageAt::Segment(Id::<Segment>::mint()), "hi", false);
         let ids = message_actions(&full, Some(full.author));
         assert_eq!(ids, [REPLY, REACT, MARK_UNREAD, COPY_TEXT, EDIT, DELETE]);
         for id in ids {
@@ -840,10 +846,10 @@ mod tests {
     /// cursor, and a message with no text no copy (`MURMURE-419`).
     #[test]
     fn the_actions_follow_the_message() {
-        let segment = MessageAt::Segment(SegmentId::new());
+        let segment = MessageAt::Segment(Id::<Segment>::mint());
         let notice = target(segment, "joined", true);
         assert_eq!(message_actions(&notice, None), [MARK_UNREAD, COPY_TEXT]);
-        let reply = target(MessageAt::Thread(MessageId::new()), "one", false);
+        let reply = target(MessageAt::Thread(Id::<Message>::mint()), "one", false);
         assert_eq!(message_actions(&reply, None), [REACT, COPY_TEXT]);
         let deleted = target(segment, "", false);
         assert_eq!(message_actions(&deleted, None), [REPLY, MARK_UNREAD]);
@@ -857,11 +863,11 @@ mod tests {
     /// Logic to seek it (`MURMURE-545`).
     #[test]
     fn the_reply_on_a_copy_opens_the_thread_it_came_from() {
-        let segment = MessageAt::Segment(SegmentId::new());
+        let segment = MessageAt::Segment(Id::<Segment>::mint());
         let mut copy = target(segment, "ok", false);
         let root = MessageRef {
-            segment: SegmentId::new(),
-            message: MessageId::new(),
+            segment: Id::<Segment>::mint(),
+            message: Id::<Message>::mint(),
         };
         copy.from_thread = Some(FromThread::Root(root));
         let Some(MessageAction::Open(MurmurePane::Thread { channel, root: at })) =
@@ -870,7 +876,7 @@ mod tests {
             panic!("the reply opens a thread");
         };
         assert_eq!((channel, at), (copy.channel, root));
-        let thread = DocumentId::new();
+        let thread = Id::<Document>::mint();
         copy.from_thread = Some(FromThread::Unloaded(thread));
         assert_eq!(
             message_actions(&copy, None),
@@ -891,16 +897,16 @@ mod tests {
     /// The action asks for a confirmation, and sends nothing (`MURMURE-512`).
     #[test]
     fn only_the_author_deletes_a_message_and_only_once_confirmed() {
-        let segment = MessageAt::Segment(SegmentId::new());
+        let segment = MessageAt::Segment(Id::<Segment>::mint());
         let own = target(segment, "hi", false);
         let me = Some(own.author);
         assert_eq!(message_actions(&own, None).last(), Some(&COPY_TEXT));
-        let other = Some(UserId::new());
+        let other = Some(Id::<User>::mint());
         assert!(
             !message_actions(&own, other).contains(&DELETE),
             "not theirs"
         );
-        let reply = target(MessageAt::Thread(MessageId::new()), "one", false);
+        let reply = target(MessageAt::Thread(Id::<Message>::mint()), "one", false);
         let reply_ids = message_actions(&reply, Some(reply.author));
         assert_eq!(reply_ids, [REACT, COPY_TEXT, EDIT, DELETE]);
         let notice = target(segment, "joined", true);
@@ -943,17 +949,17 @@ mod tests {
     /// nothing (`MURMURE-203`, `MURMURE-526`).
     #[test]
     fn only_the_author_edits_a_message_or_a_reply() {
-        let segment = MessageAt::Segment(SegmentId::new());
+        let segment = MessageAt::Segment(Id::<Segment>::mint());
         let own = target(segment, "hi", false);
         let me = Some(own.author);
-        assert!(!message_actions(&own, Some(UserId::new())).contains(&EDIT));
-        let reply = target(MessageAt::Thread(MessageId::new()), "one", false);
+        assert!(!message_actions(&own, Some(Id::<User>::mint())).contains(&EDIT));
+        let reply = target(MessageAt::Thread(Id::<Message>::mint()), "one", false);
         let Some(MessageAction::Edit(of_reply)) = message_action(EDIT, &reply, Some(reply.author))
         else {
             panic!("a reply is edited in its thread");
         };
         assert_eq!((of_reply.at, of_reply.message), (reply.at, reply.message));
-        let others = message_actions(&reply, Some(UserId::new()));
+        let others = message_actions(&reply, Some(Id::<User>::mint()));
         assert!(!others.contains(&EDIT), "nor another member's reply");
         let notice = target(segment, "joined", true);
         assert!(!message_actions(&notice, Some(notice.author)).contains(&EDIT));
@@ -978,7 +984,7 @@ mod tests {
     /// back to it, and copy hands its text over (`MURMURE-419`).
     #[test]
     fn each_action_does_what_its_title_says() {
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         let target = target(MessageAt::Segment(segment), "hi", false);
         let root = MessageRef {
             segment,

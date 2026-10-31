@@ -25,9 +25,9 @@ status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `PRESENCE-002` | `INV` | A presence payload MUST NOT carry a user identifier. | this spec section 3; `SYNC-014` | type-level -- no payload in the suite declares the field, so an impersonated sample has no shape to travel in | none | verified |
-| `PRESENCE-003` | `INV` | The author of a presence sample MUST be the `UserId` the Sync thread resolves from the signing key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-014` | `ambre_sync::pipeline::tests::roundtrip_ephemeral`; `ambre_server::ws::handler::message::tests::forged_author_key_writes_no_presence` | none | verified |
-| `PRESENCE-005` | `INV` | The peer set MUST be keyed by `UserId`: one collaborator on two devices MUST NOT render as two. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- on the assertions that a second peer is tracked under its own identity and neither displaces the other | none | verified |
-| `PRESENCE-006` | `INV` | A peer's colour MUST be derived from that `UserId` by the shared cross-app helper. | this spec section 3; this spec section 5 | `ambre_draw::peer::tests::stable_and_pure`; `::distinct_seeds_usually_differ`; `::opaque` | none | verified |
+| `PRESENCE-003` | `INV` | The author of a presence sample MUST be the `Id<User>` the Sync thread resolves from the signing key. | this spec section 3; `ambre-spec-membership.md`, `SYNC-014` | `ambre_sync::pipeline::tests::roundtrip_ephemeral`; `ambre_server::ws::handler::message::tests::forged_author_key_writes_no_presence` | none | verified |
+| `PRESENCE-005` | `INV` | The peer set MUST be keyed by `Id<User>`: one collaborator on two devices MUST NOT render as two. | this spec section 3 | `ambre_toile::logic::convergence_tests::apply_ephemeral_keys_presence_by_user_id_without_touching_history` -- on the assertions that a second peer is tracked under its own identity and neither displaces the other | none | verified |
+| `PRESENCE-006` | `INV` | A peer's colour MUST be derived from that `Id<User>` by the shared cross-app helper. | this spec section 3; this spec section 5 | `ambre_draw::peer::tests::stable_and_pure`; `::distinct_seeds_usually_differ`; `::opaque` | none | verified |
 | `PRESENCE-004` | `INV` | A peer's display name MUST be cosmetic: it MUST NOT decide identity, colour or permission. | this spec section 3 | `ambre_toile::ui::presence::tests::a_peer_name_decides_neither_identity_nor_colour` -- two peers under one name paint two cursors in their own colours, and a renamed peer keeps its colour | none | verified |
 | `PRESENCE-007` | `INV` | A presence anchor MUST name identities that survive a structural edit, never positions. | this spec section 3 | `ambre_toile::ui::presence::tests::a_selection_anchor_survives_a_structural_edit` -- a peer's selection ghost follows its element through a deletion, an insertion before it and a move | none | verified |
 
@@ -60,7 +60,7 @@ An inbound sample is opened, its author resolved, and the peer set updated for t
   in a frame pass already charged.
 * **Boundary.** every presence sample leaves the client, and `ZK-005` seals it with the
   `DocumentKey`: the relay reads `document_id`, `pub_key` and `counter`. The author is resolved to a
-  `UserId` in `ambre-sync` first, so no peer paints under another name.
+  `Id<User>` in `ambre-sync` first, so no peer paints under another name.
 * **Verification.** 15 `verified`. A departure travels twice: the relay says it, and the client
   ages a peer out if that word is lost.
 
@@ -94,7 +94,7 @@ identity rule: what a peer may assert about itself, and what the receiver has es
 | Shape | Direction | Carries |
 |---|---|---|
 | the payload | this peer to the relay, and back from every other | an anchor, and a self-asserted display name |
-| the resolved sample | the Logic thread to the view | the resolved `UserId`, the name, the colour, the anchor resolved to a position |
+| the resolved sample | the Logic thread to the view | the resolved `Id<User>`, the name, the colour, the anchor resolved to a position |
 
 The payload is postcard bytes inside an `Ephemeral` wire message, so it is one of the few types in the
 suite that keeps `serde`. The resolved sample never leaves the process: it moves by value on
@@ -108,9 +108,9 @@ relabels their own cursor, and nothing else.
 
 **The four steps of an inbound sample:**
 
-1. `ambre-sync` decrypts the sample and resolves the author to a `UserId`, dropping a sample whose
+1. `ambre-sync` decrypts the sample and resolves the author to an `Id<User>`, dropping a sample whose
    key matches no member (`SYNC-014`, `SYNC-015`);
-2. the Logic thread records the sample under that `UserId`, replacing that peer's previous one, so
+2. the Logic thread records the sample under that `Id<User>`, replacing that peer's previous one, so
    one collaborator on two devices is one entry (`PRESENCE-005`);
 3. the anchor is resolved against the current document. An anchor naming no live target is dropped,
    with no error and no record (`PRESENCE-008`);
@@ -137,7 +137,7 @@ because a position is what a concurrent structural edit invalidates (`PRESENCE-0
 | Application | Anchor | Resolved against |
 |---|---|---|
 | Trame | `CellAnchor { sheet_id, row_uid, col_uid }` -- the uids of `ambre-spec-trame-schema.md section 2` | the sheet index, to a row and a column |
-| Toile | a world point, and the `ElementId` set of the peer's selection | the board, to screen space |
+| Toile | a world point, and the `Id<Element>` set of the peer's selection | the board, to screen space |
 | Prose | `CursorPosition { block_id, offset }` -- a `TreeID` and an offset in that block | the block tree, to a caret rectangle |
 
 Trame's declaration is `2-Trame/features/ambre-spec-trame-selection.md section 3`, Toile's is
@@ -159,20 +159,20 @@ in a spreadsheet, a board and a text document.
 
 ```rust
 // ambre-draw/src/peer.rs
-use ambre_core::UserId;
+use ambre_core::id::{Id, User};
 use peniko::Color;
 
 /// Deterministic per-user color, identical across all apps in the suite.
-/// Seeded on the **canonical `UserId`** (spoof-proof, resolved by `ambre-sync`)
+/// Seeded on the **canonical `Id<User>`** (spoof-proof, resolved by `ambre-sync`)
 /// -- never on the per-device `pub_key`, which changes on key rotation. The id
 /// bytes are folded into a hue with FNV-1a and mapped through HSL at a fixed
 /// saturation/lightness, so every peer color is vivid, legible on light and
 /// dark backgrounds, and distinct from its neighbours; the result is always
 /// fully opaque (callers apply per-element alpha themselves).
-pub fn peer_color(user_id: &UserId) -> Color;
+pub fn peer_color(user_id: &Id<User>) -> Color;
 ```
 
-Seeding on the `UserId` newtype rather than on a raw `Uuid` keeps the type end to end through every
+Seeding on the `Id<User>` type rather than on a raw `Uuid` keeps the type end to end through every
 presence path. That is why `ambre-draw` takes a types-only dependency on `ambre-core`. It is the
 one exception to its dependency rule (`CANVAS-025`), and its manifest records it.
 
@@ -208,8 +208,8 @@ must not draw a cursor sliding through thirty-nine pages they never visited.
 | The anchor stays with the application | a shared anchor type parameterized over three models | it buys one type and forces every application through an indirection to reach its own ids. An anchor names the identities of one document model, and a spreadsheet has no text offset. |
 | Presence is ephemeral, never a document write | a presence container pruned on a timer | it grows the file and makes undo step over other people's gestures. A position changes on every gesture and matters for as long as it is on the screen; writing it would put a per-gesture operation into the history every peer keeps for good, and make a cursor a thing that merges (`PRESENCE-001`). |
 | The payload carries no user identifier | an author field in the sample | it lets any member paint a cursor under any other member's name. Anything a peer writes about itself is something it can write about anyone else; leaving the field out means there is nothing to forge, and the only identity is the one resolved from the key that signed the frame (`PRESENCE-002`). |
-| Keyed by `UserId`, never by peer or device | keying by the sending peer | it doubles a collaborator every time they open a second tab. A peer identifier is per session and per device, so one collaborator on a laptop and a phone appears as two people in two colours; the `UserId` is the person (`PRESENCE-005`). |
-| The colour is hashed from the `UserId` by the shared helper | a per-application palette assigned in join order | it gives one user a different colour per document and swaps two users' colours on a reconnect. One person with three colours is three people to the reader; the helper is pure, so the colour is the same on every device and in every application (`PRESENCE-006`). |
+| Keyed by `Id<User>`, never by peer or device | keying by the sending peer | it doubles a collaborator every time they open a second tab. A peer identifier is per session and per device, so one collaborator on a laptop and a phone appears as two people in two colours; the `Id<User>` is the person (`PRESENCE-005`). |
+| The colour is hashed from the `Id<User>` by the shared helper | a per-application palette assigned in join order | it gives one user a different colour per document and swaps two users' colours on a reconnect. One person with three colours is three people to the reader; the helper is pure, so the colour is the same on every device and in every application (`PRESENCE-006`). |
 | The anchor is move-invariant | raw coordinates | it is what Trame carried until the review named it X30. A remote position must follow its target through the inserts, deletes and sorts a collaborator makes while the sample is in flight, and a row number, a screen point or a text offset is exactly what those edits invalidate, so a positional anchor makes remote cursors jump on every structural change (`PRESENCE-007`). |
 | An unresolvable anchor is dropped, silently | queueing the sample until the target resolves | it holds a cursor at a position the peer has already left. The sample is one of a stream whose next one is on its way, and the target is missing because a delta is in flight: there is nothing for the user to do and nothing for the log to say (`PRESENCE-008`). |
 | The event carries the whole live set | one event per peer with a receiver-side accumulation | it needs a removal path, a timeout or a leave message, and leaves a ghost until whichever one is written. It is what Toile built, and `TOILE-UI-075` is the ghost cursor it produces. The whole live set makes a departure the absence of an entry, so no application needs a departure signal, and none of the three has one (`PRESENCE-009`). |

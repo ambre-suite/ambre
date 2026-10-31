@@ -19,9 +19,8 @@
 // one `RestyleElements`.
 // ============================================================================
 
-use ambre_bus::app::toile::{
-    ConnectorId, DisplayElement, DisplayNode, DisplayViewport, ElementId, ElementStyle,
-};
+use ambre_bus::app::toile::{DisplayElement, DisplayNode, DisplayViewport, ElementStyle};
+use ambre_core::id::{Connector, Element, Id};
 
 /// Which style attributes differ across the current selection. A set flag means
 /// the inspector shows a mixed-state indicator for that field rather than a value.
@@ -115,7 +114,7 @@ pub struct StyleModel {
 /// The inspector's model for a selected arrow: its own style, nothing mixed.
 /// An arrow is always a selection of one, so no field can diverge
 /// (`toile-connectors`).
-pub fn arrow_style_scope(id: &ConnectorId, display: &DisplayViewport) -> Option<StyleModel> {
+pub fn arrow_style_scope(id: &Id<Connector>, display: &DisplayViewport) -> Option<StyleModel> {
     let base = display.nodes.iter().find_map(|n| match n {
         DisplayNode::Connector(c) if &c.id == id => Some(c.style.clone()),
         _ => None,
@@ -126,7 +125,10 @@ pub fn arrow_style_scope(id: &ConnectorId, display: &DisplayViewport) -> Option<
     })
 }
 
-pub fn style_scope_for(selection: &[ElementId], selected: &[DisplayElement]) -> Option<StyleModel> {
+pub fn style_scope_for(
+    selection: &[Id<Element>],
+    selected: &[DisplayElement],
+) -> Option<StyleModel> {
     // Resolve the selected ids to their styles, in selection order. `selected`
     // is the whole selection's data from Logic, off-screen included
     // (`TOILE-UI-070`).
@@ -164,8 +166,8 @@ mod tests {
     use ambre_core::Rgba;
     use kurbo::{Affine, Point, Rect, Size};
 
-    fn eid(s: &str) -> ElementId {
-        ElementId(s.to_owned())
+    fn eid(s: &str) -> Id<Element> {
+        Id::<Element>::from_text(s.to_owned())
     }
 
     /// A displayed element carrying `style`, everything else filler.

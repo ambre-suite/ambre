@@ -8,7 +8,8 @@
 //! learn which user a PeerID stands for (`ambre-spec-op-authorship.md`).
 
 use ambre_core::authorship::PeerEntry;
-use ambre_core::{DeltaBytes, DocumentId, LoroPayload, MessageId, Payload, UserId};
+use ambre_core::id::{Document, Id, Message, User};
+use ambre_core::{DeltaBytes, LoroPayload, Payload};
 use loro::json::{JsonOpContent, JsonSchema, ListOp, MapOp};
 use loro::{
     Container, ContainerID, ContainerType, Index, LoroDoc, LoroValue, ValueOrContainer,
@@ -59,7 +60,7 @@ pub struct Signer {
     pub peer: ambre_core::PeerId,
     /// The member the signing key resolves to, `None` when the directory does
     /// not name it (`AUTHOR-013`).
-    pub user: Option<UserId>,
+    pub user: Option<Id<User>>,
 }
 
 /// Why the check refused a delta. Every refusal leaves the document as it
@@ -197,7 +198,7 @@ fn restore_entries(update: &mut JsonSchema) {
 pub(crate) fn check(
     update: &JsonSchema,
     signer: Signer,
-    registered: impl Fn(ambre_core::PeerId) -> Option<UserId>,
+    registered: impl Fn(ambre_core::PeerId) -> Option<Id<User>>,
     reactions: impl Fn(&ContainerID) -> bool,
     thread_of: impl Fn(&ContainerID) -> Option<ThreadField>,
 ) -> Result<(), Refusal> {
@@ -303,9 +304,9 @@ pub(crate) fn check(
 pub(crate) fn check_amendments(
     update: &JsonSchema,
     signer: Signer,
-    registered: impl Fn(ambre_core::PeerId) -> Option<UserId>,
-    author_of: impl Fn(MessageId) -> Option<UserId>,
-    thread_of: impl Fn(MessageId) -> ThreadField,
+    registered: impl Fn(ambre_core::PeerId) -> Option<Id<User>>,
+    author_of: impl Fn(Id<Message>) -> Option<Id<User>>,
+    thread_of: impl Fn(Id<Message>) -> ThreadField,
 ) -> Result<(), Refusal> {
     let user = signer.user.ok_or(Refusal::Unattributed)?;
     if update.changes.iter().any(|c| c.id.peer != signer.peer.0) {
@@ -351,7 +352,7 @@ pub(crate) fn check_amendments(
                     let Some(message) = message_key(key).filter(|m| author_of(*m).is_some()) else {
                         return Err(Refusal::NotInSegment);
                     };
-                    let takes = DocumentId::parse_str(value)
+                    let takes = Id::<Document>::parse_str(value)
                         .is_ok_and(|thread| thread_of(message).takes(thread));
                     if !takes {
                         return Err(Refusal::ForeignMessage);
@@ -372,15 +373,15 @@ pub(crate) fn check_amendments(
 /// The message an amendment or a thread key names, spelled as the engine
 /// writes an identifier. Any other spelling names no message: a reader looks
 /// the key up as written, and would never find it.
-fn message_key(key: &str) -> Option<MessageId> {
-    MessageId::parse_str(key)
+fn message_key(key: &str) -> Option<Id<Message>> {
+    Id::<Message>::parse_str(key)
         .ok()
         .filter(|id| id.to_string() == key)
 }
 
 /// The author `segment` holds for the message `key` names, `None` when it
 /// holds no such message.
-pub(crate) fn author_in(segment: &LoroDoc, key: MessageId) -> Option<UserId> {
+pub(crate) fn author_in(segment: &LoroDoc, key: Id<Message>) -> Option<Id<User>> {
     let key = key.to_string();
     let key = key.as_str();
     let list = crate::schema::root_list(segment, Root::Messages);
@@ -389,7 +390,7 @@ pub(crate) fn author_in(segment: &LoroDoc, key: MessageId) -> Option<UserId> {
         if schema::string(&map, MessageKey::Id).as_deref() != Some(key) {
             return None;
         }
-        UserId::parse_str(&schema::string(&map, MessageKey::Author)?).ok()
+        Id::<User>::parse_str(&schema::string(&map, MessageKey::Author)?).ok()
     })
 }
 
@@ -399,7 +400,7 @@ pub(crate) enum ThreadField {
     /// No thread is named yet.
     Unset,
     /// The thread document the field names.
-    Names(DocumentId),
+    Names(Id<Document>),
     /// A value no reader takes for a document. It is set, so it takes no
     /// other.
     Unreadable,
@@ -409,13 +410,13 @@ impl ThreadField {
     /// The field as `stored` holds it, `None` for an absent one.
     fn read(stored: Option<String>) -> Self {
         stored.map_or(Self::Unset, |stored| {
-            DocumentId::parse_str(&stored).map_or(Self::Unreadable, Self::Names)
+            Id::<Document>::parse_str(&stored).map_or(Self::Unreadable, Self::Names)
         })
     }
 
     /// Whether the field takes `thread`: an absent field takes any, and a
     /// set one the same again (`MURMURE-108`).
-    fn takes(self, thread: DocumentId) -> bool {
+    fn takes(self, thread: Id<Document>) -> bool {
         match self {
             Self::Unset => true,
             Self::Names(set) => set == thread,
@@ -426,7 +427,7 @@ impl ThreadField {
 
 /// The `thread` field `segment` holds for the message `key` names, unset
 /// when it holds no such message or no thread.
-fn thread_in(segment: &LoroDoc, key: MessageId) -> ThreadField {
+fn thread_in(segment: &LoroDoc, key: Id<Message>) -> ThreadField {
     let key = key.to_string();
     let key = key.as_str();
     let list = crate::schema::root_list(segment, Root::Messages);
@@ -458,7 +459,7 @@ fn thread_set(content: &JsonOpContent, current: Option<ThreadField>) -> bool {
         return false;
     };
     MessageKey::parse(key) == Some(MessageKey::Thread)
-        && DocumentId::parse_str(value).is_ok_and(|thread| current.takes(thread))
+        && Id::<Document>::parse_str(value).is_ok_and(|thread| current.takes(thread))
 }
 
 /// The `thread` field of `id` when it is a message map of `doc`, `None` for
@@ -486,7 +487,7 @@ pub(crate) fn thread_field(doc: &LoroDoc, id: &ContainerID) -> Option<ThreadFiel
 fn entry_allowed(
     content: &JsonOpContent,
     peer: ambre_core::PeerId,
-    user: UserId,
+    user: Id<User>,
 ) -> Result<(), Refusal> {
     let JsonOpContent::Map(MapOp::Insert { key, value }) = content else {
         return Err(Refusal::ForeignEntry);
@@ -506,7 +507,7 @@ fn entry_allowed(
 
 /// Whether a write to a `reactions` map is the signer's own: an entry under
 /// their key, set to a plain value or removed.
-fn reaction_allowed(content: &JsonOpContent, user: UserId) -> Result<(), Refusal> {
+fn reaction_allowed(content: &JsonOpContent, user: Id<User>) -> Result<(), Refusal> {
     let own = |key: &str| reaction::ReactionKey::read(key).map(|(writer, _)| writer) == Some(user);
     match content {
         JsonOpContent::Map(MapOp::Insert { key, value })
@@ -521,7 +522,7 @@ fn reaction_allowed(content: &JsonOpContent, user: UserId) -> Result<(), Refusal
 
 /// The messages a JSON update creates, in operation order. A message takes
 /// its identity once, when it is created, so a later write never names it.
-pub(crate) fn created_messages(update: &JsonSchema) -> Vec<MessageId> {
+pub(crate) fn created_messages(update: &JsonSchema) -> Vec<Id<Message>> {
     update
         .changes
         .iter()
@@ -530,15 +531,17 @@ pub(crate) fn created_messages(update: &JsonSchema) -> Vec<MessageId> {
             JsonOpContent::Map(MapOp::Insert {
                 key,
                 value: LoroValue::String(id),
-            }) if MessageKey::parse(key) == Some(MessageKey::Id) => MessageId::parse_str(id).ok(),
+            }) if MessageKey::parse(key) == Some(MessageKey::Id) => {
+                Id::<Message>::parse_str(id).ok()
+            }
             _ => None,
         })
         .collect()
 }
 
 /// Whether `value` is the identifier of `user`.
-fn names(value: &LoroValue, user: UserId) -> bool {
-    matches!(value, LoroValue::String(s) if UserId::parse_str(s).is_ok_and(|u| u == user))
+fn names(value: &LoroValue, user: Id<User>) -> bool {
+    matches!(value, LoroValue::String(s) if Id::<User>::parse_str(s).is_ok_and(|u| u == user))
 }
 
 fn is_root(id: &ContainerID, root: impl ContainerName, kind: ContainerType) -> bool {
@@ -547,7 +550,7 @@ fn is_root(id: &ContainerID, root: impl ContainerName, kind: ContainerType) -> b
 
 /// The user the registry of `doc` names for `peer`, `None` when its entry is
 /// absent or unreadable (`AUTHOR-006`).
-pub(crate) fn registered(doc: &LoroDoc, peer: ambre_core::PeerId) -> Option<UserId> {
+pub(crate) fn registered(doc: &LoroDoc, peer: ambre_core::PeerId) -> Option<Id<User>> {
     let ValueOrContainer::Value(LoroValue::Binary(bytes)) = doc
         .get_map(ambre_core::crdt::FoundationRoot::Peers.as_str())
         .get(ambre_core::PeerKey::of(peer).as_str())?
@@ -653,7 +656,7 @@ pub(crate) fn verdict(
 pub(crate) fn import_arrivals(
     doc: &LoroDoc,
     arrivals: Vec<Arrival>,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     rules: Rules<'_>,
 ) -> Result<(), MurmureError> {
     for arrival in arrivals {
@@ -691,7 +694,7 @@ mod tests {
     /// and one no reader takes for a document takes none.
     #[test]
     fn a_thread_field_takes_a_thread_only_when_absent_or_the_same() {
-        let (thread, other) = (DocumentId::new(), DocumentId::new());
+        let (thread, other) = (Id::<Document>::mint(), Id::<Document>::mint());
         assert!(ThreadField::read(None).takes(thread));
         let set = ThreadField::read(Some(thread.to_string()));
         assert_eq!(set, ThreadField::Names(thread));

@@ -13,11 +13,12 @@
 //! nothing else: one is a container, the other a kind. Absent reads as 0,
 //! and the verdict and the walk are `ambre_core::schema`'s own.
 
+use ambre_core::LoroPayloadRef;
+use ambre_core::id::{Channel, Document, Id, Space};
 use ambre_core::schema::{
     SCHEMA_VERSION_ABSENT, SchemaError, SchemaMigration, SchemaVerdict, SchemaVersion,
     migrate_schema, migration_peer, verdict,
 };
-use ambre_core::{ChannelId, DocumentId, LoroPayloadRef, SpaceId};
 use loro::{LoroDoc, LoroList, LoroMap, LoroValue, ValueOrContainer};
 
 use crate::error::MurmureError;
@@ -40,10 +41,10 @@ ambre_core::crdt_names! {
         /// The `space` root of a space document, read through [`SpaceKey`].
         Space = "space",
         /// The `categories` root of a space document, one [`CategoryKey`] map
-        /// per `CategoryId`.
+        /// per `Id<Category>`.
         Categories = "categories",
         /// The `channels` root of a space document, the catalogue: one
-        /// [`EntryKey`] map per public `ChannelId`.
+        /// [`EntryKey`] map per public `Id<Channel>`.
         Catalogue = "channels",
         /// The `channel` root of a `meta` document, read through
         /// [`ChannelKey`].
@@ -52,10 +53,10 @@ ambre_core::crdt_names! {
         /// segment.
         Segments = "segments",
         /// The `amendments` root of an amendments document, one
-        /// [`AmendmentKey`] map per `MessageId` of its segment.
+        /// [`AmendmentKey`] map per `Id<Message>` of its segment.
         Amendments = "amendments",
         /// The `threads` root of an amendments document: the thread document
-        /// of each root of its locked segment, keyed by `MessageId`
+        /// of each root of its locked segment, keyed by `Id<Message>`
         /// (`MURMURE-484`).
         Threads = "threads",
         /// The `messages` list of a segment, one [`MessageKey`] map per
@@ -382,7 +383,7 @@ pub(crate) fn ts_value(ts: ambre_core::Timestamp) -> i64 {
 pub(crate) fn write_header(
     doc: &LoroDoc,
     kind: DocumentKind,
-    channel_id: ChannelId,
+    channel_id: Id<Channel>,
     created_at: ambre_core::Timestamp,
 ) -> Result<(), MurmureError> {
     let header = header(doc);
@@ -404,7 +405,7 @@ pub(crate) fn write_header(
 /// [`MurmureError::Crdt`] when Loro refuses a write.
 pub(crate) fn write_space_header(
     doc: &LoroDoc,
-    space_id: SpaceId,
+    space_id: Id<Space>,
     created_at: ambre_core::Timestamp,
 ) -> Result<(), MurmureError> {
     let header = header(doc);
@@ -501,8 +502,8 @@ pub fn read_version(doc: &LoroDoc) -> Result<SchemaVersion, SchemaError> {
 pub(crate) fn admit(
     payload: LoroPayloadRef<'_>,
     kind: DocumentKind,
-    channel_id: ChannelId,
-    document_id: DocumentId,
+    channel_id: Id<Channel>,
+    document_id: Id<Document>,
 ) -> Result<LoroDoc, MurmureError> {
     admit_all(&[payload], kind, channel_id, document_id)
 }
@@ -524,8 +525,8 @@ pub(crate) fn admit(
 pub(crate) fn admit_all(
     payloads: &[LoroPayloadRef<'_>],
     kind: DocumentKind,
-    channel_id: ChannelId,
-    document_id: DocumentId,
+    channel_id: Id<Channel>,
+    document_id: Id<Document>,
 ) -> Result<LoroDoc, MurmureError> {
     admit_with(kind, channel_id, document_id, |doc| {
         payloads
@@ -542,15 +543,15 @@ pub(crate) fn admit_all(
 /// Every refusal of `fill` and of [`admit_all`].
 pub(crate) fn admit_with(
     kind: DocumentKind,
-    channel_id: ChannelId,
-    document_id: DocumentId,
+    channel_id: Id<Channel>,
+    document_id: Id<Document>,
     fill: impl FnOnce(&LoroDoc) -> Result<(), MurmureError>,
 ) -> Result<LoroDoc, MurmureError> {
     let doc = import_current(fill)?;
     let header = header(&doc);
     check_kind(&header, kind, document_id)?;
     let found_channel = string(&header, HeaderKey::Channel)
-        .and_then(|s| ChannelId::parse_str(&s).ok())
+        .and_then(|s| Id::<Channel>::parse_str(&s).ok())
         .ok_or(MurmureError::HeaderMalformed {
             document_id,
             key: HeaderKey::Channel,
@@ -579,7 +580,7 @@ pub(crate) fn admit_with(
 /// place of the foreign channel.
 pub(crate) fn admit_space(
     payloads: &[LoroPayloadRef<'_>],
-    space_id: SpaceId,
+    space_id: Id<Space>,
 ) -> Result<LoroDoc, MurmureError> {
     let document_id = space_id.document_id();
     let doc = import_current(|doc| {
@@ -590,7 +591,7 @@ pub(crate) fn admit_space(
     let header = header(&doc);
     check_kind(&header, DocumentKind::Space, document_id)?;
     let found = string(&header, HeaderKey::Space)
-        .and_then(|s| SpaceId::parse_str(&s).ok())
+        .and_then(|s| Id::<Space>::parse_str(&s).ok())
         .ok_or(MurmureError::HeaderMalformed {
             document_id,
             key: HeaderKey::Space,
@@ -609,7 +610,7 @@ pub(crate) fn admit_space(
 pub(crate) fn import_bytes(
     doc: &LoroDoc,
     payload: LoroPayloadRef<'_>,
-    document_id: DocumentId,
+    document_id: Id<Document>,
 ) -> Result<(), MurmureError> {
     // A snapshot may carry the relay's numbers before its Loro bytes; the
     // document is the bytes past them.
@@ -673,7 +674,7 @@ pub(crate) fn import_through(
 fn check_kind(
     header: &Fields<HeaderKey>,
     kind: DocumentKind,
-    document_id: DocumentId,
+    document_id: Id<Document>,
 ) -> Result<(), MurmureError> {
     let found = string(header, HeaderKey::Kind).ok_or(MurmureError::HeaderMalformed {
         document_id,

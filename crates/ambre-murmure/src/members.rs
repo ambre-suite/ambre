@@ -10,7 +10,8 @@
 use std::collections::HashMap;
 
 use ambre_bus::{MemberView, Presence, Timestamp};
-use ambre_core::{Millis, UserId};
+use ambre_core::Millis;
+use ambre_core::id::{Id, User};
 
 /// How often a client that holds a space open sends its presence sample, in
 /// milliseconds (`ambre-spec-budgets.md section 8`).
@@ -92,15 +93,15 @@ pub fn find_members<'a>(members: &'a [MemberView], query: &str) -> Vec<&'a Membe
 #[derive(Default)]
 pub struct Roster {
     /// The relay's member rows: each member and their display name.
-    members: Vec<(UserId, ambre_core::DisplayName)>,
+    members: Vec<(Id<User>, ambre_core::DisplayName)>,
     /// The members heard from, with the tick that dates their last sample.
     /// `None` for a sample heard before the first tick: the next tick dates
     /// it.
-    heard: HashMap<UserId, Option<Timestamp>>,
+    heard: HashMap<Id<User>, Option<Timestamp>>,
     /// The latest tick of the view, `None` before the first.
     now: Option<Timestamp>,
     /// This user, online as long as the space is open.
-    me: Option<UserId>,
+    me: Option<Id<User>>,
 }
 
 impl std::fmt::Debug for Roster {
@@ -116,7 +117,7 @@ impl std::fmt::Debug for Roster {
 
 impl Roster {
     /// A roster with no member yet, held open by `me`.
-    pub fn new(me: Option<UserId>) -> Self {
+    pub fn new(me: Option<Id<User>>) -> Self {
         Self {
             me,
             ..Self::default()
@@ -127,13 +128,13 @@ impl Roster {
     /// shows nowhere, whatever sample came from them (`MURMURE-440`).
     pub fn set_members(
         &mut self,
-        members: impl IntoIterator<Item = (UserId, ambre_core::DisplayName)>,
+        members: impl IntoIterator<Item = (Id<User>, ambre_core::DisplayName)>,
     ) {
         self.members = members.into_iter().collect();
     }
 
     /// Set this user, once the session names them.
-    pub fn set_me(&mut self, me: UserId) {
+    pub fn set_me(&mut self, me: Id<User>) {
         self.me = Some(me);
     }
 
@@ -141,13 +142,13 @@ impl Roster {
     /// before, so the caller can answer a member who just came online with
     /// its own sample. A newcomer then sees who is online without waiting a
     /// refresh period.
-    pub fn heard(&mut self, user: UserId) -> bool {
+    pub fn heard(&mut self, user: Id<User>) -> bool {
         self.heard.insert(user, self.now).is_none()
     }
 
     /// The relay says `user` stopped watching the space (`PRESENCE-014`).
     /// Returns whether they were online.
-    pub fn left(&mut self, user: UserId) -> bool {
+    pub fn left(&mut self, user: Id<User>) -> bool {
         self.heard.remove(&user).is_some()
     }
 
@@ -166,7 +167,7 @@ impl Roster {
 
     /// The presence of `user`: this user is online, and every other member
     /// while a sample of theirs has not expired.
-    pub fn presence(&self, user: UserId) -> Presence {
+    pub fn presence(&self, user: Id<User>) -> Presence {
         if Some(user) == self.me || self.heard.contains_key(&user) {
             Presence::Online
         } else {
@@ -207,7 +208,7 @@ mod tests {
     fn a_roster_debugs_its_member_count_alone() {
         let mut roster = Roster::new(None);
         let name = ambre_core::DisplayName::new("Secretary").expect("a name");
-        roster.set_members([(UserId::new(), name)]);
+        roster.set_members([(Id::<User>::mint(), name)]);
         let shown = format!("{roster:?}");
         assert!(!shown.contains("Secretary"), "{shown}");
         assert!(shown.contains("members: 1"), "{shown}");
@@ -223,7 +224,7 @@ mod tests {
         view.iter().map(|m| m.display_name.as_str()).collect()
     }
 
-    fn roster(members: &[(UserId, &str)]) -> Roster {
+    fn roster(members: &[(Id<User>, &str)]) -> Roster {
         let mut roster = Roster::new(None);
         roster.set_members(
             members
@@ -238,7 +239,7 @@ mod tests {
     /// outside them adds no one (`MURMURE-440`).
     #[test]
     fn the_list_holds_the_member_rows_and_no_one_else() {
-        let (alice, bob, mallory) = (UserId::new(), UserId::new(), UserId::new());
+        let (alice, bob, mallory) = (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
         let mut roster = roster(&[(alice, "Alice"), (bob, "Bob")]);
         roster.heard(mallory);
         let view = roster.view();
@@ -250,7 +251,7 @@ mod tests {
     /// turns them offline again (`MURMURE-445`).
     #[test]
     fn a_member_turns_offline_once_no_sample_refreshes_them_within_the_expiry() {
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         let mut roster = roster(&[(bob, "Bob")]);
         assert_eq!(roster.presence(bob), Presence::Offline);
         assert!(roster.heard(bob), "Bob was offline");
@@ -268,7 +269,7 @@ mod tests {
     /// periods, even when every sample lands just before the next tick.
     #[test]
     fn a_member_refreshed_each_period_stays_online() {
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         let mut roster = roster(&[(bob, "Bob")]);
         for period in 1..10 {
             roster.heard(bob);
@@ -281,7 +282,7 @@ mod tests {
     /// epoch, so it does not expire at once.
     #[test]
     fn a_sample_before_the_first_tick_is_dated_by_it() {
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         let mut roster = Roster::new(None);
         roster.set_members([(bob, ambre_core::DisplayName::new("Bob").unwrap())]);
         roster.heard(bob);
@@ -293,7 +294,7 @@ mod tests {
     /// user stays online while the space is open.
     #[test]
     fn a_departure_turns_its_member_offline_and_this_user_stays_online() {
-        let (me, bob) = (UserId::new(), UserId::new());
+        let (me, bob) = (Id::<User>::mint(), Id::<User>::mint());
         let mut roster = roster(&[(me, "Me"), (bob, "Bob")]);
         roster.set_me(me);
         roster.heard(bob);
@@ -307,7 +308,7 @@ mod tests {
     /// and two clients never answer each other forever.
     #[test]
     fn only_the_first_sample_of_a_member_reads_as_new() {
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         let mut roster = roster(&[(bob, "Bob")]);
         assert!(roster.heard(bob));
         assert!(!roster.heard(bob));
@@ -317,7 +318,7 @@ mod tests {
     /// name, whatever the case (`MURMURE-450`).
     #[test]
     fn the_list_shows_the_online_members_first_each_group_by_name() {
-        let ids: Vec<UserId> = (0..4).map(|_| UserId::new()).collect();
+        let ids: Vec<Id<User>> = (0..4).map(|_| Id::<User>::mint()).collect();
         let mut roster = roster(&[
             (ids[0], "dora"),
             (ids[1], "Carl"),
@@ -362,9 +363,9 @@ mod tests {
     #[test]
     fn the_filter_keeps_the_members_whose_name_matches() {
         let roster = roster(&[
-            (UserId::new(), "Bob"),
-            (UserId::new(), "Alice"),
-            (UserId::new(), "Jacob"),
+            (Id::<User>::mint(), "Bob"),
+            (Id::<User>::mint(), "Alice"),
+            (Id::<User>::mint(), "Jacob"),
         ]);
         let view = roster.view();
         let found: Vec<&str> = find_members(&view, " OB ")

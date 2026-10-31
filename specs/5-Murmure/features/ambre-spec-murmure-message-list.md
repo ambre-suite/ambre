@@ -140,7 +140,7 @@ enum Rest {
     Latest,                                // on the latest row: a new message scrolls into view
     Row { key: RowKey, anchor_y: ViewPx }, // a row at a height, which loads leave in place
 }
-pub enum RowKey { Message(MessageId), Band(SegmentId) }
+pub enum RowKey { Message(Id<Message>), Band(Id<Segment>) }
 ```
 
 **Canvas and DOM.** The messages are canvas content, shaped by the text pipeline every application

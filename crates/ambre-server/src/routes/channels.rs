@@ -4,6 +4,7 @@
 // member of that space joins a public channel alone.
 
 use ambre_core::Role;
+use ambre_core::id::{self, Document, Id, Lease, Message, Meta, Segment, Snapshot, Space, User};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -20,8 +21,8 @@ use ambre_protocol::MembershipAct;
 /// One document of a channel, as the listing answers it.
 #[derive(serde::Serialize)]
 pub struct ChannelDocumentJson {
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub document_id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub document_id: Id<Document>,
     #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
     pub kind: ambre_core::ChannelDocumentKind,
 }
@@ -34,7 +35,7 @@ pub struct ChannelDocumentJson {
 pub async fn list_channel_documents(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
+    OpaquePathId(channel_id): OpaquePathId<Id<id::Channel>>,
 ) -> Result<impl IntoResponse, AppError> {
     let documents = db::list_channel_documents(&state.db, &channel_id).await?;
     let meta = documents
@@ -57,18 +58,14 @@ pub async fn list_channel_documents(
 /// The public channels of a space, as the listing answers them.
 #[derive(serde::Serialize)]
 pub struct SpaceChannelsJson {
-    #[serde(with = "ambre_core::serde_id::channel_id::vec")]
-    pub channels: Vec<ambre_core::ChannelId>,
+    #[serde(with = "ambre_core::serde_id::text::vec")]
+    pub channels: Vec<Id<id::Channel>>,
 }
 
 /// Tells every connection of `user` that `meta` was shared with them. A
 /// channel has no wire message of its own (`SRV-102`), so this is how a
 /// member learns of one (`SRV-192`). Best-effort: the listing is the truth.
-pub(crate) async fn share_notice(
-    state: &AppState,
-    user: &ambre_core::UserId,
-    meta: ambre_core::DocumentId,
-) {
+pub(crate) async fn share_notice(state: &AppState, user: &Id<User>, meta: Id<Document>) {
     let msg =
         crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::DocumentShared {
             document_id: meta,
@@ -81,15 +78,15 @@ pub(crate) async fn share_notice(
 /// `null` for a direct message.
 #[derive(serde::Serialize)]
 pub struct MemberChannelJson {
-    #[serde(with = "ambre_core::serde_id::channel_id")]
-    pub channel_id: ambre_core::ChannelId,
-    #[serde(with = "ambre_core::serde_id::space_id::option")]
-    pub space_id: Option<ambre_core::SpaceId>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub channel_id: Id<id::Channel>,
+    #[serde(with = "ambre_core::serde_id::text::option")]
+    pub space_id: Option<Id<Space>>,
     #[serde(rename = "public", with = "ambre_core::serde_enums::visibility_flag")]
     pub visibility: ambre_core::Visibility,
     /// The channel's `meta`, which the sealed name binds.
-    #[serde(with = "ambre_core::serde_id::meta_id")]
-    pub meta_id: ambre_core::MetaId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub meta_id: Id<Meta>,
     /// The name sealed beside the channel's `meta`, base64, as the document
     /// list carries one (`SRV-219`). The relay never reads it.
     pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
@@ -110,8 +107,8 @@ pub struct MemberChannelJson {
 pub struct MemberChannelsJson {
     pub channels: Vec<MemberChannelJson>,
     /// Every space of the caller, a space with no channel of theirs included.
-    #[serde(with = "ambre_core::serde_id::space_id::vec")]
-    pub spaces: Vec<ambre_core::SpaceId>,
+    #[serde(with = "ambre_core::serde_id::text::vec")]
+    pub spaces: Vec<Id<Space>>,
 }
 
 /// `GET /api/channels`: every channel the caller is a member of, by its
@@ -123,8 +120,7 @@ pub async fn list_member_channels(
 ) -> Result<axum::Json<MemberChannelsJson>, AppError> {
     let spaces = db::list_member_spaces(&state.db, &auth.user_id).await?;
     let rows = db::list_member_channels(&state.db, &auth.user_id).await?;
-    let metas: Vec<ambre_core::DocumentId> =
-        rows.iter().map(|row| row.meta_id.document_id()).collect();
+    let metas: Vec<Id<Document>> = rows.iter().map(|row| row.meta_id.document_id()).collect();
     let counters = crate::redis_ops::document_seqs(&state.redis, &metas).await?;
     let channels = rows
         .into_iter()
@@ -156,7 +152,7 @@ pub async fn list_member_channels(
 pub async fn list_space_channels(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId(space_id): OpaquePathId<ambre_core::SpaceId>,
+    OpaquePathId(space_id): OpaquePathId<Id<Space>>,
 ) -> Result<axum::Json<SpaceChannelsJson>, AppError> {
     db::get_document_member(&state.db, &space_id.document_id(), &auth.user_id)
         .await?
@@ -172,22 +168,22 @@ pub struct CreateChannelRequest {
     /// A public channel, which its catalogue lists, or a private one.
     #[serde(rename = "public", with = "ambre_core::serde_enums::visibility_flag")]
     pub visibility: ambre_core::Visibility,
-    #[serde(with = "ambre_core::serde_id::channel_id")]
-    pub channel_id: ambre_core::ChannelId,
-    #[serde(with = "ambre_core::serde_id::space_id")]
-    pub space_id: ambre_core::SpaceId,
-    #[serde(with = "ambre_core::serde_id::meta_id")]
-    pub meta_id: ambre_core::MetaId,
-    #[serde(with = "ambre_core::serde_id::segment_id")]
-    pub segment_id: ambre_core::SegmentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub channel_id: Id<id::Channel>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub space_id: Id<Space>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub meta_id: Id<Meta>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub segment_id: Id<Segment>,
 }
 
 /// One member of a new direct message, other than its creator, with the
 /// channel key wrapped for them alone.
 #[derive(serde::Deserialize)]
 pub struct DirectMemberJson {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
 }
 
@@ -195,19 +191,19 @@ pub struct DirectMemberJson {
 /// generated, and none exists on the relay yet.
 #[derive(serde::Deserialize)]
 pub struct CreateDirectMessageRequest {
-    #[serde(with = "ambre_core::serde_id::channel_id")]
-    pub channel_id: ambre_core::ChannelId,
-    #[serde(with = "ambre_core::serde_id::meta_id")]
-    pub meta_id: ambre_core::MetaId,
-    #[serde(with = "ambre_core::serde_id::segment_id")]
-    pub segment_id: ambre_core::SegmentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub channel_id: Id<id::Channel>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub meta_id: Id<Meta>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub segment_id: Id<Segment>,
     /// Every member but the caller.
     pub members: Vec<DirectMemberJson>,
     /// The channel key wrapped for the caller.
     pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     /// The identifier of the channel key, in hex, which the creation and every
     /// invite of the log name.
-    #[serde(with = "ambre_core::serde_id::key_id")]
+    #[serde(with = "ambre_core::serde_id::text")]
     pub key_id: ambre_core::FixedBytes<ambre_core::KeyId>,
     /// The log of `meta`, signed by the caller. In order, it holds its
     /// `Create`, one editor `Invite` per member in the order of `members`,
@@ -219,8 +215,8 @@ pub struct CreateDirectMessageRequest {
 /// that already held its members.
 #[derive(serde::Serialize)]
 pub struct DirectMessageJson {
-    #[serde(with = "ambre_core::serde_id::channel_id")]
-    pub channel_id: ambre_core::ChannelId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub channel_id: Id<id::Channel>,
     pub created: ambre_core::Creation,
 }
 
@@ -239,8 +235,8 @@ pub struct JoinChannelRequest {
 #[derive(serde::Serialize)]
 pub struct JoinHeadJson {
     /// The document whose log the self-join extends.
-    #[serde(with = "ambre_core::serde_id::meta_id")]
-    pub meta_id: ambre_core::MetaId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub meta_id: Id<Meta>,
     /// The role the self-join grants, which its entry must name.
     pub role: Role,
     /// The number of entries, the position the self-join takes.
@@ -253,26 +249,26 @@ pub struct JoinHeadJson {
 /// successor it created, which no channel groups yet.
 #[derive(serde::Deserialize)]
 pub struct CloseSegmentRequest {
-    #[serde(with = "ambre_core::serde_id::segment_id")]
-    pub closing: ambre_core::SegmentId,
-    #[serde(with = "ambre_core::serde_id::segment_id")]
-    pub successor: ambre_core::SegmentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub closing: Id<Segment>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub successor: Id<Segment>,
 }
 
 /// The active segment after a close, and whether it is the caller's
 /// successor. `false` means an earlier close registered another one.
 #[derive(serde::Serialize)]
 pub struct ClosedSegmentJson {
-    #[serde(with = "ambre_core::serde_id::segment_id")]
-    pub active: ambre_core::SegmentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub active: Id<Segment>,
     pub created: ambre_core::Creation,
 }
 
 /// A Murmure document outside every channel but `channel`, or a 403.
 async fn free_murmure_document(
     state: &AppState,
-    document_id: &ambre_core::DocumentId,
-    channel: Option<ambre_core::ChannelId>,
+    document_id: &Id<Document>,
+    channel: Option<Id<id::Channel>>,
 ) -> Result<db::DocumentRow, AppError> {
     let document = db::get_document(&state.db, document_id)
         .await?
@@ -342,7 +338,7 @@ pub async fn create_channel(
 pub async fn close_segment(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
+    OpaquePathId(channel_id): OpaquePathId<Id<id::Channel>>,
     Json(req): Json<CloseSegmentRequest>,
 ) -> Result<axum::Json<ClosedSegmentJson>, AppError> {
     let meta = db::get_channel(&state.db, &channel_id)
@@ -371,7 +367,7 @@ pub async fn close_segment(
 ///
 /// It runs once the rotation or the close committed, so a failure is only
 /// logged. The next close or lease request of the channel locks it again.
-pub(crate) async fn lock_retired_segments(state: &AppState, document_id: &ambre_core::DocumentId) {
+pub(crate) async fn lock_retired_segments(state: &AppState, document_id: &Id<Document>) {
     let locked = async {
         for segment in db::retired_unlocked_segments(&state.db, document_id).await? {
             let horizon = crate::redis_ops::lock_segment_now(&state.redis, &segment).await?;
@@ -407,8 +403,8 @@ pub struct FinalizeLeaseJson {
 /// A granted finalize lease (`SRV-113`).
 #[derive(Debug, serde::Serialize)]
 pub struct GrantedLeaseJson {
-    #[serde(with = "ambre_core::serde_id::lease_id")]
-    pub lease_id: ambre_core::LeaseId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub lease_id: Id<Lease>,
     /// The last delta number the final snapshot covers.
     pub horizon: ambre_core::Seq,
     /// Milliseconds before the lease expires.
@@ -419,10 +415,10 @@ pub struct GrantedLeaseJson {
 /// the horizon.
 #[derive(serde::Deserialize)]
 pub struct FinalizeSegmentRequest {
-    #[serde(with = "ambre_core::serde_id::lease_id")]
-    pub lease_id: ambre_core::LeaseId,
-    #[serde(with = "ambre_core::serde_id::snapshot_id")]
-    pub snapshot_id: ambre_core::SnapshotId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub lease_id: Id<Lease>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
 }
 
 /// The channel and the segment of a segment path, once the caller is a
@@ -431,9 +427,9 @@ pub struct FinalizeSegmentRequest {
 async fn finalize_target(
     state: &AppState,
     auth: &auth::AuthSession,
-    channel_id: ambre_core::ChannelId,
-    segment: ambre_core::SegmentId,
-) -> Result<(ambre_core::ChannelId, ambre_core::SegmentId), AppError> {
+    channel_id: Id<id::Channel>,
+    segment: Id<Segment>,
+) -> Result<(Id<id::Channel>, Id<Segment>), AppError> {
     let meta = db::get_channel(&state.db, &channel_id)
         .await?
         .and_then(|channel| channel.meta_id)
@@ -454,10 +450,7 @@ async fn finalize_target(
 pub async fn take_finalize_lease(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId((channel_id, segment)): OpaquePathId<(
-        ambre_core::ChannelId,
-        ambre_core::SegmentId,
-    )>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(Id<id::Channel>, Id<Segment>)>,
 ) -> Result<axum::Json<FinalizeLeaseJson>, AppError> {
     let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
     let terms = db::LeaseTerms {
@@ -498,10 +491,7 @@ pub async fn take_finalize_lease(
 pub async fn finalize_segment(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId((channel_id, segment)): OpaquePathId<(
-        ambre_core::ChannelId,
-        ambre_core::SegmentId,
-    )>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(Id<id::Channel>, Id<Segment>)>,
     Json(req): Json<FinalizeSegmentRequest>,
 ) -> Result<StatusCode, AppError> {
     let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
@@ -534,13 +524,13 @@ pub struct FoldLeaseJson {
 /// A granted fold lease (`SRV-204`).
 #[derive(Debug, serde::Serialize)]
 pub struct GrantedFoldJson {
-    #[serde(with = "ambre_core::serde_id::lease_id")]
-    pub lease_id: ambre_core::LeaseId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub lease_id: Id<Lease>,
     /// The last delta number of the segment, which the fold snapshot covers.
     pub horizon: ambre_core::Seq,
     /// The amendments document to fold.
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub amendments: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub amendments: Id<Document>,
     /// The last delta number of the amendments the fold holds.
     pub amendments_seq: ambre_core::Seq,
     /// Milliseconds before the lease expires.
@@ -551,10 +541,10 @@ pub struct GrantedFoldJson {
 /// the amendments it reaches.
 #[derive(serde::Deserialize)]
 pub struct FoldSegmentRequest {
-    #[serde(with = "ambre_core::serde_id::lease_id")]
-    pub lease_id: ambre_core::LeaseId,
-    #[serde(with = "ambre_core::serde_id::snapshot_id")]
-    pub snapshot_id: ambre_core::SnapshotId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub lease_id: Id<Lease>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
     pub amendments_seq: ambre_core::Seq,
 }
 
@@ -566,19 +556,15 @@ pub struct FoldSegmentRequest {
 pub async fn take_fold_lease(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId((channel_id, segment)): OpaquePathId<(
-        ambre_core::ChannelId,
-        ambre_core::SegmentId,
-    )>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(Id<id::Channel>, Id<Segment>)>,
 ) -> Result<axum::Json<FoldLeaseJson>, AppError> {
     let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
     let terms = db::FoldTerms {
         delay: FOLD_DELAY,
         lease: FINALIZE_LEASE,
     };
-    let relayed = async |document: ambre_core::DocumentId| {
-        crate::redis_ops::current_seq(&state.redis, &document).await
-    };
+    let relayed =
+        async |document: Id<Document>| crate::redis_ops::current_seq(&state.redis, &document).await;
     let answer = db::take_fold_lease(&state.db, &channel_id, segment, terms, relayed).await?;
     Ok(axum::Json(match answer {
         db::FoldLease::Granted {
@@ -614,10 +600,7 @@ pub async fn take_fold_lease(
 pub async fn fold_segment(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId((channel_id, segment)): OpaquePathId<(
-        ambre_core::ChannelId,
-        ambre_core::SegmentId,
-    )>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(Id<id::Channel>, Id<Segment>)>,
     Json(req): Json<FoldSegmentRequest>,
 ) -> Result<StatusCode, AppError> {
     let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
@@ -637,16 +620,16 @@ pub async fn fold_segment(
 /// The body of an amendments registration: the caller's new document.
 #[derive(serde::Deserialize)]
 pub struct RegisterAmendmentsRequest {
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub amendments: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub amendments: Id<Document>,
 }
 
 /// The amendments document of a segment after a registration, and whether
 /// it is the caller's. `false` means an earlier one registered another.
 #[derive(serde::Serialize)]
 pub struct AmendmentsJson {
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub amendments: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub amendments: Id<Document>,
     pub created: ambre_core::Creation,
 }
 
@@ -659,10 +642,7 @@ pub struct AmendmentsJson {
 pub async fn register_amendments(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId((channel_id, segment)): OpaquePathId<(
-        ambre_core::ChannelId,
-        ambre_core::SegmentId,
-    )>,
+    OpaquePathId((channel_id, segment)): OpaquePathId<(Id<id::Channel>, Id<Segment>)>,
     Json(req): Json<RegisterAmendmentsRequest>,
 ) -> Result<axum::Json<AmendmentsJson>, AppError> {
     let (channel_id, segment) = finalize_target(&state, &auth, channel_id, segment).await?;
@@ -684,18 +664,18 @@ pub async fn register_amendments(
 /// document.
 #[derive(serde::Deserialize)]
 pub struct RegisterThreadRequest {
-    #[serde(with = "ambre_core::serde_id::message_id")]
-    pub root: ambre_core::MessageId,
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub thread: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub root: Id<Message>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub thread: Id<Document>,
 }
 
 /// The thread document of a root after a registration, and whether it is
 /// the caller's. `false` means an earlier one registered another.
 #[derive(serde::Serialize)]
 pub struct ThreadJson {
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub thread: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub thread: Id<Document>,
     pub created: ambre_core::Creation,
 }
 
@@ -708,7 +688,7 @@ pub struct ThreadJson {
 pub async fn register_thread(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
+    OpaquePathId(channel_id): OpaquePathId<Id<id::Channel>>,
     Json(req): Json<RegisterThreadRequest>,
 ) -> Result<axum::Json<ThreadJson>, AppError> {
     let meta = db::get_channel(&state.db, &channel_id)
@@ -843,7 +823,7 @@ pub async fn create_direct_message(
 pub async fn delete_channel(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
+    OpaquePathId(channel_id): OpaquePathId<Id<id::Channel>>,
 ) -> Result<impl IntoResponse, AppError> {
     let channel = db::get_channel(&state.db, &channel_id)
         .await?
@@ -887,7 +867,7 @@ pub async fn delete_channel(
 pub async fn join_channel(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
+    OpaquePathId(channel_id): OpaquePathId<Id<id::Channel>>,
     Json(req): Json<JoinChannelRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let Joinable {
@@ -933,7 +913,7 @@ pub async fn join_channel(
 pub async fn join_channel_head(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    OpaquePathId(channel_id): OpaquePathId<ambre_core::ChannelId>,
+    OpaquePathId(channel_id): OpaquePathId<Id<id::Channel>>,
 ) -> Result<axum::Json<JoinHeadJson>, AppError> {
     let Joinable { meta_id, role, .. } = joinable(&state, &auth, &channel_id).await?;
     let log = db::membership_log(&state.db, &meta_id.document_id()).await?;
@@ -948,8 +928,8 @@ pub async fn join_channel_head(
 /// A channel the caller may join alone: its space, its `meta`, and the role
 /// the join takes.
 struct Joinable {
-    space_id: ambre_core::SpaceId,
-    meta_id: ambre_core::MetaId,
+    space_id: Id<Space>,
+    meta_id: Id<Meta>,
     role: Role,
 }
 
@@ -960,7 +940,7 @@ struct Joinable {
 async fn joinable(
     state: &AppState,
     auth: &auth::AuthSession,
-    channel_id: &ambre_core::ChannelId,
+    channel_id: &Id<id::Channel>,
 ) -> Result<Joinable, AppError> {
     let channel = db::get_channel(&state.db, channel_id)
         .await?
@@ -994,7 +974,7 @@ fn joined_role(space_role: Role) -> Option<Role> {
 mod tests {
     use super::*;
     use crate::extract::PathId;
-    use ambre_core::{ChannelId, Creation, DocumentId, MetaId, SegmentId, SpaceId, UserId};
+    use ambre_core::Creation;
 
     /// The signing key every test user registers, so an entry one signs
     /// checks against the row and the session alike.
@@ -1006,9 +986,9 @@ mod tests {
     /// answers keep their shape for every client that reads them.
     #[test]
     fn a_creation_answers_as_the_bool_it_was() {
-        let segment = SegmentId::from_document(DocumentId::from_bytes([1; 16]));
-        let document = DocumentId::from_bytes([2; 16]);
-        let channel = ChannelId::from_bytes([3; 16]);
+        let segment = Id::<Segment>::from_document(Id::<Document>::from_bytes([1; 16]));
+        let document = Id::<Document>::from_bytes([2; 16]);
+        let channel = Id::<id::Channel>::from_bytes([3; 16]);
         let json = |value: serde_json::Result<String>| value.expect("json");
         assert_eq!(
             json(serde_json::to_string(&ClosedSegmentJson {
@@ -1040,7 +1020,7 @@ mod tests {
         );
     }
 
-    fn session(user_id: UserId) -> auth::AuthSession {
+    fn session(user_id: Id<User>) -> auth::AuthSession {
         auth::AuthSession {
             user_id,
             signing_pubkey: ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
@@ -1053,9 +1033,9 @@ mod tests {
     /// log, in the form a request carries it. The relay walks no digest, so
     /// the previous one is filler.
     fn signed_entry(
-        document: DocumentId,
+        document: Id<Document>,
         position: u64,
-        who: UserId,
+        who: Id<User>,
         act: MembershipAct,
         role: Role,
     ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
@@ -1085,14 +1065,14 @@ mod tests {
     }
 
     /// The length of `document`'s log.
-    async fn log_length(state: &AppState, document: DocumentId) -> u64 {
+    async fn log_length(state: &AppState, document: Id<Document>) -> u64 {
         let log = db::membership_log(&state.db, &document).await.expect("log");
         u64::try_from(log.len()).expect("length")
     }
 
     /// Opens `meta`'s log with a `Create` entry of `creator`, as Sync does
     /// when it creates a channel.
-    async fn open_log(state: &AppState, meta: DocumentId, creator: UserId) {
+    async fn open_log(state: &AppState, meta: Id<Document>, creator: Id<User>) {
         let text = signed_entry(meta, 0, creator, MembershipAct::Create, Role::Owner);
         let entry = db::LogEntry {
             position: ambre_protocol::LogPosition::FIRST,
@@ -1118,11 +1098,11 @@ mod tests {
         }
     }
 
-    async fn user(state: &AppState, email: &str) -> UserId {
+    async fn user(state: &AppState, email: &str) -> Id<User> {
         named_user(state, email, "Test User").await
     }
 
-    async fn named_user(state: &AppState, email: &str, display_name: &str) -> UserId {
+    async fn named_user(state: &AppState, email: &str, display_name: &str) -> Id<User> {
         let signing = ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array(
             signing_key().verifying_key().to_bytes(),
         );
@@ -1140,11 +1120,11 @@ mod tests {
         row.id
     }
 
-    async fn document(state: &AppState, owner: UserId) -> DocumentId {
+    async fn document(state: &AppState, owner: Id<User>) -> Id<Document> {
         crate::test_helpers::create_test_document(&state.db, owner, "murmure").await
     }
 
-    async fn grant(state: &AppState, document: DocumentId, member: UserId, role: Role) {
+    async fn grant(state: &AppState, document: Id<Document>, member: Id<User>, role: Role) {
         db::add_document_member(
             &state.db,
             &document,
@@ -1159,24 +1139,24 @@ mod tests {
     }
 
     /// A space of `owner`, with `members` at the given roles.
-    async fn space(state: &AppState, owner: UserId, members: &[(UserId, Role)]) -> SpaceId {
+    async fn space(state: &AppState, owner: Id<User>, members: &[(Id<User>, Role)]) -> Id<Space> {
         let space = document(state, owner).await;
         for &(member, role) in members {
             grant(state, space, member, role).await;
         }
-        SpaceId::from_document(space)
+        Id::<Space>::from_document(space)
     }
 
     struct Channel {
-        id: ChannelId,
-        meta: MetaId,
-        segment: SegmentId,
+        id: Id<id::Channel>,
+        meta: Id<Meta>,
+        segment: Id<Segment>,
     }
 
     async fn register(
         state: &Arc<AppState>,
-        who: UserId,
-        space: SpaceId,
+        who: Id<User>,
+        space: Id<Space>,
         channel: &Channel,
     ) -> StatusCode {
         register_as(state, who, space, channel, ambre_core::Visibility::Public).await
@@ -1184,8 +1164,8 @@ mod tests {
 
     async fn register_as(
         state: &Arc<AppState>,
-        who: UserId,
-        space: SpaceId,
+        who: Id<User>,
+        space: Id<Space>,
         channel: &Channel,
         visibility: ambre_core::Visibility,
     ) -> StatusCode {
@@ -1206,16 +1186,16 @@ mod tests {
     }
 
     /// Two documents of `creator`, not yet a channel.
-    async fn new_channel(state: &AppState, creator: UserId) -> Channel {
+    async fn new_channel(state: &AppState, creator: Id<User>) -> Channel {
         Channel {
-            id: ChannelId::new(),
-            meta: MetaId::from_document(document(state, creator).await),
-            segment: SegmentId::from_document(document(state, creator).await),
+            id: Id::<id::Channel>::mint(),
+            meta: Id::<Meta>::from_document(document(state, creator).await),
+            segment: Id::<Segment>::from_document(document(state, creator).await),
         }
     }
 
     /// A public channel of `space`, registered by `creator`.
-    async fn public_channel(state: &Arc<AppState>, creator: UserId, space: SpaceId) -> Channel {
+    async fn public_channel(state: &Arc<AppState>, creator: Id<User>, space: Id<Space>) -> Channel {
         let channel = new_channel(state, creator).await;
         assert_eq!(
             register(state, creator, space, &channel).await,
@@ -1230,8 +1210,8 @@ mod tests {
     /// refuses before it reads one.
     async fn join_entry(
         state: &AppState,
-        who: UserId,
-        channel: ChannelId,
+        who: Id<User>,
+        channel: Id<id::Channel>,
     ) -> Option<ambre_core::Encoded<ambre_core::EncodedLogEntry>> {
         let Joinable {
             meta_id: meta,
@@ -1250,7 +1230,12 @@ mod tests {
         })
     }
 
-    async fn join(state: &Arc<AppState>, who: UserId, channel: ChannelId, key: u8) -> StatusCode {
+    async fn join(
+        state: &Arc<AppState>,
+        who: Id<User>,
+        channel: Id<id::Channel>,
+        key: u8,
+    ) -> StatusCode {
         let entry = join_entry(state, who, channel).await;
         status(
             join_channel(
@@ -1266,14 +1251,14 @@ mod tests {
         )
     }
 
-    async fn role_on(state: &AppState, document: DocumentId, who: UserId) -> Option<Role> {
+    async fn role_on(state: &AppState, document: Id<Document>, who: Id<User>) -> Option<Role> {
         db::member_role(&state.db, &document, &who)
             .await
             .expect("query")
     }
 
-    async fn member_ids(state: &AppState, document: DocumentId) -> Vec<UserId> {
-        let mut ids: Vec<UserId> = db::list_document_members(&state.db, &document)
+    async fn member_ids(state: &AppState, document: Id<Document>) -> Vec<Id<User>> {
+        let mut ids: Vec<Id<User>> = db::list_document_members(&state.db, &document)
             .await
             .expect("query")
             .into_iter()
@@ -1292,7 +1277,7 @@ mod tests {
     async fn a_new_space_has_its_creator_as_its_one_owner(pool: sqlx::PgPool) {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
-        let space = DocumentId::new();
+        let space = Id::<Document>::mint();
         let answer = create_as(
             &state,
             alice,
@@ -1309,8 +1294,8 @@ mod tests {
     /// `who` creates `document` of `doc_type`, marked a space or not.
     async fn create_as(
         state: &Arc<AppState>,
-        who: UserId,
-        document: DocumentId,
+        who: Id<User>,
+        document: Id<Document>,
         doc_type: ambre_core::DocType,
         space: ambre_core::DocumentScope,
     ) -> StatusCode {
@@ -1337,7 +1322,7 @@ mod tests {
     }
 
     /// The spaces `who` lists.
-    async fn spaces_of(state: &Arc<AppState>, who: UserId) -> Vec<SpaceId> {
+    async fn spaces_of(state: &Arc<AppState>, who: Id<User>) -> Vec<Id<Space>> {
         list_member_channels(State(state.clone()), session(who))
             .await
             .expect("listed")
@@ -1355,7 +1340,7 @@ mod tests {
         let alice = user(&state, "alice@test.dev").await;
         let bob = user(&state, "bob@test.dev").await;
         let carol = user(&state, "carol@test.dev").await;
-        let (space, other) = (DocumentId::new(), DocumentId::new());
+        let (space, other) = (Id::<Document>::mint(), Id::<Document>::mint());
         let murmure = ambre_core::DocType::Murmure;
         assert_eq!(
             create_as(
@@ -1382,7 +1367,7 @@ mod tests {
         grant(&state, space, bob, Role::Viewer).await;
         grant(&state, other, bob, Role::Viewer).await;
 
-        let space = SpaceId::from_document(space);
+        let space = Id::<Space>::from_document(space);
         assert_eq!(spaces_of(&state, alice).await, [space]);
         assert_eq!(spaces_of(&state, bob).await, [space]);
         assert_eq!(spaces_of(&state, carol).await, []);
@@ -1395,7 +1380,7 @@ mod tests {
     async fn only_a_murmure_document_is_a_space(pool: sqlx::PgPool) {
         let state = crate::test_helpers::test_app_state(pool).await;
         let alice = user(&state, "alice@test.dev").await;
-        let prose = DocumentId::new();
+        let prose = Id::<Document>::mint();
         let answer = create_as(
             &state,
             alice,
@@ -1443,12 +1428,12 @@ mod tests {
         );
     }
 
-    fn uuid_of_doc(id: DocumentId) -> uuid::Uuid {
-        uuid::Uuid::from_bytes(*ambre_core::Uuid::from(id).as_bytes())
+    fn uuid_of_doc(id: Id<Document>) -> uuid::Uuid {
+        uuid::Uuid::from_bytes(*id.uuid().as_bytes())
     }
 
-    fn uuid_of_snap(id: ambre_core::SnapshotId) -> uuid::Uuid {
-        uuid::Uuid::from_bytes(*ambre_core::Uuid::from(id).as_bytes())
+    fn uuid_of_snap(id: Id<Snapshot>) -> uuid::Uuid {
+        uuid::Uuid::from_bytes(*id.uuid().as_bytes())
     }
 
     /// A viewer of the space changes no catalogue, so it registers no public
@@ -1493,9 +1478,9 @@ mod tests {
         );
         let first = public_channel(&state, bob, space).await;
         let reused = Channel {
-            id: ChannelId::new(),
+            id: Id::<id::Channel>::mint(),
             meta: first.meta,
-            segment: SegmentId::from_document(document(&state, bob).await),
+            segment: Id::<Segment>::from_document(document(&state, bob).await),
         };
         assert_eq!(
             register(&state, bob, space, &reused).await,
@@ -1506,7 +1491,7 @@ mod tests {
             register(
                 &state,
                 bob,
-                SpaceId::from_document(first.segment.document_id()),
+                Id::<Space>::from_document(first.segment.document_id()),
                 &into_a_channel
             )
             .await,
@@ -1630,9 +1615,7 @@ mod tests {
         for space_id in [Some(uuid_of_doc(space.document_id())), None] {
             let channel = new_channel(&state, alice).await;
             sqlx::query("INSERT INTO channels (id, space_id, is_public) VALUES ($1, $2, false)")
-                .bind(uuid::Uuid::from_bytes(
-                    *ambre_core::Uuid::from(channel.id).as_bytes(),
-                ))
+                .bind(uuid::Uuid::from_bytes(*channel.id.uuid().as_bytes()))
                 .bind(space_id)
                 .execute(&state.db)
                 .await
@@ -1646,7 +1629,7 @@ mod tests {
             );
         }
         assert_eq!(
-            join(&state, bob, ChannelId::new(), 9).await,
+            join(&state, bob, Id::<id::Channel>::mint(), 9).await,
             StatusCode::FORBIDDEN
         );
     }
@@ -1878,7 +1861,11 @@ mod tests {
     // --- The Murmure channels spec: private channels, leaves and deletes ---
 
     /// A private channel of `space`, registered by `creator`.
-    async fn private_channel(state: &Arc<AppState>, creator: UserId, space: SpaceId) -> Channel {
+    async fn private_channel(
+        state: &Arc<AppState>,
+        creator: Id<User>,
+        space: Id<Space>,
+    ) -> Channel {
         let channel = new_channel(state, creator).await;
         assert_eq!(
             register_as(
@@ -1898,8 +1885,8 @@ mod tests {
     /// the key `key` names.
     async fn invite(
         state: &Arc<AppState>,
-        who: UserId,
-        document: DocumentId,
+        who: Id<User>,
+        document: Id<Document>,
         invitee: &str,
         key: [u8; 16],
     ) -> StatusCode {
@@ -2048,7 +2035,7 @@ mod tests {
         let gone = public_channel(&state, alice, space).await;
         assert_eq!(delete(&state, alice, gone.id).await, StatusCode::NO_CONTENT);
 
-        let list = |who: UserId, id: ambre_core::SpaceId| {
+        let list = |who: Id<User>, id: Id<Space>| {
             list_space_channels(State(state.clone()), session(who), OpaquePathId(id))
         };
         let listed = list(bob, space).await.expect("listed").0;
@@ -2056,14 +2043,14 @@ mod tests {
         assert_eq!(status(list(mallory, space).await), StatusCode::FORBIDDEN);
     }
 
-    async fn delete(state: &Arc<AppState>, who: UserId, channel: ChannelId) -> StatusCode {
+    async fn delete(state: &Arc<AppState>, who: Id<User>, channel: Id<id::Channel>) -> StatusCode {
         status(delete_channel(State(state.clone()), session(who), OpaquePathId(channel)).await)
     }
 
     /// `who` leaves the channel, posting no rotation.
     async fn leave(
         state: &AppState,
-        who: UserId,
+        who: Id<User>,
         channel: &Channel,
     ) -> Result<db::Removed, AppError> {
         db::remove_document_member(
@@ -2076,7 +2063,7 @@ mod tests {
         .await
     }
 
-    async fn exists(state: &AppState, document: DocumentId) -> bool {
+    async fn exists(state: &AppState, document: Id<Document>) -> bool {
         db::get_document(&state.db, &document)
             .await
             .expect("query")
@@ -2231,7 +2218,7 @@ mod tests {
             StatusCode::FORBIDDEN
         );
         assert_eq!(
-            delete(&state, alice, ChannelId::new()).await,
+            delete(&state, alice, Id::<id::Channel>::mint()).await,
             StatusCode::FORBIDDEN
         );
         assert!(exists(&state, channel.meta.document_id()).await);
@@ -2546,8 +2533,8 @@ mod tests {
     /// fresh ids. Its log creates `meta`, invites each member as an editor,
     /// then sets the creator's own role to editor. Each member's key is
     /// filled with a byte of its own, so a test tells the wraps apart.
-    fn direct_request(creator: UserId, others: &[UserId]) -> CreateDirectMessageRequest {
-        let meta = MetaId::from_document(DocumentId::new());
+    fn direct_request(creator: Id<User>, others: &[Id<User>]) -> CreateDirectMessageRequest {
+        let meta = Id::<Meta>::from_document(Id::<Document>::mint());
         let entries = ambre_protocol::ownerless_log(creator, others)
             .zip(0u64..)
             .map(|((member, act, role), position)| {
@@ -2565,9 +2552,9 @@ mod tests {
             .collect();
         let key = |byte: u8| ambre_core::Encoded::new([byte; 48].to_vec());
         CreateDirectMessageRequest {
-            channel_id: ChannelId::new(),
+            channel_id: Id::<id::Channel>::mint(),
             meta_id: meta,
-            segment_id: SegmentId::from_document(DocumentId::new()),
+            segment_id: Id::<Segment>::from_document(Id::<Document>::mint()),
             members: others
                 .iter()
                 .zip(2u8..)
@@ -2590,13 +2577,13 @@ mod tests {
     /// log, in the form a request carries it. The relay walks no digest, so
     /// the previous one is filler.
     fn authored_entry(
-        document: DocumentId,
+        document: Id<Document>,
         position: u64,
-        member: UserId,
+        member: Id<User>,
         act: MembershipAct,
         role: Role,
         key: Option<ambre_core::FixedBytes<ambre_core::KeyId>>,
-        author: UserId,
+        author: Id<User>,
     ) -> ambre_core::Encoded<ambre_core::EncodedLogEntry> {
         use ed25519_dalek::Signer;
         let signing = signing_key();
@@ -2626,7 +2613,7 @@ mod tests {
 
     async fn open_direct(
         state: &Arc<AppState>,
-        who: UserId,
+        who: Id<User>,
         req: CreateDirectMessageRequest,
     ) -> Result<DirectMessageJson, AppError> {
         create_direct_message(State(state.clone()), session(who), Json(req))
@@ -2720,7 +2707,7 @@ mod tests {
         let direct = req.channel_id;
         open_direct(&state, alice, req).await.expect("create");
 
-        let listed = |who: UserId| list_member_channels(State(state.clone()), session(who));
+        let listed = |who: Id<User>| list_member_channels(State(state.clone()), session(who));
         let mut want = vec![
             (public.id, Some(space), ambre_core::Visibility::Public),
             (private.id, Some(space), ambre_core::Visibility::Private),
@@ -2759,7 +2746,7 @@ mod tests {
         let req = direct_request(alice, &[bob]);
         let meta = req.meta_id.document_id();
         open_direct(&state, alice, req).await.expect("create");
-        let listed = |who: UserId| list_member_channels(State(state.clone()), session(who));
+        let listed = |who: Id<User>| list_member_channels(State(state.clone()), session(who));
         let first = listed(bob).await.expect("listed").0.channels;
         assert_eq!(first.len(), 1);
         assert_eq!(first[0].meta_id.document_id(), meta);
@@ -2819,7 +2806,7 @@ mod tests {
         let direct = req.channel_id;
         open_direct(&state, alice, req).await.expect("create");
 
-        let peers = |who: UserId| {
+        let peers = |who: Id<User>| {
             let state = state.clone();
             async move {
                 list_member_channels(State(state), session(who))
@@ -2933,7 +2920,7 @@ mod tests {
                     .expect("subscribe"),
             );
         }
-        let shared = |notice: Option<WsServerMsg>, meta: DocumentId| {
+        let shared = |notice: Option<WsServerMsg>, meta: Id<Document>| {
             matches!(
                 notice,
                 Some(WsServerMsg::DocumentShared { document_id, doc_type })
@@ -3039,7 +3026,7 @@ mod tests {
         let alice = user(&state, "alice@test.dev").await;
         let max = ambre_protocol::membership::DIRECT_MESSAGE_MAX_MEMBERS;
 
-        let strangers: Vec<UserId> = (0..max).map(|_| UserId::new()).collect();
+        let strangers: Vec<Id<User>> = (0..max).map(|_| Id::<User>::mint()).collect();
         assert!(matches!(
             open_direct(&state, alice, direct_request(alice, &strangers)).await,
             Err(AppError::BadRequest(_))
@@ -3108,7 +3095,7 @@ mod tests {
     }
 
     /// `who` leaves `space`, posting no rotation.
-    async fn leave_space(state: &Arc<AppState>, who: UserId, space: SpaceId) -> StatusCode {
+    async fn leave_space(state: &Arc<AppState>, who: Id<User>, space: Id<Space>) -> StatusCode {
         status(
             crate::routes::share::revoke_from_document(
                 State(state.clone()),
@@ -3121,7 +3108,7 @@ mod tests {
     }
 
     /// The documents of `channel`.
-    fn documents_of(channel: &Channel) -> [DocumentId; 2] {
+    fn documents_of(channel: &Channel) -> [Id<Document>; 2] {
         [channel.meta.document_id(), channel.segment.document_id()]
     }
 
@@ -3129,9 +3116,9 @@ mod tests {
     /// private one he alone holds, all in `space`.
     async fn bobs_channels(
         state: &Arc<AppState>,
-        alice: UserId,
-        bob: UserId,
-        space: SpaceId,
+        alice: Id<User>,
+        bob: Id<User>,
+        space: Id<Space>,
     ) -> [Channel; 3] {
         let public = public_channel(state, alice, space).await;
         assert_eq!(join(state, bob, public.id, 3).await, StatusCode::NO_CONTENT);
@@ -3258,7 +3245,7 @@ mod tests {
         assert!(!owes(&state, &elsewhere).await);
     }
 
-    async fn delete_space(state: &Arc<AppState>, who: UserId, space: SpaceId) -> StatusCode {
+    async fn delete_space(state: &Arc<AppState>, who: Id<User>, space: Id<Space>) -> StatusCode {
         status(
             crate::routes::delete_document(
                 State(state.clone()),
@@ -3353,7 +3340,7 @@ mod tests {
         );
 
         assert_eq!(
-            delete_space(&state, alice, SpaceId::from_document(plain)).await,
+            delete_space(&state, alice, Id::<Space>::from_document(plain)).await,
             StatusCode::OK
         );
         let silent =
@@ -3391,9 +3378,9 @@ mod tests {
     /// `who` re-keys `meta` from key 1 to key 2, wrapping for `members`.
     async fn rekey(
         state: &Arc<AppState>,
-        who: UserId,
-        meta: DocumentId,
-        members: Vec<UserId>,
+        who: Id<User>,
+        meta: Id<Document>,
+        members: Vec<Id<User>>,
     ) -> StatusCode {
         let link = ambre_protocol::KeyLink {
             document_id: meta,
@@ -3426,8 +3413,8 @@ mod tests {
     /// What `who` reads of `meta`: its member list, then its key links.
     async fn read_access(
         state: &Arc<AppState>,
-        who: UserId,
-        meta: DocumentId,
+        who: Id<User>,
+        meta: Id<Document>,
     ) -> (StatusCode, StatusCode) {
         let members =
             crate::routes::list_document_members(State(state.clone()), session(who), PathId(meta))
@@ -3484,9 +3471,9 @@ mod tests {
 
     async fn close(
         state: &Arc<AppState>,
-        who: UserId,
+        who: Id<User>,
         channel: &Channel,
-        successor: DocumentId,
+        successor: Id<Document>,
     ) -> Result<ClosedSegmentJson, StatusCode> {
         close_segment(
             State(state.clone()),
@@ -3494,7 +3481,7 @@ mod tests {
             OpaquePathId(channel.id),
             Json(CloseSegmentRequest {
                 closing: channel.segment,
-                successor: SegmentId::from_document(successor),
+                successor: Id::<Segment>::from_document(successor),
             }),
         )
         .await
@@ -3516,12 +3503,12 @@ mod tests {
 
         let mine = document(&state, alice).await;
         let first = close(&state, alice, &channel, mine).await.expect("close");
-        assert_eq!(first.active, SegmentId::from_document(mine));
+        assert_eq!(first.active, Id::<Segment>::from_document(mine));
         assert_eq!(first.created, Creation::Created);
 
         let theirs = document(&state, bob).await;
         let late = close(&state, bob, &channel, theirs).await.expect("close");
-        assert_eq!(late.active, SegmentId::from_document(mine));
+        assert_eq!(late.active, Id::<Segment>::from_document(mine));
         assert_eq!(
             late.created,
             Creation::Existing,
@@ -3570,9 +3557,9 @@ mod tests {
 
     async fn amend(
         state: &Arc<AppState>,
-        who: UserId,
+        who: Id<User>,
         channel: &Channel,
-        amendments: DocumentId,
+        amendments: Id<Document>,
     ) -> Result<AmendmentsJson, StatusCode> {
         register_amendments(
             State(state.clone()),
@@ -3641,10 +3628,10 @@ mod tests {
 
     async fn thread(
         state: &Arc<AppState>,
-        who: UserId,
+        who: Id<User>,
         channel: &Channel,
-        root: ambre_core::MessageId,
-        thread: DocumentId,
+        root: Id<Message>,
+        thread: Id<Document>,
     ) -> Result<ThreadJson, StatusCode> {
         register_thread(
             State(state.clone()),
@@ -3671,7 +3658,7 @@ mod tests {
         let channel = public_channel(&state, alice, space).await;
         grant(&state, channel.meta.document_id(), bob, Role::Editor).await;
         grant(&state, channel.meta.document_id(), vera, Role::Viewer).await;
-        let root = ambre_core::MessageId::new();
+        let root = Id::<Message>::mint();
 
         let veras = document(&state, vera).await;
         assert_eq!(
@@ -3717,7 +3704,7 @@ mod tests {
 
     async fn lease(
         state: &Arc<AppState>,
-        who: UserId,
+        who: Id<User>,
         channel: &Channel,
     ) -> Result<FinalizeLeaseJson, StatusCode> {
         take_finalize_lease(
@@ -3732,10 +3719,10 @@ mod tests {
 
     async fn finalize(
         state: &Arc<AppState>,
-        who: UserId,
+        who: Id<User>,
         channel: &Channel,
-        lease_id: ambre_core::LeaseId,
-        snapshot_id: ambre_core::SnapshotId,
+        lease_id: Id<Lease>,
+        snapshot_id: Id<Snapshot>,
     ) -> StatusCode {
         status(
             finalize_segment(
@@ -3761,8 +3748,8 @@ mod tests {
     }
 
     /// A delta of `document` at `seq`, stored `age` ago.
-    async fn delta(state: &AppState, document: DocumentId, seq: i64, age: &str) {
-        let snapshot = ambre_core::SnapshotId::new();
+    async fn delta(state: &AppState, document: Id<Document>, seq: i64, age: &str) {
+        let snapshot = Id::<Snapshot>::mint();
         db::insert_update(
             &state.db,
             &document,
@@ -3787,11 +3774,7 @@ mod tests {
     }
 
     /// A snapshot of `document` covering every delta up to `covered`.
-    async fn snapshot(
-        state: &AppState,
-        document: DocumentId,
-        covered: i64,
-    ) -> ambre_core::SnapshotId {
+    async fn snapshot(state: &AppState, document: Id<Document>, covered: i64) -> Id<Snapshot> {
         let clocks = serde_json::json!({});
         db::create_snapshot(
             &state.db,
@@ -3807,7 +3790,7 @@ mod tests {
 
     /// A public channel of `alice` and `bob`, its first segment closed, and the
     /// relay holding `seq` deltas for it.
-    async fn closed_channel(state: &Arc<AppState>, seq: u64) -> (UserId, UserId, Channel) {
+    async fn closed_channel(state: &Arc<AppState>, seq: u64) -> (Id<User>, Id<User>, Channel) {
         use rustis::commands::StringCommands;
         let alice = user(state, "alice@test.dev").await;
         let bob = user(state, "bob@test.dev").await;
@@ -3902,7 +3885,7 @@ mod tests {
     }
 
     /// Whether the store mirrors the lock of `segment`.
-    async fn lock_mirrored(state: &AppState, segment: DocumentId) -> bool {
+    async fn lock_mirrored(state: &AppState, segment: Id<Document>) -> bool {
         use rustis::commands::GenericCommands;
         let mirrored: usize = state
             .redis
@@ -4047,7 +4030,7 @@ mod tests {
         let exact = snapshot(&state, segment, 2).await;
 
         for (who, lease_id, snapshot_id) in [
-            (bob, ambre_core::LeaseId::new(), exact),
+            (bob, Id::<Lease>::mint(), exact),
             (alice, held.lease_id, short),
             (alice, held.lease_id, elsewhere),
         ] {
@@ -4237,7 +4220,7 @@ mod tests {
 
     async fn fold_lease(
         state: &Arc<AppState>,
-        who: UserId,
+        who: Id<User>,
         channel: &Channel,
     ) -> Result<FoldLeaseJson, StatusCode> {
         take_fold_lease(
@@ -4252,10 +4235,10 @@ mod tests {
 
     async fn fold(
         state: &Arc<AppState>,
-        who: UserId,
+        who: Id<User>,
         channel: &Channel,
-        lease_id: ambre_core::LeaseId,
-        snapshot_id: ambre_core::SnapshotId,
+        lease_id: Id<Lease>,
+        snapshot_id: Id<Snapshot>,
         amendments_seq: u64,
     ) -> StatusCode {
         status(
@@ -4277,10 +4260,10 @@ mod tests {
     /// other than its author.
     async fn confirm(
         state: &Arc<AppState>,
-        who: UserId,
+        who: Id<User>,
         channel: &Channel,
-        snapshot_id: ambre_core::SnapshotId,
-    ) -> Option<DocumentId> {
+        snapshot_id: Id<Snapshot>,
+    ) -> Option<Id<Document>> {
         let document = channel.segment.document_id();
         let axum::Json(answer) = crate::routes::confirm_snapshot(
             State(state.clone()),
@@ -4292,7 +4275,7 @@ mod tests {
         answer.folded
     }
 
-    async fn set_seq(state: &AppState, document: DocumentId, seq: u64) {
+    async fn set_seq(state: &AppState, document: Id<Document>, seq: u64) {
         use rustis::commands::StringCommands;
         let key = format!("doc:{document}:seq");
         state.redis.set(key, seq).await.expect("seq");
@@ -4300,7 +4283,7 @@ mod tests {
 
     /// A final segment of `alice` and `bob` at the horizon 2, and the
     /// amendments document `alice` registered for it, created 8 days ago.
-    async fn amended_channel(state: &Arc<AppState>) -> (UserId, UserId, Channel, DocumentId) {
+    async fn amended_channel(state: &Arc<AppState>) -> (Id<User>, Id<User>, Channel, Id<Document>) {
         let (alice, bob, channel) = closed_channel(state, 2).await;
         on_segment(
             state,
@@ -4334,7 +4317,10 @@ mod tests {
     }
 
     /// The fold of the amendments, as the register holds it.
-    async fn folded(state: &AppState, amendments: DocumentId) -> (Option<uuid::Uuid>, Option<i64>) {
+    async fn folded(
+        state: &AppState,
+        amendments: Id<Document>,
+    ) -> (Option<uuid::Uuid>, Option<i64>) {
         sqlx::query_as("SELECT folded_by, folded_seq FROM channel_documents WHERE document_id = $1")
             .bind(uuid_of_doc(amendments))
             .fetch_one(&state.db)
@@ -4418,7 +4404,7 @@ mod tests {
         let short = snapshot(&state, segment, 1).await;
         let exact = snapshot(&state, segment, 2).await;
         for (who, lease_id, snapshot_id) in [
-            (bob, ambre_core::LeaseId::new(), exact),
+            (bob, Id::<Lease>::mint(), exact),
             (alice, held.lease_id, short),
         ] {
             assert_eq!(

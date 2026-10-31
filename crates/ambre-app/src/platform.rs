@@ -762,7 +762,7 @@ fn read_container(
     container: &ambre_core::Payload<ambre_core::PlaintextContainer>,
     toasts: Toasts,
 ) -> Option<(
-    DocumentId,
+    Id<Document>,
     ambre_bus::DocType,
     ambre_core::Payload<ambre_core::SnapshotBytes>,
 )> {
@@ -789,7 +789,7 @@ fn read_container(
 /// Store a container's sealed payload as the document's copy, and navigate
 /// to it.
 async fn store_container(
-    document_id: DocumentId,
+    document_id: Id<Document>,
     doc_type: ambre_bus::DocType,
     sealed: ambre_core::Payload<ambre_core::SealedRowBytes>,
     toasts: Toasts,

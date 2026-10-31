@@ -35,7 +35,8 @@ use ambre_chrome::{
     Pressed, ShellAction, ShellRegion, Toasts,
 };
 use ambre_commands::{CommandId, Locale};
-use ambre_core::{ChannelId, CssPoint, CssPx, Name, SpaceId, StepDirection, UserId};
+use ambre_core::id::{Channel, Id, Space, User};
+use ambre_core::{CssPoint, CssPx, Name, StepDirection};
 use leptos::prelude::*;
 
 pub use crate::notices::{
@@ -345,21 +346,21 @@ pub struct MurmureRelay {
     /// The pane the user is in.
     pub pane: RwSignal<MurmurePane>,
     /// The channels this page asked the Logic thread to open.
-    opened: RwSignal<HashSet<ChannelId>>,
+    opened: RwSignal<HashSet<Id<Channel>>>,
     /// The member list of each open space, as its last event drew it.
-    members: RwSignal<HashMap<SpaceId, Vec<MemberView>>>,
+    members: RwSignal<HashMap<Id<Space>, Vec<MemberView>>>,
     /// This user, once the session names them. The palette never offers a
     /// direct message with oneself.
-    me: RwSignal<Option<UserId>>,
+    me: RwSignal<Option<Id<User>>>,
     /// The search box of the command bar, closed until the find chord.
     pub search: RwSignal<SearchBox>,
     /// The member whose key was fetched for an invite, and the channel it
     /// goes into. The answer becomes that invite, not a direct message.
-    inviting: RwSignal<Option<(UserId, ChannelId)>>,
+    inviting: RwSignal<Option<(Id<User>, Id<Channel>)>>,
     /// The members of each open channel by name, as the Logic thread last
     /// listed them. The invite control offers none of them, and the `@`
     /// list offers them all (`MURMURE-551`).
-    channel_members: RwSignal<HashMap<ChannelId, HashMap<UserId, ambre_core::DisplayName>>>,
+    channel_members: RwSignal<HashMap<Id<Channel>, HashMap<Id<User>, ambre_core::DisplayName>>>,
     /// The `@` list a region of the page shows, `None` while none is open
     /// (`MURMURE-555`).
     pub mentions: RwSignal<Option<MentionList>>,
@@ -373,7 +374,7 @@ pub struct MurmureRelay {
     pressed_mark: RwSignal<Option<(Region, TextStyle)>>,
     /// The other members who watch each open channel, as the Logic thread
     /// last heard them (`MURMURE-126`). A channel nobody watches has no entry.
-    watching: RwSignal<HashMap<ChannelId, HashSet<UserId>>>,
+    watching: RwSignal<HashMap<Id<Channel>, HashSet<Id<User>>>>,
     /// The message the actions are open on, as the view last found it under
     /// a right-click or a long press. `None` once the menu closes.
     pub target: RwSignal<Option<MessageTarget>>,
@@ -438,7 +439,7 @@ const UNNAMED_CHANNEL: &str = "Unnamed channel";
 #[derive(Clone, PartialEq, Eq)]
 pub struct SearchGroup {
     /// The channel a click on a match opens.
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     /// The name the sidebar shows, `None` for a channel with no name read
     /// yet.
     pub name: Option<Name>,
@@ -491,7 +492,7 @@ pub fn coverage(channels: &[ChannelMatches]) -> String {
 #[derive(Clone, PartialEq, Eq)]
 pub struct Notice {
     /// The channel a click opens.
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     /// The message a click rests the list on (`MURMURE-507`). A closed
     /// channel names none, and opens at its latest message.
     pub at: Option<MessageRef>,
@@ -594,7 +595,7 @@ impl MurmureRelay {
     }
 
     /// Delete the drafts of `channels`, which the user lost (`MURMURE-215`).
-    fn forget_drafts(&self, channels: &[ChannelId]) {
+    fn forget_drafts(&self, channels: &[Id<Channel>]) {
         let shelf = self.drafts();
         for channel in channels {
             shelf.forget_channel(*channel);
@@ -678,7 +679,7 @@ impl MurmureRelay {
     }
 
     /// The signed-in member, `None` before the session names them.
-    pub fn me(&self) -> Option<UserId> {
+    pub fn me(&self) -> Option<Id<User>> {
         self.me.get_untracked()
     }
 
@@ -748,7 +749,7 @@ impl MurmureRelay {
     /// Choose the match `at` of `channel`: the box closes, and the channel
     /// opens as a click on the sidebar opens it. Its list rests on the
     /// message (`MURMURE-150`).
-    pub fn choose_result(&self, channel: ChannelId, at: MessageRef) -> Option<LogicCommand> {
+    pub fn choose_result(&self, channel: Id<Channel>, at: MessageRef) -> Option<LogicCommand> {
         self.close_search();
         self.open_at(channel, Some(at))
     }
@@ -756,7 +757,7 @@ impl MurmureRelay {
     /// Open `channel` as a click on the sidebar opens it, its list resting
     /// on `at` when the channel shows (`MURMURE-507`). No other channel's
     /// cursor moves (`MURMURE-508`).
-    pub fn open_at(&self, channel: ChannelId, at: Option<MessageRef>) -> Option<LogicCommand> {
+    pub fn open_at(&self, channel: Id<Channel>, at: Option<MessageRef>) -> Option<LogicCommand> {
         let command = self.select(channel);
         if at.is_some() && self.pane.get_untracked().shown_channel() == Some(channel) {
             self.pane.set(MurmurePane::Channel { channel, at });
@@ -832,7 +833,7 @@ impl MurmureRelay {
     /// The members who watch the shown channel: the others the Logic thread
     /// heard, and this user, who has it on screen. Empty with no channel
     /// shown, so no list shows who reads another channel (`MURMURE-127`).
-    pub fn shown_watchers(&self) -> Signal<HashSet<UserId>> {
+    pub fn shown_watchers(&self) -> Signal<HashSet<Id<User>>> {
         let (pane, watching, me) = (self.pane, self.watching, self.me);
         Signal::derive(move || {
             let Some(channel) = pane.get().shown_channel() else {
@@ -1037,7 +1038,7 @@ impl MurmureRelay {
         }
     }
 
-    fn absorb_space(&self, space: ambre_core::SpaceId, event: &SpaceEvent) -> Vec<LogicCommand> {
+    fn absorb_space(&self, space: Id<Space>, event: &SpaceEvent) -> Vec<LogicCommand> {
         match event {
             SpaceEvent::Catalogue {
                 name,
@@ -1093,7 +1094,7 @@ impl MurmureRelay {
 
     /// Forget the channels this page opened among `channels`, and leave the
     /// pane that shows one of them.
-    fn drop_channels(&self, channels: &[ChannelId]) {
+    fn drop_channels(&self, channels: &[Id<Channel>]) {
         self.opened.update(|o| o.retain(|c| !channels.contains(c)));
         self.channel_members
             .update(|m| m.retain(|c, _| !channels.contains(c)));
@@ -1108,7 +1109,7 @@ impl MurmureRelay {
     /// Select a channel of the sidebar. A joined one shows in the content,
     /// opened the first time only. One to join is joined first. Nothing is
     /// sent for the channel left behind (`MURMURE-167`).
-    pub fn select(&self, channel: ChannelId) -> Option<LogicCommand> {
+    pub fn select(&self, channel: Id<Channel>) -> Option<LogicCommand> {
         let to_join = self
             .sidebar
             .with_untracked(|s| (!s.is_member(channel)).then(|| s.listed_in(channel)));
@@ -1184,7 +1185,7 @@ impl MurmureRelay {
     }
 
     /// The display name of `user` in an open space, if they are a member.
-    pub fn member_name(&self, user: UserId) -> Option<ambre_core::DisplayName> {
+    pub fn member_name(&self, user: Id<User>) -> Option<ambre_core::DisplayName> {
         self.members.with_untracked(|spaces| {
             spaces
                 .values()
@@ -1197,7 +1198,7 @@ impl MurmureRelay {
     /// The shown channel, when the user may invite into it: a private
     /// channel or a direct message of theirs. A space member joins a public
     /// channel by themselves.
-    pub fn invite_target(&self) -> Signal<Option<ChannelId>> {
+    pub fn invite_target(&self) -> Signal<Option<Id<Channel>>> {
         let (sidebar, pane) = (self.sidebar, self.pane);
         Signal::derive(move || {
             let channel = pane.get().shown_channel()?;
@@ -1223,7 +1224,7 @@ impl MurmureRelay {
                 _ => s.spaces().to_vec(),
             });
             let me = me.get();
-            let mut seen: HashSet<UserId> = in_channel.with(|m| {
+            let mut seen: HashSet<Id<User>> = in_channel.with(|m| {
                 m.get(&channel)
                     .map(|listed| listed.keys().copied().collect())
                     .unwrap_or_default()
@@ -1242,7 +1243,7 @@ impl MurmureRelay {
     }
 
     /// Whether the Logic thread lists `user` among the members of `channel`.
-    fn in_channel(&self, channel: ChannelId, user: UserId) -> bool {
+    fn in_channel(&self, channel: Id<Channel>, user: Id<User>) -> bool {
         self.channel_members.with_untracked(|m| {
             m.get(&channel)
                 .is_some_and(|listed| listed.contains_key(&user))
@@ -1251,7 +1252,7 @@ impl MurmureRelay {
 
     /// The members of `channel` by name, as the Logic thread last listed
     /// them. The `@` list offers them (`MURMURE-551`).
-    pub fn members_of(&self, channel: ChannelId) -> Vec<(UserId, ambre_core::DisplayName)> {
+    pub fn members_of(&self, channel: Id<Channel>) -> Vec<(Id<User>, ambre_core::DisplayName)> {
         self.channel_members.with_untracked(|m| {
             m.get(&channel)
                 .map(|listed| listed.iter().map(|(u, n)| (*u, n.clone())).collect())
@@ -1326,7 +1327,7 @@ impl MurmureRelay {
     /// Invite `user` into the shown channel. Their key is fetched first, for
     /// the check of the pin, and the invite leaves only once it passes. A
     /// member of the channel is fetched nothing (`MURMURE-501`).
-    pub fn invite(&self, user: UserId) -> Option<LogicCommand> {
+    pub fn invite(&self, user: Id<User>) -> Option<LogicCommand> {
         let channel = self.invite_target().get_untracked()?;
         if self.me.get_untracked() == Some(user)
             || self.member_name(user).is_none()
@@ -1343,7 +1344,7 @@ impl MurmureRelay {
 
     /// The channel a key fetched for `user` invites them into, taken once.
     /// `None` means the key was fetched for a direct message.
-    pub fn take_invite(&self, user: UserId) -> Option<ChannelId> {
+    pub fn take_invite(&self, user: Id<User>) -> Option<Id<Channel>> {
         self.inviting
             .try_update(|pending| match *pending {
                 Some((invitee, channel)) if invitee == user => {
@@ -1366,7 +1367,7 @@ impl MurmureRelay {
         self.select(to)
     }
 
-    fn show(&self, channel: ChannelId) -> Option<LogicCommand> {
+    fn show(&self, channel: Id<Channel>) -> Option<LogicCommand> {
         self.pane.set(MurmurePane::channel(channel));
         let fresh = self
             .opened

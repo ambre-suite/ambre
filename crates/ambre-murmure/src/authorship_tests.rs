@@ -9,9 +9,8 @@ use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, Timestamp};
 use ambre_core::authorship::PeerEntry;
-use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, FixedBytes, Payload, PeerEntryBytes, Seq, UserId,
-};
+use ambre_core::id::{Channel, Document, Id, User};
+use ambre_core::{DeltaBytes, FixedBytes, Payload, PeerEntryBytes, Seq};
 use loro::{Container, ExportMode, LoroDoc, LoroMap, LoroValue, ValueOrContainer, VersionVector};
 
 use crate::schema::{MessageKey, Root};
@@ -32,7 +31,7 @@ fn draft(text: &str) -> MessageDraft {
 
 /// A registry entry naming `user`. The signature is Sync's to check, so the
 /// engine reads only the user.
-fn entry(user: UserId) -> PeerEntryBytes {
+fn entry(user: Id<User>) -> PeerEntryBytes {
     PeerEntryBytes::from(&PeerEntry {
         user,
         nonce: FixedBytes::from_array([7; 16]),
@@ -43,7 +42,7 @@ fn entry(user: UserId) -> PeerEntryBytes {
 /// One member of a channel, with the user its sessions write for.
 struct Member {
     state: ChannelState,
-    user: UserId,
+    user: Id<User>,
 }
 
 impl Member {
@@ -61,7 +60,7 @@ impl Member {
     }
 
     /// The active segment of the channel.
-    fn segment(&self) -> DocumentId {
+    fn segment(&self) -> Id<Document> {
         self.state.active_id().document_id()
     }
 
@@ -113,8 +112,9 @@ impl Member {
 /// A channel just created by a member of its own.
 fn founder(channel_type: ChannelType) -> Member {
     let mut founder = Member {
-        state: ChannelState::create(ChannelId::new(), channel_type, None, NOW).expect("create"),
-        user: UserId::new(),
+        state: ChannelState::create(Id::<Channel>::mint(), channel_type, None, NOW)
+            .expect("create"),
+        user: Id::<User>::mint(),
     };
     founder.new_session();
     founder
@@ -131,7 +131,7 @@ fn join(of: &Member) -> Member {
     let mut member = Member {
         state: ChannelState::open(state.channel_id(), state.meta_id(), &meta, &segments)
             .expect("open"),
-        user: UserId::new(),
+        user: Id::<User>::mint(),
     };
     member.new_session();
     member
@@ -160,11 +160,15 @@ fn a_segment_delta_travels_as_a_json_update_of_the_pinned_version() {
     assert!(update["peers"].is_null());
 
     // The first update of a segment created here is a delta like any other.
-    let mut created =
-        ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW).expect("create");
+    let mut created = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
+        .expect("create");
     let active = created.active_id().document_id();
     let first = created
-        .adopt_session(active, crate::session::next_peer(), entry(UserId::new()))
+        .adopt_session(
+            active,
+            crate::session::next_peer(),
+            entry(Id::<User>::mint()),
+        )
         .expect("adopt")
         .expect("the first update");
     let first: serde_json::Value = serde_json::from_slice(first.as_bytes()).expect("a JSON update");
@@ -238,7 +242,7 @@ fn a_json_update_of_another_version_is_refused_and_asks_an_update() {
 fn a_message_carries_the_author_who_signed_it_and_no_other() {
     let mut alice = founder(ChannelType::Public);
     let mut bob = join(&alice);
-    let carol = UserId::new();
+    let carol = Id::<User>::mint();
     let segment = bob.segment();
     // Written first, so no refused write below rides in its delta.
     let own = alice

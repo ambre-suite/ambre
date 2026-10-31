@@ -7,7 +7,8 @@
 //! reads this copy and never writes it (`MURMURE-153`).
 
 use ambre_bus::SnapshotVerdict;
-use ambre_core::{DocumentId, LoroPayloadRef, Payload, Seq, SnapshotBytes};
+use ambre_core::id::{Document, Id};
+use ambre_core::{LoroPayloadRef, Payload, Seq, SnapshotBytes};
 use loro::{LoroDoc, VersionVector};
 
 use super::{ChannelState, folding};
@@ -28,7 +29,7 @@ impl ChannelState {
     /// [`MurmureError::NotHeld`] for a document the channel does not hold.
     pub fn check_snapshot(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         covered: Seq,
         snapshot: &Payload<SnapshotBytes>,
     ) -> Result<SnapshotVerdict, MurmureError> {

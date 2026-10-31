@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 
 use crate::state::AppState;
 use crate::{db, redis_ops};
+use ambre_core::id::{Document, Id};
 
 /// The deltas past a document's served snapshot at which the relay asks for a
 /// new one (`ambre-spec-budgets.md section 6`, the snapshot threshold row).
@@ -43,7 +44,7 @@ fn is_checked(seq: ambre_core::Seq) -> bool {
 }
 
 /// The threshold of a document: a Murmure segment's own, or the default.
-async fn threshold_of(state: &AppState, document_id: &ambre_core::DocumentId) -> db::DeltaCount {
+async fn threshold_of(state: &AppState, document_id: &Id<Document>) -> db::DeltaCount {
     match db::channel_document_kind(&state.db, document_id).await {
         Ok(Some(ambre_core::ChannelDocumentKind::Segment)) => SEGMENT_SNAPSHOT_THRESHOLD,
         Ok(_) => SNAPSHOT_THRESHOLD,
@@ -58,7 +59,7 @@ async fn threshold_of(state: &AppState, document_id: &ambre_core::DocumentId) ->
 /// history passed the threshold, and no request already stands.
 pub async fn should_ask(
     state: &AppState,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     seq: ambre_core::Seq,
 ) -> bool {
     if !is_checked(seq) {
@@ -87,7 +88,7 @@ pub async fn should_ask(
 /// path: the delta is already stored and broadcast.
 pub fn ask_when_due(
     state: &Arc<AppState>,
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
     seq: ambre_core::Seq,
     writer: &mpsc::Sender<crate::payload::Payload>,
 ) {
@@ -169,13 +170,14 @@ mod db_tests {
     use super::*;
     use crate::db::SnapshotStatus;
     use crate::test_helpers::{create_test_document, create_test_user, test_app_state};
+    use ambre_core::id::Snapshot;
 
     const ALICE: [u8; 32] = [1u8; 32];
     const BOB: [u8; 32] = [2u8; 32];
     const CAROL: [u8; 32] = [3u8; 32];
 
     /// A state over `pool` and a fresh document.
-    async fn setup(pool: sqlx::PgPool) -> (Arc<AppState>, ambre_core::DocumentId) {
+    async fn setup(pool: sqlx::PgPool) -> (Arc<AppState>, Id<Document>) {
         let state = test_app_state(pool.clone()).await;
         let owner = create_test_user(&pool, "compaction@ambre.app").await;
         let doc = create_test_document(&pool, owner, "prose").await;
@@ -183,8 +185,8 @@ mod db_tests {
     }
 
     /// Stores delta `seq` under `author`.
-    async fn delta(state: &AppState, doc: &ambre_core::DocumentId, author: &[u8; 32], seq: i64) {
-        let tag = ambre_core::SnapshotId::new();
+    async fn delta(state: &AppState, doc: &Id<Document>, author: &[u8; 32], seq: i64) {
+        let tag = Id::<Snapshot>::mint();
         db::insert_update(
             &state.db,
             doc,
@@ -201,10 +203,10 @@ mod db_tests {
     /// Stores a pending snapshot by `author` folding in `covered`.
     async fn snapshot(
         state: &AppState,
-        doc: &ambre_core::DocumentId,
+        doc: &Id<Document>,
         author: &[u8; 32],
         covered: i64,
-    ) -> ambre_core::SnapshotId {
+    ) -> Id<Snapshot> {
         let json = serde_json::json!({});
         let key = format!("s3/{covered}");
         let key = ambre_core::ObjectKey(key);
@@ -222,7 +224,7 @@ mod db_tests {
     }
 
     /// Each remaining delta's number and author tag.
-    async fn rows(state: &AppState, doc: &ambre_core::DocumentId) -> Vec<(i64, u8)> {
+    async fn rows(state: &AppState, doc: &Id<Document>) -> Vec<(i64, u8)> {
         db::get_updates_after(
             &state.db,
             doc,
@@ -365,7 +367,7 @@ mod db_tests {
         let dropped = db::find_compactable_snapshots(&state.db, db::SnapshotCount::new(1))
             .await
             .unwrap();
-        let ids: Vec<ambre_core::SnapshotId> = dropped.into_iter().map(|s| s.id).collect();
+        let ids: Vec<Id<Snapshot>> = dropped.into_iter().map(|s| s.id).collect();
         assert!(!ids.contains(&reference));
         assert!(!ids.contains(&own));
         assert!(!ids.contains(&newer));

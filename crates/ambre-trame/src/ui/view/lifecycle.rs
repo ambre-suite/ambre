@@ -8,7 +8,7 @@ impl TrameView {
     /// a test's natively. The view itself never reads the browser's.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        document_id: DocumentId,
+        document_id: Id<Document>,
         to_logic: ambre_bus::conduit::Sender<LogicCommand>,
         from_logic: ambre_bus::conduit::Receiver<UiEvent>,
         canvas_width: ambre_core::SurfacePx,

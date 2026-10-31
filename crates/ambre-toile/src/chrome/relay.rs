@@ -13,10 +13,9 @@
 // only sends it to the routed document.
 // ============================================================================
 
-use ambre_bus::app::toile::{
-    Broadcast, ElementId, SlidePosition, StatsRequestKind, ToileCommand, ToileEvent,
-};
-use ambre_bus::{AppCommand, AppEvent, UiEvent, UserId};
+use ambre_bus::app::toile::{Broadcast, SlidePosition, StatsRequestKind, ToileCommand, ToileEvent};
+use ambre_bus::{AppCommand, AppEvent, UiEvent};
+use ambre_core::id::{Element, Frame, Id, User};
 use leptos::prelude::*;
 
 use super::find::FindRequest;
@@ -43,13 +42,13 @@ pub struct ToileRelay {
     /// The speaker notes of the slide on screen.
     pub presenter_notes: RwSignal<String>,
     /// The frame those notes belong to.
-    pub presenter_frame: RwSignal<Option<ElementId>>,
+    pub presenter_frame: RwSignal<Option<Id<Frame>>>,
     /// Whether this client broadcasts its playback position.
     pub broadcasting: RwSignal<Broadcast>,
     /// The presenter this client follows, if any.
-    pub following: RwSignal<Option<UserId>>,
+    pub following: RwSignal<Option<Id<User>>>,
     /// A peer presenting now, whom the user may follow.
-    pub presenter_peer: RwSignal<Option<UserId>>,
+    pub presenter_peer: RwSignal<Option<Id<User>>>,
 }
 
 impl ToileRelay {

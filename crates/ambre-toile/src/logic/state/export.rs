@@ -11,8 +11,9 @@
 
 use crate::logic::command::{ToileEvent, ToileOutcome};
 use crate::logic::interop::{ExportElement, export_svg};
-use crate::logic::model::{ElementId, ElementKind, NodeId, ShapeKind};
+use crate::logic::model::{ElementKind, NodeId, ShapeKind};
 use ambre_core::WholePx;
+use ambre_core::id::{Element, Id};
 
 use super::ToileState;
 use super::codec::{bin_of, body_of, kind_of, path_of, rotation_of, stored_rect, str_of};
@@ -126,7 +127,7 @@ impl ToileState {
     /// One element, read from the CRDT exactly as the display pass reads it.
     /// That means the stored box for anything with geometry, and the derived
     /// union for a group.
-    fn export_element(&self, id: &ElementId) -> Option<ExportElement> {
+    fn export_element(&self, id: &Id<Element>) -> Option<ExportElement> {
         let em = self.element_map(id)?;
         let kind = kind_of(&em);
         let rect = if kind == ElementKind::Group {

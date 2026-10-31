@@ -97,11 +97,11 @@ fn ShellHeader(
     theme_sig: RwSignal<ambre_canvas::Theme>,
     toasts: Toasts,
     chrome_status: RwSignal<ChromeStatus>,
-    current_doc: RwSignal<Option<DocumentId>>,
+    current_doc: RwSignal<Option<Id<Document>>>,
     share_open: RwSignal<ambre_chrome::Openness>,
     about_open: RwSignal<ambre_chrome::Openness>,
     username: RwSignal<Option<ambre_core::DisplayName>>,
-    me: RwSignal<Option<UserId>>,
+    me: RwSignal<Option<Id<User>>>,
 ) -> impl IntoView {
     view! {
         <span class="title">"Ambre"</span>
@@ -1111,7 +1111,7 @@ mod tests {
     /// shell's own router, at the document's path, and opens no tab.
     #[wasm_bindgen_test]
     fn a_document_link_is_opened_by_the_shells_router() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let to = std::cell::RefCell::new(Vec::new());
         follow_shell_nav(
             toile_chrome::ShellNav::Document {

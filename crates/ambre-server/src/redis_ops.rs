@@ -1,4 +1,5 @@
 use crate::error::{AppError, Resource};
+use ambre_core::id::{Channel, Document, Id, User};
 use rustis::client::Client;
 use rustis::commands::{
     GenericCommands, HashCommands, InfoSection, ListCommands, PubSubCommands, ScriptingCommands,
@@ -79,7 +80,7 @@ return redis.call('INCR', KEYS[2])
 /// [`AppError::SegmentLocked`] (`SRV-115`).
 pub async fn verify_clock_and_assign_seq(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     pub_key: &FixedBytes<PublicKey>,
     clock: Clock,
 ) -> Result<ambre_core::Seq, AppError> {
@@ -145,7 +146,7 @@ fn clock_refusal(error: &str, got: Clock) -> AppError {
 /// the store was reset and nothing wrote since.
 pub async fn document_seqs(
     redis: &Client,
-    document_ids: &[ambre_core::DocumentId],
+    document_ids: &[Id<Document>],
 ) -> Result<Vec<Option<ambre_core::Seq>>, AppError> {
     if document_ids.is_empty() {
         return Ok(Vec::new());
@@ -194,7 +195,7 @@ return 1
 /// validated. Otherwise `CLOCK_MISMATCH`, since clients hold advanced clocks.
 pub async fn clock_state_is_cold(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<bool, AppError> {
     let clocks_key = ClocksKey::of(document_id);
     let existing: usize = redis
@@ -209,7 +210,7 @@ pub async fn clock_state_is_cold(
 /// A no-op when there is no durable history (a brand-new document).
 pub async fn seed_clock_state(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     max_seq: ambre_core::Seq,
     author_clocks: &[(FixedBytes<PublicKey>, Clock)],
 ) -> Result<(), AppError> {
@@ -246,7 +247,7 @@ pub async fn seed_clock_state(
 /// (`SRV-017`).
 pub async fn append_pending_delta(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     seq: ambre_core::Seq,
     s3_key: &ambre_core::ObjectKey,
     update_wire: &Payload,
@@ -336,7 +337,7 @@ return redis.call('RPUSH', KEYS[1], ARGV[1])
 /// is being deleted.
 pub async fn push_poison_entry(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     entry: &Payload,
 ) -> Result<(), AppError> {
     guarded_rpush(
@@ -419,7 +420,7 @@ pub async fn clear_pending_dirty_if_empty(
 /// signal, not a hot path.
 pub async fn push_dead_letter(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     seq: ambre_core::Seq,
     s3_key: &ambre_core::ObjectKey,
     update_wire: &Payload,
@@ -447,7 +448,7 @@ pub async fn push_dead_letter(
 /// Loading the list once turns every fallback into a map lookup.
 pub async fn get_pending_deltas_map(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<std::collections::HashMap<ambre_core::Seq, Payload>, AppError> {
     let entries = pending_entries(redis, &PendingKey::of(document_id)).await?;
     let mut map = std::collections::HashMap::with_capacity(entries.len());
@@ -529,7 +530,7 @@ pub async fn release_flush_lock(
 /// instance shares the claim, so one threshold crossing asks once.
 pub async fn claim_snapshot_ask(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     ttl: ambre_core::Seconds,
 ) -> Result<bool, AppError> {
     let key = SnapshotAskedKey::of(document_id);
@@ -545,7 +546,7 @@ pub async fn claim_snapshot_ask(
 /// cold.
 pub async fn current_seq(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<ambre_core::Seq, AppError> {
     let seq: Option<u64> = redis
         .get(SeqKey::of(document_id).as_str())
@@ -578,7 +579,7 @@ pub async fn refresh_get(
     let user_id = fields.get("user_id").cloned().unwrap_or_default();
 
     let user_id = ambre_core::Uuid::parse_str(&user_id)
-        .map(ambre_core::UserId::from_uuid)
+        .map(Id::<User>::from_uuid)
         .map_err(|e| AppError::Redis(format!("invalid user_id in refresh: {e}")))?;
 
     // An absent field is a session without keys; a present one must parse.
@@ -673,7 +674,7 @@ pub async fn refresh_consume(
 /// All active subscribers (across Axum instances) receive the message.
 pub async fn doc_broadcast(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     payload: &Payload,
 ) -> Result<(), AppError> {
     let channel = crate::ws::Topic::document(document_id);
@@ -694,7 +695,7 @@ pub async fn doc_broadcast(
 /// `DocumentShared` on a fresh invite.
 pub async fn user_broadcast(
     redis: &Client,
-    user_id: &ambre_core::UserId,
+    user_id: &Id<User>,
     payload: &Payload,
 ) -> Result<(), AppError> {
     let channel = crate::ws::Topic::user(user_id);
@@ -709,7 +710,7 @@ pub async fn user_broadcast(
 /// (`SRV-177`). The message names the document alone, which the topic already
 /// names. Best-effort, like every broadcast: the member rows stay the source of
 /// truth, and a client reads them again at its next open.
-pub async fn members_changed(redis: &Client, document_id: &ambre_core::DocumentId) {
+pub async fn members_changed(redis: &Client, document_id: &Id<Document>) {
     let msg =
         crate::payload::Payload::server_msg(&ambre_protocol::ws::WsServerMsg::MembersChanged {
             document_id: *document_id,
@@ -723,8 +724,8 @@ pub async fn members_changed(redis: &Client, document_id: &ambre_core::DocumentI
 /// it counts the delta at the next one, or reads it when it opens the thread.
 pub async fn thread_activity(
     redis: &Client,
-    channel_id: &ambre_core::ChannelId,
-    thread: &ambre_core::DocumentId,
+    channel_id: &Id<Channel>,
+    thread: &Id<Document>,
 ) -> Result<(), AppError> {
     let msg = Payload::server_msg(&ambre_protocol::ws::WsServerMsg::ThreadActivity {
         document_id: *thread,
@@ -744,7 +745,7 @@ pub async fn thread_activity(
 /// deleted takes no presence (`SRV-017`).
 pub async fn doc_presence_update(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     pub_key: &FixedBytes<PublicKey>,
     presence: &ambre_protocol::messages::Ciphertext,
     ttl: ambre_core::Seconds,
@@ -799,7 +800,7 @@ return redis.call('HEXPIRE', KEYS[1], ARGV[1], 'FIELDS', 1, ARGV[2])
 /// and says so on the document topic either way.
 pub async fn doc_presence_remove(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     pub_key: &FixedBytes<PublicKey>,
 ) -> Result<(), AppError> {
     let key = PresenceKey::of(document_id);
@@ -821,7 +822,7 @@ const SESSION_COUNT_TTL: ambre_core::Seconds = ambre_core::Seconds(24 * 3600);
 /// document being deleted takes no count (`SRV-017`).
 pub async fn doc_session_open(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     pub_key: &FixedBytes<PublicKey>,
 ) -> Result<(), AppError> {
     let pub_key_hex = pub_key.to_hex();
@@ -854,7 +855,7 @@ return 1
 /// relay cannot count against an open session is a departure.
 pub async fn doc_session_close(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     pub_key: &FixedBytes<PublicKey>,
 ) -> Result<bool, AppError> {
     let pub_key_hex = pub_key.to_hex();
@@ -878,7 +879,7 @@ return 0
 /// delete, before any object or key is removed.
 pub async fn mark_document_gone(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
     const LUA: &str = "return redis.call('SET', KEYS[1], '1', 'EX', ARGV[1])";
@@ -902,7 +903,7 @@ pub async fn mark_document_gone(
 /// not lose (`SRV-057`, `SRV-165`).
 pub async fn purge_document_state(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     ttl: ambre_core::Seconds,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
@@ -951,7 +952,7 @@ return 1
 /// delta is numbered between the check and the lock.
 pub async fn lock_segment(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<Option<ambre_core::Seq>, AppError> {
     const LUA: &str = r#"
 if redis.call('LLEN', KEYS[1]) > 0 then
@@ -979,7 +980,7 @@ return tonumber(redis.call('GET', KEYS[3])) or 0
 /// flush, and a delta numbered before it stays under the lock (`SRV-147`).
 pub async fn lock_segment_now(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<ambre_core::Seq, AppError> {
     const LUA: &str = r#"
 redis.call('SET', KEYS[1], '1')
@@ -1001,7 +1002,7 @@ return tonumber(redis.call('GET', KEYS[2])) or 0
 /// so no delta is numbered between the check and the seal.
 pub async fn seal_folded(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     folded_seq: ambre_core::Seq,
 ) -> Result<bool, AppError> {
     const LUA: &str = r#"
@@ -1032,7 +1033,7 @@ return 1
 /// deleted document: a lock holds for good.
 pub async fn mirror_segment_lock(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<(), AppError> {
     redis
         .set(LockedKey::of(document_id).as_str(), "1")
@@ -1047,7 +1048,7 @@ pub use ambre_core::RotationDebt;
 /// Sets or clears the mirror of an owed rotation.
 pub async fn mirror_rotation_owed(
     redis: &Client,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     debt: RotationDebt,
 ) -> Result<(), AppError> {
     const LUA: &str = r#"
@@ -1075,7 +1076,7 @@ return redis.call('DEL', KEYS[1])
 /// HGETALL response. Mirrors what a minted access JWT carries in its claims.
 #[derive(Debug, Clone)]
 pub struct RefreshData {
-    pub user_id: ambre_core::UserId,
+    pub user_id: Id<User>,
     /// `None` for an account that has not registered its keys (`SRV-027`).
     pub signing_pubkey: Option<FixedBytes<PublicKey>>,
 }
@@ -1282,7 +1283,7 @@ mod lua_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn a_frame_owed_a_rotation_takes_no_seq_and_no_clock() {
         let redis = connect_redis().await;
-        let doc_id = ambre_core::DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xa1; 32]);
 
         mirror_rotation_owed(&redis, &doc_id, RotationDebt::Owed)
@@ -1329,7 +1330,7 @@ mod lua_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn a_locked_segment_refuses_every_later_delta() {
         let redis = connect_redis().await;
-        let doc_id = ambre_core::DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xb1; 32]);
         let pending = format!("doc:{doc_id}:pending");
 
@@ -1373,7 +1374,7 @@ mod lua_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn a_rotation_locks_a_segment_with_a_delta_still_pending() {
         let redis = connect_redis().await;
-        let doc_id = ambre_core::DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xd1; 32]);
         assert_eq!(
             lock_segment_now(&redis, &doc_id).await.unwrap(),
@@ -1416,7 +1417,7 @@ mod lua_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn a_fold_seals_only_the_amendments_it_holds() {
         let redis = connect_redis().await;
-        let doc_id = ambre_core::DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xc1; 32]);
         let pending = format!("doc:{doc_id}:pending");
 
@@ -1463,7 +1464,7 @@ mod lua_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn first_update_succeeds() {
         let redis = connect_redis().await;
-        let doc_id = ambre_core::DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let pk_hex = &FixedBytes::<PublicKey>::from_array([0xab; 32]);
 
         let seq = verify_clock_and_assign_seq(&redis, &doc_id, pk_hex, Clock(1))
@@ -1484,7 +1485,7 @@ mod lua_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn sequential_clock_succeeds() {
         let redis = connect_redis().await;
-        let doc_id = ambre_core::DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let pk = &FixedBytes::<PublicKey>::from_array([0xde; 32]);
 
         let s1 = verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
@@ -1513,7 +1514,7 @@ mod lua_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn clock_mismatch_rejected() {
         let redis = connect_redis().await;
-        let doc_id = ambre_core::DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let pk = &FixedBytes::<PublicKey>::from_array([0x11; 32]);
 
         verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
@@ -1546,7 +1547,7 @@ mod lua_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn duplicate_clock_rejected() {
         let redis = connect_redis().await;
-        let doc_id = ambre_core::DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let pk = &FixedBytes::<PublicKey>::from_array([0x22; 32]);
 
         verify_clock_and_assign_seq(&redis, &doc_id, pk, Clock(1))
@@ -1579,7 +1580,7 @@ mod lua_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn independent_clients_have_independent_clocks() {
         let redis = connect_redis().await;
-        let doc_id = ambre_core::DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         let pk_a = &FixedBytes::<PublicKey>::from_array([0xaa; 32]);
         let pk_b = &FixedBytes::<PublicKey>::from_array([0xbb; 32]);
 
@@ -1637,7 +1638,7 @@ mod redis_integration_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn flush_lock_is_mutually_exclusive() {
         let redis = connect_redis().await;
-        let lock_key = FlushLockKey::of(&ambre_core::DocumentId::new());
+        let lock_key = FlushLockKey::of(&Id::<Document>::mint());
         let _ = redis.del([lock_key.as_str()]).await;
 
         // First caller acquires; a concurrent instance cannot while it is held.
@@ -1701,7 +1702,7 @@ mod redis_integration_tests {
     #[tokio::test]
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn one_clock_sent_at_once_is_numbered_once() {
-        let doc = ambre_core::DocumentId::new();
+        let doc = Id::<Document>::mint();
         let ab = FixedBytes::<PublicKey>::from_array([0xab; 32]);
         let mut clients = Vec::new();
         for _ in 0..16 {
@@ -1750,7 +1751,7 @@ mod redis_integration_tests {
     async fn dirty_set_marks_on_append_and_clears_only_when_drained() {
         use rustis::commands::SetCommands;
         let redis = connect_redis().await;
-        let doc = ambre_core::DocumentId::new();
+        let doc = Id::<Document>::mint();
         let pending_key = PendingKey::of(&doc);
         let _ = redis.del([pending_key.as_str()]).await;
         // Start from a clean marker for this doc's key.
@@ -1804,7 +1805,7 @@ mod redis_integration_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn pending_map_roundtrips_seq_to_wire() {
         let redis = connect_redis().await;
-        let doc = ambre_core::DocumentId::new();
+        let doc = Id::<Document>::mint();
         let key = format!("doc:{doc}:pending");
         let _ = redis.del([key.as_str()]).await;
 
@@ -1847,7 +1848,7 @@ mod redis_integration_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn presence_field_is_dropped_on_departure() {
         let redis = connect_redis().await;
-        let doc = ambre_core::DocumentId::new();
+        let doc = Id::<Document>::mint();
         let key = format!("doc:{doc}:presence");
         let pk = &FixedBytes::<PublicKey>::from_array([0x0b; 32]);
         let _ = redis.del([key.as_str()]).await;
@@ -1908,7 +1909,7 @@ mod redis_integration_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn presence_field_self_expires() {
         let redis = connect_redis().await;
-        let doc = ambre_core::DocumentId::new();
+        let doc = Id::<Document>::mint();
         let key = format!("doc:{doc}:presence");
         let pk = &FixedBytes::<PublicKey>::from_array([0xef; 32]);
         let _ = redis.del([key.as_str()]).await;
@@ -1950,7 +1951,7 @@ mod redis_integration_tests {
     #[cfg_attr(not(feature = "db"), ignore = "needs redis; run with --features db")]
     async fn seed_clock_state_unblocks_the_next_update_after_a_redis_reset() {
         let redis = connect_redis().await;
-        let doc = ambre_core::DocumentId::new();
+        let doc = Id::<Document>::mint();
         let clocks_key = format!("doc:{doc}:clocks");
         let seq_key = format!("doc:{doc}:seq");
         let author = &FixedBytes::<PublicKey>::from_array([0xef; 32]);
@@ -1987,7 +1988,7 @@ mod redis_integration_tests {
     async fn seed_refresh(redis: &Client) -> Credential<RefreshToken> {
         let token = Credential::<RefreshToken>::new(uuid::Uuid::new_v4().to_string());
         let data = RefreshData {
-            user_id: ambre_core::UserId::new(),
+            user_id: Id::<User>::mint(),
             signing_pubkey: Some(FixedBytes::<PublicKey>::from_array([3u8; 32])),
         };
         refresh_create(redis, &token, &data, ambre_core::Seconds(60))

@@ -154,7 +154,7 @@ impl DisplayName {
     /// The short handle a member who carries no usable name shows: the first
     /// four bytes of `user` in hex. It always fits the rule.
     #[must_use]
-    pub fn handle_of(user: &crate::UserId) -> Self {
+    pub fn handle_of(user: &crate::Id<crate::id::User>) -> Self {
         let handle: String = user
             .as_bytes()
             .iter()

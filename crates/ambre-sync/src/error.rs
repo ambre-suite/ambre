@@ -9,7 +9,8 @@
 // by `Display`, for a log line and a toast.
 // ============================================================================
 
-use ambre_bus::{ApiFailure, DocumentId, UserId};
+use ambre_bus::ApiFailure;
+use ambre_core::id::{Document, Id, User};
 
 use crate::http::{HttpError, Reported};
 use crate::pipeline::PipelineError;
@@ -58,15 +59,15 @@ pub(crate) enum SyncError {
     MemberUnsigned,
     /// The exchange key the relay serves for a member is not the one pinned.
     #[error("the exchange key of {0} is not the one pinned")]
-    PinMismatch(UserId),
+    PinMismatch(Id<User>),
     /// The relay created another document than the one this client minted
     /// (`SYNC-136`).
     #[error("the relay answered {answered}, not the minted {minted}")]
     WrongDocument {
         /// The id this client minted.
-        minted: DocumentId,
+        minted: Id<Document>,
         /// The id the relay answered.
-        answered: DocumentId,
+        answered: Id<Document>,
     },
     /// A downloaded blob is not the one its address names (`SYNC-052`).
     #[error("the blob is not the one its address names")]

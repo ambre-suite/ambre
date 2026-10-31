@@ -3,6 +3,7 @@ use axum::response::IntoResponse;
 use std::sync::Arc;
 
 use ambre_core::OidcProvider;
+use ambre_core::id::{Id, User};
 
 use crate::auth;
 use crate::db;
@@ -61,8 +62,8 @@ pub struct DevLoginRequest {
 /// Response for `POST /api/auth/dev/login`.
 #[derive(serde::Serialize)]
 pub struct DevLoginResponse {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub user_id: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub user_id: Id<User>,
     pub display_name: ambre_core::DisplayName,
     /// Access JWT, kept in client memory and sent as `Authorization: Bearer`.
     pub access_token: ambre_protocol::ws::Credential<ambre_protocol::ws::AccessToken>,
@@ -314,7 +315,7 @@ mod tests {
         signing_pubkey: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
     ) -> db::UserRow {
         db::UserRow {
-            id: ambre_core::UserId::new(),
+            id: Id::<User>::mint(),
             oidc_subject: Some(openidconnect::SubjectIdentifier::new("subject".into())),
             email: "a@example.com".into(),
             email_verified: db::EmailProof::Verified,

@@ -7,7 +7,7 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelId, LeaseAnswer, LeaseId, SegmentId, Seq};
+use ambre_bus::{LeaseAnswer, Seq};
 
 use crate::updates::{SnapshotUpload, upload_snapshot};
 
@@ -16,8 +16,8 @@ pub(crate) async fn take_lease(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
     base: &crate::http::ApiRoot,
-    channel_id: ChannelId,
-    segment: SegmentId,
+    channel_id: Id<Channel>,
+    segment: Id<Segment>,
 ) -> Result<LeaseAnswer, http::HttpError> {
     let url = base.route(format!("/channels/{channel_id}/segments/{segment}/lease"));
     let answer: http::FinalizeLeaseResponse =
@@ -40,9 +40,9 @@ pub(crate) async fn commit_final(
     transport: &impl http::Transport,
     auth: &http::AuthContext,
     base: &crate::http::ApiRoot,
-    channel_id: ChannelId,
-    segment: SegmentId,
-    lease: LeaseId,
+    channel_id: Id<Channel>,
+    segment: Id<Segment>,
+    lease: Id<Lease>,
     upload: SnapshotUpload,
 ) -> Result<(), http::HttpError> {
     let snapshot_id = upload_snapshot(transport, auth, base, upload).await?;
@@ -59,7 +59,7 @@ pub(crate) async fn commit_final(
 
 impl SyncState {
     /// Ask the relay for the finalize lease of `segment`.
-    pub(crate) fn handle_take_finalize_lease(&self, channel_id: ChannelId, segment: SegmentId) {
+    pub(crate) fn handle_take_finalize_lease(&self, channel_id: Id<Channel>, segment: Id<Segment>) {
         let Some(tx) = self.event_tx.clone() else {
             return self.finalize_failed(
                 channel_id,
@@ -88,9 +88,9 @@ impl SyncState {
     /// edit still unanswered waits, and asks again later.
     pub(crate) fn handle_finalize_segment(
         &self,
-        channel_id: ChannelId,
-        segment: SegmentId,
-        lease: LeaseId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        lease: Id<Lease>,
         horizon: Seq,
         payload: &ambre_core::Payload<ambre_core::SnapshotBytes>,
     ) {
@@ -162,8 +162,8 @@ impl SyncState {
     /// Tell the Logic thread a lease request or a commit of `segment` failed.
     pub(crate) fn finalize_failed(
         &self,
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         end: ambre_core::FinalizeEnd,
         message: &str,
     ) {
@@ -193,14 +193,14 @@ mod tests {
     }
 
     /// A sealed snapshot of `document_id` covering the deltas up to `horizon`.
-    fn upload(document_id: DocumentId, horizon: Seq) -> SnapshotUpload {
+    fn upload(document_id: Id<Document>, horizon: Seq) -> SnapshotUpload {
         let key = DocumentKey::generate();
         let sk = MasterSeed::generate().derive_signing_key();
         let public_data = SnapshotPublicData {
             document_id,
             pub_key: ambre_core::FixedBytes::from_array(sk.verifying_key().to_bytes()),
             key_id: key.id(),
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<Snapshot>::mint(),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
@@ -222,8 +222,8 @@ mod tests {
     /// segments spec).
     #[tokio::test]
     async fn a_lease_request_reads_the_grant_or_the_deferral() {
-        let (channel, segment) = (ChannelId::new(), SegmentId::new());
-        let lease = LeaseId::new();
+        let (channel, segment) = (Id::<Channel>::mint(), Id::<Segment>::mint());
+        let lease = Id::<Lease>::mint();
         let transport = Scripted::new([
             Ok((
                 200,
@@ -266,8 +266,8 @@ mod tests {
     /// spec).
     #[tokio::test]
     async fn a_commit_uploads_the_snapshot_at_the_horizon_then_names_it() {
-        let (channel, segment) = (ChannelId::new(), SegmentId::new());
-        let (lease, given) = (LeaseId::new(), SnapshotId::new());
+        let (channel, segment) = (Id::<Channel>::mint(), Id::<Segment>::mint());
+        let (lease, given) = (Id::<Lease>::mint(), Id::<Snapshot>::mint());
         let document = segment.document_id();
         let link = serde_json::json!({
             "upload_url": "https://store.test/o?sig=x",

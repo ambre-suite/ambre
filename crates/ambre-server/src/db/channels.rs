@@ -19,7 +19,7 @@ macro_rules! insert_channel_document {
 /// One document a channel groups.
 #[derive(Debug)]
 pub struct ChannelDocumentRow {
-    pub document_id: ambre_core::DocumentId,
+    pub document_id: Id<Document>,
     pub kind: ambre_core::ChannelDocumentKind,
 }
 
@@ -28,7 +28,7 @@ pub struct ChannelDocumentRow {
 /// An unknown channel groups nothing, so it answers an empty list.
 pub async fn list_channel_documents(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
+    channel_id: &Id<Channel>,
 ) -> Result<Vec<ChannelDocumentRow>, AppError> {
     let rows = sqlx::query(
         "SELECT document_id, kind FROM channel_documents WHERE channel_id = $1 \
@@ -64,16 +64,16 @@ pub(super) fn decode_kind(word: &str) -> Result<ambre_core::ChannelDocumentKind,
 #[derive(Debug)]
 pub struct ChannelRow {
     /// Absent for a direct message.
-    pub space_id: Option<ambre_core::SpaceId>,
+    pub space_id: Option<Id<Space>>,
     pub visibility: ambre_core::Visibility,
     /// Absent only for a channel whose `meta` was never registered.
-    pub meta_id: Option<ambre_core::MetaId>,
+    pub meta_id: Option<Id<Meta>>,
 }
 
 /// The channel, or `None` when the relay holds no such channel.
 pub async fn get_channel(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
+    channel_id: &Id<Channel>,
 ) -> Result<Option<ChannelRow>, AppError> {
     let row = sqlx::query(
         "SELECT c.space_id, c.is_public, d.document_id AS meta_id FROM channels c \
@@ -96,7 +96,7 @@ pub async fn get_channel(
 }
 
 /// Hold `space` as a space. A second registration changes nothing.
-pub async fn register_space(pool: &PgPool, space: &ambre_core::SpaceId) -> Result<(), AppError> {
+pub async fn register_space(pool: &PgPool, space: &Id<Space>) -> Result<(), AppError> {
     sqlx::query("INSERT INTO spaces (id) VALUES ($1) ON CONFLICT DO NOTHING")
         .bind(id_to_uuid(*space))
         .execute(pool)
@@ -108,8 +108,8 @@ pub async fn register_space(pool: &PgPool, space: &ambre_core::SpaceId) -> Resul
 /// (`SRV-216`).
 pub async fn list_member_spaces(
     pool: &PgPool,
-    user: &ambre_core::UserId,
-) -> Result<Vec<ambre_core::SpaceId>, AppError> {
+    user: &Id<User>,
+) -> Result<Vec<Id<Space>>, AppError> {
     let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
         "SELECT s.id FROM spaces s JOIN document_members m ON m.document_id = s.id \
          WHERE m.user_id = $1 ORDER BY s.id",
@@ -124,8 +124,8 @@ pub async fn list_member_spaces(
 /// other document (`SRV-218`).
 pub async fn space_members(
     pool: &PgPool,
-    document: &ambre_core::DocumentId,
-) -> Result<Vec<ambre_core::UserId>, AppError> {
+    document: &Id<Document>,
+) -> Result<Vec<Id<User>>, AppError> {
     let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
         "SELECT m.user_id FROM spaces s JOIN document_members m ON m.document_id = s.id \
          WHERE s.id = $1 ORDER BY m.user_id",
@@ -139,8 +139,8 @@ pub async fn space_members(
 /// The channels the relay holds as public in `space`, by identifier.
 pub async fn list_space_public_channels(
     pool: &PgPool,
-    space: &ambre_core::SpaceId,
-) -> Result<Vec<ambre_core::ChannelId>, AppError> {
+    space: &Id<Space>,
+) -> Result<Vec<Id<Channel>>, AppError> {
     let ids: Vec<uuid::Uuid> =
         sqlx::query_scalar("SELECT id FROM channels WHERE space_id = $1 AND is_public ORDER BY id")
             .bind(id_to_uuid(*space))
@@ -152,11 +152,11 @@ pub async fn list_space_public_channels(
 /// A channel `user` is a member of, as their listing answers it.
 #[derive(Debug, PartialEq, Eq)]
 pub struct MemberChannelRow {
-    pub id: ambre_core::ChannelId,
+    pub id: Id<Channel>,
     /// `None` for a direct message.
-    pub space_id: Option<ambre_core::SpaceId>,
+    pub space_id: Option<Id<Space>>,
     pub visibility: ambre_core::Visibility,
-    pub meta_id: ambre_core::MetaId,
+    pub meta_id: Id<Meta>,
     /// The name sealed beside `meta`, if any (`SRV-219`).
     pub name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>,
     /// The caller's copy of the channel key, and the exchange key of whoever
@@ -176,7 +176,7 @@ pub struct MemberChannelRow {
 /// message also lists its other members (`SRV-220`).
 pub async fn list_member_channels(
     pool: &PgPool,
-    user: &ambre_core::UserId,
+    user: &Id<User>,
 ) -> Result<Vec<MemberChannelRow>, AppError> {
     let rows = sqlx::query(
         "SELECT c.id, c.space_id, c.is_public, d.document_id, doc.name_enc, m.doc_key_enc, \
@@ -208,9 +208,7 @@ pub async fn list_member_channels(
                 id: uuid_row_to_id(r.try_get("id")?),
                 space_id: space_id.map(uuid_row_to_id),
                 visibility: ambre_core::Visibility::public_if(r.try_get("is_public")?),
-                meta_id: ambre_core::MetaId::from_document(uuid_row_to_id(
-                    r.try_get("document_id")?,
-                )),
+                meta_id: Id::<Meta>::from_document(uuid_row_to_id(r.try_get("document_id")?)),
                 name_enc: r
                     .try_get::<Option<Vec<u8>>, _>("name_enc")?
                     .map(ambre_core::Encoded::new),
@@ -229,8 +227,8 @@ pub async fn list_member_channels(
 /// every channel.
 pub async fn channel_of_document(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-) -> Result<Option<ambre_core::ChannelId>, AppError> {
+    document_id: &Id<Document>,
+) -> Result<Option<Id<Channel>>, AppError> {
     let channel: Option<uuid::Uuid> =
         sqlx::query_scalar("SELECT channel_id FROM channel_documents WHERE document_id = $1")
             .bind(id_to_uuid(*document_id))
@@ -246,8 +244,8 @@ pub async fn channel_of_document(
 /// constraint admits none.
 pub async fn member_role(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    user_id: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    user_id: &Id<User>,
 ) -> Result<Option<ambre_core::Role>, AppError> {
     let role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM document_members WHERE document_id = $1 AND user_id = $2",
@@ -262,11 +260,11 @@ pub async fn member_role(
 /// A channel to register: its space, its flag, and its first two documents.
 #[derive(Debug, Clone, Copy)]
 pub struct NewChannel {
-    pub channel_id: ambre_core::ChannelId,
-    pub space_id: ambre_core::SpaceId,
+    pub channel_id: Id<Channel>,
+    pub space_id: Id<Space>,
     pub visibility: ambre_core::Visibility,
-    pub meta_id: ambre_core::MetaId,
-    pub segment_id: ambre_core::SegmentId,
+    pub meta_id: Id<Meta>,
+    pub segment_id: Id<Segment>,
 }
 
 /// Register a channel with its `meta` and its first segment, in one
@@ -336,10 +334,10 @@ pub async fn register_channel(pool: &PgPool, new: &NewChannel) -> Result<(), App
 /// not the active segment, or a successor already registered.
 pub async fn close_segment(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
-    closing: ambre_core::SegmentId,
-    successor: ambre_core::SegmentId,
-) -> Result<ambre_core::SegmentId, AppError> {
+    channel_id: &Id<Channel>,
+    closing: Id<Segment>,
+    successor: Id<Segment>,
+) -> Result<Id<Segment>, AppError> {
     let channel = id_to_uuid(*channel_id);
     let conflict = |detail: &str| AppError::Conflict {
         detail: detail.into(),
@@ -364,7 +362,7 @@ pub async fn close_segment(
     let closing = id_to_uuid(closing.document_id());
     if closing_now == Some(closing) {
         let active = active.ok_or_else(|| conflict("the channel has no active segment"))?;
-        return Ok(ambre_core::SegmentId::from_document(uuid_row_to_id(active)));
+        return Ok(Id::<Segment>::from_document(uuid_row_to_id(active)));
     }
     if active != Some(closing) {
         return Err(conflict("the segment is not the active one"));
@@ -398,10 +396,7 @@ pub async fn close_segment(
 /// Whether a finalize lease locked `document_id` against deltas (`SRV-114`).
 /// The lock is its horizon, so a segment with one is locked. A document
 /// outside every channel is not locked.
-pub async fn segment_locked(
-    pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-) -> Result<bool, AppError> {
+pub async fn segment_locked(pool: &PgPool, document_id: &Id<Document>) -> Result<bool, AppError> {
     let locked: Option<bool> = sqlx::query_scalar(
         "SELECT horizon IS NOT NULL FROM channel_documents WHERE document_id = $1",
     )
@@ -415,8 +410,8 @@ pub async fn segment_locked(
 /// retired the key of, and that no lock holds yet (`SRV-147`).
 pub async fn retired_unlocked_segments(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+    document_id: &Id<Document>,
+) -> Result<Vec<Id<Document>>, AppError> {
     let rows: Vec<uuid::Uuid> = sqlx::query_scalar(
         "SELECT s.document_id FROM channel_documents s \
          JOIN channel_documents d ON d.channel_id = s.channel_id \
@@ -433,7 +428,7 @@ pub async fn retired_unlocked_segments(
 /// it already: a lock is set once.
 pub async fn record_lock(
     pool: &PgPool,
-    segment: &ambre_core::DocumentId,
+    segment: &Id<Document>,
     horizon: ambre_core::Seq,
 ) -> Result<(), AppError> {
     sqlx::query(
@@ -455,10 +450,10 @@ pub async fn record_lock(
 /// So is an `amendments` already registered.
 pub async fn register_amendments(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
-    segment: ambre_core::SegmentId,
-    amendments: ambre_core::DocumentId,
-) -> Result<ambre_core::DocumentId, AppError> {
+    channel_id: &Id<Channel>,
+    segment: Id<Segment>,
+    amendments: Id<Document>,
+) -> Result<Id<Document>, AppError> {
     let channel = id_to_uuid(*channel_id);
     let conflict = |detail: &str| AppError::Conflict {
         detail: detail.into(),
@@ -518,10 +513,10 @@ pub async fn register_amendments(
 /// A `thread` already registered is refused with a 409.
 pub async fn register_thread(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
-    root: ambre_core::MessageId,
-    thread: ambre_core::DocumentId,
-) -> Result<ambre_core::DocumentId, AppError> {
+    channel_id: &Id<Channel>,
+    root: Id<Message>,
+    thread: Id<Document>,
+) -> Result<Id<Document>, AppError> {
     let channel = id_to_uuid(*channel_id);
     let root = id_to_uuid(root);
     let mut tx = pool.begin().await?;
@@ -579,7 +574,7 @@ pub enum FinalizeLease {
     /// The caller holds the lease. It writes the snapshot of every delta up
     /// to `horizon`, and commits it before `expires_in` runs out.
     Granted {
-        lease_id: ambre_core::LeaseId,
+        lease_id: Id<Lease>,
         horizon: ambre_core::Seq,
         expires_in: std::time::Duration,
     },
@@ -599,8 +594,8 @@ pub enum FinalizeLease {
 /// not of the channel, is refused with a 409.
 pub async fn take_finalize_lease(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
-    segment: ambre_core::SegmentId,
+    channel_id: &Id<Channel>,
+    segment: Id<Segment>,
     terms: LeaseTerms,
     lock: impl AsyncFnOnce() -> Result<Option<ambre_core::Seq>, AppError>,
 ) -> Result<FinalizeLease, AppError> {
@@ -658,7 +653,7 @@ pub async fn take_finalize_lease(
         tx.commit().await?;
         return Ok(wait(left));
     }
-    let lease_id = ambre_core::LeaseId::new();
+    let lease_id = Id::<Lease>::mint();
     sqlx::query(
         "UPDATE channel_documents SET lease_id = $2, \
          lease_until = now() + make_interval(secs => $3) WHERE document_id = $1",
@@ -685,7 +680,7 @@ struct LeaseRow {
     #[sqlx(try_from = "PgOptSeq")]
     horizon: Option<ambre_core::Seq>,
     #[sqlx(try_from = "PgOptId")]
-    final_snapshot: Option<ambre_core::SnapshotId>,
+    final_snapshot: Option<Id<Snapshot>>,
     #[sqlx(try_from = "PgTimeLeft", rename = "grace_left_ms")]
     grace_left: Option<std::time::Duration>,
     #[sqlx(try_from = "PgTimeLeft", rename = "lease_left_ms")]
@@ -710,20 +705,20 @@ struct CommitRow {
     state: Option<ambre_core::SegmentState>,
     /// The live or expired lease, if any.
     #[sqlx(try_from = "PgOptId")]
-    held: Option<ambre_core::LeaseId>,
+    held: Option<Id<Lease>>,
     live: LeaseClock,
     #[sqlx(try_from = "PgOptSeq")]
     horizon: Option<ambre_core::Seq>,
     #[sqlx(try_from = "PgOptId")]
-    final_snapshot: Option<ambre_core::SnapshotId>,
+    final_snapshot: Option<Id<Snapshot>>,
 }
 
 /// The delta number a snapshot of `document` folds in, `None` for a snapshot
 /// of another document or none at all.
 async fn covered_seq_of(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    snapshot: ambre_core::SnapshotId,
-    document: ambre_core::DocumentId,
+    snapshot: Id<Snapshot>,
+    document: Id<Document>,
 ) -> Result<Option<ambre_core::Seq>, AppError> {
     let covered: Option<i64> =
         sqlx::query_scalar("SELECT covered_seq FROM snapshots WHERE id = $1 AND document_id = $2")
@@ -736,10 +731,7 @@ async fn covered_seq_of(
 
 /// Whether a segment takes a lease and a commit: it is closing, or a report
 /// dropped its final snapshot (the Murmure segments spec).
-fn finalizable(
-    state: ambre_core::SegmentState,
-    final_snapshot: Option<ambre_core::SnapshotId>,
-) -> bool {
+fn finalizable(state: ambre_core::SegmentState, final_snapshot: Option<Id<Snapshot>>) -> bool {
     state == ambre_core::SegmentState::Closing
         || (state == ambre_core::SegmentState::Final && final_snapshot.is_none())
 }
@@ -760,10 +752,10 @@ fn not_closing() -> AppError {
 /// `segment` is written (`SRV-120`).
 pub async fn commit_finalization(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
-    segment: ambre_core::SegmentId,
-    lease_id: ambre_core::LeaseId,
-    snapshot_id: ambre_core::SnapshotId,
+    channel_id: &Id<Channel>,
+    segment: Id<Segment>,
+    lease_id: Id<Lease>,
+    snapshot_id: Id<Snapshot>,
 ) -> Result<(), AppError> {
     let document = id_to_uuid(segment.document_id());
     let conflict = |detail: &str| AppError::Conflict {
@@ -832,9 +824,9 @@ pub enum FoldLease {
     /// The caller holds the lease. It folds `amendments` up to its delta
     /// `amendments_seq` into the snapshot of the segment at `horizon`.
     Granted {
-        lease_id: ambre_core::LeaseId,
+        lease_id: Id<Lease>,
         horizon: ambre_core::Seq,
-        amendments: ambre_core::DocumentId,
+        amendments: Id<Document>,
         amendments_seq: ambre_core::Seq,
         expires_in: std::time::Duration,
     },
@@ -851,11 +843,11 @@ struct FoldRow {
     #[sqlx(try_from = "PgOptSeq")]
     horizon: Option<ambre_core::Seq>,
     #[sqlx(try_from = "PgOptId")]
-    final_snapshot: Option<ambre_core::SnapshotId>,
+    final_snapshot: Option<Id<Snapshot>>,
     #[sqlx(try_from = "PgTimeLeft", rename = "lease_left_ms")]
     lease_left: Option<std::time::Duration>,
     #[sqlx(try_from = "PgOptId")]
-    amendments: Option<ambre_core::DocumentId>,
+    amendments: Option<Id<Document>>,
     #[sqlx(try_from = "PgOptSeq")]
     folded_seq: Option<ambre_core::Seq>,
     #[sqlx(try_from = "PgTimeLeft", rename = "delay_left_ms")]
@@ -875,10 +867,10 @@ struct FoldRow {
 /// nothing to fold, is refused with a 409.
 pub async fn take_fold_lease(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
-    segment: ambre_core::SegmentId,
+    channel_id: &Id<Channel>,
+    segment: Id<Segment>,
     terms: FoldTerms,
-    relayed: impl AsyncFnOnce(ambre_core::DocumentId) -> Result<ambre_core::Seq, AppError>,
+    relayed: impl AsyncFnOnce(Id<Document>) -> Result<ambre_core::Seq, AppError>,
 ) -> Result<FoldLease, AppError> {
     let document = id_to_uuid(segment.document_id());
     let conflict = |detail: &str| AppError::Conflict {
@@ -930,7 +922,7 @@ pub async fn take_fold_lease(
     if let Some(retry_in) = delay_left.or(lease_left) {
         return Ok(FoldLease::Wait { retry_in });
     }
-    let lease_id = ambre_core::LeaseId::new();
+    let lease_id = Id::<Lease>::mint();
     sqlx::query(
         "UPDATE channel_documents SET lease_id = $2, \
          lease_until = now() + make_interval(secs => $3) WHERE document_id = $1",
@@ -956,16 +948,16 @@ struct FoldCommitRow {
     #[sqlx(try_from = "PgOptState")]
     state: Option<ambre_core::SegmentState>,
     #[sqlx(try_from = "PgOptId")]
-    held: Option<ambre_core::LeaseId>,
+    held: Option<Id<Lease>>,
     live: LeaseClock,
     #[sqlx(try_from = "PgOptSeq")]
     horizon: Option<ambre_core::Seq>,
     #[sqlx(try_from = "PgOptId")]
-    final_snapshot: Option<ambre_core::SnapshotId>,
+    final_snapshot: Option<Id<Snapshot>>,
     #[sqlx(try_from = "PgOptId")]
-    amendments: Option<ambre_core::DocumentId>,
+    amendments: Option<Id<Document>>,
     #[sqlx(try_from = "PgOptId")]
-    folded_by: Option<ambre_core::SnapshotId>,
+    folded_by: Option<Id<Snapshot>>,
     #[sqlx(try_from = "PgOptSeq")]
     folded_seq: Option<ambre_core::Seq>,
 }
@@ -981,10 +973,10 @@ struct FoldCommitRow {
 /// answers `Ok`.
 pub async fn commit_fold(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
-    segment: ambre_core::SegmentId,
-    lease_id: ambre_core::LeaseId,
-    snapshot_id: ambre_core::SnapshotId,
+    channel_id: &Id<Channel>,
+    segment: Id<Segment>,
+    lease_id: Id<Lease>,
+    snapshot_id: Id<Snapshot>,
     amendments_seq: ambre_core::Seq,
 ) -> Result<(), AppError> {
     let document = id_to_uuid(segment.document_id());
@@ -1056,7 +1048,7 @@ pub async fn commit_fold(
 /// delta number the fold holds, and the objects of the snapshots it replaced.
 #[derive(Debug, PartialEq, Eq)]
 pub struct SettledFold {
-    pub amendments: ambre_core::DocumentId,
+    pub amendments: Id<Document>,
     pub folded_seq: ambre_core::Seq,
     pub dropped_keys: Vec<ambre_core::ObjectKey>,
 }
@@ -1068,8 +1060,8 @@ pub struct SettledFold {
 /// (`SRV-209`). Answers the fold, `None` when the snapshot folds nothing.
 pub async fn settle_fold(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    snapshot_id: &ambre_core::SnapshotId,
+    document_id: &Id<Document>,
+    snapshot_id: &Id<Snapshot>,
 ) -> Result<Option<SettledFold>, AppError> {
     let (document, snapshot) = (id_to_uuid(*document_id), id_to_uuid(*snapshot_id));
     let mut tx = pool.begin().await?;
@@ -1114,7 +1106,7 @@ pub async fn settle_fold(
 /// channel.
 pub async fn channel_document_kind(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<Option<ChannelDocumentKind>, AppError> {
     let kind: Option<String> =
         sqlx::query_scalar("SELECT kind FROM channel_documents WHERE document_id = $1")
@@ -1128,8 +1120,8 @@ pub async fn channel_document_kind(
 /// `None` for a document outside every channel.
 pub async fn channel_place(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-) -> Result<Option<(ambre_core::ChannelId, ChannelDocumentKind)>, AppError> {
+    document_id: &Id<Document>,
+) -> Result<Option<(Id<Channel>, ChannelDocumentKind)>, AppError> {
     let row: Option<(uuid::Uuid, String)> =
         sqlx::query_as("SELECT channel_id, kind FROM channel_documents WHERE document_id = $1")
             .bind(id_to_uuid(*document_id))
@@ -1145,7 +1137,7 @@ pub async fn channel_place(
 /// marked, empty for an unknown channel.
 pub async fn delete_channel(
     pool: &PgPool,
-    channel_id: &ambre_core::ChannelId,
+    channel_id: &Id<Channel>,
     sweep_due: ambre_core::UnixSeconds,
 ) -> Result<DeletedChannel, AppError> {
     let channel = id_to_uuid(*channel_id);
@@ -1181,7 +1173,7 @@ pub async fn delete_channel(
 /// deletes one, in identifier order (`SRV-143`).
 pub(super) async fn delete_space_channels_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    space: ambre_core::SpaceId,
+    space: Id<Space>,
     sweep_due: ambre_core::UnixSeconds,
 ) -> Result<Vec<DeletedChannel>, AppError> {
     let space = id_to_uuid(space);
@@ -1195,8 +1187,8 @@ pub(super) async fn delete_space_channels_in(
     .await?;
     let mut deleted = Vec::with_capacity(channels.len());
     for (channel, meta) in channels {
-        let channel: ambre_core::ChannelId = uuid_row_to_id(channel);
-        let meta: Option<ambre_core::DocumentId> = meta.map(uuid_row_to_id);
+        let channel: Id<Channel> = uuid_row_to_id(channel);
+        let meta: Option<Id<Document>> = meta.map(uuid_row_to_id);
         let members: Vec<uuid::Uuid> = match meta {
             Some(meta) => {
                 super::members::lock_document(tx, meta).await?;
@@ -1221,11 +1213,11 @@ pub(super) async fn delete_space_channels_in(
 pub struct DeletedChannel {
     /// Its `meta`, absent only for a channel whose `meta` was never
     /// registered.
-    pub meta: Option<ambre_core::DocumentId>,
+    pub meta: Option<Id<Document>>,
     /// Every document the channel grouped, marked for deletion.
-    pub documents: Vec<ambre_core::DocumentId>,
+    pub documents: Vec<Id<Document>>,
     /// The members of its `meta`, as the delete found them.
-    pub members: Vec<ambre_core::UserId>,
+    pub members: Vec<Id<User>>,
 }
 
 /// [`delete_channel`] inside `tx`.
@@ -1236,9 +1228,9 @@ pub struct DeletedChannel {
 /// member reaches a document through the channel past the commit.
 pub(super) async fn delete_channel_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    channel: ambre_core::ChannelId,
+    channel: Id<Channel>,
     sweep_due: ambre_core::UnixSeconds,
-) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+) -> Result<Vec<Id<Document>>, AppError> {
     let channel = id_to_uuid(channel);
     let held: Option<uuid::Uuid> =
         sqlx::query_scalar("SELECT id FROM channels WHERE id = $1 FOR UPDATE")
@@ -1248,7 +1240,7 @@ pub(super) async fn delete_channel_in(
     if held.is_none() {
         return Ok(Vec::new());
     }
-    let documents: Vec<ambre_core::DocumentId> = sqlx::query_scalar::<_, PgId>(
+    let documents: Vec<Id<Document>> = sqlx::query_scalar::<_, PgId>(
         "SELECT document_id FROM channel_documents WHERE channel_id = $1",
     )
     .bind(channel)
@@ -1269,9 +1261,9 @@ pub(super) async fn delete_channel_in(
 /// A leave of the space would leave each of them owing a rotation.
 pub async fn private_channels_of_member(
     pool: &PgPool,
-    space: &ambre_core::DocumentId,
-    user: &ambre_core::UserId,
-) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+    space: &Id<Document>,
+    user: &Id<User>,
+) -> Result<Vec<Id<Document>>, AppError> {
     let metas: Vec<uuid::Uuid> = sqlx::query_scalar(
         "SELECT d.document_id FROM channels c \
          JOIN channel_documents d ON d.channel_id = c.id AND d.kind = 'meta' \
@@ -1297,8 +1289,8 @@ pub async fn private_channels_of_member(
 /// after the space, as a self-join takes them.
 pub(super) async fn leave_space_channels_in(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    space: ambre_core::SpaceId,
-    user: ambre_core::UserId,
+    space: Id<Space>,
+    user: Id<User>,
     sweep_due: ambre_core::UnixSeconds,
 ) -> Result<Option<super::SpaceLeave>, AppError> {
     let space = id_to_uuid(space);
@@ -1324,8 +1316,8 @@ pub(super) async fn leave_space_channels_in(
     .await?;
     let mut leave = super::SpaceLeave::default();
     for (channel, meta, public) in channels {
-        let channel: ambre_core::ChannelId = uuid_row_to_id(channel);
-        let meta_id: ambre_core::DocumentId = uuid_row_to_id(meta);
+        let channel: Id<Channel> = uuid_row_to_id(channel);
+        let meta_id: Id<Document> = uuid_row_to_id(meta);
         super::members::lock_document(tx, meta_id).await?;
         let members: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM document_members WHERE document_id = $1")
@@ -1351,7 +1343,7 @@ pub(super) async fn leave_space_channels_in(
 /// for any other document.
 pub(super) async fn channel_of_meta(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
 ) -> Result<Option<ChannelMeta>, AppError> {
     let document_id = id_to_uuid(document_id);
     let row: Option<(uuid::Uuid, bool)> = sqlx::query_as(
@@ -1375,7 +1367,7 @@ pub(super) async fn channel_of_meta(
 /// The channel whose `meta` a document is, with whether its space lists it.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct ChannelMeta {
-    pub(super) id: ambre_core::ChannelId,
+    pub(super) id: Id<Channel>,
     pub(super) visibility: ambre_core::Visibility,
 }
 
@@ -1393,9 +1385,9 @@ pub(super) struct ChannelMeta {
 #[allow(clippy::too_many_arguments)]
 pub async fn add_channel_member_if_absent(
     pool: &PgPool,
-    space: &ambre_core::SpaceId,
-    meta_id: &ambre_core::MetaId,
-    user_id: &ambre_core::UserId,
+    space: &Id<Space>,
+    meta_id: &Id<Meta>,
+    user_id: &Id<User>,
     role: ambre_core::Role,
     doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
     entry: Option<&LogEntry>,
@@ -1440,16 +1432,13 @@ pub async fn add_channel_member_if_absent(
 /// A direct message to create: its documents, its members, and the log of
 /// its `meta` (`SRV-175`).
 pub struct NewDirectMessage<'a> {
-    pub channel_id: ambre_core::ChannelId,
-    pub meta_id: ambre_core::MetaId,
-    pub segment_id: ambre_core::SegmentId,
+    pub channel_id: Id<Channel>,
+    pub meta_id: Id<Meta>,
+    pub segment_id: Id<Segment>,
     /// Who creates it: a member too, and the author of every entry.
-    pub creator: ambre_core::UserId,
+    pub creator: Id<User>,
     /// Every member, the creator included, with the key wrapped for them.
-    pub members: &'a [(
-        ambre_core::UserId,
-        ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    )],
+    pub members: &'a [(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)],
     /// The log of `meta`, in position order.
     pub entries: &'a [LogEntry],
 }
@@ -1461,7 +1450,7 @@ pub enum DirectMessage {
     Created,
     /// A direct message of exactly these members was there already, so
     /// nothing was written (`SRV-176`).
-    Existing(ambre_core::ChannelId),
+    Existing(Id<Channel>),
 }
 
 /// Find the direct message of exactly `new.members`, or create it in one
@@ -1564,19 +1553,18 @@ pub async fn find_or_create_direct_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::{ChannelId, DocumentId, MessageId, UserId};
 
-    async fn user(pool: &PgPool, email: &str) -> UserId {
+    async fn user(pool: &PgPool, email: &str) -> Id<User> {
         crate::test_helpers::create_test_user(pool, email).await
     }
 
     /// A Murmure document owned by `owner`, with `owner` as its one member.
-    async fn document(pool: &PgPool, owner: UserId) -> DocumentId {
+    async fn document(pool: &PgPool, owner: Id<User>) -> Id<Document> {
         crate::test_helpers::create_test_document(pool, owner, "murmure").await
     }
 
-    async fn channel(pool: &PgPool) -> ChannelId {
-        let id = ChannelId::new();
+    async fn channel(pool: &PgPool) -> Id<Channel> {
+        let id = Id::<Channel>::mint();
         sqlx::query("INSERT INTO channels (id) VALUES ($1)")
             .bind(id_to_uuid(id))
             .execute(pool)
@@ -1587,8 +1575,8 @@ mod tests {
 
     async fn group(
         pool: &PgPool,
-        channel: ChannelId,
-        document: DocumentId,
+        channel: Id<Channel>,
+        document: Id<Document>,
         kind: ChannelDocumentKind,
     ) {
         sqlx::query(insert_channel_document!())
@@ -1600,7 +1588,7 @@ mod tests {
             .expect("group document");
     }
 
-    async fn grant(pool: &PgPool, document: DocumentId, member: UserId, owner: UserId) {
+    async fn grant(pool: &PgPool, document: Id<Document>, member: Id<User>, owner: Id<User>) {
         add_document_member(
             pool,
             &document,
@@ -1615,7 +1603,10 @@ mod tests {
     }
 
     /// A channel of `owner`: its `meta` and one segment.
-    async fn channel_of(pool: &PgPool, owner: UserId) -> (ChannelId, DocumentId, DocumentId) {
+    async fn channel_of(
+        pool: &PgPool,
+        owner: Id<User>,
+    ) -> (Id<Channel>, Id<Document>, Id<Document>) {
         let id = channel(pool).await;
         let meta = document(pool, owner).await;
         let segment = document(pool, owner).await;
@@ -1645,7 +1636,7 @@ mod tests {
             "the key sealed on `meta`"
         );
 
-        let listed: Vec<ambre_core::UserId> = list_document_members(&pool, &segment)
+        let listed: Vec<Id<User>> = list_document_members(&pool, &segment)
             .await
             .expect("query")
             .into_iter()
@@ -1734,7 +1725,7 @@ mod tests {
         assert_eq!(row.role, ambre_core::Role::Owner);
     }
 
-    async fn states(pool: &PgPool, channel: ChannelId) -> Vec<(DocumentId, String)> {
+    async fn states(pool: &PgPool, channel: Id<Channel>) -> Vec<(Id<Document>, String)> {
         let rows: Vec<(uuid::Uuid, String)> = sqlx::query_as(
             "SELECT document_id, state FROM channel_documents \
              WHERE channel_id = $1 AND kind = 'segment' ORDER BY state",
@@ -1748,8 +1739,8 @@ mod tests {
             .collect()
     }
 
-    fn segment(document: DocumentId) -> ambre_core::SegmentId {
-        ambre_core::SegmentId::from_document(document)
+    fn segment(document: Id<Document>) -> Id<Segment> {
+        Id::<Segment>::from_document(document)
     }
 
     /// `SRV-194`, `SRV-197`: a close marks the active segment closing and
@@ -1824,7 +1815,7 @@ mod tests {
     }
 
     /// Lock `segment` as a first finalize lease would, at `horizon`.
-    async fn lock(pool: &PgPool, segment: DocumentId, horizon: i64) {
+    async fn lock(pool: &PgPool, segment: Id<Document>, horizon: i64) {
         sqlx::query("UPDATE channel_documents SET horizon = $2 WHERE document_id = $1")
             .bind(id_to_uuid(segment))
             .bind(horizon)
@@ -1834,7 +1825,7 @@ mod tests {
     }
 
     /// The amendments documents of a channel, with the segment each amends.
-    async fn amended(pool: &PgPool, channel: ChannelId) -> Vec<(DocumentId, DocumentId)> {
+    async fn amended(pool: &PgPool, channel: Id<Channel>) -> Vec<(Id<Document>, Id<Document>)> {
         let rows: Vec<(uuid::Uuid, uuid::Uuid)> = sqlx::query_as(
             "SELECT document_id, amends FROM channel_documents \
              WHERE channel_id = $1 AND kind = 'amendments'",
@@ -1908,7 +1899,7 @@ mod tests {
             "{elsewhere:?}"
         );
         let unknown =
-            register_amendments(&pool, &ChannelId::new(), segment(foreign), amendments).await;
+            register_amendments(&pool, &Id::<Channel>::mint(), segment(foreign), amendments).await;
         assert!(matches!(unknown, Err(AppError::NotFound { .. })));
         assert!(amended(&pool, id).await.is_empty());
         assert!(amended(&pool, other).await.is_empty());
@@ -1934,7 +1925,7 @@ mod tests {
     }
 
     /// Every row of the channel that is not a thread, each column read.
-    async fn rows_beside_threads(pool: &PgPool, channel: ChannelId) -> Vec<String> {
+    async fn rows_beside_threads(pool: &PgPool, channel: Id<Channel>) -> Vec<String> {
         sqlx::query_scalar(
             "SELECT to_jsonb(d)::text FROM channel_documents d \
              WHERE channel_id = $1 AND kind <> 'thread' ORDER BY document_id",
@@ -1954,7 +1945,7 @@ mod tests {
         let owner = user(&pool, "owner@test.dev").await;
         let (id, _, _) = channel_of(&pool, owner).await;
         let before = rows_beside_threads(&pool, id).await;
-        let (root, other) = (MessageId::new(), MessageId::new());
+        let (root, other) = (Id::<Message>::mint(), Id::<Message>::mint());
         let thread = document(&pool, owner).await;
         for _ in 0..2 {
             let held = register_thread(&pool, &id, root, thread)
@@ -1977,7 +1968,7 @@ mod tests {
         assert_eq!(threads.len(), 2);
         assert!(threads.contains(&thread) && threads.contains(&second));
         assert_eq!(rows_beside_threads(&pool, id).await, before);
-        let unknown = register_thread(&pool, &ChannelId::new(), root, thread).await;
+        let unknown = register_thread(&pool, &Id::<Channel>::mint(), root, thread).await;
         assert!(matches!(unknown, Err(AppError::NotFound { .. })));
     }
 
@@ -1988,7 +1979,7 @@ mod tests {
     async fn two_racing_registrations_keep_one_thread_document(pool: PgPool) {
         let owner = user(&pool, "owner@test.dev").await;
         let (id, _, _) = channel_of(&pool, owner).await;
-        let root = MessageId::new();
+        let root = Id::<Message>::mint();
         let (a, b) = (document(&pool, owner).await, document(&pool, owner).await);
         let (left, right) = tokio::join!(
             register_thread(&pool, &id, root, a),
@@ -2025,7 +2016,13 @@ mod tests {
         let stale = close_segment(&pool, &id, segment(third), segment(first)).await;
         assert!(matches!(stale, Err(AppError::Conflict { .. })), "{stale:?}");
         assert_eq!(states(&pool, id).await.len(), 2, "nothing was registered");
-        let unknown = close_segment(&pool, &ChannelId::new(), segment(first), segment(third)).await;
+        let unknown = close_segment(
+            &pool,
+            &Id::<Channel>::mint(),
+            segment(first),
+            segment(third),
+        )
+        .await;
         assert!(matches!(unknown, Err(AppError::NotFound { .. })));
     }
 
@@ -2061,7 +2058,7 @@ mod tests {
             ]
         );
         assert!(
-            list_channel_documents(&pool, &ChannelId::new())
+            list_channel_documents(&pool, &Id::<Channel>::mint())
                 .await
                 .expect("query")
                 .is_empty()

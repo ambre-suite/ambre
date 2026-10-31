@@ -93,7 +93,7 @@ pub(crate) mod tests {
     #[test]
     fn a_reply_intent_prints_its_text_by_length_alone() {
         let reply = crate::view::annotate::AnnotationIntent::Reply {
-            comment_id: ambre_core::CommentId::new(),
+            comment_id: ambre_core::Id::mint(),
             text: "my reply".into(),
         };
         assert!(hides(&reply, "my reply"));

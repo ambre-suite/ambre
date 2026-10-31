@@ -21,14 +21,13 @@ use std::hint::black_box;
 
 use ambre_bus::app::toile::{DisplayElement, DisplayGeom, DisplayNode, ElementStyle, ShapeKind};
 use ambre_canvas::{TextCache, Theme};
+use ambre_core::id::{Element, Id};
 use ambre_draw::FontContext;
 use ambre_draw::testing::RecordingSurface;
 use ambre_toile::logic::command::DisplayViewport;
 use ambre_toile::ui::render::{ImageStore, paint_content};
 use ambre_toile::ui::viewport::ViewportTransform;
-use ambre_toile::{
-    ElementId, ElementKind, InitContent, ToileCommand, ToileEvent, ToileOutcome, ToileState,
-};
+use ambre_toile::{ElementKind, InitContent, ToileCommand, ToileEvent, ToileOutcome, ToileState};
 use kurbo::{Affine, Point, Rect, Size};
 
 /// Characters in the body the "Toile body commit" row names: 4 KB of ASCII.
@@ -69,7 +68,7 @@ fn scatter(text: &str, range: std::ops::Range<usize>, stride: usize, with: char)
 }
 
 /// A board holding one sticky whose body is `base`, then a peer's edit of it.
-fn board(base: &str, stored: &str) -> (ToileState, ElementId) {
+fn board(base: &str, stored: &str) -> (ToileState, Id<Element>) {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Sticky,
@@ -165,7 +164,7 @@ fn busy_node(i: usize) -> DisplayNode {
         _ => (ElementKind::Shape(ShapeKind::Rect), DisplayGeom::Rect),
     };
     DisplayNode::Element(DisplayElement {
-        id: ElementId(format!("e{i}")),
+        id: Id::<Element>::from_text(format!("e{i}")),
         kind,
         transform: Affine::IDENTITY,
         bounds: Rect::new(x, y, x + 20.0, y + 20.0),

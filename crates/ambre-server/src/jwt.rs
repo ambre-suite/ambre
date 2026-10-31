@@ -16,6 +16,7 @@
 use std::collections::HashSet;
 
 use ambre_core::Secret;
+use ambre_core::id::{Id, User};
 
 use crate::secrets::SeedText;
 use ambre_protocol::ws::{AccessToken, Credential};
@@ -32,8 +33,8 @@ use serde::{Deserialize, Serialize};
 /// keys yet. Such a session carries no identity to sign under (`SRV-027`).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    #[serde(with = "ambre_core::serde_id::user_id")]
-    pub sub: ambre_core::UserId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub sub: Id<User>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spk: Option<ambre_core::FixedBytes<ambre_core::PublicKey>>,
     pub iat: ambre_core::UnixSeconds,
@@ -216,7 +217,7 @@ mod tests {
         let keys = JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([7u8; 32]));
         let iat = now();
         let claims = Claims {
-            sub: ambre_core::UserId::parse_str("11111111-1111-7111-8111-111111111111").unwrap(),
+            sub: Id::<User>::parse_str("11111111-1111-7111-8111-111111111111").unwrap(),
             spk: Some(FixedBytes::from_array([0xab; 32])),
             iat,
             exp: iat.plus(Seconds(900)),
@@ -257,7 +258,7 @@ mod tests {
         let keys = JwtKeys::from_seed(&crate::jwt::JwtSeed::from_array([9u8; 32]));
         let iat = UnixSeconds(now().0 - 10_000);
         let claims = Claims {
-            sub: ambre_core::UserId::new(),
+            sub: Id::<User>::mint(),
             spk: Some(FixedBytes::from_array([0x79; 32])),
             iat,
             exp: iat.plus(Seconds(1)), // long past
@@ -273,7 +274,7 @@ mod tests {
         let iat = now();
         let token = a
             .mint(&Claims {
-                sub: ambre_core::UserId::new(),
+                sub: Id::<User>::mint(),
                 spk: Some(FixedBytes::from_array([0x70; 32])),
                 iat,
                 exp: iat.plus(Seconds(900)),

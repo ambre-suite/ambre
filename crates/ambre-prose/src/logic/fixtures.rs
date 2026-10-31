@@ -14,9 +14,10 @@ use std::collections::{BTreeMap, HashMap};
 
 use ambre_bus::app::grid::{CellPos, Col, ColCount, Row, RowCount};
 use ambre_bus::app::prose::{DocCount, DocOffset, DocSpan};
+use ambre_core::id::{Footnote, Id, User};
 use ambre_core::{
     CharCount, DocBlockCount, DocType, FixtureGen, FixtureName, FixtureSeed, FixtureShape,
-    GeneratorVersion, ShapeBody, UserId, fixture_peer_count, seeded_document_id,
+    GeneratorVersion, ShapeBody, fixture_peer_count, seeded_document_id,
 };
 use loro::{LoroTree, LoroValue, TextDelta, TreeID};
 
@@ -134,7 +135,7 @@ impl ProseState {
                 };
                 if let Some(LoroValue::String(note)) =
                     attributes.get(crate::mark::MarkRoot::Footnote.as_str())
-                    && let Some(uuid) = ambre_core::FootnoteId::parse_str(note.as_str()).ok()
+                    && let Some(uuid) = Id::<Footnote>::parse_str(note.as_str()).ok()
                     && let Some(block) = crate::note::block(&self.doc, &uuid)
                 {
                     notes.push(block);
@@ -402,7 +403,9 @@ fn root_after(state: &ProseState, after: TreeID) -> Result<TreeID, FixtureError>
 fn build_styled_document(seed: FixtureSeed) -> Result<ProseState, FixtureError> {
     let mut state =
         ProseState::with_peer(seed.peer()).ok_or(FixtureError::Missing("no document"))?;
-    state.set_user_id(UserId::from_uuid(seeded_document_id(AUTHOR_SEED).into()));
+    state.set_user_id(Id::<User>::from_uuid(
+        seeded_document_id(AUTHOR_SEED).uuid(),
+    ));
     state.set_display_name(
         ambre_core::DisplayName::new("Fixture Author").map_err(FixtureError::Name)?,
     );

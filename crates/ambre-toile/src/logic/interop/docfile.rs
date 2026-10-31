@@ -11,8 +11,9 @@
 
 use loro::{ExportMode, LoroDoc};
 
+use ambre_core::id::{Document, Id};
 use ambre_core::{
-    DocType, DocumentId,
+    DocType,
     docfile::{AmbreHeader, DocFileError, read_ambre_plaintext_as, write_ambre_plaintext},
 };
 
@@ -23,7 +24,7 @@ use ambre_core::{
 /// owned by `ambre-sync` (`docfile`).
 pub fn export_ambre_plaintext(
     doc: &LoroDoc,
-    doc_id: DocumentId,
+    doc_id: Id<Document>,
 ) -> Option<ambre_core::Payload<ambre_core::PlaintextContainer>> {
     // `None` rather than a header over nothing (`TOILE-IO-069`). A well-formed
     // file carrying the right document id and an empty board is what the user

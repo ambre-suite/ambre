@@ -9,7 +9,8 @@
 use ambre_bus::{
     Deletion, MessageDraft, MessageView, MurmureEvent, ReplyEcho, ThreadHead, Timestamp,
 };
-use ambre_core::{DeltaBytes, DocumentId, MessageId, Payload, PeerEntryBytes, SegmentId, UserId};
+use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes};
 use loro::LoroDoc;
 
 use super::{
@@ -26,7 +27,7 @@ use crate::{mention, style};
 #[derive(Debug)]
 pub(super) struct Thread {
     /// The segment its root lies in, as its header names it.
-    pub(super) segment: SegmentId,
+    pub(super) segment: Id<Segment>,
     pub(super) held: Held,
 }
 
@@ -35,7 +36,7 @@ pub(super) struct Thread {
 pub(super) struct Pending {
     /// The segment of its root and that root, as a held segment names them.
     /// `None` for a probe: a seek reads its header, and nothing holds it.
-    named: Option<(SegmentId, MessageId)>,
+    named: Option<(Id<Segment>, Id<Message>)>,
     /// Its payloads, in the order they came.
     pub(super) arrivals: Vec<Arrival>,
     /// The identity issued for it, adopted once it is admitted.
@@ -43,7 +44,7 @@ pub(super) struct Pending {
 }
 
 impl Pending {
-    fn of(segment: SegmentId, root: MessageId) -> Self {
+    fn of(segment: Id<Segment>, root: Id<Message>) -> Self {
         Self {
             named: Some((segment, root)),
             arrivals: Vec::new(),
@@ -65,11 +66,11 @@ impl Pending {
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Seek {
     /// The thread document the copy names.
-    thread: DocumentId,
+    thread: Id<Document>,
     /// The segment its header names, once its probe is read.
-    target: Option<SegmentId>,
+    target: Option<Id<Segment>>,
     /// The older segment the seek last asked for.
-    asked: Option<SegmentId>,
+    asked: Option<Id<Segment>>,
     /// Whether its probe failed, or named no listed segment.
     trail: Trail,
 }
@@ -90,31 +91,31 @@ ambre_core::define_flag! {
 pub enum SeekStep {
     /// A held segment holds the root, and names the thread.
     Found {
-        thread: DocumentId,
-        segment: SegmentId,
-        root: MessageId,
+        thread: Id<Document>,
+        segment: Id<Segment>,
+        root: Id<Message>,
     },
     /// Open this older segment, then step again.
-    Load(SegmentId),
+    Load(Id<Segment>),
     /// A probe or a segment is on its way.
     Wait,
     /// The root of `thread` cannot be reached: its probe failed, or no
     /// segment down to the one the header names holds it. The seek ends,
     /// and nothing opens.
-    Lost { thread: DocumentId },
+    Lost { thread: Id<Document> },
 }
 
 /// The document a reply writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ThreadTarget {
     /// The thread document the channel holds or is loading for the root.
-    Write(DocumentId),
+    Write(Id<Document>),
     /// The thread document the root names, now asked for: the reply waits
     /// until it is held.
-    Open(DocumentId),
+    Open(Id<Document>),
     /// A new thread document, held here with no session. The Sync worker
     /// creates it on the relay and links it to the root (`SRV-213`).
-    Create(DocumentId),
+    Create(Id<Document>),
 }
 
 /// What a link of a thread document produced.
@@ -128,7 +129,7 @@ pub struct ThreadLinked {
     pub open: super::LinkedOpening,
     /// This client's own document, which lost the race to another member's
     /// (`SRV-214`). What waited on it waits on the winner.
-    pub replaced: Option<DocumentId>,
+    pub replaced: Option<Id<Document>>,
 }
 
 /// What a reply produced.
@@ -145,7 +146,7 @@ pub struct Replied {
 
 impl ChannelState {
     /// The root and the held thread document of that identifier.
-    fn thread_of(&self, document_id: DocumentId) -> Option<(MessageId, &Thread)> {
+    fn thread_of(&self, document_id: Id<Document>) -> Option<(Id<Message>, &Thread)> {
         self.threads
             .iter()
             .find(|(_, thread)| thread.held.id == document_id)
@@ -153,32 +154,32 @@ impl ChannelState {
     }
 
     /// The thread documents the channel holds.
-    pub fn held_threads(&self) -> Vec<DocumentId> {
+    pub fn held_threads(&self) -> Vec<Id<Document>> {
         self.threads.values().map(|thread| thread.held.id).collect()
     }
 
     /// Whether `document_id` is a thread document, held or arriving.
-    pub(super) fn is_thread(&self, document_id: DocumentId) -> bool {
+    pub(super) fn is_thread(&self, document_id: Id<Document>) -> bool {
         self.threads_pending.contains_key(&document_id) || self.thread_of(document_id).is_some()
     }
 
     /// The thread document the channel holds for `root`.
-    pub fn thread_id(&self, root: MessageId) -> Option<DocumentId> {
+    pub fn thread_id(&self, root: Id<Message>) -> Option<Id<Document>> {
         self.threads.get(&root).map(|thread| thread.held.id)
     }
 
     /// The held segment that holds `root`: the one its thread is linked to.
-    pub fn root_segment(&self, root: MessageId) -> Option<SegmentId> {
+    pub fn root_segment(&self, root: Id<Message>) -> Option<Id<Segment>> {
         self.root_slot(root).map(|(segment, _)| segment)
     }
 
     /// The held segment that holds `root`, with the thread it names: its
     /// `thread` field, else the one its amendments record (`MURMURE-484`).
-    fn root_slot(&self, root: MessageId) -> Option<(SegmentId, Option<DocumentId>)> {
+    fn root_slot(&self, root: Id<Message>) -> Option<(Id<Segment>, Option<Id<Document>>)> {
         self.held_segments().into_iter().find_map(|segment| {
             let map = message_map(self.doc(segment.document_id())?, root)?;
             let named = schema::string(&map, MessageKey::Thread)
-                .and_then(|s| DocumentId::parse_str(&s).ok())
+                .and_then(|s| Id::<Document>::parse_str(&s).ok())
                 .or_else(|| {
                     let amendments = self.amendments.get(&segment)?;
                     amending::recorded_thread(&amendments.doc, root)
@@ -200,7 +201,7 @@ impl ChannelState {
     /// header of a new document.
     pub fn reply_target(
         &mut self,
-        root: MessageId,
+        root: Id<Message>,
         now: Timestamp,
     ) -> Result<ThreadTarget, MurmureError> {
         let (segment, named) = self.root_slot(root).ok_or(MurmureError::NoMessage(root))?;
@@ -216,7 +217,7 @@ impl ChannelState {
         if self.amendable(segment) && !self.amendments.contains_key(&segment) {
             return Err(MurmureError::NoAmendments(segment));
         }
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         let created = Created::Thread { segment, root, now };
         let doc = LoroDoc::new();
         created.write(&doc, self.channel_id)?;
@@ -240,9 +241,9 @@ impl ChannelState {
     /// and [`MurmureError::Crdt`] when Loro refuses a write or the export.
     pub fn thread_linked(
         &mut self,
-        segment: SegmentId,
-        root: MessageId,
-        thread: DocumentId,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
     ) -> Result<ThreadLinked, MurmureError> {
         let replaced = self.thread_id(root).filter(|own| *own != thread);
         if replaced.is_some() {
@@ -261,7 +262,7 @@ impl ChannelState {
     /// The link of this client's own `thread` for `root` failed. It is
     /// dropped, so the next reply creates one again. Returns `false` when
     /// the channel holds no such document.
-    pub fn thread_failed(&mut self, root: MessageId, thread: DocumentId) -> bool {
+    pub fn thread_failed(&mut self, root: Id<Message>, thread: Id<Document>) -> bool {
         let own = self
             .threads
             .get(&root)
@@ -277,9 +278,9 @@ impl ChannelState {
     /// segment takes no delta, so its amendments record it instead.
     fn name_thread(
         &mut self,
-        segment: SegmentId,
-        root: MessageId,
-        thread: DocumentId,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
     ) -> Result<Option<Sent>, MurmureError> {
         if self.amendable(segment) {
             return self.record_thread(segment, root, thread);
@@ -305,9 +306,9 @@ impl ChannelState {
     /// replied first holds them and records it.
     fn record_thread(
         &mut self,
-        segment: SegmentId,
-        root: MessageId,
-        thread: DocumentId,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
     ) -> Result<Option<Sent>, MurmureError> {
         let held = self
             .doc(segment.document_id())
@@ -335,7 +336,7 @@ impl ChannelState {
     /// The thread documents a held segment's roots name, and that the
     /// channel neither holds nor loads. Each is asked for now: open it, and
     /// [`ChannelState::older_ready`] admits it.
-    pub fn threads_to_open(&mut self) -> Vec<DocumentId> {
+    pub fn threads_to_open(&mut self) -> Vec<Id<Document>> {
         let mut asked = Vec::new();
         for segment in self.held_segments() {
             let Some(doc) = self.doc(segment.document_id()) else {
@@ -359,7 +360,7 @@ impl ChannelState {
     /// Returns `false` when no such document is arriving.
     pub(super) fn note_thread_session(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         peer: ambre_core::PeerId,
         entry: PeerEntryBytes,
     ) -> bool {
@@ -378,7 +379,7 @@ impl ChannelState {
     /// another segment, and every refusal of the header check.
     pub(super) fn thread_ready(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         pending: Pending,
     ) -> Result<MurmureEvent, MurmureError> {
         let doc = schema::admit_with(DocumentKind::Thread, self.channel_id, document_id, |doc| {
@@ -401,7 +402,7 @@ impl ChannelState {
     /// Ask for `id` as the thread of `root`, a message of `segment`. A probe
     /// of it becomes this ask, so its header is checked against the root.
     /// `false` when it was on its way already.
-    fn ask_thread(&mut self, id: DocumentId, segment: SegmentId, root: MessageId) -> bool {
+    fn ask_thread(&mut self, id: Id<Document>, segment: Id<Segment>, root: Id<Message>) -> bool {
         match self.threads_pending.get_mut(&id) {
             Some(pending) => {
                 pending.named.get_or_insert((segment, root));
@@ -415,7 +416,7 @@ impl ChannelState {
     }
 
     /// The held segment whose root names `thread`, with that root.
-    pub fn root_naming(&self, thread: DocumentId) -> Option<(SegmentId, MessageId)> {
+    pub fn root_naming(&self, thread: Id<Document>) -> Option<(Id<Segment>, Id<Message>)> {
         self.held_segments().into_iter().find_map(|segment| {
             let mut named = named_threads(self.doc(segment.document_id())?);
             if let Some(amendments) = self.amendments.get(&segment) {
@@ -433,7 +434,7 @@ impl ChannelState {
     ///
     /// Returns the probe to open, `None` when none is to open: a held
     /// segment names the thread, or the thread is on its way already.
-    pub fn seek_root(&mut self, thread: DocumentId) -> Option<DocumentId> {
+    pub fn seek_root(&mut self, thread: Id<Document>) -> Option<Id<Document>> {
         self.seek = Some(Seek {
             thread,
             target: None,
@@ -452,7 +453,7 @@ impl ChannelState {
 
     /// Whether `document_id` is a probe still arriving: a seek reads its
     /// header, and nothing holds it.
-    pub fn is_probe(&self, document_id: DocumentId) -> bool {
+    pub fn is_probe(&self, document_id: Id<Document>) -> bool {
         self.threads_pending
             .get(&document_id)
             .is_some_and(|pending| pending.named.is_none())
@@ -465,7 +466,7 @@ impl ChannelState {
     /// [`MurmureError::NotHeld`] for no such probe, every refusal of the
     /// header check, and [`MurmureError::ForeignRoot`] for a header naming no
     /// segment `meta` lists. The next step of the seek is then lost.
-    pub fn probe_ready(&mut self, document_id: DocumentId) -> Result<(), MurmureError> {
+    pub fn probe_ready(&mut self, document_id: Id<Document>) -> Result<(), MurmureError> {
         let read = self.read_probe(document_id);
         if let Some(seek) = self.seek.as_mut().filter(|seek| seek.thread == document_id) {
             match &read {
@@ -476,7 +477,7 @@ impl ChannelState {
         read.map(|_| ())
     }
 
-    fn read_probe(&mut self, document_id: DocumentId) -> Result<SegmentId, MurmureError> {
+    fn read_probe(&mut self, document_id: Id<Document>) -> Result<Id<Segment>, MurmureError> {
         if !self.is_probe(document_id) {
             return Err(MurmureError::NotHeld(document_id));
         }
@@ -531,7 +532,7 @@ impl ChannelState {
 
     /// The next older segment to load down to `target`. `None` when the
     /// root is out of reach.
-    fn seek_older(&mut self, target: SegmentId, asked: Option<SegmentId>) -> Option<SeekStep> {
+    fn seek_older(&mut self, target: Id<Segment>, asked: Option<Id<Segment>>) -> Option<SeekStep> {
         if self.held_segments().contains(&target) {
             return None;
         }
@@ -548,7 +549,7 @@ impl ChannelState {
 
     /// The thread `document_id` could not open: a seek still waiting on its
     /// probe is lost.
-    pub(super) fn end_seek_of(&mut self, document_id: DocumentId) {
+    pub(super) fn end_seek_of(&mut self, document_id: Id<Document>) {
         if let Some(seek) = self
             .seek
             .as_mut()
@@ -559,7 +560,7 @@ impl ChannelState {
     }
 
     /// The held segment `meta` lists first: the oldest the list shows.
-    fn oldest_held(&self) -> Option<SegmentId> {
+    fn oldest_held(&self) -> Option<Id<Segment>> {
         let held = self.held_segments();
         segment_entries(&self.meta.doc)
             .into_iter()
@@ -569,7 +570,7 @@ impl ChannelState {
 
     /// The replies of the held thread document `document_id`, for the view.
     /// `None` for any other document.
-    pub fn thread_view(&self, document_id: DocumentId) -> Option<MurmureEvent> {
+    pub fn thread_view(&self, document_id: Id<Document>) -> Option<MurmureEvent> {
         let (root, thread) = self.thread_of(document_id)?;
         Some(MurmureEvent::ThreadMessages {
             root,
@@ -586,7 +587,7 @@ impl ChannelState {
     /// [`MurmureError::NoThread`] for a thread the channel does not hold.
     pub(super) fn thread_reacted(
         &self,
-        root: MessageId,
+        root: Id<Message>,
         delta: Payload<DeltaBytes>,
     ) -> Result<Sent, MurmureError> {
         let thread = self
@@ -609,7 +610,7 @@ impl ChannelState {
     /// The segment that holds `root`, read with its thread heads. A delete
     /// in its thread moves its count (`MURMURE-106`). `None` when no held
     /// segment holds it.
-    pub fn root_view(&self, root: MessageId) -> Option<MurmureEvent> {
+    pub fn root_view(&self, root: Id<Message>) -> Option<MurmureEvent> {
         let segment = self.root_segment(root)?;
         let messages = self.read_segment(segment)?;
         Some(MurmureEvent::Messages { segment, messages })
@@ -617,7 +618,7 @@ impl ChannelState {
 
     /// The root's segment of the held thread document `document_id`, read
     /// with its thread heads. `None` for any other document.
-    pub(super) fn thread_answer(&self, document_id: DocumentId) -> Option<Vec<MurmureEvent>> {
+    pub(super) fn thread_answer(&self, document_id: Id<Document>) -> Option<Vec<MurmureEvent>> {
         let view = self.thread_view(document_id)?;
         let (_, thread) = self.thread_of(document_id)?;
         let segment = thread.segment;
@@ -641,9 +642,9 @@ impl ChannelState {
     /// Loro refuses a write or the export.
     pub fn reply(
         &mut self,
-        root: MessageId,
+        root: Id<Message>,
         draft: &MessageDraft,
-        author: UserId,
+        author: Id<User>,
         now: Timestamp,
         echo: ReplyEcho,
     ) -> Result<Replied, MurmureError> {
@@ -697,7 +698,11 @@ impl ChannelState {
     ///
     /// The copy is written after its root. The held segments run from the
     /// active one back, so a held root leaves its copy held too.
-    pub fn copy_of(&self, root: MessageId, reply: MessageId) -> Option<(SegmentId, MessageId)> {
+    pub fn copy_of(
+        &self,
+        root: Id<Message>,
+        reply: Id<Message>,
+    ) -> Option<(Id<Segment>, Id<Message>)> {
         let thread = self.thread_id(root)?.to_string();
         let copy = copy_id(reply);
         self.held_segments().into_iter().find_map(|segment| {
@@ -725,19 +730,15 @@ impl ChannelState {
 /// The identifier of the copy of `reply` in the channel: the reply's own,
 /// its last bit turned (`MURMURE-538`). The turn is its own inverse, and it
 /// keeps the version, the variant and the instant of the identifier.
-pub(super) fn copy_id(reply: MessageId) -> MessageId {
+pub(super) fn copy_id(reply: Id<Message>) -> Id<Message> {
     let mut bytes = *reply.as_bytes();
     bytes[15] ^= 1;
-    MessageId::from_bytes(bytes)
+    Id::<Message>::from_bytes(bytes)
 }
 
 /// What a root shows of `thread`: its replies, deleted ones aside, and the
 /// author of the latest one.
-fn thread_head(
-    document: DocumentId,
-    thread: &LoroDoc,
-    channel: ambre_core::ChannelId,
-) -> ThreadHead {
+fn thread_head(document: Id<Document>, thread: &LoroDoc, channel: Id<Channel>) -> ThreadHead {
     let replies: Vec<MessageView> = read_messages(thread, channel)
         .into_iter()
         .filter(|reply| reply.deleted == Deletion::Live)
@@ -752,23 +753,25 @@ fn thread_head(
 /// Every message of a segment whose `thread` field names a document, with
 /// that document, in list order.
 /// The segment and the root a thread document's header names.
-fn header_root(doc: &LoroDoc) -> (Option<SegmentId>, Option<MessageId>) {
+fn header_root(doc: &LoroDoc) -> (Option<Id<Segment>>, Option<Id<Message>>) {
     let header = crate::schema::header(doc);
     let segment =
-        schema::string(&header, HeaderKey::Segment).and_then(|s| SegmentId::parse_str(&s).ok());
-    let root = schema::string(&header, HeaderKey::Root).and_then(|s| MessageId::parse_str(&s).ok());
+        schema::string(&header, HeaderKey::Segment).and_then(|s| Id::<Segment>::parse_str(&s).ok());
+    let root =
+        schema::string(&header, HeaderKey::Root).and_then(|s| Id::<Message>::parse_str(&s).ok());
     (segment, root)
 }
 
-fn named_threads(doc: &LoroDoc) -> Vec<(MessageId, DocumentId)> {
+fn named_threads(doc: &LoroDoc) -> Vec<(Id<Message>, Id<Document>)> {
     let mut named = Vec::new();
     crate::schema::root_list(doc, Root::Messages).for_each(|item| {
         let Some(map) = crate::schema::fields_of(item) else {
             return;
         };
-        let root = schema::string(&map, MessageKey::Id).and_then(|s| MessageId::parse_str(&s).ok());
-        let thread =
-            schema::string(&map, MessageKey::Thread).and_then(|s| DocumentId::parse_str(&s).ok());
+        let root =
+            schema::string(&map, MessageKey::Id).and_then(|s| Id::<Message>::parse_str(&s).ok());
+        let thread = schema::string(&map, MessageKey::Thread)
+            .and_then(|s| Id::<Document>::parse_str(&s).ok());
         if let (Some(root), Some(thread)) = (root, thread) {
             named.push((root, thread));
         }

@@ -4,7 +4,7 @@
 //! **ephemeral** Sync payloads. It never enters the CRDT, never persists, and is
 //! not an undo item. Outbound, a local `Presence` sample is postcard-encoded
 //! into an ephemeral. Inbound, a sample is keyed by the sender's canonical
-//! `UserId`. That id is resolved from the authenticated `pub_key` in
+//! `Id<User>`. That id is resolved from the authenticated `pub_key` in
 //! `ambre-sync` before it reaches this thread, so a peer cannot spoof another
 //! user's cursor. The render side is `toile-presence`'s overlay pass.
 //!
@@ -21,7 +21,7 @@
 //! a sender's own clock never reaches this decision, so a wrong or hostile one
 //! ages nobody.
 
-use ambre_bus::UserId;
+use ambre_core::id::{Id, User};
 
 use crate::logic::command::{PresencePayload, PresenceUpdate, ToileEvent, ToileOutcome};
 
@@ -61,7 +61,7 @@ impl ToileState {
     }
 
     /// Apply a decrypted remote presence sample, keyed by the sender's
-    /// canonical `UserId` (resolved in `ambre-sync`). Records the peer's latest
+    /// canonical `Id<User>` (resolved in `ambre-sync`). Records the peer's latest
     /// presence and returns the live set for the overlay to adopt whole. Never
     /// mutates the CRDT or history; a malformed sample is dropped.
     ///
@@ -70,7 +70,7 @@ impl ToileState {
     /// the first heartbeat corrects it.
     pub fn apply_ephemeral(
         &mut self,
-        from_user_id: UserId,
+        from_user_id: Id<User>,
         payload: &ambre_core::Payload<ambre_core::EphemeralBytes>,
     ) -> Vec<ToileEvent> {
         let presence: PresencePayload = match postcard::from_bytes(payload.as_bytes()) {
@@ -109,7 +109,7 @@ impl ToileState {
     /// A peer nobody was painting yields nothing. A departure the client never
     /// saw arrive is not a change, and an empty event would repaint the overlay
     /// for nothing. The TTL still covers the case where this message is lost.
-    pub fn peer_left(&mut self, user_id: UserId) -> Vec<ToileEvent> {
+    pub fn peer_left(&mut self, user_id: Id<User>) -> Vec<ToileEvent> {
         if self.presence.remove(&user_id).is_none() {
             return Vec::new();
         }
@@ -147,7 +147,7 @@ impl ToileState {
     }
 
     /// A remote peer's latest known presence, if any. Overlay / test accessor.
-    pub fn peer_presence(&self, user_id: &UserId) -> Option<&PresencePayload> {
+    pub fn peer_presence(&self, user_id: &Id<User>) -> Option<&PresencePayload> {
         self.presence.get(user_id).map(|(p, _)| p)
     }
 }

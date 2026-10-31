@@ -5,9 +5,8 @@ use ambre_bus::CharSpan;
 use std::collections::HashMap;
 
 use ambre_bus::{MessageDraft, MurmureEvent, StyleMark, TextStyle, Timestamp};
-use ambre_core::{
-    ByteSize, ChannelId, DeltaBytes, Payload, PeerEntryBytes, SegmentId, Seq, SnapshotBytes, UserId,
-};
+use ambre_core::id::{Channel, Id, Lease, Segment, User};
+use ambre_core::{ByteSize, DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
 
 use crate::channel::live_segments;
 use crate::session::next_peer;
@@ -25,7 +24,7 @@ fn draft(text: &str) -> MessageDraft {
 
 /// A channel whose segments close past `size` messages.
 fn channel(size: usize) -> ChannelState {
-    ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .with_segment_size(crate::MessageCount::of_len(size))
         .identify()
@@ -33,7 +32,7 @@ fn channel(size: usize) -> ChannelState {
 
 /// A second member's copy of `state`, opened from its live documents.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, Payload<SnapshotBytes>> = state
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -52,9 +51,9 @@ fn peer_of(state: &ChannelState) -> ChannelState {
 /// and the successor's first update.
 fn close_created(
     state: &mut ChannelState,
-) -> (SegmentId, Payload<DeltaBytes>, Payload<DeltaBytes>) {
+) -> (Id<Segment>, Payload<DeltaBytes>, Payload<DeltaBytes>) {
     let closing = state.active_id();
-    let successor = SegmentId::new();
+    let successor = Id::<Segment>::mint();
     let closed = state
         .close_into(closing, successor, crate::Successor::Created, NOW)
         .expect("close");
@@ -71,7 +70,7 @@ fn close_created(
     (successor, closed.meta, first)
 }
 
-fn live_of(state: &ChannelState) -> (SegmentId, Option<SegmentId>) {
+fn live_of(state: &ChannelState) -> (Id<Segment>, Option<Id<Segment>>) {
     let meta = state.snapshot(state.meta_id().document_id()).expect("meta");
     let doc = loro::LoroDoc::new();
     doc.import(meta.as_bytes()).expect("import");
@@ -86,7 +85,7 @@ fn live_of(state: &ChannelState) -> (SegmentId, Option<SegmentId>) {
 #[test]
 fn a_full_segment_asks_to_close_once() {
     let mut alice = channel(2);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     alice.send(&draft("one"), author, NOW).expect("send");
     assert_eq!(alice.wants_close(), None, "below the segment size");
     alice.send(&draft("two"), author, NOW).expect("send");
@@ -103,7 +102,7 @@ fn a_full_segment_asks_to_close_once() {
 #[test]
 fn a_rotation_closes_the_active_segment_whatever_it_holds() {
     let mut alice = channel(10);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     alice.send(&draft("one"), author, NOW).expect("send");
     assert_eq!(alice.wants_close(), None, "below the segment size");
     alice.key_rotated();
@@ -114,7 +113,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
     close_created(&mut alice);
     alice.lease_granted(
         closing,
-        ambre_core::LeaseId::new(),
+        Id::<Lease>::mint(),
         ambre_core::Seq(1),
         ambre_core::Millis(60_000),
     );
@@ -136,7 +135,7 @@ fn a_rotation_closes_the_active_segment_whatever_it_holds() {
 fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
     const BYTES: ByteSize = ByteSize(16 * 1024);
     let mut alice = channel(10_000).with_segment_snapshot_size(BYTES);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let mut sent = 0;
     loop {
         // Distinct words per message, so the snapshot does not compress them.
@@ -169,7 +168,7 @@ fn a_segment_past_its_bytes_asks_to_close_whatever_its_count() {
 #[test]
 fn a_successor_that_fails_to_open_is_fetched_again() {
     let mut alice = channel(1);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     alice.send(&draft("one"), author, NOW).expect("send");
     let mut bob = peer_of(&alice);
     let old = alice.active_id();
@@ -209,7 +208,9 @@ fn a_successor_that_fails_to_open_is_fetched_again() {
 #[test]
 fn a_successor_is_fetched_again_four_times_at_most() {
     let mut alice = channel(1);
-    alice.send(&draft("one"), UserId::new(), NOW).expect("send");
+    alice
+        .send(&draft("one"), Id::<User>::mint(), NOW)
+        .expect("send");
     let mut bob = peer_of(&alice);
     let (successor, meta, _) = close_created(&mut alice);
     bob.apply_remote(bob.meta_id().document_id(), (&meta).into())
@@ -236,7 +237,7 @@ fn a_successor_is_fetched_again_four_times_at_most() {
 #[test]
 fn a_close_makes_the_segment_closing_and_its_successor_active() {
     let mut alice = channel(1);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let before = alice.send(&draft("before"), author, NOW).expect("send");
     let old = alice.active_id();
     let kept = alice.messages(old).expect("messages");
@@ -259,17 +260,26 @@ fn a_close_makes_the_segment_closing_and_its_successor_active() {
 #[test]
 fn a_close_while_a_segment_is_closing_is_refused() {
     let mut alice = channel(1);
-    alice.send(&draft("one"), UserId::new(), NOW).expect("send");
+    alice
+        .send(&draft("one"), Id::<User>::mint(), NOW)
+        .expect("send");
     let old = alice.active_id();
     let (successor, _, _) = close_created(&mut alice);
-    alice.send(&draft("two"), UserId::new(), NOW).expect("send");
+    alice
+        .send(&draft("two"), Id::<User>::mint(), NOW)
+        .expect("send");
     assert_eq!(alice.wants_close(), None, "a segment is still closing");
     assert!(matches!(
-        alice.close_into(old, SegmentId::new(), crate::Successor::Created, NOW),
+        alice.close_into(old, Id::<Segment>::mint(), crate::Successor::Created, NOW),
         Err(MurmureError::NotActive(_))
     ));
     assert!(matches!(
-        alice.close_into(successor, SegmentId::new(), crate::Successor::Created, NOW),
+        alice.close_into(
+            successor,
+            Id::<Segment>::mint(),
+            crate::Successor::Created,
+            NOW
+        ),
         Err(MurmureError::StillClosing(_))
     ));
 }
@@ -282,7 +292,9 @@ fn a_close_while_a_segment_is_closing_is_refused() {
 #[test]
 fn two_writers_of_one_close_converge_on_one_successor() {
     let mut alice = channel(1);
-    alice.send(&draft("one"), UserId::new(), NOW).expect("send");
+    alice
+        .send(&draft("one"), Id::<User>::mint(), NOW)
+        .expect("send");
     let mut bob = peer_of(&alice);
     let old = alice.active_id();
     let (successor, alice_meta, _) = close_created(&mut alice);
@@ -310,7 +322,7 @@ fn two_writers_of_one_close_converge_on_one_successor() {
 #[test]
 fn a_remote_close_is_followed_once_its_successor_arrives() {
     let mut alice = channel(1);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     alice.send(&draft("one"), author, NOW).expect("send");
     let mut bob = peer_of(&alice);
     let old = alice.active_id();
@@ -352,7 +364,7 @@ fn a_remote_close_is_followed_once_its_successor_arrives() {
 #[test]
 fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
     let mut alice = channel(1);
-    let (alice_user, bob_user) = (UserId::new(), UserId::new());
+    let (alice_user, bob_user) = (Id::<User>::mint(), Id::<User>::mint());
     alice.send(&draft("one"), alice_user, NOW).expect("send");
     let mut bob = peer_of(&alice);
     let old = alice.active_id();
@@ -443,7 +455,7 @@ fn a_message_refused_by_the_lock_moves_to_the_active_segment() {
 #[test]
 fn a_refused_reaction_alone_moves_nothing() {
     let mut alice = channel(1);
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let sent = alice.send(&draft("one"), author, NOW).expect("send");
     let MurmureEvent::Messages { messages, .. } = &sent.event else {
         panic!("a message");

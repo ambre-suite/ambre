@@ -7,13 +7,13 @@ use super::*;
 #[derive(Debug)]
 pub struct MemberRow {
     #[allow(dead_code)]
-    pub document_id: ambre_core::DocumentId,
+    pub document_id: Id<Document>,
     #[allow(dead_code)]
-    pub user_id: ambre_core::UserId,
+    pub user_id: Id<User>,
     pub role: ambre_core::Role,
     pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     #[allow(dead_code)]
-    pub invited_by: Option<ambre_core::UserId>,
+    pub invited_by: Option<Id<User>>,
 }
 
 /// What a removal posted alone did, decided inside its transaction.
@@ -27,7 +27,7 @@ pub enum Removed {
     /// The last member left a channel that is not public, which went with
     /// every document it grouped (`SRV-142`). Each is marked for its delete,
     /// which the caller runs (`SRV-165`).
-    ChannelDeleted(Vec<ambre_core::DocumentId>),
+    ChannelDeleted(Vec<Id<Document>>),
     /// The document is a space. It owes a rotation, and the member left
     /// every channel of it too (`SRV-136`).
     SpaceLeft(SpaceLeave),
@@ -37,12 +37,12 @@ pub enum Removed {
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct SpaceLeave {
     /// The `meta` of each channel the member left and that stays.
-    pub left: Vec<ambre_core::DocumentId>,
+    pub left: Vec<Id<Document>>,
     /// Those of them that owe a rotation: every channel that is not public.
-    pub owed: Vec<ambre_core::DocumentId>,
+    pub owed: Vec<Id<Document>>,
     /// Each channel the member was the last of, by its `meta`, with every
     /// document it grouped, marked for its delete (`SRV-142`).
-    pub deleted: Vec<(ambre_core::DocumentId, Vec<ambre_core::DocumentId>)>,
+    pub deleted: Vec<(Id<Document>, Vec<Id<Document>>)>,
 }
 
 /// `document_members` joined with `users` for display purposes. Carries the
@@ -50,7 +50,7 @@ pub struct SpaceLeave {
 /// can then locate its own entry and unwrap the key, or rewrap on rotation.
 #[derive(Debug)]
 pub struct MemberWithUserRow {
-    pub user_id: ambre_core::UserId,
+    pub user_id: Id<User>,
     pub email: ambre_core::Email,
     /// Whether the member's email was provider-verified vs self-asserted at
     /// `/auth/setup` (#3). Lets the member list flag an unverified peer for the
@@ -62,7 +62,7 @@ pub struct MemberWithUserRow {
     pub exchange_pubkey: FixedBytes<ambre_core::ExchangePublicKey>,
     pub doc_key_enc: ambre_core::Encoded<ambre_core::WrappedDocKey>,
     #[allow(dead_code)]
-    pub invited_by: Option<ambre_core::UserId>,
+    pub invited_by: Option<Id<User>>,
     /// Exchange public key of the member who wrapped `doc_key_enc` (the inviter,
     /// or the member themselves for a self-wrap at creation). The recipient needs
     /// this peer key to perform the ECDH unwrap -- their own key is the wrong DH
@@ -108,11 +108,11 @@ macro_rules! access_document {
 /// A creation's first `entry` lands in the same transaction (`SRV-104`).
 pub async fn add_document_member(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    user_id: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    user_id: &Id<User>,
     role: ambre_core::Role,
     doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    invited_by: &ambre_core::UserId,
+    invited_by: &Id<User>,
     entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
@@ -132,7 +132,7 @@ pub async fn add_document_member(
 /// (`SYNC-107`).
 pub(super) async fn append_entry(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
     entry: &LogEntry,
 ) -> Result<(), AppError> {
     let document_id = id_to_uuid(document_id);
@@ -160,7 +160,7 @@ pub(super) async fn append_entry(
 /// empty log predates it, and its changes carry none.
 pub(super) async fn record_change(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
     entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(document_id);
@@ -184,7 +184,7 @@ pub(super) async fn record_change(
 /// Every entry of a document's log, in order (`SRV-104`).
 pub async fn membership_log(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<Vec<ambre_core::Encoded<ambre_core::EncodedLogEntry>>, AppError> {
     let rows: Vec<Vec<u8>> = sqlx::query_scalar(
         "SELECT entry FROM document_membership_log WHERE document_id = $1 ORDER BY position",
@@ -202,11 +202,11 @@ pub async fn membership_log(
 #[allow(clippy::too_many_arguments)]
 pub async fn invite_document_member(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    user_id: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    user_id: &Id<User>,
     role: ambre_core::Role,
     doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    invited_by: &ambre_core::UserId,
+    invited_by: &Id<User>,
     key_id: &FixedBytes<ambre_core::KeyId>,
     entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
@@ -237,11 +237,11 @@ pub async fn invite_document_member(
 /// The upsert behind both adds, inside the caller's transaction.
 async fn upsert_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: &ambre_core::DocumentId,
-    user_id: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    user_id: &Id<User>,
     role: ambre_core::Role,
     doc_key_enc: &ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    invited_by: &ambre_core::UserId,
+    invited_by: &Id<User>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
@@ -282,7 +282,7 @@ async fn upsert_member(
 /// sharing anymore.
 async fn ensure_not_last_owner(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
 ) -> Result<(), AppError> {
     let document_id = id_to_uuid(document_id);
     let owners: i64 = sqlx::query_scalar(
@@ -305,8 +305,8 @@ async fn ensure_not_last_owner(
 /// `meta` document (`access_document!`).
 pub async fn get_document_member(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    user_id: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    user_id: &Id<User>,
 ) -> Result<Option<MemberRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let uid = id_to_uuid(*user_id);
@@ -343,7 +343,7 @@ pub async fn get_document_member(
 /// Only a row written before the invite refused such an account can match.
 pub async fn list_document_members(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<Vec<MemberWithUserRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(concat!(
@@ -392,8 +392,8 @@ pub async fn list_document_members(
 /// transaction. An owner who leaves other members behind is still refused.
 pub async fn remove_document_member(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    user_id: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    user_id: &Id<User>,
     entry: Option<&LogEntry>,
     sweep_due: ambre_core::UnixSeconds,
 ) -> Result<Removed, AppError> {
@@ -413,7 +413,7 @@ pub async fn remove_document_member(
     owe_rotation(&mut tx, *document_id).await?;
     let left = super::channels::leave_space_channels_in(
         &mut tx,
-        ambre_core::SpaceId::from_document(*document_id),
+        Id::<Space>::from_document(*document_id),
         *user_id,
         sweep_due,
     )
@@ -425,7 +425,7 @@ pub async fn remove_document_member(
 /// Marks a document as owing a rotation (`SRV-122`).
 pub(super) async fn owe_rotation(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
 ) -> Result<(), AppError> {
     let document_id = id_to_uuid(document_id);
     sqlx::query("UPDATE documents SET rotation_owed = true WHERE id = $1")
@@ -444,14 +444,11 @@ pub(super) async fn owe_rotation(
 #[allow(clippy::too_many_arguments)]
 pub async fn revoke_and_rotate(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    user_id: &ambre_core::UserId,
-    rotated_by: &ambre_core::UserId,
-    keys: &[(
-        ambre_core::UserId,
-        ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    )],
-    members: &[ambre_core::UserId],
+    document_id: &Id<Document>,
+    user_id: &Id<User>,
+    rotated_by: &Id<User>,
+    keys: &[(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)],
+    members: &[Id<User>],
     link: &ambre_protocol::KeyLink,
     entry: Option<&LogEntry>,
     sweep_due: ambre_core::UnixSeconds,
@@ -465,7 +462,7 @@ pub async fn revoke_and_rotate(
     rewrap_members(&mut tx, *document_id, *rotated_by, keys, members, link).await?;
     let left = super::channels::leave_space_channels_in(
         &mut tx,
-        ambre_core::SpaceId::from_document(*document_id),
+        Id::<Space>::from_document(*document_id),
         *user_id,
         sweep_due,
     )
@@ -478,7 +475,7 @@ pub async fn revoke_and_rotate(
 /// the last link under this lock, so two rotations cannot both chain from it.
 pub(super) async fn lock_document(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
 ) -> Result<(), AppError> {
     let document_id = id_to_uuid(document_id);
     let found: Option<uuid::Uuid> =
@@ -497,7 +494,7 @@ pub(super) async fn lock_document(
 /// one to replace.
 async fn append_link(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
     link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
     let document_id = id_to_uuid(document_id);
@@ -542,7 +539,7 @@ async fn append_link(
 /// `meta`, where every document of the channel finds them.
 pub async fn document_key_links(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<Vec<ambre_core::Encoded<ambre_core::EncodedKeyLink>>, AppError> {
     let rows = sqlx::query_scalar::<_, Vec<u8>>(concat!(
         "SELECT link FROM document_key_links WHERE document_id = ",
@@ -556,10 +553,7 @@ pub async fn document_key_links(
 }
 
 /// Whether the document owes a rotation (`SRV-122`).
-pub async fn rotation_owed(
-    pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-) -> Result<bool, AppError> {
+pub async fn rotation_owed(pool: &PgPool, document_id: &Id<Document>) -> Result<bool, AppError> {
     let owed: Option<bool> =
         sqlx::query_scalar("SELECT rotation_owed FROM documents WHERE id = $1")
             .bind(id_to_uuid(*document_id))
@@ -577,10 +571,10 @@ pub async fn rotation_owed(
 /// (`SRV-142`); a public one stays with its documents (`SRV-173`).
 async fn delete_member(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
-    user_id: ambre_core::UserId,
+    document_id: Id<Document>,
+    user_id: Id<User>,
     channel: Option<super::channels::ChannelMeta>,
-) -> Result<Option<ambre_core::ChannelId>, AppError> {
+) -> Result<Option<Id<Channel>>, AppError> {
     let did = id_to_uuid(document_id);
     let uid = id_to_uuid(user_id);
     let current_role: Option<String> = sqlx::query_scalar(
@@ -627,8 +621,8 @@ async fn delete_member(
 /// Deletes one member row with its read cursors, and checks nothing.
 pub(super) async fn drop_member_row(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
-    user_id: ambre_core::UserId,
+    document_id: Id<Document>,
+    user_id: Id<User>,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(document_id);
     let uid = id_to_uuid(user_id);
@@ -646,8 +640,8 @@ pub(super) async fn drop_member_row(
 /// refused with a 409 (see `remove_document_member`).
 pub async fn update_document_member_role(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    user_id: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    user_id: &Id<User>,
     role: ambre_core::Role,
     entry: Option<&LogEntry>,
 ) -> Result<(), AppError> {
@@ -688,13 +682,10 @@ pub async fn update_document_member_role(
 /// each remaining member and this function applies them all at once.
 pub async fn rotate_document_keys(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    rotated_by: &ambre_core::UserId,
-    keys: &[(
-        ambre_core::UserId,
-        ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    )],
-    members: &[ambre_core::UserId],
+    document_id: &Id<Document>,
+    rotated_by: &Id<User>,
+    keys: &[(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)],
+    members: &[Id<User>],
     link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
     let mut tx = pool.begin().await?;
@@ -713,13 +704,10 @@ pub async fn rotate_document_keys(
 /// the one the relay now refuses, so the rotation is refused whole (`SRV-167`).
 async fn rewrap_members(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: ambre_core::DocumentId,
-    rotator: ambre_core::UserId,
-    keys: &[(
-        ambre_core::UserId,
-        ambre_core::Encoded<ambre_core::WrappedDocKey>,
-    )],
-    members: &[ambre_core::UserId],
+    document_id: Id<Document>,
+    rotator: Id<User>,
+    keys: &[(Id<User>, ambre_core::Encoded<ambre_core::WrappedDocKey>)],
+    members: &[Id<User>],
     link: &ambre_protocol::KeyLink,
 ) -> Result<(), AppError> {
     let did = id_to_uuid(document_id);

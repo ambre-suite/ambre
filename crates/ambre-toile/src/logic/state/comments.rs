@@ -39,14 +39,13 @@ use std::collections::HashSet;
 
 use loro::{LoroMap, LoroMovableList, LoroText, LoroValue};
 
-use ambre_bus::UserId;
 use ambre_core::CharCount;
+use ambre_core::id::{Element, Id, Thread, User};
 
 use crate::logic::command::{
     CommentAnchor, CommentMessage, CommentPin, CommentSummary, CommentThread, TextDelta,
-    ThreadMessageIndex, ToileEvent, ToileOutcome, Viewport,
+    ThreadMessageIndex, ToileError, ToileEvent, ToileOutcome, Viewport,
 };
-use crate::logic::model::{ElementId, ThreadId};
 use ambre_bus::app::toile::ThreadMessageCount;
 
 use super::ToileState;
@@ -62,7 +61,7 @@ impl ToileState {
     ///
     /// The engine mints the thread id, so two peers who comment on one spot get
     /// two threads (`TOILE-FEAT-011`). An empty body writes nothing. A session
-    /// with no `UserId` writes nothing either: a message carries the person who
+    /// with no `Id<User>` writes nothing either: a message carries the person who
     /// wrote it (`TOILE-FEAT-014`).
     pub(super) fn create_comment(
         &mut self,
@@ -85,7 +84,7 @@ impl ToileState {
                 return ToileOutcome::display_only(Vec::new());
             }
         };
-        let thread = match self.mint_element_id() {
+        let thread = match self.mint_thread_id() {
             Ok(id) => id,
             Err(e) => return ToileOutcome::display_only(vec![ToileEvent::Error(e)]),
         };
@@ -111,9 +110,9 @@ impl ToileState {
     /// when Loro refuses a container; the caller then commits the partial write.
     fn seed_thread(
         &mut self,
-        thread: &ThreadId,
+        thread: &Id<Thread>,
         anchor: Vec<u8>,
-        author: UserId,
+        author: Id<User>,
         ts: ambre_core::Timestamp,
         body: &str,
     ) -> Option<()> {
@@ -132,11 +131,11 @@ impl ToileState {
     }
 
     /// Append a message to `thread`. A missing thread, an empty body and a
-    /// session with no `UserId` write nothing. Outside the undo stack, like
+    /// session with no `Id<User>` write nothing. Outside the undo stack, like
     /// every comment write (`TOILE-FEAT-017`).
     pub(super) fn reply_comment(
         &mut self,
-        thread: &ThreadId,
+        thread: &Id<Thread>,
         body: &str,
         ts: ambre_core::Timestamp,
     ) -> ToileOutcome {
@@ -147,7 +146,7 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         }
         let Some(messages) = self.message_list(thread) else {
-            return self.err_no_element(thread);
+            return self.err_no_thread(thread);
         };
         if push_message(&messages, author, ts, body).is_none() {
             tracing::warn!("Toile: comment reply write failed");
@@ -168,7 +167,7 @@ impl ToileState {
     /// the case that needs no rule.
     pub(super) fn edit_comment(
         &mut self,
-        thread: &ThreadId,
+        thread: &Id<Thread>,
         message: ThreadMessageIndex,
         delta: &TextDelta,
     ) -> ToileOutcome {
@@ -180,13 +179,13 @@ impl ToileState {
             return ToileOutcome::display_only(Vec::new());
         }
         let Some(map) = self.message_map(thread, message) else {
-            return self.err_no_element(thread);
+            return self.err_no_thread(thread);
         };
         if author_of(&map) != Some(me) {
             return ToileOutcome::display_only(Vec::new());
         }
         let Some(text) = body_text(&map) else {
-            return self.err_no_element(thread);
+            return self.err_no_thread(thread);
         };
         // Clamp to the current length: `at` and the deletion span never run past
         // the end of the buffer.
@@ -208,12 +207,12 @@ impl ToileState {
     /// survive both ways (`TOILE-FEAT-015`).
     pub(super) fn resolve_thread(
         &mut self,
-        thread: &ThreadId,
+        thread: &Id<Thread>,
         state: ambre_core::ThreadState,
     ) -> ToileOutcome {
         let resolved = state.is_resolved();
         let Some(map) = self.thread_map(thread) else {
-            return self.err_no_element(thread);
+            return self.err_no_thread(thread);
         };
         if matches!(map.value(ThreadKey::Resolved), Some(LoroValue::Bool(cur)) if cur == resolved) {
             return ToileOutcome::display_only(Vec::new());
@@ -231,12 +230,15 @@ impl ToileState {
     /// them. A thread whose anchor element is gone stays in the list, and a
     /// reader still opens it. Only the pin derivation skips it
     /// (`TOILE-FEAT-016`).
-    pub fn comment_thread_ids(&self) -> Vec<ThreadId> {
+    pub fn comment_thread_ids(&self) -> Vec<Id<Thread>> {
         let LoroValue::Map(threads) = self.doc.get_map(Root::Comments.as_str()).get_deep_value()
         else {
             return Vec::new();
         };
-        let mut ids: Vec<ThreadId> = threads.keys().map(|k| ElementId(k.to_string())).collect();
+        let mut ids: Vec<Id<Thread>> = threads
+            .keys()
+            .map(|k| Id::<Thread>::from_text(k.to_string()))
+            .collect();
         // Loro fixes no iteration order on a map, so the read sorts. Two peers
         // then list the same threads in the same order.
         ids.sort();
@@ -247,7 +249,7 @@ impl ToileState {
     /// cannot drift from the containers; the display viewport carries the pins
     /// alone (`TOILE-026`). `None` when the thread does not exist or its anchor
     /// fails to decode.
-    pub fn comment_thread(&self, id: &ThreadId) -> Option<CommentThread> {
+    pub fn comment_thread(&self, id: &Id<Thread>) -> Option<CommentThread> {
         let LoroValue::Map(fields) = self.thread_map(id)?.map().get_deep_value() else {
             return None;
         };
@@ -305,7 +307,7 @@ impl ToileState {
     /// sequence.
     pub(super) fn comment_pins(
         &self,
-        visible: &HashSet<ElementId>,
+        visible: &HashSet<Id<Element>>,
         vp: &Viewport,
     ) -> Vec<CommentPin> {
         let camera = vp.to_world_rect();
@@ -345,7 +347,7 @@ impl ToileState {
     /// board-wide list. A pure read -- no commit, no delta, no undo item. An
     /// unknown thread answers nothing rather than an empty thread, so the panel
     /// keeps showing what it has.
-    pub(super) fn read_comments(&self, thread: Option<&ThreadId>) -> ToileOutcome {
+    pub(super) fn read_comments(&self, thread: Option<&Id<Thread>>) -> ToileOutcome {
         let events = match thread {
             Some(id) => match self.comment_thread(id) {
                 Some(t) => vec![ToileEvent::CommentThreadData(t)],
@@ -356,13 +358,20 @@ impl ToileState {
         ToileOutcome::display_only(events)
     }
 
+    /// The error for a thread that does not exist.
+    fn err_no_thread(&self, thread: &Id<Thread>) -> ToileOutcome {
+        ToileOutcome::display_only(vec![ToileEvent::Error(ToileError::NoSuchThread(
+            thread.clone(),
+        ))])
+    }
+
     /// The thread's map container, or `None` when no thread carries `id`.
-    fn thread_map(&self, id: &ThreadId) -> Option<Fields<ThreadKey>> {
+    fn thread_map(&self, id: &Id<Thread>) -> Option<Fields<ThreadKey>> {
         entry::<ThreadKey>(&self.doc, id)
     }
 
     /// The thread's message list container.
-    fn message_list(&self, thread: &ThreadId) -> Option<LoroMovableList> {
+    fn message_list(&self, thread: &Id<Thread>) -> Option<LoroMovableList> {
         self.thread_map(thread)?
             .get(ThreadKey::Messages)?
             .into_container()
@@ -375,7 +384,7 @@ impl ToileState {
     /// out-of-range index yields `None`.
     fn message_map(
         &self,
-        thread: &ThreadId,
+        thread: &Id<Thread>,
         index: ThreadMessageIndex,
     ) -> Option<Fields<MessageKey>> {
         self.message_list(thread)?
@@ -393,7 +402,7 @@ impl ToileState {
 /// when Loro refuses one of the writes.
 fn push_message(
     messages: &LoroMovableList,
-    author: UserId,
+    author: Id<User>,
     ts: ambre_core::Timestamp,
     body: &str,
 ) -> Option<()> {
@@ -407,13 +416,13 @@ fn push_message(
     Some(())
 }
 
-/// The canonical `UserId` a message map carries, or `None` when the field is
+/// The canonical `Id<User>` a message map carries, or `None` when the field is
 /// absent or unparsable.
-fn author_of(map: &Fields<MessageKey>) -> Option<UserId> {
+fn author_of(map: &Fields<MessageKey>) -> Option<Id<User>> {
     let LoroValue::String(author) = map.value(MessageKey::Author)? else {
         return None;
     };
-    UserId::parse_str(&author).ok()
+    Id::<User>::parse_str(&author).ok()
 }
 
 /// The `LoroText` body of a message map. The seed creates the container with the
@@ -436,7 +445,7 @@ fn read_message(value: &LoroValue) -> Option<CommentMessage> {
     let Some(LoroValue::String(author)) = fields.get(MessageKey::Author) else {
         return None;
     };
-    let author = UserId::parse_str(author).ok()?;
+    let author = Id::<User>::parse_str(author).ok()?;
     let ts = match fields.get(MessageKey::Ts) {
         Some(LoroValue::I64(ts)) => ambre_core::Timestamp::from_i64(*ts),
         _ => ambre_core::Timestamp::default(),

@@ -3,7 +3,8 @@
 
 use crate::Receipt;
 use ambre_bus::{ActivityKind, MessageDraft, MessageView, Reaction, Timestamp, UnreadCount};
-use ambre_core::{ChannelId, DeltaBytes, MessageId, Payload, SegmentId, Seq, UserId};
+use ambre_core::id::{Channel, Id, Message, Segment, User};
+use ambre_core::{DeltaBytes, Payload, Seq};
 use loro::{Container, LoroMap, ValueOrContainer, VersionVector};
 
 use crate::schema::{MessageKey, Root};
@@ -17,11 +18,11 @@ const THUMB: &str = "\u{1F44D}";
 /// One member of the channel: its state, and the user it writes for.
 struct Member {
     state: ChannelState,
-    user: UserId,
+    user: Id<User>,
 }
 
 impl Member {
-    fn segment(&self) -> SegmentId {
+    fn segment(&self) -> Id<Segment> {
         self.state.active_id()
     }
 
@@ -54,7 +55,7 @@ impl Member {
         messages[0].clone()
     }
 
-    fn react(&mut self, message: MessageId, emoji: &str) -> Sent {
+    fn react(&mut self, message: Id<Message>, emoji: &str) -> Sent {
         self.state
             .react(
                 self.segment(),
@@ -69,12 +70,12 @@ impl Member {
 }
 
 /// Alice's channel with one message of hers, and Bob, who opened it after.
-fn pair() -> (Member, Member, MessageId) {
+fn pair() -> (Member, Member, Id<Message>) {
     let mut alice = Member {
-        state: ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        state: ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
             .expect("create")
             .identify(),
-        user: UserId::new(),
+        user: Id::<User>::mint(),
     };
     let draft = MessageDraft {
         text: "lunch?".to_owned(),
@@ -84,7 +85,7 @@ fn pair() -> (Member, Member, MessageId) {
     alice.state.send(&draft, alice.user, NOW).expect("send");
     let bob = Member {
         state: open_from(&alice.state),
-        user: UserId::new(),
+        user: Id::<User>::mint(),
     };
     let message = alice.only_message().id;
     (alice, bob, message)
@@ -112,7 +113,7 @@ fn open_from(state: &ChannelState) -> ChannelState {
     }
 }
 
-fn one(emoji: &str, mut users: Vec<UserId>) -> Reaction {
+fn one(emoji: &str, mut users: Vec<Id<User>>) -> Reaction {
     users.sort_by_key(ToString::to_string);
     Reaction {
         emoji: ambre_bus::Emoji::from(emoji),

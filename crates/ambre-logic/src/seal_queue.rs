@@ -9,7 +9,8 @@
 
 use std::collections::VecDeque;
 
-use ambre_bus::{DocumentId, SecretBytes};
+use ambre_bus::SecretBytes;
+use ambre_core::id::{Document, Id};
 use ambre_core::{Generation, GenerationKind, Issuer, Payload, SealedRowBytes};
 
 use crate::{PersistWrite, SealedWrite};
@@ -50,7 +51,7 @@ impl Default for SealQueue {
 
 #[derive(Debug)]
 struct Entry {
-    document_id: DocumentId,
+    document_id: Id<Document>,
     slot: Slot,
 }
 
@@ -79,7 +80,7 @@ impl SealQueue {
     /// the writes ahead of it.
     pub fn push(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         write: PersistWrite,
     ) -> Option<(Generation<SealTicket>, SecretBytes)> {
         let (slot, plaintext) = match write {
@@ -148,7 +149,7 @@ impl SealQueue {
 
     /// The writes that may go now, in order: each one up to the first that
     /// still waits for its seal.
-    pub fn ready(&mut self) -> Vec<(DocumentId, SealedWrite)> {
+    pub fn ready(&mut self) -> Vec<(Id<Document>, SealedWrite)> {
         let mut ready = Vec::new();
         while self
             .entries
@@ -191,7 +192,7 @@ mod tests {
     /// each in the order Logic made them, sealed bytes in place of plaintext.
     #[test]
     fn writes_reach_the_store_in_order_with_their_sealed_bytes() {
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         let mut queue = SealQueue::default();
         let (first, plain) = queue
             .push(
@@ -242,7 +243,7 @@ mod tests {
     /// first.
     #[test]
     fn a_sealed_row_keeps_the_kind_of_its_write() {
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         let mut queue = SealQueue::default();
         let (delta, _) = queue
             .push(
@@ -270,7 +271,7 @@ mod tests {
     /// A write with no content goes at once when nothing waits ahead of it.
     #[test]
     fn a_write_with_no_content_goes_at_once() {
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         let mut queue = SealQueue::default();
         assert!(queue.push(doc, PersistWrite::Shown).is_none());
         assert_eq!(queue.ready(), [(doc, SealedWrite::Shown)]);
@@ -280,7 +281,7 @@ mod tests {
     /// never receives the plaintext, and the writes behind it go.
     #[test]
     fn a_seal_that_did_not_happen_drops_only_its_write() {
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         let mut queue = SealQueue::default();
         let (ticket, _) = queue
             .push(

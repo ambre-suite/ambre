@@ -10,7 +10,8 @@
 use std::collections::{HashMap, HashSet};
 
 use ambre_bus::MemberStanding;
-use ambre_core::{DocumentId, DocumentRank, FixedBytes, KeyId, PublicKey, Role, UserId};
+use ambre_core::id::{Document, Id, User};
+use ambre_core::{DocumentRank, FixedBytes, KeyId, PublicKey, Role};
 use ambre_protocol::error::SerializationError;
 use ambre_protocol::membership::ENTRY_SIGNATURE_LEN;
 use ambre_protocol::{EntryDigest, LogPosition, MembershipAct, MembershipEntry, Signature};
@@ -43,7 +44,7 @@ pub(crate) struct SpaceWord {
     pub(crate) writers: HashSet<FixedBytes<PublicKey>>,
     /// The members a valid entry of the space log removed, and no later one
     /// added back.
-    pub(crate) removed: HashSet<UserId>,
+    pub(crate) removed: HashSet<Id<User>>,
 }
 
 impl SpaceWord {
@@ -131,7 +132,7 @@ impl LogHead {
 
 /// One document's log, as far as a chain of valid entries reaches.
 pub(crate) struct Log {
-    held: HashMap<UserId, Held>,
+    held: HashMap<Id<User>, Held>,
     /// Every key the log granted a writing role, at any point.
     signers: HashSet<FixedBytes<PublicKey>>,
     /// Whether the wrapped key carried an anchor at all.
@@ -144,7 +145,7 @@ impl Log {
     /// Walks `entries` from the first, which must hash to `anchor`, and stops
     /// at the first entry that fails a check.
     pub(crate) fn walk(
-        document: DocumentId,
+        document: Id<Document>,
         anchor: Option<FixedBytes<EntryDigest>>,
         entries: &[MembershipEntry],
         self_join: SelfJoinRule,
@@ -184,7 +185,7 @@ impl Log {
     /// the space removed reads as removed here too, though no entry of this
     /// log says so.
     pub(crate) fn walk_under(
-        document: DocumentId,
+        document: Id<Document>,
         anchor: Option<FixedBytes<EntryDigest>>,
         entries: &[MembershipEntry],
         rule: &LogRule,
@@ -286,7 +287,7 @@ impl Log {
 
     /// What the log says of `member`, and the role its latest valid entry
     /// gives them (`SYNC-108`, `SYNC-109`, `SYNC-110`).
-    pub(crate) fn standing(&self, member: UserId) -> (MemberStanding, Option<Role>) {
+    pub(crate) fn standing(&self, member: Id<User>) -> (MemberStanding, Option<Role>) {
         match self.held.get(&member) {
             Some(held) if held.present => (MemberStanding::Verified, Some(held.role)),
             Some(_) => (MemberStanding::Revoked, None),
@@ -302,7 +303,7 @@ impl Log {
     }
 
     /// The key the entry that added `member` wraps, when the log reaches it.
-    pub(crate) fn wraps(&self, member: UserId) -> Option<FixedBytes<KeyId>> {
+    pub(crate) fn wraps(&self, member: Id<User>) -> Option<FixedBytes<KeyId>> {
         self.held
             .get(&member)
             .filter(|held| held.present)
@@ -325,8 +326,8 @@ fn signed_by(entry: &MembershipEntry, key: &FixedBytes<PublicKey>) -> bool {
 
 /// What an entry records, before its place in the log and its signature.
 pub(crate) struct Draft {
-    pub document: DocumentId,
-    pub member: UserId,
+    pub document: Id<Document>,
+    pub member: Id<User>,
     pub member_key: FixedBytes<PublicKey>,
     pub act: MembershipAct,
     pub role: Role,
@@ -341,7 +342,7 @@ pub(crate) struct Draft {
 pub(crate) fn sign(
     draft: Draft,
     next: LogHead,
-    author: UserId,
+    author: Id<User>,
     signing_key: &SigningKey,
 ) -> Result<MembershipEntry, SerializationError> {
     let mut entry = MembershipEntry {
@@ -389,14 +390,14 @@ pub(crate) mod tests {
 
     /// One user of a test log: an identity and a signing key.
     pub(crate) struct Person {
-        pub id: UserId,
+        pub id: Id<User>,
         pub key: SigningKey,
     }
 
     impl Person {
         pub(crate) fn new(seed: u8) -> Self {
             Self {
-                id: UserId::from_bytes([seed; 16]),
+                id: Id::<User>::from_bytes([seed; 16]),
                 key: SigningKey::from_bytes(&[seed; 32]),
             }
         }
@@ -406,7 +407,7 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) const DOC: DocumentId = DocumentId::from_bytes([7; 16]);
+    pub(crate) const DOC: Id<Document> = Id::<Document>::from_bytes([7; 16]);
 
     /// Appends the entry `by` signs about `member` to `log`.
     pub(crate) fn append(

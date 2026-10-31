@@ -19,7 +19,8 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
-use ambre_core::{ByteCount, ByteOffset, ByteSpan, DocumentId, char_to_byte};
+use ambre_core::id::{Document, Id};
+use ambre_core::{ByteCount, ByteOffset, ByteSpan, char_to_byte};
 
 use ambre_bus::app::prose::{DocCount, DocDelta, DocOffset};
 use ambre_bus::logic::{AppCommand, LogicCommand};
@@ -620,7 +621,7 @@ impl SendResult {
 /// (`PROSE-UI-150`): what crosses is the typed command alone.
 pub fn send_command(
     to_logic: &ambre_bus::conduit::Sender<LogicCommand>,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     command: ProseCommand,
 ) -> SendResult {
     let envelope = LogicCommand::App {
@@ -645,7 +646,7 @@ pub fn send_command(
 /// order the user typed in is the order the edits land.
 pub fn send_edit(
     outbox: &mut Outbox,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     command: ProseCommand,
 ) -> SendResult {
     let envelope = LogicCommand::App {
@@ -1093,8 +1094,8 @@ mod tests {
     use super::*;
     use ambre_bus::app::prose::DocSpan;
 
-    fn a_document() -> DocumentId {
-        DocumentId::from_bytes([7; 16])
+    fn a_document() -> Id<Document> {
+        Id::<Document>::from_bytes([7; 16])
     }
 
     #[test]

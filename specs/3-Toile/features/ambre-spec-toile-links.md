@@ -82,8 +82,8 @@ Absent means no link, and clearing removes the key rather than writing an empty 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LinkTarget {
     Url(LinkUrl),     // a web address, opened sandboxed by the shell
-    Frame(ElementId), // a frame on this board: the camera fits to it
-    Document { document_id: DocumentId, doc_type: DocType },
+    Frame(Id<Element>), // a frame on this board: the camera fits to it
+    Document { document_id: Id<Document>, doc_type: DocType },
 }
 ```
 

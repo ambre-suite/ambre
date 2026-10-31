@@ -9,7 +9,8 @@
 use std::collections::HashMap;
 
 use ambre_bus::Timestamp;
-use ambre_core::{ByteSize, MessageId, Millis, UserId};
+use ambre_core::id::{Id, Message, User};
+use ambre_core::{ByteSize, Millis};
 
 use crate::{PRESENCE_EXPIRY, REFRESH_PERIOD};
 
@@ -81,13 +82,13 @@ pub enum Sample {
     Typing,
     /// Its member types in the composer of the thread under this root
     /// (`MURMURE-536`).
-    TypingIn(MessageId),
+    TypingIn(Id<Message>),
 }
 
 impl Sample {
     /// The sample a keystroke sends, in the thread under `thread` or in the
     /// channel.
-    pub fn typing(thread: Option<MessageId>) -> Self {
+    pub fn typing(thread: Option<Id<Message>>) -> Self {
         thread.map_or(Self::Typing, Self::TypingIn)
     }
 
@@ -120,14 +121,14 @@ impl Sample {
         match SampleTag::from_byte(*tag)? {
             SampleTag::Watching if zeros => Some(Self::Watching),
             SampleTag::Typing if zeros => Some(Self::Typing),
-            SampleTag::TypingIn if !zeros => Some(Self::TypingIn(MessageId::from_bytes(root))),
+            SampleTag::TypingIn if !zeros => Some(Self::TypingIn(Id::<Message>::from_bytes(root))),
             _ => None,
         }
     }
 }
 
 /// Where a member types: the channel's composer, or a thread's by its root.
-type Place = Option<MessageId>;
+type Place = Option<Id<Message>>;
 
 /// The other members who watch an open channel and who type in it, and when
 /// this client last sent its own samples.
@@ -135,10 +136,10 @@ type Place = Option<MessageId>;
 pub struct Watchers {
     /// The members heard watching, with the tick that dates their last
     /// sample. `None` for a sample heard before the first tick.
-    watching: HashMap<UserId, Option<Timestamp>>,
+    watching: HashMap<Id<User>, Option<Timestamp>>,
     /// The members heard typing, dated the same way, with where they type.
     /// A member types in one place, the last their samples named.
-    typing: HashMap<UserId, (Option<Timestamp>, Place)>,
+    typing: HashMap<Id<User>, (Option<Timestamp>, Place)>,
     /// The latest tick of the view, `None` before the first.
     now: Option<Timestamp>,
     /// When this client last sent each sample, and where it typed.
@@ -149,7 +150,7 @@ pub struct Watchers {
 impl Watchers {
     /// A sample came from `user`. Returns whether the indicators changed. A
     /// member who types watches too.
-    pub fn heard(&mut self, user: UserId, sample: Sample) -> bool {
+    pub fn heard(&mut self, user: Id<User>, sample: Sample) -> bool {
         let came = self.watching.insert(user, self.now).is_none();
         let place = match sample {
             Sample::Watching => return came,
@@ -162,13 +163,13 @@ impl Watchers {
 
     /// Whether `user` was not heard watching before: the caller answers a
     /// newcomer with its own sample, so they see who watches at once.
-    pub fn is_new(&self, user: UserId) -> bool {
+    pub fn is_new(&self, user: Id<User>) -> bool {
         !self.watching.contains_key(&user)
     }
 
     /// The relay says `user` stopped watching the channel (`SRV-097`).
     /// Returns whether the indicators changed.
-    pub fn left(&mut self, user: UserId) -> bool {
+    pub fn left(&mut self, user: Id<User>) -> bool {
         let typed = self.typing.remove(&user).is_some();
         self.watching.remove(&user).is_some() || typed
     }
@@ -201,7 +202,7 @@ impl Watchers {
     /// thread under `thread`, or the channel with `None`. It is owed when
     /// none was sent, a typing refresh period after the last (`MURMURE-124`),
     /// or at once in a new place (`MURMURE-536`). Records it as sent when owed.
-    pub fn owes_typing(&mut self, now: Timestamp, thread: Option<MessageId>) -> bool {
+    pub fn owes_typing(&mut self, now: Timestamp, thread: Option<Id<Message>>) -> bool {
         let moved = self.sent_typing.is_some_and(|(_, place)| place != thread);
         let mut sent = self.sent_typing.map(|(at, _)| at).filter(|_| !moved);
         let due = owed(&mut sent, now, TYPING_REFRESH);
@@ -214,16 +215,16 @@ impl Watchers {
     /// The members who watch, then those who type in the channel. Each list
     /// keeps the order of the identifiers, so the view never reorders between
     /// two draws.
-    pub fn view(&self) -> (Vec<UserId>, Vec<UserId>) {
-        let mut watching: Vec<UserId> = self.watching.keys().copied().collect();
+    pub fn view(&self) -> (Vec<Id<User>>, Vec<Id<User>>) {
+        let mut watching: Vec<Id<User>> = self.watching.keys().copied().collect();
         watching.sort_by_key(|user| *user.as_bytes());
         (watching, self.typing_in(None))
     }
 
     /// The members who type in each thread, by its root, the roots and the
     /// members in the order of their identifiers (`MURMURE-536`).
-    pub fn in_threads(&self) -> Vec<(MessageId, Vec<UserId>)> {
-        let mut roots: Vec<MessageId> = self.typing.values().filter_map(|(_, at)| *at).collect();
+    pub fn in_threads(&self) -> Vec<(Id<Message>, Vec<Id<User>>)> {
+        let mut roots: Vec<Id<Message>> = self.typing.values().filter_map(|(_, at)| *at).collect();
         roots.sort_by_key(|root| *root.as_bytes());
         roots.dedup();
         roots
@@ -233,8 +234,8 @@ impl Watchers {
     }
 
     /// The members who type at `place`, in the order of their identifiers.
-    fn typing_in(&self, place: Place) -> Vec<UserId> {
-        let mut users: Vec<UserId> = self
+    fn typing_in(&self, place: Place) -> Vec<Id<User>> {
+        let mut users: Vec<Id<User>> = self
             .typing
             .iter()
             .filter(|(_, (_, at))| *at == place)
@@ -281,7 +282,7 @@ mod tests {
         assert!(!watchers.owes_typing(at(TYPING_REFRESH.0 - 1), None));
         assert!(watchers.owes_typing(at(TYPING_REFRESH.0), None));
 
-        let bob = UserId::new();
+        let bob = Id::<User>::mint();
         assert!(watchers.heard(bob, Sample::Typing));
         assert_eq!(watchers.view(), (vec![bob], vec![bob]));
         assert!(!watchers.tick(at(TYPING_EXPIRY.0)), "within the expiry");
@@ -301,7 +302,7 @@ mod tests {
     #[test]
     fn a_member_watches_while_their_samples_come_and_stops_when_they_leave() {
         let mut watchers = ticked();
-        let (bob, carol) = (UserId::new(), UserId::new());
+        let (bob, carol) = (Id::<User>::mint(), Id::<User>::mint());
         assert!(watchers.is_new(bob));
         assert!(watchers.heard(bob, Sample::Watching));
         assert!(!watchers.is_new(bob));
@@ -326,7 +327,7 @@ mod tests {
     /// shape reads as no sample.
     #[test]
     fn a_sample_names_no_channel_and_nothing_else_reads_as_one() {
-        let root = MessageId::new();
+        let root = Id::<Message>::mint();
         for sample in [Sample::Watching, Sample::Typing, Sample::TypingIn(root)] {
             assert_eq!(ByteSize::of_len(sample.bytes().len()), SAMPLE_LEN);
             assert_eq!(Sample::read(&sample.bytes()), Some(sample));
@@ -360,7 +361,7 @@ mod tests {
     /// reads them so.
     #[test]
     fn a_sample_keeps_its_bytes() {
-        let root = MessageId::from_bytes([0x42; 16]);
+        let root = Id::<Message>::from_bytes([0x42; 16]);
         let with = |tag: u8, rest: [u8; 16]| {
             let mut bytes = vec![tag, 1];
             bytes.extend(rest);
@@ -384,7 +385,11 @@ mod tests {
     #[test]
     fn typing_in_a_thread_is_told_apart_from_the_channel() {
         let mut watchers = ticked();
-        let (bob, carol, root) = (UserId::new(), UserId::new(), MessageId::new());
+        let (bob, carol, root) = (
+            Id::<User>::mint(),
+            Id::<User>::mint(),
+            Id::<Message>::mint(),
+        );
         assert!(watchers.heard(bob, Sample::TypingIn(root)));
         assert!(!watchers.heard(bob, Sample::TypingIn(root)), "no change");
         assert!(watchers.heard(carol, Sample::Typing));

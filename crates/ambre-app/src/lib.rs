@@ -39,14 +39,15 @@ use ambre_bus::app::toile::{Broadcast, PresentMode, SlidePosition};
 use ambre_bus::conduit::{self, ChannelCapacity, Marks};
 use ambre_bus::sync_warning::SyncWarningCode;
 use ambre_bus::{
-    AppCommand, DocumentId, LogicCommand, LogicEvent, MemberInfo, RestCommand, Role, SheetId,
-    SheetTab, SyncCommand, UiEvent, UserId,
+    AppCommand, LogicCommand, LogicEvent, MemberInfo, RestCommand, Role, SheetId, SheetTab,
+    SyncCommand, UiEvent,
 };
 use ambre_chrome::commands::{CommandId, Keymap};
 use ambre_chrome::{
     AppShell, CanvasCell, CommandStates, ComposedName, ContextMenu, Dialog, FormulaBar, Header,
     Panel, Sidebar, StatusBar, Tabs, ToastHost, Toasts, Toolbar, ZoomFactor,
 };
+use ambre_core::id::{Document, Frame, Id, User};
 // Trame-specific chrome (command wiring + toolbar / selection-toolbar markup +
 // status label). The launcher stays app-agnostic and reaches into this module
 // for every Trame concern -- it names no command, button, or event variant itself.
@@ -109,11 +110,11 @@ const SYNC_INBOX_MARKS: Marks =
 /// The child fan-out registry: every live view of a nested document, by
 /// document. A list rather than a slot -- two embeds of one document are two
 /// views (`TOILE-UI-097`).
-type ChildRoutes = Rc<RefCell<HashMap<DocumentId, Vec<ambre_bus::conduit::Sender<UiEvent>>>>>;
+type ChildRoutes = Rc<RefCell<HashMap<Id<Document>, Vec<ambre_bus::conduit::Sender<UiEvent>>>>>;
 
 /// What a child's queue could not take yet, oldest first, by document
 /// (`TOILE-UI-340`).
-type ChildBacklog = Rc<RefCell<HashMap<DocumentId, VecDeque<UiEvent>>>>;
+type ChildBacklog = Rc<RefCell<HashMap<Id<Document>, VecDeque<UiEvent>>>>;
 
 /// A handle the shell mount fills and the imperative wiring reads back.
 type Slot<T> = Rc<RefCell<Option<T>>>;
@@ -137,7 +138,7 @@ const CHILD_BACKLOG_LIMIT: usize = CHANNEL_CAPACITY.get();
 ///
 /// A document with anything already waiting takes the new event straight to the
 /// back of its queue. A child must not see a later delta before an earlier one.
-fn send_to_child(routes: &ChildRoutes, backlog: &ChildBacklog, id: DocumentId, ev: UiEvent) {
+fn send_to_child(routes: &ChildRoutes, backlog: &ChildBacklog, id: Id<Document>, ev: UiEvent) {
     if backlog.borrow().get(&id).is_some_and(|q| !q.is_empty()) {
         defer_for_child(backlog, id, ev);
         return;
@@ -150,7 +151,7 @@ fn send_to_child(routes: &ChildRoutes, backlog: &ChildBacklog, id: DocumentId, e
 /// Offer `ev` to each live view of `id`, dropping the senders whose view is
 /// gone. Reports whether every remaining one took it; `false` means at least one
 /// queue was full and the event must be re-offered.
-fn offer_to_child(routes: &ChildRoutes, id: DocumentId, ev: &UiEvent) -> bool {
+fn offer_to_child(routes: &ChildRoutes, id: Id<Document>, ev: &UiEvent) -> bool {
     let mut routes = routes.borrow_mut();
     let Some(senders) = routes.get_mut(&id) else {
         // No view left at all: the document is no longer shown, so the event has
@@ -185,13 +186,13 @@ fn offer_to_child(routes: &ChildRoutes, id: DocumentId, ev: &UiEvent) -> bool {
 /// The nested document `ev` belongs to, when it is one the fan-out holds a route
 /// for. Such an event goes to the child's queues and never to the board's own
 /// stream or chrome (`TOILE-UI-098`). A route left with no view still counts.
-fn child_of(routes: &ChildRoutes, ev: &UiEvent) -> Option<DocumentId> {
+fn child_of(routes: &ChildRoutes, ev: &UiEvent) -> Option<Id<Document>> {
     ev.routed_document_id()
         .filter(|id| routes.borrow().contains_key(id))
 }
 
 /// Queue `ev` for `id`, oldest first, and say so when the bound forces a drop.
-fn defer_for_child(backlog: &ChildBacklog, id: DocumentId, ev: UiEvent) {
+fn defer_for_child(backlog: &ChildBacklog, id: Id<Document>, ev: UiEvent) {
     let mut backlog = backlog.borrow_mut();
     let queue = backlog.entry(id).or_default();
     queue.push_back(ev);
@@ -204,7 +205,7 @@ fn defer_for_child(backlog: &ChildBacklog, id: DocumentId, ev: UiEvent) {
 /// Re-offer every deferred event, oldest first, stopping at the first one a
 /// queue still refuses so the order is kept (`TOILE-UI-340`).
 fn flush_child_backlog(routes: &ChildRoutes, backlog: &ChildBacklog) {
-    let ids: Vec<DocumentId> = backlog.borrow().keys().copied().collect();
+    let ids: Vec<Id<Document>> = backlog.borrow().keys().copied().collect();
     for id in ids {
         loop {
             let Some(ev) = backlog.borrow().get(&id).and_then(|q| q.front().cloned()) else {
@@ -261,12 +262,12 @@ struct Wiring {
     invite_role: RwSignal<Role>,
     /// The signed-in user, set on `SessionReady`. The share dialog reads it to
     /// tell the user's own row from the others (`SYNC-141`).
-    me: RwSignal<Option<UserId>>,
+    me: RwSignal<Option<Id<User>>>,
     /// Whether the server enables dev login; `None` until `/api/auth/config` answers.
     dev_mode: RwSignal<Option<landing::SignInMode>>,
     /// The currently routed document, or `None` on the landing route. Read by
     /// every command trigger so it targets the active document.
-    current_doc: RwSignal<Option<DocumentId>>,
+    current_doc: RwSignal<Option<Id<Document>>>,
     /// Formula bar: active cell reference label (for example "B2").
     formula_ref: RwSignal<String>,
     /// Formula bar: cell raw text / live edit buffer.
@@ -316,8 +317,8 @@ struct Wiring {
     /// and `presenter_peer` the latest peer seen broadcasting (drives the panel's
     /// Follow affordance).
     broadcasting_toile: RwSignal<Broadcast>,
-    following_toile: RwSignal<Option<ambre_bus::UserId>>,
-    presenter_peer_toile: RwSignal<Option<ambre_bus::UserId>>,
+    following_toile: RwSignal<Option<Id<User>>>,
+    presenter_peer_toile: RwSignal<Option<Id<User>>>,
     /// Toile right-click context-menu scope (`toile-menus`): the canvas view
     /// publishes it on each right-click. The shell's entry `Memo` reads it to build
     /// the menu, omitting inapplicable rows.
@@ -456,8 +457,8 @@ impl ChromeStatus {
     /// already left changes nothing.
     fn open_failed(
         &mut self,
-        current: Option<DocumentId>,
-        failed: DocumentId,
+        current: Option<Id<Document>>,
+        failed: Id<Document>,
     ) -> Option<&'static str> {
         if current != Some(failed) {
             return None;
@@ -556,8 +557,10 @@ pub fn main() {
     // persistence. The Main thread owns the IndexedDB store (its callbacks need a
     // live event loop, which the blocking Logic loop cannot offer). It drains
     // this in `pre_frame`.
-    let (logic_to_persist_tx, logic_to_persist_rx) =
-        conduit::to_main::<(DocumentId, ambre_logic::PersistWrite)>(CHANNEL_CAPACITY, &logic_bell);
+    let (logic_to_persist_tx, logic_to_persist_rx) = conduit::to_main::<(
+        Id<Document>,
+        ambre_logic::PersistWrite,
+    )>(CHANNEL_CAPACITY, &logic_bell);
 
     // Dispatcher -> canvas view: the content event stream, forwarded after the
     // dispatcher has mirrored command-state events into the chrome.
@@ -631,7 +634,7 @@ pub fn main() {
     let tofu_confirm = RwSignal::new(None::<TofuPrompt>);
     let opened_file = RwSignal::new(None::<platform::OpenedFile>);
     let invite_role = RwSignal::new(Role::Editor);
-    let me = RwSignal::new(None::<UserId>);
+    let me = RwSignal::new(None::<Id<User>>);
 
     // Status-bar signals (`trame-status-bar`): selection aggregates, set from the
     // `SelectionStats` event and cleared by the view on a single cell. Also the
@@ -651,14 +654,14 @@ pub fn main() {
     let present_toile = RwSignal::new(PresentMode::Editing);
     let presenter_slide = RwSignal::new(SlidePosition::default());
     let presenter_notes = RwSignal::new(String::new());
-    let presenter_frame = RwSignal::new(None::<ambre_bus::app::toile::ElementId>);
+    let presenter_frame = RwSignal::new(None::<Id<Frame>>);
     // "Follow presenter" role signals (toile-presentation), mirrored from the
     // `PresentBroadcastChanged` / `FollowingChanged` events and from a peer's
     // broadcasting presence. `presenter_peer_toile` is the latest peer seen
     // broadcasting a slide; it drives the panel's Follow affordance.
     let broadcasting_toile = RwSignal::new(Broadcast::Private);
-    let following_toile = RwSignal::new(None::<ambre_bus::UserId>);
-    let presenter_peer_toile = RwSignal::new(None::<ambre_bus::UserId>);
+    let following_toile = RwSignal::new(None::<Id<User>>);
+    let presenter_peer_toile = RwSignal::new(None::<Id<User>>);
     let perf_snap = RwSignal::new(ambre_canvas::PerfSnapshot::default());
 
     // Sheet-tab strip model (`trame-sheets`): mirrored from `TrameEvent::SheetList`
@@ -765,7 +768,7 @@ pub fn main() {
     // The canvas needs a document from frame 0. Boot onto the routed one, or a
     // throwaway id on the landing route. The canvas is hidden there, and the
     // route effect swaps it to the real document on the first navigation.
-    let initial_doc = boot_doc.unwrap_or_default();
+    let initial_doc = boot_doc.unwrap_or_else(Id::mint);
 
     // Spawn the Logic thread (shares this instance's memory). Owns the UI/Sync
     // halves of its queues. The Sync-bound half (`logic_to_sync_tx`) is relayed
@@ -865,7 +868,7 @@ pub fn main() {
     let docs_slot: Slot<RwSignal<Vec<DocItem>>> = Rc::new(RefCell::new(None));
     let members_slot: Slot<RwSignal<Vec<MemberInfo>>> = Rc::new(RefCell::new(None));
     let devmode_slot: Slot<RwSignal<Option<landing::SignInMode>>> = Rc::new(RefCell::new(None));
-    let current_doc_slot: Slot<RwSignal<Option<DocumentId>>> = Rc::new(RefCell::new(None));
+    let current_doc_slot: Slot<RwSignal<Option<Id<Document>>>> = Rc::new(RefCell::new(None));
     let relays_slot: Slot<shell::Relays> = Rc::new(RefCell::new(None));
     let style_slot: Slot<trame_chrome::StyleState> = Rc::new(RefCell::new(None));
     let chrome_status_slot: Slot<RwSignal<ChromeStatus>> = Rc::new(RefCell::new(None));
@@ -1058,7 +1061,7 @@ pub fn main() {
     let persist_gone_frame = Rc::clone(&persist_gone);
     let vault_frame = vault.clone();
     let session_seen_frame = Rc::clone(&session_seen);
-    let mut persist_waiting: Vec<(DocumentId, ambre_logic::PersistWrite)> = Vec::new();
+    let mut persist_waiting: Vec<(Id<Document>, ambre_logic::PersistWrite)> = Vec::new();
     let mut last_anchor: Option<ambre_core::ViewPoint> = None;
     let mut last_busy = false;
     let mut last_perf_push_ms: f64 = 0.0;
@@ -1553,7 +1556,7 @@ pub fn main() {
                     let purpose = match murmure_relay.take_invite(*user_id) {
                         Some(channel_id) => tofu::Purpose::Channel { channel_id },
                         None => tofu::Purpose::Direct {
-                            channel_id: ambre_bus::ChannelId::new(),
+                            channel_id: Id::<ambre_core::id::Channel>::mint(),
                         },
                     };
                     classify_against_pin(TofuPrompt {
@@ -1767,7 +1770,7 @@ pub fn main() {
     let ch_tr_find_result = RwSignal::new(None::<trame_chrome::FindPosition>);
     let ch_toile_present = RwSignal::new(PresentMode::Editing);
     let ch_toile_find_result = RwSignal::new(None::<ambre_bus::app::toile::FindResults>);
-    let make_child_fn = move |document_id: DocumentId,
+    let make_child_fn = move |document_id: Id<Document>,
                               doc_type: ambre_bus::DocType,
                               size: ambre_draw::Size,
                               text_input: ambre_canvas::TextInput|
@@ -1958,21 +1961,21 @@ use shell::mount_shell;
 #[cfg(test)]
 mod chrome_status_tests {
     use super::ChromeStatus;
-    use ambre_bus::DocumentId;
+    use ambre_core::id::{Document, Id};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     /// `CHROME-104`: a failed open of the active document lowers its loading
     /// screen and raises a notice. A document already left keeps both down.
     #[wasm_bindgen_test]
     fn a_failed_open_ends_the_loading_screen() {
-        let active = DocumentId::new();
+        let active = Id::<Document>::mint();
         let loading = ChromeStatus {
             hydrating: true,
             connected: ambre_core::LinkState::Connected,
         };
 
         let mut left = loading;
-        assert_eq!(left.open_failed(Some(active), DocumentId::new()), None);
+        assert_eq!(left.open_failed(Some(active), Id::<Document>::mint()), None);
         assert!(
             left.hydrating,
             "another document's failure lowered the screen"
@@ -1990,9 +1993,10 @@ mod fan_out_tests {
         CHILD_BACKLOG_LIMIT, ChildBacklog, ChildRoutes, child_of, flush_child_backlog,
         send_to_child,
     };
+    use ambre_bus::UiEvent;
     use ambre_bus::conduit;
-    use ambre_bus::{DocumentId, UiEvent};
     use ambre_core::LinkState;
+    use ambre_core::id::{Document, Id};
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -2002,7 +2006,7 @@ mod fan_out_tests {
 
     /// An event a child's stream carries. Its `connected` flag tells two
     /// events apart, so the order they arrive in can be read back.
-    fn status(document_id: DocumentId, connected: LinkState) -> UiEvent {
+    fn status(document_id: Id<Document>, connected: LinkState) -> UiEvent {
         UiEvent::ConnectionStatus {
             document_id,
             connected,
@@ -2043,7 +2047,7 @@ mod fan_out_tests {
     #[wasm_bindgen_test]
     fn a_refused_event_waits_and_arrives_in_order() {
         let (routes, backlog) = fan_out();
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         let (tx, rx) = conduit::local::<UiEvent>(ambre_bus::conduit::ChannelCapacity::new(1));
         routes.borrow_mut().entry(doc).or_default().push(tx);
 
@@ -2077,7 +2081,7 @@ mod fan_out_tests {
     #[wasm_bindgen_test]
     fn an_overflowing_backlog_says_what_it_dropped() {
         let (routes, backlog) = fan_out();
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         let (tx, _rx) = conduit::local::<UiEvent>(ambre_bus::conduit::ChannelCapacity::new(1));
         routes.borrow_mut().entry(doc).or_default().push(tx);
         let errors = Arc::new(AtomicUsize::new(0));
@@ -2105,8 +2109,8 @@ mod fan_out_tests {
     #[wasm_bindgen_test]
     fn a_childs_event_never_reaches_the_board() {
         let (routes, backlog) = fan_out();
-        let child = DocumentId::new();
-        let board = DocumentId::new();
+        let child = Id::<Document>::mint();
+        let board = Id::<Document>::mint();
         let (tx, rx) = conduit::local::<UiEvent>(ambre_bus::conduit::ChannelCapacity::new(4));
         routes.borrow_mut().entry(child).or_default().push(tx);
         assert_eq!(

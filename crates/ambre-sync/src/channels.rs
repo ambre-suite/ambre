@@ -1,7 +1,7 @@
 use super::*;
 use ambre_bus::{
     ChannelDocument, ChannelDocumentKind, ChannelName, DirectMember, DocumentActivity,
-    MemberChannel, MetaId, SealedChannelKey, SegmentId, SpaceId,
+    MemberChannel, SealedChannelKey,
 };
 use ambre_core::{DocType, FixedBytes};
 
@@ -26,7 +26,11 @@ impl SyncState {
     /// channel and to a caller who is no member of it (`SRV-047`).
     /// `listed_in` names the space whose catalogue lists the channel; the
     /// listing answer then records which log admits a self-join (`SYNC-106`).
-    pub(crate) fn handle_open_channel(&self, channel_id: ChannelId, listed_in: Option<SpaceId>) {
+    pub(crate) fn handle_open_channel(
+        &self,
+        channel_id: Id<Channel>,
+        listed_in: Option<Id<Space>>,
+    ) {
         let Some(tx) = self.event_tx.clone() else {
             // No event bus, no HTTP: say so instead of leaving the view waiting.
             self.send_to_logic(LogicEvent::ChannelOpenFailed {
@@ -56,8 +60,8 @@ impl SyncState {
     /// the Sync loop.
     pub(crate) fn channel_listed(
         &mut self,
-        channel_id: ChannelId,
-        listed_in: Option<SpaceId>,
+        channel_id: Id<Channel>,
+        listed_in: Option<Id<Space>>,
         result: Result<Vec<ChannelDocument>, http::HttpError>,
     ) {
         match result {
@@ -100,7 +104,7 @@ impl SyncState {
     /// in the log of a channel a catalogue lists, and nowhere else
     /// (`SYNC-106`). That log also heeds the word of its space, as the walk
     /// of the open space's log last said it.
-    pub(crate) fn log_rule(&self, document_id: DocumentId) -> membership_log::LogRule {
+    pub(crate) fn log_rule(&self, document_id: Id<Document>) -> membership_log::LogRule {
         match self.self_join_logs.get(&document_id) {
             Some(space_id) => membership_log::LogRule {
                 self_join: membership_log::public_channel_self_join,
@@ -116,7 +120,7 @@ impl SyncState {
     /// The answer to a channel creation or a self-join, on the Sync loop.
     pub(crate) fn channel_answered(
         &self,
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         result: Result<LogicEvent, http::HttpError>,
     ) {
         match result {
@@ -137,7 +141,7 @@ impl SyncState {
     /// older key it names.
     pub(crate) fn space_keys(
         &self,
-        space_id: SpaceId,
+        space_id: Id<Space>,
     ) -> Result<(crate::chain::Keyring, StaticSecret), SyncError> {
         let space = self
             .documents
@@ -159,9 +163,9 @@ impl SyncState {
     /// retry finds it.
     pub(crate) fn handle_create_channel(
         &self,
-        channel_id: ChannelId,
-        space_id: SpaceId,
-        (meta, segment): (MetaId, SegmentId),
+        channel_id: Id<Channel>,
+        space_id: Id<Space>,
+        (meta, segment): (Id<Meta>, Id<Segment>),
         visibility: ambre_core::Visibility,
         name: Option<ambre_core::Name>,
     ) {
@@ -265,7 +269,7 @@ impl SyncState {
     /// Seal the name just written into `meta` beside it on the relay, under
     /// the key meta holds now (`SYNC-171`). No name seals an empty one. A
     /// failure is logged: the hint stays stale until the next name.
-    pub(crate) fn handle_name_channel(&self, meta: MetaId, name: Option<ambre_core::Name>) {
+    pub(crate) fn handle_name_channel(&self, meta: Id<Meta>, name: Option<ambre_core::Name>) {
         let held = self.documents.get(&meta.document_id());
         let sealed = held.ok_or(SyncError::NotOpen).and_then(|held| {
             self.seal_channel_name(meta, &held.doc_key, &name.unwrap_or_default())
@@ -295,7 +299,7 @@ impl SyncState {
     /// `name` sealed for the relay beside `meta`, under `key`.
     fn seal_channel_name(
         &self,
-        meta: MetaId,
+        meta: Id<Meta>,
         key: &DocumentKey,
         name: &ambre_core::Name,
     ) -> Result<ambre_core::Encoded<ambre_core::SealedName>, SyncError> {
@@ -315,8 +319,8 @@ impl SyncState {
     /// names with the role the join grants.
     pub(crate) fn handle_join_channel(
         &self,
-        channel_id: ChannelId,
-        space_id: SpaceId,
+        channel_id: Id<Channel>,
+        space_id: Id<Space>,
         sealed: &SealedChannelKey,
     ) {
         let prepared = self
@@ -358,10 +362,10 @@ impl SyncState {
     /// the current key of `meta`, whose members are the channel's.
     pub(crate) fn handle_close_segment(
         &self,
-        channel_id: ChannelId,
-        meta: MetaId,
-        closing: SegmentId,
-        successor: SegmentId,
+        channel_id: Id<Channel>,
+        meta: Id<Meta>,
+        closing: Id<Segment>,
+        successor: Id<Segment>,
     ) {
         let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
@@ -401,7 +405,7 @@ impl SyncState {
     /// user.
     fn channel_creation(
         &self,
-        meta: MetaId,
+        meta: Id<Meta>,
     ) -> Result<
         (
             ambre_bus::conduit::UnboundedSender<SyncEvent>,
@@ -427,10 +431,10 @@ impl SyncState {
     /// segment's successor did.
     pub(crate) fn handle_create_amendments(
         &self,
-        channel_id: ChannelId,
-        meta: MetaId,
-        segment: SegmentId,
-        amendments: DocumentId,
+        channel_id: Id<Channel>,
+        meta: Id<Meta>,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
     ) {
         let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
@@ -471,11 +475,11 @@ impl SyncState {
     /// It opens under the current key of `meta`, as amendments do.
     pub(crate) fn handle_create_thread(
         &self,
-        channel_id: ChannelId,
-        meta: MetaId,
-        segment: SegmentId,
-        root: ambre_bus::MessageId,
-        thread: DocumentId,
+        channel_id: Id<Channel>,
+        meta: Id<Meta>,
+        segment: Id<Segment>,
+        root: Id<Message>,
+        thread: Id<Document>,
     ) {
         let (tx, meta_key, exchange_key, author) = match self.channel_creation(meta) {
             Ok(prepared) => prepared,
@@ -517,7 +521,7 @@ impl SyncState {
     /// Ask the relay to delete a channel with every document it groups
     /// (`SRV-142`). The documents stay open here until the Logic thread hears
     /// the answer and closes them, so a refusal leaves the channel whole.
-    pub(crate) fn handle_delete_channel(&self, channel_id: ChannelId) {
+    pub(crate) fn handle_delete_channel(&self, channel_id: Id<Channel>) {
         let Some(tx) = self.event_tx.clone() else {
             return self.channel_answered(channel_id, Err(SyncError::NoRelay.into()));
         };
@@ -535,7 +539,7 @@ impl SyncState {
     /// Ask the relay to remove this user from a channel. The documents stay
     /// open here until the Logic thread hears the answer and closes them. A
     /// refusal leaves the channel whole, as with a delete.
-    pub(crate) fn handle_leave_channel(&self, channel_id: ChannelId) {
+    pub(crate) fn handle_leave_channel(&self, channel_id: Id<Channel>) {
         let Some(tx) = self.event_tx.clone() else {
             return self.channel_answered(channel_id, Err(SyncError::NoRelay.into()));
         };
@@ -571,8 +575,8 @@ impl SyncState {
     /// in the log names.
     pub(crate) fn handle_create_direct_message(
         &self,
-        channel_id: ChannelId,
-        ids: (MetaId, SegmentId),
+        channel_id: Id<Channel>,
+        ids: (Id<Meta>, Id<Segment>),
         members: Vec<DirectMember>,
     ) {
         // The cap counts the creator, whom `members` leaves out. It holds
@@ -633,7 +637,7 @@ impl SyncState {
     /// in quarantine. Those are sequenced and not shown, and a cursor moved
     /// past them would skip them. The cursor then stays where it was, which
     /// leaves the channel unread rather than read too far.
-    pub(crate) fn read_up_to(&self, document_id: DocumentId) -> Option<Seq> {
+    pub(crate) fn read_up_to(&self, document_id: Id<Document>) -> Option<Seq> {
         let doc = self.documents.get(&document_id)?;
         (doc.last_seq.0 > 0 && doc.quarantine_len() == 0).then_some(doc.last_seq)
     }
@@ -642,10 +646,10 @@ impl SyncState {
     /// unread spec). Each live segment moves to what this worker delivered.
     /// Each final segment no longer changes, so it moves to the relay's last
     /// number.
-    pub(crate) fn handle_mark_read(&self, live: &[SegmentId], finals: Vec<SegmentId>) {
-        let cursors: Vec<(DocumentId, Seq)> = live
+    pub(crate) fn handle_mark_read(&self, live: &[Id<Segment>], finals: Vec<Id<Segment>>) {
+        let cursors: Vec<(Id<Document>, Seq)> = live
             .iter()
-            .map(SegmentId::document_id)
+            .map(Id::<Segment>::document_id)
             .filter_map(|document_id| self.read_up_to(document_id).map(|seq| (document_id, seq)))
             .collect();
         if self.event_tx.is_none() {
@@ -662,7 +666,7 @@ impl SyncState {
                 let url = crate::http::ApiRoot::of(url_scheme, &api_base)
                     .route("/read-cursors/mark-read");
                 let body = http::MarkReadRequest {
-                    documents: Some(finals.iter().map(SegmentId::document_id).collect()),
+                    documents: Some(finals.iter().map(Id::<Segment>::document_id).collect()),
                 };
                 if let Err(e) = http::post_json_auth_ok(&url, &body, auth).await {
                     tracing::warn!("Sync: read cursors of the final segments not moved: {e}");
@@ -674,7 +678,7 @@ impl SyncState {
     /// Move each listed cursor to the number Logic chose, back as well as
     /// forward: marking a message unread (the Murmure unread spec). No other
     /// cursor moves.
-    pub(crate) fn handle_move_read_cursors(&self, cursors: Vec<(SegmentId, Seq)>) {
+    pub(crate) fn handle_move_read_cursors(&self, cursors: Vec<(Id<Segment>, Seq)>) {
         self.move_cursors(
             cursors
                 .into_iter()
@@ -686,14 +690,14 @@ impl SyncState {
     /// Move the cursor of one thread to what this worker delivered on it
     /// (the Murmure threads spec). A thread not open, empty or holding a
     /// quarantine keeps its cursor, so a reply is never read too far.
-    pub(crate) fn handle_mark_thread_read(&self, thread: DocumentId) {
+    pub(crate) fn handle_mark_thread_read(&self, thread: Id<Document>) {
         match self.read_up_to(thread) {
             Some(seq) => self.move_cursors(vec![(thread, seq)]),
             None => tracing::warn!("Sync: thread {thread} has nothing delivered, its cursor stays"),
         }
     }
 
-    fn move_cursors(&self, cursors: Vec<(DocumentId, Seq)>) {
+    fn move_cursors(&self, cursors: Vec<(Id<Document>, Seq)>) {
         if self.event_tx.is_none() {
             tracing::warn!("Sync: no relay on this transport, the read cursors stay");
             return;
@@ -753,7 +757,7 @@ impl SyncState {
 
     /// List the channels the relay holds as public in a space (`SRV-189`),
     /// so a space admin can drop an entry whose channel is gone.
-    pub(crate) fn handle_list_space_channels(&self, space_id: SpaceId) {
+    pub(crate) fn handle_list_space_channels(&self, space_id: Id<Space>) {
         let Some(tx) = self.event_tx.clone() else {
             tracing::warn!("Sync: no relay on this transport, no channels of a space");
             return;
@@ -776,8 +780,8 @@ impl SyncState {
     /// the Sync loop. A failure answers nothing: the catalogue stays as it is.
     pub(crate) fn space_channels_listed(
         &self,
-        space_id: SpaceId,
-        result: Result<Vec<ChannelId>, http::HttpError>,
+        space_id: Id<Space>,
+        result: Result<Vec<Id<Channel>>, http::HttpError>,
     ) {
         match result {
             Ok(channels) => self.send_to_logic(LogicEvent::SpaceChannels { space_id, channels }),
@@ -878,7 +882,7 @@ impl SyncState {
 /// message also carries its other members.
 pub(crate) struct MemberListing {
     pub(crate) channels: Vec<MemberChannel>,
-    pub(crate) spaces: Vec<SpaceId>,
+    pub(crate) spaces: Vec<Id<Space>>,
     pub(crate) names: Vec<ChannelName>,
     pub(crate) peers: Vec<ambre_bus::DirectPeers>,
     /// The key of each channel's `meta` that opened, with its channel.
@@ -946,7 +950,7 @@ async fn open_channel_names(
 /// leaves that cursor where it was and says so in the log.
 async fn put_cursors(
     base: &crate::http::ApiRoot,
-    cursors: Vec<(DocumentId, Seq)>,
+    cursors: Vec<(Id<Document>, Seq)>,
     auth: http::AuthContext,
 ) {
     for (document_id, seq) in cursors {
@@ -960,9 +964,9 @@ async fn put_cursors(
 
 /// The aad of a sealed channel key: it binds the key to its channel, so a
 /// catalogue entry moved under another channel fails to open.
-fn channel_key_aad(channel_id: ChannelId) -> ambre_core::Aad {
+fn channel_key_aad(channel_id: Id<Channel>) -> ambre_core::Aad {
     let mut aad = b"ambre-channel-key:".to_vec();
-    aad.extend_from_slice(ambre_core::Uuid::from(channel_id).as_bytes());
+    aad.extend_from_slice(channel_id.as_bytes());
     ambre_core::Aad::new(aad)
 }
 
@@ -982,7 +986,7 @@ fn digest_of(
 /// (`SYNC-045`), and a rotation of the space shows which entries it left
 /// behind.
 pub(crate) fn seal_channel_key(
-    channel_id: ChannelId,
+    channel_id: Id<Channel>,
     channel_key: &DocumentKey,
     space_key: &DocumentKey,
     meta_anchor: FixedBytes<ambre_protocol::EntryDigest>,
@@ -1010,7 +1014,7 @@ pub(crate) fn sealed_under(sealed: &SealedChannelKey) -> Option<FixedBytes<KeyId
 /// The space key that opens it is the one its first bytes name, as `keys`
 /// reach it.
 pub(crate) fn unseal_channel_key(
-    channel_id: ChannelId,
+    channel_id: Id<Channel>,
     sealed: &SealedChannelKey,
     keys: &crate::chain::Keyring,
 ) -> Result<(DocumentKey, Option<FixedBytes<ambre_protocol::EntryDigest>>), SyncError> {
@@ -1033,7 +1037,7 @@ pub(crate) fn unseal_channel_key(
 /// The wrap carries the anchor the catalogue sealed, so the joiner replays
 /// meta's log from the word of the member who created the channel.
 pub(crate) fn join_key(
-    channel_id: ChannelId,
+    channel_id: Id<Channel>,
     sealed: &SealedChannelKey,
     space_keys: &crate::chain::Keyring,
     exchange_key: &StaticSecret,
@@ -1098,15 +1102,15 @@ pub(crate) fn self_join_entry(
 pub(crate) fn direct_message_request(
     author: &crate::sharing::Author,
     exchange_key: &StaticSecret,
-    channel_id: ChannelId,
-    (meta, segment): (MetaId, SegmentId),
+    channel_id: Id<Channel>,
+    (meta, segment): (Id<Meta>, Id<Segment>),
     members: &[(&DirectMember, FixedBytes<ambre_core::PublicKey>)],
 ) -> Result<http::CreateDirectMessageRequest, SyncError> {
     let key = DocumentKey::generate();
     let document = meta.document_id();
     let own_key = author.public();
-    let others: Vec<UserId> = members.iter().map(|(m, _)| m.user_id).collect();
-    let signing_keys: HashMap<UserId, FixedBytes<ambre_core::PublicKey>> = members
+    let others: Vec<Id<User>> = members.iter().map(|(m, _)| m.user_id).collect();
+    let signing_keys: HashMap<Id<User>, FixedBytes<ambre_core::PublicKey>> = members
         .iter()
         .map(|(m, signing)| (m.user_id, *signing))
         .chain([(author.user_id, own_key)])
@@ -1218,8 +1222,8 @@ pub(crate) mod tests {
 
     #[test]
     fn a_listing_parses_into_its_documents_in_order() {
-        let meta = DocumentId::new();
-        let segment = DocumentId::new();
+        let meta = Id::<Document>::mint();
+        let segment = Id::<Document>::mint();
         let parsed = listing(&[
             (&meta.to_string(), "meta"),
             (&segment.to_string(), "segment"),
@@ -1242,7 +1246,7 @@ pub(crate) mod tests {
 
     #[test]
     fn one_unreadable_row_fails_the_whole_listing() {
-        let meta = DocumentId::new().to_string();
+        let meta = Id::<Document>::mint().to_string();
         // Bad document_id causes an error
         assert!(listing(&[(&meta, "meta"), ("nope", "segment")]).is_err());
         // Single valid entry succeeds
@@ -1270,7 +1274,7 @@ pub(crate) mod tests {
 
     #[test]
     fn an_activity_answer_parses_into_its_documents() {
-        let (channel, segment) = (ChannelId::new(), DocumentId::new());
+        let (channel, segment) = (Id::<Channel>::mint(), Id::<Document>::mint());
         let parsed = activity(&channel.to_string(), &segment.to_string(), true).expect("ok");
         assert_eq!(
             parsed,
@@ -1330,7 +1334,7 @@ pub(crate) mod tests {
 
     /// A channel key sealed for the catalogue, and its creator's own copy.
     fn new_channel_key(
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         space_key: &DocumentKey,
         creator: &StaticSecret,
     ) -> (
@@ -1349,7 +1353,7 @@ pub(crate) mod tests {
     /// that replaced each of `previous`.
     pub(crate) fn ring(current: &DocumentKey, previous: &[&DocumentKey]) -> crate::chain::Keyring {
         crate::chain::Keyring {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             current: current.clone(),
             previous: previous.iter().map(|&key| key.clone()).collect(),
             chain: crate::chain::Chain::default(),
@@ -1372,7 +1376,7 @@ pub(crate) mod tests {
     fn a_self_join_unseals_the_catalogue_key_and_wraps_it_for_the_joiner_alone() {
         let space_key = DocumentKey::generate();
         let (alice, bob, eve) = (exchange_key(1), exchange_key(2), exchange_key(3));
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         let (sealed, alice_enc) = new_channel_key(channel_id, &space_key, &alice);
         let channel_key = unwrap_own(&alice, &alice_enc).expect("Alice opens her own wrap");
 
@@ -1392,7 +1396,7 @@ pub(crate) mod tests {
     #[test]
     fn a_sealed_channel_key_opens_for_its_own_channel_and_space_only() {
         let space_key = DocumentKey::generate();
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         let (sealed, _) = new_channel_key(channel_id, &space_key, &exchange_key(1));
         let keys = ring(&space_key, &[]);
         assert_eq!(
@@ -1407,7 +1411,7 @@ pub(crate) mod tests {
         assert_eq!(anchor, Some(ANCHOR));
         let stranger = ring(&DocumentKey::generate(), &[]);
         assert!(unseal_channel_key(channel_id, &sealed, &stranger).is_err());
-        assert!(unseal_channel_key(ChannelId::new(), &sealed, &keys).is_err());
+        assert!(unseal_channel_key(Id::<Channel>::mint(), &sealed, &keys).is_err());
         let short = SealedChannelKey::from_bytes(vec![0; 8]);
         assert!(unseal_channel_key(channel_id, &short, &keys).is_err());
         assert_eq!(sealed_under(&short), None);
@@ -1419,7 +1423,7 @@ pub(crate) mod tests {
     #[test]
     fn a_sealed_channel_key_names_its_space_key_and_opens_after_a_rotation() {
         let (old, new) = (DocumentKey::generate(), DocumentKey::generate());
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         let (sealed, _) = new_channel_key(channel_id, &old, &exchange_key(1));
         assert_eq!(sealed_under(&sealed), Some(old.id()));
         let rotated = ring(&new, &[&old]);
@@ -1433,12 +1437,12 @@ pub(crate) mod tests {
     fn with_no_relay_a_creation_and_a_join_fail_at_once() {
         let (sink, rx) = LogicSink::channel();
         let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let (channel_id, space_id) = (ChannelId::new(), SpaceId::new());
+        let (channel_id, space_id) = (Id::<Channel>::mint(), Id::<Space>::mint());
         for visibility in [
             ambre_core::Visibility::Public,
             ambre_core::Visibility::Private,
         ] {
-            let documents = (MetaId::new(), SegmentId::new());
+            let documents = (Id::<Meta>::mint(), Id::<Segment>::mint());
             state.handle_create_channel(channel_id, space_id, documents, visibility, None);
         }
         state.handle_join_channel(
@@ -1461,8 +1465,8 @@ pub(crate) mod tests {
     fn a_delete_answers_logic_and_leaves_the_sessions_to_it() {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let channel_id = ChannelId::new();
-        let meta = DocumentId::new();
+        let channel_id = Id::<Channel>::mint();
+        let meta = Id::<Document>::mint();
         state.documents.insert(
             meta,
             SyncDocumentState::new(
@@ -1506,8 +1510,8 @@ pub(crate) mod tests {
     fn a_leave_answers_logic_and_leaves_the_sessions_to_it() {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let channel_id = ChannelId::new();
-        let meta = DocumentId::new();
+        let channel_id = Id::<Channel>::mint();
+        let meta = Id::<Document>::mint();
         state.documents.insert(
             meta,
             SyncDocumentState::new(
@@ -1552,7 +1556,7 @@ pub(crate) mod tests {
     fn a_listing_refused_for_want_of_membership_reads_as_refused() {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         let url = "https://relay.example/api/channels/c/documents";
         for (status, code) in [
             (403, Some(ambre_core::RefusalCode::Forbidden)),
@@ -1587,8 +1591,8 @@ pub(crate) mod tests {
     fn a_listing_of_a_space_forwards_its_channels_and_a_failure_nothing() {
         let (sink, rx) = LogicSink::channel();
         let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let space_id = SpaceId::new();
-        let channel_id = ChannelId::new();
+        let space_id = Id::<Space>::mint();
+        let channel_id = Id::<Channel>::mint();
         let body = format!(r#"{{"channels":["{channel_id}"]}}"#);
         let answer: http::SpaceChannelsResponse = serde_json::from_str(&body).expect("decodes");
         state.space_channels_listed(space_id, Ok(answer.channels));
@@ -1616,7 +1620,7 @@ pub(crate) mod tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         for doc_type in [DocType::Prose, DocType::Murmure] {
             state.handle_ws_message(ambre_protocol::ws::WsServerMsg::DocumentShared {
-                document_id: DocumentId::new(),
+                document_id: Id::<Document>::mint(),
                 doc_type,
             });
         }
@@ -1639,8 +1643,12 @@ pub(crate) mod tests {
     fn the_loss_of_a_document_not_held_as_another_kind_lists_the_users_channels() {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        state.user_id = Some(UserId::new());
-        let (prose, murmure, unheld) = (DocumentId::new(), DocumentId::new(), DocumentId::new());
+        state.user_id = Some(Id::<User>::mint());
+        let (prose, murmure, unheld) = (
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+        );
         for (id, doc_type) in [(prose, DocType::Prose), (murmure, DocType::Murmure)] {
             let doc = crate::SyncDocumentState::new(
                 id,
@@ -1676,9 +1684,13 @@ pub(crate) mod tests {
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
         state.handle_list_member_channels();
         state.handle_list_member_channels();
-        let (space, bare) = (SpaceId::new(), SpaceId::new());
-        let (public, private, direct) = (ChannelId::new(), ChannelId::new(), ChannelId::new());
-        let meta = MetaId::new();
+        let (space, bare) = (Id::<Space>::mint(), Id::<Space>::mint());
+        let (public, private, direct) = (
+            Id::<Channel>::mint(),
+            Id::<Channel>::mint(),
+            Id::<Channel>::mint(),
+        );
+        let meta = Id::<Meta>::mint();
         // A wrap of the right length that opens under no key of this user.
         let keys = format!(
             r#""doc_key_enc":{},"wrapper_exchange_pub_key":null"#,
@@ -1791,9 +1803,9 @@ pub(crate) mod tests {
         let doc_key_enc =
             ambre_core::Encoded::new([wrapped.nonce.as_slice(), &wrapped.ciphertext.0].concat());
         let entry =
-            |meta: MetaId, name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>| {
+            |meta: Id<Meta>, name_enc: Option<ambre_core::Encoded<ambre_core::SealedName>>| {
                 http::MemberChannelEntry {
-                    channel_id: ChannelId::new(),
+                    channel_id: Id::<Channel>::mint(),
                     space_id: None,
                     visibility: ambre_core::Visibility::Private,
                     meta_id: meta,
@@ -1804,8 +1816,12 @@ pub(crate) mod tests {
                     meta_last: None,
                 }
             };
-        let (named, elsewhere, cleared, bare) =
-            (MetaId::new(), MetaId::new(), MetaId::new(), MetaId::new());
+        let (named, elsewhere, cleared, bare) = (
+            Id::<Meta>::mint(),
+            Id::<Meta>::mint(),
+            Id::<Meta>::mint(),
+            Id::<Meta>::mint(),
+        );
         let seal = |meta, name: &str| {
             Some(
                 state
@@ -1816,7 +1832,7 @@ pub(crate) mod tests {
         let answer = http::MemberChannelsResponse {
             channels: vec![
                 entry(named, seal(named, "Design")),
-                entry(elsewhere, seal(MetaId::new(), "Forged")),
+                entry(elsewhere, seal(Id::<Meta>::mint(), "Forged")),
                 entry(cleared, seal(cleared, "")),
                 entry(bare, None),
             ],
@@ -1862,7 +1878,7 @@ pub(crate) mod tests {
     fn a_channel_name_is_sealed_under_the_channel_key_for_its_meta() {
         let mut state =
             SyncState::new(LogicSink::channel().0, crate::RelayHost::new(String::new()));
-        let (meta, key) = (MetaId::new(), DocumentKey::generate());
+        let (meta, key) = (Id::<Meta>::mint(), DocumentKey::generate());
         let design = ambre_core::Name::new("Design").unwrap();
         assert!(
             state.seal_channel_name(meta, &key, &design).is_err(),
@@ -1881,7 +1897,7 @@ pub(crate) mod tests {
                 .map(ambre_core::Name::as_str),
             Some("Design")
         );
-        assert_eq!(open(DocumentId::new()), None);
+        assert_eq!(open(Id::<Document>::mint()), None);
     }
 
     /// `SYNC-170`: a space this client creates is marked until the relay
@@ -1891,8 +1907,8 @@ pub(crate) mod tests {
     fn a_new_space_is_created_as_a_space() {
         let (sink, _rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let (space, gone) = (SpaceId::new(), SpaceId::new());
-        let other = DocumentId::new();
+        let (space, gone) = (Id::<Space>::mint(), Id::<Space>::mint());
+        let other = Id::<Document>::mint();
         state.handle_command(SyncCommand::CreateSpace { space_id: space });
         state.handle_command(SyncCommand::CreateSpace { space_id: gone });
         state.handle_command(SyncCommand::OpenDocument {
@@ -1902,7 +1918,7 @@ pub(crate) mod tests {
         state.handle_command(SyncCommand::CloseDocument {
             document_id: gone.document_id(),
         });
-        let body = |state: &SyncState, document_id: DocumentId| {
+        let body = |state: &SyncState, document_id: Id<Document>| {
             let request = http::CreateDocumentRequest {
                 doc_type: DocType::Murmure,
                 name_enc: None,
@@ -1935,7 +1951,7 @@ pub(crate) mod tests {
     fn a_listed_meta_walks_under_the_word_of_its_open_space() {
         let (sink, _rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let (space_id, meta) = (SpaceId::new(), DocumentId::new());
+        let (space_id, meta) = (Id::<Space>::mint(), Id::<Document>::mint());
         let document_id = space_id.document_id();
         let mut space = SyncDocumentState::new(
             document_id,
@@ -1943,7 +1959,7 @@ pub(crate) mod tests {
             DocType::Murmure,
             crate::Existence::OnRelay,
         );
-        space.word.removed.insert(ambre_bus::UserId::new());
+        space.word.removed.insert(Id::<User>::mint());
         let word = space.word.clone();
         state.documents.insert(document_id, space);
         assert_eq!(state.log_rule(meta).space, None);
@@ -1955,7 +1971,7 @@ pub(crate) mod tests {
     fn with_no_relay_the_open_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
         let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         state.handle_open_channel(channel_id, None);
         let events: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(matches!(
@@ -1985,7 +2001,7 @@ pub(crate) mod tests {
 
     fn member_of(exchange_key: &StaticSecret) -> DirectMember {
         DirectMember {
-            user_id: UserId::new(),
+            user_id: Id::<User>::mint(),
             exchange_pub_key: crate::sharing::own_exchange_key(exchange_key),
         }
     }
@@ -1996,7 +2012,7 @@ pub(crate) mod tests {
     #[test]
     fn a_direct_message_makes_every_member_an_editor_under_one_key() {
         let author = crate::sharing::Author {
-            user_id: UserId::new(),
+            user_id: Id::<User>::mint(),
             signing_key: SigningKey::from_bytes(&[4; 32]),
         };
         let alice = exchange_key(1);
@@ -2016,12 +2032,12 @@ pub(crate) mod tests {
                 )
             })
             .collect();
-        let meta = MetaId::new();
+        let meta = Id::<Meta>::mint();
         let body = direct_message_request(
             &author,
             &alice,
-            ChannelId::new(),
-            (meta, SegmentId::new()),
+            Id::<Channel>::mint(),
+            (meta, Id::<Segment>::mint()),
             &invited,
         )
         .expect("request");
@@ -2081,8 +2097,8 @@ pub(crate) mod tests {
             let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
             let members = (0..others).map(|_| member_of(&exchange_key(2))).collect();
             state.handle_create_direct_message(
-                ChannelId::new(),
-                (MetaId::new(), SegmentId::new()),
+                Id::<Channel>::mint(),
+                (Id::<Meta>::mint(), Id::<Segment>::mint()),
                 members,
             );
             match rx.try_iter().collect::<Vec<_>>().as_slice() {
@@ -2098,9 +2114,13 @@ pub(crate) mod tests {
     fn with_no_relay_a_direct_message_fails_at_once() {
         let (sink, rx) = LogicSink::channel();
         let state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let channel_id = ChannelId::new();
+        let channel_id = Id::<Channel>::mint();
         let members = vec![member_of(&exchange_key(2))];
-        state.handle_create_direct_message(channel_id, (MetaId::new(), SegmentId::new()), members);
+        state.handle_create_direct_message(
+            channel_id,
+            (Id::<Meta>::mint(), Id::<Segment>::mint()),
+            members,
+        );
         let events: Vec<LogicEvent> = rx.try_iter().collect();
         assert!(matches!(
             events.as_slice(),
@@ -2115,7 +2135,7 @@ pub(crate) mod tests {
     fn a_channel_key_the_old_code_sealed_still_names_its_space_key_and_opens() {
         let space_key = DocumentKey::from_array([0x22; 32]);
         let channel_key = DocumentKey::from_array([0x33; 32]);
-        let channel_id = ChannelId::from_bytes([0x44; 16]);
+        let channel_id = Id::<Channel>::from_bytes([0x44; 16]);
         let sealed = SealedChannelKey::from_bytes(
             hex::decode(
                 "9479381e0c27f84d6d91c3eecc99fba280ff12c6dbadd55baceaf1a971b717dd\

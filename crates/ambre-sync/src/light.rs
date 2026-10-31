@@ -8,7 +8,6 @@
 
 use super::*;
 
-use ambre_bus::{MetaId, SegmentId};
 use ambre_core::activity::ActivityCounters;
 
 /// What the Sync worker keeps of a document the Logic thread evicted.
@@ -76,7 +75,7 @@ impl LightSubscription {
         &mut self,
         seq: Seq,
         update: &Update,
-        me: Option<UserId>,
+        me: Option<Id<User>>,
         mine: Option<&FixedBytes<PublicKey>>,
     ) -> Option<ActivityCounters> {
         if seq.0 <= self.seen.0 {
@@ -110,7 +109,7 @@ impl SyncState {
     /// The Logic thread evicted a document (`RESID-006`). The full session
     /// becomes a light subscription once the relay acknowledged every frame
     /// this client sent for it (`RESID-009`).
-    pub(crate) fn handle_release_document(&mut self, document_id: DocumentId, applied: Seq) {
+    pub(crate) fn handle_release_document(&mut self, document_id: Id<Document>, applied: Seq) {
         let Some(doc) = self.documents.get_mut(&document_id) else {
             return;
         };
@@ -120,7 +119,7 @@ impl SyncState {
 
     /// Turns a released session into a light subscription, unless a frame
     /// is still unacknowledged. The echo of that frame calls it again.
-    pub(crate) fn settle_release(&mut self, document_id: DocumentId) {
+    pub(crate) fn settle_release(&mut self, document_id: Id<Document>) {
         let unsent_here = self
             .pending_pre_session_updates
             .iter()
@@ -180,7 +179,7 @@ impl SyncState {
     /// The frames read under a key it lacked counted as activity alone. They
     /// are asked again, so their summaries count under the new key
     /// (`RESID-024`). A key it already held replays nothing.
-    pub(crate) fn rekey_light(&mut self, document_id: DocumentId, new_key: DocumentKey) {
+    pub(crate) fn rekey_light(&mut self, document_id: Id<Document>, new_key: DocumentKey) {
         let Some(light) = self.light.get_mut(&document_id) else {
             return;
         };
@@ -212,21 +211,21 @@ impl SyncState {
     /// light subscription under the key of `meta` (`SYNC-162`). A segment
     /// already held, in full or light, is left as it is. A `meta` this
     /// worker holds no key for watches nothing.
-    pub(crate) fn handle_watch_segment(&mut self, segment: SegmentId, meta: MetaId) {
+    pub(crate) fn handle_watch_segment(&mut self, segment: Id<Segment>, meta: Id<Meta>) {
         self.watch_light(segment.document_id(), meta, Seq(0));
     }
 
     /// Counts a thread whose root is not on screen from the number after
     /// `after`, its read cursor (the Murmure threads spec). Its summaries are
     /// read, and no document is loaded.
-    pub(crate) fn handle_watch_thread(&mut self, thread: DocumentId, meta: MetaId, after: Seq) {
+    pub(crate) fn handle_watch_thread(&mut self, thread: Id<Document>, meta: Id<Meta>, after: Seq) {
         self.watch_light(thread, meta, after);
     }
 
     /// Holds `document_id` as a light subscription under the key of `meta`,
     /// and asks the relay for what follows `after`. A document already held,
     /// in full or light, is left as it is.
-    fn watch_light(&mut self, document_id: DocumentId, meta: MetaId, after: Seq) {
+    fn watch_light(&mut self, document_id: Id<Document>, meta: Id<Meta>, after: Seq) {
         if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
             return;
         }
@@ -258,9 +257,9 @@ impl SyncState {
     /// for watches nothing.
     pub(crate) fn handle_watch_channel(
         &mut self,
-        channel_id: ChannelId,
-        (meta, meta_last): (MetaId, Option<Seq>),
-        documents: &[(DocumentId, Option<Seq>)],
+        channel_id: Id<Channel>,
+        (meta, meta_last): (Id<Meta>, Option<Seq>),
+        documents: &[(Id<Document>, Option<Seq>)],
     ) {
         let Some(doc_key) = self
             .listed_keys
@@ -281,7 +280,7 @@ impl SyncState {
     /// No copy of it exists, so its horizon is the first number: an open
     /// fetches it whole (`RESID-010`). The relay is asked for what follows
     /// `last`, and for nothing when there is none: the head.
-    fn watch_unheld(&mut self, document_id: DocumentId, key: &DocumentKey, last: Option<Seq>) {
+    fn watch_unheld(&mut self, document_id: Id<Document>, key: &DocumentKey, last: Option<Seq>) {
         if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
             return;
         }
@@ -309,7 +308,7 @@ impl SyncState {
     /// A thread took a delta (the Murmure threads spec). A thread held in
     /// full or light hears it on its own topic. Any other is named to the
     /// Logic thread, which decides what to load.
-    pub(crate) fn thread_activity(&mut self, document_id: DocumentId) {
+    pub(crate) fn thread_activity(&mut self, document_id: Id<Document>) {
         if self.documents.contains_key(&document_id) || self.light.contains_key(&document_id) {
             return;
         }
@@ -318,13 +317,13 @@ impl SyncState {
 
     /// Takes the light subscription of a document being reopened: its kind
     /// and the horizon the reopen resumes after.
-    pub(crate) fn take_light(&mut self, document_id: DocumentId) -> Option<Seq> {
+    pub(crate) fn take_light(&mut self, document_id: Id<Document>) -> Option<Seq> {
         self.light.remove(&document_id).map(|light| light.horizon)
     }
 
     /// The light subscriptions the socket subscribes and replays, with the
     /// cursor each resumes after.
-    pub(crate) fn light_cursors(&self) -> Vec<(DocumentId, Seq)> {
+    pub(crate) fn light_cursors(&self) -> Vec<(Id<Document>, Seq)> {
         self.light
             .iter()
             .filter(|(_, light)| light.on_relay == crate::Existence::OnRelay && light.replays)
@@ -334,7 +333,7 @@ impl SyncState {
 
     /// The light subscriptions watched from the head that took no delta
     /// yet: the socket subscribes them and asks for nothing.
-    pub(crate) fn light_heads(&self) -> Vec<DocumentId> {
+    pub(crate) fn light_heads(&self) -> Vec<Id<Document>> {
         self.light
             .iter()
             .filter(|(_, light)| light.on_relay == crate::Existence::OnRelay && !light.replays)
@@ -343,7 +342,7 @@ impl SyncState {
     }
 
     /// The cursor one light subscription resumes after, if the relay holds it.
-    pub(crate) fn light_cursor(&self, document_id: DocumentId) -> Option<Seq> {
+    pub(crate) fn light_cursor(&self, document_id: Id<Document>) -> Option<Seq> {
         self.light
             .get(&document_id)
             .filter(|light| light.on_relay == crate::Existence::OnRelay)
@@ -352,7 +351,7 @@ impl SyncState {
 
     /// The kind of a document held as a light subscription.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn light_doc_type(&self, document_id: DocumentId) -> Option<DocType> {
+    pub(crate) fn light_doc_type(&self, document_id: Id<Document>) -> Option<DocType> {
         self.light.get(&document_id).map(|light| light.doc_type)
     }
 }
@@ -370,14 +369,14 @@ mod tests {
     ) -> (
         SyncState,
         ambre_bus::conduit::Receiver<LogicEvent>,
-        DocumentId,
+        Id<Document>,
         DocumentKey,
-        SnapshotId,
+        Id<Snapshot>,
     ) {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        state.user_id = Some(UserId::from_bytes([7; 16]));
-        let document_id = DocumentId::new();
+        state.user_id = Some(Id::<User>::from_bytes([7; 16]));
+        let document_id = Id::<Document>::mint();
         let doc_key = DocumentKey::generate();
         let mut doc = SyncDocumentState::new(
             document_id,
@@ -397,8 +396,8 @@ mod tests {
     }
 
     fn update(
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         doc_key: &DocumentKey,
         summary: Option<&ActivitySummary>,
     ) -> Update {
@@ -418,7 +417,7 @@ mod tests {
     fn mention() -> ActivitySummary {
         ActivitySummary {
             kind: ActivityKind::Content,
-            mentions: vec![UserId::from_bytes([7; 16])],
+            mentions: vec![Id::<User>::from_bytes([7; 16])],
             mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
         }
@@ -526,7 +525,7 @@ mod tests {
         };
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let doc_key = DocumentKey::generate();
         let doc = SyncDocumentState::new(
             document_id,
@@ -593,8 +592,8 @@ mod tests {
         drain(&rx);
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let segment = SegmentId::new();
-        let meta = MetaId::from_document(meta);
+        let segment = Id::<Segment>::mint();
+        let meta = Id::<Meta>::from_document(meta);
         state.handle_command(SyncCommand::WatchSegment { segment, meta });
         let document_id = segment.document_id();
         let sent: Vec<WsClientMsg> = ws_rx
@@ -617,7 +616,12 @@ mod tests {
         assert_eq!(state.light_cursor(document_id), Some(Seq(0)));
         state.receive_update(
             Seq(1),
-            update(document_id, SnapshotId::new(), &doc_key, Some(&mention())),
+            update(
+                document_id,
+                Id::<Snapshot>::mint(),
+                &doc_key,
+                Some(&mention()),
+            ),
         );
         let events = drain(&rx);
         let [LogicEvent::Activity { counters, .. }] = events.as_slice() else {
@@ -639,8 +643,8 @@ mod tests {
         drain(&rx);
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let thread = DocumentId::new();
-        let meta = MetaId::from_document(meta);
+        let thread = Id::<Document>::mint();
+        let meta = Id::<Meta>::from_document(meta);
         state.handle_command(SyncCommand::WatchThread {
             thread,
             meta,
@@ -663,7 +667,7 @@ mod tests {
             ),
             "expected a subscribe and a request after the cursor, got {sent:?}"
         );
-        let reply = || update(thread, SnapshotId::new(), &doc_key, Some(&mention()));
+        let reply = || update(thread, Id::<Snapshot>::mint(), &doc_key, Some(&mention()));
         state.receive_update(Seq(4), reply());
         assert!(drain(&rx).is_empty(), "a reply already read counted");
         state.receive_update(Seq(5), reply());
@@ -691,7 +695,7 @@ mod tests {
     fn a_channel_never_opened_is_watched_after_its_last_number() {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        state.user_id = Some(UserId::from_bytes([7; 16]));
+        state.user_id = Some(Id::<User>::from_bytes([7; 16]));
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
         let sent = || -> Vec<WsClientMsg> {
@@ -700,9 +704,12 @@ mod tests {
                 .filter_map(|wire| ambre_protocol::ws::decode_client_msg(&wire).ok())
                 .collect()
         };
-        let (channel_id, meta, doc_key) =
-            (ChannelId::new(), MetaId::new(), DocumentKey::generate());
-        let (segment, older) = (DocumentId::new(), DocumentId::new());
+        let (channel_id, meta, doc_key) = (
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+            DocumentKey::generate(),
+        );
+        let (segment, older) = (Id::<Document>::mint(), Id::<Document>::mint());
         let watch = SyncCommand::WatchChannel {
             channel_id,
             meta,
@@ -717,7 +724,7 @@ mod tests {
 
         state
             .listed_keys
-            .insert(channel_id, (MetaId::new(), doc_key.clone()));
+            .insert(channel_id, (Id::<Meta>::mint(), doc_key.clone()));
         state.handle_command(watch.clone());
         assert!(sent().is_empty(), "the key of another meta was used");
 
@@ -748,7 +755,7 @@ mod tests {
         assert_eq!(heads, HashSet::from([m, o]));
         assert_eq!(state.light_cursors(), vec![(s, Seq(4))]);
         state.resubscribe_all();
-        let requests: Vec<(DocumentId, Seq)> = sent()
+        let requests: Vec<(Id<Document>, Seq)> = sent()
             .into_iter()
             .filter_map(|msg| match msg {
                 WsClientMsg::RequestMissing {
@@ -765,7 +772,7 @@ mod tests {
         );
 
         // A delta at or below the last number was news before the answer.
-        let mentioned = || update(segment, SnapshotId::new(), &doc_key, Some(&mention()));
+        let mentioned = || update(segment, Id::<Snapshot>::mint(), &doc_key, Some(&mention()));
         state.receive_update(Seq(4), mentioned());
         assert!(drain(&rx).is_empty(), "a delta the answer covered counted");
         state.receive_update(Seq(7), mentioned());
@@ -783,7 +790,10 @@ mod tests {
         assert_eq!(state.light_cursors(), vec![(segment, Seq(7))]);
 
         // The first live delta of a head gives it a cursor.
-        state.receive_update(Seq(2), update(older, SnapshotId::new(), &doc_key, None));
+        state.receive_update(
+            Seq(2),
+            update(older, Id::<Snapshot>::mint(), &doc_key, None),
+        );
         assert_eq!(state.light_heads(), vec![m]);
         assert_eq!(
             state.take_light(segment),
@@ -801,7 +811,7 @@ mod tests {
             SyncState::new(LogicSink::channel().0, crate::RelayHost::new(String::new()));
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let (channel_id, meta) = (ChannelId::new(), MetaId::new());
+        let (channel_id, meta) = (Id::<Channel>::mint(), Id::<Meta>::mint());
         state
             .listed_keys
             .insert(channel_id, (meta, DocumentKey::generate()));
@@ -840,10 +850,10 @@ mod tests {
     fn a_rotation_rekeys_a_channel_watched_unopened() {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        state.user_id = Some(UserId::from_bytes([7; 16]));
+        state.user_id = Some(Id::<User>::from_bytes([7; 16]));
         let (ws_tx, _ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let (channel_id, meta) = (ChannelId::new(), MetaId::new());
+        let (channel_id, meta) = (Id::<Channel>::mint(), Id::<Meta>::mint());
         let (old_key, new_key) = (DocumentKey::generate(), DocumentKey::generate());
         state
             .listed_keys
@@ -855,7 +865,7 @@ mod tests {
             documents: Vec::new(),
         });
         let m = meta.document_id();
-        let mentions = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| -> Vec<(DocumentId, u32)> {
+        let mentions = |rx: &ambre_bus::conduit::Receiver<LogicEvent>| -> Vec<(Id<Document>, u32)> {
             drain(rx)
                 .into_iter()
                 .filter_map(|event| match event {
@@ -868,7 +878,7 @@ mod tests {
                 .collect()
         };
         let mentioned =
-            |doc, key: &DocumentKey| update(doc, SnapshotId::new(), key, Some(&mention()));
+            |doc, key: &DocumentKey| update(doc, Id::<Snapshot>::mint(), key, Some(&mention()));
         state.receive_update(Seq(2), mentioned(m, &new_key));
         assert_eq!(
             mentions(&rx),
@@ -886,7 +896,7 @@ mod tests {
         state.receive_update(Seq(3), mentioned(m, &new_key));
         assert_eq!(mentions(&rx), vec![(m, 1)]);
 
-        let segment = SegmentId::new();
+        let segment = Id::<Segment>::mint();
         state.handle_command(SyncCommand::WatchSegment { segment, meta });
         state.receive_update(Seq(1), mentioned(segment.document_id(), &new_key));
         assert_eq!(mentions(&rx), vec![(segment.document_id(), 1)]);
@@ -900,10 +910,10 @@ mod tests {
     fn a_frame_under_a_missing_key_fetches_it_and_replays() {
         let (sink, rx) = LogicSink::channel();
         let mut state = SyncState::new(sink, crate::RelayHost::new(String::new()));
-        state.user_id = Some(UserId::from_bytes([7; 16]));
+        state.user_id = Some(Id::<User>::from_bytes([7; 16]));
         let (ws_tx, ws_rx) = ambre_bus::conduit::unbounded();
         state.set_mock_ws(ws_tx);
-        let (channel_id, meta) = (ChannelId::new(), MetaId::new());
+        let (channel_id, meta) = (Id::<Channel>::mint(), Id::<Meta>::mint());
         let (old_key, new_key) = (DocumentKey::generate(), DocumentKey::generate());
         state.listed_keys.insert(channel_id, (meta, old_key));
         state.handle_command(SyncCommand::WatchChannel {
@@ -932,7 +942,7 @@ mod tests {
                 .collect()
         };
         assert_eq!(requests(), vec![Seq(1)]);
-        let mentioned = || update(m, SnapshotId::new(), &new_key, Some(&mention()));
+        let mentioned = || update(m, Id::<Snapshot>::mint(), &new_key, Some(&mention()));
         state.receive_update(Seq(2), mentioned());
         state.receive_update(Seq(3), mentioned());
         assert_eq!(mentions(), vec![0, 0], "a key it lacks counts nothing");
@@ -964,7 +974,7 @@ mod tests {
     fn a_thread_signal_reaches_logic_only_for_a_thread_not_held() {
         let (mut state, rx, held, _, _) = released(ambre_bus::Seq(9));
         drain(&rx);
-        let open = DocumentId::new();
+        let open = Id::<Document>::mint();
         let doc = SyncDocumentState::new(
             open,
             DocumentKey::generate(),
@@ -977,7 +987,7 @@ mod tests {
         }
         assert!(drain(&rx).is_empty(), "a held thread was signalled");
 
-        let thread = DocumentId::new();
+        let thread = Id::<Document>::mint();
         state.handle_ws_message(WsServerMsg::ThreadActivity {
             document_id: thread,
         });

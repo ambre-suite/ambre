@@ -140,8 +140,8 @@ impl Inner {
 mod tests {
     use std::cell::Cell;
 
-    use ambre_bus::DocumentId;
     use ambre_bus::conduit::{self, Receiver};
+    use ambre_core::id::{Document, Id};
     use wasm_bindgen_test::wasm_bindgen_test;
 
     use super::*;
@@ -162,7 +162,7 @@ mod tests {
         let (tx, rx) = conduit::local(ambre_bus::conduit::ChannelCapacity::new(8));
         let vault = Vault::new(tx);
         let got = Rc::new(RefCell::new(None));
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         vault.seal(
             RowPlace::Document(doc),
             SecretBytes::new(b"plain".to_vec()),

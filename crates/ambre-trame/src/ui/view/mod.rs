@@ -12,8 +12,8 @@
 // ============================================================================
 
 use ambre_bus::{
-    AppCommand, AppEvent, DocumentId, FillMode, LogicCommand, LossyOutcome, Outbox, PasteSource,
-    SendOutcome, TrameCommand, TrameEvent, UiEvent,
+    AppCommand, AppEvent, FillMode, LogicCommand, LossyOutcome, Outbox, PasteSource, SendOutcome,
+    TrameCommand, TrameEvent, UiEvent,
 };
 use ambre_canvas::{
     Anchor, AnchorPublisher, BusyPublisher, ContentRepaint, FilterOpenPublisher, FrameStats,
@@ -21,6 +21,7 @@ use ambre_canvas::{
     Theme, ThemeControl,
 };
 use ambre_commands::ClipboardWrite;
+use ambre_core::id::{Document, Id};
 use ambre_draw::{Clock, DrawSurface, FontContext, Rect};
 #[cfg(target_arch = "wasm32")]
 use leptos::prelude::RwSignal;
@@ -312,7 +313,7 @@ pub enum PendingCommit {
 
 pub struct TrameView {
     /// The document this view renders (from the active route).
-    document_id: DocumentId,
+    document_id: Id<Document>,
     /// Outbound queue to the Logic thread, for the lossy class only.
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
     /// The lossless send path: it keeps a command a full queue could not take,

@@ -7,8 +7,9 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use ambre_bus::{Attachment, DraftKey, RowPlace, SealedRow, Timestamp, UserId};
+use ambre_bus::{Attachment, DraftKey, RowPlace, SealedRow, Timestamp};
 use ambre_canvas::TextInput;
+use ambre_core::id::{Id, User};
 use ambre_logic::persistence::PersistenceStore;
 use ambre_murmure::chrome::MurmureRelay;
 use ambre_murmure::drafts::{DraftRow, DraftShelf, DraftWrite, user_range};
@@ -133,9 +134,9 @@ pub struct DraftKeeper(Rc<RefCell<Keeper>>);
 struct Keeper {
     shelf: DraftShelf,
     store: Option<PersistenceStore>,
-    user: Option<UserId>,
+    user: Option<Id<User>>,
     /// The user whose rows were read, so a second sign-in reads its own.
-    loaded: Option<UserId>,
+    loaded: Option<Id<User>>,
     vault: Vault,
 }
 
@@ -212,7 +213,7 @@ impl DraftKeeper {
     }
 
     /// The session named `user`.
-    pub fn signed_in(&self, user: UserId) {
+    pub fn signed_in(&self, user: Id<User>) {
         self.0.borrow_mut().user = Some(user);
         self.load();
     }
@@ -295,6 +296,7 @@ impl LocalTime {
 
 #[cfg(test)]
 mod tests {
+    use ambre_core::id::Channel;
     use ambre_murmure::MurmurePane;
     use leptos::prelude::Set;
     use wasm_bindgen::JsCast;
@@ -357,7 +359,7 @@ mod tests {
         let reads = page_reads(relay, TextInput::detached(), Rc::new(|_| {}));
         assert_eq!((reads.pane)(), MurmurePane::ChannelList);
         relay.pane.set(MurmurePane::Members {
-            channel: ambre_bus::ChannelId::new(),
+            channel: Id::<Channel>::mint(),
         });
         assert!(matches!((reads.pane)(), MurmurePane::Members { .. }));
         let ts = Timestamp(1_700_000_000_000);

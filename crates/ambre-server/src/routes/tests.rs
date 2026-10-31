@@ -9,6 +9,7 @@ mod handler_tests {
     use crate::routes;
     use crate::state::{AppState, Config};
     use crate::ws;
+    use ambre_core::id::{Document, Id, Snapshot, User};
     use ambre_protocol::ws::{CloseCode, WsClientMsg, WsServerMsg, encode_client_msg};
 
     fn empty_oidc_clients() -> crate::oidc::OidcClients {
@@ -549,8 +550,8 @@ mod handler_tests {
         let state = test_app_state_with_s3(pool, offline_s3(Some(&stub.endpoint))).await;
         let app = build_test_router(state.clone());
 
-        let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
-        let other = ambre_core::DocumentId::parse_str(&other_id).unwrap();
+        let doc = Id::<Document>::parse_str(&doc_id).unwrap();
+        let other = Id::<Document>::parse_str(&other_id).unwrap();
         let keys = crate::redis_keys::DocumentStateKeys::of(&doc);
         let other_keys = crate::redis_keys::DocumentStateKeys::of(&other);
         let [seq, clocks, ..] = keys.texts();
@@ -683,7 +684,7 @@ mod handler_tests {
         let setup = build_test_router(setup_state);
         let auth = setup_and_get_auth(&setup).await;
         let doc_id = create_test_doc(&setup, &auth).await;
-        let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        let doc = Id::<Document>::parse_str(&doc_id).unwrap();
         let env = Config::default().s3_env_prefix;
         let object = |rest: &str| format!("{env}/documents/{doc_id}/{rest}");
         let marks = |pool: sqlx::PgPool| async move {
@@ -825,9 +826,8 @@ mod handler_tests {
             body
         };
         let member = || async {
-            let document = ambre_core::DocumentId::from_bytes(
-                *uuid::Uuid::parse_str(&doc_id).unwrap().as_bytes(),
-            );
+            let document =
+                Id::<Document>::from_bytes(*uuid::Uuid::parse_str(&doc_id).unwrap().as_bytes());
             crate::db::get_document_member(&state.db, &document, &invitee)
                 .await
                 .unwrap()
@@ -845,7 +845,7 @@ mod handler_tests {
         );
         assert!(member().await.is_none(), "a refused invite adds no row");
 
-        let unknown = body(None, Some(ambre_core::UserId::new().to_string()));
+        let unknown = body(None, Some(Id::<User>::mint().to_string()));
         assert_eq!(
             post_json(&app, &auth, share.clone(), unknown).await,
             StatusCode::NOT_FOUND
@@ -1009,7 +1009,7 @@ mod handler_tests {
         state: &AppState,
         email: &str,
         seed: u8,
-    ) -> (String, ed25519_dalek::SigningKey, ambre_core::UserId) {
+    ) -> (String, ed25519_dalek::SigningKey, Id<User>) {
         let key = ed25519_dalek::SigningKey::from_bytes(&[seed; 32]);
         let body = serde_json::json!({
             "email": email,
@@ -1030,7 +1030,7 @@ mod handler_tests {
             .await
             .unwrap();
         let auth = format!("Bearer {}", access_token_of(resp).await);
-        let id = ambre_core::UserId::parse_str(&doc_user_id(state, email).await).unwrap();
+        let id = Id::<User>::parse_str(&doc_user_id(state, email).await).unwrap();
         (auth, key, id)
     }
 
@@ -1050,10 +1050,10 @@ mod handler_tests {
     /// An unsigned entry of `doc` at `position`. The relay walks no digest,
     /// so the previous one is filler.
     fn entry_at(
-        doc: ambre_core::DocumentId,
+        doc: Id<Document>,
         position: u64,
-        author: ambre_core::UserId,
-        member: (ambre_core::UserId, &ed25519_dalek::SigningKey),
+        author: Id<User>,
+        member: (Id<User>, &ed25519_dalek::SigningKey),
         act: ambre_protocol::MembershipAct,
         role: ambre_core::Role,
     ) -> ambre_protocol::MembershipEntry {
@@ -1122,7 +1122,7 @@ mod handler_tests {
         let app = build_test_router(state.clone());
         let (owner, owner_key, owner_id) = setup_signed(&app, &state, "owner@log.test", 41).await;
         let (_bob, bob_key, bob_id) = setup_signed(&app, &state, "bob@log.test", 42).await;
-        let doc = ambre_core::DocumentId::new();
+        let doc = Id::<Document>::mint();
         let doc_id = doc.to_string();
         let me = (owner_id, &owner_key);
         let bob = (bob_id, &bob_key);
@@ -1366,10 +1366,10 @@ mod handler_tests {
     async fn a_sign_out_revokes_no_token_of_another_caller(pool: sqlx::PgPool) {
         let state = test_app_state(pool).await;
         let app = build_test_router(state.clone());
-        let mine = crate::auth::issue_session(&state, ambre_core::UserId::new(), None)
+        let mine = crate::auth::issue_session(&state, Id::<User>::mint(), None)
             .await
             .unwrap();
-        let theirs = crate::auth::issue_session(&state, ambre_core::UserId::new(), None)
+        let theirs = crate::auth::issue_session(&state, Id::<User>::mint(), None)
             .await
             .unwrap();
         let sign_out = |refresh: &str| {
@@ -1417,7 +1417,7 @@ mod handler_tests {
                 }),
                 ..(*base).clone()
             };
-            let tokens = crate::auth::issue_session(&state, ambre_core::UserId::new(), None)
+            let tokens = crate::auth::issue_session(&state, Id::<User>::mint(), None)
                 .await
                 .unwrap();
             let claims = state.jwt.verify(&tokens.access_token).unwrap();
@@ -1455,8 +1455,8 @@ mod handler_tests {
         let app = build_test_router(state.clone());
         let auth = setup_and_get_auth(&app).await;
         let doc_id = create_test_doc(&app, &auth).await;
-        let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
-        let snapshot = ambre_core::SnapshotId::from_bytes([0u8; 16]);
+        let doc = Id::<Document>::parse_str(&doc_id).unwrap();
+        let snapshot = Id::<Snapshot>::from_bytes([0u8; 16]);
         for seq in 1..=1_005u64 {
             crate::db::insert_update(
                 &pool,
@@ -1518,7 +1518,7 @@ mod handler_tests {
     /// posts it. The relay opens nothing, so the seal is filler.
     fn link_text(doc_id: &str, key: u8, previous: u8) -> String {
         let link = ambre_protocol::KeyLink {
-            document_id: ambre_core::DocumentId::parse_str(doc_id).unwrap(),
+            document_id: Id::<Document>::parse_str(doc_id).unwrap(),
             key: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([key; 16]),
             previous: ambre_core::FixedBytes::<ambre_core::KeyId>::from_array([previous; 16]),
             sealed: ambre_core::Payload::new(vec![key; 200]),
@@ -2066,7 +2066,7 @@ mod handler_tests {
         let auth = setup_and_get_auth(&app).await;
         let token = auth.trim_start_matches("Bearer ");
         let subscribe = WsClientMsg::Subscribe {
-            document_id: ambre_core::DocumentId::new(),
+            document_id: Id::<Document>::mint(),
         };
         let reply = first_reply(state, &format!("?token={token}"), &subscribe).await;
         let Message::Close(Some(frame)) = reply else {
@@ -2093,7 +2093,7 @@ mod handler_tests {
             .await
             .unwrap();
         let subscribe = WsClientMsg::Subscribe {
-            document_id: ambre_core::DocumentId::new(),
+            document_id: Id::<Document>::mint(),
         };
         socket
             .send(Message::Binary(
@@ -2142,7 +2142,7 @@ mod handler_tests {
             .await
             .unwrap();
         let mut garbage = encode_client_msg(&WsClientMsg::Subscribe {
-            document_id: ambre_core::DocumentId::new(),
+            document_id: Id::<Document>::mint(),
         })
         .into_bytes();
         garbage[1] = 0xff;
@@ -2176,7 +2176,7 @@ mod handler_tests {
         let peer_email = "peer@ambre.app";
         let peer = setup_named(&app, peer_email, 5).await;
         invite(&app, &owner, &doc_id, peer_email, "editor").await;
-        let document_id = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        let document_id = Id::<Document>::parse_str(&doc_id).unwrap();
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("ws://{}/api/ws", listener.local_addr().unwrap());
@@ -2238,7 +2238,7 @@ mod handler_tests {
         let far = setup_named(&app, "far@ambre.app", 6).await;
         invite(&app, &owner, &doc_id, "near@ambre.app", "editor").await;
         invite(&app, &owner, &doc_id, "far@ambre.app", "editor").await;
-        let document_id = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        let document_id = Id::<Document>::parse_str(&doc_id).unwrap();
         let serve = |state: Arc<AppState>| async move {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let url = format!("ws://{}/api/ws", listener.local_addr().unwrap());
@@ -2283,7 +2283,7 @@ mod handler_tests {
 
     /// Whether `socket` hears the peer of key `[key; 32]` leave `document_id`
     /// before it ends or falls silent.
-    async fn heard_leave<S>(socket: &mut S, document_id: ambre_core::DocumentId, key: u8) -> bool
+    async fn heard_leave<S>(socket: &mut S, document_id: Id<Document>, key: u8) -> bool
     where
         S: futures_util::Stream<
                 Item = Result<
@@ -2310,7 +2310,7 @@ mod handler_tests {
     async fn subscribed_socket(
         url: &str,
         auth: &str,
-        document_id: ambre_core::DocumentId,
+        document_id: Id<Document>,
     ) -> tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>
     {
         use futures_util::SinkExt;
@@ -2356,7 +2356,7 @@ mod handler_tests {
         use tokio_tungstenite::tungstenite::Message;
 
         let probe = WsClientMsg::Subscribe {
-            document_id: ambre_core::DocumentId::new(),
+            document_id: Id::<Document>::mint(),
         };
         socket
             .send(Message::Binary(
@@ -2741,7 +2741,7 @@ mod handler_tests {
 
         let hash = "e".repeat(64);
         let env = Config::default().s3_env_prefix;
-        let doc = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        let doc = Id::<Document>::parse_str(&doc_id).unwrap();
         let media = crate::s3::format_s3_media_key(
             &env,
             &doc,
@@ -3355,13 +3355,13 @@ mod handler_tests {
         invite(&app, &owner, &doc_id, "reporter@ambre.app", "editor").await;
         let reporter_id = doc_user_id(&state, "reporter@ambre.app").await;
 
-        let document = ambre_core::DocumentId::parse_str(&doc_id).unwrap();
+        let document = Id::<Document>::parse_str(&doc_id).unwrap();
         for seq in 1..=3i64 {
             crate::db::insert_update(
                 &state.db,
                 &document,
                 &ambre_core::FixedBytes::<ambre_core::PublicKey>::from_array([3u8; 32]),
-                &ambre_core::SnapshotId::new(),
+                &Id::<Snapshot>::mint(),
                 ambre_protocol::messages::Clock(seq.unsigned_abs()),
                 ambre_core::Seq(seq.unsigned_abs()),
                 &ambre_core::ObjectKey(format!("k{seq}")),
@@ -3370,7 +3370,7 @@ mod handler_tests {
             .unwrap();
         }
         let snap = upload_snapshot(&app, &owner, &doc_id, 3).await;
-        let snapshot = ambre_core::SnapshotId::parse_str(&snap).unwrap();
+        let snapshot = Id::<Snapshot>::parse_str(&snap).unwrap();
         let report = format!("/api/documents/{doc_id}/snapshots/{snap}/report");
         let signed = |author: [u8; 32]| {
             let transcript = report_transcript(
@@ -3420,7 +3420,7 @@ mod handler_tests {
         let kept = upload_snapshot(&app, &owner, &doc_id, 3).await;
         let confirm = format!("/api/documents/{doc_id}/snapshots/{kept}/confirm");
         post_json(&app, &reporter, confirm, serde_json::json!({})).await;
-        let kept_id = ambre_core::SnapshotId::parse_str(&kept).unwrap();
+        let kept_id = Id::<Snapshot>::parse_str(&kept).unwrap();
         let transcript = report_transcript(
             document,
             kept_id,
@@ -3730,7 +3730,7 @@ mod handler_tests {
     /// Whether the ephemeral store mirrors a rotation owed by the document.
     async fn debt_mirrored(state: &AppState, doc_id: &str) -> bool {
         use rustis::commands::GenericCommands;
-        let doc = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::parse_str(doc_id).unwrap());
+        let doc = Id::<Document>::from_uuid(ambre_core::Uuid::parse_str(doc_id).unwrap());
         let n: usize = state
             .redis
             .exists(crate::redis_keys::RotationOwedKey::of(&doc).as_str())
@@ -3894,7 +3894,7 @@ mod handler_tests {
         state
             .pubsub
             .subscribe(
-                crate::ws::Topic::document(&ambre_core::DocumentId::parse_str(&doc_id).unwrap()),
+                crate::ws::Topic::document(&Id::<Document>::parse_str(&doc_id).unwrap()),
                 crate::ws::ConnectionId::named("watcher"),
                 tx,
             )
@@ -4085,7 +4085,7 @@ mod handler_tests {
         let app = build_test_router(state.clone());
         let owner = setup_and_get_auth(&app).await;
         let doc_id = create_test_doc(&app, &owner).await;
-        let document_id = ambre_core::DocumentId::parse_str(&doc_id).expect("a document id");
+        let document_id = Id::<Document>::parse_str(&doc_id).expect("a document id");
         // A connection of its own: a subscriber sharing the relay's client
         // would desynchronise its replies (see `PubSubHub`).
         let subscriber = rustis::client::Client::connect("redis://localhost:6379")

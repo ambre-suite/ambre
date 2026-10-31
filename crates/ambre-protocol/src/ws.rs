@@ -10,7 +10,8 @@
 use crate::messages::{Clock, Seq, Signature};
 use crate::version::CURRENT_VERSION;
 use crate::{Ephemeral, SeqUpdate, Update};
-use ambre_core::{DocType, DocumentId, FixedBytes, KeyId, PublicKey, RefusalCode, SnapshotId};
+use ambre_core::id::{Document, Id, Snapshot};
+use ambre_core::{DocType, FixedBytes, KeyId, PublicKey, RefusalCode};
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -22,11 +23,11 @@ pub enum WsClientMsg {
     /// Start receiving real-time events for a document.
     /// Server adds this doc to the connection's subscription set.
     /// Server responds with Subscribed { document_id }.
-    Subscribe { document_id: DocumentId },
+    Subscribe { document_id: Id<Document> },
 
     /// Stop receiving events for a document.
     /// Server removes this doc from the subscription set.
-    Unsubscribe { document_id: DocumentId },
+    Unsubscribe { document_id: Id<Document> },
 
     /// Encrypted CRDT delta. document_id is inside update.public_data.
     Update(Update),
@@ -36,7 +37,7 @@ pub enum WsClientMsg {
 
     /// Request missing updates for a specific document after a known seq.
     RequestMissing {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         after_seq: Seq,
     },
 
@@ -51,7 +52,7 @@ pub enum WsClientMsg {
     /// deltas of the document until it reads this answer to the delta that
     /// set the fence (`ambre-spec-sequencer.md`, `SRV-169`).
     ClockResync {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         signature: FixedBytes<Signature>,
     },
 }
@@ -122,7 +123,7 @@ impl std::fmt::Display for CloseCode {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum WsServerMsg {
     /// Subscription confirmed.
-    Subscribed { document_id: DocumentId },
+    Subscribed { document_id: Id<Document> },
 
     /// Encrypted CRDT delta with server-assigned seq.
     Update { seq: Seq, update: Update },
@@ -138,30 +139,30 @@ pub enum WsServerMsg {
     /// It carries what the relay already routes on -- a document id and an
     /// author key -- and nothing else. No content, and no claim about why the
     /// peer left (`ambre-spec-zero-knowledge.md`). The recipient resolves the
-    /// key to a `UserId` exactly as it does for an ephemeral. A departure is
+    /// key to an `Id<User>` exactly as it does for an ephemeral. A departure is
     /// attributed by the same spoof-proof path as a cursor.
     ///
     /// Best-effort, like presence itself: a lost `PeerLeft` leaves the peer to
     /// age out of the live set.
     PeerLeft {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         pub_key: FixedBytes<PublicKey>,
     },
 
     /// Response to RequestMissing.
     MissingUpdates {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         updates: Vec<SeqUpdate>,
     },
 
     /// Too many deltas accumulated -- client must compact.
-    SnapshotRequired { document_id: DocumentId },
+    SnapshotRequired { document_id: Id<Document> },
 
     /// New snapshot available for download via S3. It is pending: a member who
     /// holds the deltas it covers checks it and confirms it (`SRV-129`).
     SnapshotAvailable {
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         /// The highest delta its author says it folds in.
         covered_seq: Seq,
     },
@@ -172,20 +173,20 @@ pub enum WsServerMsg {
     /// signal. No recipient can mistake it for "you were revoked" (that is the
     /// separate, targeted `DocumentRevoked`). Rotation typically follows a revoke,
     /// but the two are distinct events.
-    KeyRotationRequired { document_id: DocumentId },
+    KeyRotationRequired { document_id: Id<Document> },
 
     /// The authenticated user was removed from a document. Pushed ONLY to the
     /// revoked user, on their per-user topic (`user:{id}`), by the server's
     /// revoke handler. The client closes the document locally. Distinct from
     /// `KeyRotationRequired` so a member managing keys never revokes themselves.
-    DocumentRevoked { document_id: DocumentId },
+    DocumentRevoked { document_id: Id<Document> },
 
     /// A document was just shared with this user. Pushed on the per-user topic
     /// (`user:{id}`), which every connection subscribes to, so the invitee learns
     /// about the new document without polling. The client refreshes its document
     /// list and notifies the user.
     DocumentShared {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
     },
 
@@ -193,7 +194,7 @@ pub enum WsServerMsg {
     /// the document it concerns, and none for a frame that does not decode or
     /// a connection over its rate. The detail stays in the relay's log.
     Error {
-        document_id: Option<DocumentId>,
+        document_id: Option<Id<Document>>,
         code: RefusalCode,
     },
 
@@ -203,7 +204,7 @@ pub enum WsServerMsg {
     /// and consumed no clock (`SRV-125`). So the author seals it again under
     /// the next key, at the same clock, and sends it again (`SYNC-129`).
     KeyRefused {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         key_id: FixedBytes<KeyId>,
         clock: Clock,
     },
@@ -213,7 +214,7 @@ pub enum WsServerMsg {
     /// alone, naming the delta by its signature. The author seals that delta
     /// again from the `expected` clock on (`SYNC-147`).
     ClockRefused {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         clock: Clock,
         expected: Clock,
         signature: FixedBytes<Signature>,
@@ -223,14 +224,14 @@ pub enum WsServerMsg {
     /// shows the members asks the relay for the rows again.
     ///
     /// Appended last, so the wire tags of the variants above do not move.
-    MembersChanged { document_id: DocumentId },
+    MembersChanged { document_id: Id<Document> },
 
     /// A replay ended before its end: the relay could not read its index or
     /// a delta (`ambre-spec-sequencer.md`, `SRV-184`). The pages sent before
     /// it stand, and `after_seq` is the last delta they delivered. The client
     /// asks again from there (`SYNC-153`).
     ReplayStopped {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         after_seq: Seq,
     },
 
@@ -240,7 +241,7 @@ pub enum WsServerMsg {
     /// The relay holds nothing of it, so the author holds an edit the relay
     /// lacks (`SYNC-155`).
     DeltaRefused {
-        document_id: DocumentId,
+        document_id: Id<Document>,
         signature: FixedBytes<Signature>,
         code: RefusalCode,
     },
@@ -251,8 +252,8 @@ pub enum WsServerMsg {
     /// client resolves as it does for a cursor. `after` says whether it was
     /// the final snapshot of a segment, which a member then finalizes again.
     SnapshotDropped {
-        document_id: DocumentId,
-        snapshot_id: SnapshotId,
+        document_id: Id<Document>,
+        snapshot_id: Id<Snapshot>,
         author: FixedBytes<PublicKey>,
         reporter: FixedBytes<PublicKey>,
         after: ambre_core::AfterDrop,
@@ -263,7 +264,7 @@ pub enum WsServerMsg {
     /// socket watching a document of that channel. It names the thread alone
     /// (`SRV-162`): a client that holds the thread hears the delta on its own
     /// topic, and any other fetches the summaries.
-    ThreadActivity { document_id: DocumentId },
+    ThreadActivity { document_id: Id<Document> },
 }
 
 // ---------------------------------------------------------------------------

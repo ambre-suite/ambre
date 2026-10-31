@@ -16,7 +16,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CellCount, CharCount, DocType, DocumentId, ElementCount};
+use crate::id::{Document, Id};
+use crate::{CellCount, CharCount, DocType, ElementCount};
 
 // -----------------------------------------------------------------------------
 // Generator identity
@@ -131,7 +132,7 @@ crate::define_tally! {
 /// Crypto-free by design: the mixer is SplitMix64, a finalizer chosen for being
 /// short and dependency-free. It is **not** a hash and nothing here relies on it
 /// being one -- a fixture's identity is public by construction.
-pub fn seeded_document_id(seed: FixtureSeed) -> DocumentId {
+pub fn seeded_document_id(seed: FixtureSeed) -> Id<Document> {
     let mut state = seed.get();
     let mut bytes = [0u8; 16];
     for chunk in bytes.chunks_mut(8) {
@@ -147,7 +148,7 @@ pub fn seeded_document_id(seed: FixtureSeed) -> DocumentId {
     // bits of byte 8. Those are the two fields a reader may check.
     bytes[6] = (bytes[6] & 0x0F) | 0x70;
     bytes[8] = (bytes[8] & 0x3F) | 0x80;
-    DocumentId::from_bytes(bytes)
+    Id::from_bytes(bytes)
 }
 
 // -----------------------------------------------------------------------------

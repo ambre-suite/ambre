@@ -9,10 +9,8 @@ use ambre_bus::{
     ActivityKind, Mention, MentionCount, MentionTarget, MessageAt, MessageDraft, MessageView,
     MurmureEvent, Timestamp,
 };
-use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, MessageId, MetaId, Payload, PeerEntryBytes, SegmentId, Seq,
-    SnapshotBytes, UserId,
-};
+use ambre_core::id::{Channel, Document, Id, Message, Meta, Segment, User};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
 use loro::json::{JsonOpContent, MapOp};
 use loro::{ExportMode, LoroDoc, VersionVector};
 
@@ -34,8 +32,8 @@ fn draft(text: &str) -> MessageDraft {
 }
 
 /// A channel whose active segment holds `texts` by `author`.
-fn channel_with(texts: &[&str], author: UserId) -> ChannelState {
-    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+fn channel_with(texts: &[&str], author: Id<User>) -> ChannelState {
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
     for text in texts {
@@ -51,7 +49,7 @@ fn message_at(state: &ChannelState, index: usize) -> MessageView {
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, Payload<SnapshotBytes>> = state
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -65,7 +63,7 @@ fn peer_of(state: &ChannelState) -> ChannelState {
         .identify()
 }
 
-fn signer(state: &ChannelState, document_id: DocumentId, user: UserId) -> Signer {
+fn signer(state: &ChannelState, document_id: Id<Document>, user: Id<User>) -> Signer {
     Signer {
         peer: state.peer(document_id).expect("a session"),
         user: Some(user),
@@ -75,7 +73,10 @@ fn signer(state: &ChannelState, document_id: DocumentId, user: UserId) -> Signer
 /// Create the thread of `root`, adopt its session and link it, as the Sync
 /// worker and the relay answer. Returns it, its first update, and the delta
 /// that names it in the root.
-fn threaded(state: &mut ChannelState, root: MessageId) -> (DocumentId, Payload<DeltaBytes>, Sent) {
+fn threaded(
+    state: &mut ChannelState,
+    root: Id<Message>,
+) -> (Id<Document>, Payload<DeltaBytes>, Sent) {
     let ThreadTarget::Create(thread) = state.reply_target(root, NOW).expect("target") else {
         panic!("a root with no thread creates one");
     };
@@ -96,7 +97,7 @@ fn threaded(state: &mut ChannelState, root: MessageId) -> (DocumentId, Payload<D
 }
 
 /// The `thread` field the root reads in `state`.
-fn thread_field(state: &ChannelState, index: usize) -> Option<DocumentId> {
+fn thread_field(state: &ChannelState, index: usize) -> Option<Id<Document>> {
     message_at(state, index).thread.map(|head| head.document)
 }
 
@@ -113,7 +114,7 @@ fn json_since(doc: &LoroDoc, before: &VersionVector) -> Payload<DeltaBytes> {
 /// reply writes it. Another root has its own.
 #[test]
 fn every_reply_to_a_root_writes_its_one_thread_document() {
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     let mut state = channel_with(&["root", "other"], alice);
     let root = message_at(&state, 0).id;
     assert_eq!(state.root_segment(root), Some(state.active_id()));
@@ -134,7 +135,7 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
         Err(MurmureError::NoThread(id)) if id == other
     ));
     assert!(matches!(
-        state.reply_target(MessageId::new(), NOW),
+        state.reply_target(Id::<Message>::mint(), NOW),
         Err(MurmureError::NoMessage(_))
     ));
     let peer = next_peer();
@@ -181,7 +182,7 @@ fn every_reply_to_a_root_writes_its_one_thread_document() {
 /// a locked segment waits for its amendments: no delta may set its field.
 #[test]
 fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     let mut state = channel_with(&["root", "other"], alice);
     let root = message_at(&state, 0).id;
     let other = message_at(&state, 1).id;
@@ -191,7 +192,7 @@ fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
     assert!(state.thread_failed(other, own));
     assert!(!state.thread_failed(other, own), "already dropped");
     let segment = state.active_id();
-    let successor = SegmentId::new();
+    let successor = Id::<Segment>::mint();
     state
         .close_into(segment, successor, crate::Successor::Created, NOW)
         .expect("close");
@@ -218,7 +219,7 @@ fn a_failed_link_drops_the_own_thread_and_a_locked_root_waits() {
 /// a deleted reply aside. A peer that does not hold the thread reads none.
 #[test]
 fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
-    let (alice, bob) = (UserId::new(), UserId::new());
+    let (alice, bob) = (Id::<User>::mint(), Id::<User>::mint());
     let mut state = channel_with(&["root"], alice);
     let root = message_at(&state, 0).id;
     let (thread, _, _) = threaded(&mut state, root);
@@ -274,7 +275,7 @@ fn the_root_reads_its_reply_count_and_last_replier_from_its_thread() {
 /// writes nothing else of it.
 #[test]
 fn the_link_sets_the_root_thread_field_and_nothing_else() {
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     let mut state = channel_with(&["root"], alice);
     let before = message_at(&state, 0);
     assert_eq!(before.thread, None);
@@ -312,7 +313,7 @@ fn the_link_sets_the_root_thread_field_and_nothing_else() {
 /// Alice's. Bob drops his own, and both roots name the one document.
 #[test]
 fn two_first_replies_converge_on_the_thread_the_relay_linked() {
-    let (alice_user, bob_user) = (UserId::new(), UserId::new());
+    let (alice_user, bob_user) = (Id::<User>::mint(), Id::<User>::mint());
     let mut alice = channel_with(&["root"], alice_user);
     let mut bob = peer_of(&alice);
     let root = message_at(&alice, 0).id;
@@ -350,7 +351,7 @@ fn two_first_replies_converge_on_the_thread_the_relay_linked() {
 /// which names the thread it came from.
 #[test]
 fn a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread() {
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     let mut state = channel_with(&["root"], alice);
     let root = message_at(&state, 0).id;
     let (thread, _, _) = threaded(&mut state, root);
@@ -379,7 +380,7 @@ fn a_reply_also_sent_to_the_channel_writes_a_copy_naming_its_thread() {
 /// sent to its thread alone has none, and another root finds nothing.
 #[test]
 fn a_copy_is_found_from_its_reply() {
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     let mut state = channel_with(&["root"], alice);
     let root = message_at(&state, 0).id;
     let (thread, _, _) = threaded(&mut state, root);
@@ -410,7 +411,7 @@ fn a_copy_is_found_from_its_reply() {
     assert_eq!(state.copy_of(root, copied), Some((state.active_id(), copy)));
     assert_eq!(state.copy_of(root, alone), None, "no copy was sent");
     assert_eq!(
-        state.copy_of(MessageId::new(), copied),
+        state.copy_of(Id::<Message>::mint(), copied),
         None,
         "no such thread"
     );
@@ -423,14 +424,15 @@ fn a_copy_is_found_from_its_reply() {
 /// a reply of a thread are refused.
 #[test]
 fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
-    let (alice_user, bob_user, carol_user) = (UserId::new(), UserId::new(), UserId::new());
+    let (alice_user, bob_user, carol_user) =
+        (Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint());
     let mut alice = channel_with(&["root"], alice_user);
     let mut bob = peer_of(&alice);
     let mut carol = peer_of(&alice);
     let root = message_at(&alice, 0).id;
     let segment = alice.active_id();
     let doc = segment.document_id();
-    let thread = DocumentId::new();
+    let thread = Id::<Document>::mint();
     let named = bob.thread_linked(segment, root, thread).expect("link");
     alice
         .apply_signed(
@@ -442,7 +444,7 @@ fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
         .expect("an absent field takes Bob's value");
     assert_eq!(thread_field(&alice, 0), Some(thread));
     let other = carol
-        .thread_linked(segment, root, DocumentId::new())
+        .thread_linked(segment, root, Id::<Document>::mint())
         .expect("link");
     assert_eq!(
         alice.apply_signed(
@@ -481,7 +483,7 @@ fn the_check_lets_another_member_set_an_absent_thread_field_alone() {
 /// `thread` field of a reply.
 #[test]
 fn a_reply_takes_no_thread_field_from_another_member() {
-    let (alice_user, bob_user) = (UserId::new(), UserId::new());
+    let (alice_user, bob_user) = (Id::<User>::mint(), Id::<User>::mint());
     let mut alice = channel_with(&["root"], alice_user);
     let root = message_at(&alice, 0).id;
     let (thread, first, named) = threaded(&mut alice, root);
@@ -521,7 +523,7 @@ fn a_reply_takes_no_thread_field_from_another_member() {
     else {
         panic!("the reply");
     };
-    map.insert(MessageKey::Thread, DocumentId::new().to_string())
+    map.insert(MessageKey::Thread, Id::<Document>::mint().to_string())
         .expect("write");
     assert_eq!(
         alice.apply_signed(
@@ -541,9 +543,9 @@ fn a_reply_takes_no_thread_field_from_another_member() {
 /// with a session of its own on it.
 fn peer_with_thread(
     alice: &ChannelState,
-    thread: DocumentId,
+    thread: Id<Document>,
     updates: &[&Payload<DeltaBytes>],
-    author: UserId,
+    author: Id<User>,
 ) -> ChannelState {
     let mut bob = peer_of(alice);
     assert_eq!(bob.threads_to_open(), [thread]);
@@ -563,7 +565,7 @@ fn peer_with_thread(
 }
 
 /// The replies the thread view of `state` reads.
-fn replies_of(state: &ChannelState, thread: DocumentId) -> Vec<MessageView> {
+fn replies_of(state: &ChannelState, thread: Id<Document>) -> Vec<MessageView> {
     let Some(MurmureEvent::ThreadMessages { messages, .. }) = state.thread_view(thread) else {
         panic!("the thread reads its replies");
     };
@@ -575,7 +577,7 @@ fn replies_of(state: &ChannelState, thread: DocumentId) -> Vec<MessageView> {
 /// count of its root.
 #[test]
 fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     let mut state = channel_with(&["root"], alice);
     let root = message_at(&state, 0).id;
     let (thread, _, _) = threaded(&mut state, root);
@@ -628,7 +630,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
         panic!("the root's segment");
     };
     assert_eq!(messages[0].thread.map(|head| head.replies.get()), Some(0));
-    assert_eq!(state.root_view(MessageId::new()), None);
+    assert_eq!(state.root_view(Id::<Message>::mint()), None);
     // The root itself still changes in its segment.
     assert!(
         state
@@ -644,7 +646,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
     );
     assert!(matches!(
         state.react(
-            MessageAt::Thread(MessageId::new()),
+            MessageAt::Thread(Id::<Message>::mint()),
             reply,
             &ambre_bus::Emoji::from("\u{1F44D}"),
             alice,
@@ -658,7 +660,7 @@ fn an_edit_a_reaction_and_a_delete_on_a_reply_write_in_its_thread() {
 /// or delete her reply.
 #[test]
 fn another_member_reacts_to_a_reply_and_never_edits_it() {
-    let (alice_user, bob_user) = (UserId::new(), UserId::new());
+    let (alice_user, bob_user) = (Id::<User>::mint(), Id::<User>::mint());
     let mut alice = channel_with(&["root"], alice_user);
     let root = message_at(&alice, 0).id;
     let (thread, first, _) = threaded(&mut alice, root);
@@ -710,7 +712,7 @@ fn another_member_reacts_to_a_reply_and_never_edits_it() {
 /// names another root is refused.
 #[test]
 fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
-    let alice_user = UserId::new();
+    let alice_user = Id::<User>::mint();
     let mut alice = channel_with(&["root", "other", "third"], alice_user);
     let root = message_at(&alice, 0).id;
     let other = message_at(&alice, 1).id;
@@ -784,7 +786,7 @@ fn a_thread_opens_once_its_header_names_the_root_that_names_it() {
 /// on its thread, and only on a thread the channel holds.
 #[test]
 fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
-    let (alice, bob) = (UserId::new(), UserId::new());
+    let (alice, bob) = (Id::<User>::mint(), Id::<User>::mint());
     let mut state = channel_with(&["root"], alice);
     let root = message_at(&state, 0).id;
     let (thread, _, _) = threaded(&mut state, root);
@@ -846,7 +848,7 @@ fn a_mention_in_a_held_thread_counts_past_its_read_cursor() {
 // --- MURMURE-545, MURMURE-546 and MURMURE-547 ---
 
 /// The bytes of an empty segment of `channel`.
-fn empty_segment(channel: ChannelId) -> Payload<SnapshotBytes> {
+fn empty_segment(channel: Id<Channel>) -> Payload<SnapshotBytes> {
     let doc = LoroDoc::new();
     schema::write_header(&doc, DocumentKind::Segment, channel, NOW).expect("header");
     doc.commit();
@@ -856,9 +858,9 @@ fn empty_segment(channel: ChannelId) -> Payload<SnapshotBytes> {
 /// Bob's copy of the channel of `alice`, opened from a new active segment
 /// alone. `meta` lists `oldest` first when given, then an empty final
 /// segment, which is returned.
-fn far_copy(alice: &ChannelState, oldest: Option<SegmentId>) -> (ChannelState, SegmentId) {
+fn far_copy(alice: &ChannelState, oldest: Option<Id<Segment>>) -> (ChannelState, Id<Segment>) {
     let channel = alice.channel_id();
-    let (middle, active) = (SegmentId::new(), SegmentId::new());
+    let (middle, active) = (Id::<Segment>::mint(), Id::<Segment>::mint());
     let meta = LoroDoc::new();
     schema::write_header(&meta, DocumentKind::Meta, channel, NOW).expect("header");
     let entries = [
@@ -872,7 +874,7 @@ fn far_copy(alice: &ChannelState, oldest: Option<SegmentId>) -> (ChannelState, S
     meta.commit();
     let meta = Payload::<SnapshotBytes>::new(meta.export(ExportMode::Snapshot).expect("snapshot"));
     let segments = HashMap::from([(active, empty_segment(channel))]);
-    let bob = ChannelState::open(channel, MetaId::new(), &meta, &segments)
+    let bob = ChannelState::open(channel, Id::<Meta>::mint(), &meta, &segments)
         .expect("open")
         .identify();
     (bob, middle)
@@ -880,7 +882,7 @@ fn far_copy(alice: &ChannelState, oldest: Option<SegmentId>) -> (ChannelState, S
 
 /// Load the older segment `segment` from `bytes`, as the Sync worker
 /// delivers it.
-fn load(state: &mut ChannelState, segment: SegmentId, bytes: &Payload<SnapshotBytes>) {
+fn load(state: &mut ChannelState, segment: Id<Segment>, bytes: &Payload<SnapshotBytes>) {
     let _ = state
         .apply_remote(segment.document_id(), bytes.into())
         .expect("kept");
@@ -892,7 +894,7 @@ fn load(state: &mut ChannelState, segment: SegmentId, bytes: &Payload<SnapshotBy
 /// names, until the root is found. A held root is found at once.
 #[test]
 fn the_reply_on_a_far_copy_loads_down_to_its_root() {
-    let alice_user = UserId::new();
+    let alice_user = Id::<User>::mint();
     let mut alice = channel_with(&["root"], alice_user);
     let root = message_at(&alice, 0).id;
     let (thread, first, _) = threaded(&mut alice, root);
@@ -931,7 +933,7 @@ fn the_reply_on_a_far_copy_loads_down_to_its_root() {
 /// is asked for.
 #[test]
 fn a_seek_ends_on_what_it_cannot_follow() {
-    let alice_user = UserId::new();
+    let alice_user = Id::<User>::mint();
     let mut alice = channel_with(&["root"], alice_user);
     let root = message_at(&alice, 0).id;
     let (thread, first, _) = threaded(&mut alice, root);

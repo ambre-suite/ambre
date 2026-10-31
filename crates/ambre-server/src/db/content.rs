@@ -7,9 +7,9 @@ use crate::payload::Payload;
 /// Row from `snapshots`.
 #[derive(Debug)]
 pub struct SnapshotRow {
-    pub id: ambre_core::SnapshotId,
+    pub id: Id<Snapshot>,
     #[allow(dead_code)]
-    pub document_id: ambre_core::DocumentId,
+    pub document_id: Id<Document>,
     #[allow(dead_code)]
     pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
     #[allow(dead_code)]
@@ -55,10 +55,10 @@ fn snapshot_row(r: &sqlx::postgres::PgRow) -> Result<SnapshotRow, AppError> {
 /// hold a frame (`ZK-006`).
 pub struct UpdateRow {
     #[allow(dead_code)]
-    pub document_id: ambre_core::DocumentId,
+    pub document_id: Id<Document>,
     pub author_pubkey: FixedBytes<ambre_core::PublicKey>,
     #[allow(dead_code)]
-    pub snapshot_id: ambre_core::SnapshotId,
+    pub snapshot_id: Id<Snapshot>,
     pub clock: ambre_protocol::messages::Clock,
     pub seq: ambre_core::Seq,
     /// The object of its own, for a delta over the inline size (`SRV-149`).
@@ -129,15 +129,15 @@ pub struct Trim {
     pub batch_keys: Vec<ambre_core::ObjectKey>,
 }
 
-/// Inserts snapshot metadata and returns the assigned `SnapshotId`.
+/// Inserts snapshot metadata and returns the assigned `Id<Snapshot>`.
 pub async fn create_snapshot(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
     update_clocks: &serde_json::Value,
     s3_key: &ambre_core::ObjectKey,
     covered_seq: ambre_core::Seq,
-) -> Result<ambre_core::SnapshotId, AppError> {
+) -> Result<Id<Snapshot>, AppError> {
     let did = id_to_uuid(*document_id);
     let snapshot_id = uuid::Uuid::now_v7();
     sqlx::query(
@@ -153,14 +153,14 @@ pub async fn create_snapshot(
     .await?;
 
     let core_id = ambre_core::Uuid::from_bytes(*snapshot_id.as_bytes());
-    Ok(ambre_core::SnapshotId::from_uuid(core_id))
+    Ok(Id::<Snapshot>::from_uuid(core_id))
 }
 
 /// Returns the snapshot an open is served: the most recent one somebody
 /// confirmed, its author included (`SRV-128`). A pending one is never served.
 pub async fn get_latest_snapshot(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<Option<SnapshotRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let row = sqlx::query(&format!(
@@ -177,7 +177,7 @@ pub async fn get_latest_snapshot(
 /// its author confirmed (`SRV-131`).
 pub async fn get_reference_snapshot(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<Option<SnapshotRow>, AppError> {
     let did = id_to_uuid(*document_id);
     let row = sqlx::query(&format!(
@@ -202,8 +202,8 @@ pub async fn get_reference_snapshot(
 /// confirms it (`SRV-118`). Its author's confirmation leaves it pending.
 pub async fn confirm_snapshot(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    snapshot_id: &ambre_core::SnapshotId,
+    document_id: &Id<Document>,
+    snapshot_id: &Id<Snapshot>,
     confirmer: &FixedBytes<ambre_core::PublicKey>,
 ) -> Result<Option<SnapshotStatus>, AppError> {
     let did = id_to_uuid(*document_id);
@@ -257,8 +257,8 @@ pub struct DroppedSnapshot {
 /// at the same horizon (the Murmure segments spec).
 pub async fn drop_pending_snapshot(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    snapshot_id: &ambre_core::SnapshotId,
+    document_id: &Id<Document>,
+    snapshot_id: &Id<Snapshot>,
 ) -> Result<Option<DroppedSnapshot>, AppError> {
     let (sid, did) = (id_to_uuid(*snapshot_id), id_to_uuid(*document_id));
     let mut tx = pool.begin().await?;
@@ -297,7 +297,7 @@ pub async fn drop_pending_snapshot(
 /// What lies past it is the history an open replays (`SRV-038`).
 pub async fn served_horizon(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<ambre_core::Seq, AppError> {
     let horizon: Option<i64> = sqlx::query_scalar(
         "SELECT MAX(covered_seq) FROM snapshots WHERE document_id = $1 AND status <> 'pending'",
@@ -316,8 +316,8 @@ pub async fn served_horizon(
 /// IDOR).
 pub async fn get_snapshot(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    snapshot_id: &ambre_core::SnapshotId,
+    document_id: &Id<Document>,
+    snapshot_id: &Id<Snapshot>,
 ) -> Result<Option<SnapshotRow>, AppError> {
     let sid = id_to_uuid(*snapshot_id);
     let did = id_to_uuid(*document_id);
@@ -334,9 +334,9 @@ pub async fn get_snapshot(
 /// Inserts an update metadata row (idempotent on conflict).
 pub async fn insert_update(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
-    snapshot_id: &ambre_core::SnapshotId,
+    snapshot_id: &Id<Snapshot>,
     clock: ambre_protocol::messages::Clock,
     seq: ambre_core::Seq,
     s3_key: &ambre_core::ObjectKey,
@@ -364,9 +364,9 @@ pub async fn insert_update(
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_inline_update(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     author_pubkey: &FixedBytes<ambre_core::PublicKey>,
-    snapshot_id: &ambre_core::SnapshotId,
+    snapshot_id: &Id<Snapshot>,
     clock: ambre_protocol::messages::Clock,
     seq: ambre_core::Seq,
     wire: &Payload,
@@ -411,7 +411,7 @@ pub async fn insert_inline_update(
 /// pointing at a batch is left as it is. Returns whether a row took it.
 pub async fn attach_wire(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     seq: ambre_core::Seq,
     wire: &Payload,
 ) -> Result<bool, AppError> {
@@ -432,7 +432,7 @@ pub async fn attach_wire(
 /// object. `None` when another move holds it.
 pub async fn lock_inline_tail(
     tx: &mut sqlx::PgConnection,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<Option<Vec<(ambre_core::Seq, Payload)>>, AppError> {
     let rows: Result<Vec<(i64, Payload)>, _> = sqlx::query_as(
         "SELECT seq, wire FROM updates WHERE document_id = $1 AND wire IS NOT NULL \
@@ -457,7 +457,7 @@ pub async fn lock_inline_tail(
 /// inline frames. The caller holds their locks.
 pub async fn point_rows_at_batch(
     tx: &mut sqlx::PgConnection,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     seqs: &[ambre_core::Seq],
     batch_key: &ambre_core::ObjectKey,
 ) -> Result<u64, AppError> {
@@ -484,7 +484,7 @@ pub async fn idle_inline_documents(
     pool: &PgPool,
     idle: ambre_core::Seconds,
     limit: QueryLimit,
-) -> Result<Vec<ambre_core::DocumentId>, AppError> {
+) -> Result<Vec<Id<Document>>, AppError> {
     let ids: Vec<uuid::Uuid> = sqlx::query_scalar(
         "SELECT DISTINCT u.document_id FROM updates u WHERE u.wire IS NOT NULL \
          AND NOT EXISTS (SELECT 1 FROM updates v WHERE v.document_id = u.document_id \
@@ -501,7 +501,7 @@ pub async fn idle_inline_documents(
 /// Returns updates with seq > `after_seq` for delta-sync after reconnect.
 pub async fn get_updates_after(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     after_seq: ambre_core::Seq,
     limit: QueryLimit,
 ) -> Result<Vec<UpdateRow>, AppError> {
@@ -557,7 +557,7 @@ pub struct ClockState {
 /// history clients have already replayed (see [`ClockState`]).
 pub async fn get_clock_state(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
 ) -> Result<ClockState, AppError> {
     let did = id_to_uuid(*document_id);
     let rows = sqlx::query(
@@ -664,8 +664,8 @@ pub async fn purge_superseded_updates(pool: &PgPool) -> Result<Trim, AppError> {
 /// Confirms a completed S3 upload by inserting a `media` row.
 pub async fn insert_media(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
-    uploaded_by: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    uploaded_by: &Id<User>,
     content_hash: &ambre_core::ContentHash,
     size: ambre_core::ByteSize,
     s3_key: &ambre_core::ObjectKey,
@@ -719,8 +719,8 @@ pub enum MediaErase {
 /// delete leaves the row and the claim for a retry (`SRV-139`).
 pub async fn erase_media_claim(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    document_id: &ambre_core::DocumentId,
-    user: &ambre_core::UserId,
+    document_id: &Id<Document>,
+    user: &Id<User>,
     content_hash: &ambre_core::ContentHash,
 ) -> Result<MediaErase, AppError> {
     let did = id_to_uuid(*document_id);
@@ -770,7 +770,7 @@ pub async fn erase_media_claim(
 /// Whether the media index records `content_hash` in `document_id`.
 pub async fn document_holds_media(
     pool: &PgPool,
-    document_id: &ambre_core::DocumentId,
+    document_id: &Id<Document>,
     content_hash: &ambre_core::ContentHash,
 ) -> Result<bool, AppError> {
     let did = id_to_uuid(*document_id);
@@ -788,7 +788,7 @@ pub async fn document_holds_media(
 #[derive(Debug, sqlx::FromRow)]
 pub struct CompactSnapshot {
     #[sqlx(try_from = "PgId")]
-    pub id: ambre_core::SnapshotId,
+    pub id: Id<Snapshot>,
     #[sqlx(try_from = "String")]
     pub s3_key: ambre_core::ObjectKey,
 }
@@ -830,10 +830,7 @@ pub async fn find_compactable_snapshots(
 /// foreign key, as the `updates` table of the initial schema states. The
 /// column is an opaque client-side correlation tag with no cascade. Superseded deltas are trimmed
 /// separately by [`purge_superseded_updates`]; the caller removes the S3 blob.
-pub async fn delete_snapshot(
-    pool: &PgPool,
-    snapshot_id: &ambre_core::SnapshotId,
-) -> Result<(), AppError> {
+pub async fn delete_snapshot(pool: &PgPool, snapshot_id: &Id<Snapshot>) -> Result<(), AppError> {
     sqlx::query("DELETE FROM snapshots WHERE id = $1")
         .bind(id_to_uuid(*snapshot_id))
         .execute(pool)

@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::{Deletion, Mention, MessageDraft, MessageView, MurmureEvent, Notice};
-use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId};
+use ambre_core::id::{Channel, Document, Id, Message, Segment};
 use loro::{LoroDoc, LoroMap, LoroText, VersionVector};
 
 use super::{ChannelState, Sent, read_messages, summary_of};
@@ -37,9 +37,9 @@ pub struct Relocated {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Replay {
     /// The locked segment that holds the message.
-    pub segment: SegmentId,
+    pub segment: Id<Segment>,
     /// The message the author changed.
-    pub message: MessageId,
+    pub message: Id<Message>,
     /// The body the author wrote, `None` for a delete.
     pub draft: Option<MessageDraft>,
 }
@@ -67,7 +67,7 @@ impl ChannelState {
     /// - [`MurmureError::Crdt`]: Loro refused the fork or a write.
     pub fn relocate_locked(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         refused: &[ambre_core::Payload<ambre_core::DeltaBytes>],
     ) -> Result<Relocated, MurmureError> {
         if document_id == self.active.id {
@@ -104,8 +104,8 @@ impl ChannelState {
         }
         let rewound = doc.fork_at(&doc.vv_to_frontiers(&kept))?;
         let channel = self.channel_id;
-        let locked = SegmentId::from_document(document_id);
-        let stays: HashMap<MessageId, MessageView> = read_messages(&rewound, channel)
+        let locked = Id::<Segment>::from_document(document_id);
+        let stays: HashMap<Id<Message>, MessageView> = read_messages(&rewound, channel)
             .into_iter()
             .map(|m| (m.id, m))
             .collect();
@@ -149,7 +149,7 @@ impl ChannelState {
     /// first counter the relay refused.
     fn rewind(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         rewound: LoroDoc,
         kept: &VersionVector,
     ) -> Result<(), MurmureError> {
@@ -161,7 +161,7 @@ impl ChannelState {
             held.doc = rewound;
             return Ok(());
         }
-        let segment = SegmentId::from_document(document_id);
+        let segment = Id::<Segment>::from_document(document_id);
         if let Some(doc) = self.loaded.get_mut(&segment) {
             *doc = rewound;
         }
@@ -172,7 +172,7 @@ impl ChannelState {
 /// The change the refused deltas made to a message the relay holds, `None`
 /// when they changed neither its body nor its deletion.
 pub(super) fn replay_of(
-    segment: SegmentId,
+    segment: Id<Segment>,
     before: &MessageView,
     now: MessageView,
 ) -> Option<Replay> {
@@ -202,7 +202,7 @@ pub(super) fn replay_of(
 /// Write `view` as a new message at the end of `doc`, as its author sent it.
 /// Only the author's own reactions were refused with it, so only theirs are
 /// written.
-fn rewrite(doc: &LoroDoc, channel: ChannelId, view: &MessageView) -> Result<(), MurmureError> {
+fn rewrite(doc: &LoroDoc, channel: Id<Channel>, view: &MessageView) -> Result<(), MurmureError> {
     let message = crate::schema::Fields::of(
         crate::schema::root_list(doc, Root::Messages).push_container(LoroMap::new())?,
     );

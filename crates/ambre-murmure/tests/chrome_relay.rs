@@ -20,7 +20,8 @@ use ambre_bus::{
 };
 use ambre_chrome::{CommandHandler, KeyRoute, MenuEntry, PaletteKey, PaletteRow, ShellAction};
 use ambre_commands::{KeyBinding, KeyChar, Locale};
-use ambre_core::{ChannelId, MessageId, SegmentId, SpaceId, UserId, ViewPoint, ViewPx};
+use ambre_core::id::{Channel, Document, Id, Message, Segment, Space, User};
+use ambre_core::{ViewPoint, ViewPx};
 use ambre_murmure::chrome::{
     ChannelMentionConfirm, DeleteConfirm, EmojiPicker, KeyList, MarkBarPanel, MentionPanel,
     MurmureHandler, MurmureRelay, Notice, PageVisibility, SearchBox, coverage,
@@ -36,11 +37,11 @@ use wasm_bindgen_test::*;
 wasm_bindgen_test_configure!(run_in_browser);
 
 /// A relay that holds one direct channel, shown in the pane.
-fn shown_direct() -> (Owner, MurmureRelay, ChannelId) {
+fn shown_direct() -> (Owner, MurmureRelay, Id<Channel>) {
     let owner = Owner::new();
     owner.set();
     let relay = MurmureRelay::new();
-    let direct = ChannelId::new();
+    let direct = Id::<Channel>::mint();
     relay.absorb(&UiEvent::MemberChannels {
         channels: vec![MemberChannel {
             channel_id: direct,
@@ -94,9 +95,13 @@ fn a_channel_lost_while_open_leaves_the_sidebar_and_the_pane() {
 fn a_lost_channel_and_a_sign_out_take_their_drafts() {
     use ambre_murmure::composer::DraftOf;
     let (_owner, relay, direct) = shown_direct();
-    let (failed, left, deleted) = (ChannelId::new(), ChannelId::new(), ChannelId::new());
+    let (failed, left, deleted) = (
+        Id::<Channel>::mint(),
+        Id::<Channel>::mint(),
+        Id::<Channel>::mint(),
+    );
     let shelf = relay.drafts();
-    shelf.load(UserId::new(), Vec::new());
+    shelf.load(Id::<User>::mint(), Vec::new());
     let draft = MessageDraft {
         text: "kept".to_owned(),
         mentions: Vec::new(),
@@ -105,7 +110,7 @@ fn a_lost_channel_and_a_sign_out_take_their_drafts() {
     for channel in [direct, failed, left, deleted] {
         shelf.put(DraftOf::Channel(channel), Some(draft.clone()));
     }
-    let thread_of = DraftOf::Thread(left, MessageId::new());
+    let thread_of = DraftOf::Thread(left, Id::<Message>::mint());
     shelf.put(thread_of, Some(draft.clone()));
     relay.absorb(&UiEvent::Channel {
         channel_id: direct,
@@ -118,11 +123,11 @@ fn a_lost_channel_and_a_sign_out_take_their_drafts() {
         },
     });
     relay.absorb(&UiEvent::Space {
-        space_id: SpaceId::new(),
+        space_id: Id::<Space>::mint(),
         event: SpaceEvent::ChannelLeft { channel_id: left },
     });
     relay.absorb(&UiEvent::Space {
-        space_id: SpaceId::new(),
+        space_id: Id::<Space>::mint(),
         event: SpaceEvent::ChannelDeleted {
             channel_id: deleted,
         },
@@ -146,18 +151,18 @@ fn a_lost_channel_and_a_sign_out_take_their_drafts() {
 fn a_root_found_opens_its_thread_in_the_channel_shown() {
     let (_owner, relay, direct) = shown_direct();
     let root = MessageRef {
-        segment: SegmentId::new(),
-        message: MessageId::new(),
+        segment: Id::<Segment>::mint(),
+        message: Id::<Message>::mint(),
     };
     let found = |channel_id| UiEvent::Channel {
         channel_id,
         event: MurmureEvent::RootFound {
-            thread: ambre_core::DocumentId::new(),
+            thread: Id::<Document>::mint(),
             segment: root.segment,
             root: root.message,
         },
     };
-    assert!(relay.absorb(&found(ChannelId::new())).is_empty());
+    assert!(relay.absorb(&found(Id::<Channel>::mint())).is_empty());
     assert_eq!(relay.pane.get_untracked(), MurmurePane::channel(direct));
     assert!(relay.absorb(&found(direct)).is_empty());
     assert_eq!(
@@ -207,7 +212,7 @@ fn a_root_lost_tells_the_user_the_thread_cannot_open() {
     let lost = UiEvent::Channel {
         channel_id: direct,
         event: MurmureEvent::RootLost {
-            thread: ambre_core::DocumentId::new(),
+            thread: Id::<Document>::mint(),
         },
     };
     assert!(relay.absorb(&lost).is_empty());
@@ -278,10 +283,10 @@ fn a_space_that_cannot_open_is_told_and_opens_anew() {
     let owner = Owner::new();
     owner.set();
     let relay = MurmureRelay::new();
-    let space = SpaceId::new();
+    let space = Id::<Space>::mint();
     let listing = UiEvent::MemberChannels {
         channels: vec![MemberChannel {
-            channel_id: ChannelId::new(),
+            channel_id: Id::<Channel>::mint(),
             place: ChannelPlace::Public(space),
         }],
         spaces: Vec::new(),
@@ -317,9 +322,9 @@ fn a_space_that_cannot_open_is_told_and_opens_anew() {
 #[wasm_bindgen_test]
 fn a_channel_change_that_failed_is_told() {
     let failed = UiEvent::Space {
-        space_id: SpaceId::new(),
+        space_id: Id::<Space>::mint(),
         event: SpaceEvent::ChannelFailed {
-            channel_id: ChannelId::new(),
+            channel_id: Id::<Channel>::mint(),
             message: "the relay refused it".to_owned(),
         },
     };
@@ -356,12 +361,16 @@ fn a_channel_named_shows_its_name_in_the_header() {
 
 /// A relay with two private channels and a direct message, each named by
 /// the listing: `[budget, zeta, Budget review]` in sidebar order.
-fn three_named() -> (Owner, MurmureRelay, [ChannelId; 3]) {
+fn three_named() -> (Owner, MurmureRelay, [Id<Channel>; 3]) {
     let owner = Owner::new();
     owner.set();
     let relay = MurmureRelay::new();
-    let space = SpaceId::new();
-    let ids = [ChannelId::new(), ChannelId::new(), ChannelId::new()];
+    let space = Id::<Space>::mint();
+    let ids = [
+        Id::<Channel>::mint(),
+        Id::<Channel>::mint(),
+        Id::<Channel>::mint(),
+    ];
     let [budget, zeta, direct] = ids;
     let member = |channel_id, place| MemberChannel { channel_id, place };
     let name = |channel_id, name: &str| ChannelName {
@@ -430,22 +439,22 @@ fn choosing_a_channel_in_the_palette_opens_it() {
 
 /// A relay showing `general`, a public channel of a space whose members are
 /// this user, Bob and Carol. Returns the space's members in that order.
-fn a_space_with_members() -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
+fn a_space_with_members() -> (Owner, MurmureRelay, Id<Channel>, [Id<User>; 3]) {
     a_space_with(
-        ChannelId::new(),
-        [UserId::new(), UserId::new(), UserId::new()],
+        Id::<Channel>::mint(),
+        [Id::<User>::mint(), Id::<User>::mint(), Id::<User>::mint()],
     )
 }
 
 /// [`a_space_with_members`], with the channel and the members it names.
 fn a_space_with(
-    general: ChannelId,
-    users: [UserId; 3],
-) -> (Owner, MurmureRelay, ChannelId, [UserId; 3]) {
+    general: Id<Channel>,
+    users: [Id<User>; 3],
+) -> (Owner, MurmureRelay, Id<Channel>, [Id<User>; 3]) {
     let owner = Owner::new();
     owner.set();
     let relay = MurmureRelay::new();
-    let space = SpaceId::new();
+    let space = Id::<Space>::mint();
     relay.absorb(&UiEvent::Rest {
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
@@ -558,9 +567,10 @@ fn the_palette_lists_the_other_members_of_the_space_after_the_channels() {
 /// and no key is fetched for the member.
 #[wasm_bindgen_test]
 fn a_channel_entry_shows_its_channel_beside_a_member_of_the_same_bytes() {
-    let general = ChannelId::new();
-    let twin = UserId::from_bytes(*general.as_bytes());
-    let (_owner, relay, _, _) = a_space_with(general, [UserId::new(), twin, UserId::new()]);
+    let general = Id::<Channel>::mint();
+    let twin = Id::<User>::from_bytes(*general.as_bytes());
+    let (_owner, relay, _, _) =
+        a_space_with(general, [Id::<User>::mint(), twin, Id::<User>::mint()]);
     relay.pane.set(MurmurePane::ChannelList);
     let entry = relay
         .palette_entries()
@@ -591,9 +601,9 @@ fn choosing_a_member_fetches_their_key_then_shows_the_direct_message() {
     assert_eq!(relay.pane.get_untracked().shown_channel(), Some(general));
     assert_eq!(relay.member_name(bob).unwrap().as_str(), "Bob");
 
-    let direct = ChannelId::new();
+    let direct = Id::<Channel>::mint();
     let after = relay.absorb(&UiEvent::DirectMessage {
-        requested: ChannelId::new(),
+        requested: Id::<Channel>::mint(),
         event: DirectMessageEvent::Opened { channel_id: direct },
     });
     assert!(
@@ -627,8 +637,12 @@ fn an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once() {
         .sidebar
         .with_untracked(|s| s.public_space_of(general))
         .unwrap();
-    let other = SpaceId::new();
-    let (board, direct, dave) = (ChannelId::new(), ChannelId::new(), UserId::new());
+    let other = Id::<Space>::mint();
+    let (board, direct, dave) = (
+        Id::<Channel>::mint(),
+        Id::<Channel>::mint(),
+        Id::<User>::mint(),
+    );
     let member = |channel_id, place| MemberChannel { channel_id, place };
     relay.absorb(&UiEvent::MemberChannels {
         channels: vec![
@@ -651,7 +665,7 @@ fn an_invite_fetches_the_key_for_the_shown_channel_and_is_taken_once() {
             members: vec![view(bob, "Bob"), view(dave, "Dave")],
         },
     });
-    let offered = |channel| -> Vec<UserId> {
+    let offered = |channel| -> Vec<Id<User>> {
         relay.select(channel);
         assert_eq!(relay.invite_target().get_untracked(), Some(channel));
         relay
@@ -697,7 +711,7 @@ fn the_invite_control_offers_no_member_of_the_channel() {
         .sidebar
         .with_untracked(|s| s.public_space_of(general))
         .unwrap();
-    let board = ChannelId::new();
+    let board = Id::<Channel>::mint();
     relay.absorb(&UiEvent::MemberChannels {
         channels: vec![MemberChannel {
             channel_id: board,
@@ -708,7 +722,7 @@ fn the_invite_control_offers_no_member_of_the_channel() {
         peers: Vec::new(),
     });
     relay.select(board);
-    let offered = || -> Vec<UserId> {
+    let offered = || -> Vec<Id<User>> {
         relay
             .invitees()
             .get_untracked()
@@ -870,13 +884,13 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
     assert!(handler.on_command(REPLY).is_empty());
     assert!(sent.get_untracked().is_empty(), "no target, nothing sent");
 
-    let segment = SegmentId::new();
-    let message = MessageId::new();
+    let segment = Id::<Segment>::mint();
+    let message = Id::<Message>::mint();
     let target = MessageTarget {
         channel: direct,
         at: MessageAt::Segment(segment),
         message,
-        author: UserId::new(),
+        author: Id::<User>::mint(),
         text: "hello".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
@@ -932,7 +946,7 @@ fn the_menu_of_a_message_runs_its_actions_on_it() {
 #[wasm_bindgen_test]
 fn an_edit_is_handed_to_the_region_and_sends_nothing() {
     let (_owner, relay, direct) = shown_direct();
-    let me = UserId::new();
+    let me = Id::<User>::mint();
     relay.absorb(&UiEvent::Rest {
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
@@ -944,8 +958,8 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
     let (handler, sent) = handler(relay);
     let target = MessageTarget {
         channel: direct,
-        at: MessageAt::Segment(SegmentId::new()),
-        message: MessageId::new(),
+        at: MessageAt::Segment(Id::<Segment>::mint()),
+        message: Id::<Message>::mint(),
         author: me,
         text: "typo".to_owned(),
         mentions: Vec::new(),
@@ -978,7 +992,7 @@ fn an_edit_is_handed_to_the_region_and_sends_nothing() {
 
     // A reply goes to the thread's region alone (`MURMURE-526`).
     let reply = PendingEdit {
-        at: MessageAt::Thread(MessageId::new()),
+        at: MessageAt::Thread(Id::<Message>::mint()),
         ..asked
     };
     relay.editing.set(Some(reply.clone()));
@@ -999,7 +1013,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
     use wasm_bindgen::JsCast;
 
     let (_owner, relay, direct) = shown_direct();
-    let me = UserId::new();
+    let me = Id::<User>::mint();
     relay.absorb(&UiEvent::Rest {
         id: Some(ambre_bus::next_request()),
         evt: RestEvent::SessionReady {
@@ -1009,8 +1023,8 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         },
     });
     let (handler, sent) = handler(relay);
-    let segment = SegmentId::new();
-    let message = MessageId::new();
+    let segment = Id::<Segment>::mint();
+    let message = Id::<Message>::mint();
     let target = MessageTarget {
         channel: direct,
         at: MessageAt::Segment(segment),
@@ -1026,7 +1040,7 @@ async fn a_deletion_is_sent_only_once_the_dialog_confirms_it() {
         from_thread: None,
     };
     let other = MessageTarget {
-        author: UserId::new(),
+        author: Id::<User>::mint(),
         ..target.clone()
     };
     relay.target.set(Some(other));
@@ -1156,13 +1170,13 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
 
     let (_owner, relay, direct) = shown_direct();
     let (handler, sent) = handler(relay);
-    let segment = SegmentId::new();
-    let message = MessageId::new();
+    let segment = Id::<Segment>::mint();
+    let message = Id::<Message>::mint();
     relay.target.set(Some(MessageTarget {
         channel: direct,
         at: MessageAt::Segment(segment),
         message,
-        author: UserId::new(),
+        author: Id::<User>::mint(),
         text: "ship it".to_owned(),
         mentions: Vec::new(),
         styles: Vec::new(),
@@ -1258,11 +1272,11 @@ async fn a_pick_reacts_to_the_message_or_goes_to_the_composer() {
 
 /// What a search of `query` found: `budget` holds one match in the one
 /// segment of two it read, and `zeta` holds none.
-fn found(query: &str, budget: ChannelId, zeta: ChannelId) -> UiEvent {
-    let segment = SegmentId::new();
+fn found(query: &str, budget: Id<Channel>, zeta: Id<Channel>) -> UiEvent {
+    let segment = Id::<Segment>::mint();
     let message = MessageView {
-        id: MessageId::new(),
-        author: UserId::new(),
+        id: Id::<Message>::mint(),
+        author: Id::<User>::mint(),
         ts: Timestamp(1),
         text: "the budget for May".to_owned(),
         mentions: Vec::new(),
@@ -1286,7 +1300,7 @@ fn found(query: &str, budget: ChannelId, zeta: ChannelId) -> UiEvent {
             },
             ChannelMatches {
                 channel_id: zeta,
-                covered: vec![SegmentId::new()],
+                covered: vec![Id::<Segment>::mint()],
                 listed: ambre_bus::SegmentCount::new(1),
                 matches: Vec::new(),
             },
@@ -1394,7 +1408,7 @@ fn a_match_opens_its_message_in_its_channel_and_closes_the_search() {
     assert!(relay.search_groups().get_untracked().is_empty());
 }
 
-fn news(channel_id: ChannelId, mention: ambre_bus::MentionState) -> UiEvent {
+fn news(channel_id: Id<Channel>, mention: ambre_bus::MentionState) -> UiEvent {
     UiEvent::NewMessage {
         channel_id,
         mention,
@@ -1410,8 +1424,8 @@ fn a_notice_opens_its_channel_at_its_message() {
     let (_owner, relay, direct) = shown_direct();
     relay.pane.set(MurmurePane::ChannelList);
     let at = MessageRef {
-        segment: SegmentId::new(),
-        message: MessageId::new(),
+        segment: Id::<Segment>::mint(),
+        message: Id::<Message>::mint(),
     };
     let event = UiEvent::NewMessage {
         channel_id: direct,
@@ -1448,7 +1462,7 @@ fn a_notice_opens_its_channel_at_its_message() {
 #[wasm_bindgen_test]
 fn a_notice_debugs_its_title_length_alone() {
     let notice = Notice {
-        channel_id: ChannelId::new(),
+        channel_id: Id::<Channel>::mint(),
         at: None,
         title: "New message from Secretary".to_owned(),
     };
@@ -1462,12 +1476,12 @@ fn a_notice_debugs_its_title_length_alone() {
 #[wasm_bindgen_test]
 fn a_notice_asks_nothing_of_another_channel() {
     let (_owner, relay, general, _) = a_space_with_members();
-    let other = ChannelId::new();
+    let other = Id::<Channel>::mint();
     relay.absorb(&UiEvent::MemberChannels {
         channels: vec![
             MemberChannel {
                 channel_id: general,
-                place: ChannelPlace::Public(SpaceId::new()),
+                place: ChannelPlace::Public(Id::<Space>::mint()),
             },
             MemberChannel {
                 channel_id: other,
@@ -1479,8 +1493,8 @@ fn a_notice_asks_nothing_of_another_channel() {
         peers: Vec::new(),
     });
     let at = MessageRef {
-        segment: SegmentId::new(),
-        message: MessageId::new(),
+        segment: Id::<Segment>::mint(),
+        message: Id::<Message>::mint(),
     };
     let opened = relay.open_at(other, Some(at));
     assert!(
@@ -1496,12 +1510,12 @@ fn a_notice_asks_nothing_of_another_channel() {
 #[wasm_bindgen_test]
 fn a_mention_or_a_direct_message_notifies_and_a_plain_message_does_not() {
     let (_owner, relay, general, _) = a_space_with_members();
-    let direct = ChannelId::new();
+    let direct = Id::<Channel>::mint();
     relay.absorb(&UiEvent::MemberChannels {
         channels: vec![
             MemberChannel {
                 channel_id: general,
-                place: ChannelPlace::Public(SpaceId::new()),
+                place: ChannelPlace::Public(Id::<Space>::mint()),
             },
             MemberChannel {
                 channel_id: direct,
@@ -1755,7 +1769,7 @@ async fn the_at_channel_question_sends_on_send_and_gives_back_on_cancel() {
     };
 
     // A reply asks, and Cancel gives it to the thread's region alone.
-    let root_id = MessageId::new();
+    let root_id = Id::<Message>::mint();
     relay.absorb(&ask(Some(HeldReply {
         root: root_id,
         also_in_channel: ambre_bus::ReplyEcho::AlsoInChannel,

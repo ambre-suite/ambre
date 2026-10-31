@@ -6,31 +6,31 @@
 // ============================================================================
 
 use super::*;
-use ambre_bus::{ChannelDocumentKind, ChannelId, ChannelMeta, DocumentActivity};
+use ambre_bus::{ChannelDocumentKind, ChannelMeta, DocumentActivity};
 
 /// The segments of a channel, each with the last number the activity
 /// answer gave, if any.
-type Segments = Vec<(DocumentId, Option<Seq>)>;
+type Segments = Vec<(Id<Document>, Option<Seq>)>;
 
 /// What the Logic thread knows of the channels it may watch unopened.
 #[derive(Debug, Default)]
 pub(crate) struct ListedChannels {
     /// The `meta` of each channel of the latest listing whose key opened,
     /// with its last number then.
-    metas: HashMap<ChannelId, ChannelMeta>,
+    metas: HashMap<Id<Channel>, ChannelMeta>,
     /// Whether a listing answered in this session.
     listed: bool,
     /// The segments of each channel the latest activity answer named, each
     /// with its last number then, or `None` before any answer.
-    segments: Option<HashMap<ChannelId, Segments>>,
+    segments: Option<HashMap<Id<Channel>, Segments>>,
     /// The channels watched unopened, so a listing that drops one ends it.
-    watched: HashSet<ChannelId>,
+    watched: HashSet<Id<Channel>>,
 }
 
 impl ListedChannels {
     /// Forget a channel the user no longer reads, deleted or left, so no
     /// later answer watches it again.
-    pub(crate) fn forget(&mut self, channel_id: ChannelId) {
+    pub(crate) fn forget(&mut self, channel_id: Id<Channel>) {
         self.metas.remove(&channel_id);
         self.watched.remove(&channel_id);
     }
@@ -42,11 +42,11 @@ impl LogicState {
     /// its watch ends. A channel joined since the last listing has segments
     /// no activity answer named yet, so the activity is asked again.
     pub(crate) fn channels_listed(&mut self, metas: &[ChannelMeta]) {
-        let fresh: HashMap<ChannelId, ChannelMeta> =
+        let fresh: HashMap<Id<Channel>, ChannelMeta> =
             metas.iter().map(|m| (m.channel_id, *m)).collect();
         let listed = &mut self.listed_channels;
         let joined = listed.listed && fresh.keys().any(|c| !listed.metas.contains_key(c));
-        let gone: Vec<ChannelId> = listed
+        let gone: Vec<Id<Channel>> = listed
             .watched
             .iter()
             .filter(|c| !fresh.contains_key(c))
@@ -66,7 +66,7 @@ impl LogicState {
 
     /// The relay's activity answer named the segments of each channel.
     pub(crate) fn segments_listed(&mut self, documents: &[DocumentActivity]) {
-        let mut segments: HashMap<ChannelId, Segments> = HashMap::new();
+        let mut segments: HashMap<Id<Channel>, Segments> = HashMap::new();
         for document in documents
             .iter()
             .filter(|d| d.kind == ChannelDocumentKind::Segment)
@@ -128,7 +128,7 @@ impl LogicState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::{ChannelActivity, MetaId, Seq, SpaceId};
+    use ambre_bus::{ChannelActivity, Seq};
     use ambre_core::activity::ActivityCounters;
 
     fn harness() -> (LogicState, Receiver<UiEvent>, Receiver<SyncCommand>) {
@@ -149,7 +149,7 @@ mod tests {
     /// The last number the listing gives every `meta`.
     const META_LAST: Seq = Seq(8);
 
-    fn list(state: &mut LogicState, metas: &[(ChannelId, MetaId)]) {
+    fn list(state: &mut LogicState, metas: &[(Id<Channel>, Id<Meta>)]) {
         state.handle_logic_event(LogicEvent::MemberChannels {
             channels: Vec::new(),
             spaces: Vec::new(),
@@ -166,7 +166,10 @@ mod tests {
         });
     }
 
-    fn answer(state: &mut LogicState, documents: &[(ChannelId, DocumentId, ChannelDocumentKind)]) {
+    fn answer(
+        state: &mut LogicState,
+        documents: &[(Id<Channel>, Id<Document>, ChannelDocumentKind)],
+    ) {
         state.handle_logic_event(LogicEvent::ChannelActivity {
             documents: documents
                 .iter()
@@ -184,7 +187,7 @@ mod tests {
 
     /// Every channel the Sync worker was asked to watch, with its documents.
     /// Each `meta` must resume after the listing's last number.
-    fn watches(sync: &Receiver<SyncCommand>) -> Vec<(ChannelId, MetaId, Segments)> {
+    fn watches(sync: &Receiver<SyncCommand>) -> Vec<(Id<Channel>, Id<Meta>, Segments)> {
         drain(sync)
             .into_iter()
             .filter_map(|command| match command {
@@ -211,8 +214,16 @@ mod tests {
     fn a_channel_never_opened_is_watched_once_listed_and_answered() {
         use ChannelDocumentKind::{Segment, Thread};
         let (mut state, _ui, sync) = harness();
-        let (channel, keyless, meta) = (ChannelId::new(), ChannelId::new(), MetaId::new());
-        let (segment, thread, other) = (DocumentId::new(), DocumentId::new(), DocumentId::new());
+        let (channel, keyless, meta) = (
+            Id::<Channel>::mint(),
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+        );
+        let (segment, thread, other) = (
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+            Id::<Document>::mint(),
+        );
         list(&mut state, &[(channel, meta)]);
         assert!(
             watches(&sync).is_empty(),
@@ -252,7 +263,7 @@ mod tests {
     #[test]
     fn the_last_number_counts_nothing() {
         let (mut state, ui, _sync) = harness();
-        let (channel, segment) = (ChannelId::new(), DocumentId::new());
+        let (channel, segment) = (Id::<Channel>::mint(), Id::<Document>::mint());
         state.handle_logic_event(LogicEvent::ChannelActivity {
             documents: vec![DocumentActivity {
                 channel_id: channel,
@@ -283,7 +294,11 @@ mod tests {
     #[test]
     fn the_first_message_of_a_channel_never_opened_notifies() {
         let (mut state, ui, sync) = harness();
-        let (channel, meta, segment) = (ChannelId::new(), MetaId::new(), DocumentId::new());
+        let (channel, meta, segment) = (
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+            Id::<Document>::mint(),
+        );
         list(&mut state, &[(channel, meta)]);
         answer(
             &mut state,
@@ -341,9 +356,9 @@ mod tests {
     fn a_joined_channel_is_asked_for_and_a_dropped_one_ends() {
         use ChannelDocumentKind::Segment;
         let (mut state, _ui, sync) = harness();
-        let (first, joined) = (ChannelId::new(), ChannelId::new());
-        let (first_meta, joined_meta) = (MetaId::new(), MetaId::new());
-        let (segment, later) = (DocumentId::new(), DocumentId::new());
+        let (first, joined) = (Id::<Channel>::mint(), Id::<Channel>::mint());
+        let (first_meta, joined_meta) = (Id::<Meta>::mint(), Id::<Meta>::mint());
+        let (segment, later) = (Id::<Document>::mint(), Id::<Document>::mint());
         list(&mut state, &[(first, first_meta)]);
         answer(&mut state, &[(first, segment, Segment)]);
         drain(&sync);
@@ -364,7 +379,7 @@ mod tests {
         );
 
         list(&mut state, &[(joined, joined_meta)]);
-        let mut closed: Vec<DocumentId> = drain(&sync)
+        let mut closed: Vec<Id<Document>> = drain(&sync)
             .into_iter()
             .map(|command| match command {
                 SyncCommand::CloseDocument { document_id } => document_id,
@@ -382,11 +397,15 @@ mod tests {
     #[test]
     fn a_deleted_channel_is_not_watched_again() {
         let (mut state, _ui, sync) = harness();
-        let (channel, meta, segment) = (ChannelId::new(), MetaId::new(), DocumentId::new());
+        let (channel, meta, segment) = (
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+            Id::<Document>::mint(),
+        );
         let documents = [(channel, segment, ChannelDocumentKind::Segment)];
         list(&mut state, &[(channel, meta)]);
         answer(&mut state, &documents);
-        state.deleting.insert(channel, SpaceId::new());
+        state.deleting.insert(channel, Id::<Space>::mint());
         state.handle_logic_event(LogicEvent::ChannelDeleted {
             channel_id: channel,
         });
@@ -400,7 +419,11 @@ mod tests {
     #[test]
     fn opening_a_channel_watched_unopened_fetches_it() {
         let (mut state, _ui, sync) = harness();
-        let (channel, meta, segment) = (ChannelId::new(), MetaId::new(), DocumentId::new());
+        let (channel, meta, segment) = (
+            Id::<Channel>::mint(),
+            Id::<Meta>::mint(),
+            Id::<Document>::mint(),
+        );
         list(&mut state, &[(channel, meta)]);
         answer(
             &mut state,

@@ -5,12 +5,12 @@
 
 use super::*;
 use crate::ui::kinetic::FingerRole;
-use ambre_bus::UserId;
 use ambre_bus::app::toile::{Anchor, ElementStyle, PresenceUpdate, PresentMode, ShapeKind};
 use ambre_bus::conduit::Receiver;
 use ambre_commands::KeyChar;
 use ambre_core::Rgba;
 use ambre_core::WholePx;
+use ambre_core::id::User;
 use kurbo::Rect;
 
 /// A pointer at screen `(x, y)`, as the canvas hands it over.
@@ -44,7 +44,7 @@ impl Rig {
             ambre_bus::conduit::local(ambre_bus::conduit::ChannelCapacity::new(256));
         let notices = NoticePublisher::new();
         let view = ToileView::new(
-            DocumentId::new(),
+            Id::<Document>::mint(),
             tx,
             rx,
             ambre_core::SurfacePx::new(1200.0),
@@ -201,8 +201,8 @@ impl Rig {
     }
 }
 
-fn eid(s: &str) -> ElementId {
-    ElementId(s.to_owned())
+fn eid(s: &str) -> Id<Element> {
+    Id::<Element>::from_text(s.to_owned())
 }
 
 fn sticky(id: &str, bounds: Rect) -> DisplayElement {
@@ -224,7 +224,7 @@ fn arrow(id: &str) -> DisplayConnector {
     path.move_to((0.0, 300.0));
     path.line_to((400.0, 300.0));
     DisplayConnector {
-        id: ConnectorId(id.to_owned()),
+        id: Id::<Connector>::from_text(id.to_owned()),
         path,
         style: Default::default(),
         arrows: ambre_bus::app::toile::EndCaps {
@@ -368,11 +368,14 @@ fn an_editor_on_an_element_a_peer_deleted_closes_without_a_write_and_says_so() {
 fn a_caption_editor_on_an_arrow_a_peer_deleted_closes_without_a_write_and_says_so() {
     let mut rig = Rig::new();
     rig.show(vec![DisplayNode::Connector(arrow("c"))]);
-    rig.view.open_label_editor(ConnectorId("c".to_owned()));
+    rig.view
+        .open_label_editor(Id::<Connector>::from_text("c".to_owned()));
     assert!(rig.view.editor.is_some());
     rig.type_text("!");
     rig.paint();
-    rig.answer(ToileEvent::ArrowsGone(vec![ConnectorId("c".to_owned())]));
+    rig.answer(ToileEvent::ArrowsGone(vec![Id::<Connector>::from_text(
+        "c".to_owned(),
+    )]));
     rig.show(Vec::new());
     rig.paint();
     assert!(rig.view.editor.is_none());
@@ -454,19 +457,27 @@ fn a_selected_arrow_outlives_the_frame_and_leaves_with_the_board() {
     let mut rig = Rig::new();
     rig.show(vec![DisplayNode::Connector(arrow("c"))]);
     rig.click(200.0, 300.0);
-    assert_eq!(rig.view.arrow, Some(ConnectorId("c".to_owned())));
-    rig.view.open_label_editor(ConnectorId("c".to_owned()));
+    assert_eq!(
+        rig.view.arrow,
+        Some(Id::<Connector>::from_text("c".to_owned()))
+    );
+    rig.view
+        .open_label_editor(Id::<Connector>::from_text("c".to_owned()));
     rig.show(Vec::new());
     rig.paint();
     assert_eq!(
         rig.view.arrow,
-        Some(ConnectorId("c".to_owned())),
+        Some(Id::<Connector>::from_text("c".to_owned())),
         "culled, not deleted"
     );
     assert!(rig.view.editor.is_some(), "the caption editor stays open");
-    rig.answer(ToileEvent::ArrowsGone(vec![ConnectorId("d".to_owned())]));
+    rig.answer(ToileEvent::ArrowsGone(vec![Id::<Connector>::from_text(
+        "d".to_owned(),
+    )]));
     assert!(rig.view.arrow.is_some() && rig.view.editor.is_some());
-    rig.answer(ToileEvent::ArrowsGone(vec![ConnectorId("c".to_owned())]));
+    rig.answer(ToileEvent::ArrowsGone(vec![Id::<Connector>::from_text(
+        "c".to_owned(),
+    )]));
     assert_eq!(rig.view.arrow, None, "the board lost it");
     assert!(rig.view.editor.is_none());
 }
@@ -1070,7 +1081,7 @@ fn frame_at(version: u64, nodes: Vec<DisplayNode>) -> ToileEvent {
 }
 
 /// The ids of the elements the view paints from.
-fn shown(rig: &Rig) -> Vec<ElementId> {
+fn shown(rig: &Rig) -> Vec<Id<Element>> {
     rig.view
         .display
         .nodes
@@ -1156,8 +1167,8 @@ fn a_vanished_logic_thread_latches_the_page() {
 // Arrows driven through the view (`toile-connectors`)
 // -----------------------------------------------------------------------------
 
-fn cid(s: &str) -> ConnectorId {
-    ConnectorId(s.to_owned())
+fn cid(s: &str) -> Id<Connector> {
+    Id::<Connector>::from_text(s.to_owned())
 }
 
 /// A board holding the arrow `c`, from (0, 300) to (400, 300), and these
@@ -1409,7 +1420,7 @@ fn writes(sent: Vec<ToileCommand>) -> Vec<ToileCommand> {
 }
 
 /// The element the open editor writes to.
-fn editing(rig: &Rig) -> Option<ElementId> {
+fn editing(rig: &Rig) -> Option<Id<Element>> {
     rig.view
         .editor
         .as_ref()
@@ -1931,7 +1942,7 @@ fn a_resize_keeps_the_camera_and_asks_for_the_new_canvas() {
     assert_eq!(rig.view.cam.size, kurbo::Size::new(1.0, 1.0));
 }
 
-fn stats_requests(sent: &[ToileCommand]) -> Vec<Vec<ElementId>> {
+fn stats_requests(sent: &[ToileCommand]) -> Vec<Vec<Id<Element>>> {
     sent.iter()
         .filter_map(|c| match c {
             ToileCommand::RequestSelectionStats {
@@ -2276,7 +2287,7 @@ fn chord_board(selection: &[&str]) -> Rig {
     rig.answer(ToileEvent::SelectionData {
         elements: elements
             .into_iter()
-            .filter(|e| selection.contains(&e.id.0.as_str()))
+            .filter(|e| selection.contains(&e.id.as_str()))
             .collect(),
         framed: Vec::new(),
         missing: Vec::new(),
@@ -2573,7 +2584,7 @@ fn two_bar_edits_compose_and_keep_the_selection() {
 
 /// A peer whose sample puts their cursor at the world point (x, y) and
 /// selects `selection`.
-fn peer_at(user_id: UserId, x: f64, y: f64, selection: &[&str]) -> PresenceUpdate {
+fn peer_at(user_id: Id<User>, x: f64, y: f64, selection: &[&str]) -> PresenceUpdate {
     PresenceUpdate {
         user_id,
         presence: PresencePayload {
@@ -2586,7 +2597,7 @@ fn peer_at(user_id: UserId, x: f64, y: f64, selection: &[&str]) -> PresenceUpdat
 
 /// A board showing sticky `a` with a reaction under it, an open thread
 /// pinned beside it, and one peer whose cursor sits on it.
-fn a_shared_board(peer: UserId) -> Rig {
+fn a_shared_board(peer: Id<User>) -> Rig {
     let mut rig = Rig::new();
     let mut reactions = std::collections::BTreeMap::new();
     reactions.insert(
@@ -2604,7 +2615,7 @@ fn a_shared_board(peer: UserId) -> Rig {
         version: ambre_core::Generation::ZERO,
         grid_unit: ambre_core::BoardLength::new(20.0),
         pins: vec![ambre_bus::app::toile::CommentPin {
-            thread: eid("t"),
+            thread: Id::<Thread>::from_text("t".to_owned()),
             at: kurbo::Point::new(50.0, 50.0),
             messages: ambre_bus::app::toile::ThreadMessageCount::new(1),
             resolved: ambre_core::ThreadState::Open,
@@ -2679,7 +2690,7 @@ fn fills_in(
 /// first, the badge row next, and the pins last.
 #[test]
 fn the_overlays_stack_peers_then_badges_then_pins() {
-    let peer = UserId::new();
+    let peer = Id::<User>::mint();
     let mut rig = a_shared_board(peer);
     let (content, overlay) = paint_passes(&mut rig);
     let palette = rig.view.theme.palette();
@@ -2709,7 +2720,7 @@ fn the_overlays_stack_peers_then_badges_then_pins() {
 /// board, while it leaves the peers off the slide.
 #[test]
 fn a_presentation_keeps_the_badges() {
-    let peer = UserId::new();
+    let peer = Id::<User>::mint();
     let mut rig = a_shared_board(peer);
     rig.answer(ToileEvent::PresentModeChanged(PresentMode::Presenting));
     let (_, overlay) = paint_passes(&mut rig);
@@ -2730,7 +2741,7 @@ fn an_arriving_sample_keeps_the_camera_and_the_selection() {
     rig.view.selection = vec![eid("a")];
     let camera = rig.view.cam;
     rig.answer(ToileEvent::PeerPresence(vec![peer_at(
-        UserId::new(),
+        Id::<User>::mint(),
         900.0,
         900.0,
         &["b"],
@@ -2750,9 +2761,9 @@ fn an_arriving_sample_keeps_the_camera_and_the_selection() {
 /// overlay paints none of them over the new board.
 #[test]
 fn opening_another_board_drops_its_peers() {
-    let peer = UserId::new();
+    let peer = Id::<User>::mint();
     let mut rig = a_shared_board(peer);
-    rig.view.set_document(DocumentId::new());
+    rig.view.set_document(Id::<Document>::mint());
     rig.show(vec![DisplayNode::Element(sticky("a", A))]);
     let (_, overlay) = paint_passes(&mut rig);
     let ink = ambre_draw::peer_color(&peer);
@@ -2829,7 +2840,7 @@ fn a_thread_brings_the_camera_to_its_anchor() {
 /// panel reads nothing.
 #[test]
 fn a_changed_thread_is_read_again_while_the_panel_shows_it() {
-    let reads = |rig: &mut Rig| -> Vec<Option<ThreadId>> {
+    let reads = |rig: &mut Rig| -> Vec<Option<Id<Thread>>> {
         rig.sent()
             .into_iter()
             .filter_map(|c| match c {
@@ -2840,13 +2851,14 @@ fn a_changed_thread_is_read_again_while_the_panel_shows_it() {
     };
     let mut rig = Rig::new();
     rig.sent();
-    let t = eid("t");
+    let t = Id::<Thread>::from_text("t".to_owned());
 
     rig.view
         .reread_comments_shown(PanelState::Open, Some(&t), &t);
     assert_eq!(reads(&mut rig), [None, Some(t.clone())]);
+    let other = Id::<Thread>::from_text("other".to_owned());
     rig.view
-        .reread_comments_shown(PanelState::Open, Some(&eid("other")), &t);
+        .reread_comments_shown(PanelState::Open, Some(&other), &t);
     assert_eq!(reads(&mut rig), [None], "the list alone");
     rig.view.reread_comments_shown(PanelState::Closed, None, &t);
     assert!(reads(&mut rig).is_empty(), "a closed panel reads nothing");

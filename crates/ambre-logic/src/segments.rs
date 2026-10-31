@@ -11,14 +11,14 @@
 
 use super::*;
 use ambre_bus::{
-    ChannelDocument, ChannelDocumentKind, ChannelId, FoldAnswer, LeaseAnswer, MurmureCommand,
-    MurmureEvent, SegmentId, Timestamp,
+    ChannelDocument, ChannelDocumentKind, FoldAnswer, LeaseAnswer, MurmureCommand, MurmureEvent,
+    Timestamp,
 };
 
 impl LogicState {
     /// Ask the Sync worker to close the active segment of `channel_id` once
     /// a send filled it. The engine asks once, until an answer.
-    pub(crate) fn close_if_full(&mut self, channel_id: ChannelId, now: Timestamp) {
+    pub(crate) fn close_if_full(&mut self, channel_id: Id<Channel>, now: Timestamp) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -28,9 +28,12 @@ impl LogicState {
         let meta = channel.meta_id();
         self.closing_segments.insert(channel_id, now);
         // A close that failed may still have registered its successor, so a
-        // second ask names the same one (`SYNC-164`). The default is a fresh
-        // identifier.
-        let successor = *self.close_successors.entry(channel_id).or_default();
+        // second ask names the same one (`SYNC-164`). The first ask mints a
+        // fresh identifier.
+        let successor = *self
+            .close_successors
+            .entry(channel_id)
+            .or_insert_with(Id::mint);
         self.send_to_sync(SyncCommand::CloseSegment {
             channel_id,
             meta,
@@ -42,7 +45,7 @@ impl LogicState {
     /// This client rotated the key of `document_id`. When it is the `meta` of
     /// a held channel, its active segment closes at the next tick (the
     /// Murmure channels spec).
-    pub(crate) fn key_rotated(&mut self, document_id: DocumentId) {
+    pub(crate) fn key_rotated(&mut self, document_id: Id<Document>) {
         if let Some(channel) = self
             .channels
             .values_mut()
@@ -57,9 +60,9 @@ impl LogicState {
     /// otherwise.
     pub(crate) fn segment_closed(
         &mut self,
-        channel_id: ChannelId,
-        closing: SegmentId,
-        active: SegmentId,
+        channel_id: Id<Channel>,
+        closing: Id<Segment>,
+        active: Id<Segment>,
         successor: ambre_murmure::Successor,
     ) {
         let Some(now) = self.closing_segments.remove(&channel_id) else {
@@ -98,8 +101,8 @@ impl LogicState {
     /// full asks again.
     pub(crate) fn segment_close_failed(
         &mut self,
-        channel_id: ChannelId,
-        closing: SegmentId,
+        channel_id: Id<Channel>,
+        closing: Id<Segment>,
         message: &str,
     ) {
         self.closing_segments.remove(&channel_id);
@@ -112,7 +115,7 @@ impl LogicState {
     /// Drive the finalization of the closing segment of `channel_id` at
     /// `now`: ask for its lease when due. The final snapshot goes to the
     /// Sync worker once this copy holds every delta up to the horizon.
-    pub(crate) fn drive_finalization(&mut self, channel_id: ChannelId, now: Timestamp) {
+    pub(crate) fn drive_finalization(&mut self, channel_id: Id<Channel>, now: Timestamp) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -149,8 +152,8 @@ impl LogicState {
     /// The relay answered the lease request for `segment`.
     pub(crate) fn finalize_lease_answered(
         &mut self,
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         answer: LeaseAnswer,
     ) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
@@ -168,7 +171,7 @@ impl LogicState {
 
     /// The relay accepted the final snapshot of `segment`: `meta` marks it
     /// final, and the delta leaves for the other members.
-    pub(crate) fn segment_finalized(&mut self, channel_id: ChannelId, segment: SegmentId) {
+    pub(crate) fn segment_finalized(&mut self, channel_id: Id<Channel>, segment: Id<Segment>) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -194,8 +197,8 @@ impl LogicState {
     /// later.
     pub(crate) fn segment_finalize_failed(
         &mut self,
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         end: ambre_core::FinalizeEnd,
         message: &str,
     ) {
@@ -212,7 +215,7 @@ impl LogicState {
     /// Drive the fold of the amendments of a final segment of `channel_id` at
     /// `now`: ask for its lease when due. The fold snapshot goes to the Sync
     /// worker once this copy holds the amendments the lease names.
-    pub(crate) fn drive_fold(&mut self, channel_id: ChannelId, now: Timestamp) {
+    pub(crate) fn drive_fold(&mut self, channel_id: Id<Channel>, now: Timestamp) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -239,8 +242,8 @@ impl LogicState {
     /// The relay answered the fold lease request for `segment`.
     pub(crate) fn fold_lease_answered(
         &mut self,
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         answer: FoldAnswer,
     ) {
         if let Some(channel) = self.channels.get_mut(&channel_id) {
@@ -250,7 +253,7 @@ impl LogicState {
 
     /// The relay took the fold of `segment`; another member's check settles
     /// it.
-    pub(crate) fn segment_folded(&mut self, channel_id: ChannelId, segment: SegmentId) {
+    pub(crate) fn segment_folded(&mut self, channel_id: Id<Channel>, segment: Id<Segment>) {
         if let Some(channel) = self.channels.get_mut(&channel_id) {
             channel.fold_committed(segment);
         }
@@ -260,8 +263,8 @@ impl LogicState {
     /// again later.
     pub(crate) fn segment_fold_failed(
         &mut self,
-        channel_id: ChannelId,
-        segment: SegmentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
         message: &str,
     ) {
         tracing::warn!("Logic: fold of {segment} on {channel_id} failed: {message}");
@@ -273,7 +276,11 @@ impl LogicState {
     /// This client's confirmation settled the fold of the segment
     /// `document_id`, and the relay erased `amendments` (`SRV-211`). `meta`
     /// marks them folded, and the delta leaves for the other members.
-    pub(crate) fn amendments_folded(&mut self, document_id: DocumentId, amendments: DocumentId) {
+    pub(crate) fn amendments_folded(
+        &mut self,
+        document_id: Id<Document>,
+        amendments: Id<Document>,
+    ) {
         let Some((&channel_id, channel)) = self
             .channels
             .iter_mut()
@@ -281,7 +288,7 @@ impl LogicState {
         else {
             return;
         };
-        let segment = SegmentId::from_document(document_id);
+        let segment = Id::<Segment>::from_document(document_id);
         match channel.mark_folded(segment, amendments) {
             Ok(Some(payload)) => {
                 let meta = channel.meta_id().document_id();
@@ -303,7 +310,7 @@ impl LogicState {
     /// were erased by a fold whose mark never reached this copy. `meta`
     /// marks them, and the refused change is written again (the Murmure
     /// segments spec).
-    pub(crate) fn document_gone(&mut self, document_id: DocumentId) {
+    pub(crate) fn document_gone(&mut self, document_id: Id<Document>) {
         let Some((&channel_id, channel)) = self
             .channels
             .iter_mut()
@@ -331,7 +338,7 @@ impl LogicState {
     /// Fold in every amendments document `meta` marks folded, then close it.
     /// The changes of this client the relay never sequenced are written again
     /// at the next tick (the Murmure segments spec).
-    pub(crate) fn settle_folds(&mut self, channel_id: ChannelId) {
+    pub(crate) fn settle_folds(&mut self, channel_id: Id<Channel>) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -363,9 +370,9 @@ impl LogicState {
     /// segment (the Murmure segments spec).
     pub(crate) fn snapshot_dropped(
         &mut self,
-        document_id: DocumentId,
-        author: Option<UserId>,
-        reporter: Option<UserId>,
+        document_id: Id<Document>,
+        author: Option<Id<User>>,
+        reporter: Option<Id<User>>,
         after: ambre_core::AfterDrop,
     ) {
         let Some((&channel_id, channel)) = self
@@ -375,7 +382,7 @@ impl LogicState {
         else {
             return;
         };
-        let segment = SegmentId::from_document(document_id);
+        let segment = Id::<Segment>::from_document(document_id);
         if after == ambre_core::AfterDrop::Refinalize {
             channel.refinalize(segment);
         }
@@ -394,7 +401,7 @@ impl LogicState {
     /// segment (the Murmure segments spec).
     pub(crate) fn deltas_locked(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         deltas: &[ambre_core::Payload<ambre_core::DeltaBytes>],
     ) {
         let Some((&channel_id, channel)) = self
@@ -411,7 +418,7 @@ impl LogicState {
             }
         };
         // The segment reads as the relay holds it until the replays land.
-        let segment = SegmentId::from_document(document_id);
+        let segment = Id::<Segment>::from_document(document_id);
         let rewound = (!relocated.replay.is_empty())
             .then(|| channel.messages(segment).ok())
             .flatten();
@@ -442,7 +449,7 @@ impl LogicState {
 
     /// Write again, as amendments stamped `now`, the edits and deletes the
     /// lock of a segment refused (the Murmure messages spec).
-    pub(crate) fn replay_owed(&mut self, channel_id: ChannelId, now: Timestamp) {
+    pub(crate) fn replay_owed(&mut self, channel_id: Id<Channel>, now: Timestamp) {
         for replay in self.owed_replays.remove(&channel_id).unwrap_or_default() {
             let command = match replay.draft {
                 Some(draft) => MurmureCommand::EditMessage {
@@ -463,7 +470,7 @@ impl LogicState {
 
     /// Forget the replays a channel still owed, when it leaves memory before
     /// its next tick.
-    pub(crate) fn drop_replays(&mut self, channel_id: ChannelId) {
+    pub(crate) fn drop_replays(&mut self, channel_id: Id<Channel>) {
         if let Some(owed) = self.owed_replays.remove(&channel_id) {
             tracing::warn!(
                 "Logic: {} refused changes of {channel_id} closed unreplayed",
@@ -478,9 +485,9 @@ impl LogicState {
     /// winner (`SRV-202`).
     pub(crate) fn amendments_linked(
         &mut self,
-        channel_id: ChannelId,
-        segment: SegmentId,
-        amendments: DocumentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
     ) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
@@ -519,9 +526,9 @@ impl LogicState {
     /// a document again.
     pub(crate) fn amendments_link_failed(
         &mut self,
-        channel_id: ChannelId,
-        segment: SegmentId,
-        amendments: DocumentId,
+        channel_id: Id<Channel>,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
         message: &str,
     ) {
         tracing::warn!("Logic: amendments of {segment} on {channel_id} failed: {message}");
@@ -534,7 +541,7 @@ impl LogicState {
 
     /// Open each amendments document `meta` names for a segment the channel
     /// holds, so its messages read as amended.
-    pub(crate) fn open_amendments(&mut self, channel_id: ChannelId) {
+    pub(crate) fn open_amendments(&mut self, channel_id: Id<Channel>) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -549,7 +556,7 @@ impl LogicState {
     /// A `meta` delta may name a successor another member created, or a
     /// closing segment another member finalized. Fetch the successor once;
     /// it becomes active when its bytes are in.
-    pub(crate) fn follow_close(&mut self, channel_id: ChannelId) {
+    pub(crate) fn follow_close(&mut self, channel_id: Id<Channel>) {
         let Some(channel) = self.channels.get_mut(&channel_id) else {
             return;
         };
@@ -571,7 +578,7 @@ impl LogicState {
 
     /// The `meta` of a closed channel moved: it may name a new segment, so
     /// the channel is listed again (the Murmure unread spec).
-    pub(crate) fn closed_meta_moved(&mut self, document_id: DocumentId) {
+    pub(crate) fn closed_meta_moved(&mut self, document_id: Id<Document>) {
         let Some(channel_id) = self
             .closed_channels
             .iter()
@@ -593,16 +600,16 @@ impl LogicState {
     /// A closed channel was listed again. Each segment it did not hold is
     /// counted from its first number, under the key of its `meta` (the
     /// Murmure unread spec).
-    pub(crate) fn watch_listed(&mut self, channel_id: ChannelId, documents: &[ChannelDocument]) {
+    pub(crate) fn watch_listed(&mut self, channel_id: Id<Channel>, documents: &[ChannelDocument]) {
         let Some(closed) = self.closed_channels.get_mut(&channel_id) else {
             return;
         };
         let meta = closed.meta();
-        let fresh: Vec<SegmentId> = documents
+        let fresh: Vec<Id<Segment>> = documents
             .iter()
             .filter(|d| d.kind == ChannelDocumentKind::Segment)
             .filter(|d| closed.watch(d.document_id))
-            .map(|d| SegmentId::from_document(d.document_id))
+            .map(|d| Id::<Segment>::from_document(d.document_id))
             .collect();
         for segment in fresh {
             self.send_to_sync(SyncCommand::WatchSegment { segment, meta });

@@ -20,7 +20,7 @@ impl LogicState {
     /// A document with no session identity yet holds a restore that was only
     /// shown, which is never saved (`AUTHOR-027`). It closes the way it did
     /// before residency: Sync drops it whole, and the next open fetches it.
-    pub(crate) fn evict(&mut self, document_id: DocumentId) {
+    pub(crate) fn evict(&mut self, document_id: Id<Document>) {
         // A running import lands whole first, so the save never holds half of
         // it (`ARCH-031`).
         self.settle_import(document_id);
@@ -64,7 +64,7 @@ impl LogicState {
     /// Reopens a document that left memory: the Main thread reads its local
     /// copy back, and Sync opens once it lands (`RESID-010`). Returns `false`
     /// for a document that never left.
-    pub(crate) fn reopen_evicted(&mut self, document_id: DocumentId, doc_type: DocType) -> bool {
+    pub(crate) fn reopen_evicted(&mut self, document_id: Id<Document>, doc_type: DocType) -> bool {
         if self.docs.contains_key(&document_id) {
             return false;
         }
@@ -90,7 +90,7 @@ impl LogicState {
     /// (`RESID-011`).
     pub(crate) fn reopen_from_store(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         doc_type: DocType,
         horizon: Seq,
         restored: HeldRestore,
@@ -135,14 +135,14 @@ impl LogicState {
     /// Sync turned the document light: the relay holds every change of it
     /// (`RESID-019`). A change the store refused is now on the relay, so it
     /// no longer pauses editing (`RESID-018`).
-    pub(crate) fn store_sent(&mut self, document_id: DocumentId) {
+    pub(crate) fn store_sent(&mut self, document_id: Id<Document>) {
         self.send_to_persist(document_id, PersistWrite::Sent);
         self.store_full(document_id, ambre_bus::StoreRoom::Free);
     }
 
     /// The browser refuses, or takes again, an unsent change of a document
     /// (`RESID-018`). The user is warned once, as editing pauses.
-    pub(crate) fn store_full(&mut self, document_id: DocumentId, room: ambre_bus::StoreRoom) {
+    pub(crate) fn store_full(&mut self, document_id: Id<Document>, room: ambre_bus::StoreRoom) {
         if room == ambre_bus::StoreRoom::Free {
             if self.store_full.remove(&document_id) && self.store_full.is_empty() {
                 tracing::info!("Logic: the local store takes changes again, editing resumes");
@@ -180,9 +180,9 @@ mod tests {
     /// The state, its one document, and the Sync, persist and UI outboxes.
     type Opened = (
         LogicState,
-        DocumentId,
+        Id<Document>,
         Receiver<SyncCommand>,
-        Receiver<(DocumentId, PersistWrite)>,
+        Receiver<(Id<Document>, PersistWrite)>,
         Receiver<UiEvent>,
     );
 
@@ -193,7 +193,7 @@ mod tests {
         let (to_sync, sync) = test_link();
         let (to_persist, persist) = test_link();
         let mut state = LogicState::new(to_ui, to_sync, to_persist);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
         if let Some(doc) = state.docs.get_mut(&document_id) {
             doc.ledger
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn a_shown_document_never_leaves_memory() {
         let (mut state, shown, _sync, _persist, _ui) = opened();
-        let other = DocumentId::new();
+        let other = Id::<Document>::mint();
         state.handle_logic_command(LogicCommand::OpenDocument {
             document_id: other,
             doc_type: DocType::Prose,

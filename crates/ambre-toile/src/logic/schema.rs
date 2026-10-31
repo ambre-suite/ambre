@@ -169,8 +169,9 @@ fn gate_through<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::logic::model::{ElementId, ElementKind};
+    use crate::logic::model::ElementKind;
     use crate::logic::state::{BoardKey, ElementKey, Fields, Root, ToileState, entry, root_map};
+    use ambre_core::id::{Element, Id};
     use loro::LoroText;
 
     /// A snapshot of a board carrying `version` in its register. A `None`
@@ -266,7 +267,7 @@ mod tests {
         let mut ids: Vec<&String> = entries.keys().collect();
         ids.sort();
         for id in ids {
-            let Some(map) = entry::<ElementKey>(doc, &ElementId(id.clone())) else {
+            let Some(map) = entry::<ElementKey>(doc, &Id::<Element>::from_text(id.clone())) else {
                 continue;
             };
             let Some(LoroValue::String(body)) = map.value(ElementKey::Body) else {

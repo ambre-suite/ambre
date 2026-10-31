@@ -9,10 +9,8 @@ use ambre_bus::{
     FoldAnswer, MessageDraft, MessageView, MurmureEvent, SnapshotVerdict, StyleMark, TextStyle,
     Timestamp,
 };
-use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, LeaseId, MessageId, Payload, PeerEntryBytes, SegmentId, Seq,
-    SnapshotBytes, UserId,
-};
+use ambre_core::id::{Channel, Document, Id, Lease, Message, Segment, User};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
 use loro::{Container, ExportMode, LoroDoc, ValueOrContainer};
 
 use crate::error::MurmureError;
@@ -45,7 +43,7 @@ fn draft(text: &str) -> MessageDraft {
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, Payload<SnapshotBytes>> = state
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -64,10 +62,10 @@ fn peer_of(state: &ChannelState) -> ChannelState {
 /// numbered their three deltas, header first.
 struct Amended {
     alice: ChannelState,
-    author: UserId,
-    segment: SegmentId,
-    amendments: DocumentId,
-    ids: Vec<MessageId>,
+    author: Id<User>,
+    segment: Id<Segment>,
+    amendments: Id<Document>,
+    ids: Vec<Id<Message>>,
     /// The `meta` delta that names the amendments.
     meta: Payload<DeltaBytes>,
     /// The three amendment deltas, in the relay's order.
@@ -77,8 +75,8 @@ struct Amended {
 }
 
 fn amended() -> Amended {
-    let author = UserId::new();
-    let mut alice = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let author = Id::<User>::mint();
+    let mut alice = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .with_segment_size(crate::MessageCount::new(3))
         .identify();
@@ -86,7 +84,7 @@ fn amended() -> Amended {
         alice.send(&draft(text), author, NOW).expect("send");
     }
     let segment = alice.wants_close().expect("full");
-    let successor = SegmentId::new();
+    let successor = Id::<Segment>::mint();
     alice
         .close_into(segment, successor, crate::Successor::Created, NOW)
         .expect("close");
@@ -101,7 +99,7 @@ fn amended() -> Amended {
     assert_eq!(alice.lease_to_ask(NOW), Some(segment));
     alice.lease_granted(
         segment,
-        LeaseId::new(),
+        Id::<Lease>::mint(),
         ambre_core::Seq(0),
         ambre_core::Millis(LEASE_MS),
     );
@@ -130,7 +128,7 @@ fn amended() -> Amended {
         .expect("link")
         .meta
         .expect("meta names them");
-    let ids: Vec<MessageId> = alice
+    let ids: Vec<Id<Message>> = alice
         .messages(segment)
         .expect("held")
         .iter()
@@ -206,7 +204,7 @@ impl Amended {
         self.alice.fold_answered(
             self.segment,
             FoldAnswer::Granted {
-                lease: LeaseId::new(),
+                lease: Id::<Lease>::mint(),
                 horizon: ambre_core::Seq(0),
                 amendments: self.amendments,
                 amendments_seq: ambre_core::Seq(3),
@@ -291,7 +289,7 @@ fn the_fold_lease_is_asked_as_the_relay_says() {
 /// A channel with no amendments asks for no fold lease.
 #[test]
 fn a_segment_without_amendments_asks_for_no_fold_lease() {
-    let mut state = ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
         .expect("create")
         .identify();
     assert_eq!(state.fold_lease_to_ask(NOW), None);
@@ -307,7 +305,7 @@ fn the_lease_holder_folds_the_amendments_into_the_segment() {
     let (segment, amendments) = (amended.segment, amended.amendments);
     let before = amended.alice.messages(segment).expect("held");
     assert_eq!(amended.alice.fold_lease_to_ask(NOW), Some(segment));
-    let lease = LeaseId::new();
+    let lease = Id::<Lease>::mint();
     amended.alice.fold_answered(
         segment,
         FoldAnswer::Granted {
@@ -398,9 +396,9 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
     alice.fold_answered(
         segment,
         FoldAnswer::Granted {
-            lease: LeaseId::new(),
+            lease: Id::<Lease>::mint(),
             horizon: ambre_core::Seq(0),
-            amendments: DocumentId::new(),
+            amendments: Id::<Document>::mint(),
             amendments_seq: ambre_core::Seq(1),
             expires_in: ambre_core::Millis(LEASE_MS),
         },
@@ -412,7 +410,7 @@ fn a_fold_lease_at_odds_with_this_copy_is_asked_again() {
     alice.fold_answered(
         segment,
         FoldAnswer::Granted {
-            lease: LeaseId::new(),
+            lease: Id::<Lease>::mint(),
             horizon: ambre_core::Seq(0),
             amendments,
             amendments_seq: ambre_core::Seq(9),
@@ -589,7 +587,7 @@ fn amendments_reported_gone_are_marked_folded_and_replay_the_refused_change() {
     let (segment, amendments) = (amended.segment, amended.amendments);
     let mut bob = amended.bob(3);
     assert!(matches!(
-        amended.alice.amendments_gone(DocumentId::new()),
+        amended.alice.amendments_gone(Id::<Document>::mint()),
         Err(MurmureError::NotHeld(_))
     ));
     // The relay refuses this edit: it erased the amendments meanwhile.

@@ -127,7 +127,7 @@ impl SyncState {
             // announces is the one it holds, so an opened document gets a
             // session identity (`AUTHOR-002`).
             let master_seed = MasterSeed::generate();
-            let user_id = *self.user_id.get_or_insert_with(UserId::new);
+            let user_id = *self.user_id.get_or_insert_with(Id::<User>::mint);
             self.signing_key = Some(master_seed.derive_signing_key());
             self.exchange_key = Some(master_seed.derive_exchange_key());
             self.master_seed = Some(master_seed);
@@ -213,7 +213,7 @@ impl SyncState {
             self.exchange_key = Some(exchange_key);
             self.master_seed = Some(master_seed);
             self.open_websocket();
-            let user_id = UserId::new();
+            let user_id = Id::<User>::mint();
             self.send_to_logic(LogicEvent::Rest {
                 id,
                 evt: RestEvent::SessionReady {
@@ -521,7 +521,7 @@ mod provider_tests {
     fn signed_in(keys_stored: ambre_bus::KeySetup) -> SyncEvent {
         SyncEvent::ProviderSignedIn {
             id: ambre_bus::next_request(),
-            user_id: UserId::new(),
+            user_id: Id::<User>::mint(),
             display_name: ambre_core::DisplayName::new("Ada").unwrap(),
             email: "ada@example.org".into(),
             keys_stored,

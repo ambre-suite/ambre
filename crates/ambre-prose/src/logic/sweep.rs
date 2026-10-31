@@ -133,10 +133,11 @@ mod tests {
     use super::*;
     use crate::events::{BlockId, BlockInit, CursorPosition, ProseCommand, tree_id};
     use ambre_bus::app::prose::DocOffset;
-    use ambre_core::{FixedBytes, UserId};
+    use ambre_core::FixedBytes;
+    use ambre_core::id::{Id, User};
 
     /// Bob's user.
-    const BOB: UserId = UserId::from_bytes([2; 16]);
+    const BOB: Id<User> = Id::from_bytes([2; 16]);
 
     /// Alice on one document, and Bob on the same one under a session the
     /// registry ties to his user. Bob adds a block and hides it, and Alice
@@ -269,7 +270,7 @@ mod tests {
 
         alice.apply_ephemeral(BOB, &hello);
         assert!(alice.take_greeting().is_none(), "Bob is no newcomer now");
-        bob.apply_ephemeral(UserId::from_bytes([1; 16]), &answer);
+        bob.apply_ephemeral(Id::from_bytes([1; 16]), &answer);
         assert!(bob.take_greeting().is_some(), "Bob answers in turn");
     }
 

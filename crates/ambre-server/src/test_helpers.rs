@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use ambre_core::id::{Document, Id, User};
 use sqlx::PgPool;
 
 use crate::db;
@@ -67,7 +68,7 @@ pub async fn second_instance(base: &AppState) -> Arc<AppState> {
 }
 
 /// Whether the register of deletes still marks `document`.
-pub async fn deletion_marked(pool: &PgPool, document: ambre_core::DocumentId) -> bool {
+pub async fn deletion_marked(pool: &PgPool, document: Id<Document>) -> bool {
     sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (SELECT 1 FROM document_deletions WHERE document_id = $1)",
     )
@@ -86,7 +87,7 @@ pub async fn make_sweeps_due(pool: &PgPool) {
 }
 
 /// Creates a test user directly in the database (bypasses OIDC flow).
-pub async fn create_test_user(pool: &PgPool, email: &str) -> ambre_core::UserId {
+pub async fn create_test_user(pool: &PgPool, email: &str) -> Id<User> {
     let user = db::create_user(
         pool,
         &ambre_core::Email::from(email),
@@ -353,9 +354,9 @@ fn unchunk(body: &[u8]) -> Vec<u8> {
 /// Creates a test document and adds the owner as an owner member.
 pub async fn create_test_document(
     pool: &PgPool,
-    owner_id: ambre_core::UserId,
+    owner_id: Id<User>,
     doc_type: &str,
-) -> ambre_core::DocumentId {
+) -> Id<Document> {
     let doc_type = doc_type.parse().expect("a document type word");
     let (doc, _created) = db::create_document(pool, &owner_id, doc_type, None, None)
         .await

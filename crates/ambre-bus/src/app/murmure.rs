@@ -7,7 +7,7 @@
 //! `ambre-murmure`.
 //!
 //! A channel is a set of documents, never one document (`MURMURE-021`). So the
-//! command is addressed to a [`ChannelId`](crate::ChannelId), carried by
+//! command is addressed to a [`Id<Channel>`](crate::Id<Channel>), carried by
 //! [`LogicCommand::Channel`](crate::LogicCommand::Channel), and never by
 //! [`LogicCommand::App`](crate::LogicCommand::App), whose address is a
 //! document (`BUS-027`).
@@ -15,15 +15,14 @@
 use ambre_core::{ByteOffset, CharCount, CharOffset, CharSpan, CharVec};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    CategoryId, ChannelDocumentKind, ChannelId, DocumentId, MessageId, MetaId, SegmentId, Seq,
-    SpaceId, UserId,
-};
+use ambre_core::id::{Category, Channel, Document, Id, Message, Meta, Segment, Space, User};
+
+use crate::{ChannelDocumentKind, Seq};
 
 /// One document a channel groups, as the relay lists it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelDocument {
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub kind: ChannelDocumentKind,
 }
 
@@ -31,8 +30,8 @@ pub struct ChannelDocument {
 /// read cursor. The relay answers a yes or no, never a count (`SRV-110`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentActivity {
-    pub channel_id: ChannelId,
-    pub document_id: DocumentId,
+    pub channel_id: Id<Channel>,
+    pub document_id: Id<Document>,
     /// A segment or a thread. A thread counts its mentions alone.
     pub kind: ChannelDocumentKind,
     pub active: crate::Activity,
@@ -50,7 +49,7 @@ pub struct DocumentActivity {
 /// knows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChannelActivity {
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     /// The mark the sidebar shows before any count is known (`MURMURE-119`).
     pub active: crate::Activity,
     /// The new messages of the channel, once the loaded document gives the
@@ -89,9 +88,9 @@ impl MentionCount {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChannelPlace {
     /// A public channel of the space: its catalogue lists it.
-    Public(SpaceId),
+    Public(Id<Space>),
     /// A private channel of the space: only its members know it.
-    Private(SpaceId),
+    Private(Id<Space>),
     /// A direct message, in no space.
     Direct,
 }
@@ -100,13 +99,13 @@ pub enum ChannelPlace {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageAt {
     /// A segment of the channel.
-    Segment(SegmentId),
+    Segment(Id<Segment>),
     /// The thread document of the root message (the Murmure threads spec).
-    Thread(MessageId),
+    Thread(Id<Message>),
 }
 
-impl From<SegmentId> for MessageAt {
-    fn from(segment: SegmentId) -> Self {
+impl From<Id<Segment>> for MessageAt {
+    fn from(segment: Id<Segment>) -> Self {
         Self::Segment(segment)
     }
 }
@@ -116,7 +115,7 @@ impl From<SegmentId> for MessageAt {
 /// Learning of it opens nothing (`MURMURE-475`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemberChannel {
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     pub place: ChannelPlace,
 }
 
@@ -125,8 +124,8 @@ pub struct MemberChannel {
 /// (the Murmure notifications spec).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelMeta {
-    pub channel_id: ChannelId,
-    pub meta: MetaId,
+    pub channel_id: Id<Channel>,
+    pub meta: Id<Meta>,
     /// The last number the relay gave in `meta`, none from a relay that
     /// lists none. A watch resumes after it.
     pub last: Option<Seq>,
@@ -136,7 +135,7 @@ pub struct ChannelMeta {
 /// its `meta`. The name its `meta` holds replaces it once the channel opens.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelName {
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     pub name: ambre_core::Name,
 }
 
@@ -145,7 +144,7 @@ pub struct ChannelName {
 /// nobody named, and never stores it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectPeers {
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     pub names: Vec<ambre_core::DisplayName>,
 }
 
@@ -183,7 +182,7 @@ pub use ambre_core::Timestamp;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MentionTarget {
     /// One member, by user identifier.
-    User(UserId),
+    User(Id<User>),
     /// The channel itself, an `@channel`.
     Channel,
 }
@@ -361,7 +360,7 @@ pub enum ReplyEcho {
 /// The thread of a held reply.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeldReply {
-    pub root: MessageId,
+    pub root: Id<Message>,
     /// Whether the reply also goes to the channel (`MURMURE-109`).
     pub also_in_channel: ReplyEcho,
 }
@@ -397,7 +396,7 @@ pub enum MurmureCommand {
     },
     /// Load the final segment listed before `segment`, because the view
     /// scrolled past the oldest message it holds (`MURMURE-023`).
-    LoadOlder { segment: SegmentId },
+    LoadOlder { segment: Id<Segment> },
     /// The view shows the latest message of the channel: move the read
     /// cursor to it (`MURMURE-115`). A relay record, never a document write.
     MarkRead,
@@ -405,12 +404,12 @@ pub enum MurmureCommand {
     /// segment to just before it (`MURMURE-117`). A relay record, never a
     /// document write.
     MarkUnread {
-        segment: SegmentId,
-        message: MessageId,
+        segment: Id<Segment>,
+        message: Id<Message>,
     },
     /// The view shows the last reply of `thread`: move its read cursor to
     /// it (`MURMURE-293`). A relay record, never a document write.
-    MarkThreadRead { thread: DocumentId },
+    MarkThreadRead { thread: Id<Document> },
     /// Name a direct message, or clear its name with `None` (`MURMURE-054`,
     /// `MURMURE-055`). A name of blanks alone clears it too. Any member may,
     /// and every member reads it.
@@ -420,7 +419,7 @@ pub enum MurmureCommand {
     /// takes it in its thread (`MURMURE-485`).
     React {
         at: MessageAt,
-        message: MessageId,
+        message: Id<Message>,
         emoji: Emoji,
         /// The instant the member reacted, stamped by the view.
         now: Timestamp,
@@ -429,7 +428,7 @@ pub enum MurmureCommand {
     /// (`MURMURE-096`). The entry of another member stays (`MURMURE-097`).
     Unreact {
         at: MessageAt,
-        message: MessageId,
+        message: Id<Message>,
         emoji: Emoji,
     },
     /// Replace the body of this session's own `message` with `draft`, and
@@ -437,7 +436,7 @@ pub enum MurmureCommand {
     /// stay (`MURMURE-086`). A reply takes it in its thread (`MURMURE-485`).
     EditMessage {
         at: MessageAt,
-        message: MessageId,
+        message: Id<Message>,
         draft: MessageDraft,
         /// The instant the author edited, stamped by the view. A locked
         /// segment takes the edit in an amendments document created then.
@@ -448,7 +447,7 @@ pub enum MurmureCommand {
     /// takes it in its thread (`MURMURE-485`).
     DeleteMessage {
         at: MessageAt,
-        message: MessageId,
+        message: Id<Message>,
         /// The instant the author deleted, stamped by the view.
         now: Timestamp,
     },
@@ -456,7 +455,7 @@ pub enum MurmureCommand {
     /// (`MURMURE-105`). The first reply opens the thread (`MURMURE-107`).
     /// The engine finds the segment that holds `root`.
     Reply {
-        root: MessageId,
+        root: Id<Message>,
         draft: MessageDraft,
         /// The reply also goes to the channel, as a copy that names its
         /// thread (`MURMURE-109`).
@@ -477,14 +476,14 @@ pub enum MurmureCommand {
     /// a document write (`MURMURE-125`).
     Typing {
         now: Timestamp,
-        thread: Option<MessageId>,
+        thread: Option<Id<Message>>,
     },
     /// Ask again for a segment the list shows as a band. Its key chain and
     /// its bytes are fetched again from the relay (`MURMURE-514`).
-    Retry { segment: SegmentId },
+    Retry { segment: Id<Segment> },
     /// Find the root of `thread`, which a copy names, down the older
     /// segments, and answer [`MurmureEvent::RootFound`] once it is loaded.
-    SeekRoot { thread: DocumentId },
+    SeekRoot { thread: Id<Document> },
     /// Upload a file for the composer, under the channel's `meta`, through
     /// the shared media flow (`MURMURE-132`). The answer is the
     /// `MediaUploaded` of request `id`, or an `ApiError` naming it. The view
@@ -557,9 +556,9 @@ ambre_core::define_flag! {
 #[derive(Clone, PartialEq, Eq)]
 pub struct MessageView {
     /// The identity the author's peer minted (`MURMURE-002`).
-    pub id: MessageId,
+    pub id: Id<Message>,
     /// The user who wrote the message (`MURMURE-003`).
-    pub author: UserId,
+    pub author: Id<User>,
     /// The instant the author's peer stamped.
     pub ts: Timestamp,
     /// The body, as plain text.
@@ -585,7 +584,7 @@ pub struct MessageView {
     pub thread: Option<ThreadHead>,
     /// The thread a reply also sent to the channel came from, `None` for
     /// any other message (`MURMURE-109`).
-    pub also_in_thread: Option<DocumentId>,
+    pub also_in_thread: Option<Id<Document>>,
 }
 
 impl std::fmt::Debug for MessageView {
@@ -619,12 +618,12 @@ ambre_core::define_tally! {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ThreadHead {
     /// The thread document its `thread` field names.
-    pub document: DocumentId,
+    pub document: Id<Document>,
     /// The replies the thread document holds, deleted ones aside. Zero
     /// until the document is held.
     pub replies: ReplyCount,
     /// The author of the latest reply, `None` until the document is held.
-    pub last_replier: Option<UserId>,
+    pub last_replier: Option<Id<User>>,
 }
 
 /// An event of the channel itself, shown in its message list.
@@ -633,7 +632,7 @@ pub enum Notice {
     /// A member joins a direct message (`MURMURE-057`).
     MemberAdded {
         /// The member who joins.
-        member: UserId,
+        member: Id<User>,
     },
 }
 
@@ -641,7 +640,7 @@ impl MessageView {
     /// The body as the view shows it: each mention of a member reads as
     /// `@` and that member's current name (`MURMURE-098`). A name `name_of`
     /// does not know keeps the text the author typed.
-    pub fn shown(&self, name_of: impl Fn(UserId) -> Option<ambre_core::DisplayName>) -> String {
+    pub fn shown(&self, name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>) -> String {
         self.shown_at(name_of).0
     }
 
@@ -650,7 +649,7 @@ impl MessageView {
     /// char a name took the place of starts past that name (`MURMURE-565`).
     pub fn shown_at(
         &self,
-        name_of: impl Fn(UserId) -> Option<ambre_core::DisplayName>,
+        name_of: impl Fn(Id<User>) -> Option<ambre_core::DisplayName>,
     ) -> (String, CharVec<ByteOffset>) {
         let mut shown = String::with_capacity(self.text.len());
         let mut bytes = CharVec::new();
@@ -686,13 +685,13 @@ impl MessageView {
 pub struct Reaction {
     pub emoji: Emoji,
     /// Each member once, in identifier order.
-    pub users: Vec<UserId>,
+    pub users: Vec<Id<User>>,
 }
 
 /// One message a search found, with the segment that holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchMatch {
-    pub segment: SegmentId,
+    pub segment: Id<Segment>,
     pub message: MessageView,
 }
 
@@ -704,9 +703,9 @@ pub use crate::event::Successor;
 /// it read (the Murmure search spec).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChannelMatches {
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     /// The segments searched: the ones the client holds, in list order.
-    pub covered: Vec<SegmentId>,
+    pub covered: Vec<Id<Segment>>,
     /// How many segments `meta` lists, searched or not.
     pub listed: SegmentCount,
     /// The matches, segment by segment in list order, each segment's in
@@ -720,35 +719,35 @@ pub struct ChannelMatches {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MurmureEvent {
     /// These messages of `segment` are new or changed. The view keys them by
-    /// [`MessageId`], so a message it already holds is replaced, never
+    /// [`Id<Message>`], so a message it already holds is replaced, never
     /// duplicated. One it holds under another segment moves to `segment`.
     /// `messages` keeps the order of the segment.
     Messages {
-        segment: SegmentId,
+        segment: Id<Segment>,
         messages: Vec<MessageView>,
     },
     /// These replies of the thread of `root` are new or changed, keyed as
     /// [`MurmureEvent::Messages`] keys its own. `messages` keeps the order
     /// of the thread document (`MURMURE-105`).
     ThreadMessages {
-        root: MessageId,
-        thread: DocumentId,
+        root: Id<Message>,
+        thread: Id<Document>,
         messages: Vec<MessageView>,
     },
     /// The root of `thread`, which a copy names, lies in `segment`, now
     /// loaded (the Murmure threads spec). Its thread is to open.
     RootFound {
-        thread: DocumentId,
-        segment: SegmentId,
-        root: MessageId,
+        thread: Id<Document>,
+        segment: Id<Segment>,
+        root: Id<Message>,
     },
     /// The root of `thread`, which a copy names, could not be reached (the
     /// Murmure threads spec). Nothing opens.
-    RootLost { thread: DocumentId },
+    RootLost { thread: Id<Document> },
     /// The first message past the read cursors, in list order, that another
     /// member wrote. `None` when every held message is read. Sent each time
     /// the count of the channel is known anew (`MURMURE-499`).
-    FirstUnread { message: Option<MessageId> },
+    FirstUnread { message: Option<Id<Message>> },
     /// The channel could not open: the relay refused it, or one of its
     /// documents failed the checks. Nothing of it is held.
     OpenFailed { message: String },
@@ -765,9 +764,9 @@ pub enum MurmureEvent {
     /// the order of the identifiers. Sent whenever one changes
     /// (`MURMURE-124`, `MURMURE-126`, `MURMURE-536`).
     Watchers {
-        watching: Vec<UserId>,
-        typing: Vec<UserId>,
-        in_threads: Vec<(MessageId, Vec<UserId>)>,
+        watching: Vec<Id<User>>,
+        typing: Vec<Id<User>>,
+        in_threads: Vec<(Id<Message>, Vec<Id<User>>)>,
     },
     /// The members of the channel, as the relay lists them: the `@` list of
     /// the composer offers them alone. Sent at the open and on every change.
@@ -783,15 +782,15 @@ pub enum MurmureEvent {
     /// dropped it. The view names its author and the reporter; `None` for a
     /// key no member holds any more (`MURMURE-239`).
     SnapshotDropped {
-        segment: SegmentId,
-        author: Option<UserId>,
-        reporter: Option<UserId>,
+        segment: Id<Segment>,
+        author: Option<Id<User>>,
+        reporter: Option<Id<User>>,
     },
     /// The older segment the view asked for cannot be read, for `cause`. It
     /// holds the messages from `from` until `to`; `to` is `None` when no
     /// later segment starts (`MURMURE-218`).
     Unreadable {
-        segment: SegmentId,
+        segment: Id<Segment>,
         cause: Unreadable,
         from: Timestamp,
         to: Option<Timestamp>,
@@ -958,7 +957,7 @@ impl std::fmt::Display for CatalogPosition {
 /// A category of a space, as the view draws it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CategoryView {
-    pub id: CategoryId,
+    pub id: Id<Category>,
     pub name: ambre_core::Name,
     /// The rank among the categories: lower first, ties by identifier.
     pub position: CatalogPosition,
@@ -970,11 +969,11 @@ pub struct CategoryView {
 /// document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogueEntry {
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     pub name: ambre_core::Name,
     pub topic: Option<Topic>,
     /// Absent for a channel outside every category.
-    pub category: Option<CategoryId>,
+    pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
     pub position: CatalogPosition,
 }
@@ -983,11 +982,11 @@ pub struct CatalogueEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicChannelDraft {
     /// Minted by the view, so it can follow the channel before it exists.
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     pub name: ambre_core::Name,
     pub topic: Option<Topic>,
     /// Absent for a channel outside every category.
-    pub category: Option<CategoryId>,
+    pub category: Option<Id<Category>>,
     /// The rank in the catalogue: lower first, ties by identifier.
     pub position: CatalogPosition,
 }
@@ -1006,7 +1005,7 @@ pub enum Presence {
 /// One member of a space, as the member list draws it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemberView {
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub display_name: ambre_core::DisplayName,
     pub presence: Presence,
 }
@@ -1016,7 +1015,7 @@ pub struct MemberView {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrivateChannelDraft {
     /// Minted by the view, so it can follow the channel before it exists.
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     pub name: ambre_core::Name,
 }
 
@@ -1028,7 +1027,7 @@ pub struct PrivateChannelDraft {
 /// in never receives a wrap.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DirectMember {
-    pub user_id: UserId,
+    pub user_id: Id<User>,
     pub exchange_pub_key: ambre_core::FixedBytes<ambre_core::ExchangePublicKey>,
 }
 
@@ -1037,7 +1036,7 @@ pub struct DirectMember {
 pub struct DirectMessageDraft {
     /// Minted by the view. It names the request, and the channel too when
     /// the relay creates one. An existing direct message keeps its own.
-    pub channel_id: ChannelId,
+    pub channel_id: Id<Channel>,
     /// Every member but this user.
     pub members: Vec<DirectMember>,
 }
@@ -1050,7 +1049,7 @@ pub enum DirectMessageEvent {
     /// The direct message of these members, created or found
     /// (`MURMURE-051`). It is opening: its events follow under `channel_id`,
     /// which differs from the request's when the direct message existed.
-    Opened { channel_id: ChannelId },
+    Opened { channel_id: Id<Channel> },
     /// The request failed. Nothing changed on the relay.
     Failed { message: String },
 }
@@ -1063,7 +1062,7 @@ pub enum DirectMessageEvent {
 pub enum SpaceCommand {
     /// Add a category to the catalogue.
     AddCategory {
-        category_id: CategoryId,
+        category_id: Id<Category>,
         name: ambre_core::Name,
         /// The rank among the categories: lower first, ties by identifier.
         position: CatalogPosition,
@@ -1085,17 +1084,17 @@ pub enum SpaceCommand {
     },
     /// Join a public channel of the catalogue, with no other member online
     /// (`MURMURE-039`).
-    JoinChannel { channel_id: ChannelId },
+    JoinChannel { channel_id: Id<Channel> },
     /// Delete a channel of the space this user owns, with every document it
     /// groups. Once the relay answers, the client drops it, and a public one
     /// leaves the catalogue (`MURMURE-462`, `MURMURE-247`). A refusal keeps
     /// it whole (`MURMURE-463`).
-    DeleteChannel { channel_id: ChannelId },
+    DeleteChannel { channel_id: Id<Channel> },
     /// Leave a channel of the space. Once the relay answers, the client drops
     /// it with its documents and its keys (`MURMURE-467`). A public one stays
     /// in the catalogue, and a private one's key is owed to the members who
     /// stay (`MURMURE-059`). A refusal keeps it whole.
-    LeaveChannel { channel_id: ChannelId },
+    LeaveChannel { channel_id: Id<Channel> },
     /// Send this user's presence on the space, and turn offline the members
     /// whose presence expired. The view sends it once per refresh period
     /// (`ambre-spec-budgets.md section 8`): the Logic thread reads no clock.
@@ -1122,17 +1121,17 @@ pub enum SpaceEvent {
     Members { members: Vec<MemberView> },
     /// The relay holds the new channel, and the catalogue lists it when it
     /// is public.
-    ChannelCreated { channel_id: ChannelId },
+    ChannelCreated { channel_id: Id<Channel> },
     /// The user is now a member of the channel, which the view may open.
-    Joined { channel_id: ChannelId },
+    Joined { channel_id: Id<Channel> },
     /// The relay deleted the channel, and this client holds nothing of it.
-    ChannelDeleted { channel_id: ChannelId },
+    ChannelDeleted { channel_id: Id<Channel> },
     /// The user left the channel, and this client holds nothing of it.
-    ChannelLeft { channel_id: ChannelId },
+    ChannelLeft { channel_id: Id<Channel> },
     /// A creation, a join, a delete or a leave failed. Nothing changed on the
     /// relay.
     ChannelFailed {
-        channel_id: ChannelId,
+        channel_id: Id<Channel>,
         message: String,
     },
     /// The space could not open. Nothing of it is held.
@@ -1145,7 +1144,8 @@ pub enum SpaceEvent {
 #[cfg(test)]
 mod tests {
     use super::{MurmureCommand, SealedChannelKey, Topic};
-    use ambre_core::{Ciphertext, FixedBytes, KeyId, Nonce, SegmentId};
+    use ambre_core::id::{Id, Message, Segment, User};
+    use ambre_core::{Ciphertext, FixedBytes, KeyId, Nonce};
 
     /// A split gives back the parts a join wrote. Bytes too short to hold a
     /// key id and a nonce give nothing.
@@ -1172,7 +1172,7 @@ mod tests {
     #[test]
     fn a_retry_writes_no_document() {
         let retry = MurmureCommand::Retry {
-            segment: SegmentId::from_bytes([7; 16]),
+            segment: Id::<Segment>::from_bytes([7; 16]),
         };
         assert!(!retry.is_mutating());
     }
@@ -1199,7 +1199,7 @@ mod tests {
             Attachment, ByteSize, ContentHash, Deletion, MediaType, MessageAt, MessageDraft,
             MessageView, Revision,
         };
-        use ambre_core::{MessageId, Timestamp, UserId};
+        use ambre_core::Timestamp;
         let secret = "Q3 layoffs";
         let topic = Topic::new(secret).expect("a topic");
         assert_eq!(format!("{topic:?}"), "Topic(10 chars)");
@@ -1215,8 +1215,8 @@ mod tests {
             size: ByteSize(1),
         };
         let view = MessageView {
-            id: MessageId::new(),
-            author: UserId::default(),
+            id: Id::<Message>::mint(),
+            author: Id::<User>::mint(),
             ts: Timestamp::default(),
             text: secret.to_owned(),
             mentions: Vec::new(),
@@ -1230,8 +1230,8 @@ mod tests {
             also_in_thread: None,
         };
         let edit = MurmureCommand::EditMessage {
-            at: MessageAt::Segment(SegmentId::from_bytes([7; 16])),
-            message: MessageId::new(),
+            at: MessageAt::Segment(Id::<Segment>::from_bytes([7; 16])),
+            message: Id::<Message>::mint(),
             draft: draft.clone(),
             now: Timestamp::default(),
         };

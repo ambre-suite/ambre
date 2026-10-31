@@ -11,7 +11,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use ambre_core::{DocumentId, FixedBytes, KeyId};
+use ambre_core::id::{Document, Id};
+use ambre_core::{FixedBytes, KeyId};
 use ambre_crypto::DocumentKey;
 use ambre_protocol::KeyLink;
 
@@ -26,7 +27,7 @@ pub(crate) struct Chain {
 impl Chain {
     /// The links of `document_id` among `links`. A link of another document
     /// is dropped, and the first link starting from a key is the one kept.
-    pub(crate) fn new(document_id: DocumentId, links: impl IntoIterator<Item = KeyLink>) -> Self {
+    pub(crate) fn new(document_id: Id<Document>, links: impl IntoIterator<Item = KeyLink>) -> Self {
         let mut chain = Self::default();
         for link in links {
             chain.push(document_id, link);
@@ -35,7 +36,7 @@ impl Chain {
     }
 
     /// Adds one link, the one this client just posted or one the relay served.
-    pub(crate) fn push(&mut self, document_id: DocumentId, link: KeyLink) {
+    pub(crate) fn push(&mut self, document_id: Id<Document>, link: KeyLink) {
         if link.document_id == document_id {
             self.links.entry(link.key).or_insert(link);
         }
@@ -55,7 +56,7 @@ impl Chain {
     /// `None` when the walk ends before `wanted`.
     pub(crate) fn recover(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         current: &DocumentKey,
         wanted: FixedBytes<KeyId>,
     ) -> Option<DocumentKey> {
@@ -94,7 +95,7 @@ pub(crate) fn signed_by_writers(
 /// It is taken out of the document state for a task that outlives the borrow.
 #[derive(Clone)]
 pub(crate) struct Keyring {
-    pub(crate) document_id: DocumentId,
+    pub(crate) document_id: Id<Document>,
     pub(crate) current: DocumentKey,
     pub(crate) previous: Vec<DocumentKey>,
     pub(crate) chain: Chain,
@@ -117,7 +118,7 @@ impl Keyring {
 /// chain reaches from the current key. Never by trying every key in turn
 /// (`SYNC-045`).
 pub(crate) fn find_key(
-    document_id: DocumentId,
+    document_id: Id<Document>,
     current: &DocumentKey,
     previous: &[DocumentKey],
     chain: &Chain,
@@ -141,7 +142,7 @@ mod tests {
     }
 
     /// `n + 1` keys, oldest first, and the `n` links between them.
-    fn rotations(document_id: DocumentId, n: usize) -> (Vec<DocumentKey>, Vec<KeyLink>) {
+    fn rotations(document_id: Id<Document>, n: usize) -> (Vec<DocumentKey>, Vec<KeyLink>) {
         let keys: Vec<_> = (0..=n).map(|_| DocumentKey::generate()).collect();
         let links = keys
             .windows(2)
@@ -154,7 +155,7 @@ mod tests {
     /// older key, one link at a time (`SYNC-119`).
     #[test]
     fn the_current_key_walks_back_to_every_older_key() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (keys, links) = rotations(document_id, 12);
         let chain = Chain::new(document_id, links);
         let current = keys.last().unwrap();
@@ -177,7 +178,7 @@ mod tests {
     /// (`SYNC-120`).
     #[test]
     fn a_link_naming_another_key_stops_the_walk_there() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (keys, mut links) = rotations(document_id, 4);
         // The link from keys[3] seals a key that is not keys[2], and names
         // keys[2]: what the relay would serve to swap a key in.
@@ -200,7 +201,7 @@ mod tests {
     /// nothing; a link of another document is not kept.
     #[test]
     fn a_link_tampered_or_misfiled_opens_nothing() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (keys, links) = rotations(document_id, 1);
         let mut tampered = links[0].clone();
         let mut sealed = tampered.sealed.into_bytes();
@@ -210,7 +211,7 @@ mod tests {
         let chain = Chain::new(document_id, [tampered]);
         assert!(chain.recover(document_id, &keys[1], keys[0].id()).is_none());
 
-        let elsewhere = Chain::new(DocumentId::new(), links);
+        let elsewhere = Chain::new(Id::<Document>::mint(), links);
         assert_eq!(elsewhere.len(), 0);
     }
 
@@ -219,7 +220,7 @@ mod tests {
     /// A document with no log keeps every link.
     #[test]
     fn a_link_no_writer_signed_is_dropped() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (keys, mut links) = rotations(document_id, 2);
         let stranger = MasterSeed::from_array([0x55; 32]).derive_signing_key();
         if let Some(link) = links.get_mut(0) {
@@ -240,7 +241,7 @@ mod tests {
     /// key the caller holds as current is untouched (`SYNC-122`).
     #[test]
     fn a_recovered_key_never_becomes_the_current_one() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (keys, links) = rotations(document_id, 2);
         let chain = Chain::new(document_id, links);
         let current = keys[2].clone();

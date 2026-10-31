@@ -69,13 +69,14 @@ pub fn send_lossy(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{AppCommand, DocumentId, TrameCommand};
+    use crate::{AppCommand, TrameCommand};
     use crate::{Col, Row};
+    use ambre_core::id::Id;
 
     /// The viewport request, the archetype of the class.
     fn viewport() -> LogicCommand {
         LogicCommand::App {
-            document_id: DocumentId::from_bytes([1; 16]),
+            document_id: Id::from_bytes([1; 16]),
             command: AppCommand::Trame(TrameCommand::ScrollViewport {
                 version: ambre_core::Generation::nth(1),
                 row_start: Row::new(0),
@@ -104,7 +105,7 @@ mod tests {
         ]
         .into_iter()
         .map(|command| LogicCommand::App {
-            document_id: DocumentId::from_bytes([1; 16]),
+            document_id: Id::from_bytes([1; 16]),
             command: AppCommand::Trame(command),
         })
         .collect()
@@ -139,7 +140,7 @@ mod tests {
     fn a_command_of_another_plane_is_refused_with_the_mutations() {
         let (tx, rx) = crate::conduit::local(crate::conduit::ChannelCapacity::new(1));
         let close = LogicCommand::CloseDocument {
-            document_id: DocumentId::from_bytes([2; 16]),
+            document_id: Id::from_bytes([2; 16]),
         };
         assert_eq!(send_lossy(&tx, close), LossyOutcome::Refused);
         assert_eq!(rx.len(), 0);

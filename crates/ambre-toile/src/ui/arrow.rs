@@ -9,11 +9,10 @@
 // means. It is kept pure so the host tier can run it.
 // ============================================================================
 
-use ambre_bus::app::toile::{
-    ConnectorId, DisplayNode, DisplayViewport, ElementId, End, NodeId, ToileCommand, ZTarget,
-};
+use ambre_bus::app::toile::{DisplayNode, DisplayViewport, End, NodeId, ToileCommand, ZTarget};
 use ambre_commands::CommandId;
 use ambre_core::ViewPx;
+use ambre_core::id::{Connector, Element, Id};
 use ambre_draw::{BezPath, Point};
 use kurbo::ParamCurve;
 
@@ -50,7 +49,7 @@ pub fn handle_at(path: &BezPath, world: Point, tol: BoardLength) -> Option<End> 
 /// dropped. A re-aim needs somewhere to land, and a dropped endpoint would
 /// dangle the arrow the user was repairing.
 pub fn retarget_on_release(
-    id: &ConnectorId,
+    id: &Id<Connector>,
     endpoint: End,
     display: &DisplayViewport,
     world: Point,
@@ -71,7 +70,7 @@ pub fn retarget_on_release(
 /// locked, reacted to, put in a frame, or copied (its two endpoints would not
 /// travel with it). What is left is the four the story names, minus the restyle
 /// the inspector drives through its own path.
-pub fn arrow_command_for(id: CommandId, arrow: &ConnectorId) -> Vec<ToileCommand> {
+pub fn arrow_command_for(id: CommandId, arrow: &Id<Connector>) -> Vec<ToileCommand> {
     use super::menu::{BACKWARD, BRING_FRONT, DELETE, FORWARD, SEND_BACK};
     let reorder = |to| {
         vec![ToileCommand::Reorder {
@@ -90,7 +89,7 @@ pub fn arrow_command_for(id: CommandId, arrow: &ConnectorId) -> Vec<ToileCommand
 }
 
 /// The routed path of one connector in the current display, if it is there.
-pub fn path_of<'a>(display: &'a DisplayViewport, id: &ConnectorId) -> Option<&'a BezPath> {
+pub fn path_of<'a>(display: &'a DisplayViewport, id: &Id<Connector>) -> Option<&'a BezPath> {
     display.nodes.iter().find_map(|n| match n {
         DisplayNode::Connector(c) if &c.id == id => Some(&c.path),
         _ => None,
@@ -100,7 +99,7 @@ pub fn path_of<'a>(display: &'a DisplayViewport, id: &ConnectorId) -> Option<&'a
 /// Whether an element id is still in the culled display. A selected arrow whose
 /// endpoint left the board is answered by [`path_of`] instead: the deriver drops
 /// the whole connector.
-pub fn holds_element(display: &DisplayViewport, id: &ElementId) -> bool {
+pub fn holds_element(display: &DisplayViewport, id: &Id<Element>) -> bool {
     display
         .nodes
         .iter()
@@ -126,7 +125,7 @@ mod tests {
 
     fn rect(id: &str, b: Rect) -> DisplayNode {
         DisplayNode::Element(DisplayElement {
-            id: ElementId(id.to_owned()),
+            id: Id::<Element>::from_text(id.to_owned()),
             kind: ElementKind::Shape(ShapeKind::Rect),
             transform: Affine::IDENTITY,
             bounds: b,
@@ -140,7 +139,7 @@ mod tests {
 
     fn arrow(id: &str, path: BezPath) -> DisplayNode {
         DisplayNode::Connector(DisplayConnector {
-            id: ConnectorId(id.to_owned()),
+            id: Id::<Connector>::from_text(id.to_owned()),
             path,
             style: ElementStyle::default(),
             arrows: EndCaps {
@@ -203,7 +202,7 @@ mod tests {
             arrow("c", line((100.0, 50.0), (300.0, 50.0))),
         ]);
         let cmd = retarget_on_release(
-            &ConnectorId("c".into()),
+            &Id::<Connector>::from_text("c".into()),
             End::To,
             &display,
             Point::new(50.0, 98.0),
@@ -216,9 +215,9 @@ mod tests {
                 to,
                 anch,
             }) => {
-                assert_eq!(id, ConnectorId("c".into()));
+                assert_eq!(id, Id::<Connector>::from_text("c".into()));
                 assert!(matches!(endpoint, End::To));
-                assert_eq!(to, ElementId("a".into()));
+                assert_eq!(to, Id::<Element>::from_text("a".into()));
                 assert!(matches!(anch, Anchor::Bottom), "aimed at the bottom edge");
             }
             other => panic!("expected a retarget, got {other:?}"),
@@ -229,7 +228,7 @@ mod tests {
     #[test]
     fn an_arrow_answers_delete_and_the_z_order() {
         use super::super::menu::{BACKWARD, BRING_FRONT, COPY, DELETE, FORWARD, GROUP, SEND_BACK};
-        let c = ConnectorId("c".into());
+        let c = Id::<Connector>::from_text("c".into());
         assert!(matches!(
             arrow_command_for(DELETE, &c).as_slice(),
             [ToileCommand::DeleteConnector { .. }]
@@ -265,7 +264,7 @@ mod tests {
         let display = viewport(vec![arrow("c", line((0.0, 0.0), (100.0, 0.0)))]);
         assert!(
             retarget_on_release(
-                &ConnectorId("c".into()),
+                &Id::<Connector>::from_text("c".into()),
                 End::From,
                 &display,
                 Point::new(500.0, 500.0),

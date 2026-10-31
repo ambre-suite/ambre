@@ -5,7 +5,8 @@
 //! the snapshot's author. So the relay can check it, and nobody can replay it
 //! against another snapshot.
 
-use ambre_core::{DocumentId, FixedBytes, PublicKey, SnapshotId};
+use ambre_core::id::{Document, Id, Snapshot};
+use ambre_core::{FixedBytes, PublicKey};
 
 use crate::transcript::SignedTranscript;
 
@@ -16,16 +17,16 @@ pub const REPORT_DOMAIN: &[u8] = b"ambre-snapshot-report-v1";
 /// the author's signing key, each at a fixed length.
 #[must_use]
 pub fn report_transcript(
-    document_id: DocumentId,
-    snapshot_id: SnapshotId,
+    document_id: Id<Document>,
+    snapshot_id: Id<Snapshot>,
     author: &FixedBytes<PublicKey>,
 ) -> SignedTranscript {
     // The domain, two UUIDs and one key. The compiler sums the constants, so
     // the sum cannot overflow at run time.
     let mut transcript = Vec::with_capacity(const { REPORT_DOMAIN.len() + 16 + 16 + 32 });
     transcript.extend_from_slice(REPORT_DOMAIN);
-    transcript.extend_from_slice(document_id.as_uuid().as_bytes());
-    transcript.extend_from_slice(snapshot_id.as_uuid().as_bytes());
+    transcript.extend_from_slice(document_id.as_bytes());
+    transcript.extend_from_slice(snapshot_id.as_bytes());
     transcript.extend_from_slice(author.as_array());
     SignedTranscript::new(transcript)
 }
@@ -38,17 +39,25 @@ mod tests {
     /// any of the three changes what is signed.
     #[test]
     fn the_transcript_names_the_document_the_snapshot_and_the_author() {
-        let doc = DocumentId::new();
-        let snap = SnapshotId::new();
+        let doc = Id::<Document>::mint();
+        let snap = Id::<Snapshot>::mint();
         let base = report_transcript(doc, snap, &FixedBytes::from_array([1; 32]));
         assert!(base.as_bytes().starts_with(REPORT_DOMAIN));
         assert_ne!(
             base,
-            report_transcript(DocumentId::new(), snap, &FixedBytes::from_array([1; 32]))
+            report_transcript(
+                Id::<Document>::mint(),
+                snap,
+                &FixedBytes::from_array([1; 32])
+            )
         );
         assert_ne!(
             base,
-            report_transcript(doc, SnapshotId::new(), &FixedBytes::from_array([1; 32]))
+            report_transcript(
+                doc,
+                Id::<Snapshot>::mint(),
+                &FixedBytes::from_array([1; 32])
+            )
         );
         assert_ne!(
             base,

@@ -13,6 +13,7 @@ use std::io::Read;
 
 use ambre_core::activity::{ActivitySummary, SummaryError};
 use ambre_core::authorship::SessionNonce;
+use ambre_core::id::{Document, Id};
 use ambre_core::{
     Aad, ByteSize, EphemeralBytes, FixedBytes, KeyId, MediaBytes, Payload, PublicKey, SecretBytes,
     SnapshotBytes,
@@ -522,7 +523,7 @@ pub fn seal_snapshot(
 /// [`PipelineError::WrongDocument`] for another document's.
 pub fn decode_snapshot_blob(
     blob: &FetchedBlob,
-    document_id: ambre_bus::DocumentId,
+    document_id: Id<Document>,
 ) -> Result<Snapshot, PipelineError> {
     let snapshot: Snapshot =
         postcard::from_bytes(blob.as_bytes()).map_err(|_| PipelineError::Postcard)?;
@@ -826,7 +827,7 @@ const OBJECT_HEADER: ByteSize = ObjectLayout::SIZE
 const NAME_DOMAIN: &[u8] = b"ambre-doc-name-v2";
 
 /// The additional data of a document name: the domain, then the document id.
-pub fn name_aad(document_id: ambre_core::DocumentId) -> Aad {
+pub fn name_aad(document_id: Id<Document>) -> Aad {
     let mut aad = NAME_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
     Aad::new(aad)
@@ -839,10 +840,7 @@ const MEDIA_DOMAIN: &[u8] = b"ambre-media-v2";
 
 /// The additional data of a media blob: the domain, the document id, then the
 /// address the document stores.
-pub fn media_aad(
-    document_id: ambre_core::DocumentId,
-    address: &FixedBytes<ambre_core::MediaAddress>,
-) -> Aad {
+pub fn media_aad(document_id: Id<Document>, address: &FixedBytes<ambre_core::MediaAddress>) -> Aad {
     let mut aad = MEDIA_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
     aad.extend_from_slice(address.as_array());
@@ -970,7 +968,7 @@ const LINK_DOMAIN: &[u8] = b"ambre-key-link-v1";
 
 /// The additional data of a link: the domain, the document id, then the
 /// identifier of the key it seals.
-fn link_aad(document_id: ambre_core::DocumentId, previous: FixedBytes<KeyId>) -> Aad {
+fn link_aad(document_id: Id<Document>, previous: FixedBytes<KeyId>) -> Aad {
     let mut aad = LINK_DOMAIN.to_vec();
     aad.extend_from_slice(document_id.as_bytes());
     aad.extend_from_slice(previous.as_array());
@@ -985,7 +983,7 @@ fn link_aad(document_id: ambre_core::DocumentId, previous: FixedBytes<KeyId>) ->
 ///
 /// [`PipelineError::Crypto`] from the envelope.
 pub fn seal_link(
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
     previous: &DocumentKey,
     next: &DocumentKey,
     signing_key: &SigningKey,
@@ -1013,7 +1011,7 @@ pub fn seal_link(
 ///   fails.
 pub fn open_link(
     link: &ambre_protocol::KeyLink,
-    document_id: ambre_core::DocumentId,
+    document_id: Id<Document>,
     next: &DocumentKey,
 ) -> Result<DocumentKey, PipelineError> {
     if link.document_id != document_id {
@@ -1069,9 +1067,10 @@ pub fn object_author(object: &impl StoredObject) -> Result<FixedBytes<PublicKey>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ambre_core::PublicKey;
     use ambre_core::activity::ActivityKind;
     use ambre_core::authorship::SESSION_NONCE_LEN;
-    use ambre_core::{DocumentId, PublicKey, SnapshotId, UserId};
+    use ambre_core::id::{self, User};
     use ambre_crypto::MasterSeed;
     use ambre_protocol::messages::{Clock, Counter};
 
@@ -1104,10 +1103,10 @@ mod tests {
 
     fn update_pd(author: FixedBytes<PublicKey>) -> UpdatePublicData {
         UpdatePublicData {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             pub_key: author,
             key_id: key_id(),
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<id::Snapshot>::mint(),
             clock: Clock(1),
         }
     }
@@ -1125,10 +1124,10 @@ mod tests {
         let (doc_key, signing, author) = keys();
         let payload = vec![0x7Au8; 4096]; // highly compressible
         let pd = SnapshotPublicData {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             pub_key: author,
             key_id: key_id(),
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
@@ -1148,10 +1147,10 @@ mod tests {
 
         let (doc_key, signing, author) = keys();
         let pd = SnapshotPublicData {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             pub_key: author,
             key_id: key_id(),
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: vec![(author, Clock(1)), (author, Clock(2))],
         };
@@ -1245,7 +1244,7 @@ mod tests {
         let (doc_key, signing, author) = keys();
         let pd = update_pd(author);
         let nonce = FixedBytes::<SessionNonce>::from_array([1; SESSION_NONCE_LEN]);
-        let mentioned = UserId::from_bytes([0xA7; 16]);
+        let mentioned = Id::<User>::from_bytes([0xA7; 16]);
         let summary = ActivitySummary {
             kind: ActivityKind::Content,
             mentions: vec![mentioned],
@@ -1320,7 +1319,7 @@ mod tests {
     #[test]
     fn a_blob_bound_for_storage_is_sealed() {
         let (doc_key, signing, author) = keys();
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let plaintext = b"a picture's bytes, or a document's whole state, in the clear";
         let contains = |hay: &[u8]| {
             hay.windows(16)
@@ -1331,7 +1330,7 @@ mod tests {
             document_id,
             pub_key: author,
             key_id: key_id(),
-            snapshot_id: SnapshotId::new(),
+            snapshot_id: Id::<id::Snapshot>::mint(),
             parent_snapshot_proof: None,
             parent_snapshot_update_clocks: Vec::new(),
         };
@@ -1361,7 +1360,7 @@ mod tests {
         let (doc_key, signing, author) = keys();
         let payload = b"cursor@42";
         let pd = EphemeralPublicData {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             pub_key: author,
             key_id: key_id(),
             counter: Counter(7),
@@ -1523,7 +1522,7 @@ mod tests {
             seal_update(&frame(b"secret"), update_pd(author), &doc_key, &signing).unwrap();
         // Forge the routing metadata: signature still passes (attacker re-signs is
         // not modeled here), but the aad-bound commitment/AEAD no longer match.
-        update.public_data.document_id = DocumentId::new();
+        update.public_data.document_id = Id::<Document>::mint();
         assert!(open_update(&update, &doc_key).is_err());
     }
 
@@ -1585,7 +1584,7 @@ mod tests {
     #[test]
     fn a_name_opens_under_its_own_document_only() {
         let (doc_key, signing, _) = keys();
-        let own = DocumentId::new();
+        let own = Id::<Document>::mint();
         let sealed =
             seal_object(&secret(b"Budget 2027"), &name_aad(own), &doc_key, &signing).unwrap();
         assert_eq!(
@@ -1594,7 +1593,7 @@ mod tests {
                 .into_plaintext(),
             b"Budget 2027"
         );
-        assert!(open_object(&sealed, &name_aad(DocumentId::new()), &doc_key).is_err());
+        assert!(open_object(&sealed, &name_aad(Id::<Document>::mint()), &doc_key).is_err());
     }
 
     /// A name the build before the typed layout sealed: `layout || key id ||
@@ -1604,7 +1603,7 @@ mod tests {
     #[test]
     fn an_object_the_old_code_sealed_still_reads_and_opens() {
         let (doc_key, _, author) = keys();
-        let id = DocumentId::from_bytes([7; 16]);
+        let id = Id::<Document>::from_bytes([7; 16]);
         let sealed = hex::decode(
             "01b6e14f706ce523ebafb9bf6eb3cbeb9a9baf2dea5ae773139d2499db2dd2ac\
              92bbc3240f24e943973cea139eed5162b6778951fb570716916c42c0cc88465a\
@@ -1633,7 +1632,7 @@ mod tests {
     #[test]
     fn a_media_blob_the_old_code_sealed_still_reads_and_opens() {
         let (doc_key, _, author) = keys();
-        let id = DocumentId::from_bytes([7; 16]);
+        let id = Id::<Document>::from_bytes([7; 16]);
         let address = FixedBytes::<ambre_core::MediaAddress>::from_array([0xab; 32]);
         let sealed = FetchedBlob::new(
             hex::decode(
@@ -1667,7 +1666,7 @@ mod tests {
         let delta = Payload::<ambre_core::DeltaBytes>::new(b"delta".to_vec());
         let summary = ActivitySummary {
             kind: ActivityKind::Content,
-            mentions: vec![UserId::from_bytes([0xA7; 16])],
+            mentions: vec![Id::<User>::from_bytes([0xA7; 16])],
             mentions_all: ambre_bus::MentionScope::Named,
             anchor: None,
         };

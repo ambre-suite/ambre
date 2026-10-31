@@ -33,8 +33,8 @@ pub use command::{
 };
 pub use index::{ElementBounds, SpatialIndex, Viewport};
 pub use model::{
-    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, FontSpec, NodeId, PathType,
-    Shadow, ShapeKind, StrokePoint,
+    Anchor, ElementKind, ElementStyle, EndCaps, FontSpec, NodeId, PathType, Shadow, ShapeKind,
+    StrokePoint,
 };
 pub use state::ToileState;
 

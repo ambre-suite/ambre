@@ -217,7 +217,7 @@ nor either read rule (`DOCFILE-007`).
 // ambre-core
 
 /// The writer rule: no version parameter, because there is no write mode to pick.
-pub fn write_ambre_plaintext(doc_type: DocType, document_id: DocumentId, payload: &SnapshotBytes)
+pub fn write_ambre_plaintext(doc_type: DocType, document_id: Id<Document>, payload: &SnapshotBytes)
     -> PlaintextContainer;
 
 /// Any `DocType`, version-recovery rule applied. What a file-open router reads
@@ -242,7 +242,7 @@ pub fn migrate_ambre(from: ContainerVersion, file: &PlaintextContainer)
 pub struct AmbreHeader {
     pub version: ContainerVersion,
     pub doc_type: DocType,
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     /// Offset 22 onward: the raw Loro snapshot.
     pub payload: SnapshotBytes,
 }
@@ -300,7 +300,7 @@ application's `LoroDoc`; the header handling is not reimplemented per applicatio
 ```rust
 /// Header + uncompressed, unencrypted snapshot. Pure; no crypto (`DOCFILE-006`).
 /// `None` when the document could not be read, so no file is written.
-pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: DocumentId) -> Option<PlaintextContainer>;
+pub fn export_ambre_plaintext(doc: &LoroDoc, doc_id: Id<Document>) -> Option<PlaintextContainer>;
 
 /// Validates magic, version and doc_type, and returns the payload. The caller
 /// compares the returned `DocType` against its own and re-dispatches on

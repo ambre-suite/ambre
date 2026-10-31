@@ -7,7 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::id::UserId;
+use crate::id::{Id, User};
 
 /// The most members one summary names. A message that names more names the
 /// channel, as an `@channel` does.
@@ -112,7 +112,7 @@ pub struct ActivitySummary {
     /// The kind of activity.
     pub kind: ActivityKind,
     /// The members the update names, at most [`MAX_MENTIONS`].
-    pub mentions: Vec<UserId>,
+    pub mentions: Vec<Id<User>>,
     /// Whether the update names every member, as an `@channel` does.
     pub mentions_all: MentionScope,
     /// The application key it points at, such as a thread root.
@@ -198,7 +198,7 @@ impl ActivitySummary {
         let mentions = users
             .chunks_exact(16)
             .filter_map(|chunk| <[u8; 16]>::try_from(chunk).ok())
-            .map(UserId::from_bytes)
+            .map(Id::<User>::from_bytes)
             .collect();
         let (&anchor_len, rest) = rest.split_first().ok_or(SummaryError::Short)?;
         let anchor_len = usize::from(anchor_len);
@@ -255,7 +255,7 @@ impl ActivityCounters {
     /// Moves the counters by one update (`RESID-014`). An update with no
     /// summary marks the document active and counts nothing (`RESID-015`).
     /// With no `me`, only a mention of every member counts.
-    pub fn advance(&mut self, summary: Option<&ActivitySummary>, me: Option<UserId>) {
+    pub fn advance(&mut self, summary: Option<&ActivitySummary>, me: Option<Id<User>>) {
         self.active = Activity::Active;
         let Some(summary) = summary else {
             return;
@@ -312,8 +312,8 @@ mod tests {
         assert!(at.encode().is_ok());
     }
 
-    fn user(byte: u8) -> UserId {
-        UserId::from_bytes([byte; 16])
+    fn user(byte: u8) -> Id<User> {
+        Id::<User>::from_bytes([byte; 16])
     }
 
     fn summary() -> ActivitySummary {

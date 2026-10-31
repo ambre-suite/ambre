@@ -23,7 +23,8 @@
 // Listing requires a session, so the signed-out panel gates access.
 // ============================================================================
 
-use ambre_bus::{DocType, DocumentId, LogicCommand, RestCommand};
+use ambre_bus::{DocType, LogicCommand, RestCommand};
+use ambre_core::id::{Document, Id};
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
@@ -36,7 +37,7 @@ use crate::route;
 /// named -> "Untitled" placeholder, `ambre-spec-launcher.md`, CHROME-036).
 #[derive(Clone)]
 pub struct DocItem {
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub doc_type: DocType,
     pub name: Option<ambre_core::Name>,
     /// Epoch milliseconds of the last modification (routing metadata, plaintext).
@@ -114,7 +115,7 @@ pub fn landing_view(
     let on_pick = {
         let navigate = use_navigate();
         Callback::new(move |doc_type: DocType| {
-            open_document(&navigate, doc_type, DocumentId::new(), booted);
+            open_document(&navigate, doc_type, Id::<Document>::mint(), booted);
         })
     };
 
@@ -147,7 +148,7 @@ pub fn landing_view(
     // The irreversible delete (E2EE: no server-side trash). A card only names
     // its target here; `DeleteConfirm` renders the name and holds the dispatch
     // behind its confirming action (`CHROME-041`).
-    let pending_delete = RwSignal::new(None::<(DocumentId, ComposedName)>);
+    let pending_delete = RwSignal::new(None::<(Id<Document>, ComposedName)>);
 
     // Distinct clones for the two view sites (the `view!` macro's capture
     // analysis cannot share one binding across both closures).
@@ -157,7 +158,7 @@ pub fn landing_view(
 
     let confirm_delete = {
         let to_logic = to_logic.clone();
-        Callback::new(move |document_id: DocumentId| {
+        Callback::new(move |document_id: Id<Document>| {
             let _ = to_logic.try_send(LogicCommand::Rest {
                 id: ambre_bus::next_request(),
                 cmd: RestCommand::DeleteDocument { document_id },
@@ -243,7 +244,7 @@ pub fn landing_view(
 fn open_document(
     navigate: &impl Fn(&str, leptos_router::NavigateOptions),
     doc_type: DocType,
-    document_id: DocumentId,
+    document_id: Id<Document>,
     booted: DocType,
 ) {
     let path = route::doc_path(doc_type, document_id);
@@ -339,7 +340,7 @@ fn doc_card(
     d: DocItem,
     docs: RwSignal<Vec<DocItem>>,
     to_logic: ambre_bus::conduit::Sender<LogicCommand>,
-    pending_delete: RwSignal<Option<(DocumentId, ComposedName)>>,
+    pending_delete: RwSignal<Option<(Id<Document>, ComposedName)>>,
     booted: DocType,
     toasts: Toasts,
 ) -> impl IntoView {
@@ -497,9 +498,9 @@ fn card_name(name: Option<ambre_core::Name>) -> impl IntoView {
 #[component]
 fn DeleteConfirm(
     /// The document a card asked to delete, with the name to confirm against.
-    pending: RwSignal<Option<(DocumentId, ComposedName)>>,
+    pending: RwSignal<Option<(Id<Document>, ComposedName)>>,
     /// The dispatch, run with the confirmed document.
-    on_confirm: Callback<DocumentId>,
+    on_confirm: Callback<Id<Document>>,
 ) -> impl IntoView {
     let open = RwSignal::new(ambre_chrome::Openness::Closed);
     Effect::new(move |_| open.set(ambre_chrome::Openness::from_bool(pending.get().is_some())));
@@ -944,8 +945,8 @@ mod tests {
     async fn a_delete_waits_for_the_confirmation_on_the_name() {
         let owner = Owner::new();
         owner.set();
-        let pending = RwSignal::new(None::<(DocumentId, ComposedName)>);
-        let confirmed = RwSignal::new(Vec::<DocumentId>::new());
+        let pending = RwSignal::new(None::<(Id<Document>, ComposedName)>);
+        let confirmed = RwSignal::new(Vec::<Id<Document>>::new());
         let on_confirm = Callback::new(move |id| confirmed.update(|v| v.push(id)));
         let container = mount_in_container(move || {
             view! { <DeleteConfirm pending=pending on_confirm=on_confirm /> }
@@ -963,7 +964,7 @@ mod tests {
                 .unwrap()
         };
 
-        let id = DocumentId::new();
+        let id = Id::<Document>::mint();
         let payroll =
             || ComposedName::or_placeholder(Some(&ambre_core::Name::new("Payroll").unwrap()));
         pending.set(Some((id, payroll())));
@@ -1041,7 +1042,7 @@ mod tests {
     #[wasm_bindgen_test]
     fn creatable_types_round_trip_through_doc_path() {
         for &doc_type in DocType::creatable() {
-            let id = DocumentId::new();
+            let id = Id::<Document>::mint();
             let route = route::parse(&route::doc_path(doc_type, id));
             assert_eq!(route.doc(), Some((doc_type, id)));
         }
@@ -1057,7 +1058,7 @@ mod tests {
             ambre_bus::conduit::local::<LogicCommand>(ambre_bus::conduit::ChannelCapacity::new(8));
         let toasts = Toasts::new();
         let item = DocItem {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             doc_type: DocType::Prose,
             name: Some(ambre_core::Name::new("Plan").unwrap()),
             updated_at: ambre_bus::Timestamp(0),

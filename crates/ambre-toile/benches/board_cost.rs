@@ -18,9 +18,10 @@
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
+use ambre_core::id::{Element, Id};
 use ambre_toile::{
-    ElementBounds, ElementId, ElementKind, InitContent, ShapeKind, SpatialIndex, ToileCommand,
-    ToileEvent, ToileState,
+    ElementBounds, ElementKind, InitContent, ShapeKind, SpatialIndex, ToileCommand, ToileEvent,
+    ToileState,
 };
 use criterion::{Criterion, criterion_group, criterion_main};
 use kurbo::{Point, Rect, Size, Vec2};
@@ -29,7 +30,7 @@ use kurbo::{Point, Rect, Size, Vec2};
 fn leaf(i: usize, dy: f64) -> ElementBounds {
     let (x, y) = ((i % 250) as f64 * 40.0, (i / 250) as f64 * 40.0 + dy);
     ElementBounds::from_rect(
-        ElementId(format!("e{i}")),
+        Id::<Element>::from_text(format!("e{i}")),
         Rect::new(x, y, x + 30.0, y + 30.0),
     )
 }
@@ -47,7 +48,7 @@ fn bench_index_update(c: &mut Criterion) {
 }
 
 /// A board of `n` rectangles, and their ids.
-fn board(n: usize) -> (ToileState, Vec<ElementId>) {
+fn board(n: usize) -> (ToileState, Vec<Id<Element>>) {
     let mut st = ToileState::new();
     let ids = (0..n)
         .map(|i| {
@@ -77,7 +78,7 @@ fn board(n: usize) -> (ToileState, Vec<ElementId>) {
 fn remote_moves(
     author: &mut ToileState,
     reader: &mut ToileState,
-    ids: &[ElementId],
+    ids: &[Id<Element>],
     iters: u64,
 ) -> Duration {
     let mut spent = Duration::ZERO;

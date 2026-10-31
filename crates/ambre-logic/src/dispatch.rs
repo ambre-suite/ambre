@@ -229,7 +229,7 @@ impl LogicState {
                     doc.state.load_faces(&faces);
                 }
                 // A new face re-shapes the runs it covers (`PROSE-111`).
-                let open: Vec<DocumentId> = self.docs.keys().copied().collect();
+                let open: Vec<Id<Document>> = self.docs.keys().copied().collect();
                 for document_id in open {
                     self.owe_layout(document_id);
                 }
@@ -293,7 +293,7 @@ impl LogicState {
                         return;
                     }
                 }
-                // `SessionReady` also seeds the canonical `UserId`. Capture it
+                // `SessionReady` also seeds the canonical `Id<User>`. Capture it
                 // for later opens and push it into every already-open document,
                 // before forwarding the event verbatim to the UI.
                 if let RestEvent::SessionReady {
@@ -758,7 +758,7 @@ mod tests {
     use ambre_bus::app::prose::DocOffset;
     use ambre_bus::app::toile::ToileCommand;
     use ambre_bus::{Col, Row};
-    use ambre_bus::{DocumentId, Request, RestCommand, RestEvent, TrameCommand};
+    use ambre_bus::{Request, RestCommand, RestEvent, TrameCommand};
     use ambre_core::Generation;
     use std::io::Cursor;
 
@@ -780,7 +780,7 @@ mod tests {
     /// the rule under test is exactly what the dispatcher adds. The header's
     /// identity comes from the registry that keyed the document, and an engine
     /// has no way to supply it.
-    fn exported_file(doc_type: DocType, document_id: DocumentId) -> Vec<u8> {
+    fn exported_file(doc_type: DocType, document_id: Id<Document>) -> Vec<u8> {
         let (mut state, ui, _sync) = harness();
         state.open_with_identity(document_id, doc_type);
         let command = match doc_type {
@@ -827,7 +827,7 @@ mod tests {
     /// The bytes `ExportAmbreFile` would answer with, for a document already
     /// live in `state`. The command path itself is driven by
     /// [`exported_file`]; this reads the same answer without a second registry.
-    fn exported_file_from(state: &LogicState, document_id: DocumentId) -> Vec<u8> {
+    fn exported_file_from(state: &LogicState, document_id: Id<Document>) -> Vec<u8> {
         let doc = state.docs.get(&document_id).expect("a live document");
         match doc.state.ambre_file_event(document_id) {
             AppEvent::Trame(ambre_bus::TrameEvent::ExportComplete { data, .. })
@@ -843,7 +843,7 @@ mod tests {
     /// dispatcher, and the file it writes opens in a fresh Prose document.
     #[test]
     fn a_prose_document_saves_to_a_native_file_and_reopens() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let bytes = exported_file(DocType::Prose, document_id);
         let mut reopened =
             ambre_prose::logic::ProseState::with_peer(ambre_core::PeerId(9)).expect("a document");
@@ -865,7 +865,7 @@ mod tests {
     #[test]
     fn a_prose_outcome_reaches_the_ui_thread_and_the_sync_worker() {
         let (mut state, ui, sync) = harness();
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
         let block = match &state.docs.get(&document_id).expect("a live document").state {
             DocState::Prose(prose) => prose.root_blocks()[0],
@@ -912,7 +912,7 @@ mod tests {
     fn the_view_draws_a_layout_the_logic_thread_computed() {
         use ambre_bus::app::prose::ProseEvent;
         let (mut state, ui, _sync) = harness();
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
         state.answer_pass();
         let block = match &state.docs.get(&document_id).expect("a live document").state {
@@ -982,7 +982,7 @@ mod tests {
     #[test]
     fn a_prose_caret_leaves_as_an_ephemeral_and_not_as_a_delta() {
         let (mut state, _ui, sync) = harness();
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Prose);
         let block = match &state.docs.get(&document_id).expect("a live document").state {
             DocState::Prose(prose) => prose.root_blocks()[0],
@@ -1019,7 +1019,7 @@ mod tests {
     #[test]
     fn a_saved_file_carries_the_document_id_the_registry_keyed_it_under() {
         for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
-            let document_id = DocumentId::new();
+            let document_id = Id::<Document>::mint();
             let bytes = exported_file(doc_type, document_id);
             let header =
                 ambre_core::docfile::read_ambre_plaintext(&ambre_core::Payload::<
@@ -1045,7 +1045,7 @@ mod tests {
     /// identical fresh states.
     #[test]
     fn a_saved_file_opens_back_as_the_document_that_was_saved() {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (mut state, _ui, _sync) = harness();
         state.open_with_identity(document_id, DocType::Trame);
         state.handle_logic_command(LogicCommand::App {
@@ -1100,7 +1100,7 @@ mod tests {
     /// Open a document and ask for a sealed `.ambre`, returning the state, the
     /// UI queue, and the service request the seal produced.
     fn sealing(doc_type: DocType) -> (LogicState, Receiver<UiEvent>, Generation<Request>, Vec<u8>) {
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         let (mut state, ui, sync_rx) = harness();
         state.open_with_identity(document_id, doc_type);
         let passphrase = ambre_core::Passphrase::new("a passphrase".to_owned());
@@ -1302,7 +1302,7 @@ mod tests {
     #[test]
     fn close_document_drops_state_and_forwards() {
         let (mut state, _ui, sync_rx) = harness();
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         state.docs.insert(
             doc_id,
             LiveDoc::new(DocState::Trame(Box::new(TrameState::new()))),
@@ -1323,7 +1323,7 @@ mod tests {
     fn closing_a_document_of_each_kind_drops_its_state() {
         for doc_type in [DocType::Trame, DocType::Toile, DocType::Prose] {
             let (mut state, _ui, sync_rx) = harness();
-            let doc_id = DocumentId::new();
+            let doc_id = Id::<Document>::mint();
             let doc = DocState::new(doc_type).expect("a state for each application");
             state.docs.insert(doc_id, LiveDoc::new(doc));
             state.handle_logic_command(LogicCommand::CloseDocument {
@@ -1342,13 +1342,13 @@ mod tests {
         // #1: SessionReady seeds `my_user_id` into every already-open
         // document and into any opened afterwards.
         let (mut state, _ui, _sync) = harness();
-        let already_open = DocumentId::new();
+        let already_open = Id::<Document>::mint();
         state.docs.insert(
             already_open,
             LiveDoc::new(DocState::Toile(Box::new(ToileState::new()))),
         );
 
-        let me = ambre_bus::UserId::new();
+        let me = Id::<User>::mint();
         state.handle_logic_event(LogicEvent::Rest {
             id: Some(ambre_bus::next_request()),
             evt: RestEvent::SessionReady {
@@ -1358,7 +1358,7 @@ mod tests {
             },
         });
 
-        let toile_user_id = |state: &LogicState, id: &DocumentId| match state.docs.get(id) {
+        let toile_user_id = |state: &LogicState, id: &Id<Document>| match state.docs.get(id) {
             Some(LiveDoc {
                 state: DocState::Toile(s),
                 ..
@@ -1368,7 +1368,7 @@ mod tests {
         assert_eq!(toile_user_id(&state, &already_open), Some(me));
 
         // A document opened after authentication is seeded immediately.
-        let opened_later = DocumentId::new();
+        let opened_later = Id::<Document>::mint();
         state.handle_logic_command(LogicCommand::OpenDocument {
             document_id: opened_later,
             doc_type: DocType::Toile,
@@ -1382,7 +1382,7 @@ mod tests {
         // OpenDocument. The handler must materialise the live document itself so
         // the snapshot is applied instead of dropped.
         let (mut state, _ui, _sync) = harness();
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         // An empty Trame snapshot is a valid Loro export; import must not panic
         // and the doc must exist afterwards.
         let snapshot = TrameState::new().export_snapshot();
@@ -1419,7 +1419,7 @@ mod tests {
     #[test]
     fn app_command_on_live_doc_yields_viewport() {
         let (mut state, ui_rx, _sync) = harness();
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         state.docs.insert(
             doc_id,
             LiveDoc::new(DocState::Trame(Box::new(TrameState::new()))),
@@ -1442,7 +1442,7 @@ mod tests {
     #[test]
     fn app_command_on_unknown_doc_is_dropped() {
         let (mut state, ui_rx, _sync) = harness();
-        let unknown = DocumentId::from_bytes([9; 16]);
+        let unknown = Id::<Document>::from_bytes([9; 16]);
         state.handle_logic_command(LogicCommand::App {
             document_id: unknown,
             command: scroll(1),
@@ -1457,7 +1457,7 @@ mod tests {
     #[test]
     fn open_document_materialises_state_before_any_payload() {
         let (mut state, ui_rx, sync_rx) = harness();
-        let id = DocumentId::from_bytes([7; 16]);
+        let id = Id::<Document>::from_bytes([7; 16]);
 
         // No live state, and no app command can route yet.
         state.handle_logic_command(LogicCommand::App {
@@ -1495,8 +1495,8 @@ mod tests {
     }
 
     /// Seed a live document already carrying `role`, skipping the open handshake.
-    fn live_trame(state: &mut LogicState, role: Role) -> DocumentId {
-        let doc_id = DocumentId::new();
+    fn live_trame(state: &mut LogicState, role: Role) -> Id<Document> {
+        let doc_id = Id::<Document>::mint();
         let mut doc = LiveDoc::new(DocState::Trame(Box::new(TrameState::new())));
         doc.role = role;
         state.docs.insert(doc_id, doc);
@@ -1606,7 +1606,7 @@ mod tests {
     #[test]
     fn document_ready_supersedes_the_optimistic_owner_role() {
         let (mut state, ui_rx, sync_rx) = harness();
-        let doc_id = DocumentId::from_bytes([3; 16]);
+        let doc_id = Id::<Document>::from_bytes([3; 16]);
 
         // A freshly opened slot is optimistically writable, before Sync has
         // resolved our real role.
@@ -1641,10 +1641,10 @@ mod tests {
     // the parent's role has no say over the child's, in both directions.
 
     /// Seed a live Toile already carrying `role`, skipping the open handshake.
-    fn live_toile(state: &mut LogicState, role: Role) -> DocumentId {
-        let doc_id = DocumentId::new();
+    fn live_toile(state: &mut LogicState, role: Role) -> Id<Document> {
+        let doc_id = Id::<Document>::mint();
         let mut toile = ToileState::new();
-        toile.set_user_id(UserId::new());
+        toile.set_user_id(Id::<User>::mint());
         let mut doc = LiveDoc::new(DocState::Toile(Box::new(toile)));
         doc.role = role;
         state.docs.insert(doc_id, doc);
@@ -1654,7 +1654,7 @@ mod tests {
 
     /// Drain every `SendUpdate` and report which documents produced one -- which
     /// document a delta belongs to is exactly what these tests are about.
-    fn updated_docs(sync_rx: &Receiver<SyncCommand>) -> Vec<DocumentId> {
+    fn updated_docs(sync_rx: &Receiver<SyncCommand>) -> Vec<Id<Document>> {
         sync_rx
             .try_iter()
             .filter_map(|cmd| match cmd {
@@ -1701,7 +1701,7 @@ mod tests {
         let (mut state, ui_rx, sync_rx) = harness();
 
         state.handle_logic_command(LogicCommand::App {
-            document_id: DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             command: set_cell("42"),
         });
 
@@ -1716,7 +1716,7 @@ mod tests {
     #[test]
     fn snapshot_required_triggers_send_snapshot() {
         let (mut state, _ui, sync_rx) = harness();
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         state.docs.insert(
             doc_id,
             LiveDoc::new(DocState::Trame(Box::new(TrameState::new()))),
@@ -1738,7 +1738,7 @@ mod tests {
     #[test]
     fn a_snapshot_on_the_wire_carries_no_container_header() {
         let (mut state, _ui, sync_rx) = harness();
-        let doc_id = DocumentId::new();
+        let doc_id = Id::<Document>::mint();
         state.docs.insert(
             doc_id,
             LiveDoc::new(DocState::Trame(Box::new(TrameState::new()))),
@@ -1801,7 +1801,7 @@ mod tests {
 
     /// Import a solid PNG into `doc_id` and return the single `Generation<Request>` the
     /// lowered `UploadMedia` was correlated with.
-    fn import_one_image(state: &mut LogicState, doc_id: DocumentId) -> Generation<Request> {
+    fn import_one_image(state: &mut LogicState, doc_id: Id<Document>) -> Generation<Request> {
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
             command: AppCommand::Toile(ToileCommand::ImportImage {
@@ -1977,12 +1977,13 @@ mod tests {
     /// Every service request but the two that remove a document, each naming
     /// `doc` where it names one. The `match` has no wildcard, so a new variant
     /// fails the build here until it is listed.
-    fn relayed_requests(doc: DocumentId) -> Vec<RestCommand> {
+    fn relayed_requests(doc: Id<Document>) -> Vec<RestCommand> {
+        use ambre_bus::Role;
         use ambre_bus::rest::{SecretBytes, SecretString};
-        use ambre_bus::{MeetingId, Role, UserId};
+        use ambre_core::id::Meeting;
         let secret = || SecretBytes::new(b"pass".to_vec());
         let typed = || ambre_core::Passphrase::new("pass".to_owned());
-        let (user, meeting) = (UserId::new(), MeetingId::new());
+        let (user, meeting) = (Id::<User>::mint(), Id::<Meeting>::mint());
         let all = vec![
             RestCommand::Unlock {
                 passphrase: typed(),
@@ -2137,7 +2138,7 @@ mod tests {
     #[test]
     fn a_relayed_request_leaves_the_registry_alone() {
         let (mut state, _ui, sync_rx) = harness();
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
         state.open_with_identity(doc, DocType::Trame);
         let requests = relayed_requests(doc);
         let count = requests.len();
@@ -2224,7 +2225,7 @@ mod tests {
         let faces = shipped_faces();
         assert!(!faces.is_empty(), "the workspace ships its faces");
 
-        let before = DocumentId::new();
+        let before = Id::<Document>::mint();
         state.open_with_identity(before, DocType::Prose);
         assert_eq!(
             state.docs[&before].state.face_count(),
@@ -2241,7 +2242,7 @@ mod tests {
             "a document open at delivery takes the faces"
         );
 
-        let after = DocumentId::new();
+        let after = Id::<Document>::mint();
         state.open_with_identity(after, DocType::Prose);
         assert_eq!(
             state.docs[&after].state.face_count(),
@@ -2273,7 +2274,7 @@ mod tests {
     fn export_pdf_answer(
         state: &mut LogicState,
         ui_rx: &Receiver<UiEvent>,
-        doc_id: DocumentId,
+        doc_id: Id<Document>,
     ) -> ambre_bus::app::toile::ToileEvent {
         // Whatever seeded the board has already spoken; the export's own answer
         // is the only event this reads.
@@ -2295,7 +2296,7 @@ mod tests {
     }
 
     /// A board with a rect on it, so the deck has a page to draw.
-    fn board_with_content(state: &mut LogicState) -> DocumentId {
+    fn board_with_content(state: &mut LogicState) -> Id<Document> {
         let doc_id = live_toile(state, Role::Owner);
         state.handle_logic_command(LogicCommand::App {
             document_id: doc_id,
@@ -2397,7 +2398,7 @@ mod tests {
     #[test]
     fn a_failed_open_reaches_the_ui_naming_its_document() {
         let (mut state, ui, _sync) = harness();
-        let failed = DocumentId::new();
+        let failed = Id::<Document>::mint();
         state.handle_logic_event(LogicEvent::DocumentOpenFailed {
             document_id: failed,
             cause: ambre_bus::OpenFailure::Transient,

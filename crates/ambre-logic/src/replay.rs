@@ -26,7 +26,7 @@ impl LogicState {
     /// Queue the accepted deltas of a replay, and import its first slice now.
     pub(crate) fn replay(
         &mut self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         accepted: Vec<(Seq, ambre_core::Payload<ambre_core::DeltaBytes>)>,
     ) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
@@ -37,7 +37,7 @@ impl LogicState {
     }
 
     /// The documents a replay is still being imported into.
-    pub(crate) fn docs_replaying(&self) -> Vec<DocumentId> {
+    pub(crate) fn docs_replaying(&self) -> Vec<Id<Document>> {
         self.docs
             .iter()
             .filter(|(_, doc)| !doc.replay.is_empty())
@@ -46,7 +46,7 @@ impl LogicState {
     }
 
     /// Whether a replay is still being imported into the document.
-    pub(crate) fn replaying(&self, document_id: DocumentId) -> bool {
+    pub(crate) fn replaying(&self, document_id: Id<Document>) -> bool {
         self.docs
             .get(&document_id)
             .is_some_and(|doc| !doc.replay.is_empty())
@@ -54,7 +54,7 @@ impl LogicState {
 
     /// Import the next slice of a document's replay. The last slice runs
     /// what the replay's end held back.
-    pub(crate) fn resume_replay(&mut self, document_id: DocumentId) {
+    pub(crate) fn resume_replay(&mut self, document_id: Id<Document>) {
         let Some(doc) = self.docs.get_mut(&document_id) else {
             return;
         };
@@ -76,7 +76,7 @@ impl LogicState {
 
     /// Import what is left of a document's replay, now. Called before what
     /// reads the whole document: a close, an export, a live delta.
-    pub(crate) fn settle_replay(&mut self, document_id: DocumentId) {
+    pub(crate) fn settle_replay(&mut self, document_id: Id<Document>) {
         while self.replaying(document_id) {
             self.resume_replay(document_id);
         }
@@ -84,7 +84,7 @@ impl LogicState {
 
     /// The document is ready: what reads the whole replay runs now, or once
     /// its last slice lands.
-    pub(crate) fn ready(&mut self, document_id: DocumentId) {
+    pub(crate) fn ready(&mut self, document_id: Id<Document>) {
         if self.replaying(document_id) {
             if let Some(doc) = self.docs.get_mut(&document_id) {
                 doc.ready_held = true;
@@ -95,7 +95,7 @@ impl LogicState {
     }
 
     /// The last slice landed: run what a ready document held back.
-    fn replay_landed(&mut self, document_id: DocumentId) {
+    fn replay_landed(&mut self, document_id: Id<Document>) {
         let held = self
             .docs
             .get_mut(&document_id)
@@ -108,7 +108,7 @@ impl LogicState {
     /// Every delta the relay kept is imported. A delta still waiting now waits
     /// for ever (`AUTHOR-025`). What the relay lacks of an earlier session is
     /// known (`AUTHOR-028`).
-    fn after_replay(&mut self, document_id: DocumentId) {
+    fn after_replay(&mut self, document_id: Id<Document>) {
         self.report_stalled(document_id);
         self.send_unsent(document_id);
     }
@@ -168,7 +168,7 @@ mod tests {
         let (to_persist, persist) = test_link();
         std::mem::forget(persist);
         let mut state = LogicState::new(to_ui, test_link().0, to_persist);
-        let document_id = DocumentId::new();
+        let document_id = Id::<Document>::mint();
         state.open_with_identity(document_id, DocType::Trame);
         let deltas: Vec<SignedDelta> = (1..=8)
             .map(|peer| written_by(ambre_core::PeerId(peer), 20 << 10))

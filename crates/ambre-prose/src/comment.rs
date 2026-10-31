@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use ambre_bus::app::prose::{DocCount, DocOffset};
-use ambre_core::{CommentId, ReplyId, UserId};
+use ambre_core::id::{Comment, Id, Reply, User};
 use loro::{Container, LoroDoc, LoroList, TreeID, ValueOrContainer};
 
 use crate::doc::{self, AnnotKey, Fields, ReplyKey};
@@ -21,7 +21,7 @@ use ambre_bus::app::prose::MarkKey;
 
 /// The mark key of thread `id`.
 #[must_use]
-pub(crate) fn mark_key(id: &CommentId) -> MarkKey {
+pub(crate) fn mark_key(id: &Id<Comment>) -> MarkKey {
     MarkKey::new(format!(
         "{}:{}",
         MarkRoot::Comment.as_str(),
@@ -30,12 +30,12 @@ pub(crate) fn mark_key(id: &CommentId) -> MarkKey {
 }
 
 /// The thread a mark key names, when it is a comment's.
-fn thread_of_key(key: &str) -> Option<CommentId> {
+fn thread_of_key(key: &str) -> Option<Id<Comment>> {
     let (root, id) = key.split_once(':')?;
     if MarkRoot::parse(root)? != MarkRoot::Comment {
         return None;
     }
-    CommentId::parse_str(id).ok()
+    Id::<Comment>::parse_str(id).ok()
 }
 
 /// Where a mark sits: a block and a span in its own offsets.
@@ -48,7 +48,7 @@ pub(crate) struct Span {
 
 /// The entry of thread `id`, when `annots` holds one of that kind.
 #[must_use]
-pub(crate) fn entry(document: &LoroDoc, id: &CommentId) -> Option<Fields<AnnotKey>> {
+pub(crate) fn entry(document: &LoroDoc, id: &Id<Comment>) -> Option<Fields<AnnotKey>> {
     let annots = doc::annots(document);
     let Some(ValueOrContainer::Container(Container::Map(map))) = annots.get(&id.to_hyphenated())
     else {
@@ -102,10 +102,10 @@ fn read_reply(map: &Fields<ReplyKey>) -> Option<CommentReply> {
         _ => String::new(),
     };
     Some(CommentReply {
-        reply_id: ReplyId::parse_str(&doc::read_string(map, ReplyKey::Id)?).ok()?,
+        reply_id: Id::<Reply>::parse_str(&doc::read_string(map, ReplyKey::Id)?).ok()?,
         author: doc::read_string(map, ReplyKey::Author)
             .and_then(|name| ambre_core::DisplayName::new(&name).ok()),
-        user_id: UserId::parse_str(&doc::read_string(map, ReplyKey::User)?).ok()?,
+        user_id: Id::<User>::parse_str(&doc::read_string(map, ReplyKey::User)?).ok()?,
         created_at: ambre_bus::Timestamp::from_i64(
             doc::read_i64(map, ReplyKey::Created).unwrap_or(0),
         ),
@@ -128,14 +128,14 @@ pub(crate) fn replies(entry: &Fields<AnnotKey>) -> Vec<CommentReply> {
 
 /// Every thread the document holds, marked or not.
 #[must_use]
-pub(crate) fn all(document: &LoroDoc) -> Vec<CommentId> {
+pub(crate) fn all(document: &LoroDoc) -> Vec<Id<Comment>> {
     let annots = doc::annots(document);
-    let mut ids: Vec<CommentId> = annots
+    let mut ids: Vec<Id<Comment>> = annots
         .keys()
-        .filter_map(|key| CommentId::parse_str(&key).ok())
+        .filter_map(|key| Id::<Comment>::parse_str(&key).ok())
         .filter(|id| entry(document, id).is_some())
         .collect();
-    ids.sort_by_key(CommentId::to_hyphenated);
+    ids.sort_by_key(Id::<Comment>::to_hyphenated);
     ids
 }
 
@@ -151,7 +151,7 @@ pub(crate) fn cached(entry: &Fields<AnnotKey>) -> Option<Span> {
 /// Every run of a comment mark in `blocks`, in the order given: the thread,
 /// the block, and the run's span.
 #[must_use]
-pub(crate) fn runs(document: &LoroDoc, blocks: &[TreeID]) -> Vec<(CommentId, Span)> {
+pub(crate) fn runs(document: &LoroDoc, blocks: &[TreeID]) -> Vec<(Id<Comment>, Span)> {
     let mut out = Vec::new();
     for id in blocks {
         let mut offset = DocOffset::ZERO;
@@ -182,13 +182,13 @@ pub(crate) fn runs(document: &LoroDoc, blocks: &[TreeID]) -> Vec<(CommentId, Spa
 /// The live span of each marked thread: the first block its mark reaches, from
 /// the mark's first character there to its last.
 #[must_use]
-pub(crate) fn live_spans(document: &LoroDoc, blocks: &[TreeID]) -> HashMap<CommentId, Span> {
+pub(crate) fn live_spans(document: &LoroDoc, blocks: &[TreeID]) -> HashMap<Id<Comment>, Span> {
     spans_of(&runs(document, blocks))
 }
 
 /// The live span of each thread among `runs`, as [`live_spans`] reads it.
-fn spans_of(runs: &[(CommentId, Span)]) -> HashMap<CommentId, Span> {
-    let mut out: HashMap<CommentId, Span> = HashMap::new();
+fn spans_of(runs: &[(Id<Comment>, Span)]) -> HashMap<Id<Comment>, Span> {
+    let mut out: HashMap<Id<Comment>, Span> = HashMap::new();
     for &(thread, run) in runs {
         match out.get_mut(&thread) {
             None => {
@@ -217,7 +217,7 @@ pub(crate) fn text_blocks(document: &LoroDoc) -> Vec<TreeID> {
 pub fn threads(document: &LoroDoc) -> Vec<CommentThread> {
     let runs = runs(document, &text_blocks(document));
     let spans = spans_of(&runs);
-    let mut order: Vec<CommentId> = Vec::new();
+    let mut order: Vec<Id<Comment>> = Vec::new();
     for (thread, _) in &runs {
         if !order.contains(thread) {
             order.push(*thread);

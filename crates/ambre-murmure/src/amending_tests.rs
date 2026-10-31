@@ -8,10 +8,8 @@ use std::collections::HashMap;
 use ambre_bus::{
     ActivityKind, MessageDraft, MessageView, MurmureEvent, StyleMark, TextStyle, Timestamp,
 };
-use ambre_core::{
-    DeltaBytes, DocumentId, MessageId, Payload, PeerEntryBytes, SegmentId, Seq, SnapshotBytes,
-    UserId,
-};
+use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
+use ambre_core::{DeltaBytes, Payload, PeerEntryBytes, Seq, SnapshotBytes};
 use loro::{LoroDoc, LoroMap, VersionVector};
 
 use crate::channel::read_messages;
@@ -33,16 +31,15 @@ fn draft(text: &str) -> MessageDraft {
 }
 
 /// A channel whose active segment holds `texts` by `author`, and is closing.
-fn closing_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
-    let mut state =
-        ChannelState::create(ambre_core::ChannelId::new(), ChannelType::Public, None, NOW)
-            .expect("create")
-            .identify();
+fn closing_with(texts: &[&str], author: Id<User>) -> (ChannelState, Id<Segment>) {
+    let mut state = ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
+        .expect("create")
+        .identify();
     for text in texts {
         state.send(&draft(text), author, NOW).expect("send");
     }
     let closing = state.active_id();
-    let successor = SegmentId::new();
+    let successor = Id::<Segment>::mint();
     state
         .close_into(closing, successor, crate::Successor::Created, NOW)
         .expect("close");
@@ -59,7 +56,7 @@ fn closing_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
 
 /// The same channel, its closing segment locked as the relay does once a
 /// member holds its finalize lease.
-fn locked_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
+fn locked_with(texts: &[&str], author: Id<User>) -> (ChannelState, Id<Segment>) {
     let (mut state, segment) = closing_with(texts, author);
     state
         .relocate_locked(segment.document_id(), &[])
@@ -71,8 +68,8 @@ fn locked_with(texts: &[&str], author: UserId) -> (ChannelState, SegmentId) {
 /// Returns them, their first update, and the `meta` delta that names them.
 fn amended(
     state: &mut ChannelState,
-    segment: SegmentId,
-) -> (DocumentId, Payload<DeltaBytes>, Payload<DeltaBytes>) {
+    segment: Id<Segment>,
+) -> (Id<Document>, Payload<DeltaBytes>, Payload<DeltaBytes>) {
     let ChangeTarget::Create(amendments) = state.change_target(segment, NOW).expect("target")
     else {
         panic!("a locked segment with no amendments creates them");
@@ -93,7 +90,7 @@ fn amended(
 
 /// A second member's copy of `state`, opened from its live segments.
 fn peer_of(state: &ChannelState) -> ChannelState {
-    let segments: HashMap<SegmentId, Payload<SnapshotBytes>> = state
+    let segments: HashMap<Id<Segment>, Payload<SnapshotBytes>> = state
         .held_segments()
         .into_iter()
         .map(|segment| {
@@ -107,7 +104,7 @@ fn peer_of(state: &ChannelState) -> ChannelState {
         .identify()
 }
 
-fn signer(state: &ChannelState, document_id: DocumentId, user: UserId) -> Signer {
+fn signer(state: &ChannelState, document_id: Id<Document>, user: Id<User>) -> Signer {
     Signer {
         peer: state.peer(document_id).expect("a session"),
         user: Some(user),
@@ -131,11 +128,11 @@ fn json_since(doc: &LoroDoc, before: &VersionVector) -> Payload<DeltaBytes> {
 /// Bob's copy of Alice's amendments, held with a session of his own.
 fn bob_holding(
     alice: &ChannelState,
-    segment: SegmentId,
-    amendments: DocumentId,
+    segment: Id<Segment>,
+    amendments: Id<Document>,
     first: &Payload<DeltaBytes>,
     meta: &Payload<DeltaBytes>,
-    author: UserId,
+    author: Id<User>,
 ) -> ChannelState {
     let mut bob = peer_of(alice);
     bob.apply_remote(bob.meta_id().document_id(), meta.into())
@@ -161,7 +158,7 @@ fn bob_holding(
 /// creates them, and every later one writes them.
 #[test]
 fn a_change_of_a_locked_segment_waits_for_its_amendments() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = locked_with(&["one"], author);
     let message = alice.messages(segment).expect("held")[0].id;
     assert!(matches!(
@@ -192,12 +189,12 @@ fn a_change_of_a_locked_segment_waits_for_its_amendments() {
 /// the other's: this client drops its own and fetches the winner.
 #[test]
 fn a_lost_race_fetches_the_amendments_the_relay_linked() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = locked_with(&["one"], author);
     let ChangeTarget::Create(own) = alice.change_target(segment, NOW).expect("target") else {
         panic!("created");
     };
-    let winner = DocumentId::new();
+    let winner = Id::<Document>::mint();
     let linked = alice.amendments_linked(segment, winner).expect("link");
     assert_eq!(
         (linked.open, linked.replaced),
@@ -216,10 +213,10 @@ fn a_lost_race_fetches_the_amendments_the_relay_linked() {
 /// segment itself never moves. The view reads each one over its message.
 #[test]
 fn an_edit_and_a_delete_of_a_locked_segment_write_amendments() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = locked_with(&["one", "two"], author);
     let (amendments, _, _) = amended(&mut alice, segment);
-    let ids: Vec<MessageId> = alice
+    let ids: Vec<Id<Message>> = alice
         .messages(segment)
         .expect("held")
         .iter()
@@ -278,10 +275,10 @@ fn an_edit_and_a_delete_of_a_locked_segment_write_amendments() {
 /// the segment: those that arrived first, then each later one.
 #[test]
 fn a_member_reads_the_amendments_over_the_segment() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = locked_with(&["one", "two"], author);
     let (amendments, first, meta) = amended(&mut alice, segment);
-    let ids: Vec<MessageId> = alice
+    let ids: Vec<Id<Message>> = alice
         .messages(segment)
         .expect("held")
         .iter()
@@ -335,7 +332,7 @@ fn a_member_reads_the_amendments_over_the_segment() {
 /// creates the entry or writes into the author's own.
 #[test]
 fn an_amendment_of_another_authors_message_is_refused() {
-    let (alice_user, bob_user) = (UserId::new(), UserId::new());
+    let (alice_user, bob_user) = (Id::<User>::mint(), Id::<User>::mint());
     let (mut alice, segment) = locked_with(&["one"], alice_user);
     let (amendments, first, meta) = amended(&mut alice, segment);
     let message = alice.messages(segment).expect("held")[0].id;
@@ -406,7 +403,7 @@ fn an_amendment_of_another_authors_message_is_refused() {
 /// an amendments document whose header names another segment is refused.
 #[test]
 fn an_amendment_outside_its_segment_is_refused() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = locked_with(&["one"], author);
     // Carol opens the channel before `meta` names the amendments.
     let mut carol = peer_of(&alice);
@@ -416,7 +413,7 @@ fn an_amendment_outside_its_segment_is_refused() {
     let doc = bob.doc(amendments).expect("held");
     let before = doc.oplog_vv();
     crate::schema::root_map(doc, Root::Amendments)
-        .insert_container(&MessageId::new().to_string(), LoroMap::new())
+        .insert_container(&Id::<Message>::mint().to_string(), LoroMap::new())
         .expect("forge");
     let forged = json_since(doc, &before);
     assert_eq!(
@@ -466,9 +463,9 @@ fn an_amendment_outside_its_segment_is_refused() {
 /// are held, and link it. Returns it and the delta that records it.
 fn locked_thread(
     state: &mut ChannelState,
-    segment: SegmentId,
-    root: MessageId,
-) -> (DocumentId, Sent) {
+    segment: Id<Segment>,
+    root: Id<Message>,
+) -> (Id<Document>, Sent) {
     let ThreadTarget::Create(thread) = state.reply_target(root, NOW).expect("target") else {
         panic!("a root with no thread creates one");
     };
@@ -488,7 +485,7 @@ fn locked_thread(
 /// which record the thread. The segment itself takes no delta.
 #[test]
 fn a_thread_of_a_locked_root_is_recorded_in_its_amendments() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = locked_with(&["root"], author);
     let root = alice.messages(segment).expect("held")[0].id;
     assert_eq!(
@@ -535,14 +532,14 @@ fn a_thread_of_a_locked_root_is_recorded_in_its_amendments() {
 /// and asks for it.
 #[test]
 fn another_member_finds_the_thread_of_a_locked_root() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = locked_with(&["root"], author);
     let root = alice.messages(segment).expect("held")[0].id;
     let (amendments, first, meta) = amended(&mut alice, segment);
     let (thread, recorded) = locked_thread(&mut alice, segment, root);
     let mut bob = bob_holding(&alice, segment, amendments, &first, &meta, author);
     assert_eq!(bob.messages(segment).expect("held")[0].thread, None);
-    let replier = UserId::new();
+    let replier = Id::<User>::mint();
     bob.apply_signed(
         amendments,
         Seq(2),
@@ -562,7 +559,7 @@ fn another_member_finds_the_thread_of_a_locked_root() {
 /// a second thread for a root, a value that names no document, and a removal.
 #[test]
 fn a_thread_record_outside_the_rule_is_refused() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = locked_with(&["root"], author);
     let root = alice.messages(segment).expect("held")[0].id;
     let (amendments, first, meta) = amended(&mut alice, segment);
@@ -585,14 +582,17 @@ fn a_thread_record_outside_the_rule_is_refused() {
     let cases: [(Write<'_>, Refusal); 4] = [
         (
             &|map| {
-                map.insert(&MessageId::new().to_string(), DocumentId::new().to_string())
-                    .expect("forge");
+                map.insert(
+                    &Id::<Message>::mint().to_string(),
+                    Id::<Document>::mint().to_string(),
+                )
+                .expect("forge");
             },
             Refusal::NotInSegment,
         ),
         (
             &|map| {
-                map.insert(&root.to_string(), DocumentId::new().to_string())
+                map.insert(&root.to_string(), Id::<Document>::mint().to_string())
                     .expect("forge");
             },
             Refusal::ForeignMessage,
@@ -611,7 +611,7 @@ fn a_thread_record_outside_the_rule_is_refused() {
             Refusal::Removed,
         ),
     ];
-    let user = UserId::new();
+    let user = Id::<User>::mint();
     for (seq, (write, refusal)) in (3..).zip(cases) {
         let forged = forge(write);
         assert_eq!(
@@ -629,7 +629,7 @@ fn a_thread_record_outside_the_rule_is_refused() {
 /// A fold carries the recorded thread into the root's empty `thread` field.
 #[test]
 fn a_fold_carries_the_thread_of_a_locked_root() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = locked_with(&["root"], author);
     let root = alice.messages(segment).expect("held")[0].id;
     amended(&mut alice, segment);
@@ -646,9 +646,9 @@ fn a_fold_carries_the_thread_of_a_locked_root() {
 /// reads as the relay holds it until they are written again.
 #[test]
 fn a_change_refused_by_the_lock_is_replayed() {
-    let author = UserId::new();
+    let author = Id::<User>::mint();
     let (mut alice, segment) = closing_with(&["one", "two"], author);
-    let ids: Vec<MessageId> = alice
+    let ids: Vec<Id<Message>> = alice
         .messages(segment)
         .expect("held")
         .iter()

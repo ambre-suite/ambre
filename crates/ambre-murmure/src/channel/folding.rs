@@ -11,10 +11,8 @@
 //! The engine reads no clock: each delay is stamped by the next tick.
 
 use ambre_bus::{FoldAnswer, MessageView, MurmureEvent, SnapshotVerdict, Timestamp};
-use ambre_core::{
-    ChannelId, DeltaBytes, DocumentId, FailureCount, LeaseId, Millis, Payload, SegmentId, Seq,
-    SnapshotBytes,
-};
+use ambre_core::id::{Channel, Document, Id, Lease, Segment};
+use ambre_core::{DeltaBytes, FailureCount, Millis, Payload, Seq, SnapshotBytes};
 use loro::{ExportMode, LoroDoc, UpdateOptions, VersionVector};
 
 use super::amending::{entry_content, folded_amendments, segment_entry};
@@ -34,7 +32,7 @@ pub const FOLD_DELAY: Millis = Millis(7 * 24 * 60 * 60 * 1000);
 /// The fold of one final segment, as this client drives it.
 #[derive(Debug)]
 pub(super) struct Folding {
-    segment: SegmentId,
+    segment: Id<Segment>,
     step: Step,
     /// Failed lease requests and commits since the last answer that granted
     /// or deferred the lease.
@@ -60,9 +58,9 @@ enum Step {
 /// What the relay granted with a fold lease.
 #[derive(Debug, Clone, Copy)]
 struct Grant {
-    lease: LeaseId,
+    lease: Id<Lease>,
     horizon: Seq,
-    amendments: DocumentId,
+    amendments: Id<Document>,
     amendments_seq: Seq,
     expires_in: ambre_core::Millis,
 }
@@ -71,13 +69,13 @@ struct Grant {
 #[derive(Debug)]
 pub struct FoldSnapshot {
     /// The segment it folds into.
-    pub segment: SegmentId,
+    pub segment: Id<Segment>,
     /// The lease the commit names.
-    pub lease: LeaseId,
+    pub lease: Id<Lease>,
     /// The last delta of the segment it covers, the one the relay returned.
     pub horizon: Seq,
     /// The amendments document it folds in.
-    pub amendments: DocumentId,
+    pub amendments: Id<Document>,
     /// The last delta number of those amendments it holds.
     pub amendments_seq: Seq,
     /// The shallow snapshot, framed as every channel snapshot is.
@@ -88,9 +86,9 @@ pub struct FoldSnapshot {
 #[derive(Debug)]
 pub struct Settled {
     /// The segment the amendments folded into.
-    pub segment: SegmentId,
+    pub segment: Id<Segment>,
     /// The amendments document it no longer holds.
-    pub amendments: DocumentId,
+    pub amendments: Id<Document>,
     /// One per change of this client the relay never sequenced, to write
     /// again as an amendment (`MURMURE-077`).
     pub replay: Vec<Replay>,
@@ -101,7 +99,7 @@ pub struct Settled {
 impl ChannelState {
     /// The final segment whose amendments this client folds: the first one,
     /// in list order, that it holds with the amendments the relay linked.
-    fn fold_candidate(&self) -> Option<SegmentId> {
+    fn fold_candidate(&self) -> Option<Id<Segment>> {
         self.final_segments().into_iter().find(|segment| {
             self.loaded.contains_key(segment)
                 && self
@@ -129,7 +127,7 @@ impl ChannelState {
     }
 
     /// The step of `segment`, `None` unless this client folds it now.
-    fn fold_step_of(&mut self, segment: SegmentId) -> Option<&mut Folding> {
+    fn fold_step_of(&mut self, segment: Id<Segment>) -> Option<&mut Folding> {
         self.fold_step()
             .filter(|folding| folding.segment == segment)
     }
@@ -137,7 +135,7 @@ impl ChannelState {
     /// The final segment whose fold lease to ask for at `now`. The first
     /// tick asks at once: the relay answers how long the fold delay still
     /// runs (`SRV-206`).
-    pub fn fold_lease_to_ask(&mut self, now: Timestamp) -> Option<SegmentId> {
+    pub fn fold_lease_to_ask(&mut self, now: Timestamp) -> Option<Id<Segment>> {
         let folding = self.fold_step()?;
         match &mut folding.step {
             Step::Due { after, at } => {
@@ -155,7 +153,7 @@ impl ChannelState {
     }
 
     /// The relay answered the fold lease request for `segment`.
-    pub fn fold_answered(&mut self, segment: SegmentId, answer: FoldAnswer) {
+    pub fn fold_answered(&mut self, segment: Id<Segment>, answer: FoldAnswer) {
         let Some(folding) = self.fold_step_of(segment) else {
             return;
         };
@@ -186,7 +184,7 @@ impl ChannelState {
 
     /// The relay took the fold of `segment`. The next one is asked past the
     /// fold delay; another member's check decides this one.
-    pub fn fold_committed(&mut self, segment: SegmentId) {
+    pub fn fold_committed(&mut self, segment: Id<Segment>) {
         if let Some(folding) = self.fold_step_of(segment) {
             folding.failures = FailureCount::ZERO;
             folding.step = Step::Due {
@@ -199,7 +197,7 @@ impl ChannelState {
     /// A lease request or a commit of `segment` failed, or the relay names
     /// other amendments than this copy holds. It is asked again past
     /// [`FINALIZE_RETRY`], doubled at each failure.
-    pub fn fold_failed(&mut self, segment: SegmentId) {
+    pub fn fold_failed(&mut self, segment: Id<Segment>) {
         if let Some(folding) = self.fold_step_of(segment) {
             let doublings = folding.failures.min(RETRY_DOUBLINGS);
             folding.failures = folding.failures.incremented();
@@ -265,8 +263,8 @@ impl ChannelState {
     /// them up to `reached`. This copy stays as it is.
     fn folded(
         &self,
-        segment: SegmentId,
-        amendments: DocumentId,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
         reached: Seq,
     ) -> Result<LoroDoc, MurmureError> {
         let document_id = segment.document_id();
@@ -283,8 +281,8 @@ impl ChannelState {
     /// operation it delivered, and none of this client's still on its way.
     fn relayed_amendments(
         &self,
-        segment: SegmentId,
-        amendments: DocumentId,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
     ) -> Result<LoroDoc, MurmureError> {
         let held = self
             .amendments
@@ -315,12 +313,12 @@ impl ChannelState {
     /// number of them.
     pub(super) fn check_fold(
         &self,
-        document_id: DocumentId,
+        document_id: Id<Document>,
         theirs: &LoroDoc,
-        amendments: DocumentId,
+        amendments: Id<Document>,
         seq: Seq,
     ) -> SnapshotVerdict {
-        let segment = SegmentId::from_document(document_id);
+        let segment = Id::<Segment>::from_document(document_id);
         let held = self.amendments.get(&segment).map(|held| held.id);
         if held != Some(amendments) || self.delivered(amendments) != seq {
             return SnapshotVerdict::Unchecked;
@@ -345,8 +343,8 @@ impl ChannelState {
     /// [`MurmureError::Crdt`] when Loro refuses the write or the export.
     pub fn mark_folded(
         &mut self,
-        segment: SegmentId,
-        amendments: DocumentId,
+        segment: Id<Segment>,
+        amendments: Id<Document>,
     ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         if folded_amendments(&self.meta.doc, segment) == Some(amendments) {
             return Ok(None);
@@ -369,7 +367,7 @@ impl ChannelState {
     /// amendments, and every refusal of [`ChannelState::mark_folded`].
     pub fn amendments_gone(
         &mut self,
-        amendments: DocumentId,
+        amendments: Id<Document>,
     ) -> Result<Option<Payload<DeltaBytes>>, MurmureError> {
         let segment = self
             .amendments
@@ -390,7 +388,7 @@ impl ChannelState {
     /// # Errors
     /// [`MurmureError::Crdt`] when Loro refuses the fold.
     pub fn settle_folds(&mut self) -> Result<Vec<Settled>, MurmureError> {
-        let marked: Vec<(SegmentId, DocumentId)> = self
+        let marked: Vec<(Id<Segment>, Id<Document>)> = self
             .amendments
             .iter()
             .map(|(segment, held)| (*segment, held.id))
@@ -431,7 +429,7 @@ impl ChannelState {
     /// Fold the held amendments of `segment` into this copy, as
     /// [`ChannelState::settle_folds`] does, and keep them held. The schema
     /// belts walk the segment and its amendments side by side.
-    pub(crate) fn fold_in_place(&self, segment: SegmentId) -> Result<(), MurmureError> {
+    pub(crate) fn fold_in_place(&self, segment: Id<Segment>) -> Result<(), MurmureError> {
         let amendments = self
             .amendments
             .get(&segment)
@@ -452,7 +450,11 @@ impl ChannelState {
 
 /// The changes `read` shows that `folded` lacks: one per message, in segment
 /// order.
-fn unsequenced(segment: SegmentId, folded: &[MessageView], read: Vec<MessageView>) -> Vec<Replay> {
+fn unsequenced(
+    segment: Id<Segment>,
+    folded: &[MessageView],
+    read: Vec<MessageView>,
+) -> Vec<Replay> {
     read.into_iter()
         .filter_map(|now| {
             let before = folded.iter().find(|view| view.id == now.id)?;
@@ -463,9 +465,10 @@ fn unsequenced(segment: SegmentId, folded: &[MessageView], read: Vec<MessageView
 
 /// The amendments document and the number a snapshot header names, `None`
 /// for a snapshot that folds nothing.
-pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(DocumentId, Seq)> {
+pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(Id<Document>, Seq)> {
     let header = crate::schema::header(doc);
-    let amendments = DocumentId::parse_str(&schema::string(&header, HeaderKey::Folded)?).ok()?;
+    let amendments =
+        Id::<Document>::parse_str(&schema::string(&header, HeaderKey::Folded)?).ok()?;
     Some((
         amendments,
         Seq(schema::unsigned(&header, HeaderKey::FoldedSeq)?),
@@ -486,8 +489,8 @@ pub(crate) fn header_fold(doc: &LoroDoc) -> Option<(DocumentId, Seq)> {
 fn fold_into(
     segment: &LoroDoc,
     amendments: &LoroDoc,
-    channel: ChannelId,
-    amendments_id: DocumentId,
+    channel: Id<Channel>,
+    amendments_id: Id<Document>,
     reached: Seq,
 ) -> Result<(), MurmureError> {
     let root = crate::schema::root_map(amendments, Root::Amendments);

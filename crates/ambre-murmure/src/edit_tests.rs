@@ -6,7 +6,8 @@ use ambre_bus::CharSpan;
 use ambre_bus::{
     ActivityKind, Mention, MentionTarget, MessageDraft, MessageView, Reaction, Timestamp,
 };
-use ambre_core::{ChannelId, DocumentId, MessageId, SegmentId, Seq, UserId};
+use ambre_core::Seq;
+use ambre_core::id::{Channel, Document, Id, Message, Segment, User};
 
 use crate::schema::{self, Root};
 use crate::{ChannelState, ChannelType, MurmureError, Opening, OpeningChannel, Sent, Signer};
@@ -17,11 +18,11 @@ const THUMB: &str = "\u{1F44D}";
 /// One member of the channel: its state, and the user it writes for.
 struct Member {
     state: ChannelState,
-    user: UserId,
+    user: Id<User>,
 }
 
 impl Member {
-    fn segment(&self) -> SegmentId {
+    fn segment(&self) -> Id<Segment> {
         self.state.active_id()
     }
 
@@ -66,7 +67,7 @@ impl Member {
         map
     }
 
-    fn edit(&mut self, message: MessageId, draft: &MessageDraft) -> Sent {
+    fn edit(&mut self, message: Id<Message>, draft: &MessageDraft) -> Sent {
         self.state
             .edit(self.segment(), message, draft, self.user)
             .expect("edit")
@@ -84,17 +85,17 @@ fn plain(text: &str) -> MessageDraft {
 
 /// Alice's channel with one message of hers, `draft`, and Bob, who opened
 /// it after.
-fn pair(draft: &MessageDraft) -> (Member, Member, MessageId) {
+fn pair(draft: &MessageDraft) -> (Member, Member, Id<Message>) {
     let mut alice = Member {
-        state: ChannelState::create(ChannelId::new(), ChannelType::Public, None, NOW)
+        state: ChannelState::create(Id::<Channel>::mint(), ChannelType::Public, None, NOW)
             .expect("create")
             .identify(),
-        user: UserId::new(),
+        user: Id::<User>::mint(),
     };
     alice.state.send(draft, alice.user, NOW).expect("send");
     let bob = Member {
         state: open_from(&alice.state),
-        user: UserId::new(),
+        user: Id::<User>::mint(),
     };
     let message = alice.only_message().id;
     (alice, bob, message)
@@ -129,8 +130,8 @@ fn open_from(state: &ChannelState) -> ChannelState {
 /// and the one it added is there.
 #[test]
 fn an_edit_changes_the_body_and_marks_the_message_edited() {
-    let carol = UserId::new();
-    let dave = UserId::new();
+    let carol = Id::<User>::mint();
+    let dave = Id::<User>::mint();
     let (mut alice, mut bob, message) = pair(&MessageDraft {
         text: "@carol lunch?".to_owned(),
         styles: Vec::new(),
@@ -287,12 +288,12 @@ fn an_edit_or_a_delete_of_a_message_not_ones_own_is_refused() {
         bob.state.delete(segment, message, bob.user),
         Err(MurmureError::NotAuthor(id)) if id == message
     ));
-    let absent = MessageId::new();
+    let absent = Id::<Message>::mint();
     assert!(matches!(
         bob.state.delete(segment, absent, bob.user),
         Err(MurmureError::NoMessage(id)) if id == absent
     ));
-    let elsewhere = SegmentId::from_document(DocumentId::new());
+    let elsewhere = Id::<Segment>::from_document(Id::<Document>::mint());
     assert!(matches!(
         bob.state.delete(elsewhere, message, bob.user),
         Err(MurmureError::NotHeld(_))
@@ -321,7 +322,7 @@ fn a_delete_keeps_the_thread_and_the_reactions() {
     alice.receive(&bob, &reacted, 2);
     // The thread document the first reply would name (the Murmure threads
     // spec), written by the author herself until the threads land.
-    let thread = DocumentId::new().to_string();
+    let thread = Id::<Document>::mint().to_string();
     alice
         .message_map()
         .insert(crate::schema::MessageKey::Thread, thread.as_str())

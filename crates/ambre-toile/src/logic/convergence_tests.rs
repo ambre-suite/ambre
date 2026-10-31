@@ -11,7 +11,7 @@ use ambre_core::{CharCount, CharOffset, ElementCount, StepDirection};
 use kurbo::{Point, Rect, Size, Vec2};
 use proptest::prelude::*;
 
-use ambre_bus::UserId;
+use ambre_core::id::{Connector, Document, Element, Frame, Id, Thread, User};
 
 use crate::logic::align::AlignOp;
 use crate::logic::autolayout::{Align, AutoLayout, Direction, Sizing};
@@ -21,8 +21,8 @@ use crate::logic::command::{
     TextDelta, ThreadMessageIndex, ToileCommand, ToileError, ToileEvent, ZTarget,
 };
 use crate::logic::model::{
-    Anchor, ConnectorId, ElementId, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId,
-    PathType, ShapeKind, StrokePoint, ThreadId,
+    Anchor, ElementKind, ElementStyle, EndCaps, LinkTarget, NodeId, PathType, ShapeKind,
+    StrokePoint,
 };
 use crate::logic::state::{PRESENCE_TTL, ToileState};
 
@@ -100,7 +100,7 @@ fn a_remote_change_is_never_re_broadcast() {
 #[test]
 fn a_remote_move_walks_no_board() {
     let mut a = ToileState::new();
-    let ids: Vec<ElementId> = (0..500)
+    let ids: Vec<Id<Element>> = (0..500)
         .map(|i| {
             create_rect(
                 &mut a,
@@ -126,7 +126,7 @@ fn a_remote_move_walks_no_board() {
     assert_eq!(b.bounds_of(&ids[7]), a.bounds_of(&ids[7]));
 }
 
-fn created_id(out: &crate::logic::command::ToileOutcome) -> ElementId {
+fn created_id(out: &crate::logic::command::ToileOutcome) -> Id<Element> {
     out.display
         .iter()
         .find_map(|e| match e {
@@ -136,7 +136,7 @@ fn created_id(out: &crate::logic::command::ToileOutcome) -> ElementId {
         .expect("expected an ElementCreated event")
 }
 
-fn create_rect(st: &mut ToileState, at: Point, size: Size) -> ElementId {
+fn create_rect(st: &mut ToileState, at: Point, size: Size) -> Id<Element> {
     let out = st.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Shape(ShapeKind::Rect),
         at,
@@ -160,7 +160,7 @@ fn create_registers_bounds_and_layer() {
 
 /// Read an element's plaintext body from the derived viewport (Phase 0 stores it
 /// as `DisplayGeom::Sticky` for a sticky, `DisplayGeom::Text` for a text element).
-fn body_of(st: &ToileState, id: &ElementId) -> Option<String> {
+fn body_of(st: &ToileState, id: &Id<Element>) -> Option<String> {
     use crate::logic::command::DisplayGeom;
     st.debug_viewport().nodes.iter().find_map(|n| match n {
         DisplayNode::Element(e) if &e.id == id => match &e.geom {
@@ -233,7 +233,7 @@ fn set_text_rejects_a_non_text_element() {
 /// Write `text` over the body `st` holds now, as an editor opened on it would.
 fn set_body(
     st: &mut ToileState,
-    id: &ElementId,
+    id: &Id<Element>,
     base: &str,
     text: &str,
 ) -> crate::logic::command::ToileOutcome {
@@ -246,7 +246,7 @@ fn set_body(
 
 /// Two authors write one body at once, each sending the whole body as the
 /// editor does, then each receives the other's delta.
-fn race_two_bodies(a: &mut ToileState, b: &mut ToileState, id: &ElementId, ta: &str, tb: &str) {
+fn race_two_bodies(a: &mut ToileState, b: &mut ToileState, id: &Id<Element>, ta: &str, tb: &str) {
     let base = body_of(a, id).expect("a body");
     let da = set_body(a, id, &base, ta)
         .update
@@ -476,7 +476,7 @@ fn delete_drops_owned_connectors() {
 // -----------------------------------------------------------------------------
 
 /// Join two fresh rects with a straight arrow and answer its minted id.
-fn create_connector(st: &mut ToileState) -> ConnectorId {
+fn create_connector(st: &mut ToileState) -> Id<Connector> {
     let a = create_rect(st, Point::ZERO, Size::new(10.0, 10.0));
     let b = create_rect(st, Point::new(100.0, 0.0), Size::new(10.0, 10.0));
     st.handle_command(ToileCommand::CreateConnector {
@@ -504,7 +504,7 @@ fn create_connector(st: &mut ToileState) -> ConnectorId {
 
 /// Read a connector's caption back out of the derived viewport -- the same
 /// string the UI paints.
-fn caption(st: &ToileState, id: &ConnectorId) -> String {
+fn caption(st: &ToileState, id: &Id<Connector>) -> String {
     st.debug_viewport()
         .nodes
         .iter()
@@ -516,7 +516,7 @@ fn caption(st: &ToileState, id: &ConnectorId) -> String {
 }
 
 /// Read a connector's style back out of the derived viewport.
-fn conn_style(st: &ToileState, id: &ConnectorId) -> ElementStyle {
+fn conn_style(st: &ToileState, id: &Id<Connector>) -> ElementStyle {
     st.debug_viewport()
         .nodes
         .iter()
@@ -557,7 +557,7 @@ fn an_arrow_carries_its_own_style() {
 fn restyling_a_missing_arrow_is_refused() {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::RestyleConnector {
-        id: ConnectorId("nope".into()),
+        id: Id::<Connector>::from_text("nope".into()),
         style: ElementStyle::default(),
     });
     assert!(out.update.is_none(), "a refused restyle writes nothing");
@@ -588,7 +588,7 @@ fn a_caption_reaches_the_viewport() {
 fn captioning_a_missing_arrow_is_refused() {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::SetConnectorLabel {
-        id: ConnectorId("nope".into()),
+        id: Id::<Connector>::from_text("nope".into()),
         base: String::new(),
         text: "hi".into(),
     });
@@ -784,7 +784,7 @@ fn selection_stats_empty_ids_on_empty_board_is_none() {
 }
 
 /// The tally of one stats request, as `(count, bounds)`.
-fn stats_of(st: &mut ToileState, ids: Vec<ElementId>) -> (u32, Option<Rect>) {
+fn stats_of(st: &mut ToileState, ids: Vec<Id<Element>>) -> (u32, Option<Rect>) {
     let out = st.handle_command(ToileCommand::RequestSelectionStats {
         ids,
         kind: StatsRequestKind::Band,
@@ -822,7 +822,7 @@ fn a_stale_id_does_not_stop_the_tally() {
     st.handle_command(ToileCommand::DeleteElements {
         ids: vec![gone.clone()],
     });
-    let never = ElementId("never-was".into());
+    let never = Id::<Element>::from_text("never-was".into());
     let ids = vec![gone.clone(), a, never, b, gone];
     assert_eq!(
         stats_of(&mut st, ids),
@@ -1035,7 +1035,7 @@ fn group_and_drawing_are_not_creatable() {
 // Find (board text search,)
 // -----------------------------------------------------------------------------
 
-fn create_sticky(st: &mut ToileState, at: Point, body: &str) -> ElementId {
+fn create_sticky(st: &mut ToileState, at: Point, body: &str) -> Id<Element> {
     let out = st.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Sticky,
         at,
@@ -1051,7 +1051,7 @@ fn find(
     st: &mut ToileState,
     query: &str,
     options: crate::logic::command::FindOptions,
-    from: Option<ElementId>,
+    from: Option<Id<Element>>,
 ) -> crate::logic::command::FindResults {
     find_dir(st, query, options, from, StepDirection::Forward)
 }
@@ -1060,7 +1060,7 @@ fn find_dir(
     st: &mut ToileState,
     query: &str,
     options: crate::logic::command::FindOptions,
-    from: Option<ElementId>,
+    from: Option<Id<Element>>,
     direction: StepDirection,
 ) -> crate::logic::command::FindResults {
     let out = st.handle_command(ToileCommand::Find {
@@ -1262,7 +1262,7 @@ fn a_search_finds_a_hit_far_outside_the_camera() {
         zoom: ambre_core::ZoomFactor::positive(1.0),
         size: Size::new(800.0, 600.0),
     }));
-    let visible: Vec<ElementId> = st
+    let visible: Vec<Id<Element>> = st
         .debug_viewport()
         .nodes
         .into_iter()
@@ -1330,7 +1330,7 @@ fn find_honors_match_case_and_whole_word() {
 fn find_reaches_an_element_the_order_omits() {
     let mut st = ToileState::new();
     let listed = create_sticky(&mut st, Point::ZERO, "plan");
-    let mut omitted: Vec<ElementId> = (1..=3)
+    let mut omitted: Vec<Id<Element>> = (1..=3)
         .map(|i| create_sticky(&mut st, Point::new(f64::from(i) * 100.0, 0.0), "plan"))
         .collect();
     for id in &omitted {
@@ -1402,7 +1402,7 @@ fn identity_is_seeded_and_read_back() {
     // #1: my_user_id is `None` until SessionReady, then the dispatcher seeds it.
     let mut st = ToileState::new();
     assert!(st.user_id().is_none());
-    let me = UserId::new();
+    let me = Id::<User>::mint();
     st.set_user_id(me);
     assert_eq!(st.user_id(), Some(me));
 }
@@ -1442,7 +1442,7 @@ fn a_stroke_in_flight_reaches_the_other_users() {
     let frame = out.ephemeral.expect("the sample broadcasts");
 
     let mut watcher = ToileState::new();
-    let drawer_id = UserId::new();
+    let drawer_id = Id::<User>::mint();
     watcher.apply_ephemeral(drawer_id, &frame);
     assert_eq!(
         watcher
@@ -1503,7 +1503,7 @@ fn the_outbound_sample_carries_the_session_display_name() {
     let frame = presence_frame(&mut sender, sample_at(1.0, 2.0), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
-    let peers = live_set(rx.apply_ephemeral(UserId::new(), &frame));
+    let peers = live_set(rx.apply_ephemeral(Id::<User>::mint(), &frame));
     assert_eq!(peers.len(), 1);
     assert_eq!(peers[0].presence.name.as_ref().unwrap().as_str(), "Ada");
 
@@ -1515,7 +1515,7 @@ fn the_outbound_sample_carries_the_session_display_name() {
         sample_at(3.0, 4.0),
         ambre_core::PageTime(0.0),
     );
-    let peers = live_set(rx.apply_ephemeral(UserId::new(), &frame));
+    let peers = live_set(rx.apply_ephemeral(Id::<User>::mint(), &frame));
     assert!(peers.iter().any(|p| p.presence.name.is_none()));
 }
 
@@ -1534,7 +1534,7 @@ fn a_peer_who_stops_sending_leaves_the_live_set() {
         payload: PresencePayload::default(),
         now: ambre_core::PageTime(1_000.0),
     });
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     assert_eq!(live_set(rx.apply_ephemeral(alice, &frame)).len(), 1);
 
     // Still inside the TTL: Alice is live, and the local sample says nothing new.
@@ -1566,7 +1566,7 @@ fn a_departure_message_drops_the_peer_at_once() {
     let frame = presence_frame(&mut sender, sample_at(3.0, 3.0), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     assert_eq!(live_set(rx.apply_ephemeral(alice, &frame)).len(), 1);
 
     let events = rx.peer_left(alice);
@@ -1578,7 +1578,7 @@ fn a_departure_message_drops_the_peer_at_once() {
 
     // A peer nobody was painting is not a change: no event, no repaint.
     assert!(
-        rx.peer_left(UserId::new()).is_empty(),
+        rx.peer_left(Id::<User>::mint()).is_empty(),
         "a departure for an unknown peer says nothing"
     );
 }
@@ -1597,7 +1597,7 @@ fn a_clock_that_steps_backwards_ages_nobody() {
         payload: PresencePayload::default(),
         now: ambre_core::PageTime(100_000.0),
     });
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     rx.apply_ephemeral(alice, &frame);
 
     rx.handle_command(ToileCommand::Presence {
@@ -1626,7 +1626,7 @@ fn a_sample_replaces_the_peers_presence_whole() {
     let second = presence_frame(&mut sender, sample_at(9.0, 9.0), ambre_core::PageTime(0.0));
 
     let mut rx = ToileState::new();
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     rx.apply_ephemeral(alice, &first);
     rx.apply_ephemeral(alice, &second);
 
@@ -1639,7 +1639,7 @@ fn a_sample_replaces_the_peers_presence_whole() {
 #[test]
 fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
     // #2 / DoD: an inbound presence sample yields a PeerPresence keyed by the
-    // resolved UserId and mutates neither the doc nor its history.
+    // resolved Id<User> and mutates neither the doc nor its history.
     let mut sender = ToileState::new();
     let payload = PresencePayload {
         name: None,
@@ -1658,7 +1658,7 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
     let before = rx.export_snapshot();
     let count_before = rx.element_count();
 
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     let peers = live_set(rx.apply_ephemeral(alice, &frame));
     assert_eq!(peers.len(), 1);
     assert_eq!(peers[0].user_id, alice);
@@ -1669,9 +1669,9 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
     assert_eq!(rx.export_snapshot(), before);
     assert_eq!(rx.element_count(), count_before);
 
-    // The board tracks a second peer independently, keyed by its own UserId,
+    // The board tracks a second peer independently, keyed by its own Id<User>,
     // and the set carries both.
-    let bob = UserId::new();
+    let bob = Id::<User>::mint();
     let bob_frame = presence_frame(
         &mut sender,
         PresencePayload::default(),
@@ -1686,7 +1686,7 @@ fn apply_ephemeral_keys_presence_by_user_id_without_touching_history() {
 #[test]
 fn apply_ephemeral_drops_a_malformed_sample() {
     let mut rx = ToileState::new();
-    let events = rx.apply_ephemeral(UserId::new(), &vec![0xFF, 0x00, 0x13, 0x37].into());
+    let events = rx.apply_ephemeral(Id::<User>::mint(), &vec![0xFF, 0x00, 0x13, 0x37].into());
     assert!(
         events.is_empty(),
         "a malformed presence sample yields no event"
@@ -1842,8 +1842,8 @@ fn group_unions_bounds_and_sits_below_members() {
 fn a_group_takes_no_box_from_a_resize_or_a_rotation() {
     let mut a = ToileState::new();
     let mut b = ToileState::new();
-    a.set_user_id(UserId::new());
-    b.set_user_id(UserId::new());
+    a.set_user_id(Id::<User>::mint());
+    b.set_user_id(Id::<User>::mint());
     let x = create_rect(&mut a, Point::ZERO, Size::new(10.0, 10.0));
     let y = create_rect(&mut a, Point::new(90.0, 90.0), Size::new(10.0, 10.0));
     b.apply_remote_snapshot(&a.export_snapshot());
@@ -1882,7 +1882,7 @@ fn derive_populates_the_group_edge_on_members() {
         ids: vec![a.clone(), b.clone()],
     }));
     let vp = st.debug_viewport();
-    let group_of = |id: &ElementId| {
+    let group_of = |id: &Id<Element>| {
         vp.nodes.iter().find_map(|n| match n {
             DisplayNode::Element(e) if &e.id == id => Some(e.group.clone()),
             _ => None,
@@ -2087,7 +2087,7 @@ fn deleting_a_group_cascades_to_members() {
 // Frames: membership + z-order invariant
 // -----------------------------------------------------------------------------
 
-fn create_frame(st: &mut ToileState, at: Point, size: Size) -> ElementId {
+fn create_frame(st: &mut ToileState, at: Point, size: Size) -> Id<Element> {
     created_id(&st.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Frame,
         at,
@@ -2098,12 +2098,18 @@ fn create_frame(st: &mut ToileState, at: Point, size: Size) -> ElementId {
     }))
 }
 
+/// A frame created like [`create_frame`], read back as the frame it is.
+fn create_slide(st: &mut ToileState, at: Point, size: Size) -> Id<Frame> {
+    let id = create_frame(st, at, size);
+    st.frame(&id).expect("a frame")
+}
+
 // -----------------------------------------------------------------------------
 // Links on an element (toile-links)
 // -----------------------------------------------------------------------------
 
 /// Read an element's link back out of the derived viewport.
-fn link_of(st: &ToileState, id: &ElementId) -> Option<LinkTarget> {
+fn link_of(st: &ToileState, id: &Id<Element>) -> Option<LinkTarget> {
     st.debug_viewport().nodes.iter().find_map(|n| match n {
         DisplayNode::Element(e) if &e.id == id => Some(e.link.clone()),
         _ => None,
@@ -2203,7 +2209,7 @@ fn setting_a_link_touches_nothing_else() {
 
     st.handle_command(ToileCommand::SetLink {
         id: id.clone(),
-        link: Some(LinkTarget::Frame(ElementId("f".into()))),
+        link: Some(LinkTarget::Frame(Id::<Element>::from_text("f".into()))),
     });
 
     let after = st
@@ -2254,7 +2260,7 @@ fn deleting_the_target_frame_leaves_the_link() {
 fn linking_a_missing_element_is_refused() {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::SetLink {
-        id: ElementId("nope".into()),
+        id: Id::<Element>::from_text("nope".into()),
         link: Some(LinkTarget::Url("https://example.org/".into())),
     });
     assert!(out.update.is_none(), "a refused link writes nothing");
@@ -2318,7 +2324,7 @@ fn remove_from_frames_targets_the_real_parent() {
 }
 
 /// The ids a `SelectionData` reply names as framed.
-fn framed_of(st: &mut ToileState, ids: Vec<ElementId>) -> Vec<ElementId> {
+fn framed_of(st: &mut ToileState, ids: Vec<Id<Element>>) -> Vec<Id<Element>> {
     let out = st.handle_command(ToileCommand::RequestSelectionData { ids });
     match out.display.as_slice() {
         [ToileEvent::SelectionData { framed, .. }] => framed.clone(),
@@ -2455,7 +2461,7 @@ fn frame_children_paint_after_their_frame() {
     });
 
     let order = st.layer_order();
-    let idx = |id: &ElementId| {
+    let idx = |id: &Id<Element>| {
         order
             .iter()
             .position(|n| n == &NodeId::Element(id.clone()))
@@ -2576,7 +2582,10 @@ fn frame_snapshot_captures_declared_children_props() {
         vec![a.clone(), b.clone()]
     );
     let sa = snap.by_id(&a).expect("a captured");
-    assert_eq!(snap.by_id(&ElementId("absent".to_owned())), None);
+    assert_eq!(
+        snap.by_id(&Id::<Element>::from_text("absent".to_owned())),
+        None
+    );
     assert_eq!(sa.bounds, Rect::new(10.0, 20.0, 40.0, 60.0));
     assert_eq!(sa.rotation, ambre_core::Radians::new(1.0));
     assert_eq!(sa.opacity.get(), 0.5);
@@ -2608,7 +2617,7 @@ fn clip_of(out: &crate::logic::command::ToileOutcome) -> crate::logic::command::
         .expect("expected a Clipboard event")
 }
 
-fn created_ids(out: &crate::logic::command::ToileOutcome) -> Vec<ElementId> {
+fn created_ids(out: &crate::logic::command::ToileOutcome) -> Vec<Id<Element>> {
     out.display
         .iter()
         .filter_map(|e| match e {
@@ -2663,7 +2672,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     let mut st = ToileState::new();
     let frame = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::EditNotes {
-        frame: frame.clone(),
+        frame: st.frame(&frame).expect("a frame"),
         base: String::new(),
         delta: TextDelta {
             at: CharOffset::ZERO,
@@ -2682,8 +2691,9 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     });
     let pasted = created_ids(&paste);
     assert_eq!(pasted.len(), 1);
+    let copy_frame = st.frame(&pasted[0]).expect("the copy is a frame");
     assert_eq!(
-        st.notes(&pasted[0]).unwrap_or_default(),
+        st.notes(&copy_frame).unwrap_or_default(),
         "open on the budget",
         "the copy lost its notes"
     );
@@ -2694,7 +2704,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
     peer.apply_remote_snapshot(&st.export_snapshot());
     let da = st
         .handle_command(ToileCommand::EditNotes {
-            frame: pasted[0].clone(),
+            frame: copy_frame.clone(),
             base: "open on the budget".into(),
             delta: TextDelta {
                 at: CharOffset::ZERO,
@@ -2706,7 +2716,7 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
         .expect("a delta");
     let db = peer
         .handle_command(ToileCommand::EditNotes {
-            frame: pasted[0].clone(),
+            frame: copy_frame.clone(),
             base: "open on the budget".into(),
             delta: TextDelta {
                 at: CharOffset::new(18),
@@ -2718,10 +2728,10 @@ fn a_pasted_frame_carries_its_notes_and_takes_an_element() {
         .expect("a delta");
     peer.apply_remote(&da);
     st.apply_remote(&db);
-    let merged = st.notes(&pasted[0]).unwrap_or_default();
+    let merged = st.notes(&copy_frame).unwrap_or_default();
     assert_eq!(
         merged,
-        peer.notes(&pasted[0]).unwrap_or_default(),
+        peer.notes(&copy_frame).unwrap_or_default(),
         "the notes diverged"
     );
     assert!(
@@ -2854,7 +2864,7 @@ fn paste_keeps_fully_copied_connector_drops_half_copied() {
 }
 
 /// The elements a copy and a paste of `ids` create, in paint order.
-fn copy_paste(st: &mut ToileState, ids: Vec<ElementId>) -> Vec<ElementId> {
+fn copy_paste(st: &mut ToileState, ids: Vec<Id<Element>>) -> Vec<Id<Element>> {
     let payload = clip_of(&st.handle_command(ToileCommand::CopyElements { ids }));
     created_ids(&st.handle_command(ToileCommand::PasteElements {
         payload,
@@ -2901,7 +2911,7 @@ fn a_pasted_group_binds_its_own_copies() {
     }));
     let pasted = copy_paste(&mut st, vec![g.clone()]);
     assert_eq!(pasted.len(), 3);
-    let groups: Vec<&ElementId> = pasted
+    let groups: Vec<&Id<Element>> = pasted
         .iter()
         .filter(|id| !st.membership_of(id).is_empty())
         .collect();
@@ -2910,7 +2920,7 @@ fn a_pasted_group_binds_its_own_copies() {
     };
     let mut members = st.membership_of(group);
     members.sort();
-    let mut copies: Vec<ElementId> = pasted.iter().filter(|id| *id != group).cloned().collect();
+    let mut copies: Vec<Id<Element>> = pasted.iter().filter(|id| *id != group).cloned().collect();
     copies.sort();
     assert_eq!(members, copies, "bound to the copies");
     assert_eq!(st.membership_of(&g), [a, b], "the source keeps its members");
@@ -2936,7 +2946,7 @@ fn a_pasted_arrow_joins_the_copies() {
     });
     let before = st.connector_ids();
     let pasted = copy_paste(&mut st, vec![a, b]);
-    let fresh: Vec<ConnectorId> = st
+    let fresh: Vec<Id<Connector>> = st
         .connector_ids()
         .into_iter()
         .filter(|c| !before.contains(c))
@@ -3135,7 +3145,7 @@ fn undo_reverts_group_as_one_item() {
 // Transforms, connectors, viewport
 // -----------------------------------------------------------------------------
 
-fn connect(st: &mut ToileState, from: ElementId, to: ElementId) -> ConnectorId {
+fn connect(st: &mut ToileState, from: Id<Element>, to: Id<Element>) -> Id<Connector> {
     st.handle_command(ToileCommand::CreateConnector {
         from,
         from_anch: Anchor::Right,
@@ -3222,7 +3232,7 @@ fn retarget_to_missing_element_reports_dangling() {
     let out = st.handle_command(ToileCommand::RetargetConnector {
         id: conn.clone(),
         endpoint: End::To,
-        to: ElementId("ffff_0000".to_owned()), // never minted
+        to: Id::<Element>::from_text("ffff_0000".to_owned()), // never minted
         anch: Anchor::Left,
     });
     assert!(
@@ -3261,7 +3271,7 @@ fn viewport_culls_offscreen_nodes() {
     let mut st = ToileState::new();
     let near = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let _far = create_rect(&mut st, Point::new(5000.0, 5000.0), Size::new(10.0, 10.0));
-    let painted: Vec<ElementId> = st
+    let painted: Vec<Id<Element>> = st
         .debug_viewport()
         .nodes
         .iter()
@@ -3274,7 +3284,7 @@ fn viewport_culls_offscreen_nodes() {
 }
 
 /// The arrows a derivation answers, by id.
-fn painted_arrows(st: &ToileState) -> Vec<ConnectorId> {
+fn painted_arrows(st: &ToileState) -> Vec<Id<Connector>> {
     st.debug_viewport()
         .nodes
         .iter()
@@ -3360,8 +3370,8 @@ fn slide_changed(out: &crate::logic::command::ToileOutcome) -> Option<u32> {
 #[test]
 fn set_slide_order_produces_delta_and_is_undoable() {
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
 
     let out = st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![b.clone(), a.clone()],
@@ -3383,8 +3393,8 @@ fn set_slide_order_produces_delta_and_is_undoable() {
 #[test]
 fn slide_order_dedups_repeated_frames() {
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone(), a.clone()],
     });
@@ -3395,8 +3405,8 @@ fn slide_order_dedups_repeated_frames() {
 #[test]
 fn set_slide_order_unchanged_writes_nothing() {
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone()],
     });
@@ -3413,9 +3423,9 @@ fn set_slide_order_unchanged_writes_nothing() {
 #[test]
 fn shorter_deck_clamps_the_active_slide() {
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
-    let c = create_frame(&mut st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let c = create_slide(&mut st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b, c],
     });
@@ -3435,16 +3445,16 @@ fn shorter_deck_clamps_the_active_slide() {
 #[test]
 fn deleting_a_frame_drops_its_slide() {
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
-    let c = create_frame(&mut st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let c = create_slide(&mut st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone(), c.clone()],
     });
     st.handle_command(ToileCommand::GotoSlide(SlideIndex::new(2)));
 
     st.handle_command(ToileCommand::DeleteElements {
-        ids: vec![b.clone()],
+        ids: vec![b.clone().into()],
     });
     assert_eq!(
         st.slide_order(),
@@ -3476,9 +3486,9 @@ fn deleting_an_element_seeds_no_deck() {
 #[test]
 fn playback_bounds() {
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
-    let c = create_frame(&mut st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let c = create_slide(&mut st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a, b, c],
     });
@@ -3529,8 +3539,8 @@ fn slide_change_carries_snapshots_and_fit_rect() {
     // The camera pass needs both frame snapshots + the target rect in one shot,
     // since the UI holds no board state (toile-presentation).
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone()],
     });
@@ -3538,6 +3548,7 @@ fn slide_change_carries_snapshots_and_fit_rect() {
     let change = slide_change(&st.handle_command(ToileCommand::NextSlide));
     assert_eq!(change.position.index().get(), 1);
     // `from` is slide 0, `to` is slide 1, each the engine's own frame snapshot.
+    let (a, b) = (Id::<Element>::from(a), Id::<Element>::from(b));
     assert_eq!(change.from, st.frame_snapshot(&a));
     assert_eq!(change.to, st.frame_snapshot(&b));
     // The fit target is the new active frame's world rect.
@@ -3556,8 +3567,8 @@ fn slide_change_carries_count_frame_and_notes() {
     // the active frame id and its speaker notes straight off the enriched
     // SlideChanged. The chrome holds no board state of its own.
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone(), b.clone()],
     });
@@ -3595,7 +3606,7 @@ fn enter_present_starts_from_empty_snapshot() {
     // Entering present mode has no source frame: `from` is empty so slide 0 fades
     // in rather than tweening from a stale frame.
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a.clone()],
     });
@@ -3605,6 +3616,7 @@ fn enter_present_starts_from_empty_snapshot() {
     }));
     assert_eq!(change.position.index().get(), 0);
     assert!(change.from.elements.is_empty(), "no source frame on entry");
+    let a = Id::<Element>::from(a);
     assert_eq!(change.to, st.frame_snapshot(&a));
     assert_eq!(change.to_rect, st.element_rect(&a));
 }
@@ -3612,7 +3624,7 @@ fn enter_present_starts_from_empty_snapshot() {
 #[test]
 fn present_mode_toggle_is_local() {
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder { order: vec![a] });
     st.handle_command(ToileCommand::NextSlide); // cursor is not at 0
 
@@ -3674,7 +3686,7 @@ fn leaving_the_presentation_stops_the_broadcast() {
     );
     let frame = out.ephemeral.expect("the peers hear it");
     let mut rx = ToileState::new();
-    let presenter = UserId::new();
+    let presenter = Id::<User>::mint();
     rx.apply_ephemeral(presenter, &frame);
     assert_eq!(
         rx.peer_presence(&presenter)
@@ -3690,8 +3702,8 @@ fn leaving_the_presentation_stops_the_broadcast() {
 fn every_path_that_moves_the_deck_says_so() {
     let said = |events: &[ToileEvent]| events.iter().any(|e| matches!(e, ToileEvent::DeckChanged));
     let mut st = ToileState::new();
-    let a = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(&mut st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
     let mut peer = ToileState::new();
     peer.apply_remote_snapshot(&st.export_snapshot());
 
@@ -3707,7 +3719,9 @@ fn every_path_that_moves_the_deck_says_so() {
         "a history step"
     );
     st.handle_command(ToileCommand::Redo);
-    let deleted = st.handle_command(ToileCommand::DeleteElements { ids: vec![b] });
+    let deleted = st.handle_command(ToileCommand::DeleteElements {
+        ids: vec![b.into()],
+    });
     assert!(said(&deleted.display), "a deleted frame");
     assert_eq!(st.slide_order(), [a]);
 }
@@ -3718,8 +3732,8 @@ fn playback_is_not_synced() {
     // playback carries no CRDT delta.
     let mut a = ToileState::new();
     let mut b = ToileState::new();
-    let f0 = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
-    let f1 = create_frame(&mut a, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let f0 = create_slide(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let f1 = create_slide(&mut a, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
     a.handle_command(ToileCommand::SetSlideOrder {
         order: vec![f0, f1],
     });
@@ -3758,9 +3772,9 @@ fn broadcast_slide(out: &crate::logic::command::ToileOutcome) -> Option<u32> {
 
 /// A three-frame deck shared by the follow-presenter tests.
 fn deck_of_three(st: &mut ToileState) {
-    let a = create_frame(st, Point::ZERO, Size::new(200.0, 200.0));
-    let b = create_frame(st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
-    let c = create_frame(st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
+    let a = create_slide(st, Point::ZERO, Size::new(200.0, 200.0));
+    let b = create_slide(st, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let c = create_slide(st, Point::new(600.0, 0.0), Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetSlideOrder {
         order: vec![a, b, c],
     });
@@ -3773,8 +3787,8 @@ fn deck_of_three(st: &mut ToileState) {
 fn concurrent_first_decks_converge_on_one_list() {
     let mut a = ToileState::new();
     let mut b = ToileState::new();
-    let f1 = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
-    let f2 = create_frame(&mut a, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
+    let f1 = create_slide(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let f2 = create_slide(&mut a, Point::new(300.0, 0.0), Size::new(200.0, 200.0));
     // B takes the board, frames and all, before either peer has a deck.
     b.apply_remote_snapshot(&a.export_snapshot());
     assert!(a.slide_order().is_empty() && b.slide_order().is_empty());
@@ -3871,7 +3885,7 @@ fn a_transition_lasts_what_the_deck_configures() {
 #[test]
 fn a_peers_note_edit_reaches_the_slide_on_screen() {
     let mut a = ToileState::new();
-    let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let frame = create_slide(&mut a, Point::ZERO, Size::new(200.0, 200.0));
     a.handle_command(ToileCommand::SetSlideOrder {
         order: vec![frame.clone()],
     });
@@ -3930,7 +3944,7 @@ fn stopping_a_broadcast_sends_a_sample_naming_no_slide() {
         .ephemeral
         .expect("stopping broadcasts one last frame");
     let mut rx = ToileState::new();
-    let presenter = UserId::new();
+    let presenter = Id::<User>::mint();
     rx.apply_ephemeral(presenter, &frame);
     assert_eq!(
         rx.peer_presence(&presenter)
@@ -3961,7 +3975,7 @@ fn follower_adopts_presenter_slide() {
 
     let mut rx = ToileState::new();
     rx.apply_remote_snapshot(&presenter.export_snapshot());
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
 
     let before = rx.export_snapshot();
@@ -3997,7 +4011,7 @@ fn non_follower_ignores_broadcast() {
 
     let mut rx = ToileState::new();
     rx.apply_remote_snapshot(&presenter.export_snapshot());
-    let events = rx.apply_ephemeral(UserId::new(), &frame);
+    let events = rx.apply_ephemeral(Id::<User>::mint(), &frame);
     assert_eq!(
         rx.playback().1.active.get(),
         0,
@@ -4014,7 +4028,7 @@ fn non_follower_ignores_broadcast() {
 #[test]
 fn following_other_peer_ignores_broadcast() {
     // Following B, the board ignores a frame from A (identity is the canonical
-    // UserId).
+    // Id<User>).
     let mut presenter = ToileState::new();
     deck_of_three(&mut presenter);
     presenter.handle_command(ToileCommand::SetPresentBroadcast(Broadcast::Broadcasting));
@@ -4025,9 +4039,9 @@ fn following_other_peer_ignores_broadcast() {
 
     let mut rx = ToileState::new();
     rx.apply_remote_snapshot(&presenter.export_snapshot());
-    let bob = UserId::new();
+    let bob = Id::<User>::mint();
     rx.handle_command(ToileCommand::FollowPresenter(Some(bob)));
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     rx.apply_ephemeral(alice, &frame);
     assert_eq!(
         rx.playback().1.active.get(),
@@ -4041,7 +4055,7 @@ fn adopted_slide_is_clamped_to_deck() {
     // A broadcast index past the deck end clamps to the last slide.
     let mut rx = ToileState::new();
     deck_of_three(&mut rx); // three slides -> last index 2
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     rx.handle_command(ToileCommand::FollowPresenter(Some(alice)));
     let frame = postcard::to_allocvec(&PresencePayload {
         present_slide: Some(SlideIndex::new(99)),
@@ -4061,7 +4075,7 @@ fn manual_nav_breaks_follow() {
     // A manual navigation takes control: it clears the follow and says so.
     let mut st = ToileState::new();
     deck_of_three(&mut st);
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     st.handle_command(ToileCommand::FollowPresenter(Some(alice)));
     assert_eq!(st.following(), Some(alice));
 
@@ -4081,7 +4095,7 @@ fn follow_snaps_to_last_known_slide() {
     // Following a peer whose broadcast slide is already known snaps at once.
     let mut rx = ToileState::new();
     deck_of_three(&mut rx);
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     // Store a broadcast frame from alice before following her.
     let frame = postcard::to_allocvec(&PresencePayload {
         present_slide: Some(SlideIndex::new(2)),
@@ -4134,7 +4148,7 @@ fn follow_state_is_not_synced() {
     deck_of_three(&mut a);
     b.apply_remote_snapshot(&a.export_snapshot());
 
-    let alice = UserId::new();
+    let alice = Id::<User>::mint();
     assert!(
         a.handle_command(ToileCommand::FollowPresenter(Some(alice)))
             .update
@@ -4168,7 +4182,7 @@ fn insert_notes(at: usize, s: &str) -> TextDelta {
 #[test]
 fn edit_notes_produces_delta_and_is_undoable() {
     let mut st = ToileState::new();
-    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let f = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
 
     let out = st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
@@ -4213,7 +4227,7 @@ fn edit_notes_produces_delta_and_is_undoable() {
 #[test]
 fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
     let mut a = ToileState::new();
-    let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let f = create_slide(&mut a, Point::ZERO, Size::new(200.0, 200.0));
     a.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
         base: String::new(),
@@ -4245,7 +4259,8 @@ fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
     assert!(
         out.display.iter().any(|e| matches!(
             e,
-            ToileEvent::NotesChanged { frame, notes } if frame == &f && notes == "Dear Hello world!"
+            ToileEvent::NotesChanged { frame, notes }
+                if *frame == f && notes == "Dear Hello world!"
         )),
         "the panel is told the merged note"
     );
@@ -4277,7 +4292,7 @@ fn a_splice_measured_against_a_moved_note_lands_where_it_was_typed() {
 #[test]
 fn edit_notes_clamps_out_of_range_splice() {
     let mut st = ToileState::new();
-    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let f = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::EditNotes {
         frame: f.clone(),
         base: String::new(),
@@ -4311,7 +4326,7 @@ fn edit_notes_rejects_non_frame() {
 
     // A sticky carries no `children` field, so it is not a frame: rejected no-op.
     let out = st.handle_command(ToileCommand::EditNotes {
-        frame: sticky.clone(),
+        frame: Id::<Frame>::from_text(sticky.as_str().to_owned()),
         base: String::new(),
         delta: insert_notes(0, "nope"),
     });
@@ -4323,14 +4338,14 @@ fn edit_notes_rejects_non_frame() {
         "notes on a non-frame report a ContentKindMismatch"
     );
     assert_eq!(
-        st.notes(&sticky),
+        st.notes(&Id::<Frame>::from_text(sticky.as_str().to_owned())),
         None,
         "no notes were written to the sticky"
     );
 
     // A missing element reports NoSuchElement.
     let out = st.handle_command(ToileCommand::EditNotes {
-        frame: ElementId("ghost".to_owned()),
+        frame: Id::<Frame>::from_text("ghost".to_owned()),
         base: String::new(),
         delta: insert_notes(0, "nope"),
     });
@@ -4349,7 +4364,7 @@ fn concurrent_notes_edits_converge() {
     // converge: both peers reach the same notes string after a sync round.
     let mut a = ToileState::new();
     let mut b = ToileState::new();
-    let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let f = create_slide(&mut a, Point::ZERO, Size::new(200.0, 200.0));
     // Bring B up to date so both share the same frame + notes container.
     b.apply_remote_snapshot(&a.export_snapshot());
     assert_eq!(a.notes(&f).unwrap_or_default(), "");
@@ -4408,7 +4423,7 @@ fn a_layout(direction: Direction, gap: f64) -> AutoLayout {
 #[test]
 fn set_auto_layout_add_change_clear() {
     let mut st = ToileState::new();
-    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let f = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     assert_eq!(st.auto_layout(&f), None, "a fresh frame has no layout spec");
 
     // Add a spec.
@@ -4462,7 +4477,7 @@ fn set_auto_layout_rejects_non_frame() {
     let mut st = ToileState::new();
     let sticky = create_sticky(&mut st, Point::ZERO, "note");
     let out = st.handle_command(ToileCommand::SetAutoLayout {
-        frame: sticky.clone(),
+        frame: Id::<Frame>::from_text(sticky.as_str().to_owned()),
         layout: Some(a_layout(Direction::Horizontal, 8.0)),
     });
     assert!(
@@ -4475,11 +4490,14 @@ fn set_auto_layout_rejects_non_frame() {
             .any(|e| matches!(e, ToileEvent::Error(ToileError::ContentKindMismatch))),
         "auto-layout on a non-frame reports a ContentKindMismatch"
     );
-    assert_eq!(st.auto_layout(&sticky), None);
+    assert_eq!(
+        st.auto_layout(&Id::<Frame>::from_text(sticky.as_str().to_owned())),
+        None
+    );
 
     // A missing element is likewise a rejected no-op.
     let out = st.handle_command(ToileCommand::SetAutoLayout {
-        frame: ElementId("ghost".to_owned()),
+        frame: Id::<Frame>::from_text("ghost".to_owned()),
         layout: Some(a_layout(Direction::Horizontal, 8.0)),
     });
     assert!(out.update.is_none());
@@ -4491,7 +4509,7 @@ fn concurrent_auto_layout_edits_converge() {
     // The LWW register must converge: both peers agree on one surviving spec.
     let mut a = ToileState::new();
     let mut b = ToileState::new();
-    let f = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
+    let f = create_slide(&mut a, Point::ZERO, Size::new(200.0, 200.0));
     b.apply_remote_snapshot(&a.export_snapshot());
 
     let da = a
@@ -4542,9 +4560,9 @@ fn vote(w: i32) -> Reaction {
     }
 }
 
-/// Seed a state with a canonical `UserId` (as the dispatcher does on
+/// Seed a state with a canonical `Id<User>` (as the dispatcher does on
 /// `SessionReady`) and a target element to react on. Returns the target id.
-fn state_with_user(user: UserId) -> (ToileState, ElementId) {
+fn state_with_user(user: Id<User>) -> (ToileState, Id<Element>) {
     let mut st = ToileState::new();
     st.set_user_id(user);
     let target = create_sticky(&mut st, Point::ZERO, "target");
@@ -4553,7 +4571,7 @@ fn state_with_user(user: UserId) -> (ToileState, ElementId) {
 
 #[test]
 fn react_add_change_remove_updates_tally() {
-    let (mut st, t) = state_with_user(UserId::new());
+    let (mut st, t) = state_with_user(Id::<User>::mint());
 
     // Add an emoji reaction.
     st.handle_command(ToileCommand::React {
@@ -4595,7 +4613,7 @@ fn react_add_change_remove_updates_tally() {
 
 #[test]
 fn derive_viewport_carries_tally_and_skips_deleted_target() {
-    let (mut st, t) = state_with_user(UserId::new());
+    let (mut st, t) = state_with_user(Id::<User>::mint());
     st.handle_command(ToileCommand::React {
         target: t.clone(),
         reaction: Some(emoji("thumbsup")),
@@ -4646,7 +4664,7 @@ fn doc_embed_reference_survives_the_crdt_round_trip() {
     // asserts the pair survives verbatim. A `document_id` that does not
     // round-trip points the child session at the wrong document, or nowhere.
     let mut st = ToileState::new();
-    let child = ambre_core::DocumentId::new();
+    let child = Id::<Document>::mint();
 
     st.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::DocEmbed,
@@ -4690,7 +4708,7 @@ fn doc_embed_with_an_unreadable_reference_falls_back_to_a_frame() {
         size: Size::new(100.0, 100.0),
         fill: None,
         content: InitContent::DocEmbed {
-            document_id: ambre_core::DocumentId::new(),
+            document_id: Id::<Document>::mint(),
             doc_type: ambre_core::DocType::Toile,
         },
         correlate: None,
@@ -4806,7 +4824,7 @@ fn a_peers_traversal_in_a_picture_address_derives_no_address() {
 #[test]
 fn a_copied_embed_is_a_second_reference_to_the_same_document() {
     let mut st = ToileState::new();
-    let child = ambre_core::DocumentId::new();
+    let child = Id::<Document>::mint();
     let out = st.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::DocEmbed,
         at: Point::ZERO,
@@ -4859,7 +4877,7 @@ fn a_copied_embed_is_a_second_reference_to_the_same_document() {
 
 #[test]
 fn react_broadcasts_delta_and_is_undoable() {
-    let (mut st, t) = state_with_user(UserId::new());
+    let (mut st, t) = state_with_user(Id::<User>::mint());
 
     let out = st.handle_command(ToileCommand::React {
         target: t.clone(),
@@ -4894,7 +4912,7 @@ fn react_broadcasts_delta_and_is_undoable() {
 
 #[test]
 fn react_before_session_ready_is_a_noop() {
-    // Without a canonical UserId there is no per-user key to write under.
+    // Without a canonical Id<User> there is no per-user key to write under.
     let mut st = ToileState::new();
     let t = create_sticky(&mut st, Point::ZERO, "target");
     assert!(st.user_id().is_none());
@@ -4909,7 +4927,7 @@ fn react_before_session_ready_is_a_noop() {
 
 #[test]
 fn tally_skips_a_deleted_target() {
-    let (mut st, t) = state_with_user(UserId::new());
+    let (mut st, t) = state_with_user(Id::<User>::mint());
     st.handle_command(ToileCommand::React {
         target: t.clone(),
         reaction: Some(emoji("thumbsup")),
@@ -4932,8 +4950,8 @@ fn tally_skips_a_deleted_target() {
 fn concurrent_reactions_distinct_users_converge() {
     // Two different users react on the same target concurrently. Per-user keys
     // mean both entries survive; the tally counts both, with no double-count.
-    let alice = UserId::new();
-    let bob = UserId::new();
+    let alice = Id::<User>::mint();
+    let bob = Id::<User>::mint();
     let mut a = ToileState::new();
     a.set_user_id(alice);
     let t = create_sticky(&mut a, Point::ZERO, "target");
@@ -4975,9 +4993,9 @@ fn concurrent_reactions_distinct_users_converge() {
 #[test]
 fn same_user_two_devices_is_one_entry() {
     // The same account reacting from two devices (two sessions / PeerIDs) must
-    // collapse to a single entry, keyed by the canonical UserId. A double-count
+    // collapse to a single entry, keyed by the canonical Id<User>. A double-count
     // is the failure this guards.
-    let me = UserId::new();
+    let me = Id::<User>::mint();
     let mut a = ToileState::new();
     a.set_user_id(me);
     let t = create_sticky(&mut a, Point::ZERO, "target");
@@ -5019,11 +5037,11 @@ fn same_user_two_devices_is_one_entry() {
 
 /// A board whose one target carries one reaction per entry. A distinct user
 /// places each one on a peer of its own, and the board merges it back in order.
-fn reacted_by(reactions: &[Reaction]) -> (ToileState, ElementId) {
-    let (mut board, t) = state_with_user(UserId::new());
+fn reacted_by(reactions: &[Reaction]) -> (ToileState, Id<Element>) {
+    let (mut board, t) = state_with_user(Id::<User>::mint());
     for reaction in reactions {
         let mut peer = ToileState::new();
-        peer.set_user_id(UserId::new());
+        peer.set_user_id(Id::<User>::mint());
         peer.apply_remote_snapshot(&board.export_snapshot());
         let delta = peer
             .handle_command(ToileCommand::React {
@@ -5042,7 +5060,7 @@ fn reacted_by(reactions: &[Reaction]) -> (ToileState, ElementId) {
 /// board still holds and counts its reaction: it is skipped, not deleted.
 #[test]
 fn a_reacted_target_out_of_view_is_left_out_of_the_frame() {
-    let (mut st, near) = state_with_user(UserId::new());
+    let (mut st, near) = state_with_user(Id::<User>::mint());
     let far = create_sticky(&mut st, Point::new(1.0e6, 1.0e6), "far");
     for t in [&near, &far] {
         st.handle_command(ToileCommand::React {
@@ -5134,7 +5152,7 @@ fn votes_fold_into_one_signed_total_and_one_count() {
 /// nothing, says nothing and costs no undo item.
 #[test]
 fn placing_the_same_reaction_again_does_nothing() {
-    let (mut st, t) = state_with_user(UserId::new());
+    let (mut st, t) = state_with_user(Id::<User>::mint());
     st.handle_command(ToileCommand::React {
         target: t.clone(),
         reaction: Some(emoji("heart")),
@@ -5170,7 +5188,7 @@ fn placing_the_same_reaction_again_does_nothing() {
 
 /// The thread the last command opened. Only `CreateComment` emits
 /// `CommentThreadOpened`, so the event names a freshly minted thread.
-fn opened_thread(out: &crate::logic::command::ToileOutcome) -> ThreadId {
+fn opened_thread(out: &crate::logic::command::ToileOutcome) -> Id<Thread> {
     out.display
         .iter()
         .find_map(|e| match e {
@@ -5186,7 +5204,7 @@ fn comment_on(
     anchor: CommentAnchor,
     body: &str,
     ts: ambre_core::Timestamp,
-) -> ThreadId {
+) -> Id<Thread> {
     let out = st.handle_command(ToileCommand::CreateComment {
         anchor,
         body: body.to_owned(),
@@ -5197,7 +5215,7 @@ fn comment_on(
 }
 
 /// The bodies of a thread's messages, in list order.
-fn bodies(st: &ToileState, thread: &ThreadId) -> Vec<String> {
+fn bodies(st: &ToileState, thread: &Id<Thread>) -> Vec<String> {
     st.comment_thread(thread)
         .map(|t| t.messages.into_iter().map(|m| m.body).collect())
         .unwrap_or_default()
@@ -5208,7 +5226,7 @@ fn a_thread_anchors_to_an_element_or_to_a_world_point() {
     // TOILE-024: both anchor shapes survive the CRDT round trip, and neither is
     // a viewport coordinate.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let e = create_sticky(&mut st, Point::ZERO, "note");
 
     let on_element = comment_on(
@@ -5238,7 +5256,7 @@ fn a_thread_anchors_to_an_element_or_to_a_world_point() {
 fn a_message_author_is_the_user_id_of_the_session() {
     // TOILE-FEAT-014: the message carries the person, not the session. A board
     // with no authenticated session writes nothing at all.
-    let me = UserId::new();
+    let me = Id::<User>::mint();
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::CreateComment {
         anchor: CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
@@ -5270,11 +5288,11 @@ fn two_peers_commenting_on_one_spot_mint_distinct_threads() {
     // TOILE-FEAT-011: a minted id per thread makes the collision
     // unrepresentable. Keyed by the anchor element, one of the two would lose.
     let mut a = ToileState::new();
-    a.set_user_id(UserId::new());
+    a.set_user_id(Id::<User>::mint());
     let e = create_sticky(&mut a, Point::ZERO, "note");
 
     let mut b = ToileState::new();
-    b.set_user_id(UserId::new());
+    b.set_user_id(Id::<User>::mint());
     b.apply_remote_snapshot(&a.export_snapshot());
 
     let out_a = a.handle_command(ToileCommand::CreateComment {
@@ -5308,7 +5326,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
     // TOILE-FEAT-012: the order both readers see is the list order. The clocks
     // here disagree with it on purpose: A's reply carries the later timestamp.
     let mut a = ToileState::new();
-    a.set_user_id(UserId::new());
+    a.set_user_id(Id::<User>::mint());
     let t = comment_on(
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
@@ -5317,7 +5335,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
     );
 
     let mut b = ToileState::new();
-    b.set_user_id(UserId::new());
+    b.set_user_id(Id::<User>::mint());
     b.apply_remote_snapshot(&a.export_snapshot());
 
     let da = a
@@ -5350,7 +5368,7 @@ fn concurrent_replies_converge_in_list_order_not_clock_order() {
 fn concurrent_edits_of_one_message_converge_character_wise() {
     // TOILE-FEAT-013: one author on two devices edits their own message. A
     // whole-string register would drop one edit in silence.
-    let me = UserId::new();
+    let me = Id::<User>::mint();
     let mut a = ToileState::new();
     a.set_user_id(me);
     let t = comment_on(
@@ -5399,7 +5417,7 @@ fn editing_another_authors_message_is_refused() {
     // (`features/ambre-spec-toile-comments.md section 6`), so the engine allows
     // the one case that needs no rule: the author's own message.
     let mut a = ToileState::new();
-    a.set_user_id(UserId::new());
+    a.set_user_id(Id::<User>::mint());
     let t = comment_on(
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
@@ -5408,7 +5426,7 @@ fn editing_another_authors_message_is_refused() {
     );
 
     let mut b = ToileState::new();
-    b.set_user_id(UserId::new());
+    b.set_user_id(Id::<User>::mint());
     b.apply_remote_snapshot(&a.export_snapshot());
 
     let out = b.handle_command(ToileCommand::EditComment {
@@ -5428,7 +5446,7 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
     // TOILE-FEAT-015: resolving is idempotent and convergent, and it destroys
     // neither the thread nor its messages.
     let mut a = ToileState::new();
-    a.set_user_id(UserId::new());
+    a.set_user_id(Id::<User>::mint());
     let t = comment_on(
         &mut a,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
@@ -5437,7 +5455,7 @@ fn concurrent_resolves_converge_and_keep_the_messages() {
     );
 
     let mut b = ToileState::new();
-    b.set_user_id(UserId::new());
+    b.set_user_id(Id::<User>::mint());
     b.apply_remote_snapshot(&a.export_snapshot());
 
     let da = a
@@ -5492,7 +5510,7 @@ fn a_thread_survives_the_deletion_of_its_anchor_element() {
     // why it changed. The board stops painting the pin, and that half belongs to
     // the derived viewport.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let e = create_sticky(&mut st, Point::ZERO, "note");
     let t = comment_on(
         &mut st,
@@ -5518,7 +5536,7 @@ fn undo_reverts_the_drawing_and_never_the_comment() {
     // TOILE-FEAT-017: Ctrl+Z reverts what the user drew. Withdrawing a message a
     // teammate has already read is a deletion nobody asked for.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let e = create_sticky(&mut st, Point::ZERO, "note");
     let t = comment_on(
         &mut st,
@@ -5550,9 +5568,9 @@ fn undo_reverts_the_drawing_and_never_the_comment() {
 #[test]
 fn replying_to_a_missing_thread_is_a_rejected_no_op() {
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let out = st.handle_command(ToileCommand::ReplyComment {
-        thread: ElementId("ghost".to_owned()),
+        thread: Id::<Thread>::from_text("ghost".to_owned()),
         body: "nobody".to_owned(),
         ts: ambre_bus::Timestamp(0),
     });
@@ -5563,7 +5581,7 @@ fn replying_to_a_missing_thread_is_a_rejected_no_op() {
     assert!(
         out.display
             .iter()
-            .any(|e| matches!(e, ToileEvent::Error(ToileError::NoSuchElement(_)))),
+            .any(|e| matches!(e, ToileEvent::Error(ToileError::NoSuchThread(_)))),
     );
 }
 
@@ -5573,7 +5591,7 @@ fn pins(st: &ToileState) -> Vec<crate::logic::command::CommentPin> {
 }
 
 /// The events one `ReadComments` answers.
-fn read_comments(st: &mut ToileState, thread: Option<ThreadId>) -> Vec<ToileEvent> {
+fn read_comments(st: &mut ToileState, thread: Option<Id<Thread>>) -> Vec<ToileEvent> {
     let out = st.handle_command(ToileCommand::ReadComments { thread });
     assert!(out.update.is_none(), "a read must not mutate the doc");
     out.display
@@ -5583,7 +5601,7 @@ fn read_comments(st: &mut ToileState, thread: Option<ThreadId>) -> Vec<ToileEven
 fn a_fresh_thread_is_open_anchored_and_carries_its_first_message() {
     // TOILE-FEAT-070: the three clauses of a drop, read back off the document.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let e = create_sticky(&mut st, Point::ZERO, "note");
     let t = comment_on(
         &mut st,
@@ -5615,7 +5633,7 @@ fn a_reply_lands_at_the_end_of_the_thread() {
     // TOILE-FEAT-071: the rule is an order, not a count. A reply inserted before
     // an earlier one fails here.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let t = comment_on(
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
@@ -5640,7 +5658,7 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
     // TOILE-FEAT-072: the frame half of a correction, which needs an untouched
     // neighbour to read back.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let t = comment_on(
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
@@ -5680,7 +5698,7 @@ fn correcting_a_message_leaves_its_neighbours_as_they_read() {
 fn a_reply_moves_neither_the_pin_nor_the_resolved_flag() {
     // TOILE-FEAT-073: writing in a thread touches the message list alone.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let anchor = CommentAnchor::Point(kurbo::Point::new(12.0, -4.0));
     let t = comment_on(&mut st, anchor.clone(), "open it", ambre_bus::Timestamp(0));
     st.handle_command(ToileCommand::ResolveThread {
@@ -5707,7 +5725,7 @@ fn a_resolve_keeps_every_message_body() {
     // TOILE-FEAT-074: a settled point stays readable. A resolve that blanked the
     // message it kept fails here.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let t = comment_on(
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
@@ -5735,8 +5753,8 @@ fn two_peers_answering_one_brand_new_thread_both_keep_their_reply() {
     // each peer mint a rival container, and Loro would keep one.
     let mut a = ToileState::new();
     let mut b = ToileState::new();
-    a.set_user_id(UserId::new());
-    b.set_user_id(UserId::new());
+    a.set_user_id(Id::<User>::mint());
+    b.set_user_id(Id::<User>::mint());
 
     let t = comment_on(
         &mut a,
@@ -5770,7 +5788,7 @@ fn a_pin_carries_its_place_its_count_and_its_state() {
     // TOILE-026: the board says where each pin sits, how many messages it holds
     // and whether anyone has closed it.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let e = create_sticky(&mut st, Point::new(10.0, 20.0), "note");
     let on_element = comment_on(
         &mut st,
@@ -5818,7 +5836,7 @@ fn a_pin_leaves_the_board_with_its_anchor_element() {
     // itself stays, which `a_thread_survives_the_deletion_of_its_anchor_element`
     // holds.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let e = create_sticky(&mut st, Point::ZERO, "note");
     let t = comment_on(
         &mut st,
@@ -5844,7 +5862,7 @@ fn the_board_carries_no_body_and_a_read_carries_them_all() {
     // all, so the compiler holds half of this. The other half is that the read
     // answers with the bodies, and nothing else does.
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let t = comment_on(
         &mut st,
         CommentAnchor::Point(kurbo::Point::new(0.0, 0.0)),
@@ -5872,7 +5890,7 @@ fn the_board_carries_no_body_and_a_read_carries_them_all() {
 
     // An unknown thread answers nothing rather than an empty thread.
     assert!(
-        read_comments(&mut st, Some(ElementId("ghost".to_owned()))).is_empty(),
+        read_comments(&mut st, Some(Id::<Thread>::from_text("ghost".to_owned()))).is_empty(),
         "a missing thread answers nothing"
     );
 }
@@ -5931,7 +5949,7 @@ enum PeerOp {
         x: f64,
         y: f64,
     },
-    // Presentation sequence -- concurrent `LoroMovableList<FrameId>` reorders.
+    // Presentation sequence -- concurrent `LoroMovableList<Id<Frame>>` reorders.
     CreateFrame {
         x: f64,
         y: f64,
@@ -5955,7 +5973,7 @@ enum PeerOp {
         gap: f64,
     },
     // Reactions -- concurrent per-user entries on a shared target. Each
-    // peer holds a distinct `UserId`, so two reactions on one target must both
+    // peer holds a distinct `Id<User>`, so two reactions on one target must both
     // survive and the derived tally must converge.
     ReactNth {
         nth: usize,
@@ -6021,8 +6039,8 @@ fn op_strategy() -> impl Strategy<Value = PeerOp> {
 
 /// The element ids currently live on a peer, in a stable order (by id string) so
 /// `nth` resolves identically regardless of insertion history.
-fn live_ids(st: &ToileState) -> Vec<ElementId> {
-    let mut ids: Vec<ElementId> = st
+fn live_ids(st: &ToileState) -> Vec<Id<Element>> {
+    let mut ids: Vec<Id<Element>> = st
         .layer_order()
         .iter()
         .filter_map(|n| match n {
@@ -6163,7 +6181,12 @@ fn apply_local(
                 return None;
             }
             let k = by % ids.len();
-            let mut order = ids.clone();
+            // Any live id, frame or not: a slide naming a non-frame is kept and
+            // skipped at derivation.
+            let mut order: Vec<Id<Frame>> = ids
+                .iter()
+                .map(|id| Id::<Frame>::from_text(id.as_str().to_owned()))
+                .collect();
             order.rotate_left(k);
             st.handle_command(ToileCommand::SetSlideOrder { order })
         }
@@ -6174,7 +6197,7 @@ fn apply_local(
                 let direction = [Direction::Horizontal, Direction::Vertical, Direction::Wrap]
                     [(*dir % 3) as usize];
                 st.handle_command(ToileCommand::SetAutoLayout {
-                    frame: id,
+                    frame: Id::<Frame>::from_text(id.as_str().to_owned()),
                     layout: Some(a_layout(direction, *gap)),
                 })
             }
@@ -6252,8 +6275,8 @@ fn interleave(
     // `ReactNth` on each peer then writes under its own key, and concurrent
     // reactions on one target must both survive. They are pinned too, so a
     // found case replays with the same reaction keys.
-    a.set_user_id(UserId::from_bytes([0xA1; 16]));
-    b.set_user_id(UserId::from_bytes([0xB2; 16]));
+    a.set_user_id(Id::<User>::from_bytes([0xA1; 16]));
+    b.set_user_id(Id::<User>::from_bytes([0xB2; 16]));
     let rounds = ops_a.len().max(ops_b.len());
     for i in 0..rounds {
         let da = ops_a.get(i).and_then(|op| apply_local(&mut a, op));
@@ -6382,7 +6405,11 @@ fn a_remove_takes_every_entry_a_concurrent_add_left() {
         .expect("a delta");
     b.apply_remote(&removed);
     for (name, st) in [("remover", &mut a), ("receiver", &mut b)] {
-        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new(), "{name}");
+        assert_eq!(
+            st.membership_of(&frame),
+            Vec::<Id<Element>>::new(),
+            "{name}"
+        );
         assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
     }
 }
@@ -6444,13 +6471,17 @@ fn an_undone_delete_after_a_concurrent_re_add_keeps_the_caches_whole() {
         .expect("a delta");
     a.apply_remote(&removed);
     for (name, st) in [("undoer", &mut a), ("peer", &mut b)] {
-        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new(), "{name}");
+        assert_eq!(
+            st.membership_of(&frame),
+            Vec::<Id<Element>>::new(),
+            "{name}"
+        );
         assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
     }
 }
 
 /// Two peers holding one frame and one rect, the rect a member of the frame.
-fn a_framed_rect_on_two_peers() -> (ToileState, ToileState, ElementId, ElementId) {
+fn a_framed_rect_on_two_peers() -> (ToileState, ToileState, Id<Element>, Id<Element>) {
     let mut a = ToileState::new();
     let frame = create_frame(&mut a, Point::ZERO, Size::new(200.0, 200.0));
     let rect = create_rect(&mut a, Point::new(10.0, 10.0), Size::new(20.0, 20.0));
@@ -6478,7 +6509,11 @@ fn a_delete_takes_the_id_off_its_frame_list() {
         .expect("a delta");
     b.apply_remote(&delta);
     for (name, st) in [("deleter", &mut a), ("receiver", &mut b)] {
-        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new(), "{name}");
+        assert_eq!(
+            st.membership_of(&frame),
+            Vec::<Id<Element>>::new(),
+            "{name}"
+        );
         assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
     }
 }
@@ -6531,7 +6566,11 @@ fn a_pruned_group_leaves_its_frame_list() {
         .expect("a delta");
     b.apply_remote(&delta);
     for (name, st) in [("deleter", &mut a), ("receiver", &mut b)] {
-        assert_eq!(st.membership_of(&frame), Vec::<ElementId>::new(), "{name}");
+        assert_eq!(
+            st.membership_of(&frame),
+            Vec::<Id<Element>>::new(),
+            "{name}"
+        );
         assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
     }
 }
@@ -6602,7 +6641,7 @@ fn an_ungroup_into_a_frame_lifts_the_children_above_it() {
     b.apply_remote(&delta);
     for (name, st) in [("ungrouper", &a), ("receiver", &b)] {
         let order = st.layer_order();
-        let idx = |id: &ElementId| order.iter().position(|n| n == &NodeId::Element(id.clone()));
+        let idx = |id: &Id<Element>| order.iter().position(|n| n == &NodeId::Element(id.clone()));
         assert_eq!(
             st.membership_of(&frame),
             vec![x.clone(), y.clone()],
@@ -6665,7 +6704,7 @@ fn a_frame_entry_for_a_deleted_element_names_no_member() {
         );
         assert_eq!(
             framed_of(st, vec![other.clone()]),
-            Vec::<ElementId>::new(),
+            Vec::<Id<Element>>::new(),
             "{name}"
         );
         assert_eq!(st.debug_caches(), rebuilt_caches(st), "{name}");
@@ -6728,14 +6767,15 @@ proptest! {
         );
 
         // Identical slide sequence: concurrent `SetSlideOrder` reorders must
-        // converge on the shared `LoroMovableList<FrameId>`.
+        // converge on the shared `LoroMovableList<Id<Frame>>`.
         prop_assert_eq!(a.slide_order(), b.slide_order(), "slide order diverged");
 
         // Identical auto-layout spec on every surviving element: concurrent
         // `SetAutoLayout` edits converge on the shared LWW register.
         for id in &la {
+            let frame = Id::<Frame>::from_text(id.as_str().to_owned());
             prop_assert_eq!(
-                a.auto_layout(id), b.auto_layout(id),
+                a.auto_layout(&frame), b.auto_layout(&frame),
                 "auto-layout spec diverged for {:?}", id
             );
         }
@@ -6769,7 +6809,7 @@ proptest! {
         ops in proptest::collection::vec(op_strategy(), 0..40)
     ) {
         let mut a = ToileState::new();
-        a.set_user_id(UserId::new());
+        a.set_user_id(Id::<User>::mint());
         let mut b = ToileState::new();
         b.apply_remote_snapshot(&a.export_snapshot());
         for op in &ops {
@@ -6792,7 +6832,7 @@ proptest! {
         let mut a = ToileState::new();
         // Seed an identity so `ReactNth` ops actually write (else a no-op), so the
         // rebuilt peer `b` exercises the reactions map on the snapshot path too.
-        a.set_user_id(UserId::new());
+        a.set_user_id(Id::<User>::mint());
         for op in &ops {
             let _ = apply_local(&mut a, op);
         }
@@ -6832,7 +6872,7 @@ proptest! {
 fn a_move_naming_a_missing_element_answers_an_error() {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::MoveElements {
-        ids: vec![ElementId("ghost".to_owned())],
+        ids: vec![Id::<Element>::from_text("ghost".to_owned())],
         delta: Vec2::new(1.0, 1.0),
     });
     assert!(matches!(
@@ -6846,7 +6886,7 @@ fn a_move_naming_a_missing_element_answers_an_error() {
 fn a_restyle_naming_a_missing_element_answers_an_error() {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::RestyleElements {
-        ids: vec![ElementId("ghost".to_owned())],
+        ids: vec![Id::<Element>::from_text("ghost".to_owned())],
         style: ElementStyle::default(),
     });
     assert!(matches!(
@@ -6924,7 +6964,7 @@ fn concurrent_whole_element_restyles_do_not_blend_across_registers() {
 fn a_delete_naming_a_missing_element_answers_an_error() {
     let mut st = ToileState::new();
     let out = st.handle_command(ToileCommand::DeleteElements {
-        ids: vec![ElementId("ghost".to_owned())],
+        ids: vec![Id::<Element>::from_text("ghost".to_owned())],
     });
     assert!(matches!(
         out.display.as_slice(),
@@ -6961,9 +7001,9 @@ fn an_ungroup_of_a_non_group_answers_an_error() {
 #[test]
 fn a_reaction_on_a_missing_target_answers_an_error() {
     let mut st = ToileState::new();
-    st.set_user_id(UserId::new());
+    st.set_user_id(Id::<User>::mint());
     let out = st.handle_command(ToileCommand::React {
-        target: ElementId("ghost".to_owned()),
+        target: Id::<Element>::from_text("ghost".to_owned()),
         reaction: Some(emoji("thumbsup")),
     });
     assert!(matches!(
@@ -7078,7 +7118,7 @@ fn a_create_to_a_missing_element_is_refused() {
     let mut st = ToileState::new();
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let order = st.layer_order().to_vec();
-    let ghost = ElementId("ffff_0000".to_owned());
+    let ghost = Id::<Element>::from_text("ffff_0000".to_owned());
     for (from, to) in [(a.clone(), ghost.clone()), (ghost.clone(), a.clone())] {
         let out = st.handle_command(ToileCommand::CreateConnector {
             from,
@@ -7152,7 +7192,7 @@ fn re_aiming_an_unknown_arrow_changes_nothing() {
     let a = create_rect(&mut st, Point::ZERO, Size::new(10.0, 10.0));
     let before = st.crdt().oplog_vv();
     let out = st.handle_command(ToileCommand::RetargetConnector {
-        id: ConnectorId("ffff_0000".to_owned()),
+        id: Id::<Connector>::from_text("ffff_0000".to_owned()),
         endpoint: End::From,
         to: a,
         anch: Anchor::Left,
@@ -7185,7 +7225,7 @@ fn a_caption_changes_nothing_else_on_the_arrow() {
 }
 
 /// The stored value of one element, as the document holds it.
-fn stored(st: &ToileState, id: &ElementId) -> loro::LoroValue {
+fn stored(st: &ToileState, id: &Id<Element>) -> loro::LoroValue {
     st.crdt()
         .get_map(crate::logic::state::Root::Elements.as_str())
         .get_deep_value()
@@ -7212,7 +7252,7 @@ fn a_layout_rule_writes_no_solved_box() {
     let (sa, sb) = (stored(&st, &a), stored(&st, &b));
     let frame_before = stored(&st, &f).into_map().expect("a map");
     st.handle_command(ToileCommand::SetAutoLayout {
-        frame: f.clone(),
+        frame: st.frame(&f).expect("a frame"),
         layout: Some(a_layout(Direction::Horizontal, 8.0)),
     });
     st.debug_viewport();
@@ -7235,7 +7275,7 @@ fn a_layout_rule_writes_no_solved_box() {
 #[test]
 fn an_unchanged_layout_rule_writes_nothing() {
     let mut st = ToileState::new();
-    let f = create_frame(&mut st, Point::ZERO, Size::new(200.0, 200.0));
+    let f = create_slide(&mut st, Point::ZERO, Size::new(200.0, 200.0));
     st.handle_command(ToileCommand::SetAutoLayout {
         frame: f.clone(),
         layout: Some(a_layout(Direction::Vertical, 6.0)),
@@ -7249,7 +7289,7 @@ fn an_unchanged_layout_rule_writes_nothing() {
     assert_eq!(st.crdt().oplog_vv(), before, "nothing was written");
 }
 
-fn filled_rect(st: &mut ToileState, x: f64, fill: Rgba) -> ElementId {
+fn filled_rect(st: &mut ToileState, x: f64, fill: Rgba) -> Id<Element> {
     created_id(&st.handle_command(ToileCommand::CreateElement {
         kind: ElementKind::Shape(ShapeKind::Rect),
         at: Point::new(x, 0.0),

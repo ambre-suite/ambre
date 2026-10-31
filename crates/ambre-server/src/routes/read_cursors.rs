@@ -9,6 +9,8 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
+use ambre_core::id::{Channel, Document, Id, User};
+
 use crate::auth;
 use crate::db;
 use crate::error::{AppError, Resource};
@@ -24,10 +26,10 @@ pub struct ReadCursorRequest {
 /// One document of the activity answer.
 #[derive(serde::Serialize)]
 pub struct ActivityJson {
-    #[serde(with = "ambre_core::serde_id::channel_id")]
-    pub channel_id: ambre_core::ChannelId,
-    #[serde(with = "ambre_core::serde_id::document_id")]
-    pub document_id: ambre_core::DocumentId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub channel_id: Id<Channel>,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub document_id: Id<Document>,
     /// A segment or a thread, which the relay already routes on.
     #[serde(with = "ambre_core::serde_enums::channel_document_kind")]
     pub kind: ambre_core::ChannelDocumentKind,
@@ -47,7 +49,7 @@ pub struct ActivityJson {
 pub async fn set_read_cursor(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<ReadCursorRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let not_found = || AppError::NotFound {
@@ -77,10 +79,9 @@ pub async fn get_activity(
         .await?
         .into_iter()
         .map(|(row, last)| {
-            let channel_id = ambre_core::ChannelId::from_uuid(ambre_core::Uuid::from_bytes(
-                *row.channel_id.as_bytes(),
-            ));
-            let document_id = ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(
+            let channel_id =
+                Id::<Channel>::from_uuid(ambre_core::Uuid::from_bytes(*row.channel_id.as_bytes()));
+            let document_id = Id::<Document>::from_uuid(ambre_core::Uuid::from_bytes(
                 *row.document_id.as_bytes(),
             ));
             ActivityJson {
@@ -100,8 +101,8 @@ pub async fn get_activity(
 /// every segment and thread of every channel of the caller moves.
 #[derive(serde::Deserialize, Default)]
 pub struct MarkReadRequest {
-    #[serde(default, with = "ambre_core::serde_id::document_id::option_vec")]
-    pub documents: Option<Vec<ambre_core::DocumentId>>,
+    #[serde(default, with = "ambre_core::serde_id::text::option_vec")]
+    pub documents: Option<Vec<Id<Document>>>,
 }
 
 /// `POST /api/read-cursors/mark-read`: move the caller's cursors to the last
@@ -113,17 +114,16 @@ pub async fn mark_read(
     auth: auth::AuthSession,
     body: Option<Json<MarkReadRequest>>,
 ) -> Result<impl IntoResponse, AppError> {
-    let wanted: Option<std::collections::HashSet<ambre_core::DocumentId>> = body
+    let wanted: Option<std::collections::HashSet<Id<Document>>> = body
         .and_then(|Json(req)| req.documents)
         .map(|ids| ids.into_iter().collect());
-    let cursors: Vec<(ambre_core::DocumentId, ambre_core::Seq)> =
-        last_numbers(&state, &auth.user_id)
-            .await?
-            .into_iter()
-            .filter(|(row, last)| *last > row.cursor)
-            .filter(|(row, _)| wanted.as_ref().is_none_or(|w| w.contains(&row.document_id)))
-            .map(|(row, last)| (row.document_id, last))
-            .collect();
+    let cursors: Vec<(Id<Document>, ambre_core::Seq)> = last_numbers(&state, &auth.user_id)
+        .await?
+        .into_iter()
+        .filter(|(row, last)| *last > row.cursor)
+        .filter(|(row, _)| wanted.as_ref().is_none_or(|w| w.contains(&row.document_id)))
+        .map(|(row, last)| (row.document_id, last))
+        .collect();
     db::set_read_cursors(&state.db, &auth.user_id, &cursors).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -133,16 +133,12 @@ pub async fn mark_read(
 /// flushed lives in the second alone.
 async fn last_numbers(
     state: &AppState,
-    user_id: &ambre_core::UserId,
+    user_id: &Id<User>,
 ) -> Result<Vec<(db::ActivityRow, ambre_core::Seq)>, AppError> {
     let rows = db::channel_activity(&state.db, user_id).await?;
-    let ids: Vec<ambre_core::DocumentId> = rows
+    let ids: Vec<Id<Document>> = rows
         .iter()
-        .map(|r| {
-            ambre_core::DocumentId::from_uuid(ambre_core::Uuid::from_bytes(
-                *r.document_id.as_bytes(),
-            ))
-        })
+        .map(|r| Id::<Document>::from_uuid(ambre_core::Uuid::from_bytes(*r.document_id.as_bytes())))
         .collect();
     let counters = crate::redis_ops::document_seqs(&state.redis, &ids).await?;
     Ok(rows
@@ -158,14 +154,14 @@ async fn last_numbers(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_core::{ChannelId, DocumentId, FixedBytes, PublicKey, UserId};
+    use ambre_core::{FixedBytes, PublicKey};
     use rustis::commands::StringCommands;
 
-    fn uuid_of(id: impl Into<ambre_core::Uuid>) -> uuid::Uuid {
-        uuid::Uuid::from_bytes(*id.into().as_bytes())
+    fn uuid_of<E: ambre_core::id::Entity<Repr = ambre_core::Uuid>>(id: Id<E>) -> uuid::Uuid {
+        uuid::Uuid::from_bytes(*id.uuid().as_bytes())
     }
 
-    fn session(user_id: UserId, key: u8) -> auth::AuthSession {
+    fn session(user_id: Id<User>, key: u8) -> auth::AuthSession {
         auth::AuthSession {
             user_id,
             signing_pubkey: FixedBytes::<PublicKey>::from_array([key; 32]),
@@ -177,12 +173,12 @@ mod tests {
     /// `meta`, which grants the whole channel.
     async fn channel(
         state: &AppState,
-        owner: UserId,
-        members: &[UserId],
+        owner: Id<User>,
+        members: &[Id<User>],
         counters: &[u64],
-    ) -> (ChannelId, DocumentId, Vec<DocumentId>) {
+    ) -> (Id<Channel>, Id<Document>, Vec<Id<Document>>) {
         let pool = &state.db;
-        let channel = ChannelId::new();
+        let channel = Id::<Channel>::mint();
         sqlx::query("INSERT INTO channels (id) VALUES ($1)")
             .bind(uuid_of(channel))
             .execute(pool)
@@ -239,7 +235,7 @@ mod tests {
     async fn put_cursor(
         state: &Arc<AppState>,
         who: auth::AuthSession,
-        document: DocumentId,
+        document: Id<Document>,
         seq: u64,
     ) -> StatusCode {
         match set_read_cursor(
@@ -309,12 +305,12 @@ mod tests {
         (answer, keys, kinds)
     }
 
-    fn active_of(answer: &[(String, bool)], document: DocumentId) -> Option<bool> {
+    fn active_of(answer: &[(String, bool)], document: Id<Document>) -> Option<bool> {
         let id = document.to_string();
         answer.iter().find(|(d, _)| *d == id).map(|(_, a)| *a)
     }
 
-    async fn cursor_of(pool: &sqlx::PgPool, user: UserId, document: DocumentId) -> Option<i64> {
+    async fn cursor_of(pool: &sqlx::PgPool, user: Id<User>, document: Id<Document>) -> Option<i64> {
         sqlx::query_scalar("SELECT seq FROM read_cursors WHERE user_id = $1 AND document_id = $2")
             .bind(uuid_of(user))
             .bind(uuid_of(document))
@@ -580,7 +576,7 @@ mod tests {
         assert_eq!(cursor_of(&state.db, alice, segments[0]).await, Some(3));
 
         let refused = put_cursor(&state, session(eve, 3), segments[0], 6).await;
-        let unknown = put_cursor(&state, session(eve, 3), DocumentId::new(), 6).await;
+        let unknown = put_cursor(&state, session(eve, 3), Id::<Document>::mint(), 6).await;
         assert_eq!(refused, StatusCode::NOT_FOUND);
         assert_eq!(unknown, refused);
         assert_eq!(cursor_of(&state.db, eve, segments[0]).await, None);

@@ -15,7 +15,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use ambre_bus::conduit::Sender;
-use ambre_bus::{DocType, DocumentId, LogicCommand, RowPlace, SealedRow};
+use ambre_bus::{DocType, LogicCommand, RowPlace, SealedRow};
+use ambre_core::id::{Document, Id};
 use ambre_logic::persistence::{PersistenceStore, Stored};
 use ambre_logic::seal_queue::SealQueue;
 use ambre_logic::store_ledger::{QuotaAttempt, Refusal, RowChange, StoreLedger};
@@ -59,7 +60,7 @@ struct Inner {
     ledger: RefCell<StoreLedger>,
     /// Writes of a change the relay has not acknowledged, which the browser
     /// still refuses. Each is retried until it lands.
-    held: RefCell<Vec<(DocumentId, SealedWrite)>>,
+    held: RefCell<Vec<(Id<Document>, SealedWrite)>>,
     /// Frames since the held writes were last tried.
     frames: Cell<u32>,
     to_logic: Sender<LogicCommand>,
@@ -68,7 +69,7 @@ struct Inner {
     queue: RefCell<SealQueue>,
     /// The document the page opened on, restored once a session holds the
     /// key.
-    boot: Cell<Option<(DocType, DocumentId)>>,
+    boot: Cell<Option<(DocType, Id<Document>)>>,
 }
 
 impl LocalStore {
@@ -78,7 +79,7 @@ impl LocalStore {
         store: PersistenceStore,
         to_logic: Sender<LogicCommand>,
         vault: Vault,
-        boot: Option<(DocType, DocumentId)>,
+        boot: Option<(DocType, Id<Document>)>,
     ) -> Self {
         PersistenceStore::request_persistent();
         let mut ledger = StoreLedger::default();
@@ -114,7 +115,7 @@ impl LocalStore {
 
     /// Take one write or signal from Logic. A snapshot or a delta waits for
     /// its seal, and every write behind it waits its turn.
-    pub(crate) fn apply(&self, id: DocumentId, write: PersistWrite) {
+    pub(crate) fn apply(&self, id: Id<Document>, write: PersistWrite) {
         let seal = self.inner.queue.borrow_mut().push(id, write);
         let Some((ticket, plaintext)) = seal else {
             self.flush();
@@ -141,7 +142,7 @@ impl LocalStore {
     }
 
     /// Perform one write or signal, its row sealed.
-    fn land(&self, id: DocumentId, write: SealedWrite) {
+    fn land(&self, id: Id<Document>, write: SealedWrite) {
         let observed = self.inner.ledger.borrow_mut().observe(id, &write);
         for gone in &observed.evict {
             self.inner.store.delete_snapshot(*gone);
@@ -173,7 +174,7 @@ impl LocalStore {
     /// with a row that does not open leaves the store, and Logic receives
     /// none (`RESID-027`). At boot, a store that holds no copy hands
     /// nothing: the open fetches the document anyway.
-    fn read_back(&self, document_id: DocumentId, doc_type: DocType, moment: ReadBack) {
+    fn read_back(&self, document_id: Id<Document>, doc_type: DocType, moment: ReadBack) {
         let this = self.clone();
         wasm_bindgen_futures::spawn_local(async move {
             let store = &this.inner.store;
@@ -235,7 +236,7 @@ impl LocalStore {
     }
 
     /// Drop the document's copy from the store and from the ledger.
-    fn forget(&self, id: DocumentId) {
+    fn forget(&self, id: Id<Document>) {
         self.inner.store.delete_snapshot(id);
         self.inner.ledger.borrow_mut().forget(id);
     }
@@ -255,7 +256,7 @@ impl LocalStore {
     }
 
     /// Write a snapshot or a delta, and meet its outcome once it lands.
-    fn write(&self, id: DocumentId, write: SealedWrite, attempt: Attempt) {
+    fn write(&self, id: Id<Document>, write: SealedWrite, attempt: Attempt) {
         let landed = match &write {
             PersistWrite::Snapshot(bytes) => self.inner.store.save_snapshot(id, bytes),
             PersistWrite::Delta(bytes) => self.inner.store.save_delta(id, bytes),
@@ -273,7 +274,7 @@ impl LocalStore {
 
     /// Meet a write the browser refused for its quota (`RESID-017`,
     /// `RESID-018`).
-    fn refused(&self, id: DocumentId, write: SealedWrite, attempt: Attempt) {
+    fn refused(&self, id: Id<Document>, write: SealedWrite, attempt: Attempt) {
         let need = match &write {
             PersistWrite::Snapshot(bytes) | PersistWrite::Delta(bytes) => bytes.len(),
             _ => 0,
@@ -309,14 +310,14 @@ impl LocalStore {
 
     /// A held write landed: once none is left for its document, editing
     /// resumes (`RESID-018`).
-    fn resumed(&self, id: DocumentId) {
+    fn resumed(&self, id: Id<Document>) {
         if !self.inner.held.borrow().iter().any(|(held, _)| *held == id) {
             self.tell_logic(id, ambre_bus::StoreRoom::Free);
         }
     }
 
     /// Tell Logic whether the store refuses the document's unsent change.
-    fn tell_logic(&self, document_id: DocumentId, room: ambre_bus::StoreRoom) {
+    fn tell_logic(&self, document_id: Id<Document>, room: ambre_bus::StoreRoom) {
         if self
             .inner
             .to_logic
@@ -395,7 +396,7 @@ mod tests {
             LocalStore::open(store.clone(), logic_tx, Vault::new(vault_tx.clone()), None).await;
         // The answers reach the vault as the per-frame relay hands them.
         let vault = local.inner.vault.clone();
-        let doc = DocumentId::new();
+        let doc = Id::<Document>::mint();
 
         local.apply(
             doc,

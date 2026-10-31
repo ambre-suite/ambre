@@ -2,6 +2,7 @@ use axum::extract::{Query, State};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 
+use ambre_core::id::{Document, Id, Snapshot};
 use ambre_core::{FixedBytes, PublicKey};
 
 use crate::auth;
@@ -14,8 +15,8 @@ use crate::state::AppState;
 /// Summary of the latest snapshot (id + S3 key).
 #[derive(serde::Serialize)]
 pub struct SnapshotResponse {
-    #[serde(with = "ambre_core::serde_id::snapshot_id")]
-    pub snapshot_id: ambre_core::SnapshotId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
     pub s3_key: ambre_core::ObjectKey,
     /// Highest delta `seq` folded into this snapshot, so the client can gate its
     /// post-open `RequestMissing` and skip the already-replayed history.
@@ -33,15 +34,15 @@ pub struct SnapshotResponse {
 /// The reference snapshot named beside a self-confirmed one (`SRV-131`).
 #[derive(serde::Serialize)]
 pub struct ReferenceSnapshot {
-    #[serde(with = "ambre_core::serde_id::snapshot_id")]
-    pub snapshot_id: ambre_core::SnapshotId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
     pub covered_seq: ambre_core::Seq,
 }
 
 pub async fn get_snapshot_metadata(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
     db::get_document_member(&state.db, &doc_id, &s.user_id)
@@ -76,8 +77,8 @@ pub async fn get_snapshot_metadata(
 /// snapshot folded one in (`SRV-211`).
 #[derive(Debug, serde::Serialize)]
 pub struct ConfirmedSnapshotJson {
-    #[serde(with = "ambre_core::serde_id::document_id::option")]
-    pub folded: Option<ambre_core::DocumentId>,
+    #[serde(with = "ambre_core::serde_id::text::option")]
+    pub folded: Option<Id<Document>>,
 }
 
 /// Records that the caller checked a snapshot and vouches for it (`SRV-126`).
@@ -91,7 +92,7 @@ pub struct ConfirmedSnapshotJson {
 pub async fn confirm_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, snap_id)): PathId<(ambre_core::DocumentId, ambre_core::SnapshotId)>,
+    PathId((doc_id, snap_id)): PathId<(Id<Document>, Id<Snapshot>)>,
 ) -> Result<axum::Json<ConfirmedSnapshotJson>, AppError> {
     db::get_document_member(&state.db, &doc_id, &auth.user_id)
         .await?
@@ -143,7 +144,7 @@ pub struct ReportSnapshotRequest {
 pub async fn report_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId((doc_id, snap_id)): PathId<(ambre_core::DocumentId, ambre_core::SnapshotId)>,
+    PathId((doc_id, snap_id)): PathId<(Id<Document>, Id<Snapshot>)>,
     Json(req): Json<ReportSnapshotRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     use ed25519_dalek::{Signature, VerifyingKey};
@@ -204,8 +205,8 @@ pub async fn report_snapshot(
 #[derive(serde::Deserialize)]
 pub struct CreateSnapshotRequest {
     #[allow(dead_code)]
-    #[serde(with = "ambre_core::serde_id::snapshot_id")]
-    pub snapshot_id: ambre_core::SnapshotId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
     pub author_pubkey: FixedBytes<PublicKey>,
     /// No client builds a parent proof yet, so one that arrives is refused
     /// rather than stored unread (`SRV-228`). `null` reads as none.
@@ -219,14 +220,14 @@ pub struct CreateSnapshotRequest {
 }
 #[derive(serde::Serialize)]
 pub struct CreateSnapshotResponse {
-    #[serde(with = "ambre_core::serde_id::snapshot_id")]
-    pub snapshot_id: ambre_core::SnapshotId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
 }
 
 pub async fn create_snapshot(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<CreateSnapshotRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -306,7 +307,7 @@ pub struct SnapshotUploadUrlResponse {
 pub async fn snapshot_upload_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<SnapshotUploadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -326,7 +327,7 @@ pub async fn snapshot_upload_url(
         )));
     }
 
-    let snapshot_id = ambre_core::SnapshotId::new();
+    let snapshot_id = Id::<Snapshot>::mint();
     let key = s3::format_s3_snapshot_key(&state.config.s3_env_prefix, &doc_id, &snapshot_id);
     let url = s3::generate_presigned_upload_url(
         &state.s3,
@@ -345,8 +346,8 @@ pub async fn snapshot_upload_url(
 /// Request a presigned GET URL to download a specific snapshot blob.
 #[derive(serde::Deserialize)]
 pub struct SnapshotDownloadUrlRequest {
-    #[serde(with = "ambre_core::serde_id::snapshot_id")]
-    pub snapshot_id: ambre_core::SnapshotId,
+    #[serde(with = "ambre_core::serde_id::text")]
+    pub snapshot_id: Id<Snapshot>,
 }
 #[derive(serde::Serialize)]
 pub struct SnapshotDownloadUrlResponse {
@@ -356,7 +357,7 @@ pub struct SnapshotDownloadUrlResponse {
 pub async fn snapshot_download_url(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Json(req): Json<SnapshotDownloadUrlRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;
@@ -407,7 +408,7 @@ pub struct DeltasResponse {
 pub async fn get_deltas(
     State(state): State<Arc<AppState>>,
     auth: auth::AuthSession,
-    PathId(doc_id): PathId<ambre_core::DocumentId>,
+    PathId(doc_id): PathId<Id<Document>>,
     Query(params): Query<DeltasQuery>,
 ) -> Result<impl IntoResponse, AppError> {
     let s = auth;

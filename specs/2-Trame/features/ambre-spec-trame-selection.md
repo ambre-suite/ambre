@@ -125,13 +125,13 @@ that rectangle, and a cell in two of them is enumerated once (`TRAME-UI-031`). E
 
 **The other users' selections**, not built. The behaviour is one the three applications share and
 is `1-Foundations/ambre-spec-presence.md`, `PRESENCE-001` to `PRESENCE-010`. That covers the
-ephemeral transport, the identity resolution, the keying by `UserId` and the shared colour. It
+ephemeral transport, the identity resolution, the keying by `Id<User>` and the shared colour. It
 covers the whole-set event and the drop of an anchor that resolves to nothing. What is Trame's own
 is the anchor, and the two shapes it sits in.
 
 ```rust
 /// The wire payload, postcard-encoded into the `Ephemeral` bytes. It carries no
-/// `UserId` (`PRESENCE-002`): identity is the `from_user_id` the Sync thread
+/// `Id<User>` (`PRESENCE-002`): identity is the `from_user_id` the Sync thread
 /// resolves out of band, so a peer cannot assert another user's.
 pub struct PresencePayload {
     pub anchor:       CellAnchor,
@@ -151,7 +151,7 @@ pub struct CellAnchor {
 /// read from the payload (`PRESENCE-003`); `color` is `ambre_draw::peer::peer_color`
 /// (`PRESENCE-006`); the positions are the anchors resolved against the `SheetIndex`.
 pub struct RemoteCursorPayload {
-    pub user_id:      UserId,
+    pub user_id:      Id<User>,
     pub display_name: Option<DisplayName>,
     pub color:        Color,
     pub sheet_id:     SheetId,

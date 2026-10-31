@@ -36,8 +36,8 @@ Grammar and status values are normative in `ambre-spec-template.md`.
 | ID | Kind | Statement (RFC 2119) | Sources | Mechanism | Gap | Status |
 |---|---|---|---|---|---|---|
 | `MURMURE-001` | `INV` | Every Murmure document MUST carry a `header` naming its kind, and its channel or its space. | this spec section 2 | `ambre_murmure::channel_tests::every_document_carries_a_header_and_the_foundation_version` -- the `meta` document and the segment of a new channel, and the version in each one's foundation `meta` map | none | verified |
-| `MURMURE-002` | `INV` | A message's identity MUST be a `MessageId` minted by the peer that creates it; a position in a list MUST NOT be used as a key. | this spec section 2 | `ambre_murmure::channel_tests::a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author` -- two sends mint two identifiers; type-level -- `MessageView` carries a `MessageId` and no position, so the view has no index to key on | none | verified |
-| `MURMURE-003` | `INV` | A message's `author` MUST hold a user identifier, never a display name and never a key. | this spec section 3; `ambre-spec-op-authorship.md` | `ambre_murmure::channel_tests::a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author`; type-level -- `MessageView` holds its author as a `UserId` | none | verified |
+| `MURMURE-002` | `INV` | A message's identity MUST be an `Id<Message>` minted by the peer that creates it; a position in a list MUST NOT be used as a key. | this spec section 2 | `ambre_murmure::channel_tests::a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author` -- two sends mint two identifiers; type-level -- `MessageView` carries an `Id<Message>` and no position, so the view has no index to key on | none | verified |
+| `MURMURE-003` | `INV` | A message's `author` MUST hold a user identifier, never a display name and never a key. | this spec section 3; `ambre-spec-op-authorship.md` | `ambre_murmure::channel_tests::a_sent_message_lands_in_the_active_segment_with_a_fresh_id_and_its_author`; type-level -- `MessageView` holds its author as an `Id<User>` | none | verified |
 | `MURMURE-004` | `INV` | All message text MUST live in a `LoroText`; a `LoroMap` MUST NOT hold message text. | this spec section 3 | `ambre_murmure::channel_tests::the_body_lives_in_a_text_and_no_map_holds_it`; `ambre_murmure::schema_shape::a_body_stored_as_a_string_moves_the_shape` -- a body stored as a map string turns the frozen shape red | none | verified |
 | `MURMURE-005` | `CONC` | Two peers typing in the same message MUST both keep their text. | this spec section 3 | `ambre_murmure::channel_tests::two_peers_typing_in_one_message_keep_both_texts` -- two peers type into one body at once, exchange deltas, and both read the same text holding both insertions | none | verified |
 | `MURMURE-006` | `INV` | A reaction MUST be one entry of one flat map, keyed by the pair of its emoji and its reacting user. | this spec section 3 | `ambre_murmure::reaction_tests::two_members_reacting_at_once_both_stay`; `ambre_murmure::schema_shape::the_shape_a_build_writes_is_the_shape_frozen_for_its_version` -- one flat map per message, one key per member and emoji | none | verified |
@@ -74,19 +74,19 @@ Grammar and status values are normative in `ambre-spec-template.md`.
   never one document.
 * Every **document** of a channel or a space has its own `document_id`, a UUID v7 minted by the
   client. Its `header` names its kind and the channel or the space it belongs to (`MURMURE-001`).
-* A **message** is identified by a `MessageId` minted by the peer that creates it (`MURMURE-002`). Its
+* A **message** is identified by an `Id<Message>` minted by the peer that creates it (`MURMURE-002`). Its
   position in a list moves with every concurrent append. The copy of a reply also sent to the
   channel takes its reply's identifier, the last bit turned (`MURMURE-538`).
 * A **segment** is identified by its `document_id`. A thread reply, a pin and an amendment reach a
-  message through the pair of its segment and its `MessageId`.
+  message through the pair of its segment and its `Id<Message>`.
 * A **thread** document names its channel, its root message and the segment of that root
   (`MURMURE-009`).
 * An **amendments** document names its channel and its segment, and holds only that segment's
   messages (`MURMURE-013`).
 
 **Every value has its type.** The containers below name the Rust newtype each value maps to, per
-`ai/ambre-rust-style.md`. `DocumentId`, `UserId`, `ChannelId`, `MessageId`, `SpaceId`, `CategoryId`
-and `MeetingId` exist in `ambre-core`, minted by the same `define_id!` macro. The types marked not
+`ai/ambre-rust-style.md`. Each identifier, such as `Id<Channel>`, `Id<Message>` or `Id<Meeting>`, is
+an `Id<E>` of `ambre_core::id`. The types marked not
 built join with the feature that first writes them.
 
 ```rust
@@ -97,7 +97,6 @@ pub enum ReactionEmoji { Unicode(Emoji), Custom(CustomEmojiId) }  // not built: 
 pub struct CustomEmojiId(Uuid);         // not built: minted by the admin's client
 pub struct TagId(Uuid);                 // not built: minted by the forum owner's client
 pub struct ImportOrigin { pub name: String, pub ts: Timestamp }  // not built
-pub struct MeetingId(Uuid);             // a Rendez-Vous meeting
 pub struct MediaType(pub String);       // a lower-case type and subtype
 pub struct ByteSize(pub u64);
 pub struct SealedChannelKey(Vec<u8>);   // a channel key, sealed under the space key
@@ -107,7 +106,7 @@ pub enum ChannelLayout { Stream, Forum }  // not built; absent means a stream
 pub enum SegmentState { Active, Closing, Final }
 pub(crate) enum DeletedBy { Author }   // `Moderator` joins with moderation
 pub(crate) enum NoticeKind { MemberAdded } // a notice has an empty body; absent on a written message
-pub enum MentionTarget { User(UserId), Channel }
+pub enum MentionTarget { User(Id<User>), Channel }
 pub enum NotifyLevel { All, Mentions, None }  // not built
 ```
 
@@ -121,36 +120,36 @@ names the unit two concurrent writers race for. Every document also carries the 
 
 | Document | Container | Loro type | Key | Value | LWW unit | Owning feature | State |
 |---|---|---|---|---|---|---|---|
-| every | `header` | Map | `kind`, `channel_id` or `space_id`, `created_at` | `DocumentKind`, `ChannelId` or `SpaceId`, `Timestamp` | the key | -- (this spec section 7) | built |
+| every | `header` | Map | `kind`, `channel_id` or `space_id`, `created_at` | `DocumentKind`, `Id<Channel>` or `Id<Space>`, `Timestamp` | the key | -- (this spec section 7) | built |
 | every | `meta` | Map | `schema_version` | `u32` | the key | -- (`ambre-spec-schema-version.md`) | built |
 | `space` | `space` | Map | `name` | String | the key | spaces | design |
-| `space` | `categories` | Map | a `CategoryId` | `{name: String, position: u32}` | the category entry | spaces | design |
-| `space` | `channels` | Map | a `ChannelId` | `{name: String, topic: String, category_id: CategoryId, position: u32, key: SealedChannelKey}` | the field | spaces | design |
+| `space` | `categories` | Map | an `Id<Category>` | `{name: String, position: u32}` | the category entry | spaces | design |
+| `space` | `channels` | Map | an `Id<Channel>` | `{name: String, topic: String, category_id: Id<Category>, position: u32, key: SealedChannelKey}` | the field | spaces | design |
 | `space` | `emoji` | Map | a `CustomEmojiId` | `{name: String, media_ref, media_type: MediaType}` | the entry | emoji | design |
 | `meta` | `channel` | Map | `type`, `layout`, `name`, `topic` | `ChannelType`, `ChannelLayout`, String, String | the key | channels | built |
-| `meta` | `segments` | List | position | `{document_id: DocumentId, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amendments: DocumentId, folded: DocumentId}` | the field | segments | built |
-| `meta` | `pinned` | Map | a `MessageId` | `{segment: SegmentId, pinned_at: Timestamp}` | the entry | pins | design |
+| `meta` | `segments` | List | position | `{document_id: Id<Document>, from_ts: Timestamp, to_ts: Timestamp, msg_count: u32, state: SegmentState, amendments: Id<Document>, folded: Id<Document>}` | the field | segments | built |
+| `meta` | `pinned` | Map | an `Id<Message>` | `{segment: Id<Segment>, pinned_at: Timestamp}` | the entry | pins | design |
 | `meta` | `tags` | Map | a `TagId`, for a forum | `{name: String}` | the entry | forums | design |
 | `meta` | `commands` | Map | a command name | `{bot: PublicKey, description: String}` | the entry | bots | design |
-| segment | `header` | Map | `folded`, `folded_seq` | `DocumentId`, `u64`, on a fold snapshot | the key | segments | built |
-| thread | `header` | Map | `root_id`, `segment_id` | `MessageId`, `SegmentId` | the key | threads | built |
+| segment | `header` | Map | `folded`, `folded_seq` | `Id<Document>`, `u64`, on a fold snapshot | the key | segments | built |
+| thread | `header` | Map | `root_id`, `segment_id` | `Id<Message>`, `Id<Segment>` | the key | threads | built |
 | segment, thread | `messages` | List | position | one message map | list order, no LWW | messages | built |
-| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `MessageId`, `UserId`, `Timestamp`, `DocumentId`, `DocumentId`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `MeetingId`, `NoticeKind`, `UserId` | the key | messages | built |
+| segment, thread | `messages/{n}` | Map | `id`, `author`, `ts`, `thread`, `also_in_thread`, `edited`, `deleted`, `title`, `origin`, `machine`, `call`, `notice`, `member` | `Id<Message>`, `Id<User>`, `Timestamp`, `Id<Document>`, `Id<Document>`, `bool`, `bool`, String, `ImportOrigin`, `PublicKey`, `Id<Meeting>`, `NoticeKind`, `Id<User>` | the key | messages | built |
 | segment, thread | `messages/{n}/content` | Text | -- | the message body, with the `mention` mark and the style marks | none: char-CRDT | messages, mentions | built |
 | segment, thread | `messages/{n}/attachments` | List | position | `{media_ref, name: String, media_type: MediaType, size: ByteSize}`, the reference typed by `ambre-spec-media.md` | list order, no LWW | attachments | design |
-| segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and a `UserId` | a `Timestamp` | the entry | reactions | built |
+| segment, thread | `messages/{n}/reactions` | Map | a `ReactionKey`: a `ReactionEmoji` and an `Id<User>` | a `Timestamp` | the entry | reactions | built |
 | segment, thread | `messages/{n}/tags` | Map | a `TagId` | `true` | the entry | forums | design |
 | segment, thread | `messages/{n}/actions` | List | position | `{id: String, label: String}` | list order, no LWW | bots | design |
 | segment, thread | `messages/{n}/preview` | Map | `title`, `description`, `image` | String, String, a media reference | the key | link-previews | design |
-| amendments | `header` | Map | `segment_id` | `SegmentId` | the key | messages | built |
-| amendments | `amendments` | Map | a `MessageId` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | built |
+| amendments | `header` | Map | `segment_id` | `Id<Segment>` | the key | messages | built |
+| amendments | `amendments` | Map | an `Id<Message>` | `{content}` or `{deleted: bool, by: DeletedBy}` | the entry | messages | built |
 | amendments | `amendments/{id}/content` | Text | -- | the edited body, with the `mention` mark and the style marks | none: char-CRDT | messages | built |
-| amendments | `threads` | Map | a `MessageId` | `DocumentId`, the thread of a locked root | the entry | threads | built |
-| settings | `murmure/layout` | Map | a `ChannelId` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
+| amendments | `threads` | Map | an `Id<Message>` | `Id<Document>`, the thread of a locked root | the entry | threads | built |
+| settings | `murmure/layout` | Map | an `Id<Channel>` | `{group: SidebarGroup, position: u32, hidden: bool, collapsed: bool}` | the entry | sidebar | design |
 | settings | `murmure/groups` | Map | a `PersonalGroupId` | `{name: String, position: u32}` | the entry | sidebar | design |
-| settings | `murmure/notify` | Map | a `ChannelId` | `NotifyLevel` | the entry | notifications | design |
-| settings | `murmure/bookmarks` | Map | a `MessageId` | `{channel: ChannelId, segment: SegmentId, added: Timestamp}` | the entry | sidebar | design |
-| settings | `murmure/followed` | Map | a `DocumentId`, the thread | `{channel: ChannelId, since: Timestamp}` | the entry | threads | design |
+| settings | `murmure/notify` | Map | an `Id<Channel>` | `NotifyLevel` | the entry | notifications | design |
+| settings | `murmure/bookmarks` | Map | an `Id<Message>` | `{channel: Id<Channel>, segment: Id<Segment>, added: Timestamp}` | the entry | sidebar | design |
+| settings | `murmure/followed` | Map | an `Id<Document>`, the thread | `{channel: Id<Channel>, since: Timestamp}` | the entry | threads | design |
 | settings | `murmure/presence` | Map | `indicators` | bool | the key | typing-presence | design |
 
 **The `state` of a segment** is `active`, `closing` or `final`. **The `by` of a delete** is `author`
@@ -214,7 +213,7 @@ nothing in.
 
 | Decision | Rejected alternative | Why not |
 | :--- | :--- | :--- |
-| A message is keyed by a `MessageId` | its position in the list | a concurrent append moves every position after it, so a pin or a reply would point at another message |
+| A message is keyed by an `Id<Message>` | its position in the list | a concurrent append moves every position after it, so a pin or a reply would point at another message |
 | A reaction is one entry per emoji and user | a list of the users who reacted | two concurrent removals of one list slot remove the wrong member, and two concurrent adds duplicate one |
 | A reaction is one entry per emoji and user | a counter per emoji | a counter cannot say who reacted, and a member could not remove their own reaction alone |
 | The relay arbitrates a close | a successor identifier derived from the closing segment | two peers would create one document twice, and the relay would have to accept a second creation of an existing identifier |

@@ -6,7 +6,7 @@ use super::*;
 /// Row returned by `SELECT * FROM users`.
 #[derive(Debug)]
 pub struct UserRow {
-    pub id: ambre_core::UserId,
+    pub id: Id<User>,
     #[allow(dead_code)]
     pub oidc_subject: Option<openidconnect::SubjectIdentifier>,
     pub email: ambre_core::Email,
@@ -26,7 +26,7 @@ pub struct UserRow {
 /// Projection of `users` for search results (no key material).
 #[derive(Debug)]
 pub struct UserInfoRow {
-    pub id: ambre_core::UserId,
+    pub id: Id<User>,
     pub email: ambre_core::Email,
     /// Whether the email was provider-verified (see [`UserRow::email_verified`]).
     /// Surfaced in search so the sharer sees the TOFU signal for an unverified,
@@ -50,11 +50,8 @@ ambre_core::define_flag! {
 }
 ambre_core::define_flag!(@sqlx EmailProof);
 
-/// Fetches a user by their typed `UserId`.
-pub async fn get_user(
-    pool: &PgPool,
-    user_id: &ambre_core::UserId,
-) -> Result<Option<UserRow>, AppError> {
+/// Fetches a user by their typed `Id<User>`.
+pub async fn get_user(pool: &PgPool, user_id: &Id<User>) -> Result<Option<UserRow>, AppError> {
     let uid = id_to_uuid(*user_id);
     let row = sqlx::query(
         "SELECT id, oidc_provider, oidc_subject, email, email_verified, display_name, master_key_enc, master_key_salt, signing_pubkey, exchange_pubkey FROM users WHERE id = $1"
@@ -365,7 +362,7 @@ pub async fn search_users(pool: &PgPool, query: &UserSearch) -> Result<Vec<UserI
 /// Updates the encrypted master key and its salt for passphrase rotation.
 pub async fn update_master_key(
     pool: &PgPool,
-    user_id: &ambre_core::UserId,
+    user_id: &Id<User>,
     master_key_enc: &ambre_core::Encoded<ambre_core::WrappedMasterKey>,
     master_key_salt: &FixedBytes<ambre_core::MasterKeySalt>,
 ) -> Result<(), AppError> {

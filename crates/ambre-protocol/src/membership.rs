@@ -7,9 +7,8 @@
 //! what the relay serves (`SYNC-103`). The relay stores the entries and checks
 //! the signature, and computes no digest.
 
-use ambre_core::{
-    DocumentId, Encoded, EncodedLogEntry, FixedBytes, KeyId, PublicKey, Role, UserId,
-};
+use ambre_core::id::{Document, Id, User};
+use ambre_core::{Encoded, EncodedLogEntry, FixedBytes, KeyId, PublicKey, Role};
 use serde::{Deserialize, Serialize};
 
 use crate::error::SerializationError;
@@ -56,9 +55,9 @@ pub use ambre_core::envelope::EntryDigest;
 /// one sequence. Each act is `(member, act, role after it)`, and `creator`
 /// authors them all.
 pub fn ownerless_log(
-    creator: UserId,
-    members: &[UserId],
-) -> impl Iterator<Item = (UserId, MembershipAct, Role)> + '_ {
+    creator: Id<User>,
+    members: &[Id<User>],
+) -> impl Iterator<Item = (Id<User>, MembershipAct, Role)> + '_ {
     std::iter::once((creator, MembershipAct::Create, Role::Owner))
         .chain(
             members
@@ -127,12 +126,12 @@ impl std::fmt::Display for LogPosition {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MembershipEntry {
     /// The document whose membership changes.
-    pub document: DocumentId,
+    pub document: Id<Document>,
     /// The place of this entry in the log, from zero. The relay appends an
     /// entry at its own place alone, so two racing writers never fork the log.
     pub position: LogPosition,
     /// The member the entry adds, removes or changes.
-    pub member: UserId,
+    pub member: Id<User>,
     /// The member's signing key, so an entry that member signs later checks
     /// against the log alone.
     pub member_key: FixedBytes<PublicKey>,
@@ -146,7 +145,7 @@ pub struct MembershipEntry {
     /// The digest of the entry before this one, absent on the first alone.
     pub previous: Option<FixedBytes<EntryDigest>>,
     /// The member who made the change and signed it.
-    pub author: UserId,
+    pub author: Id<User>,
     /// The author's signature over [`MembershipEntry::signed_bytes`]. It
     /// encodes as its 64 bytes, with no length prefix.
     pub signature: FixedBytes<Signature>,
@@ -155,15 +154,15 @@ pub struct MembershipEntry {
 /// The fields a signature covers: every field but the signature.
 #[derive(Serialize)]
 struct Signed<'a> {
-    document: &'a DocumentId,
+    document: &'a Id<Document>,
     position: LogPosition,
-    member: &'a UserId,
+    member: &'a Id<User>,
     member_key: &'a FixedBytes<PublicKey>,
     act: MembershipAct,
     role: Role,
     key: &'a Option<FixedBytes<KeyId>>,
     previous: &'a Option<FixedBytes<EntryDigest>>,
-    author: &'a UserId,
+    author: &'a Id<User>,
 }
 
 impl MembershipEntry {
@@ -232,15 +231,15 @@ mod tests {
 
     fn entry() -> MembershipEntry {
         MembershipEntry {
-            document: DocumentId::from_bytes([1; 16]),
+            document: Id::<Document>::from_bytes([1; 16]),
             position: LogPosition::new(1),
-            member: UserId::from_bytes([2; 16]),
+            member: Id::<User>::from_bytes([2; 16]),
             member_key: FixedBytes::from_array([3; 32]),
             act: MembershipAct::Invite,
             role: Role::Editor,
             key: Some(FixedBytes::from_array([4; 16])),
             previous: Some(FixedBytes::from_array([5; 32])),
-            author: UserId::from_bytes([6; 16]),
+            author: Id::<User>::from_bytes([6; 16]),
             signature: FixedBytes::from_array([7; ENTRY_SIGNATURE_LEN]),
         }
     }
@@ -254,15 +253,15 @@ mod tests {
         let signed = base.signed_bytes().unwrap();
         assert!(signed.as_bytes().starts_with(ENTRY_DOMAIN));
         let changes: [fn(&mut MembershipEntry); 9] = [
-            |e| e.document = DocumentId::from_bytes([9; 16]),
+            |e| e.document = Id::<Document>::from_bytes([9; 16]),
             |e| e.position = LogPosition::new(2),
-            |e| e.member = UserId::from_bytes([9; 16]),
+            |e| e.member = Id::<User>::from_bytes([9; 16]),
             |e| e.member_key = FixedBytes::from_array([9; 32]),
             |e| e.act = MembershipAct::Revoke,
             |e| e.role = Role::Viewer,
             |e| e.key = None,
             |e| e.previous = Some(FixedBytes::from_array([9; 32])),
-            |e| e.author = UserId::from_bytes([9; 16]),
+            |e| e.author = Id::<User>::from_bytes([9; 16]),
         ];
         for change in changes {
             let mut changed = base.clone();
@@ -328,8 +327,8 @@ mod tests {
     /// every member an editor, with no owner.
     #[test]
     fn an_ownerless_log_leaves_every_member_an_editor() {
-        let creator = UserId::new();
-        let members = [UserId::new(), UserId::new()];
+        let creator = Id::<User>::mint();
+        let members = [Id::<User>::mint(), Id::<User>::mint()];
         let acts: Vec<_> = ownerless_log(creator, &members).collect();
         assert_eq!(
             acts.first(),

@@ -11,7 +11,8 @@
 // signals declared at the bottom.
 // ============================================================================
 
-use ambre_bus::app::toile::{DeckFrame, FrameId, SlideIndex};
+use ambre_bus::app::toile::{DeckFrame, SlideIndex};
+use ambre_core::id::{Frame, Id};
 
 /// What a deck row reads (`TOILE-UI-317`). The frame's title, or its rank when
 /// the frame has never been named, so a deck of unnamed frames is still
@@ -28,7 +29,7 @@ pub fn deck_label(frame: &DeckFrame, rank: SlideIndex) -> String {
 /// Append `frame` to the deck, or answer `None` when the deck already names
 /// it. The engine de-duplicates, and a no-op write would only cost an undo
 /// item.
-pub fn add(order: &[FrameId], frame: &FrameId) -> Option<Vec<FrameId>> {
+pub fn add(order: &[Id<Frame>], frame: &Id<Frame>) -> Option<Vec<Id<Frame>>> {
     if order.contains(frame) {
         return None;
     }
@@ -39,7 +40,7 @@ pub fn add(order: &[FrameId], frame: &FrameId) -> Option<Vec<FrameId>> {
 
 /// Drop the slide at `at` from the deck, or `None` when `at` names no slide.
 /// The frame itself is untouched: leaving the deck is not a deletion.
-pub fn remove(order: &[FrameId], at: SlideIndex) -> Option<Vec<FrameId>> {
+pub fn remove(order: &[Id<Frame>], at: SlideIndex) -> Option<Vec<Id<Frame>>> {
     let at = at.to_index().filter(|at| *at < order.len())?;
     let mut next = order.to_vec();
     next.remove(at);
@@ -49,7 +50,7 @@ pub fn remove(order: &[FrameId], at: SlideIndex) -> Option<Vec<FrameId>> {
 /// Swap the slide at `at` with its neighbour one step towards `to`
 /// (`Move::Up` earlier, `Move::Down` later), or `None` when it is already at
 /// that end. One swap is one `SetSlideOrder`, so one reorder is one undo item.
-pub fn shift(order: &[FrameId], at: SlideIndex, to: Move) -> Option<Vec<FrameId>> {
+pub fn shift(order: &[Id<Frame>], at: SlideIndex, to: Move) -> Option<Vec<Id<Frame>>> {
     let other = match to {
         Move::Up => at.prev()?,
         Move::Down => at.next(),
@@ -78,7 +79,7 @@ pub enum Move {
 #[derive(Clone, PartialEq)]
 pub enum DeckIntent {
     /// Add a frame the deck does not name yet, at the end.
-    Add(FrameId),
+    Add(Id<Frame>),
     /// Drop the slide at this rank.
     Remove(SlideIndex),
     /// Move the slide at this rank one step.
@@ -88,7 +89,7 @@ pub enum DeckIntent {
     /// Name a frame, deck member or not (`TOILE-247`). It names the frame
     /// rather than a rank, because the panel's second list holds frames no
     /// rank addresses.
-    Rename(FrameId, String),
+    Rename(Id<Frame>, String),
 }
 
 /// A frame name prints as its length alone (`ZK-006`).
@@ -126,14 +127,16 @@ pub struct DeckSignals {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ambre_bus::app::toile::ElementId;
 
     /// `TOILE-289`: a rename's debug form prints the name's length, none of it.
     #[test]
     fn a_rename_debug_form_prints_no_name() {
         let form = format!(
             "{:?}",
-            DeckIntent::Rename(ElementId("f".to_owned()), "Q3 layoffs".to_owned())
+            DeckIntent::Rename(
+                Id::<Frame>::from_text("f".to_owned()),
+                "Q3 layoffs".to_owned()
+            )
         );
         assert!(!form.contains("layoffs"), "{form}");
         assert!(form.contains("<10 chars>"), "{form}");
@@ -141,7 +144,7 @@ mod tests {
 
     fn frame(id: &str, name: &str) -> DeckFrame {
         DeckFrame {
-            id: ElementId(id.to_owned()),
+            id: Id::<Frame>::from_text(id.to_owned()),
             name: name.to_owned(),
         }
     }
@@ -150,8 +153,11 @@ mod tests {
         SlideIndex::new(at)
     }
 
-    fn ids(names: &[&str]) -> Vec<FrameId> {
-        names.iter().map(|n| ElementId((*n).to_owned())).collect()
+    fn ids(names: &[&str]) -> Vec<Id<Frame>> {
+        names
+            .iter()
+            .map(|n| Id::<Frame>::from_text((*n).to_owned()))
+            .collect()
     }
 
     #[test]
@@ -175,10 +181,10 @@ mod tests {
     fn adding_appends_and_a_frame_already_on_the_deck_writes_nothing() {
         let order = ids(&["a", "b"]);
         assert_eq!(
-            add(&order, &ElementId("c".to_owned())),
+            add(&order, &Id::<Frame>::from_text("c".to_owned())),
             Some(ids(&["a", "b", "c"]))
         );
-        assert_eq!(add(&order, &ElementId("b".to_owned())), None);
+        assert_eq!(add(&order, &Id::<Frame>::from_text("b".to_owned())), None);
     }
 
     #[test]

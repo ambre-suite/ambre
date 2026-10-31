@@ -184,7 +184,7 @@ keys the same way.
 ```rust
 pub struct KeyId([u8; 16]);         // BLAKE2b("ambre-key-id-v1" || key), truncated
 pub struct KeyLink {
-    pub document_id: DocumentId,
+    pub document_id: Id<Document>,
     pub key: KeyId,                 // the key the link starts from
     pub previous: KeyId,            // the key it seals
     pub sealed: SealedPreviousKey,  // `previous` as a sealed object under `key`
