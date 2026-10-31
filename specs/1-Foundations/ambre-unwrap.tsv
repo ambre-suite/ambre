@@ -20,6 +20,7 @@ ambre-logic | src/persistence.rs | crate::persistence::IdbKey::user | Uuid::to_s
 ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::save_delta | SealedRowBytes::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
 ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::save_draft | SealedRowBytes::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
 ambre-logic | src/persistence.rs | crate::persistence::PersistenceStore::write_snapshot | SealedRowBytes::as_bytes -> bytes_to_js	1	bytes_to_js copies any bytes into a JS Uint8Array, the IndexedDB boundary.
+ambre-prose | src/logic/fixtures.rs | crate::logic::fixtures::build_styled_document | Id::uuid -> Id::from_uuid	1	A fixture author takes the bytes of a seeded document id, so every run names the same user.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | Aad::as_bytes -> push_framed	1	push_framed length-prefixes one field of the signed transcript, the same framing the client signs.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | Ciphertext::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, the same framing the client signs.
 ambre-server | src/ws/handler/signature.rs | crate::ws::handler::signature::verify_sealed_signature | CommitmentTag::0 -> push_framed	1	push_framed length-prefixes one field of the signed transcript, the same framing the client signs.
@@ -29,5 +30,7 @@ ambre-sync | src/membership_log.rs | crate::membership_log::sign | SignedTranscr
 ambre-sync | src/pipeline.rs | crate::pipeline::seal_ephemeral | EphemeralBytes::as_bytes -> seal_payload	1	seal_payload compresses and seals any payload kind; each caller types its own.
 ambre-sync | src/pipeline.rs | crate::pipeline::seal_snapshot | SnapshotBytes::as_bytes -> seal_payload	1	seal_payload compresses and seals any payload kind; each caller types its own.
 ambre-toile | src/logic/interop/raster.rs | crate::logic::interop::raster::import_raster | FileBytes::as_bytes -> decode_media	1	decode_media is the shared image decoder, also fed the slices usvg hands out.
+ambre-toile | src/logic/state/comments.rs | crate::logic::state::comments::ToileState::err_no_thread | Id::as_str -> Id::from_text	1	ToileError has no thread variant, so a missing thread is reported under its text as an element, as before the thread kind split.
 ambre-toile | src/logic/state/find.rs | crate::logic::state::find::text_matches | FindText::as_str -> contains_match	1	contains_match also runs on case-folded Strings built at the call.
+ambre-toile | src/logic/state/presentation.rs | crate::logic::state::presentation::ToileState::frame | Id::as_str -> Id::from_text	1	frame is the one checked way from an element id to a frame id (ARCH-060): it rebuilds the text only once the board holds a frame there.
 ambre-toile | src/ui/presence.rs | crate::ui::presence::paint_cursor | DisplayName::as_str -> .get_or_build	1	The text cache shapes any string, whatever it names.
