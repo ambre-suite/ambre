@@ -3415,7 +3415,8 @@ ambre-core | src/secret.rs | crate::secret | Credential.secret | field | Arc<Sec
 ambre-core | src/secret.rs | crate::secret | Credential<K>::new(text) | param | String	newtype-inner	the bearer text the generic credential wraps
 ambre-core | src/secret.rs | crate::secret | Credential<K>::secret() | ret | &Secret<String>	newtype-inner	the shared wrapper, for the code the gate admits to read the text
 ambre-core | src/secret.rs | crate::secret | Credential<K>::matches() | ret | bool	generic	a constant-time predicate
-ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::from_shared(secret) | param | Arc<Secret<String>>	newtype-inner	the shared wrapper of a credential, taken with no copy
+ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::present_bearer(read) | param | impl FnOnce(&str)->R	generic	lends the bearer header value to the one foreign call that sets it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::present_bearer::SCHEME | const | &str	foreign-api	the Bearer scheme of the HTTP Authorization header
 ambre-core | src/secret.rs | crate::secret | Credential<OidcState>::present_state(store) | param | impl FnOnce(&str)->R	generic	lends the state text to the one foreign call that stores it (ARCH-049)
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
@@ -3444,11 +3445,6 @@ ambre-crypto | src/keys.rs | crate::keys | key_of(bytes) | param | &[u8]	generic
 ambre-crypto | src/keys.rs | crate::keys | split_anchored(plain) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/passphrase.rs | crate::passphrase | UserKey.0 | field | Secret<[u8;USER_KEY_LEN]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/passphrase.rs | crate::passphrase | argon2id() | ret | Result<Secret<[u8;USER_KEY_LEN]>,CryptoError>	generic	Argon2id output in a Secret; its one caller wraps it in UserKey
-ambre-crypto | src/token.rs | crate::token | <SecretToken as From<String>>::from(token) | param | String	newtype-inner	the SecretToken newtype over a shared Secret
-ambre-crypto | src/token.rs | crate::token | SecretToken.0 | field | Arc<Secret<String>>	newtype-inner	the SecretToken newtype over a shared Secret
-ambre-crypto | src/token.rs | crate::token | SecretToken::present_bearer(read) | param | impl FnOnce(&str)->R	generic	lends the token text to the one foreign call that carries it
-ambre-crypto | src/token.rs | crate::token | SecretToken::present_bearer::SCHEME | const | &str	foreign-api	the Bearer scheme of the HTTP Authorization header
-ambre-crypto | src/token.rs | crate::token | SecretToken::secret() | ret | &Secret<String>	newtype-inner	the SecretToken newtype over a shared Secret
 ambre-primitives | src/scan.rs | crate::scan | Scan.secrets | field | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/secrets.rs | crate::secrets | CRYPTO | const | &str	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/secrets.rs | crate::secrets | Check::names() | ret | &'static[&'static str]	generic	a word list the scanner matches Rust tokens against

@@ -96,6 +96,16 @@ impl SyncState {
                             .await
                         {
                             Ok(me) => {
+                                // The request above presented the access
+                                // token, so only a sign-out during the await
+                                // empties the store. A session with no pair
+                                // fails: an empty token is no bearer.
+                                let Some(tokens) = auth.tokens.borrow().as_ref().cloned() else {
+                                    let _ = logic_tx.send(LogicEvent::AuthError {
+                                        message: "Unlock failed: the session ended".into(),
+                                    });
+                                    return;
+                                };
                                 let user_id = me.user_id;
                                 let _ = tx.send(SyncEvent::SessionReady {
                                     id: Some(id),
@@ -105,13 +115,7 @@ impl SyncState {
                                     master_seed,
                                     signing_key,
                                     exchange_key,
-                                    tokens: auth.tokens.borrow().as_ref().cloned().unwrap_or(
-                                        http::TokenPair {
-                                            access_token: http::SecretToken::default(),
-                                            refresh_token: http::SecretToken::default(),
-                                            access_expires_in: ambre_core::TimeSpan::ZERO,
-                                        },
-                                    ),
+                                    tokens,
                                 });
                             }
                             Err(e) => {
@@ -513,7 +517,7 @@ impl SyncState {
 #[cfg(test)]
 mod provider_tests {
     use super::*;
-    use crate::http::{SecretToken, TokenPair};
+    use crate::http::{Credential, TokenPair};
     use ambre_core::{Sec, TimeSpan};
 
     fn worker() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
@@ -535,8 +539,8 @@ mod provider_tests {
             email: "ada@example.org".into(),
             keys_stored,
             tokens: TokenPair {
-                access_token: SecretToken::from("access-s3cr3t".to_owned()),
-                refresh_token: SecretToken::from("refresh-s3cr3t".to_owned()),
+                access_token: Credential::new("access-s3cr3t".to_owned()),
+                refresh_token: Credential::new("refresh-s3cr3t".to_owned()),
                 access_expires_in: TimeSpan::<Sec>::new(60),
             },
         }

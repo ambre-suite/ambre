@@ -43,7 +43,7 @@ impl SyncState {
             .tokens
             .borrow()
             .as_ref()
-            .map(|t| t.access_token.to_access_token())
+            .map(|t| t.access_token.clone())
         else {
             tracing::warn!("Sync: socket opened before the access token is ready");
             return;
@@ -1664,7 +1664,7 @@ impl SyncState {
 #[cfg(test)]
 mod tests {
     use super::{REPLAY_RETRY_LIMIT, replay_retry_delay};
-    use crate::http::{SecretToken, TokenPair};
+    use crate::http::{AccessToken, Credential, TokenPair};
     use crate::{LogicEvent, LogicSink, SyncDocumentState, SyncEvent, SyncState};
     use ambre_bus::DocType;
     use ambre_core::id::{Document, Id, User};
@@ -1763,8 +1763,8 @@ mod tests {
             .session_nonces
             .insert(id, ambre_core::FixedBytes::from_array([1; 16]));
         *state.tokens.borrow_mut() = Some(TokenPair {
-            access_token: SecretToken::from("access".to_owned()),
-            refresh_token: SecretToken::from("refresh".to_owned()),
+            access_token: Credential::new("access".to_owned()),
+            refresh_token: Credential::new("refresh".to_owned()),
             access_expires_in: TimeSpan::<Sec>::new(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
@@ -1808,8 +1808,8 @@ mod tests {
             exchange_key: master_seed.derive_exchange_key(),
             master_seed,
             tokens: TokenPair {
-                access_token: SecretToken::from("access".to_owned()),
-                refresh_token: SecretToken::from("refresh".to_owned()),
+                access_token: Credential::new("access".to_owned()),
+                refresh_token: Credential::new("refresh".to_owned()),
                 access_expires_in: TimeSpan::<Sec>::new(60),
             },
         });
@@ -2010,8 +2010,8 @@ mod tests {
         let id = *state.documents.keys().next().unwrap();
         state.documents.get_mut(&id).unwrap().existence = crate::Existence::OnRelay;
         *state.tokens.borrow_mut() = Some(TokenPair {
-            access_token: SecretToken::from("acc-s3cr3t".to_owned()),
-            refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
+            access_token: Credential::new("acc-s3cr3t".to_owned()),
+            refresh_token: Credential::new("ref-s3cr3t".to_owned()),
             access_expires_in: TimeSpan::<Sec>::new(60),
         });
         let (tx, wire) = ambre_bus::conduit::unbounded();
@@ -2033,8 +2033,8 @@ mod tests {
     #[test]
     fn a_logged_token_pair_carries_no_token() {
         let pair = TokenPair {
-            access_token: SecretToken::from("acc-s3cr3t".to_owned()),
-            refresh_token: SecretToken::from("ref-s3cr3t".to_owned()),
+            access_token: Credential::new("acc-s3cr3t".to_owned()),
+            refresh_token: Credential::new("ref-s3cr3t".to_owned()),
             access_expires_in: TimeSpan::<Sec>::new(60),
         };
         let shown = format!("{pair:?}");
@@ -2047,7 +2047,7 @@ mod tests {
     #[test]
     fn session_tokens_wipe_on_drop() {
         fn wipes_on_drop<T: zeroize::ZeroizeOnDrop>(_: &T) {}
-        let token = SecretToken::from("acc-s3cr3t".to_owned());
+        let token = Credential::<AccessToken>::new("acc-s3cr3t".to_owned());
         wipes_on_drop(token.secret());
     }
 

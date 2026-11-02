@@ -409,14 +409,34 @@ impl CredentialKind for AccessToken {
 impl WireCredential for AccessToken {}
 
 impl Credential<AccessToken> {
-    /// Takes a wrapper another owner shares, such as the token store of the
-    /// Sync worker. No copy of the text is made.
-    #[must_use]
-    pub fn from_shared(secret: Arc<Secret<String>>) -> Self {
-        Self {
-            secret,
-            kind: PhantomData,
-        }
+    /// Hands the `Authorization` header value, `Bearer` and the token, to
+    /// `read`, the one call that sets the header. The value is wiped once
+    /// `read` returns. A refresh token has no such sink: the type refuses it
+    /// here, and the primitive gate admits this name in the transport alone
+    /// (`ARCH-049`).
+    ///
+    /// ```compile_fail
+    /// use ambre_core::{Credential, RefreshToken};
+    /// let refresh = Credential::<RefreshToken>::new("ref".to_owned());
+    /// refresh.present_bearer(str::to_owned);
+    /// ```
+    ///
+    /// An access token and a refresh token never stand in for each other:
+    ///
+    /// ```compile_fail
+    /// use ambre_core::{AccessToken, Credential, RefreshToken};
+    /// let refresh = Credential::<RefreshToken>::new("ref".to_owned());
+    /// let access: Credential<AccessToken> = refresh;
+    /// ```
+    pub fn present_bearer<R>(&self, read: impl FnOnce(&str) -> R) -> R {
+        const SCHEME: &str = "Bearer ";
+        let token = self.secret.expose();
+        let header = Secret::filled(|header: &mut String| {
+            header.reserve_exact(SCHEME.len() + token.len());
+            header.push_str(SCHEME);
+            header.push_str(token);
+        });
+        read(header.expose())
     }
 }
 
@@ -521,6 +541,7 @@ mod tests {
         const CLONE: bool = false;
         const SERIALIZE: bool = false;
         const PARTIAL_EQ: bool = false;
+        const DEFAULT: bool = false;
     }
 
     impl<T> Lacks for Probe<T> {}
@@ -539,6 +560,10 @@ mod tests {
 
     impl<T: PartialEq> Probe<T> {
         const PARTIAL_EQ: bool = true;
+    }
+
+    impl<T: Default> Probe<T> {
+        const DEFAULT: bool = true;
     }
 
     type Key = Secret<[u8; 32]>;
@@ -764,10 +789,45 @@ mod tests {
         );
     }
 
+    /// A session token prints no byte, presents itself as a bearer header,
+    /// and travels as the bare string the relay exchanged before the fold
+    /// (`SYNC-061`).
     #[test]
-    fn a_shared_access_token_is_the_same_wrapper() {
-        let shared = Arc::new(Secret::new("acc".to_owned()));
-        let token = Credential::<AccessToken>::from_shared(Arc::clone(&shared));
-        assert!(std::ptr::eq(token.secret(), shared.as_ref()));
+    fn a_session_token_prints_nothing_and_travels_as_its_text() {
+        let access = Credential::<AccessToken>::new("acc-s3cr3t".to_owned());
+        assert_eq!(format!("{access:?}"), "AccessToken(Secret([REDACTED]))");
+        assert_eq!(access.present_bearer(str::to_owned), "Bearer acc-s3cr3t");
+        let wire = serde_json::to_string(&access).unwrap();
+        assert_eq!(wire, "\"acc-s3cr3t\"");
+        let back: Credential<AccessToken> = serde_json::from_str(&wire).unwrap();
+        assert!(back.matches(&access));
+        let refresh = Credential::<RefreshToken>::new("ref-s3cr3t".to_owned());
+        assert_eq!(format!("{refresh:?}"), "RefreshToken(Secret([REDACTED]))");
+        let wire = serde_json::to_string(&refresh).unwrap();
+        assert_eq!(wire, "\"ref-s3cr3t\"");
+        let back: Credential<RefreshToken> = serde_json::from_str(&wire).unwrap();
+        assert!(back.matches(&refresh));
+    }
+
+    /// No credential has a `Default`, so no empty token can reach a header.
+    /// The bare `String` shows the probe reads the bound.
+    #[test]
+    fn a_session_token_has_no_default() {
+        assert_eq!(
+            [
+                Probe::<Credential<AccessToken>>::DEFAULT,
+                Probe::<Credential<RefreshToken>>::DEFAULT,
+                Probe::<String>::DEFAULT,
+            ],
+            [false, false, true]
+        );
+    }
+
+    /// A clone shares the wrapper: no copy of the text is made.
+    #[test]
+    fn a_cloned_access_token_is_the_same_wrapper() {
+        let token = Credential::<AccessToken>::new("acc".to_owned());
+        let copy = token.clone();
+        assert!(std::ptr::eq(token.secret(), copy.secret()));
     }
 }

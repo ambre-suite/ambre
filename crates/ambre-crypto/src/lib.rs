@@ -22,14 +22,12 @@ pub mod passphrase;
 pub mod peer;
 mod random;
 pub mod signature;
-pub mod token;
 
 pub use ecdh::WrappedKey;
 pub use envelope::{Sealed, open, seal};
 pub use error::CryptoError;
 pub use hash::fingerprint;
 pub use keys::{DocumentKey, FileKey, MasterSeed, StoreKey};
-pub use token::SecretToken;
 
 #[cfg(test)]
 mod tests;
