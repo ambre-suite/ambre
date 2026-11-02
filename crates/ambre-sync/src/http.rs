@@ -6,16 +6,16 @@ use ambre_core::id::{Channel, Document, Id, Lease, Message, Meta, Segment, Snaps
 use ambre_core::{ApiFailure, FixedRole, HttpStatus, RefusalCode, Seq, UnreadableCause};
 use serde::{Deserialize, Serialize};
 
+/// The two session tokens, each wiped on drop and redacted in `Debug`
+/// (`SYNC-100`, `SYNC-061`). Their roles keep them apart: only the access
+/// token presents itself as a bearer.
+pub(crate) use ambre_core::{AccessToken, Credential, RefreshToken};
 use ambre_core::{Ms, Sec, TimeSpan};
-/// A session token: an access or a refresh token, wiped on drop and redacted
-/// in `Debug` (`SYNC-100`, `SYNC-061`). It lives in `ambre-crypto`, which
-/// alone reads its text (`ARCH-045`).
-pub(crate) use ambre_crypto::SecretToken;
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct TokenPair {
-    pub access_token: SecretToken,
-    pub refresh_token: SecretToken,
+    pub access_token: Credential<AccessToken>,
+    pub refresh_token: Credential<RefreshToken>,
     #[allow(dead_code)]
     pub access_expires_in: TimeSpan<Sec>,
 }
@@ -348,7 +348,7 @@ pub(crate) struct AuthContext {
 
 #[derive(Serialize)]
 struct RefreshRequest {
-    refresh_token: SecretToken,
+    refresh_token: Credential<RefreshToken>,
 }
 
 impl AuthContext {
@@ -357,7 +357,7 @@ impl AuthContext {
         Url::<ApiRoot>::of(self.url_scheme, &self.api_base)
     }
 
-    fn access_token(&self) -> Result<SecretToken, HttpError> {
+    fn access_token(&self) -> Result<Credential<AccessToken>, HttpError> {
         self.tokens
             .borrow()
             .as_ref()
@@ -365,7 +365,7 @@ impl AuthContext {
             .ok_or_else(|| HttpError::Local("auth required: no access token".to_owned()))
     }
 
-    fn refresh_token(&self) -> Result<SecretToken, HttpError> {
+    fn refresh_token(&self) -> Result<Credential<RefreshToken>, HttpError> {
         self.tokens
             .borrow()
             .as_ref()
@@ -506,7 +506,7 @@ pub(crate) struct Outgoing {
     pub url: Target,
     /// The access token the `Authorization` header presents, on a request to
     /// the relay that needs one. The transport spells the header at send time.
-    pub bearer: Option<SecretToken>,
+    pub bearer: Option<Credential<AccessToken>>,
     /// The content type and the bytes of the body, if any.
     pub body: Option<(ContentType, HttpBody)>,
     /// How long the transport waits before it aborts the request.
@@ -1178,8 +1178,8 @@ pub(crate) struct SetupAccountRequest {
 pub(crate) struct SetupAccountResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
-    pub access_token: SecretToken,
-    pub refresh_token: SecretToken,
+    pub access_token: Credential<AccessToken>,
+    pub refresh_token: Credential<RefreshToken>,
     pub access_expires_in: TimeSpan<Sec>,
 }
 
@@ -1195,8 +1195,8 @@ pub(crate) struct DevLoginResponse {
     #[serde(with = "ambre_core::serde_id::text")]
     pub user_id: Id<User>,
     pub display_name: ambre_core::DisplayName,
-    pub access_token: SecretToken,
-    pub refresh_token: SecretToken,
+    pub access_token: Credential<AccessToken>,
+    pub refresh_token: Credential<RefreshToken>,
     pub access_expires_in: TimeSpan<Sec>,
 }
 
@@ -1221,8 +1221,8 @@ pub(crate) struct ProviderCallbackResponse {
     pub user_id: Id<User>,
     pub email: ambre_core::Email,
     pub display_name: ambre_core::DisplayName,
-    pub access_token: SecretToken,
-    pub refresh_token: SecretToken,
+    pub access_token: Credential<AccessToken>,
+    pub refresh_token: Credential<RefreshToken>,
     pub access_expires_in: TimeSpan<Sec>,
 }
 
@@ -1252,8 +1252,8 @@ pub(crate) struct SetupKeyRequest {
 #[derive(Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct StoreMasterKeysResponse {
-    pub access_token: SecretToken,
-    pub refresh_token: SecretToken,
+    pub access_token: Credential<AccessToken>,
+    pub refresh_token: Credential<RefreshToken>,
     pub access_expires_in: TimeSpan<Sec>,
 }
 
@@ -2152,8 +2152,8 @@ pub(crate) mod scripted {
             api_base: crate::http::Url::<crate::http::RelayHost>::new("relay.test".to_owned()),
             url_scheme: UrlScheme::Https,
             tokens: Rc::new(RefCell::new(Some(TokenPair {
-                access_token: access.to_owned().into(),
-                refresh_token: refresh.to_owned().into(),
+                access_token: Credential::new(access.to_owned()),
+                refresh_token: Credential::new(refresh.to_owned()),
                 access_expires_in: TimeSpan::<Sec>::new(900),
             }))),
         }

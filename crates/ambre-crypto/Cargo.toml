@@ -7,7 +7,6 @@ description = "Cryptographic primitives for Ambre (AEAD, signatures, hashing, KD
 
 [dependencies]
 ambre-core = { path = "../ambre-core" }
-serde = { workspace = true }
 thiserror = { workspace = true }
 
 # Crypto
@@ -30,8 +29,6 @@ getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 proptest = { workspace = true }
-# The JSON form of a session token, as the relay exchanges it (`token`).
-serde_json = { workspace = true }
 criterion = { workspace = true }
 
 [[bench]]

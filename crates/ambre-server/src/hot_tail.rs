@@ -28,7 +28,8 @@ pub const INLINE_CAP: InlineCap = InlineCap {
 pub const IDLE_AFTER: TimeSpan<Sec> = TimeSpan::<Sec>::new(24 * 3600);
 
 /// How many idle documents one pass moves.
-const IDLE_PASS_LIMIT: crate::db::QueryLimit = crate::db::QueryLimit::saturating(100);
+const IDLE_PASS_LIMIT: ambre_core::Bounded<crate::db::QueryLimit> =
+    ambre_core::Bounded::<crate::db::QueryLimit>::of::<100>();
 
 /// Whether a tail of `deltas` rows and `bytes` bytes should move now. The move
 /// starts at three quarters of the cap, so a write rarely meets a full tail.
@@ -57,7 +58,7 @@ fn kept_after_move(tail: &[(ambre_core::Seq, Payload)]) -> usize {
 /// The object a batch of deltas is stored under, named by its first and last
 /// numbers. It sits under the document's prefix, so a delete sweeps it.
 pub fn batch_key(
-    env_prefix: &crate::s3::EnvPrefix,
+    env_prefix: &crate::s3::StoreText<crate::s3::EnvPrefix>,
     document_id: &Id<Document>,
     first: ambre_core::Seq,
     last: ambre_core::Seq,
@@ -331,7 +332,7 @@ mod db_tests {
             &state.db,
             doc,
             ambre_core::Seq::new(0),
-            crate::db::QueryLimit::saturating(1000),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<1000>(),
         )
         .await
         .unwrap()

@@ -389,7 +389,8 @@ pub async fn snapshot_download_url(
 #[derive(serde::Deserialize)]
 pub struct DeltasQuery {
     pub after_seq: Option<ambre_core::Seq>,
-    pub limit: Option<db::QueryLimit>,
+    #[serde(default, deserialize_with = "db::clamped_limit")]
+    pub limit: Option<ambre_core::Bounded<db::QueryLimit>>,
 }
 /// One delta entry in the response list.
 #[derive(serde::Serialize)]
@@ -419,7 +420,7 @@ pub async fn get_deltas(
     let after = params.after_seq.unwrap_or(ambre_core::Seq::ZERO);
     // The page size arrives clamped (M16): an unbounded `limit` would force a
     // full-table scan of `updates` and a large response allocation.
-    let limit = params.limit.unwrap_or(db::QueryLimit::DEFAULT);
+    let limit = params.limit.unwrap_or_default();
     let updates = db::get_updates_after(&state.db, &doc_id, after, limit).await?;
     let deltas: Vec<_> = updates
         .into_iter()
@@ -431,4 +432,29 @@ pub async fn get_deltas(
         })
         .collect();
     Ok(axum::Json(DeltasResponse { deltas }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DeltasQuery;
+    use ambre_core::Bounded;
+
+    /// The page size of the route's own query, decoded as axum decodes it.
+    fn limit_of(uri: &'static str) -> Option<Option<u32>> {
+        axum::extract::Query::<DeltasQuery>::try_from_uri(&axum::http::Uri::from_static(uri))
+            .map(|query| query.0.limit.map(Bounded::get))
+            .ok()
+    }
+
+    /// A delta page query is clamped, never refused, for an integer out of
+    /// range (`SRV-075`).
+    #[test]
+    fn a_delta_page_query_clamps_its_limit() {
+        assert_eq!(limit_of("/deltas?limit=5000"), Some(Some(1000)));
+        assert_eq!(limit_of("/deltas?limit=-2"), Some(Some(1)));
+        assert_eq!(limit_of("/deltas?limit=0"), Some(Some(1)));
+        assert_eq!(limit_of("/deltas?limit=250"), Some(Some(250)));
+        assert_eq!(limit_of("/deltas"), Some(None));
+        assert_eq!(limit_of("/deltas?limit=many"), None);
+    }
 }

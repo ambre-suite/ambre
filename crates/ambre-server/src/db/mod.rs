@@ -20,7 +20,7 @@ mod users;
 pub use channels::*;
 pub use content::*;
 pub use documents::*;
-pub use limit::QueryLimit;
+pub use limit::{QueryLimit, clamped_limit};
 pub use members::*;
 pub use orgs::*;
 pub use read_cursors::*;
@@ -427,7 +427,7 @@ mod tests {
             &pool,
             &document_id,
             ambre_core::Seq::new(0),
-            crate::db::QueryLimit::saturating(100),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<100>(),
         )
         .await
         .expect("list remaining");
@@ -508,7 +508,7 @@ mod tests {
             &pool,
             &document_id,
             ambre_core::Seq::new(0),
-            crate::db::QueryLimit::saturating(100),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<100>(),
         )
         .await
         .expect("list remaining");

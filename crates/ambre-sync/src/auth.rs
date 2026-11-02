@@ -96,6 +96,13 @@ impl SyncState {
                             .await
                         {
                             Ok(me) => {
+                                let tokens = match session_tokens(&auth.tokens) {
+                                    Ok(tokens) => tokens,
+                                    Err(failure) => {
+                                        let _ = logic_tx.send(*failure);
+                                        return;
+                                    }
+                                };
                                 let user_id = me.user_id;
                                 let _ = tx.send(SyncEvent::SessionReady {
                                     id: Some(id),
@@ -105,13 +112,7 @@ impl SyncState {
                                     master_seed,
                                     signing_key,
                                     exchange_key,
-                                    tokens: auth.tokens.borrow().as_ref().cloned().unwrap_or(
-                                        http::TokenPair {
-                                            access_token: http::SecretToken::default(),
-                                            refresh_token: http::SecretToken::default(),
-                                            access_expires_in: ambre_core::TimeSpan::ZERO,
-                                        },
-                                    ),
+                                    tokens,
                                 });
                             }
                             Err(e) => {
@@ -510,10 +511,60 @@ impl SyncState {
     }
 }
 
+/// The token pair an unlock announces once `/auth/me` answered. That request
+/// presented the access token, so only a sign-out during the await empties
+/// the store. The unlock then fails and announces no session: an empty token
+/// is no bearer.
+fn session_tokens(store: &http::TokenStore) -> Result<http::TokenPair, Box<LogicEvent>> {
+    store.borrow().as_ref().cloned().ok_or_else(|| {
+        Box::new(LogicEvent::AuthError {
+            message: "Unlock failed: the session ended".into(),
+        })
+    })
+}
+
+#[cfg(test)]
+mod unlock_tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    use super::*;
+    use crate::http::{Credential, TokenPair};
+    use ambre_core::{Sec, TimeSpan};
+
+    /// A sign-out during `/auth/me` empties the store: the unlock fails, and
+    /// no token pair reaches the session.
+    #[test]
+    fn an_unlock_whose_store_emptied_fails_with_no_session() {
+        let store: http::TokenStore = Rc::new(RefCell::new(None));
+        let Err(failure) = session_tokens(&store) else {
+            panic!("an empty store announced a session");
+        };
+        let LogicEvent::AuthError { message } = *failure else {
+            panic!("the failure is {failure:?}");
+        };
+        assert_eq!(message, "Unlock failed: the session ended");
+    }
+
+    /// A held pair is the one the session announces, shared with the store.
+    #[test]
+    fn an_unlock_announces_the_pair_the_store_holds() {
+        let pair = TokenPair {
+            access_token: Credential::new("acc-s3cr3t".to_owned()),
+            refresh_token: Credential::new("ref-s3cr3t".to_owned()),
+            access_expires_in: TimeSpan::<Sec>::new(60),
+        };
+        let store: http::TokenStore = Rc::new(RefCell::new(Some(pair.clone())));
+        let announced = session_tokens(&store).expect("the store holds a pair");
+        assert!(announced.access_token.matches(&pair.access_token));
+        assert!(announced.refresh_token.matches(&pair.refresh_token));
+    }
+}
+
 #[cfg(test)]
 mod provider_tests {
     use super::*;
-    use crate::http::{SecretToken, TokenPair};
+    use crate::http::{Credential, TokenPair};
     use ambre_core::{Sec, TimeSpan};
 
     fn worker() -> (SyncState, ambre_bus::conduit::Receiver<LogicEvent>) {
@@ -535,8 +586,8 @@ mod provider_tests {
             email: "ada@example.org".into(),
             keys_stored,
             tokens: TokenPair {
-                access_token: SecretToken::from("access-s3cr3t".to_owned()),
-                refresh_token: SecretToken::from("refresh-s3cr3t".to_owned()),
+                access_token: Credential::new("access-s3cr3t".to_owned()),
+                refresh_token: Credential::new("refresh-s3cr3t".to_owned()),
                 access_expires_in: TimeSpan::<Sec>::new(60),
             },
         }

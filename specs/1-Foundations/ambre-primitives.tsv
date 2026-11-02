@@ -2205,14 +2205,6 @@ ambre-server | src/db/orgs.rs | crate::db::orgs | OrganizationRow.name | field |
 ambre-server | src/db/orgs.rs | crate::db::orgs | delete_organization() | ret | Result<bool,AppError>	generic	predicate result
 ambre-server | src/db/orgs.rs | crate::db::orgs | log_org_recovery(reason) | param | Option<&str>	free-text	recovery reason text
 ambre-server | src/db/orgs.rs | crate::db::orgs | remove_org_member() | ret | Result<bool,AppError>	generic	predicate result
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShareThreshold.0 | field | i16	newtype-inner	the k of a k-of-n split, typed apart from ShareTotal; the smallint column width
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal.0 | field | i16	newtype-inner	the n of a k-of-n split, typed apart from ShareThreshold; the smallint column width
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShareThreshold::new(count) | param | i16	newtype-inner	the validated constructor of ShareThreshold: a count below 1 is refused
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShareThreshold::get() | ret | i16	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareThreshold as TryFrom<i16>>::try_from(count) | param | i16	newtype-inner	the smallint the fallible constructor of ShareThreshold validates, as a row or a request body carries it
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal::new(count) | param | i16	newtype-inner	the validated constructor of ShareTotal: a count below 1 is refused
-ambre-server | src/db/orgs.rs | crate::db::orgs | ShareTotal::get() | ret | i16	newtype-inner	newtype inner, accessor or constructor
-ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareTotal as TryFrom<i16>>::try_from(count) | param | i16	newtype-inner	the smallint the fallible constructor of ShareTotal validates, as a row or a request body carries it
 ambre-server | src/extract.rs | crate::extract | <Id<E> as PathPart>::Raw | assoc | String	foreign-api	the path segment text axum extracts, before the parse into the identifier
 ambre-server | src/extract.rs | crate::extract | <Id<E> as PathPart>::part(raw) | param | String	newtype-inner	the identifier's own UUID text, read back from a route path
 ambre-server | src/error.rs | crate::error | AppError::BadRequest.0 | field | String	free-text	user text or error message
@@ -3179,11 +3171,6 @@ ambre-core | src/envelope.rs | crate::envelope | Aad::new(bytes) | param | Vec<u
 ambre-core | src/envelope.rs | crate::envelope | Aad::of(bytes) | param | &[u8]	newtype-inner	Aad newtype, from a fixed domain tag
 ambre-core | src/envelope.rs | crate::envelope | Ciphertext::as_bytes() | ret | &[u8]	newtype-inner	the Ciphertext newtype unwrapped, for a caller outside its module
 ambre-core | src/envelope.rs | crate::envelope | Ciphertext::new(value) | param | Vec<u8>	newtype-inner	the constructor of the Ciphertext newtype
-ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit.0 | field | u16	newtype-inner	the row count QueryLimit wraps, held in 1..=1000
-ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::as_i64() | ret | i64	newtype-inner	the count as the sqlx LIMIT bind takes it
-ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::as_usize() | ret | usize	newtype-inner	the count compared against a page length
-ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::clamped(n) | param | i64	newtype-inner	the integer a request names, clamped into range
-ambre-server | src/db/limit.rs | crate::db::limit | QueryLimit::saturating(n) | param | u16	newtype-inner	a const count, saturated into range
 ambre-core | src/member_count.rs | crate::member_count | MemberCountError.0 | field | i64	newtype-inner	the refused store count, kept for the message
 ambre-core | src/mode.rs | crate::mode | Visibility::public_if(public) | param | bool	newtype-inner	the bool the one constructor of Visibility reads into its variant
 ambre-core | src/secret.rs | crate::secret | <SecretString as From<String>>::from(text) | param | String	newtype-inner	the String the constructor of SecretString wraps
@@ -3356,7 +3343,8 @@ ambre-core | src/secret.rs | crate::secret | Credential.secret | field | Arc<Sec
 ambre-core | src/secret.rs | crate::secret | Credential<K>::new(text) | param | String	newtype-inner	the bearer text the generic credential wraps
 ambre-core | src/secret.rs | crate::secret | Credential<K>::secret() | ret | &Secret<String>	newtype-inner	the shared wrapper, for the code the gate admits to read the text
 ambre-core | src/secret.rs | crate::secret | Credential<K>::matches() | ret | bool	generic	a constant-time predicate
-ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::from_shared(secret) | param | Arc<Secret<String>>	newtype-inner	the shared wrapper of a credential, taken with no copy
+ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::present_bearer(read) | param | impl FnOnce(&str)->R	generic	lends the bearer header value to the one foreign call that sets it (ARCH-049)
+ambre-core | src/secret.rs | crate::secret | Credential<AccessToken>::present_bearer::SCHEME | const | &str	foreign-api	the Bearer scheme of the HTTP Authorization header
 ambre-core | src/secret.rs | crate::secret | Credential<OidcState>::present_state(store) | param | impl FnOnce(&str)->R	generic	lends the state text to the one foreign call that stores it (ARCH-049)
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::object_address() | ret | &str	newtype-inner	the object address before the signed query, for a log or an error
 ambre-core | src/secret.rs | crate::secret | Credential<PresignedUrl>::present_link(send) | param | impl FnOnce(&str)->R	generic	lends the signed address to the one foreign call that fetches it (ARCH-049)
@@ -3385,11 +3373,6 @@ ambre-crypto | src/keys.rs | crate::keys | key_of(bytes) | param | &[u8]	generic
 ambre-crypto | src/keys.rs | crate::keys | split_anchored(plain) | param | &[u8]	generic	generic byte/text API or codec
 ambre-crypto | src/passphrase.rs | crate::passphrase | UserKey.0 | field | Secret<[u8;USER_KEY_LEN]>	newtype-inner	newtype field, constructor or accessor
 ambre-crypto | src/passphrase.rs | crate::passphrase | argon2id() | ret | Result<Secret<[u8;USER_KEY_LEN]>,CryptoError>	generic	Argon2id output in a Secret; its one caller wraps it in UserKey
-ambre-crypto | src/token.rs | crate::token | <SecretToken as From<String>>::from(token) | param | String	newtype-inner	the SecretToken newtype over a shared Secret
-ambre-crypto | src/token.rs | crate::token | SecretToken.0 | field | Arc<Secret<String>>	newtype-inner	the SecretToken newtype over a shared Secret
-ambre-crypto | src/token.rs | crate::token | SecretToken::present_bearer(read) | param | impl FnOnce(&str)->R	generic	lends the token text to the one foreign call that carries it
-ambre-crypto | src/token.rs | crate::token | SecretToken::present_bearer::SCHEME | const | &str	foreign-api	the Bearer scheme of the HTTP Authorization header
-ambre-crypto | src/token.rs | crate::token | SecretToken::secret() | ret | &Secret<String>	newtype-inner	the SecretToken newtype over a shared Secret
 ambre-primitives | src/scan.rs | crate::scan | Scan.secrets | field | Vec<String>	free-text	error messages printed to the terminal
 ambre-primitives | src/secrets.rs | crate::secrets | CRYPTO | const | &str	generic	a word list the scanner matches Rust tokens against
 ambre-primitives | src/secrets.rs | crate::secrets | Check::names() | ret | &'static[&'static str]	generic	a word list the scanner matches Rust tokens against
@@ -4037,3 +4020,45 @@ ambre-toile | src/logic/interop/mod.rs | crate::logic::interop | <ImportGroupRan
 ambre-trame | src/formula/types.rs | crate::formula::types | <EngineSheet as Axis>::NAME | const | &'static str	free-text	the axis name a position, a count or a span prints through Debug, for a log line
 ambre-trame | src/formula/types.rs | crate::formula::types | <EngineSheet as OrdinalKind>::NAME | const | &'static str	free-text	the name an ordinal prints through Debug, for a log line
 ambre-trame | src/formula/parser/mod.rs | crate::formula::parser | sheet_id_token() | ret | nom::IResult<&str,Id<Sheet>>	generic	parser, renderer, lexer or freeze tooling over text or bytes
+ambre-core | src/bounded.rs | crate::bounded | Bounded<K>::saturating_from(wide) | param | i64	newtype-inner	an integer named from anywhere, such as a request, brought into the bounds
+ambre-server | src/db/limit.rs | crate::db::limit | <QueryLimit as Bounds>::MAX | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/db/limit.rs | crate::db::limit | <QueryLimit as Bounds>::MIN | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/db/limit.rs | crate::db::limit | <QueryLimit as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-server | src/db/limit.rs | crate::db::limit | <QueryLimit as Bounds>::Repr | assoc | u32	newtype-inner	the number a value of this quantity holds: the rows of one page
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareThreshold as Bounds>::MAX | const | i16	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareThreshold as Bounds>::MIN | const | i16	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareThreshold as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareThreshold as Bounds>::Repr | assoc | i16	newtype-inner	the number a value of this quantity holds: the k of a k-of-n split; the smallint column width
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareTotal as Bounds>::MAX | const | i16	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareTotal as Bounds>::MIN | const | i16	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareTotal as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-server | src/db/orgs.rs | crate::db::orgs | <ShareTotal as Bounds>::Repr | assoc | i16	newtype-inner	the number a value of this quantity holds: the n of a k-of-n split; the smallint column width
+ambre-server | src/state.rs | crate::state | <Burst as Bounds>::MAX | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/state.rs | crate::state | <Burst as Bounds>::MIN | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/state.rs | crate::state | <Burst as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-server | src/state.rs | crate::state | <Burst as Bounds>::Repr | assoc | u32	newtype-inner	the number a value of this quantity holds: the burst of one WebSocket, which the token bucket counts in
+ambre-server | src/state.rs | crate::state | <RatePerSec as Bounds>::MAX | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/state.rs | crate::state | <RatePerSec as Bounds>::MIN | const | u32	generic	a bound of the quantity, which Bounded compares each value against
+ambre-server | src/state.rs | crate::state | <RatePerSec as Bounds>::NAME | const | &'static str	free-text	the name a bounded value prints through Debug, for a log line
+ambre-server | src/state.rs | crate::state | <RatePerSec as Bounds>::Repr | assoc | u32	newtype-inner	the number a value of this quantity holds: the message rate of one WebSocket, which the token bucket counts in
+ambre-server | src/redis_keys.rs | crate::redis_keys | <Clocks as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <DeadLetter as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <FlushLock as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <Gone as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <Locked as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <Presence as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <RotationOwed as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <SeqCounter as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <Sessions as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <SnapshotAsked as Slot>::SLOT | const | &'static str	generic	the last segment of the store key of this slot, which DocKey::of writes after doc:{id}:
+ambre-server | src/redis_keys.rs | crate::redis_keys | <DocKey<S> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-server | src/redis_keys.rs | crate::redis_keys | DocKey.text | field | String	newtype-inner	the key text DocKey wraps, doc:{id}:{slot}
+ambre-server | src/redis_keys.rs | crate::redis_keys | DocKey<S>::as_str() | ret | &str	newtype-inner	the key text, as a store command takes it
+ambre-server | src/s3.rs | crate::s3 | <BucketName as StoreTextKind>::NAME | const | &'static str	free-text	the name a store text prints through Debug, for a log line
+ambre-server | src/s3.rs | crate::s3 | <EnvPrefix as StoreTextKind>::NAME | const | &'static str	free-text	the name a store text prints through Debug, for a log line
+ambre-server | src/s3.rs | crate::s3 | <S3Prefix as StoreTextKind>::NAME | const | &'static str	free-text	the name a store text prints through Debug, for a log line
+ambre-server | src/s3.rs | crate::s3 | <StoreText<K> as PartialEq>::eq() | ret | bool	trait	signature fixed by foreign trait
+ambre-server | src/s3.rs | crate::s3 | StoreText.text | field | String	newtype-inner	the text StoreText wraps: a bucket, a deployment prefix or a key prefix
+ambre-server | src/s3.rs | crate::s3 | StoreText<K>::as_str() | ret | &str	newtype-inner	the text, as the object store's client takes it
+ambre-server | src/s3.rs | crate::s3 | StoreText<K>::new(text) | param | String	newtype-inner	the text StoreText wraps, read from the environment; no kind carries a rule
+ambre-server | src/state.rs | crate::state | limit_from_env(value) | param | u64	generic	the 64-bit value an environment variable parses to, refused past 32 bits
