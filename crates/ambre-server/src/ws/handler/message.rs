@@ -2002,7 +2002,7 @@ mod access_tests {
                 &pool,
                 &doc_id,
                 ambre_core::Seq::new(0),
-                ambre_core::Bounded::<crate::db::QueryLimit>::saturating(10)
+                ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>()
             )
             .await
             .unwrap()
@@ -2573,7 +2573,7 @@ mod hot_tail_tests {
             &state.db,
             &doc_id,
             ambre_core::Seq::new(0),
-            ambre_core::Bounded::<crate::db::QueryLimit>::saturating(10),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
         )
         .await
         .unwrap();
@@ -2593,7 +2593,7 @@ mod hot_tail_tests {
             &state.db,
             &doc_id,
             ambre_core::Seq::new(1),
-            ambre_core::Bounded::<crate::db::QueryLimit>::saturating(10),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
         )
         .await
         .unwrap();
@@ -2634,7 +2634,7 @@ mod hot_tail_tests {
                 &state.db,
                 &doc_id,
                 ambre_core::Seq::new(0),
-                ambre_core::Bounded::<crate::db::QueryLimit>::saturating(10),
+                ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
             )
             .await
             .unwrap()

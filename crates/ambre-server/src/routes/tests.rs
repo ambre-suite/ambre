@@ -3403,7 +3403,7 @@ mod handler_tests {
             &state.db,
             &document,
             ambre_core::Seq::new(0),
-            ambre_core::Bounded::<crate::db::QueryLimit>::saturating(10),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<10>(),
         )
         .await;
         assert_eq!(deltas.unwrap().len(), 3, "no delta is dropped with it");

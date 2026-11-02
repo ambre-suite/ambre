@@ -109,7 +109,9 @@ pub mod version;
 pub use authorship::{
     IdCounter, OpCounter, PeerEntry, PeerEntryBytes, PeerId, PeerKey, SessionNonce,
 };
-pub use bounded::{Bounded, BoundedRepr, Bounds, Defaulted, OutOfRange, Refusal, UnitFraction};
+pub use bounded::{
+    Bounded, BoundedRepr, Bounds, Defaulted, OutOfRange, Refusal, Saturates, UnitFraction,
+};
 pub use calendar::{Month, Year};
 pub use canvas_id::CanvasId;
 pub use channel_kind::{ChannelDocumentKind, SegmentState};

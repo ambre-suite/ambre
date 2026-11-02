@@ -426,7 +426,7 @@ mod tests {
             &pool,
             &document_id,
             ambre_core::Seq::new(0),
-            ambre_core::Bounded::<crate::db::QueryLimit>::saturating(100),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<100>(),
         )
         .await
         .expect("list remaining");
@@ -507,7 +507,7 @@ mod tests {
             &pool,
             &document_id,
             ambre_core::Seq::new(0),
-            ambre_core::Bounded::<crate::db::QueryLimit>::saturating(100),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<100>(),
         )
         .await
         .expect("list remaining");

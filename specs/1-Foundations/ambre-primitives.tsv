@@ -4038,7 +4038,6 @@ ambre-core | src/unit.rs | crate::unit | Vector<ViewSpeed>::scaled(factor) | par
 ambre-core | src/unit.rs | crate::unit | ViewSpeed.0 | field | f32	newtype-inner	the number of view pixels per millisecond a speed holds
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::get() | ret | f32	newtype-inner	the number of view pixels per millisecond, for a foreign API that takes the float
 ambre-core | src/unit.rs | crate::unit | ViewSpeed::new(value) | param | f32	newtype-inner	the number of view pixels per millisecond a speed wraps
-ambre-core | src/bounded.rs | crate::bounded | Bounded<K>::saturating(raw) | param | u32	newtype-inner	a const count of a 32-bit quantity, brought into its bounds
 ambre-core | src/bounded.rs | crate::bounded | Bounded<K>::saturating_from(wide) | param | i64	newtype-inner	an integer named from anywhere, such as a request, brought into the bounds
 ambre-server | src/db/limit.rs | crate::db::limit | <QueryLimit as Bounds>::MAX | const | u32	generic	a bound of the quantity, which Bounded compares each value against
 ambre-server | src/db/limit.rs | crate::db::limit | <QueryLimit as Bounds>::MIN | const | u32	generic	a bound of the quantity, which Bounded compares each value against

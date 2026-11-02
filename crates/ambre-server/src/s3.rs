@@ -668,6 +668,31 @@ mod tests {
         StoreText::<EnvPrefix>::new(text.to_owned())
     }
 
+    /// The prefix a delete sweeps keeps the text the hand-written type held,
+    /// and each store text prints the name of its kind through `Debug`.
+    #[test]
+    fn a_store_text_keeps_its_bytes_and_its_debug_name() {
+        let document = Id::<Document>::from_bytes([3u8; 16]);
+        let prefix = format_s3_document_prefix(&env("dev-ambre"), &document);
+        assert_eq!(
+            prefix.as_str(),
+            "dev-ambre/documents/03030303-0303-0303-0303-030303030303/"
+        );
+        assert_eq!(prefix.to_string(), prefix.as_str());
+        assert_eq!(
+            format!("{prefix:?}"),
+            "S3Prefix(\"dev-ambre/documents/03030303-0303-0303-0303-030303030303/\")"
+        );
+        assert_eq!(
+            format!("{:?}", env("dev-ambre")),
+            "EnvPrefix(\"dev-ambre\")"
+        );
+        assert_eq!(
+            format!("{:?}", StoreText::<BucketName>::new("b".to_owned())),
+            "BucketName(\"b\")"
+        );
+    }
+
     /// A pending entry as `append_pending_delta` stores it.
     fn entry(s3_key: &ambre_core::ObjectKey, seq: u64) -> String {
         use base64::Engine;

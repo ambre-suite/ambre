@@ -29,7 +29,7 @@ pub const IDLE_AFTER: TimeSpan<Sec> = TimeSpan::<Sec>::new(24 * 3600);
 
 /// How many idle documents one pass moves.
 const IDLE_PASS_LIMIT: ambre_core::Bounded<crate::db::QueryLimit> =
-    ambre_core::Bounded::<crate::db::QueryLimit>::saturating(100);
+    ambre_core::Bounded::<crate::db::QueryLimit>::of::<100>();
 
 /// Whether a tail of `deltas` rows and `bytes` bytes should move now. The move
 /// starts at three quarters of the cap, so a write rarely meets a full tail.
@@ -332,7 +332,7 @@ mod db_tests {
             &state.db,
             doc,
             ambre_core::Seq::new(0),
-            ambre_core::Bounded::<crate::db::QueryLimit>::saturating(1000),
+            ambre_core::Bounded::<crate::db::QueryLimit>::of::<1000>(),
         )
         .await
         .unwrap()

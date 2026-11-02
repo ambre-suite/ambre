@@ -140,14 +140,23 @@ impl<K: Bounds> Bounded<K> {
     }
 }
 
-impl<K: Bounds> Bounded<K>
+/// A quantity that serves the nearest value instead of a refusal. The
+/// capability is opt-in: a quantity with a rule refuses a value outside its
+/// bounds. Only a quantity whose callers may name anything takes it, such as
+/// the page size of a request. A weight without it refuses instead:
+///
+/// ```compile_fail
+/// use ambre_core::{Bounded, FontWeight};
+/// let _ = Bounded::<FontWeight>::saturating_from(5000);
+/// ```
+pub trait Saturates: Bounds {}
+
+impl<K: Saturates> Bounded<K>
 where
     K::Repr: Ord + TryFrom<i64> + Into<i64>,
 {
     /// The value nearest `wide`: below the lowest is the lowest, past the
-    /// highest is the highest. A caller whose input may lie anywhere, such as
-    /// a request that names a page size, serves the nearest value instead of
-    /// a refusal.
+    /// highest is the highest.
     #[must_use]
     pub fn saturating_from(wide: i64) -> Self {
         if wide <= K::MIN.into() {
@@ -161,22 +170,37 @@ where
 }
 
 /// The `const` door of a quantity outside this crate, which cannot call
-/// [`Bounded::at`]. A `const fn` compares a concrete integer only, and Rust
-/// refuses two inherent impls that differ by an associated type alone
-/// (rust-lang/rust#20400). So one representation carries the door: `u32`.
+/// [`Bounded::at`]. A bound check in a `const` block compares a concrete
+/// integer only. Rust refuses two inherent impls that differ by an
+/// associated type alone (rust-lang/rust#20400). So one representation
+/// carries the door: `u32`.
 impl<K: Bounds<Repr = u32>> Bounded<K> {
-    /// The value nearest `raw`: below the lowest is the lowest, past the
-    /// highest is the highest. A `const` item names a value through it, and
-    /// a misspelled constant clamps instead of breaking the bounds.
+    /// The value `N`, checked while the crate compiles: a constant outside
+    /// the bounds fails the build. A `const` item names a value through it.
+    ///
+    /// ```compile_fail
+    /// use ambre_core::{Bounded, Bounds, Refusal};
+    /// enum Page {}
+    /// impl Bounds for Page {
+    ///     type Repr = u32;
+    ///     const MIN: u32 = 1;
+    ///     const MAX: u32 = 1000;
+    ///     const NAME: &'static str = "Page";
+    ///     const REFUSAL: Refusal = Refusal::new("", "");
+    /// }
+    /// const NONE: Bounded<Page> = Bounded::<Page>::of::<0>();
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Never at run time: the check runs in a `const` block, so a value
+    /// outside the bounds is a compile error.
     #[must_use]
-    pub const fn saturating(raw: u32) -> Self {
-        if raw < K::MIN {
-            Self::MIN
-        } else if raw > K::MAX {
-            Self::MAX
-        } else {
-            Self::at(raw)
+    pub const fn of<const N: u32>() -> Self {
+        const {
+            assert!(K::MIN <= N && N <= K::MAX, "a constant outside its bounds");
         }
+        Self::at(N)
     }
 }
 
@@ -334,7 +358,7 @@ impl Bounded<UnitFraction> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Bounded, Bounds, OutOfRange, Refusal, UnitFraction};
+    use super::{Bounded, Bounds, OutOfRange, Refusal, Saturates, UnitFraction};
 
     /// A test quantity with the refused value first in its message.
     enum Grade {}
@@ -378,7 +402,7 @@ mod tests {
         assert_eq!(error.refused(), 9);
     }
 
-    /// A test quantity of 32 bits, for the `const` door.
+    /// A test quantity of 32 bits, for the `const` door, that saturates.
     enum Page {}
     impl Bounds for Page {
         type Repr = u32;
@@ -387,8 +411,9 @@ mod tests {
         const NAME: &'static str = "Page";
         const REFUSAL: Refusal = Refusal::new("", " is no page size");
     }
+    impl Saturates for Page {}
 
-    /// A test quantity of a signed 16-bit count.
+    /// A test quantity of a signed 16-bit count, that saturates.
     enum Shares {}
     impl Bounds for Shares {
         type Repr = i16;
@@ -397,15 +422,33 @@ mod tests {
         const NAME: &'static str = "Shares";
         const REFUSAL: Refusal = Refusal::new("", " is no share count");
     }
+    impl Saturates for Shares {}
+
+    /// A test quantity of 16 bits, that saturates.
+    enum Weight {}
+    impl Bounds for Weight {
+        type Repr = u16;
+        const MIN: u16 = 100;
+        const MAX: u16 = 900;
+        const NAME: &'static str = "Weight";
+        const REFUSAL: Refusal = Refusal::new("", " is no weight");
+    }
+    impl Saturates for Weight {}
+
+    impl Saturates for Grade {}
+
+    #[test]
+    fn a_const_door_checks_its_value_while_the_crate_compiles() {
+        const INSIDE: Bounded<Page> = Bounded::<Page>::of::<250>();
+        const LOWEST: Bounded<Page> = Bounded::<Page>::of::<1>();
+        const HIGHEST: Bounded<Page> = Bounded::<Page>::of::<1000>();
+        assert_eq!(INSIDE.get(), 250);
+        assert_eq!(LOWEST, Bounded::MIN);
+        assert_eq!(HIGHEST, Bounded::MAX);
+    }
 
     #[test]
     fn a_saturating_door_serves_the_nearest_value_and_never_breaks_a_bound() {
-        const BELOW: Bounded<Page> = Bounded::<Page>::saturating(0);
-        const PAST: Bounded<Page> = Bounded::<Page>::saturating(u32::MAX);
-        const INSIDE: Bounded<Page> = Bounded::<Page>::saturating(250);
-        assert_eq!(BELOW, Bounded::MIN);
-        assert_eq!(PAST, Bounded::MAX);
-        assert_eq!(INSIDE.get(), 250);
         for (wide, served) in [
             (i64::MIN, 1),
             (-3, 1),
@@ -422,8 +465,35 @@ mod tests {
                 "{wide}"
             );
         }
-        assert_eq!(Bounded::<Shares>::saturating_from(-7), Bounded::MIN);
-        assert_eq!(Bounded::<Shares>::saturating_from(i64::MAX), Bounded::MAX);
+        for (wide, served) in [
+            (i64::MIN, 1),
+            (i64::from(i16::MIN), 1),
+            (-7, 1),
+            (12, 12),
+            (i64::from(i16::MAX), i16::MAX),
+            (i64::from(i16::MAX) + 1, i16::MAX),
+            (i64::MAX, i16::MAX),
+        ] {
+            assert_eq!(
+                Bounded::<Shares>::saturating_from(wide).get(),
+                served,
+                "{wide}"
+            );
+        }
+        for (wide, served) in [(-1, 100), (99, 100), (400, 400), (901, 900), (70_000, 900)] {
+            assert_eq!(
+                Bounded::<Weight>::saturating_from(wide).get(),
+                served,
+                "{wide}"
+            );
+        }
+        for (wide, served) in [(-1, 1), (0, 1), (3, 3), (6, 5), (256, 5), (i64::MAX, 5)] {
+            assert_eq!(
+                Bounded::<Grade>::saturating_from(wide).get(),
+                served,
+                "{wide}"
+            );
+        }
     }
 
     #[test]

@@ -127,11 +127,18 @@ pub enum LimitRefusal {
     TooLarge(u64),
 }
 
+mod sealed {
+    /// Closes [`super::MessageLimit`]: [`super::limit_from_env`] reads a
+    /// refusal below the bound as zero, which holds for a bound of 1 alone.
+    pub trait Sealed {}
+}
+
 /// A per-connection message limit: a count from 1 to `u32::MAX`, which the
 /// token bucket counts in. A value is a `Bounded<K>` of one of the two
 /// markers below. Each marker states the value a deployment that sets
-/// nothing runs with, through [`Defaulted`].
-pub trait MessageLimit: Bounds<Repr = u32> + Defaulted {}
+/// nothing runs with, through [`Defaulted`]. Sealed: each marker has
+/// `MIN = 1` and `MAX = u32::MAX`, which [`limit_from_env`] relies on.
+pub trait MessageLimit: sealed::Sealed + Bounds<Repr = u32> + Defaulted {}
 
 /// Reads the limit `K` from the 64-bit value its environment variable parsed
 /// to. The conversion is checked: an oversized value is refused at startup,
@@ -143,6 +150,8 @@ pub trait MessageLimit: Bounds<Repr = u32> + Defaulted {}
 /// `u32::MAX`.
 pub fn limit_from_env<K: MessageLimit>(value: u64) -> Result<Bounded<K>, LimitRefusal> {
     let count = u32::try_from(value).map_err(|_| LimitRefusal::TooLarge(value))?;
+    // Every limit runs from 1 to `u32::MAX`, so a count that fits 32 bits
+    // and is refused is zero.
     Bounded::new(count).ok_or(LimitRefusal::Zero)
 }
 
@@ -159,9 +168,10 @@ impl Bounds for RatePerSec {
 }
 
 impl Defaulted for RatePerSec {
-    const DEFAULT: Bounded<Self> = Bounded::<Self>::saturating(60);
+    const DEFAULT: Bounded<Self> = Bounded::<Self>::of::<60>();
 }
 
+impl sealed::Sealed for RatePerSec {}
 impl MessageLimit for RatePerSec {}
 
 /// The burst allowance of one WebSocket: the messages it may send at once.
@@ -176,9 +186,10 @@ impl Bounds for Burst {
 }
 
 impl Defaulted for Burst {
-    const DEFAULT: Bounded<Self> = Bounded::<Self>::saturating(120);
+    const DEFAULT: Bounded<Self> = Bounded::<Self>::of::<120>();
 }
 
+impl sealed::Sealed for Burst {}
 impl MessageLimit for Burst {}
 
 impl Default for Config {
